@@ -1,0 +1,45 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
+
+namespace Matmon.Host.Services;
+
+public sealed class MatmonPageWriteGuard : IAsyncPageFilter
+{
+    public Task OnPageHandlerSelectionAsync(PageHandlerSelectedContext context)
+    {
+        return Task.CompletedTask;
+    }
+
+    public async Task OnPageHandlerExecutionAsync(PageHandlerExecutingContext context, PageHandlerExecutionDelegate next)
+    {
+        if (!HttpMethods.IsPost(context.HttpContext.Request.Method) ||
+            CanPost(context))
+        {
+            await next();
+            return;
+        }
+
+        context.Result = new ForbidResult();
+    }
+
+    private static bool CanPost(PageHandlerExecutingContext context)
+    {
+        var page = context.ActionDescriptor.ViewEnginePath ?? string.Empty;
+        if (string.Equals(page, "/Login", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(page, "/Logout", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(page, "/Alerts", StringComparison.OrdinalIgnoreCase))
+        {
+            return MatmonSecurity.CanOperateAlerts(context.HttpContext.User);
+        }
+
+        return MatmonSecurity.IsAdmin(context.HttpContext.User);
+    }
+}

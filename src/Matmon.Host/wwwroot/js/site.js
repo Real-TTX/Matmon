@@ -5,6 +5,7 @@ const monitoringTreeMoveStorageKey = "matmon-monitoring-tree-move";
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeThemeToggle();
+  initializeAccountMenu();
   initializeWorkspaceActionMenus();
   initializeMonitoringTree();
   initializeDashboardRefresh();
@@ -17,44 +18,82 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeCredentialEditors();
   initializeNotificationKindEditors();
   initializeDiscoveryJobRefresh();
+  initializeMapDesigner();
 });
 
 function initializeThemeToggle() {
-  const button = document.querySelector("[data-theme-toggle]");
-  if (!button) {
+  const buttons = Array.from(document.querySelectorAll("[data-theme-toggle]"));
+  if (buttons.length === 0) {
     return;
   }
-
-  const label = button.querySelector("[data-theme-label]");
 
   const applyTheme = (theme) => {
     const normalizedTheme = theme === "light" ? "light" : "dark";
     document.documentElement.dataset.theme = normalizedTheme;
-    button.dataset.theme = normalizedTheme;
 
-    if (label) {
-      label.textContent = normalizedTheme === "dark" ? "Bright" : "Dark";
-    }
+    buttons.forEach((button) => {
+      const label = button.querySelector("[data-theme-label]");
+      button.dataset.theme = normalizedTheme;
+      button.title = normalizedTheme === "dark" ? "Switch to bright mode" : "Switch to dark mode";
+      button.setAttribute("aria-label", button.title);
 
-    button.setAttribute(
-      "aria-label",
-      normalizedTheme === "dark" ? "Switch to bright mode" : "Switch to dark mode"
-    );
+      if (label) {
+        label.textContent = normalizedTheme === "dark" ? "Bright" : "Dark";
+      }
+    });
   };
 
   applyTheme(document.documentElement.dataset.theme || "dark");
 
-  button.addEventListener("click", () => {
-    const currentTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const currentTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
 
-    try {
-      localStorage.setItem(themeStorageKey, nextTheme);
-    } catch {
-      // Theme selection stays functional even if storage is unavailable.
+      try {
+        localStorage.setItem(themeStorageKey, nextTheme);
+      } catch {
+        // Theme selection stays functional even if storage is unavailable.
+      }
+
+      applyTheme(nextTheme);
+    });
+  });
+}
+
+function initializeAccountMenu() {
+  const menus = Array.from(document.querySelectorAll("details.account-menu"));
+  if (menus.length === 0) {
+    return;
+  }
+
+  const closeMenus = (except = null) => {
+    menus.forEach((menu) => {
+      if (menu !== except) {
+        menu.open = false;
+      }
+    });
+  };
+
+  menus.forEach((menu) => {
+    menu.addEventListener("toggle", () => {
+      if (menu.open) {
+        closeMenus(menu);
+      }
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || !target.closest("details.account-menu")) {
+      closeMenus();
     }
+  });
 
-    applyTheme(nextTheme);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeMenus();
+    }
   });
 }
 
@@ -849,6 +888,10 @@ function initializeDiscoveryJobRefresh() {
 
   const statusElement = panel.querySelector("[data-discovery-job-status]");
   const messageElement = panel.querySelector("[data-discovery-job-message]");
+  const progressPercentElement = panel.querySelector("[data-discovery-progress-percent]");
+  const progressScannedElement = panel.querySelector("[data-discovery-progress-scanned]");
+  const progressTotalElement = panel.querySelector("[data-discovery-progress-total]");
+  const progressBarElement = panel.querySelector("[data-discovery-progress-bar]");
   const countElement = document.querySelector("[data-discovery-result-count]");
   const resultList = document.querySelector("[data-discovery-result-list]");
   const emptyState = document.querySelector("[data-discovery-empty]");
@@ -880,6 +923,10 @@ function initializeDiscoveryJobRefresh() {
       renderDiscoveryJob(job, {
         statusElement,
         messageElement,
+        progressPercentElement,
+        progressScannedElement,
+        progressTotalElement,
+        progressBarElement,
         countElement,
         resultList,
         emptyState,
@@ -913,6 +960,32 @@ function renderDiscoveryJob(job, elements) {
 
   if (elements.messageElement) {
     elements.messageElement.textContent = job.message || (job.isComplete ? "Discovery completed." : "Discovery is running.");
+  }
+
+  const totalHosts = Number(job.totalHosts ?? 0);
+  const scannedHosts = Number(job.scannedHosts ?? 0);
+  const progressPercent = Number.isFinite(Number(job.progressPercent))
+    ? Math.max(0, Math.min(100, Number(job.progressPercent)))
+    : totalHosts > 0
+      ? Math.max(0, Math.min(100, Math.floor((scannedHosts / totalHosts) * 100)))
+      : job.isComplete
+        ? 100
+        : 0;
+
+  if (elements.progressPercentElement) {
+    elements.progressPercentElement.textContent = `${progressPercent}%`;
+  }
+
+  if (elements.progressScannedElement) {
+    elements.progressScannedElement.textContent = String(Math.max(0, scannedHosts));
+  }
+
+  if (elements.progressTotalElement) {
+    elements.progressTotalElement.textContent = String(Math.max(0, totalHosts));
+  }
+
+  if (elements.progressBarElement) {
+    elements.progressBarElement.style.width = `${progressPercent}%`;
   }
 
   if (elements.countElement) {
@@ -1093,7 +1166,549 @@ function discoveryStatusTone(status) {
     return "error";
   }
 
+  if (normalized === "cancelled") {
+    return "warning";
+  }
+
   return "warning";
+}
+
+function initializeMapDesigner() {
+  const canvas = document.querySelector("[data-map-designer]");
+  if (!canvas) {
+    return;
+  }
+
+  const form = document.querySelector("[data-map-designer-form]");
+  const columnInput = form?.querySelector("[data-map-columns]");
+  const rowInput = form?.querySelector("[data-map-rows]");
+  const mapNameInput = form?.querySelector("[data-map-name]");
+  const mapDescriptionInput = form?.querySelector("[data-map-description]");
+  const mapPanel = form?.querySelector("[data-map-property-map-panel]");
+  const mapSelectButton = form?.querySelector("[data-map-select-map]");
+  const mapTitlePreview = form?.querySelector("[data-map-title-preview]");
+  const mapDescriptionPreview = form?.querySelector("[data-map-description-preview]");
+  const mapGridPreview = form?.querySelector("[data-map-grid-preview]");
+  const propertyHost = form?.querySelector("[data-map-property-host]");
+  const propertyEmpty = form?.querySelector("[data-map-property-empty]");
+  const template = form?.querySelector("template[data-map-tile-template]");
+  const numericKindMap = {
+    "0": "Text",
+    "1": "Element",
+    "2": "Status",
+    "3": "Value",
+    "4": "Graph"
+  };
+  const kindLabels = {
+    "0": "Text",
+    "1": "State",
+    "2": "Summary",
+    "3": "Value",
+    "4": "Graph",
+    Text: "Text",
+    Element: "State",
+    Status: "Summary",
+    Value: "Value",
+    Graph: "Graph"
+  };
+  const sizeLimits = {
+    Text: { minWidth: 2, minHeight: 1, maxWidth: 12, maxHeight: 6, defaultWidth: 4, defaultHeight: 2 },
+    Element: { minWidth: 2, minHeight: 1, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
+    Status: { minWidth: 3, minHeight: 2, maxWidth: 12, maxHeight: 8, defaultWidth: 4, defaultHeight: 2 },
+    Value: { minWidth: 2, minHeight: 2, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
+    Graph: { minWidth: 4, minHeight: 3, maxWidth: 12, maxHeight: 10, defaultWidth: 5, defaultHeight: 3 }
+  };
+  const kindHints = {
+    "0": "Text tiles do not need a target.",
+    "1": "Shows one target state or value. Progress and gauge use the default channel when possible.",
+    "2": "Aggregates all child sensors below the selected target. Progress and gauge show healthy percentage.",
+    "3": "Shows the default channel value large.",
+    "4": "Uses the selected sensor history as a compact trend graph.",
+    Text: "Text tiles do not need a target.",
+    Element: "Shows one target state or value. Progress and gauge use the default channel when possible.",
+    Status: "Aggregates all child sensors below the selected target. Progress and gauge show healthy percentage.",
+    Value: "Shows the default channel value large.",
+    Graph: "Uses the selected sensor history as a compact trend graph."
+  };
+  const colorPattern = /^#[0-9a-fA-F]{6}$/;
+
+  const readGridValue = (value, fallback, min, max) => {
+    const numeric = Number(value);
+    const rounded = Number.isFinite(numeric) ? Math.round(numeric) : fallback;
+    return Math.min(max, Math.max(min, rounded));
+  };
+
+  const readGrid = () => ({
+    columns: readGridValue(columnInput?.value, 12, 4, 24),
+    rows: readGridValue(rowInput?.value, 8, 3, 16)
+  });
+
+  const syncMapSummary = (grid = readGrid()) => {
+    const name = mapNameInput?.value?.trim() || "New Map";
+    const description = mapDescriptionInput?.value?.trim() || "No description";
+    if (mapTitlePreview) {
+      mapTitlePreview.textContent = name;
+    }
+    if (mapDescriptionPreview) {
+      mapDescriptionPreview.textContent = description;
+    }
+    if (mapGridPreview) {
+      mapGridPreview.textContent = `${grid.columns} x ${grid.rows} grid`;
+    }
+  };
+
+  const syncGrid = (commit = false) => {
+    const grid = readGrid();
+    if (commit && columnInput) {
+      columnInput.value = String(grid.columns);
+    }
+    if (commit && rowInput) {
+      rowInput.value = String(grid.rows);
+    }
+
+    canvas.style.setProperty("--map-columns", String(grid.columns));
+    canvas.style.setProperty("--map-rows", String(grid.rows));
+    const canvasWidth = Math.max(720, grid.columns * 72);
+    canvas.style.minWidth = `${canvasWidth}px`;
+    canvas.style.minHeight = `${Math.max(560, grid.rows * 72)}px`;
+    if (mapSelectButton) {
+      mapSelectButton.style.minWidth = `${canvasWidth}px`;
+    }
+    syncMapSummary(grid);
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => applyTilePosition(tile));
+  };
+
+  const getPanel = (index) => propertyHost?.querySelector(`[data-map-property-panel][data-tile-index="${index}"]`);
+  const getTile = (index) => canvas.querySelector(`[data-map-tile][data-tile-index="${index}"]`);
+  const normalizeKind = (kind) => numericKindMap[String(kind)] || String(kind || "Element");
+  const getKindLabel = (kind) => kindLabels[String(kind)] || kindLabels[normalizeKind(kind)] || "Tile";
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const getSizeLimits = (kind) => {
+    const grid = readGrid();
+    const limits = sizeLimits[normalizeKind(kind)] || sizeLimits.Element;
+    const maxWidth = clamp(limits.maxWidth, limits.minWidth, grid.columns);
+    const maxHeight = clamp(limits.maxHeight, limits.minHeight, grid.rows);
+    return {
+      ...limits,
+      maxWidth,
+      maxHeight,
+      defaultWidth: clamp(limits.defaultWidth, limits.minWidth, maxWidth),
+      defaultHeight: clamp(limits.defaultHeight, limits.minHeight, maxHeight)
+    };
+  };
+  const createId = () => {
+    if (window.crypto?.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+
+    return `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, "0").slice(-12)}`;
+  };
+
+  const getTileControls = (tile) => {
+    const panel = getPanel(tile.dataset.tileIndex || "");
+    return {
+      x: tile.querySelector("[data-map-tile-x]"),
+      y: tile.querySelector("[data-map-tile-y]"),
+      width: panel?.querySelector("[data-map-tile-width]"),
+      height: panel?.querySelector("[data-map-tile-height]")
+    };
+  };
+
+  const applyTilePosition = (tile) => {
+    const { x, y, width, height } = getTileControls(tile);
+    const panel = getPanel(tile.dataset.tileIndex || "");
+    const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
+    const grid = readGrid();
+    const limits = getSizeLimits(kind);
+    const nextWidth = clamp(Math.round(Number(width?.value || limits.defaultWidth)), limits.minWidth, limits.maxWidth);
+    const nextHeight = clamp(Math.round(Number(height?.value || limits.defaultHeight)), limits.minHeight, limits.maxHeight);
+    const nextX = clamp(Math.round(Number(x?.value || 1)), 1, Math.max(1, grid.columns - nextWidth + 1));
+    const nextY = clamp(Math.round(Number(y?.value || 1)), 1, Math.max(1, grid.rows - nextHeight + 1));
+    if (width) {
+      width.value = String(nextWidth);
+    }
+    if (height) {
+      height.value = String(nextHeight);
+    }
+    if (x) {
+      x.value = String(nextX);
+    }
+    if (y) {
+      y.value = String(nextY);
+    }
+
+    tile.style.setProperty("--tile-x", String(nextX));
+    tile.style.setProperty("--tile-y", String(nextY));
+    tile.style.setProperty("--tile-w", String(nextWidth));
+    tile.style.setProperty("--tile-h", String(nextHeight));
+    const readout = panel?.querySelector("[data-map-property-size]");
+    if (readout) {
+      readout.textContent = `Size ${nextWidth} x ${nextHeight} · Min ${limits.minWidth} x ${limits.minHeight} · Max ${limits.maxWidth} x ${limits.maxHeight}`;
+    }
+  };
+
+  const applyTileAppearance = (tile, panel) => {
+    const background = panel?.querySelector("[data-map-property-background]")?.value?.trim();
+    const accent = panel?.querySelector("[data-map-property-accent]")?.value?.trim();
+    const text = panel?.querySelector("[data-map-property-text-color]")?.value?.trim();
+    const setColor = (property, value) => {
+      if (value && colorPattern.test(value)) {
+        tile.style.setProperty(property, value);
+      } else {
+        tile.style.removeProperty(property);
+      }
+    };
+
+    setColor("--map-tile-custom-bg", background);
+    setColor("--map-tile-custom-accent", accent);
+    setColor("--map-tile-custom-text", text);
+  };
+
+  const syncPanelVisibility = (panel) => {
+    if (!panel) {
+      return;
+    }
+
+    const kind = normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element");
+    const isText = kind === "Text";
+    const isGraph = kind === "Graph";
+    const targetField = panel.querySelector("[data-map-property-target]");
+    const visualField = panel.querySelector("[data-map-property-visual]");
+    const textField = panel.querySelector("[data-map-property-text-only]");
+    const graphField = panel.querySelector("[data-map-property-graph-only]");
+    const hint = panel.querySelector("[data-map-property-hint]");
+    if (targetField) {
+      targetField.hidden = isText;
+    }
+    if (visualField) {
+      visualField.hidden = isText || isGraph;
+    }
+    if (textField) {
+      textField.hidden = !isText;
+    }
+    if (graphField) {
+      graphField.hidden = !isGraph;
+    }
+    if (hint) {
+      const limits = getSizeLimits(kind);
+      hint.textContent = `${kindHints[kind] || "Select a target and place the tile on the grid."} Resize from the bottom-right corner. Allowed size: ${limits.minWidth}x${limits.minHeight} to ${limits.maxWidth}x${limits.maxHeight}.`;
+    }
+  };
+
+  const syncTileFromPanel = (panel) => {
+    if (!panel) {
+      return;
+    }
+
+    const tile = getTile(panel.dataset.tileIndex || "");
+    if (!tile) {
+      return;
+    }
+
+    const title = panel.querySelector("[data-map-property-title]")?.value || "Tile";
+    const kind = normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element");
+    const elementSelect = panel.querySelector("[data-map-property-element]");
+    const text = panel.querySelector("[data-map-property-text]")?.value || "";
+    const preview = tile.querySelector("[data-map-tile-preview]");
+    const titleElement = tile.querySelector("[data-map-tile-title]");
+    const showTitle = panel.querySelector("[data-map-property-show-title]")?.checked ?? true;
+    tile.dataset.kind = kind;
+    if (titleElement) {
+      titleElement.hidden = !showTitle;
+      titleElement.replaceChildren(document.createTextNode(title));
+    }
+    tile.querySelector("[data-map-tile-kind-label]")?.replaceChildren(document.createTextNode(getKindLabel(kind)));
+    if (preview) {
+      const isText = kind === "Text";
+      const selectedText = elementSelect?.selectedOptions?.[0]?.textContent?.trim();
+      preview.textContent = isText
+        ? (text.trim() || "Text tile")
+        : (selectedText && selectedText !== "No element" ? selectedText : "No target selected");
+    }
+
+    syncPanelVisibility(panel);
+    applyTileAppearance(tile, panel);
+    applyTilePosition(tile);
+  };
+
+  const selectTile = (index) => {
+    if (mapPanel) {
+      mapPanel.hidden = true;
+    }
+    mapSelectButton?.classList.remove("is-selected");
+
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      tile.classList.toggle("is-selected", tile.dataset.tileIndex === String(index) && !tile.hidden);
+    });
+
+    let hasPanel = false;
+    propertyHost?.querySelectorAll("[data-map-property-panel]").forEach((panel) => {
+      const isActive = panel.dataset.tileIndex === String(index);
+      panel.hidden = !isActive;
+      if (isActive) {
+        hasPanel = true;
+        syncPanelVisibility(panel);
+      }
+    });
+
+    if (propertyEmpty) {
+      propertyEmpty.hidden = hasPanel;
+    }
+  };
+
+  const selectMap = () => {
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      tile.classList.remove("is-selected");
+    });
+
+    propertyHost?.querySelectorAll("[data-map-property-panel]").forEach((panel) => {
+      panel.hidden = true;
+    });
+
+    if (propertyEmpty) {
+      propertyEmpty.hidden = true;
+    }
+    if (mapPanel) {
+      mapPanel.hidden = false;
+    }
+
+    mapSelectButton?.classList.add("is-selected");
+    syncMapSummary();
+  };
+
+  const pointerToGrid = (event, width, height) => {
+    const rect = canvas.getBoundingClientRect();
+    const grid = readGrid();
+    const cellWidth = rect.width / grid.columns;
+    const cellHeight = rect.height / grid.rows;
+    return {
+      x: Math.max(1, Math.min(grid.columns - width + 1, Math.floor((event.clientX - rect.left) / cellWidth) + 1)),
+      y: Math.max(1, Math.min(grid.rows - height + 1, Math.floor((event.clientY - rect.top) / cellHeight) + 1))
+    };
+  };
+
+  const setupTile = (tile) => {
+    applyTilePosition(tile);
+    tile.addEventListener("click", () => selectTile(tile.dataset.tileIndex || ""));
+
+    const panel = getPanel(tile.dataset.tileIndex || "");
+    panel?.querySelectorAll("[data-map-tile-width], [data-map-tile-height]").forEach((input) => {
+      input.addEventListener("input", () => applyTilePosition(tile));
+    });
+    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge]").forEach((input) => {
+      input.addEventListener("input", () => syncTileFromPanel(panel));
+      input.addEventListener("change", () => syncTileFromPanel(panel));
+    });
+    syncTileFromPanel(panel);
+
+    tile.querySelector("[data-map-remove-tile]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const deleted = tile.querySelector("[data-map-tile-deleted]");
+      if (deleted) {
+        deleted.value = "true";
+      }
+
+      tile.hidden = true;
+      panel?.setAttribute("hidden", "hidden");
+      selectMap();
+    });
+
+    const handle = tile.querySelector("[data-map-drag-handle]");
+    if (!handle) {
+      return;
+    }
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.target instanceof HTMLElement && event.target.closest("input, select, textarea, button")) {
+        return;
+      }
+
+      event.preventDefault();
+      selectTile(tile.dataset.tileIndex || "");
+      handle.setPointerCapture(event.pointerId);
+      tile.classList.add("is-dragging");
+
+      const move = (moveEvent) => {
+        const controls = getTileControls(tile);
+        const tileWidth = Math.max(1, Number(controls.width?.value || 3));
+        const tileHeight = Math.max(1, Number(controls.height?.value || 2));
+        const next = pointerToGrid(moveEvent, tileWidth, tileHeight);
+        if (controls.x) {
+          controls.x.value = String(next.x);
+        }
+        if (controls.y) {
+          controls.y.value = String(next.y);
+        }
+
+        applyTilePosition(tile);
+      };
+
+      const up = () => {
+        tile.classList.remove("is-dragging");
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+      };
+
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    });
+
+    const resizeHandle = tile.querySelector("[data-map-resize-handle]");
+    resizeHandle?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectTile(tile.dataset.tileIndex || "");
+      resizeHandle.setPointerCapture(event.pointerId);
+      tile.classList.add("is-resizing");
+
+      const controls = getTileControls(tile);
+      const panel = getPanel(tile.dataset.tileIndex || "");
+      const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
+      const startWidth = Math.max(1, Number(controls.width?.value || 3));
+      const startHeight = Math.max(1, Number(controls.height?.value || 2));
+      const startX = Number(event.clientX);
+      const startY = Number(event.clientY);
+
+      const move = (moveEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const grid = readGrid();
+        const cellWidth = rect.width / grid.columns;
+        const cellHeight = rect.height / grid.rows;
+        const x = Math.max(1, Number(controls.x?.value || 1));
+        const y = Math.max(1, Number(controls.y?.value || 1));
+        const limits = getSizeLimits(kind);
+        const deltaWidth = Math.round((moveEvent.clientX - startX) / cellWidth);
+        const deltaHeight = Math.round((moveEvent.clientY - startY) / cellHeight);
+        const maxWidthAtPosition = Math.min(limits.maxWidth, grid.columns - x + 1);
+        const maxHeightAtPosition = Math.min(limits.maxHeight, grid.rows - y + 1);
+        if (controls.width) {
+          controls.width.value = String(clamp(startWidth + deltaWidth, limits.minWidth, maxWidthAtPosition));
+        }
+        if (controls.height) {
+          controls.height.value = String(clamp(startHeight + deltaHeight, limits.minHeight, maxHeightAtPosition));
+        }
+
+        applyTilePosition(tile);
+      };
+
+      const up = () => {
+        tile.classList.remove("is-resizing");
+        resizeHandle.removeEventListener("pointermove", move);
+        resizeHandle.removeEventListener("pointerup", up);
+        resizeHandle.removeEventListener("pointercancel", up);
+      };
+
+      resizeHandle.addEventListener("pointermove", move);
+      resizeHandle.addEventListener("pointerup", up);
+      resizeHandle.addEventListener("pointercancel", up);
+    });
+  };
+
+  const addTile = (tool, position) => {
+    if (!template || !propertyHost) {
+      return;
+    }
+
+    const index = Number(canvas.dataset.nextTileIndex || 0);
+    const kind = normalizeKind(tool.kind || "Element");
+    const baseTitle = tool.title || getKindLabel(kind);
+    const title = `${baseTitle} ${index + 1}`;
+    const limits = getSizeLimits(kind);
+    const width = clamp(Math.max(1, Number(tool.width || limits.defaultWidth)), limits.minWidth, limits.maxWidth);
+    const height = clamp(Math.max(1, Number(tool.height || limits.defaultHeight)), limits.minHeight, limits.maxHeight);
+    const grid = readGrid();
+    const x = Math.max(1, Math.min(grid.columns - width + 1, position?.x || 1));
+    const y = Math.max(1, Math.min(grid.rows - height + 1, position?.y || 1));
+    const html = template.innerHTML
+      .replaceAll("__index__", String(index))
+      .replaceAll("__id__", createId())
+      .replaceAll("__kind__", kind)
+      .replaceAll("__kindLabel__", getKindLabel(kind))
+      .replaceAll("__title__", title)
+      .replaceAll("__x__", String(x))
+      .replaceAll("__y__", String(y))
+      .replaceAll("__w__", String(width))
+      .replaceAll("__h__", String(height));
+    const fragment = document.createRange().createContextualFragment(html);
+    const tile = fragment.querySelector("[data-map-tile]");
+    const panel = fragment.querySelector("[data-map-property-panel]");
+    if (!tile || !panel) {
+      return;
+    }
+
+    canvas.appendChild(tile);
+    propertyHost.appendChild(panel);
+    canvas.dataset.nextTileIndex = String(index + 1);
+    const kindSelect = panel.querySelector("[data-map-property-kind]");
+    if (kindSelect) {
+      kindSelect.value = kind;
+    }
+    setupTile(tile);
+    selectTile(index);
+  };
+
+  mapSelectButton?.addEventListener("click", selectMap);
+  mapNameInput?.addEventListener("input", () => syncMapSummary());
+  mapDescriptionInput?.addEventListener("input", () => syncMapSummary());
+  columnInput?.addEventListener("input", () => syncGrid());
+  columnInput?.addEventListener("change", () => syncGrid(true));
+  rowInput?.addEventListener("input", () => syncGrid());
+  rowInput?.addEventListener("change", () => syncGrid(true));
+
+  canvas.querySelectorAll("[data-map-tile]").forEach(setupTile);
+  syncGrid(true);
+
+  document.querySelectorAll("[data-map-tool-kind]").forEach((tool) => {
+    const payload = {
+      kind: tool.getAttribute("data-map-tool-kind"),
+      title: tool.getAttribute("data-map-tool-title"),
+      width: tool.getAttribute("data-map-tool-width"),
+      height: tool.getAttribute("data-map-tool-height")
+    };
+
+    tool.addEventListener("click", () => addTile(payload));
+    tool.addEventListener("dragstart", (event) => {
+      event.dataTransfer?.setData("application/x-matmon-map-tool", JSON.stringify(payload));
+      event.dataTransfer?.setData("text/plain", payload.title || "Tile");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "copy";
+      }
+    });
+  });
+
+  canvas.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+  });
+
+  canvas.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const rawPayload = event.dataTransfer?.getData("application/x-matmon-map-tool");
+    if (!rawPayload) {
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(rawPayload);
+      const width = Math.max(1, Number(payload.width || 3));
+      const height = Math.max(1, Number(payload.height || 2));
+      addTile(payload, pointerToGrid(event, width, height));
+    } catch {
+      addTile({ kind: "1", title: "Tile", width: 3, height: 2 });
+    }
+  });
+
+  canvas.addEventListener("click", (event) => {
+    if (event.target === canvas) {
+      selectMap();
+    }
+  });
+
+  selectMap();
 }
 
 function renderDashboard(snapshot) {
@@ -1106,6 +1721,7 @@ function renderDashboard(snapshot) {
   });
 
   renderNavCounters(snapshot);
+  renderDashboardStatusChart(snapshot);
 
   if (highlightStrip) {
     const currentHighlightedCards = Array.from(highlightStrip.querySelectorAll("[data-series-key]"));
@@ -1153,6 +1769,90 @@ function renderDashboard(snapshot) {
     if (svg) {
       drawSparkline(svg, series.points ?? [], series.stateColor || series.lineColor || "var(--matmon-accent)");
     }
+  });
+}
+
+function renderDashboardStatusChart(snapshot) {
+  const charts = document.querySelectorAll("[data-dashboard-status-chart]");
+  if (charts.length === 0) {
+    return;
+  }
+
+  const counts = getDashboardStatusCounts(snapshot);
+  const gradient = buildDashboardStatusGradient(counts);
+  const numberFormatter = new Intl.NumberFormat();
+
+  charts.forEach((chart) => {
+    const donut = chart.querySelector('[data-role="status-donut"]');
+    if (donut) {
+      donut.style.background = gradient;
+    }
+
+    setDashboardStatusText(chart, "status-total", numberFormatter.format(counts.total));
+
+    counts.items.forEach((item) => {
+      setDashboardStatusText(chart, `status-${item.key}-count`, numberFormatter.format(item.count));
+      setDashboardStatusText(chart, `status-${item.key}-percent`, formatDashboardStatusPercent(item.count, counts.total));
+
+      const row = chart.querySelector(`[data-dashboard-status-item="${item.key}"]`);
+      if (row && item.key === "other") {
+        row.classList.toggle("is-hidden", item.count <= 0);
+      }
+    });
+  });
+}
+
+function getDashboardStatusCounts(snapshot) {
+  const total = Math.max(0, Number(snapshot.sensorCount ?? 0));
+  const warning = Math.max(0, Number(snapshot.warningSensorCount ?? 0));
+  const ack = Math.max(0, Number(snapshot.acknowledgedSensorCount ?? snapshot.acknowledgedAlertCount ?? 0));
+  const error = Math.max(0, Number(snapshot.errorSensorCount ?? 0));
+  const otherFromSnapshot = snapshot.otherSensorCount == null ? null : Math.max(0, Number(snapshot.otherSensorCount));
+  const healthyFromSnapshot = snapshot.healthySensorCount == null ? null : Math.max(0, Number(snapshot.healthySensorCount));
+  const other = otherFromSnapshot ?? Math.max(0, total - warning - ack - error - (healthyFromSnapshot ?? 0));
+  const healthy = healthyFromSnapshot ?? Math.max(0, total - warning - ack - error - other);
+
+  return {
+    total,
+    items: [
+      { key: "ok", count: healthy, color: "#78d5c8" },
+      { key: "warning", count: warning, color: "#f3b36b" },
+      { key: "ack", count: ack, color: "#5f8dff" },
+      { key: "error", count: error, color: "#ff7f93" },
+      { key: "other", count: other, color: "#7c8eab" }
+    ]
+  };
+}
+
+function buildDashboardStatusGradient(counts) {
+  const visibleItems = counts.items.filter((item) => item.count > 0);
+  const total = visibleItems.reduce((sum, item) => sum + item.count, 0);
+  if (total <= 0) {
+    return "conic-gradient(rgba(124, 142, 171, 0.22) 0% 100%)";
+  }
+
+  let cursor = 0;
+  const segments = visibleItems.map((item) => {
+    const next = cursor + (item.count / total) * 100;
+    const segment = `${item.color} ${cursor.toFixed(3)}% ${next.toFixed(3)}%`;
+    cursor = next;
+    return segment;
+  });
+
+  return `conic-gradient(${segments.join(", ")})`;
+}
+
+function formatDashboardStatusPercent(count, total) {
+  if (total <= 0) {
+    return "0%";
+  }
+
+  return `${Math.round((count / total) * 100)}%`;
+}
+
+function setDashboardStatusText(chart, role, value) {
+  chart.querySelectorAll(`[data-role="${role}"]`).forEach((element) => {
+    element.textContent = value;
   });
 }
 

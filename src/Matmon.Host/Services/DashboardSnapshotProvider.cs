@@ -71,8 +71,15 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var activeAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged);
         var acknowledgedAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.IsAcknowledged);
         var pausedSensorCount = EnumerateElements(workspace.RootProbe).OfType<SensorElement>().Count(sensor => sensor.IsPaused);
-        var warningSensorCount = telemetrySeries.Count(series => string.Equals(series.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
-        var errorSensorCount = telemetrySeries.Count(series => string.Equals(series.StateKey, "error", StringComparison.OrdinalIgnoreCase));
+        var acknowledgedSensorIds = workspace.Alerts
+            .Where(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementKind == MonitoringElementKind.Sensor)
+            .Select(alert => alert.ElementId)
+            .ToHashSet();
+        var healthySensorCount = telemetrySeries.Count(series => IsDashboardState(series.StateKey, "ok") && !acknowledgedSensorIds.Contains(series.SensorId));
+        var warningSensorCount = telemetrySeries.Count(series => IsDashboardState(series.StateKey, "warning") && !acknowledgedSensorIds.Contains(series.SensorId));
+        var acknowledgedSensorCount = telemetrySeries.Count(series => acknowledgedSensorIds.Contains(series.SensorId));
+        var errorSensorCount = telemetrySeries.Count(series => IsDashboardState(series.StateKey, "error") && !acknowledgedSensorIds.Contains(series.SensorId));
+        var otherSensorCount = Math.Max(0, counters.Sensors - healthySensorCount - warningSensorCount - acknowledgedSensorCount - errorSensorCount);
         var highlightedTelemetrySeries = telemetrySeries
             .Where(series => series.IsHighlighted)
             .OrderByDescending(series => GetDashboardSeriesSortRank(series.StateKey))
@@ -91,8 +98,11 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             activeAlertCount,
             acknowledgedAlertCount,
             pausedSensorCount,
+            healthySensorCount,
             warningSensorCount,
+            acknowledgedSensorCount,
             errorSensorCount,
+            otherSensorCount,
             nodes,
             connectedProbes,
             probes,
@@ -636,6 +646,17 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             "paused" => 1,
             _ => 0
         };
+    }
+
+    private static bool IsDashboardState(string? actualState, string expectedState)
+    {
+        if (string.Equals(expectedState, "ok", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(actualState, "healthy", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return string.Equals(actualState, expectedState, StringComparison.OrdinalIgnoreCase);
     }
 
     private static SensorState ToSensorState(MonitoringSeverity severity)

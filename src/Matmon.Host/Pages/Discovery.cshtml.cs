@@ -117,6 +117,20 @@ public sealed class DiscoveryModel : PageModel
         }
     }
 
+    public IActionResult OnPostCancel(Guid jobId)
+    {
+        if (_discoveryJobs.Cancel(jobId))
+        {
+            StatusMessage = "Discovery job cancelled.";
+        }
+        else
+        {
+            ErrorMessage = "Discovery job could not be cancelled. It may already be finished.";
+        }
+
+        return RedirectToPage(new { jobId });
+    }
+
     public IActionResult OnPostCreateSelected()
     {
         try
@@ -293,6 +307,8 @@ public sealed class DiscoveryModel : PageModel
     {
         _ = Task.Run(async () =>
         {
+            var cancellationToken = _discoveryJobs.GetCancellationToken(job.JobId);
+
             try
             {
                 _discoveryJobs.Start(job.JobId, "Discovery is running on master probe.");
@@ -303,8 +319,21 @@ public sealed class DiscoveryModel : PageModel
                         _discoveryJobs.AddResult(job.JobId, result);
                         return ValueTask.CompletedTask;
                     },
-                    CancellationToken.None);
-                _discoveryJobs.Complete(job.JobId, [], null);
+                    cancellationToken,
+                    (progress, _) =>
+                    {
+                        _discoveryJobs.UpdateProgress(job.JobId, progress.ScannedHosts, progress.TotalHosts);
+                        return ValueTask.CompletedTask;
+                    });
+
+                if (!_discoveryJobs.IsCancelled(job.JobId))
+                {
+                    _discoveryJobs.Complete(job.JobId, [], null);
+                }
+            }
+            catch (OperationCanceledException) when (_discoveryJobs.IsCancelled(job.JobId))
+            {
+                // The user intentionally cancelled the job from the UI.
             }
             catch (Exception ex)
             {
@@ -317,6 +346,7 @@ public sealed class DiscoveryModel : PageModel
     {
         return new NetworkDiscoveryOptions(
             input.UsePing,
+            input.PingFirst,
             input.UseTcpPorts,
             ParsePorts(input.TcpPortsText),
             input.UseSnmp,
@@ -325,7 +355,7 @@ public sealed class DiscoveryModel : PageModel
             input.SnmpPort ?? 161,
             input.UseReverseDns,
             input.TimeoutMs ?? 650,
-            input.MaxHosts ?? 256,
+            input.MaxHosts ?? DiscoveryDefaults.Options.MaxHosts,
             input.Parallelism ?? 64).Normalized();
     }
 
@@ -347,6 +377,7 @@ public sealed class DiscoveryModel : PageModel
 
         return new NetworkDiscoveryOptions(
             UsePing: true,
+            PingFirst: false,
             UseTcpPorts: true,
             TcpPorts: defaults.TcpPorts,
             UseSnmp: true,
@@ -363,6 +394,7 @@ public sealed class DiscoveryModel : PageModel
     {
         var normalized = options.Normalized();
         input.UsePing = normalized.UsePing;
+        input.PingFirst = normalized.PingFirst;
         input.UseTcpPorts = normalized.UseTcpPorts;
         input.TcpPortsText = string.Join(", ", normalized.TcpPorts);
         input.UseSnmp = normalized.UseSnmp;
@@ -649,9 +681,11 @@ public sealed class DiscoveryInput
 
     public bool UsePing { get; set; } = true;
 
+    public bool PingFirst { get; set; }
+
     public bool UseTcpPorts { get; set; } = true;
 
-    public string TcpPortsText { get; set; } = "22, 80, 443, 1433, 3389, 5000, 5001, 5985, 5986, 8006, 8099";
+    public string TcpPortsText { get; set; } = "22, 80, 135, 139, 443, 445, 1433, 3389, 5000, 5001, 5985, 5986, 8006, 8080, 8099, 8443";
 
     public bool UseSnmp { get; set; }
 
@@ -665,7 +699,7 @@ public sealed class DiscoveryInput
 
     public int? TimeoutMs { get; set; } = 650;
 
-    public int? MaxHosts { get; set; } = 256;
+    public int? MaxHosts { get; set; } = 65_534;
 
     public int? Parallelism { get; set; } = 64;
 

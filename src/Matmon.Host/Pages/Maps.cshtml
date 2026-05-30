@@ -1,0 +1,216 @@
+@page "/Maps"
+@model MapsModel
+@{
+    ViewData["Title"] = "Maps";
+    var map = Model.SelectedMap;
+
+    string PublicUrl(MonitoringMap candidate)
+        => Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme)
+            ?? $"/Maps/Public/{candidate.PublicToken}";
+}
+
+<section class="dashboard-shell maps-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("dashboard")
+            <h1>Maps</h1>
+        </div>
+        @if (Model.CanEditMaps)
+        {
+            <div class="page-actions">
+                <a class="workspace-submit" asp-page="/MapEditor">@MatmonIcons.Render("plus")<span>New map</span></a>
+            </div>
+        }
+    </div>
+
+    @if (Model.Maps.Count == 0)
+    {
+        <section class="empty-state">
+            No maps yet.
+        </section>
+    }
+    else if (map is null)
+    {
+        <section class="panel map-library-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("list")<span>Map Library</span></h2>
+                <span class="panel-hint">Open a wallboard or manage public monitor links</span>
+            </div>
+
+            <div class="map-library-list">
+                @foreach (var candidate in Model.Maps)
+                {
+                    var publicUrl = PublicUrl(candidate);
+                    <article class="map-library-row">
+                        <a class="map-library-main" asp-page="/Maps" asp-route-mapId="@candidate.Id">
+                            <strong>@candidate.Name</strong>
+                            <span>@candidate.Tiles.Count tile@(candidate.Tiles.Count == 1 ? "" : "s") - @candidate.Columns x @candidate.Rows - updated @candidate.UpdatedUtc.LocalDateTime.ToString("g")</span>
+                        </a>
+                        @if (Model.CanEditMaps)
+                        {
+                            <div class="map-public-link">
+                                @MatmonIcons.Render("lock")
+                                <input class="workspace-input" value="@publicUrl" readonly aria-label="Public map link for @candidate.Name" />
+                            </div>
+                        }
+                        <div class="map-library-actions">
+                            <a class="workspace-submit" asp-page="/Maps" asp-route-mapId="@candidate.Id">@MatmonIcons.Render("dashboard")<span>Open</span></a>
+                            @if (Model.CanEditMaps)
+                            {
+                                <a class="workspace-secondary-submit" href="@publicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
+                                <a class="workspace-secondary-submit" asp-page="/MapEditor" asp-route-mapId="@candidate.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@candidate.Id">
+                                    <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Rotate</span></button>
+                                </form>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        </section>
+    }
+    else if (Model.Display is not null)
+    {
+        var selectedPublicUrl = PublicUrl(map);
+        <section class="panel map-view-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("dashboard")<span>@map.Name</span></h2>
+                <span class="panel-hint">@(string.IsNullOrWhiteSpace(map.Description) ? "monitor display" : map.Description)</span>
+            </div>
+
+            <div class="map-view-toolbar">
+                <a class="workspace-secondary-submit" asp-page="/Maps">@MatmonIcons.Render("arrow-left")<span>Map Library</span></a>
+                @if (Model.CanEditMaps)
+                {
+                    <form method="get" class="map-switcher-form">
+                        <label class="workspace-label" for="map-switcher">Map</label>
+                        <select id="map-switcher" name="mapId" class="form-select workspace-select" onchange="this.form.submit()">
+                            @foreach (var candidate in Model.Maps)
+                            {
+                                <option value="@candidate.Id" selected="@(candidate.Id == map.Id ? "selected" : null)">@candidate.Name</option>
+                            }
+                        </select>
+                    </form>
+                    <a class="workspace-secondary-submit" href="@selectedPublicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
+                    <a class="workspace-submit" asp-page="/MapEditor" asp-route-mapId="@map.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                }
+            </div>
+
+            <div class="map-canvas" style="--map-columns: @map.Columns; --map-rows: @map.Rows;">
+                @foreach (var tile in Model.Display.Tiles)
+                {
+                    <article class="map-tile map-tile-display" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
+                        @if (tile.Tile.ShowTitle || tile.Tile.ShowStateBadge)
+                        {
+                            <div class="map-tile-head">
+                                <span class="map-tile-icon">@MatmonIcons.Render(tile.IconKey)</span>
+                                @if (tile.Tile.ShowTitle)
+                                {
+                                    <strong>@tile.Tile.Title</strong>
+                                }
+                                @if (tile.Tile.ShowStateBadge)
+                                {
+                                    <span class="state-pill" data-state="@tile.StateKey">@tile.StateLabel</span>
+                                }
+                            </div>
+                        }
+
+                        @if (tile.Tile.Kind == MonitoringMapTileKind.Graph)
+                        {
+                            <div class="map-tile-graph-frame">
+                                @if (!string.IsNullOrWhiteSpace(tile.GraphLinePath))
+                                {
+                                    <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                                        @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Area && !string.IsNullOrWhiteSpace(tile.GraphAreaPath))
+                                        {
+                                            <path class="map-graph-area" d="@tile.GraphAreaPath"></path>
+                                        }
+                                        @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Bars && !string.IsNullOrWhiteSpace(tile.GraphBarPath))
+                                        {
+                                            <path class="map-graph-bars" d="@tile.GraphBarPath"></path>
+                                        }
+                                        else
+                                        {
+                                            <path class="map-graph-line" d="@tile.GraphLinePath"></path>
+                                        }
+                                    </svg>
+                                }
+                                else
+                                {
+                                    <span>No graph data yet</span>
+                                }
+                            </div>
+                        }
+
+                        @if (tile.ProgressPercent.HasValue && tile.Tile.VisualType == MonitoringMapTileVisualType.Gauge)
+                        {
+                            <div class="map-tile-gauge" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
+                                <span>
+                                    <strong>@FormatProgressLabel(tile.ProgressPercent)</strong>
+                                    <small>@tile.ProgressLabel</small>
+                                </span>
+                            </div>
+                        }
+                        else if (tile.ProgressPercent.HasValue && tile.Tile.VisualType == MonitoringMapTileVisualType.ProgressBar)
+                        {
+                            <div class="map-tile-progress-wrap">
+                                <div class="map-tile-progress" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
+                                    <span></span>
+                                </div>
+                                <small>@tile.ProgressLabel</small>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(tile.Value) && tile.Tile.VisualType != MonitoringMapTileVisualType.Gauge)
+                        {
+                            <div class="map-tile-value">@tile.Value</div>
+                        }
+
+                        <p>@tile.Subtitle</p>
+                        <small>
+                            @tile.KindLabel
+                            @if (tile.Tile.ShowElementName && tile.Element is not null)
+                            {
+                                <text> - @tile.Element.Name</text>
+                            }
+                        </small>
+                    </article>
+                }
+            </div>
+        </section>
+    }
+</section>
+
+@functions {
+    private static string TileStyle(MonitoringMapTile tile)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(tile.BackgroundColor))
+        {
+            parts.Add($"--map-tile-custom-bg: {tile.BackgroundColor}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tile.AccentColor))
+        {
+            parts.Add($"--map-tile-custom-accent: {tile.AccentColor}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tile.TextColor))
+        {
+            parts.Add($"--map-tile-custom-text: {tile.TextColor}");
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join("; ", parts) + ";";
+    }
+
+    private static string FormatProgressPercent(double? value)
+    {
+        return Math.Clamp(value.GetValueOrDefault(), 0, 100)
+            .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatProgressLabel(double? value)
+    {
+        return $"{Math.Clamp(value.GetValueOrDefault(), 0, 100):0.#}%";
+    }
+}

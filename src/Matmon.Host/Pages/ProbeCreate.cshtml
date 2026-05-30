@@ -1,8 +1,8 @@
-@page "/monitoring/probe/new"
+@page "/system/probes/new"
 @model WorkspaceModel
 @{
     ViewData["Title"] = "New probe";
-    var backUrl = Model.GetSafeReturnUrl("/Monitoring");
+    var backUrl = Model.GetSafeReturnUrl("/Config?tab=probes");
 }
 
 <section class="dashboard-shell">

@@ -3,9 +3,12 @@
 @{
     ViewData["Title"] = "System";
     var storage = Model.Overview.Storage;
+    var telemetry = Model.StorageTelemetry;
     var usedPercent = storage.DriveFreePercent.HasValue
         ? Math.Clamp(100 - storage.DriveFreePercent.Value, 0, 100)
         : 0;
+    var canManageSystem = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
+    var canManageUsers = canManageSystem;
 }
 
 <section class="dashboard-shell">
@@ -24,7 +27,21 @@
         <a class="workspace-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">General</a>
         <a class="workspace-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
         <a class="workspace-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+        @if (canManageUsers)
+        {
+            <a class="workspace-tab @(Model.IsActiveTab("users") ? "is-active" : "")" asp-page="/Config" asp-route-tab="users">Users</a>
+        }
     </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
 
     @if (Model.IsActiveTab("general"))
     {
@@ -96,21 +113,25 @@
                 <span class="panel-hint">@Model.Overview.Probes.Count configured</span>
             </div>
 
-            <div class="system-table" role="table" aria-label="Configured probes">
-                <div class="system-table-row system-table-head" role="row">
+            <div class="system-table system-probe-table" role="table" aria-label="Configured probes">
+                <div class="system-table-row system-table-head system-probe-row @(canManageSystem ? "has-actions" : string.Empty)" role="row">
                     <span role="columnheader">Probe</span>
                     <span role="columnheader">Role</span>
                     <span role="columnheader">Status</span>
                     <span role="columnheader">Last seen</span>
                     <span role="columnheader">Sensors</span>
                     <span role="columnheader">Token</span>
+                    @if (canManageSystem)
+                    {
+                        <span role="columnheader">Actions</span>
+                    }
                 </div>
                 @foreach (var probe in Model.Overview.Probes)
                 {
                     var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
                         ? "error"
                         : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
-                    <div class="system-table-row" role="row">
+                    <div class="system-table-row system-probe-row @(canManageSystem ? "has-actions" : string.Empty)" role="row">
                         <span role="cell">
                             <strong>@probe.Name</strong>
                             <small>@probe.ProbeId</small>
@@ -123,9 +144,34 @@
                         <span role="cell">@Model.FormatDateTime(probe.LastSeenUtc)</span>
                         <span role="cell">@probe.SensorCount</span>
                         <span role="cell">@(probe.EnrollmentToken ?? "-")</span>
+                        @if (canManageSystem)
+                        {
+                            <span role="cell" class="system-probe-actions">
+                                <a class="workspace-secondary-submit" asp-page="/ElementEditor" asp-route-selectedId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes">
+                                    @MatmonIcons.Render("pencil")
+                                    <span>Edit</span>
+                                </a>
+                                <form method="post" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId">
+                                    <button type="submit" class="workspace-secondary-submit">
+                                        @MatmonIcons.Render("arrow-right")
+                                        <span>Rotate</span>
+                                    </button>
+                                </form>
+                            </span>
+                        }
                     </div>
                 }
             </div>
+
+            @if (canManageSystem)
+            {
+                <div class="page-actions workspace-toolbar system-probe-create-actions">
+                    <a class="workspace-submit" asp-page="/ProbeCreate" asp-route-returnUrl="/Config?tab=probes">
+                        @MatmonIcons.Render("plus")
+                        <span>New probe</span>
+                    </a>
+                </div>
+            }
         </section>
 
         @if (string.Equals(Model.Overview.Mode, "Slave", StringComparison.OrdinalIgnoreCase))
@@ -157,7 +203,7 @@
             </section>
         }
     }
-    else
+    else if (Model.IsActiveTab("storage"))
     {
         <div class="system-storage-grid">
             <section class="panel config-block system-storage-summary">
@@ -222,6 +268,56 @@
             </section>
         </div>
 
+        <section class="panel config-block system-cleanup-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("trash")<span>Cleanup</span></h2>
+                <span class="panel-hint">Remove old telemetry without touching the structure</span>
+            </div>
+
+            <div class="storage-cleanup-metrics" aria-label="Stored telemetry entries">
+                <div>
+                    <strong>@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</strong>
+                    <span>History</span>
+                </div>
+                <div>
+                    <strong>@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</strong>
+                    <span>Statistics</span>
+                </div>
+                <div>
+                    <strong>@ConfigModel.FormatCount(telemetry.EventCount)</strong>
+                    <span>Events</span>
+                </div>
+                <div>
+                    <strong>@ConfigModel.FormatCount(telemetry.TotalEntryCount)</strong>
+                    <span>Total</span>
+                </div>
+            </div>
+
+            @if (canManageSystem)
+            {
+                <form method="post" asp-page-handler="CleanupStorage" class="workspace-form-grid storage-cleanup-form" onsubmit="return confirm('Cleanup permanently removes the selected historical data. Continue?');">
+                    <label class="workspace-field">
+                        <span>Scope</span>
+                        <select asp-for="StorageCleanup.Scope" asp-items="Model.StorageCleanupScopeOptions"></select>
+                    </label>
+                    <label class="workspace-field">
+                        <span>Delete</span>
+                        <select asp-for="StorageCleanup.OlderThanDays" asp-items="Model.StorageCleanupAgeOptions"></select>
+                    </label>
+                    <p class="workspace-inline-note workspace-span-2">
+                        Current topology, templates, credentials and alerts stay untouched. If you choose "All selected data", graphs and latest values are rebuilt on the next sensor runs.
+                    </p>
+                    <div class="workspace-form-actions workspace-span-2">
+                        <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Run cleanup</span></button>
+                    </div>
+                </form>
+            }
+            else
+            {
+                <p class="workspace-inline-note">Only admins can run storage cleanup.</p>
+            }
+        </section>
+
         @if (!string.IsNullOrWhiteSpace(storage.ErrorMessage))
         {
             <section class="workspace-banner workspace-banner-warning">
@@ -229,5 +325,81 @@
                 <span>@storage.ErrorMessage</span>
             </section>
         }
+    }
+    else if (Model.IsActiveTab("users") && canManageUsers)
+    {
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("lock")<span>Users</span></h2>
+                <span class="panel-hint">Admin, User, Viewer</span>
+            </div>
+
+            <div class="system-table system-user-table" role="table" aria-label="Matmon users">
+                <div class="system-table-row system-table-head" role="row">
+                    <span role="columnheader">User</span>
+                    <span role="columnheader">Role</span>
+                    <span role="columnheader">Enabled</span>
+                    <span role="columnheader">Password</span>
+                    <span role="columnheader">Actions</span>
+                </div>
+                @foreach (var user in Model.Users)
+                {
+                    <form method="post" asp-page-handler="UpdateUser" class="system-table-row system-user-row" role="row">
+                        <input type="hidden" name="UserInput.Id" value="@user.Id" />
+                        <span role="cell">
+                            <input class="form-control workspace-input" name="UserInput.Username" value="@user.Username" />
+                            <small>Updated @Model.FormatDateTime(user.UpdatedUtc)</small>
+                        </span>
+                        <span role="cell">
+                            <select class="form-select workspace-select" name="UserInput.Role">
+                                @foreach (var role in Enum.GetValues<MatmonUserRole>().OrderByDescending(role => role))
+                                {
+                                    <option value="@role" selected="@(role == user.Role ? "selected" : null)">@role</option>
+                                }
+                            </select>
+                        </span>
+                        <span role="cell">
+                            <label class="workspace-check">
+                                <input type="checkbox" name="UserInput.IsEnabled" value="true" checked="@(user.IsEnabled ? "checked" : null)" />
+                                <input type="hidden" name="UserInput.IsEnabled" value="false" />
+                                Active
+                            </label>
+                        </span>
+                        <span role="cell">
+                            <input class="form-control workspace-input" type="password" name="UserInput.Password" placeholder="leave unchanged" autocomplete="new-password" />
+                        </span>
+                        <span role="cell" class="system-user-actions">
+                            <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("check")<span>Save</span></button>
+                            <button type="submit" asp-page-handler="DeleteUser" asp-route-userId="@user.Id" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
+                        </span>
+                    </form>
+                }
+            </div>
+        </section>
+
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("plus")<span>New user</span></h2>
+                <span class="panel-hint">Admin can manage all areas, User can acknowledge alerts, Viewer is read-only.</span>
+            </div>
+
+            <form method="post" asp-page-handler="CreateUser" class="workspace-form-grid">
+                <label class="workspace-field">
+                    <span class="workspace-label">Username</span>
+                    <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
+                </label>
+                <label class="workspace-field">
+                    <span class="workspace-label">Password</span>
+                    <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" />
+                </label>
+                <label class="workspace-field">
+                    <span class="workspace-label">Role</span>
+                    <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="form-select workspace-select"></select>
+                </label>
+                <div class="workspace-form-actions workspace-span-2">
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create user</span></button>
+                </div>
+            </form>
+        </section>
     }
 </section>

@@ -11,6 +11,30 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyList<MonitoringTemplate> GetAllTemplates();
 
+    IReadOnlyList<MatmonUser> GetUsers();
+
+    MatmonUser? ValidateUser(string username, string password);
+
+    MatmonUser CreateUser(string username, string password, MatmonUserRole role);
+
+    bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password);
+
+    bool DeleteUser(Guid userId);
+
+    IReadOnlyList<MonitoringMap> GetMaps();
+
+    MonitoringMap? FindMap(Guid id);
+
+    MonitoringMap? FindMapByPublicToken(string publicToken);
+
+    MonitoringMap CreateMap(string name, string? description, int columns, int rows, IReadOnlyList<MonitoringMapTile> tiles);
+
+    bool UpdateMap(Guid mapId, string name, string? description, int columns, int rows, IReadOnlyList<MonitoringMapTile> tiles);
+
+    string RotateMapPublicToken(Guid mapId);
+
+    bool DeleteMap(Guid mapId);
+
     ProbeElement? FindProbeByProbeId(string probeId);
 
     MonitoringElement? FindElement(Guid id);
@@ -44,6 +68,10 @@ public interface IMonitoringWorkspaceStore
     IReadOnlyList<MonitoringEvent> GetEvents(int take = 500);
 
     IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId);
+
+    StorageTelemetryOverview GetStorageTelemetryOverview();
+
+    StorageCleanupResult CleanupStorage(StorageCleanupScope scope, int olderThanDays);
 
     ProbeElement CreateProbe(Guid? parentId, string name, string? description);
 
@@ -88,4 +116,29 @@ public interface IMonitoringWorkspaceStore
     bool TryValidateProbe(string probeId, string? probeToken);
 
     void Save();
+}
+
+public enum StorageCleanupScope
+{
+    Telemetry = 0,
+    SensorHistory = 1,
+    Events = 2,
+    Statistics = 3,
+    Everything = 4
+}
+
+public sealed record StorageTelemetryOverview(
+    long SensorHistoryCount,
+    long EventCount,
+    long StatisticsBucketCount)
+{
+    public long TotalEntryCount => SensorHistoryCount + EventCount + StatisticsBucketCount;
+}
+
+public sealed record StorageCleanupResult(
+    long SensorHistoryRemoved,
+    long EventsRemoved,
+    long StatisticsRemoved)
+{
+    public long TotalRemoved => SensorHistoryRemoved + EventsRemoved + StatisticsRemoved;
 }

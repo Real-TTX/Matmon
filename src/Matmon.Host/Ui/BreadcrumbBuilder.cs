@@ -11,7 +11,7 @@ public static class BreadcrumbBuilder
         }
 
         var normalizedPath = NormalizePath(path);
-        if (normalizedPath is "/" or "/login")
+        if (normalizedPath is "/" or "/login" or "/access-denied")
         {
             return [];
         }
@@ -42,6 +42,13 @@ public static class BreadcrumbBuilder
             case "/templates":
                 items.Add(new("Templates"));
                 break;
+            case "/maps":
+                items.Add(new("Maps"));
+                break;
+            case "/maps/edit":
+                items.Add(new("Maps", "/Maps"));
+                items.Add(new(GetLeafTitle(title, "Map")));
+                break;
             case "/notifications":
                 items.Add(new("Notifications", "/Notifications"));
                 items.Add(new("Rules"));
@@ -71,8 +78,9 @@ public static class BreadcrumbBuilder
                 items.Add(new("Sensors", "/Monitoring"));
                 items.Add(new("New sensor"));
                 break;
-            case "/monitoring/probe/new":
-                items.Add(new("Infrastructure", "/Workspace"));
+            case "/system/probes/new":
+                items.Add(new("System", "/Config"));
+                items.Add(new("Probes", "/Config"));
                 items.Add(new("New probe"));
                 break;
             case "/monitoring/folder/new":

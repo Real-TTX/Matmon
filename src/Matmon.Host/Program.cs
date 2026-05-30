@@ -50,12 +50,13 @@ builder.Services.AddSingleton<SlaveProbeRuntimeState>();
 builder.Services.AddSingleton<ProbeSensorAssignmentProvider>();
 builder.Services.AddSingleton<NetworkDiscoveryService>();
 builder.Services.AddSingleton<DiscoveryJobStore>();
+builder.Services.AddSingleton<MapDisplayProvider>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.Cookie.Name = ".Matmon.Auth";
+        options.Cookie.Name = BuildAuthCookieName(runtimeOptions);
         options.LoginPath = "/login";
-        options.AccessDeniedPath = "/login";
+        options.AccessDeniedPath = "/access-denied";
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromHours(12);
         options.Events = new CookieAuthenticationEvents
@@ -84,8 +85,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             }
         };
     });
+builder.Services.AddTransient<IClaimsTransformation, MatmonClaimsTransformation>();
 builder.Services.AddAuthorization(options =>
 {
+    options.AddPolicy(MatmonSecurity.AdminPolicy, policy =>
+        policy.RequireRole(MatmonUserRole.Admin.ToString()));
+    options.AddPolicy(MatmonSecurity.AlertOperatorPolicy, policy =>
+        policy.RequireRole(MatmonUserRole.Admin.ToString(), MatmonUserRole.User.ToString()));
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build();
@@ -93,7 +99,20 @@ builder.Services.AddAuthorization(options =>
 
 RegisterSensorExecutors(builder.Services);
 builder.Services.AddScoped<ISensorExecutionService, SensorExecutionService>();
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.AuthorizePage("/MapEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/ProbeCreate", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/FolderCreate", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/HostCreate", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SensorCreate", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SensorAssistant", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/ElementEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/TemplateEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/NotificationRuleEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/NotificationSenderEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/NotificationReceiverEditor", MatmonSecurity.AdminPolicy);
+}).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 
 if (runtimeOptions.Mode == AppMode.Master)
@@ -151,7 +170,7 @@ if (runtimeOptions.Mode == AppMode.Master)
             return Results.NotFound();
         }
 
-        var isComplete = job.Status is DiscoveryJobStatus.Completed or DiscoveryJobStatus.Failed;
+        var isComplete = job.Status is DiscoveryJobStatus.Completed or DiscoveryJobStatus.Failed or DiscoveryJobStatus.Cancelled;
         return Results.Ok(new DiscoveryJobStatusResponse(
             job.JobId,
             job.ProbeName,
@@ -159,6 +178,9 @@ if (runtimeOptions.Mode == AppMode.Master)
             job.Status.ToString(),
             job.Message ?? string.Empty,
             isComplete,
+            job.ScannedHosts,
+            job.TotalHosts,
+            job.ProgressPercent,
             job.Results));
     });
 
@@ -262,18 +284,41 @@ if (runtimeOptions.Mode == AppMode.Master)
         }
 
         var recorded = 0;
+        var cancelled = false;
         foreach (var result in batch.Results)
         {
-            var changed = result.IsComplete
-                ? discoveryJobs.Complete(result.JobId, result.Hosts, result.ErrorMessage)
-                : discoveryJobs.AddResults(result.JobId, result.Hosts);
+            if (discoveryJobs.IsCancelled(result.JobId))
+            {
+                cancelled = true;
+                continue;
+            }
+
+            var changed = false;
+            if (result.ScannedHosts.HasValue || result.TotalHosts.HasValue)
+            {
+                changed = discoveryJobs.UpdateProgress(
+                    result.JobId,
+                    result.ScannedHosts ?? 0,
+                    result.TotalHosts ?? 0);
+            }
+
+            changed = result.IsComplete
+                ? discoveryJobs.Complete(result.JobId, result.Hosts, result.ErrorMessage) || changed
+                : result.Hosts.Count > 0
+                    ? discoveryJobs.AddResults(result.JobId, result.Hosts) || changed
+                    : changed;
             if (changed)
             {
                 recorded++;
             }
+
+            if (discoveryJobs.IsCancelled(result.JobId))
+            {
+                cancelled = true;
+            }
         }
 
-        return Results.Ok(new { recorded });
+        return Results.Ok(new ProbeDiscoveryJobResultPostResponse(recorded, cancelled));
     }).AllowAnonymous();
 }
 
@@ -311,4 +356,24 @@ static string? ReadProbeToken(HttpRequest request)
     return request.Query.TryGetValue("token", out var queryToken)
         ? queryToken.FirstOrDefault()
         : null;
+}
+
+static string BuildAuthCookieName(MatmonRuntimeOptions options)
+{
+    var node = options.Mode == AppMode.Slave
+        ? $"Probe.{SanitizeCookieNamePart(options.ProbeId)}"
+        : "Master";
+    return $".Matmon.{node}.Auth";
+}
+
+static string SanitizeCookieNamePart(string? value)
+{
+    var normalized = string.IsNullOrWhiteSpace(value) ? "node" : value.Trim();
+    var chars = normalized
+        .Select(character => char.IsLetterOrDigit(character) || character is '-' or '_' or '.'
+            ? character
+            : '-')
+        .ToArray();
+    var result = new string(chars).Trim('-', '.', '_');
+    return string.IsNullOrWhiteSpace(result) ? "node" : result;
 }

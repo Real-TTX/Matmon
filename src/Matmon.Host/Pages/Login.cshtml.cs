@@ -11,11 +11,11 @@ namespace Matmon.Host.Pages;
 [AllowAnonymous]
 public class LoginModel : PageModel
 {
-    private readonly MatmonAuthOptions _authOptions;
+    private readonly IMonitoringWorkspaceStore _workspaceStore;
 
-    public LoginModel(MatmonAuthOptions authOptions)
+    public LoginModel(IMonitoringWorkspaceStore workspaceStore)
     {
-        _authOptions = authOptions;
+        _workspaceStore = workspaceStore;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -49,8 +49,8 @@ public class LoginModel : PageModel
             return Page();
         }
 
-        if (!string.Equals(enteredUsername, _authOptions.Username, StringComparison.Ordinal) ||
-            !string.Equals(Password, _authOptions.Password, StringComparison.Ordinal))
+        var user = _workspaceStore.ValidateUser(enteredUsername, Password);
+        if (user is null)
         {
             ErrorMessage = "Invalid credentials.";
             return Page();
@@ -58,7 +58,9 @@ public class LoginModel : PageModel
 
         var claims = new List<Claim>
         {
-            new(ClaimTypes.Name, _authOptions.Username)
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Role, user.Role.ToString())
         };
 
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);

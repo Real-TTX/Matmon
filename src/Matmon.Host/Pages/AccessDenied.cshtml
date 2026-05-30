@@ -1,0 +1,26 @@
+@page "/access-denied"
+@model AccessDeniedModel
+@{
+    ViewData["Title"] = "Access denied";
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("lock")
+            <h1>Access denied</h1>
+        </div>
+    </div>
+
+    <section class="panel config-block">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("warning")<span>Permission required</span></h2>
+            <span class="panel-hint">role based access</span>
+        </div>
+        <p class="workspace-inline-note">Your account can view Matmon, but this action requires a higher role.</p>
+        <div class="page-actions workspace-toolbar">
+            <a class="workspace-secondary-submit" asp-page="/Index">@MatmonIcons.Render("arrow-left")<span>Back to monitoring</span></a>
+        </div>
+    </section>
+</section>
+

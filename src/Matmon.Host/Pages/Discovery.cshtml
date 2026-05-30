@@ -12,7 +12,7 @@
             ? "ok"
             : "warning";
     var canImport = selectedJob?.Status == DiscoveryJobStatus.Completed && Model.Results.Count > 0;
-    var showImportAssistant = Model.Import && canImport;
+    var showImportAssistant = canImport && (Model.Import || selectedJob?.Status == DiscoveryJobStatus.Completed);
 }
 
 <section class="dashboard-shell">
@@ -46,23 +46,29 @@
                 <span>@job.Request.Network</span>
                 <span data-discovery-job-message>@(job.Message ?? "Waiting for probe sync")</span>
             </div>
+            <div class="discovery-progress" data-discovery-progress>
+                <div class="discovery-progress-header">
+                    <strong data-discovery-progress-percent>@job.ProgressPercent%</strong>
+                    <span>
+                        <span data-discovery-progress-scanned>@job.ScannedHosts</span>/<span data-discovery-progress-total>@job.TotalHosts</span>
+                        checked
+                    </span>
+                </div>
+                <div class="discovery-progress-track" aria-hidden="true">
+                    <span data-discovery-progress-bar style="width: @job.ProgressPercent%"></span>
+                </div>
+            </div>
             @if (job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running)
             {
-                <div class="page-actions workspace-toolbar">
+                <form method="post" asp-page-handler="Cancel" asp-route-jobId="@job.JobId" class="page-actions workspace-toolbar">
                     <span class="workspace-secondary-submit">@MatmonIcons.Render("clock")<span>Live refresh</span></span>
-                </div>
+                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("x")<span>Cancel job</span></button>
+                </form>
             }
             else if (canImport)
             {
                 <div class="page-actions workspace-toolbar">
-                    @if (showImportAssistant)
-                    {
-                        <a class="workspace-secondary-submit" asp-page="/Discovery" asp-route-jobId="@job.JobId">@MatmonIcons.Render("host")<span>View result</span></a>
-                    }
-                    else
-                    {
-                        <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@job.JobId" asp-route-import="true">@MatmonIcons.Render("plus")<span>Create sensors</span></a>
-                    }
+                    <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@job.JobId" asp-route-import="true">@MatmonIcons.Render("plus")<span>Create selected</span></a>
                 </div>
             }
         </section>
@@ -88,9 +94,11 @@
             <div class="workspace-field">
                 <span class="workspace-label">Checks</span>
                 <label class="workspace-check"><input asp-for="Input.UsePing" /> Ping</label>
+                <label class="workspace-check"><input asp-for="Input.PingFirst" /> Quick scan: ping first</label>
                 <label class="workspace-check"><input asp-for="Input.UseTcpPorts" /> TCP ports</label>
                 <label class="workspace-check"><input asp-for="Input.UseSnmp" /> SNMP probe</label>
                 <label class="workspace-check"><input asp-for="Input.UseReverseDns" /> Reverse DNS</label>
+                <span class="discovery-check-note">Quick scan runs the ping sweep in parallel and only deep-scans hosts that answer ICMP.</span>
             </div>
 
             <label class="workspace-field">
@@ -118,7 +126,7 @@
 
             <label class="workspace-field">
                 <span class="workspace-label">Max hosts</span>
-                <input asp-for="Input.MaxHosts" type="number" min="1" max="1024" class="form-control workspace-input" />
+                <input asp-for="Input.MaxHosts" type="number" min="1" max="65534" class="form-control workspace-input" />
             </label>
 
             <label class="workspace-field">
@@ -135,8 +143,8 @@
     @if (showResults)
     {
         <section class="panel panel-stack workspace-panel" data-discovery-results-panel data-discovery-import-mode="@showImportAssistant.ToString().ToLowerInvariant()">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render(showImportAssistant ? "plus" : "host")<span>@(showImportAssistant ? "Sensor import assistant" : "Discovery result")</span></h2>
+                <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render(showImportAssistant ? "plus" : "host")<span>@(showImportAssistant ? "Create hosts and sensors" : "Discovery result")</span></h2>
                 <span class="panel-hint"><span data-discovery-result-count>@Model.Results.Count</span> host@(Model.Results.Count == 1 ? string.Empty : "s") found</span>
             </div>
 
@@ -146,6 +154,7 @@
                     <input type="hidden" asp-for="Input.ProbeElementId" />
                     <input type="hidden" asp-for="Input.Network" />
                     <input type="hidden" asp-for="Input.UsePing" />
+                    <input type="hidden" asp-for="Input.PingFirst" />
                     <input type="hidden" asp-for="Input.UseTcpPorts" />
                     <input type="hidden" asp-for="Input.TcpPortsText" />
                     <input type="hidden" asp-for="Input.UseSnmp" />
@@ -162,9 +171,10 @@
                     <input type="hidden" asp-for="Input.CreateSnmpSensor" />
 
                     <div class="page-actions workspace-toolbar discovery-assistant-actions">
-                        <button type="button" class="workspace-secondary-submit" data-discovery-select-all>@MatmonIcons.Render("check")<span>Select all sensors</span></button>
+                        <button type="button" class="workspace-secondary-submit" data-discovery-select-all>@MatmonIcons.Render("check")<span>Select all</span></button>
                         <button type="button" class="workspace-secondary-submit" data-discovery-select-none>@MatmonIcons.Render("x")<span>Select none</span></button>
                     </div>
+                    <div class="workspace-inline-note">Select the hosts to create or reuse, then tick only the sensor suggestions you want below each host.</div>
 
                     <div class="empty-state" data-discovery-empty hidden="@(Model.Results.Count > 0 ? "hidden" : null)">No hosts discovered yet.</div>
 
@@ -246,8 +256,7 @@
                     </div>
 
                     <div class="page-actions workspace-toolbar">
-                        <button type="submit" class="workspace-submit" data-discovery-import-button disabled="@(Model.Results.Count == 0 ? "disabled" : null)">@MatmonIcons.Render("plus")<span>Create selected sensors</span></button>
-                        <a class="workspace-secondary-submit" asp-page="/Discovery" asp-route-jobId="@selectedJob?.JobId">@MatmonIcons.Render("host")<span>Back to result</span></a>
+                        <button type="submit" class="workspace-submit" data-discovery-import-button disabled="@(Model.Results.Count == 0 ? "disabled" : null)">@MatmonIcons.Render("plus")<span>Create selected hosts/sensors</span></button>
                         <a class="workspace-secondary-submit" asp-page="/Discovery">@MatmonIcons.Render("arrow-left")<span>New scan</span></a>
                     </div>
                 </form>
@@ -343,6 +352,7 @@
                             </a>
                             <div class="event-row-side">
                                 <span class="state-pill" data-state="@(recent.Status == DiscoveryJobStatus.Failed ? "error" : recent.Status == DiscoveryJobStatus.Completed ? "ok" : "warning")">@recent.Status</span>
+                                <span class="state-pill" data-state="@(recent.Status == DiscoveryJobStatus.Failed ? "error" : recent.Status == DiscoveryJobStatus.Completed ? "ok" : "warning")">@recent.ProgressPercent%</span>
                                 <span class="event-row-time">@recent.CreatedUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
                                 @if (recentCanImport)
                                 {

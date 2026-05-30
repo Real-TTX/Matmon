@@ -1,16 +1,25 @@
+using Matmon.Core.Domain;
+
 namespace Matmon.Host.Services;
 
 public sealed class SlaveProbeRuntimeState
 {
     private const int MaxEvents = 120;
+    private const int MaxResultTransfers = 60;
+    private const int MaxUpcomingExecutions = 20;
     private readonly object _gate = new();
     private readonly List<SlaveProbeExchangeEvent> _events = [];
+    private readonly List<SlaveProbeResultTransfer> _resultTransfers = [];
+    private IReadOnlyList<SlaveProbeUpcomingExecution> _upcomingExecutions = [];
 
     private DateTimeOffset? _lastHeartbeatUtc;
     private DateTimeOffset? _lastAssignmentSyncUtc;
     private DateTimeOffset? _lastResultPostUtc;
+    private DateTimeOffset? _lastResultTransferAttemptUtc;
     private bool _isConnected;
     private string _statusMessage = "starting";
+    private string _lastResultTransferStatus = "No results transferred yet.";
+    private bool? _lastResultTransferSucceeded;
     private int _assignedSensorCount;
     private int _lastExecutedSensorCount;
 
@@ -24,8 +33,13 @@ public sealed class SlaveProbeRuntimeState
                 _lastHeartbeatUtc,
                 _lastAssignmentSyncUtc,
                 _lastResultPostUtc,
+                _lastResultTransferAttemptUtc,
                 _assignedSensorCount,
                 _lastExecutedSensorCount,
+                _lastResultTransferSucceeded,
+                _lastResultTransferStatus,
+                _upcomingExecutions,
+                _resultTransfers.OrderByDescending(entry => entry.ExecutedUtc).ToArray(),
                 _events.OrderByDescending(entry => entry.TimestampUtc).ToArray());
         }
     }
@@ -69,19 +83,62 @@ public sealed class SlaveProbeRuntimeState
         }
     }
 
-    public void RecordResultPost(int resultCount, string message, bool success)
+    public void RecordResultPost(
+        int resultCount,
+        string message,
+        bool success,
+        IReadOnlyList<SlaveProbePendingResult>? results = null)
     {
         lock (_gate)
         {
             _isConnected = success;
             _statusMessage = message;
+            _lastResultTransferAttemptUtc = DateTimeOffset.UtcNow;
+            _lastResultTransferSucceeded = success;
+            _lastResultTransferStatus = message;
             _lastExecutedSensorCount = resultCount;
             if (success)
             {
-                _lastResultPostUtc = DateTimeOffset.UtcNow;
+                _lastResultPostUtc = _lastResultTransferAttemptUtc;
+            }
+
+            if (results is not null)
+            {
+                foreach (var result in results)
+                {
+                    _resultTransfers.Add(new SlaveProbeResultTransfer(
+                        result.SensorId,
+                        result.Name,
+                        result.Path,
+                        result.State,
+                        result.StateKey,
+                        result.StateLabel,
+                        result.Message,
+                        result.ExecutedUtc,
+                        _lastResultTransferAttemptUtc,
+                        success,
+                        message));
+                }
+
+                if (_resultTransfers.Count > MaxResultTransfers)
+                {
+                    _resultTransfers.RemoveRange(0, _resultTransfers.Count - MaxResultTransfers);
+                }
             }
 
             AddEventLocked(success ? "out" : "error", "results", message, !success);
+        }
+    }
+
+    public void UpdateUpcomingExecutions(IReadOnlyList<SlaveProbeUpcomingExecution> executions)
+    {
+        lock (_gate)
+        {
+            _upcomingExecutions = executions
+                .OrderBy(entry => entry.NextDueUtc ?? DateTimeOffset.MaxValue)
+                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .Take(MaxUpcomingExecutions)
+                .ToArray();
         }
     }
 
@@ -107,8 +164,13 @@ public sealed record SlaveProbeRuntimeSnapshot(
     DateTimeOffset? LastHeartbeatUtc,
     DateTimeOffset? LastAssignmentSyncUtc,
     DateTimeOffset? LastResultPostUtc,
+    DateTimeOffset? LastResultTransferAttemptUtc,
     int AssignedSensorCount,
     int LastExecutedSensorCount,
+    bool? LastResultTransferSucceeded,
+    string LastResultTransferStatus,
+    IReadOnlyList<SlaveProbeUpcomingExecution> UpcomingExecutions,
+    IReadOnlyList<SlaveProbeResultTransfer> ResultTransfers,
     IReadOnlyList<SlaveProbeExchangeEvent> Events);
 
 public sealed record SlaveProbeExchangeEvent(
@@ -117,3 +179,35 @@ public sealed record SlaveProbeExchangeEvent(
     string Kind,
     string Message,
     bool IsError);
+
+public sealed record SlaveProbeUpcomingExecution(
+    Guid SensorId,
+    string Name,
+    string Path,
+    string SensorTypeKey,
+    DateTimeOffset? NextDueUtc,
+    DateTimeOffset? LastExecutedUtc,
+    string ScheduleSummary);
+
+public sealed record SlaveProbePendingResult(
+    Guid SensorId,
+    string Name,
+    string Path,
+    SensorState State,
+    string StateKey,
+    string StateLabel,
+    string? Message,
+    DateTimeOffset ExecutedUtc);
+
+public sealed record SlaveProbeResultTransfer(
+    Guid SensorId,
+    string Name,
+    string Path,
+    SensorState State,
+    string StateKey,
+    string StateLabel,
+    string? Message,
+    DateTimeOffset ExecutedUtc,
+    DateTimeOffset? TransferAttemptUtc,
+    bool? TransferSucceeded,
+    string TransferStatus);

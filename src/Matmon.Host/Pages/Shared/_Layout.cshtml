@@ -38,27 +38,29 @@
                 <div class="sidebar-brand-block">
                     <a class="brand" asp-area="" asp-page="/Index">
                         @MatmonIcons.Render("monitoring")
-                        <span>Matmon</span>
+                        <span>MATMON</span>
                     </a>
-                    <div class="brand-note">Monitoring</div>
+                    <div class="brand-note">@(isSlaveMode ? "Remote probe node" : "Lightweight monitoring")</div>
                 </div>
 
                 @if (User.Identity?.IsAuthenticated == true && !isSlaveMode)
                 {
-                    <a class="sidebar-alert-status @NavClass("/Alerts")" asp-area="" asp-page="/Alerts" data-nav-alert-status>
-                        <span class="sidebar-alert-status-label">Alerts</span>
-                        <span class="sidebar-alert-status-value">
-                            <span class="sidebar-alert-status-count" data-nav-alert-count>0</span>
-                            <span class="sidebar-alert-status-state" data-nav-alert-state>OK</span>
-                        </span>
-                        <span class="sidebar-alert-status-hint" data-nav-alert-hint>All clear</span>
+                    <div class="sidebar-alert-status @NavClass("/Alerts")" data-nav-alert-status>
+                        <a class="sidebar-alert-status-main" asp-area="" asp-page="/Alerts" asp-route-alertFilter="open">
+                            <span class="sidebar-alert-status-label">Alerts</span>
+                            <span class="sidebar-alert-status-value">
+                                <span class="sidebar-alert-status-count" data-nav-alert-count>0</span>
+                                <span class="sidebar-alert-status-state" data-nav-alert-state>OK</span>
+                            </span>
+                            <span class="sidebar-alert-status-hint" data-nav-alert-hint>All clear</span>
+                        </a>
                         <span class="sidebar-alert-status-meta" aria-label="Alert summary">
-                            <span data-tone="error"><strong data-nav-error-count>0</strong><small>Err</small></span>
-                            <span data-tone="warning"><strong data-nav-warning-count>0</strong><small>Warn</small></span>
-                            <span data-tone="ack"><strong data-nav-ack-count>0</strong><small>Ack</small></span>
-                            <span data-tone="paused"><strong data-nav-paused-inline-count>0</strong><small>Pause</small></span>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><strong data-nav-error-count>0</strong><small>Err</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><strong data-nav-warning-count>0</strong><small>Warn</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><strong data-nav-ack-count>0</strong><small>Ack</small></a>
+                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="paused" data-tone="paused"><strong data-nav-paused-inline-count>0</strong><small>Pause</small></a>
                         </span>
-                    </a>
+                    </div>
                 }
 
                 <nav class="topnav sidebar-nav">
@@ -67,39 +69,69 @@
                         @if (isSlaveMode)
                         {
                             <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">@MatmonIcons.Render("probe")<span>Probe</span></a>
-                            <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">@MatmonIcons.Render("gear")<span>System</span></a>
                         }
                         else
                         {
                             <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">@MatmonIcons.Render("monitoring")<span>Monitoring</span></a>
                             <a asp-area="" asp-page="/Monitoring" class="topnav-link @NavClass("/Monitoring")">@MatmonIcons.Render("sensor")<span>Sensors</span></a>
                             <a asp-area="" asp-page="/Discovery" class="topnav-link @NavClass("/Discovery")">@MatmonIcons.Render("network")<span>Discovery</span></a>
+                            <a asp-area="" asp-page="/Maps" class="topnav-link @NavClass("/Maps")">@MatmonIcons.Render("dashboard")<span>Maps</span></a>
                             <a asp-area="" asp-page="/Templates" class="topnav-link @NavClass("/Templates")">@MatmonIcons.Render("template")<span>Templates</span></a>
                             <a asp-area="" asp-page="/Notifications" class="topnav-link @NavClass("/Notifications")">@MatmonIcons.Render("bell")<span>Notifications</span></a>
                             <a asp-area="" asp-page="/Events" class="topnav-link @NavClass("/Events")">@MatmonIcons.Render("list")<span>Events</span></a>
                             <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">@MatmonIcons.Render("gear")<span>System</span></a>
                         }
                     }
-                    else
-                    {
-                        <a asp-area="" asp-page="/Login" class="topnav-link @NavClass("/Login")">@MatmonIcons.Render("lock")<span>Login</span></a>
-                    }
                 </nav>
 
                 <div class="sidebar-footer">
-                    <button type="button" class="topnav-button topnav-theme-toggle" data-theme-toggle>
-                        <span class="theme-toggle-icon theme-toggle-icon-light-target">@MatmonIcons.Render("sun")</span>
-                        <span class="theme-toggle-icon theme-toggle-icon-dark-target">@MatmonIcons.Render("moon")</span>
-                        <span data-theme-label>Bright</span>
-                    </button>
+                    <div class="sidebar-footer-tools">
+                        <button type="button" class="sidebar-icon-button topnav-theme-toggle" data-theme-toggle title="Toggle theme">
+                            <span class="theme-toggle-icon theme-toggle-icon-light-target">@MatmonIcons.Render("sun")</span>
+                            <span class="theme-toggle-icon theme-toggle-icon-dark-target">@MatmonIcons.Render("moon")</span>
+                            <span class="workspace-sr-only" data-theme-label>Bright</span>
+                        </button>
 
-                    @if (User.Identity?.IsAuthenticated == true)
-                    {
-                        <span class="topnav-user">@User.Identity?.Name</span>
-                        <form asp-page="/Logout" method="post" class="topnav-form">
-                            <button type="submit" class="topnav-button">@MatmonIcons.Render("arrow-left")<span>Logout</span></button>
-                        </form>
-                    }
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            var accountName = User.Identity?.Name ?? "Account";
+                            var accountRole = User.Claims.FirstOrDefault(claim => claim.Type == System.Security.Claims.ClaimTypes.Role)?.Value ?? "Viewer";
+                            var accountInitial = string.IsNullOrWhiteSpace(accountName)
+                                ? "A"
+                                : accountName.Trim().Substring(0, 1).ToUpperInvariant();
+
+                            <details class="account-menu">
+                                <summary class="account-menu-trigger">
+                                    <span class="account-avatar">@accountInitial</span>
+                                    <span class="account-trigger-copy">
+                                        <span class="account-trigger-label">Account</span>
+                                        <span class="account-trigger-name">@accountName</span>
+                                    </span>
+                                    <span class="account-trigger-chevron">@MatmonIcons.Render("arrow-right")</span>
+                                </summary>
+                                <div class="account-menu-panel">
+                                    <div class="account-menu-meta">
+                                        <span>Signed in</span>
+                                        <strong>@accountName</strong>
+                                        <small>@accountRole</small>
+                                    </div>
+                                    <form asp-page="/Logout" method="post" class="account-menu-form">
+                                        <button type="submit" class="account-menu-action">
+                                            @MatmonIcons.Render("arrow-left")
+                                            <span>Logout</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </details>
+                        }
+                        else
+                        {
+                            <a asp-area="" asp-page="/Login" class="account-login-button @NavClass("/Login")">
+                                @MatmonIcons.Render("lock")
+                                <span>Login</span>
+                            </a>
+                        }
+                    </div>
                 </div>
             </div>
         </aside>

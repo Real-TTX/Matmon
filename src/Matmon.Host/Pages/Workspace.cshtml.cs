@@ -133,7 +133,7 @@ public sealed class WorkspaceModel : PageModel
         {
             var probe = _workspaceStore.CreateProbe(NewProbe.ParentId, NewProbe.Name, NewProbe.Description);
             StatusMessage = $"Probe '{probe.Name}' angelegt.";
-            return RedirectAfterAction(ReturnUrl, "/Monitoring");
+            return RedirectAfterAction(ReturnUrl, "/Config", new { tab = "probes" });
         }
         catch (Exception ex)
         {

@@ -1,0 +1,335 @@
+using System.Globalization;
+using Matmon.Core.Domain;
+
+namespace Matmon.Host.Services;
+
+public sealed class MapDisplayProvider
+{
+    private const double SparklineWidth = 100;
+    private const double SparklineHeight = 40;
+
+    private readonly IMonitoringWorkspaceStore _workspaceStore;
+
+    public MapDisplayProvider(IMonitoringWorkspaceStore workspaceStore)
+    {
+        _workspaceStore = workspaceStore;
+    }
+
+    public MapDisplayViewModel Build(MonitoringMap map)
+    {
+        var elements = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
+        var latest = _workspaceStore.GetLatestSensorObservations();
+
+        var tiles = map.Tiles
+            .OrderBy(tile => tile.Y)
+            .ThenBy(tile => tile.X)
+            .Select(tile =>
+            {
+                elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
+                var tileState = ResolveTileState(tile, element, latest);
+                return tileState;
+            })
+            .ToArray();
+
+        return new MapDisplayViewModel(map, tiles);
+    }
+
+    private MapDisplayTileViewModel ResolveTileState(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        if (tile.Kind == MonitoringMapTileKind.Text)
+        {
+            return CreateTile(tile, element, "ok", "Info", tile.Text ?? string.Empty, string.Empty, "Text", "list");
+        }
+
+        if (element is null)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No element assigned", string.Empty, KindLabel(tile.Kind), "warning");
+        }
+
+        if (element is SensorElement sensor)
+        {
+            return BuildSensorTile(tile, sensor, latest);
+        }
+
+        return BuildAggregateTile(tile, element, latest);
+    }
+
+    private MapDisplayTileViewModel BuildSensorTile(
+        MonitoringMapTile tile,
+        SensorElement sensor,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        if (!latest.TryGetValue(sensor.Id, out var observation))
+        {
+            return CreateTile(tile, sensor, "unknown", "No data", sensor.SensorTypeKey, string.Empty, KindLabel(tile.Kind), "sensor");
+        }
+
+        var channel = observation.Channels.FirstOrDefault(candidate => candidate.IsDefault)
+            ?? observation.Channels.FirstOrDefault(candidate => candidate.Value.HasValue);
+        var value = FormatObservationValue(observation, channel);
+        var subtitle = string.IsNullOrWhiteSpace(observation.Message)
+            ? sensor.SensorTypeKey
+            : observation.Message;
+        var graph = tile.Kind == MonitoringMapTileKind.Graph
+            ? BuildSparkline(sensor.Id)
+            : Sparkline.Empty;
+        var progressPercent = ResolveSensorProgressPercent(observation, channel);
+        var progressLabel = progressPercent.HasValue
+            ? $"{progressPercent.Value:0.#}%"
+            : MonitoringStatePresentation.Label(observation.State);
+
+        return new MapDisplayTileViewModel(
+            tile,
+            sensor,
+            MonitoringStatePresentation.Key(observation.State),
+            MonitoringStatePresentation.Label(observation.State),
+            subtitle,
+            value,
+            KindLabel(tile.Kind),
+            tile.Kind == MonitoringMapTileKind.Graph ? "chart" : "sensor",
+            tile.GraphType == MonitoringMapTileGraphType.Smooth ? graph.SmoothLinePath : graph.LinePath,
+            graph.AreaPath,
+            graph.BarPath,
+            MonitoringStatePresentation.Color(observation.State),
+            progressPercent,
+            progressLabel);
+    }
+
+    private MapDisplayTileViewModel BuildAggregateTile(
+        MonitoringMapTile tile,
+        MonitoringElement element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var sensorStates = Enumerate(element)
+            .OfType<SensorElement>()
+            .Select(sensor => latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown)
+            .ToArray();
+        if (sensorStates.Length == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No sensors", element.Kind.ToString(), string.Empty, KindLabel(tile.Kind), IconForElement(element));
+        }
+
+        var severity = sensorStates
+            .Select(MonitoringStatePresentation.FromSensorState)
+            .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+        var errors = sensorStates.Count(state => state is SensorState.Critical or SensorState.Disabled or SensorState.Unknown);
+        var warnings = sensorStates.Count(state => state == SensorState.Warning);
+        var healthy = sensorStates.Count(state => state is SensorState.Healthy or SensorState.Paused);
+        var subtitle = errors > 0 || warnings > 0
+            ? $"{errors} error / {warnings} warning / {sensorStates.Length} sensors"
+            : $"{sensorStates.Length} sensors OK";
+        var value = tile.Kind is MonitoringMapTileKind.Value or MonitoringMapTileKind.Status
+            ? $"{healthy}/{sensorStates.Length}"
+            : string.Empty;
+        double? progressPercent = sensorStates.Length == 0
+            ? null
+            : Math.Clamp((double)healthy / sensorStates.Length * 100, 0, 100);
+        var progressLabel = $"{healthy}/{sensorStates.Length} OK";
+
+        return new MapDisplayTileViewModel(
+            tile,
+            element,
+            MonitoringStatePresentation.Key(severity),
+            MonitoringStatePresentation.Label(severity),
+            subtitle,
+            value,
+            KindLabel(tile.Kind),
+            IconForElement(element),
+            null,
+            null,
+            null,
+            MonitoringStatePresentation.Color(severity),
+            progressPercent,
+            progressLabel);
+    }
+
+    private Sparkline BuildSparkline(Guid sensorId)
+    {
+        var points = _workspaceStore.GetSensorHistory(sensorId, TimeSpan.FromHours(24), 64)
+            .Select(observation => observation.Value
+                ?? observation.Channels.FirstOrDefault(channel => channel.Value.HasValue)?.Value)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToArray();
+        if (points.Length < 2)
+        {
+            return Sparkline.Empty;
+        }
+
+        var min = points.Min();
+        var max = points.Max();
+        var range = Math.Abs(max - min) < 0.00001 ? 1 : max - min;
+        var step = SparklineWidth / Math.Max(1, points.Length - 1);
+        var coordinates = points
+            .Select((value, index) =>
+            {
+                var x = index * step;
+                var y = SparklineHeight - ((value - min) / range * (SparklineHeight - 4)) - 2;
+                return (X: x, Y: y);
+            })
+            .ToArray();
+
+        var line = "M " + string.Join(" L ", coordinates.Select(point => FormatPoint(point.X, point.Y)));
+        var smoothLine = BuildSmoothLine(coordinates);
+        var area = $"{line} L {Format(SparklineWidth)} {Format(SparklineHeight)} L 0 {Format(SparklineHeight)} Z";
+        var bars = string.Join(" ", coordinates.Select(point => $"M {Format(point.X)} {Format(point.Y)} V {Format(SparklineHeight)}"));
+        return new Sparkline(line, smoothLine, area, bars);
+    }
+
+    private static MapDisplayTileViewModel CreateTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        string stateKey,
+        string stateLabel,
+        string subtitle,
+        string value,
+        string kindLabel,
+        string iconKey)
+    {
+        return new MapDisplayTileViewModel(
+            tile,
+            element,
+            stateKey,
+            stateLabel,
+            subtitle,
+            value,
+            kindLabel,
+            iconKey,
+            null,
+            null,
+            null,
+            "#7c8eab",
+            null,
+            string.Empty);
+    }
+
+    private static double? ResolveSensorProgressPercent(SensorObservation observation, SensorChannelValue? channel)
+    {
+        var numeric = channel?.Value ?? observation.Value;
+        if (numeric.HasValue && double.IsFinite(numeric.Value))
+        {
+            return Math.Clamp(numeric.Value, 0, 100);
+        }
+
+        return observation.State switch
+        {
+            SensorState.Healthy => 100,
+            SensorState.Paused => 100,
+            SensorState.Warning => 50,
+            SensorState.Critical => 0,
+            SensorState.Disabled => 0,
+            SensorState.Unknown => null,
+            _ => null
+        };
+    }
+
+    private static string FormatObservationValue(SensorObservation observation, SensorChannelValue? channel)
+    {
+        if (channel?.Value is double channelValue)
+        {
+            return $"{channelValue:0.##} {channel.Unit}".Trim();
+        }
+
+        return observation.Value.HasValue
+            ? $"{observation.Value.Value:0.##}"
+            : string.Empty;
+    }
+
+    private static string KindLabel(MonitoringMapTileKind kind)
+    {
+        return kind switch
+        {
+            MonitoringMapTileKind.Element => "State",
+            MonitoringMapTileKind.Status => "Summary",
+            MonitoringMapTileKind.Value => "Value",
+            MonitoringMapTileKind.Graph => "Graph",
+            MonitoringMapTileKind.Text => "Text",
+            _ => "Tile"
+        };
+    }
+
+    private static string IconForElement(MonitoringElement element)
+    {
+        return element.Kind.ToString().ToLowerInvariant();
+    }
+
+    private static IEnumerable<MonitoringElement> Enumerate(MonitoringElement element)
+    {
+        yield return element;
+
+        if (element is not MonitoringContainerElement container)
+        {
+            yield break;
+        }
+
+        foreach (var child in container.Children)
+        {
+            foreach (var descendant in Enumerate(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
+    private static string FormatPoint(double x, double y)
+    {
+        return $"{Format(x)} {Format(y)}";
+    }
+
+    private static string BuildSmoothLine(IReadOnlyList<(double X, double Y)> coordinates)
+    {
+        if (coordinates.Count < 2)
+        {
+            return string.Empty;
+        }
+
+        var segments = new List<string>
+        {
+            "M " + FormatPoint(coordinates[0].X, coordinates[0].Y)
+        };
+        for (var index = 1; index < coordinates.Count; index++)
+        {
+            var previous = coordinates[index - 1];
+            var current = coordinates[index];
+            var midX = (previous.X + current.X) / 2;
+            segments.Add($"Q {FormatPoint(previous.X, previous.Y)} {FormatPoint(midX, (previous.Y + current.Y) / 2)}");
+        }
+
+        var last = coordinates[^1];
+        segments.Add("T " + FormatPoint(last.X, last.Y));
+        return string.Join(" ", segments);
+    }
+
+    private static string Format(double value)
+    {
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private sealed record Sparkline(string? LinePath, string? SmoothLinePath, string? AreaPath, string? BarPath)
+    {
+        public static Sparkline Empty { get; } = new(null, null, null, null);
+    }
+}
+
+public sealed record MapDisplayViewModel(
+    MonitoringMap Map,
+    IReadOnlyList<MapDisplayTileViewModel> Tiles);
+
+public sealed record MapDisplayTileViewModel(
+    MonitoringMapTile Tile,
+    MonitoringElement? Element,
+    string StateKey,
+    string StateLabel,
+    string Subtitle,
+    string Value,
+    string KindLabel,
+    string IconKey,
+    string? GraphLinePath,
+    string? GraphAreaPath,
+    string? GraphBarPath,
+    string GraphColor,
+    double? ProgressPercent,
+    string ProgressLabel);

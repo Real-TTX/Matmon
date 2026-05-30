@@ -9,7 +9,7 @@ namespace Matmon.Host.Services;
 
 public sealed class NetworkDiscoveryService
 {
-    private const int MaxHardHostLimit = 1024;
+    private const int MaxHardHostLimit = 65_534;
     private readonly IReadOnlyList<ISensorExecutor> _sensorExecutors;
 
     public NetworkDiscoveryService(IEnumerable<ISensorExecutor> sensorExecutors)
@@ -23,7 +23,8 @@ public sealed class NetworkDiscoveryService
     public async Task<IReadOnlyList<NetworkDiscoveryResult>> DiscoverAsync(
         NetworkDiscoveryRequest request,
         Func<NetworkDiscoveryResult, CancellationToken, ValueTask>? onResultDiscovered = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<NetworkDiscoveryProgress, CancellationToken, ValueTask>? onProgress = null)
     {
         var options = request.Options.Normalized();
         var addresses = NetworkTargetParser.Parse(request.Network, options.MaxHosts).ToArray();
@@ -33,36 +34,52 @@ public sealed class NetworkDiscoveryService
         }
 
         var results = new List<NetworkDiscoveryResult>();
-        using var gate = new SemaphoreSlim(Math.Clamp(options.Parallelism, 1, 128));
-        var tasks = addresses.Select(async address =>
+        var workerCount = Math.Min(Math.Clamp(options.Parallelism, 1, 128), addresses.Length);
+        var nextIndex = -1;
+        var scannedCount = 0;
+        var lastReportedPercent = -1;
+        var workers = Enumerable.Range(0, workerCount).Select(async _ =>
         {
-            await gate.WaitAsync(cancellationToken);
-            try
+            while (true)
             {
-                return await ProbeAddressAsync(address, options, cancellationToken);
-            }
-            finally
-            {
-                gate.Release();
-            }
-        }).ToArray();
+                cancellationToken.ThrowIfCancellationRequested();
+                var index = Interlocked.Increment(ref nextIndex);
+                if (index >= addresses.Length)
+                {
+                    break;
+                }
 
-        var pendingTasks = tasks.ToList();
-        while (pendingTasks.Count > 0)
-        {
-            var task = await Task.WhenAny(pendingTasks);
-            pendingTasks.Remove(task);
+                var result = await ProbeAddressAsync(addresses[index], options, cancellationToken);
+                var scanned = Interlocked.Increment(ref scannedCount);
+                if (onProgress is not null)
+                {
+                    var percent = (int)Math.Floor(Math.Clamp(scanned * 100d / addresses.Length, 0d, 100d));
+                    var previousPercent = Volatile.Read(ref lastReportedPercent);
+                    if ((percent > previousPercent || scanned >= addresses.Length) &&
+                        Interlocked.CompareExchange(ref lastReportedPercent, percent, previousPercent) == previousPercent)
+                    {
+                        await onProgress(new NetworkDiscoveryProgress(scanned, addresses.Length, percent), cancellationToken);
+                    }
+                }
 
-            var result = await task;
-            if (result.IsDiscovered)
-            {
-                results.Add(result);
+                if (!result.IsDiscovered)
+                {
+                    continue;
+                }
+
+                lock (results)
+                {
+                    results.Add(result);
+                }
+
                 if (onResultDiscovered is not null)
                 {
                     await onResultDiscovered(result, cancellationToken);
                 }
             }
-        }
+        }).ToArray();
+
+        await Task.WhenAll(workers);
 
         return results
             .OrderBy(result => NetworkTargetParser.ToSortableAddress(result.Address))
@@ -78,6 +95,19 @@ public sealed class NetworkDiscoveryService
         var pingMs = options.UsePing
             ? await TryPingAsync(address, timeout, cancellationToken)
             : null;
+        if (options.PingFirst && pingMs is null)
+        {
+            return new NetworkDiscoveryResult(
+                address,
+                null,
+                false,
+                null,
+                [],
+                false,
+                null,
+                "ping did not answer; deep checks skipped");
+        }
+
         var openPorts = options.UseTcpPorts
             ? await FindOpenTcpPortsAsync(address, options.TcpPorts, timeout, cancellationToken)
             : [];
@@ -195,17 +225,18 @@ public sealed class NetworkDiscoveryService
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var openPorts = new List<int>();
-        foreach (var port in ports)
+        var checks = ports.Select(async port =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await IsTcpPortOpenAsync(address, port, timeout, cancellationToken))
-            {
-                openPorts.Add(port);
-            }
-        }
+            return await IsTcpPortOpenAsync(address, port, timeout, cancellationToken)
+                ? port
+                : 0;
+        }).ToArray();
 
-        return openPorts;
+        return (await Task.WhenAll(checks))
+            .Where(port => port > 0)
+            .Order()
+            .ToArray();
     }
 
     private static async Task<bool> IsTcpPortOpenAsync(
@@ -314,6 +345,7 @@ public sealed record NetworkDiscoveryRequest(
 
 public sealed record NetworkDiscoveryOptions(
     bool UsePing,
+    bool PingFirst,
     bool UseTcpPorts,
     IReadOnlyList<int> TcpPorts,
     bool UseSnmp,
@@ -335,13 +367,13 @@ public sealed record NetworkDiscoveryOptions(
 
         return this with
         {
-            UsePing = UsePing || (!UseTcpPorts && !UseSnmp),
+            UsePing = UsePing || PingFirst || (!UseTcpPorts && !UseSnmp),
             TcpPorts = ports,
             SnmpCommunity = string.IsNullOrWhiteSpace(SnmpCommunity) ? "public" : SnmpCommunity.Trim(),
             SnmpVersion = NormalizeSnmpVersion(SnmpVersion),
             SnmpPort = SnmpPort is >= 1 and <= 65535 ? SnmpPort : 161,
             TimeoutMs = Math.Clamp(TimeoutMs, 150, 10_000),
-            MaxHosts = Math.Clamp(MaxHosts, 1, 1024),
+            MaxHosts = Math.Clamp(MaxHosts, 1, 65_534),
             Parallelism = Math.Clamp(Parallelism, 1, 128)
         };
     }
@@ -370,6 +402,11 @@ public sealed record NetworkDiscoveryResult(
 
     public bool IsDiscovered => PingAlive || OpenPorts.Count > 0 || SnmpResponded || SuggestedSensors.Count > 0;
 }
+
+public sealed record NetworkDiscoveryProgress(
+    int ScannedHosts,
+    int TotalHosts,
+    int Percent);
 
 internal static class NetworkTargetParser
 {
@@ -548,5 +585,5 @@ internal static class NetworkTargetParser
         return new IPAddress(bytes).ToString();
     }
 
-    private const int MaxHardHostLimit = 1024;
+    private const int MaxHardHostLimit = 65_534;
 }

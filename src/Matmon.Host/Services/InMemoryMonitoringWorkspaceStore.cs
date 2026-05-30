@@ -24,6 +24,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     private readonly object _saveGate = new();
     private readonly ILogger<InMemoryMonitoringWorkspaceStore> _logger;
     private readonly IDataProtector _credentialProtector;
+    private readonly MatmonAuthOptions _authOptions;
     private readonly string _workspacePath;
     private readonly string _workspaceBackupPath;
     private readonly Timer _saveTimer;
@@ -40,10 +41,12 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     public InMemoryMonitoringWorkspaceStore(
         IHostEnvironment environment,
         MatmonRuntimeOptions runtimeOptions,
+        MatmonAuthOptions authOptions,
         IDataProtectionProvider dataProtectionProvider,
         ILogger<InMemoryMonitoringWorkspaceStore> logger)
     {
         _logger = logger;
+        _authOptions = authOptions;
         _credentialProtector = dataProtectionProvider.CreateProtector("Matmon.Credentials");
 
         var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
@@ -66,6 +69,8 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         EnsureDefaultWindowsHealthSensor();
         EnsureDefaultProxmoxSensor();
         EnsureDefaultNotificationConfiguration();
+        EnsureDefaultUsers();
+        EnsureDefaultMaps();
         EnsureDefaultAlertCollection();
         EnsureDefaultObservationCollection();
         EnsureDefaultEventCollection();
@@ -97,6 +102,268 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         lock (_gate)
         {
             return _document.Templates.ToArray();
+        }
+    }
+
+    public IReadOnlyList<MatmonUser> GetUsers()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            return _document.Users
+                .OrderBy(user => user.Username, StringComparer.OrdinalIgnoreCase)
+                .Select(CloneUser)
+                .ToArray();
+        }
+    }
+
+    public MatmonUser? ValidateUser(string username, string password)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var user = _document.Users.FirstOrDefault(candidate =>
+                candidate.IsEnabled &&
+                string.Equals(candidate.Username, username.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (user is null || !MatmonPasswordHasher.Verify(password, user.PasswordHash))
+            {
+                return null;
+            }
+
+            return CloneUser(user);
+        }
+    }
+
+    public MatmonUser CreateUser(string username, string password, MatmonUserRole role)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var normalizedUsername = NormalizeUsername(username);
+            if (_document.Users.Any(user => string.Equals(user.Username, normalizedUsername, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"User '{normalizedUsername}' already exists.");
+            }
+
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                throw new InvalidOperationException("Password is required.");
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var user = new MatmonUser
+            {
+                Username = normalizedUsername,
+                PasswordHash = MatmonPasswordHasher.Hash(password),
+                Role = role,
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+
+            _document.Users.Add(user);
+            QueueSave(SavePriority.Configuration);
+            return CloneUser(user);
+        }
+    }
+
+    public bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            if (user is null)
+            {
+                return false;
+            }
+
+            var normalizedUsername = NormalizeUsername(username);
+            if (_document.Users.Any(candidate =>
+                    candidate.Id != userId &&
+                    string.Equals(candidate.Username, normalizedUsername, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"User '{normalizedUsername}' already exists.");
+            }
+
+            user.Username = normalizedUsername;
+            user.Role = role;
+            user.IsEnabled = isEnabled;
+            user.UpdatedUtc = DateTimeOffset.UtcNow;
+            if (!string.IsNullOrWhiteSpace(password))
+            {
+                user.PasswordHash = MatmonPasswordHasher.Hash(password);
+            }
+
+            if (!_document.Users.Any(candidate => candidate.IsEnabled && candidate.Role == MatmonUserRole.Admin))
+            {
+                user.Role = MatmonUserRole.Admin;
+                user.IsEnabled = true;
+            }
+
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool DeleteUser(Guid userId)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            if (user is null)
+            {
+                return false;
+            }
+
+            if (user.Role == MatmonUserRole.Admin &&
+                _document.Users.Count(candidate => candidate.IsEnabled && candidate.Role == MatmonUserRole.Admin) <= 1)
+            {
+                throw new InvalidOperationException("At least one enabled admin user is required.");
+            }
+
+            _document.Users.Remove(user);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public IReadOnlyList<MonitoringMap> GetMaps()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            return _document.Maps
+                .OrderBy(map => map.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(CloneMap)
+                .ToArray();
+        }
+    }
+
+    public MonitoringMap? FindMap(Guid id)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var map = _document.Maps.FirstOrDefault(candidate => candidate.Id == id);
+            return map is null ? null : CloneMap(map);
+        }
+    }
+
+    public MonitoringMap? FindMapByPublicToken(string publicToken)
+    {
+        if (string.IsNullOrWhiteSpace(publicToken))
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var normalizedToken = publicToken.Trim();
+            var map = _document.Maps.FirstOrDefault(candidate =>
+                string.Equals(candidate.PublicToken, normalizedToken, StringComparison.OrdinalIgnoreCase));
+            return map is null ? null : CloneMap(map);
+        }
+    }
+
+    public MonitoringMap CreateMap(
+        string name,
+        string? description,
+        int columns,
+        int rows,
+        IReadOnlyList<MonitoringMapTile> tiles)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var now = DateTimeOffset.UtcNow;
+            var map = new MonitoringMap
+            {
+                Name = NormalizeMapName(name),
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+                Columns = Math.Clamp(columns, 4, 24),
+                Rows = Math.Clamp(rows, 3, 16),
+                PublicToken = CreateToken(),
+                CreatedUtc = now,
+                UpdatedUtc = now,
+                Tiles = NormalizeMapTiles(tiles, Math.Clamp(columns, 4, 24), Math.Clamp(rows, 3, 16)).ToList()
+            };
+
+            _document.Maps.Add(map);
+            QueueSave(SavePriority.Configuration);
+            return CloneMap(map);
+        }
+    }
+
+    public bool UpdateMap(
+        Guid mapId,
+        string name,
+        string? description,
+        int columns,
+        int rows,
+        IReadOnlyList<MonitoringMapTile> tiles)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var map = _document.Maps.FirstOrDefault(candidate => candidate.Id == mapId);
+            if (map is null)
+            {
+                return false;
+            }
+
+            var normalizedColumns = Math.Clamp(columns, 4, 24);
+            var normalizedRows = Math.Clamp(rows, 3, 16);
+            map.Name = NormalizeMapName(name);
+            map.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            map.Columns = normalizedColumns;
+            map.Rows = normalizedRows;
+            map.Tiles = NormalizeMapTiles(tiles, normalizedColumns, normalizedRows).ToList();
+            map.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public string RotateMapPublicToken(Guid mapId)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var map = _document.Maps.FirstOrDefault(candidate => candidate.Id == mapId);
+            if (map is null)
+            {
+                return string.Empty;
+            }
+
+            map.PublicToken = CreateToken();
+            map.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return map.PublicToken;
+        }
+    }
+
+    public bool DeleteMap(Guid mapId)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var map = _document.Maps.FirstOrDefault(candidate => candidate.Id == mapId);
+            if (map is null)
+            {
+                return false;
+            }
+
+            _document.Maps.Remove(map);
+            QueueSave(SavePriority.Configuration);
+            return true;
         }
     }
 
@@ -379,6 +646,111 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 .OrderBy(bucket => bucket.BucketStartUtc)
                 .ToArray();
         }
+    }
+
+    public StorageTelemetryOverview GetStorageTelemetryOverview()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+            EnsureDefaultEventCollection();
+            EnsureDefaultStatisticsCollection();
+
+            return new StorageTelemetryOverview(
+                _document.SensorHistory.Count,
+                _document.Events.Count,
+                _document.SensorStatistics.Count);
+        }
+    }
+
+    public StorageCleanupResult CleanupStorage(StorageCleanupScope scope, int olderThanDays)
+    {
+        if (!Enum.IsDefined(scope))
+        {
+            throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unknown cleanup scope.");
+        }
+
+        if (olderThanDays < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(olderThanDays), olderThanDays, "Cleanup age must be zero or greater.");
+        }
+
+        var removeAll = olderThanDays == 0;
+        var cutoffUtc = removeAll
+            ? DateTimeOffset.MaxValue
+            : DateTimeOffset.UtcNow - TimeSpan.FromDays(olderThanDays);
+
+        StorageCleanupResult result;
+
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+            EnsureDefaultEventCollection();
+            EnsureDefaultStatisticsCollection();
+
+            var historyRemoved = 0;
+            var eventsRemoved = 0;
+            var statisticsRemoved = 0;
+
+            if (ShouldCleanupHistory(scope))
+            {
+                var before = _document.SensorHistory.Count;
+                _document.SensorHistory.RemoveAll(entry => removeAll || entry.TimestampUtc < cutoffUtc);
+                historyRemoved = before - _document.SensorHistory.Count;
+
+                if (historyRemoved > 0)
+                {
+                    RebuildObservationIndexesLocked();
+                }
+            }
+
+            if (ShouldCleanupEvents(scope))
+            {
+                var before = _document.Events.Count;
+                _document.Events.RemoveAll(entry => removeAll || entry.TimestampUtc < cutoffUtc);
+                eventsRemoved = before - _document.Events.Count;
+            }
+
+            if (ShouldCleanupStatistics(scope))
+            {
+                var before = _document.SensorStatistics.Count;
+                _document.SensorStatistics.RemoveAll(entry => removeAll || entry.BucketStartUtc < cutoffUtc);
+                statisticsRemoved = before - _document.SensorStatistics.Count;
+            }
+
+            result = new StorageCleanupResult(historyRemoved, eventsRemoved, statisticsRemoved);
+            if (result.TotalRemoved > 0)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+        }
+
+        if (result.TotalRemoved > 0)
+        {
+            FlushPendingSave();
+        }
+
+        return result;
+    }
+
+    private static bool ShouldCleanupHistory(StorageCleanupScope scope)
+    {
+        return scope is StorageCleanupScope.Telemetry
+            or StorageCleanupScope.SensorHistory
+            or StorageCleanupScope.Everything;
+    }
+
+    private static bool ShouldCleanupEvents(StorageCleanupScope scope)
+    {
+        return scope is StorageCleanupScope.Events
+            or StorageCleanupScope.Everything;
+    }
+
+    private static bool ShouldCleanupStatistics(StorageCleanupScope scope)
+    {
+        return scope is StorageCleanupScope.Telemetry
+            or StorageCleanupScope.Statistics
+            or StorageCleanupScope.Everything;
     }
 
     public ProbeElement CreateProbe(Guid? parentId, string name, string? description)
@@ -1352,6 +1724,92 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 }
 
                 SynchronizeLegacyRuleFields(rule);
+            }
+        }
+    }
+
+    private void EnsureDefaultUsers()
+    {
+        _document.Users ??= [];
+
+        if (_document.Users.Count > 0)
+        {
+            if (!_document.Users.Any(user => user.IsEnabled && user.Role == MatmonUserRole.Admin))
+            {
+                _document.Users[0].Role = MatmonUserRole.Admin;
+                _document.Users[0].IsEnabled = true;
+                _document.Users[0].UpdatedUtc = DateTimeOffset.UtcNow;
+            }
+
+            return;
+        }
+
+        var username = string.IsNullOrWhiteSpace(_authOptions.Username) ? "admin" : _authOptions.Username.Trim();
+        var password = string.IsNullOrWhiteSpace(_authOptions.Password) ? "admin" : _authOptions.Password;
+        var now = DateTimeOffset.UtcNow;
+        _document.Users.Add(new MatmonUser
+        {
+            Username = username,
+            PasswordHash = MatmonPasswordHasher.Hash(password),
+            Role = MatmonUserRole.Admin,
+            IsEnabled = true,
+            CreatedUtc = now,
+            UpdatedUtc = now
+        });
+    }
+
+    private void EnsureDefaultMaps()
+    {
+        _document.Maps ??= [];
+
+        if (_document.Maps.Count > 0)
+        {
+            EnsureMapPublicTokens();
+            return;
+        }
+
+        var root = _document.RootProbe;
+        _document.Maps.Add(new MonitoringMap
+        {
+            Name = "Operations Wall",
+            Description = "A starter map for wall displays and office screens.",
+            PublicToken = CreateToken(),
+            Columns = 12,
+            Rows = 6,
+            Tiles =
+            [
+                new MonitoringMapTile
+                {
+                    Kind = MonitoringMapTileKind.Status,
+                    Title = "Overall status",
+                    ElementId = root.Id,
+                    X = 1,
+                    Y = 1,
+                    Width = 4,
+                    Height = 2
+                },
+                new MonitoringMapTile
+                {
+                    Kind = MonitoringMapTileKind.Text,
+                    Title = "Matmon Map",
+                    Text = "Assign sensors, folders or probes to tiles in edit mode.",
+                    X = 5,
+                    Y = 1,
+                    Width = 4,
+                    Height = 2
+                }
+            ]
+        });
+    }
+
+    private void EnsureMapPublicTokens()
+    {
+        foreach (var map in _document.Maps)
+        {
+            if (string.IsNullOrWhiteSpace(map.PublicToken))
+            {
+                map.PublicToken = CreateToken();
+                map.UpdatedUtc = DateTimeOffset.UtcNow;
             }
         }
     }
@@ -2658,6 +3116,164 @@ try {
         };
     }
 
+    private static MatmonUser CloneUser(MatmonUser source)
+    {
+        return new MatmonUser
+        {
+            Id = source.Id,
+            Username = source.Username,
+            PasswordHash = string.Empty,
+            Role = source.Role,
+            IsEnabled = source.IsEnabled,
+            CreatedUtc = source.CreatedUtc,
+            UpdatedUtc = source.UpdatedUtc
+        };
+    }
+
+    private static MonitoringMap CloneMap(MonitoringMap source)
+    {
+        return new MonitoringMap
+        {
+            Id = source.Id,
+            Name = source.Name,
+            Description = source.Description,
+            PublicToken = source.PublicToken,
+            Columns = source.Columns,
+            Rows = source.Rows,
+            CreatedUtc = source.CreatedUtc,
+            UpdatedUtc = source.UpdatedUtc,
+            Tiles = source.Tiles.Select(tile => new MonitoringMapTile
+            {
+                Id = tile.Id,
+                Kind = tile.Kind,
+                Title = tile.Title,
+                ElementId = tile.ElementId,
+                Text = tile.Text,
+                X = tile.X,
+                Y = tile.Y,
+                Width = tile.Width,
+                Height = tile.Height,
+                BackgroundColor = tile.BackgroundColor,
+                AccentColor = tile.AccentColor,
+                TextColor = tile.TextColor,
+                GraphType = tile.GraphType,
+                VisualType = tile.VisualType,
+                ShowTitle = tile.ShowTitle,
+                ShowStateBadge = tile.ShowStateBadge,
+                ShowElementName = tile.ShowElementName
+            }).ToList()
+        };
+    }
+
+    private static string NormalizeUsername(string username)
+    {
+        var normalized = username?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException("Username is required.");
+        }
+
+        if (normalized.Length > 80)
+        {
+            throw new InvalidOperationException("Username is too long.");
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeMapName(string name)
+    {
+        var normalized = name?.Trim() ?? string.Empty;
+        return string.IsNullOrWhiteSpace(normalized) ? "Map" : normalized;
+    }
+
+    private static IReadOnlyList<MonitoringMapTile> NormalizeMapTiles(
+        IReadOnlyList<MonitoringMapTile> tiles,
+        int columns,
+        int rows)
+    {
+        return tiles
+            .Where(tile => !string.IsNullOrWhiteSpace(tile.Title) || !string.IsNullOrWhiteSpace(tile.Text) || tile.ElementId.HasValue)
+            .Select(tile =>
+            {
+                var sizeLimits = GetMapTileSizeLimits(tile.Kind, columns, rows);
+                var width = Math.Clamp(tile.Width <= 0 ? sizeLimits.DefaultWidth : tile.Width, sizeLimits.MinWidth, sizeLimits.MaxWidth);
+                var height = Math.Clamp(tile.Height <= 0 ? sizeLimits.DefaultHeight : tile.Height, sizeLimits.MinHeight, sizeLimits.MaxHeight);
+                var x = Math.Clamp(tile.X <= 0 ? 1 : tile.X, 1, Math.Max(1, columns - width + 1));
+                var y = Math.Clamp(tile.Y <= 0 ? 1 : tile.Y, 1, Math.Max(1, rows - height + 1));
+
+                return new MonitoringMapTile
+                {
+                    Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
+                    Kind = tile.Kind,
+                    Title = string.IsNullOrWhiteSpace(tile.Title) ? "Tile" : tile.Title.Trim(),
+                    ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
+                    Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim(),
+                    X = x,
+                    Y = y,
+                    Width = width,
+                    Height = height,
+                    BackgroundColor = NormalizeColor(tile.BackgroundColor),
+                    AccentColor = NormalizeColor(tile.AccentColor),
+                    TextColor = NormalizeColor(tile.TextColor),
+                    GraphType = tile.GraphType,
+                    VisualType = tile.VisualType,
+                    ShowTitle = tile.ShowTitle,
+                    ShowStateBadge = tile.ShowStateBadge,
+                    ShowElementName = tile.ShowElementName
+                };
+            })
+            .ToArray();
+    }
+
+    private static MapTileSizeLimits GetMapTileSizeLimits(MonitoringMapTileKind kind, int columns, int rows)
+    {
+        var limits = kind switch
+        {
+            MonitoringMapTileKind.Text => new MapTileSizeLimits(2, 1, 12, 6, 4, 2),
+            MonitoringMapTileKind.Status => new MapTileSizeLimits(3, 2, 12, 8, 4, 2),
+            MonitoringMapTileKind.Value => new MapTileSizeLimits(2, 2, 8, 6, 3, 2),
+            MonitoringMapTileKind.Graph => new MapTileSizeLimits(4, 3, 12, 10, 5, 3),
+            _ => new MapTileSizeLimits(2, 1, 8, 6, 3, 2)
+        };
+
+        var maxWidth = Math.Clamp(limits.MaxWidth, limits.MinWidth, columns);
+        var maxHeight = Math.Clamp(limits.MaxHeight, limits.MinHeight, rows);
+        return limits with
+        {
+            MaxWidth = maxWidth,
+            MaxHeight = maxHeight,
+            DefaultWidth = Math.Clamp(limits.DefaultWidth, limits.MinWidth, maxWidth),
+            DefaultHeight = Math.Clamp(limits.DefaultHeight, limits.MinHeight, maxHeight)
+        };
+    }
+
+    private static string? NormalizeColor(string? color)
+    {
+        var normalized = color?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (normalized.Length == 7 &&
+            normalized[0] == '#' &&
+            normalized.Skip(1).All(Uri.IsHexDigit))
+        {
+            return normalized.ToLowerInvariant();
+        }
+
+        return null;
+    }
+
+    private sealed record MapTileSizeLimits(
+        int MinWidth,
+        int MinHeight,
+        int MaxWidth,
+        int MaxHeight,
+        int DefaultWidth,
+        int DefaultHeight);
+
     private sealed class WorkspaceDocument
     {
         public ProbeElement RootProbe { get; set; } = default!;
@@ -2665,6 +3281,10 @@ try {
         public List<MonitoringTemplate> Templates { get; set; } = [];
 
         public List<SensorDefinition> SensorDefinitions { get; set; } = [];
+
+        public List<MatmonUser> Users { get; set; } = [];
+
+        public List<MonitoringMap> Maps { get; set; } = [];
 
         public NotificationWorkspaceConfiguration NotificationConfiguration { get; set; } = new();
 

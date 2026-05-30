@@ -1,0 +1,357 @@
+@page "/Maps/Edit"
+@model MapEditorModel
+@{
+    ViewData["Title"] = Model.IsCreateMode ? "New Map" : $"Edit {Model.Input.Name}";
+}
+
+<section class="dashboard-shell maps-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("dashboard")
+            <h1>@(Model.IsCreateMode ? "New Map" : "Edit Map")</h1>
+        </div>
+        <div class="page-actions">
+            <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+        </div>
+    </div>
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="workspace-banner workspace-banner-error">
+            @foreach (var error in ViewData.ModelState.Values.SelectMany(value => value.Errors))
+            {
+                <span>@error.ErrorMessage</span>
+            }
+        </div>
+    }
+
+    <form method="post" class="map-editor-form" data-map-designer-form>
+        <input type="hidden" asp-for="Input.Id" />
+
+        <section class="panel map-editor-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("move")<span>Designer</span></h2>
+                <span class="panel-hint">Drag from the toolbox, select map title or tile, edit properties</span>
+            </div>
+
+            <div class="map-designer-shell">
+                <aside class="map-toolbox" aria-label="Map toolbox">
+                    <div class="map-designer-side-title">
+                        @MatmonIcons.Render("spark")
+                        <strong>Toolbox</strong>
+                    </div>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Element" data-map-tool-title="State" data-map-tool-width="3" data-map-tool-height="2">
+                        @MatmonIcons.Render("sensor")
+                        <span><strong>State</strong><small>One sensor, host, folder or probe</small></span>
+                    </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Value" data-map-tool-width="3" data-map-tool-height="2">
+                        @MatmonIcons.Render("square")
+                        <span><strong>Value</strong><small>Large default channel value</small></span>
+                    </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Graph" data-map-tool-title="Graph" data-map-tool-width="5" data-map-tool-height="3">
+                        @MatmonIcons.Render("chart")
+                        <span><strong>Graph</strong><small>Sensor trend sparkline</small></span>
+                    </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Status" data-map-tool-title="Summary" data-map-tool-width="4" data-map-tool-height="2">
+                        @MatmonIcons.Render("dashboard")
+                        <span><strong>Summary</strong><small>Aggregated health below a target</small></span>
+                    </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Text" data-map-tool-title="Text" data-map-tool-width="4" data-map-tool-height="2">
+                        @MatmonIcons.Render("list")
+                        <span><strong>Text</strong><small>Label, notes or instructions</small></span>
+                    </button>
+                </aside>
+
+                <div class="map-designer-workbench">
+                    <button type="button" class="map-designer-map-title" data-map-select-map>
+                        <span class="map-designer-map-title-icon">@MatmonIcons.Render("dashboard")</span>
+                        <span>
+                            <strong data-map-title-preview>@Model.Input.Name</strong>
+                            <small data-map-description-preview>@(string.IsNullOrWhiteSpace(Model.Input.Description) ? "No description" : Model.Input.Description)</small>
+                        </span>
+                        <em data-map-grid-preview>@Model.Input.Columns x @Model.Input.Rows grid</em>
+                    </button>
+                    <div class="map-editor-canvas"
+                         data-map-designer
+                         data-next-tile-index="@Model.Input.Tiles.Count"
+                         style="--map-columns: @Model.Input.Columns; --map-rows: @Model.Input.Rows;">
+                        @for (var index = 0; index < Model.Input.Tiles.Count; index++)
+                        {
+                            var tile = Model.Input.Tiles[index];
+                            <article class="map-tile map-tile-editor"
+                                     data-map-tile
+                                     data-tile-index="@index"
+                                     data-state="ok"
+                                     data-kind="@tile.Kind"
+                                     style="--tile-x: @tile.X; --tile-y: @tile.Y; --tile-w: @tile.Width; --tile-h: @tile.Height; @TileStyle(tile)"
+                                     hidden="@(tile.IsDeleted ? "hidden" : null)">
+                                <input type="hidden" asp-for="Input.Tiles[index].Id" />
+                                <input type="hidden" asp-for="Input.Tiles[index].IsDeleted" data-map-tile-deleted />
+                                <input type="hidden" asp-for="Input.Tiles[index].X" data-map-tile-x />
+                                <input type="hidden" asp-for="Input.Tiles[index].Y" data-map-tile-y />
+
+                                <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
+                                    <span class="map-tile-icon">@MatmonIcons.Render(IconForKind(tile.Kind))</span>
+                                    <strong data-map-tile-title>@tile.Title</strong>
+                                    <span class="map-tile-kind-label" data-map-tile-kind-label>@KindLabel(tile.Kind)</span>
+                                    <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
+                                </div>
+                                <p data-map-tile-preview>@Preview(tile)</p>
+                                <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
+                            </article>
+                        }
+                    </div>
+                </div>
+
+                <aside class="map-property-editor" aria-label="Tile properties">
+                    <div class="map-designer-side-title">
+                        @MatmonIcons.Render("gear")
+                        <strong>Properties</strong>
+                    </div>
+                    <section class="map-property-panel map-property-map-panel" data-map-property-map-panel>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Name</span>
+                            <input asp-for="Input.Name" class="form-control workspace-input" data-map-name />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Description</span>
+                            <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
+                        </label>
+                        <div class="map-property-section">
+                            <span class="workspace-label">Canvas</span>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Columns</span>
+                                <input asp-for="Input.Columns" type="number" min="4" max="24" class="form-control workspace-input" data-map-columns />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Rows</span>
+                                <input asp-for="Input.Rows" type="number" min="3" max="16" class="form-control workspace-input" data-map-rows />
+                            </label>
+                        </div>
+                        <div class="map-property-hint">
+                            This edits the map itself. Click a tile to switch the property editor to that control.
+                        </div>
+                    </section>
+                    <div class="map-property-empty" data-map-property-empty hidden>
+                        Select the map title or a tile to edit its properties.
+                    </div>
+                    <div data-map-property-host>
+                        @for (var index = 0; index < Model.Input.Tiles.Count; index++)
+                        {
+                            var tile = Model.Input.Tiles[index];
+                            <section class="map-property-panel" data-map-property-panel data-tile-index="@index" hidden>
+                                <label class="workspace-field">
+                                    <span class="workspace-label">Title</span>
+                                    <input asp-for="Input.Tiles[index].Title" class="form-control workspace-input" data-map-property-title />
+                                </label>
+                                <label class="workspace-field">
+                                    <span class="workspace-label">Tile type</span>
+                                    <select asp-for="Input.Tiles[index].Kind" asp-items="Model.TileKindOptions" class="form-select workspace-select" data-map-property-kind></select>
+                                </label>
+                                <label class="workspace-field" data-map-property-visual>
+                                    <span class="workspace-label">Display</span>
+                                    <select asp-for="Input.Tiles[index].VisualType" asp-items="Model.VisualTypeOptions" class="form-select workspace-select" data-map-property-visual-type></select>
+                                </label>
+                                <label class="workspace-field" data-map-property-target>
+                                    <span class="workspace-label">Target</span>
+                                    <select asp-for="Input.Tiles[index].ElementId" asp-items="Model.ElementOptions" class="form-select workspace-select" data-map-property-element></select>
+                                </label>
+                                <label class="workspace-field" data-map-property-text-only>
+                                    <span class="workspace-label">Text</span>
+                                    <textarea asp-for="Input.Tiles[index].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
+                                </label>
+                                <label class="workspace-field" data-map-property-graph-only>
+                                    <span class="workspace-label">Graph type</span>
+                                    <select asp-for="Input.Tiles[index].GraphType" asp-items="Model.GraphTypeOptions" class="form-select workspace-select" data-map-property-graph-type></select>
+                                </label>
+                                <div class="map-property-section">
+                                    <span class="workspace-label">Appearance</span>
+                                    <label class="workspace-field">
+                                        <span class="workspace-label">Background</span>
+                                        <input asp-for="Input.Tiles[index].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
+                                    </label>
+                                    <label class="workspace-field">
+                                        <span class="workspace-label">Accent</span>
+                                        <input asp-for="Input.Tiles[index].AccentColor" class="form-control workspace-input" placeholder="auto or #78d5c8" data-map-property-accent />
+                                    </label>
+                                    <label class="workspace-field">
+                                        <span class="workspace-label">Text color</span>
+                                        <input asp-for="Input.Tiles[index].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
+                                    </label>
+                                </div>
+                                <div class="map-property-checks">
+                                    <label><input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title /> <span>Show title</span></label>
+                                    <label><input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge /> <span>Show state badge</span></label>
+                                    <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
+                                </div>
+                                <input asp-for="Input.Tiles[index].Width" type="hidden" data-map-tile-width />
+                                <input asp-for="Input.Tiles[index].Height" type="hidden" data-map-tile-height />
+                                <div class="map-property-size-readout" data-map-property-size>Size @tile.Width x @tile.Height</div>
+                                <div class="map-property-hint" data-map-property-hint></div>
+                            </section>
+                        }
+                    </div>
+                </aside>
+            </div>
+
+            <template data-map-tile-template>
+                <article class="map-tile map-tile-editor"
+                         data-map-tile
+                         data-tile-index="__index__"
+                         data-state="ok"
+                         data-kind="__kind__"
+                         style="--tile-x: __x__; --tile-y: __y__; --tile-w: __w__; --tile-h: __h__;">
+                    <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
+                    <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
+                    <input type="hidden" name="Input.Tiles[__index__].X" value="__x__" data-map-tile-x />
+                    <input type="hidden" name="Input.Tiles[__index__].Y" value="__y__" data-map-tile-y />
+
+                    <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
+                        <span class="map-tile-icon">@MatmonIcons.Render("square")</span>
+                        <strong data-map-tile-title>__title__</strong>
+                        <span class="map-tile-kind-label" data-map-tile-kind-label>__kindLabel__</span>
+                        <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
+                    </div>
+                    <p data-map-tile-preview>No target selected</p>
+                    <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
+                </article>
+                <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
+                    <label class="workspace-field">
+                        <span class="workspace-label">Title</span>
+                        <input name="Input.Tiles[__index__].Title" value="__title__" class="form-control workspace-input" data-map-property-title />
+                    </label>
+                    <label class="workspace-field">
+                        <span class="workspace-label">Tile type</span>
+                        <select name="Input.Tiles[__index__].Kind" class="form-select workspace-select" data-map-property-kind>
+                            <option value="@MonitoringMapTileKind.Element">State</option>
+                            <option value="@MonitoringMapTileKind.Value">Value</option>
+                            <option value="@MonitoringMapTileKind.Graph">Graph</option>
+                            <option value="@MonitoringMapTileKind.Status">Summary</option>
+                            <option value="@MonitoringMapTileKind.Text">Text</option>
+                        </select>
+                    </label>
+                    <label class="workspace-field" data-map-property-visual>
+                        <span class="workspace-label">Display</span>
+                        <select name="Input.Tiles[__index__].VisualType" class="form-select workspace-select" data-map-property-visual-type>
+                            <option value="@MonitoringMapTileVisualType.Card">Card</option>
+                            <option value="@MonitoringMapTileVisualType.ProgressBar">Progress bar</option>
+                            <option value="@MonitoringMapTileVisualType.Gauge">Gauge</option>
+                        </select>
+                    </label>
+                    <label class="workspace-field" data-map-property-target>
+                        <span class="workspace-label">Target</span>
+                        <select name="Input.Tiles[__index__].ElementId" class="form-select workspace-select" data-map-property-element>
+                            @foreach (var option in Model.ElementOptions)
+                            {
+                                <option value="@option.Value">@option.Text</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="workspace-field" data-map-property-text-only>
+                        <span class="workspace-label">Text</span>
+                        <textarea name="Input.Tiles[__index__].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
+                    </label>
+                    <label class="workspace-field" data-map-property-graph-only>
+                        <span class="workspace-label">Graph type</span>
+                        <select name="Input.Tiles[__index__].GraphType" class="form-select workspace-select" data-map-property-graph-type>
+                            <option value="@MonitoringMapTileGraphType.Line">Line</option>
+                            <option value="@MonitoringMapTileGraphType.Area">Area</option>
+                            <option value="@MonitoringMapTileGraphType.Bars">Bars</option>
+                            <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
+                        </select>
+                    </label>
+                    <div class="map-property-section">
+                        <span class="workspace-label">Appearance</span>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Background</span>
+                            <input name="Input.Tiles[__index__].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Accent</span>
+                            <input name="Input.Tiles[__index__].AccentColor" class="form-control workspace-input" placeholder="auto or #78d5c8" data-map-property-accent />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Text color</span>
+                            <input name="Input.Tiles[__index__].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
+                        </label>
+                    </div>
+                    <div class="map-property-checks">
+                        <label><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /> <span>Show title</span></label>
+                        <label><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /> <span>Show state badge</span></label>
+                        <label><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /> <span>Show target name</span></label>
+                    </div>
+                    <input name="Input.Tiles[__index__].Width" value="__w__" type="hidden" data-map-tile-width />
+                    <input name="Input.Tiles[__index__].Height" value="__h__" type="hidden" data-map-tile-height />
+                    <div class="map-property-size-readout" data-map-property-size>Size __w__ x __h__</div>
+                    <div class="map-property-hint" data-map-property-hint></div>
+                </section>
+            </template>
+
+            <div class="page-actions workspace-toolbar">
+                <button type="submit" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save map</span></button>
+                @if (!Model.IsCreateMode)
+                {
+                    <button type="submit" asp-page-handler="Delete" formnovalidate class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete map</span></button>
+                }
+            </div>
+        </section>
+    </form>
+</section>
+
+@functions {
+    private static string KindLabel(MonitoringMapTileKind kind)
+    {
+        return kind switch
+        {
+            MonitoringMapTileKind.Element => "State",
+            MonitoringMapTileKind.Status => "Summary",
+            MonitoringMapTileKind.Value => "Value",
+            MonitoringMapTileKind.Graph => "Graph",
+            MonitoringMapTileKind.Text => "Text",
+            _ => "Tile"
+        };
+    }
+
+    private static string IconForKind(MonitoringMapTileKind kind)
+    {
+        return kind switch
+        {
+            MonitoringMapTileKind.Graph => "chart",
+            MonitoringMapTileKind.Text => "list",
+            MonitoringMapTileKind.Status => "dashboard",
+            MonitoringMapTileKind.Value => "square",
+            _ => "sensor"
+        };
+    }
+
+    private static string Preview(MapTileInput tile)
+    {
+        if (tile.Kind == MonitoringMapTileKind.Text)
+        {
+            return string.IsNullOrWhiteSpace(tile.Text) ? "Text tile" : tile.Text;
+        }
+
+        return tile.ElementId.HasValue ? "Target selected" : "No target selected";
+    }
+
+    private static string TileStyle(MapTileInput tile)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(tile.BackgroundColor))
+        {
+            parts.Add($"--map-tile-custom-bg: {tile.BackgroundColor}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tile.AccentColor))
+        {
+            parts.Add($"--map-tile-custom-accent: {tile.AccentColor}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tile.TextColor))
+        {
+            parts.Add($"--map-tile-custom-text: {tile.TextColor}");
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join("; ", parts) + ";";
+    }
+}

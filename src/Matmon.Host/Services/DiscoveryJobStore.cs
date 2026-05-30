@@ -5,6 +5,7 @@ namespace Matmon.Host.Services;
 public sealed class DiscoveryJobStore
 {
     private readonly ConcurrentDictionary<Guid, DiscoveryJobSnapshot> _jobs = new();
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationSources = new();
 
     public DiscoveryJobSnapshot Create(
         Guid probeElementId,
@@ -21,10 +22,12 @@ public sealed class DiscoveryJobStore
             ProbeName = probeName,
             Request = request with { JobId = jobId },
             Status = DiscoveryJobStatus.Pending,
-            CreatedUtc = DateTimeOffset.UtcNow
+            CreatedUtc = DateTimeOffset.UtcNow,
+            TotalHosts = CountTargets(request)
         };
 
         _jobs[job.JobId] = job;
+        _cancellationSources[job.JobId] = new CancellationTokenSource();
         return job;
     }
 
@@ -53,6 +56,10 @@ public sealed class DiscoveryJobStore
             job.Status = DiscoveryJobStatus.Running;
             job.StartedUtc ??= DateTimeOffset.UtcNow;
             job.Message = string.IsNullOrWhiteSpace(message) ? "Discovery is running." : message.Trim();
+            if (job.TotalHosts <= 0)
+            {
+                job.TotalHosts = CountTargets(job.Request);
+            }
         }
 
         return true;
@@ -72,6 +79,11 @@ public sealed class DiscoveryJobStore
 
         lock (job)
         {
+            if (job.Status is DiscoveryJobStatus.Completed or DiscoveryJobStatus.Failed or DiscoveryJobStatus.Cancelled)
+            {
+                return false;
+            }
+
             if (job.Status == DiscoveryJobStatus.Pending)
             {
                 job.Status = DiscoveryJobStatus.Running;
@@ -85,7 +97,47 @@ public sealed class DiscoveryJobStore
                 .OrderBy(result => NetworkTargetParser.ToSortableAddress(result.Address))
                 .ToArray();
             job.Results = merged;
-            job.Message = $"{job.Results.Count} host{(job.Results.Count == 1 ? string.Empty : "s")} discovered so far.";
+            job.Message = BuildProgressMessage(job);
+        }
+
+        return true;
+    }
+
+    public bool UpdateProgress(Guid jobId, int scannedHosts, int totalHosts)
+    {
+        if (!_jobs.TryGetValue(jobId, out var job))
+        {
+            return false;
+        }
+
+        lock (job)
+        {
+            if (job.Status is DiscoveryJobStatus.Completed or DiscoveryJobStatus.Failed or DiscoveryJobStatus.Cancelled)
+            {
+                return false;
+            }
+
+            if (job.Status == DiscoveryJobStatus.Pending)
+            {
+                job.Status = DiscoveryJobStatus.Running;
+                job.StartedUtc ??= DateTimeOffset.UtcNow;
+            }
+
+            if (totalHosts > 0)
+            {
+                job.TotalHosts = Math.Max(job.TotalHosts, totalHosts);
+            }
+
+            if (job.TotalHosts > 0)
+            {
+                job.ScannedHosts = Math.Clamp(scannedHosts, 0, job.TotalHosts);
+            }
+            else
+            {
+                job.ScannedHosts = Math.Max(scannedHosts, 0);
+            }
+
+            job.Message = BuildProgressMessage(job);
         }
 
         return true;
@@ -108,12 +160,67 @@ public sealed class DiscoveryJobStore
             {
                 job.Status = DiscoveryJobStatus.Running;
                 job.StartedUtc = now;
+                if (job.TotalHosts <= 0)
+                {
+                    job.TotalHosts = CountTargets(job.Request);
+                }
+
                 job.Message = "Discovery is running on probe.";
             }
         }
 
         return new ProbeDiscoveryJobAssignmentsResponse(
             jobs.Select(job => new ProbeDiscoveryJobAssignment(job.JobId, job.Request.Network, job.Request.Options)).ToArray());
+    }
+
+    public CancellationToken GetCancellationToken(Guid jobId)
+    {
+        return _cancellationSources.TryGetValue(jobId, out var source)
+            ? source.Token
+            : CancellationToken.None;
+    }
+
+    public bool IsCancelled(Guid jobId)
+    {
+        if (!_jobs.TryGetValue(jobId, out var job))
+        {
+            return false;
+        }
+
+        lock (job)
+        {
+            return job.Status == DiscoveryJobStatus.Cancelled ||
+                (_cancellationSources.TryGetValue(jobId, out var source) && source.IsCancellationRequested);
+        }
+    }
+
+    public bool Cancel(Guid jobId, string? message = null)
+    {
+        if (!_jobs.TryGetValue(jobId, out var job))
+        {
+            return false;
+        }
+
+        lock (job)
+        {
+            if (job.Status is DiscoveryJobStatus.Completed or DiscoveryJobStatus.Failed or DiscoveryJobStatus.Cancelled)
+            {
+                return false;
+            }
+
+            job.Status = DiscoveryJobStatus.Cancelled;
+            job.CompletedUtc = DateTimeOffset.UtcNow;
+            job.Message = string.IsNullOrWhiteSpace(message)
+                ? $"Discovery cancelled after {job.ScannedHosts}/{job.TotalHosts} checked."
+                : message.Trim();
+        }
+
+        if (_cancellationSources.TryGetValue(jobId, out var source))
+        {
+            source.Cancel();
+        }
+
+        return true;
     }
 
     public bool Complete(Guid jobId, IReadOnlyList<NetworkDiscoveryResult> results, string? errorMessage)
@@ -125,12 +232,27 @@ public sealed class DiscoveryJobStore
 
         lock (job)
         {
+            if (job.Status == DiscoveryJobStatus.Cancelled)
+            {
+                return false;
+            }
+
             if (results.Count > 0)
             {
                 AddResults(jobId, results);
             }
 
             job.CompletedUtc = DateTimeOffset.UtcNow;
+            if (job.TotalHosts <= 0)
+            {
+                job.TotalHosts = CountTargets(job.Request);
+            }
+
+            if (job.TotalHosts > 0 && string.IsNullOrWhiteSpace(errorMessage))
+            {
+                job.ScannedHosts = job.TotalHosts;
+            }
+
             job.Status = string.IsNullOrWhiteSpace(errorMessage)
                 ? DiscoveryJobStatus.Completed
                 : DiscoveryJobStatus.Failed;
@@ -140,6 +262,23 @@ public sealed class DiscoveryJobStore
         }
 
         return true;
+    }
+
+    private static int CountTargets(NetworkDiscoveryRequest request)
+    {
+        var options = request.Options.Normalized();
+        return NetworkTargetParser.Parse(request.Network, options.MaxHosts).Count;
+    }
+
+    private static string BuildProgressMessage(DiscoveryJobSnapshot job)
+    {
+        var discoveredText = $"{job.Results.Count} host{(job.Results.Count == 1 ? string.Empty : "s")} discovered";
+        if (job.TotalHosts <= 0)
+        {
+            return $"{discoveredText} so far.";
+        }
+
+        return $"{discoveredText}, {job.ProgressPercent}% checked ({job.ScannedHosts}/{job.TotalHosts}).";
     }
 }
 
@@ -166,6 +305,14 @@ public sealed class DiscoveryJobSnapshot
     public IReadOnlyList<NetworkDiscoveryResult> Results { get; set; } = [];
 
     public string? Message { get; set; }
+
+    public int TotalHosts { get; set; }
+
+    public int ScannedHosts { get; set; }
+
+    public int ProgressPercent => TotalHosts <= 0
+        ? Status is DiscoveryJobStatus.Completed ? 100 : 0
+        : (int)Math.Clamp(Math.Floor(ScannedHosts * 100d / TotalHosts), 0d, 100d);
 }
 
 public enum DiscoveryJobStatus
@@ -173,7 +320,8 @@ public enum DiscoveryJobStatus
     Pending = 0,
     Running = 1,
     Completed = 2,
-    Failed = 3
+    Failed = 3,
+    Cancelled = 4
 }
 
 public sealed record ProbeDiscoveryJobAssignmentsResponse(
@@ -191,7 +339,13 @@ public sealed record ProbeDiscoveryJobResult(
     Guid JobId,
     IReadOnlyList<NetworkDiscoveryResult> Hosts,
     string? ErrorMessage,
-    bool IsComplete);
+    bool IsComplete,
+    int? ScannedHosts = null,
+    int? TotalHosts = null);
+
+public sealed record ProbeDiscoveryJobResultPostResponse(
+    int Recorded,
+    bool Cancelled);
 
 public sealed record DiscoveryJobStatusResponse(
     Guid JobId,
@@ -200,20 +354,24 @@ public sealed record DiscoveryJobStatusResponse(
     string Status,
     string Message,
     bool IsComplete,
+    int ScannedHosts,
+    int TotalHosts,
+    int ProgressPercent,
     IReadOnlyList<NetworkDiscoveryResult> Results);
 
 public static class DiscoveryDefaults
 {
     public static NetworkDiscoveryOptions Options { get; } = new(
         UsePing: true,
+        PingFirst: false,
         UseTcpPorts: true,
-        TcpPorts: [22, 80, 443, 1433, 3389, 5000, 5001, 5985, 5986, 8006, 8099],
+        TcpPorts: [22, 80, 135, 139, 443, 445, 1433, 3389, 5000, 5001, 5985, 5986, 8006, 8080, 8099, 8443],
         UseSnmp: false,
         SnmpCommunity: "public",
         SnmpVersion: "v2c",
         SnmpPort: 161,
         UseReverseDns: false,
         TimeoutMs: 650,
-        MaxHosts: 256,
+        MaxHosts: 65_534,
         Parallelism: 64);
 }

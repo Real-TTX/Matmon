@@ -1,28 +1,177 @@
+using Matmon.Core.Domain;
 using Matmon.Host.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Globalization;
 
 namespace Matmon.Host.Pages;
 
 public class ConfigModel : PageModel
 {
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
+    private readonly IMonitoringWorkspaceStore _workspaceStore;
 
-    public ConfigModel(IConfigurationOverviewProvider configurationOverviewProvider)
+    public ConfigModel(
+        IConfigurationOverviewProvider configurationOverviewProvider,
+        IMonitoringWorkspaceStore workspaceStore)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
+        _workspaceStore = workspaceStore;
     }
 
     public ConfigurationOverview Overview { get; private set; } = default!;
 
+    public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
+
+    public IReadOnlyList<SelectListItem> RoleOptions { get; private set; } = [];
+
+    public StorageTelemetryOverview StorageTelemetry { get; private set; } = new(0, 0, 0);
+
+    public IReadOnlyList<SelectListItem> StorageCleanupScopeOptions { get; private set; } = [];
+
+    public IReadOnlyList<SelectListItem> StorageCleanupAgeOptions { get; private set; } = [];
+
     [BindProperty(SupportsGet = true)]
     public string? Tab { get; set; }
 
+    [BindProperty]
+    public SystemUserInput UserInput { get; set; } = new();
+
+    [BindProperty]
+    public StorageCleanupInput StorageCleanup { get; set; } = new();
+
+    [TempData]
+    public string? StatusMessage { get; set; }
+
+    [TempData]
+    public string? ErrorMessage { get; set; }
+
     public string ActiveTab => NormalizeTab(Tab);
 
-    public void OnGet()
+    public IActionResult OnGet()
     {
-        Overview = _configurationOverviewProvider.GetOverview();
+        if (IsUsersTabRequestedByNonAdmin())
+        {
+            return Forbid();
+        }
+
+        LoadView();
+        return Page();
+    }
+
+    public IActionResult OnPostCreateUser()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            _workspaceStore.CreateUser(UserInput.Username, UserInput.Password ?? string.Empty, UserInput.Role);
+            StatusMessage = $"User '{UserInput.Username}' created.";
+            return RedirectToPage(new { tab = "users" });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            Tab = "users";
+            LoadView();
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostUpdateUser()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            _workspaceStore.UpdateUser(UserInput.Id, UserInput.Username, UserInput.Role, UserInput.IsEnabled, UserInput.Password);
+            StatusMessage = $"User '{UserInput.Username}' updated.";
+            return RedirectToPage(new { tab = "users" });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            Tab = "users";
+            LoadView();
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostDeleteUser(Guid userId)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            _workspaceStore.DeleteUser(userId);
+            StatusMessage = "User deleted.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "users" });
+    }
+
+    public IActionResult OnPostRotateProbeToken(Guid probeId)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var element = _workspaceStore.FindElement(probeId)
+                ?? throw new InvalidOperationException("Probe not found.");
+            if (element is not ProbeElement probe)
+            {
+                throw new InvalidOperationException("Token can only be rotated for probes.");
+            }
+
+            _workspaceStore.RotateProbeToken(probe.Id);
+            StatusMessage = $"Token for '{probe.Name}' rotated.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "probes" });
+    }
+
+    public IActionResult OnPostCleanupStorage()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            StorageCleanup.OlderThanDays = Math.Clamp(StorageCleanup.OlderThanDays, 0, 3650);
+            var result = _workspaceStore.CleanupStorage(StorageCleanup.Scope, StorageCleanup.OlderThanDays);
+            StatusMessage = result.TotalRemoved > 0
+                ? $"Cleanup removed {FormatCount(result.TotalRemoved)} entries ({FormatCount(result.SensorHistoryRemoved)} history, {FormatCount(result.StatisticsRemoved)} statistics, {FormatCount(result.EventsRemoved)} events)."
+                : "Cleanup finished. Nothing matched the selected age and scope.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "storage" });
     }
 
     public bool IsActiveTab(string tab)
@@ -47,13 +196,73 @@ public class ConfigModel : PageModel
             : "-";
     }
 
+    public static string FormatCount(long value)
+    {
+        return value.ToString("N0", CultureInfo.CurrentCulture);
+    }
+
     private static string NormalizeTab(string? tab)
     {
         return tab?.Trim().ToLowerInvariant() switch
         {
             "probes" => "probes",
             "storage" => "storage",
+            "users" => "users",
             _ => "general"
         };
     }
+
+    private bool IsUsersTabRequestedByNonAdmin()
+    {
+        return string.Equals(NormalizeTab(Tab), "users", StringComparison.OrdinalIgnoreCase) &&
+            !MatmonSecurity.IsAdmin(User);
+    }
+
+    private void LoadView()
+    {
+        Overview = _configurationOverviewProvider.GetOverview();
+        Users = _workspaceStore.GetUsers();
+        StorageTelemetry = _workspaceStore.GetStorageTelemetryOverview();
+        RoleOptions = Enum.GetValues<MatmonUserRole>()
+            .OrderByDescending(role => role)
+            .Select(role => new SelectListItem(role.ToString(), role.ToString()))
+            .ToArray();
+        StorageCleanupScopeOptions =
+        [
+            new SelectListItem("Telemetry history + statistics", StorageCleanupScope.Telemetry.ToString()),
+            new SelectListItem("Sensor history only", StorageCleanupScope.SensorHistory.ToString()),
+            new SelectListItem("Events only", StorageCleanupScope.Events.ToString()),
+            new SelectListItem("Statistics only", StorageCleanupScope.Statistics.ToString()),
+            new SelectListItem("Everything", StorageCleanupScope.Everything.ToString())
+        ];
+        StorageCleanupAgeOptions =
+        [
+            new SelectListItem("Older than 7 days", "7"),
+            new SelectListItem("Older than 30 days", "30"),
+            new SelectListItem("Older than 90 days", "90"),
+            new SelectListItem("Older than 180 days", "180"),
+            new SelectListItem("Older than 365 days", "365"),
+            new SelectListItem("All selected data", "0")
+        ];
+    }
+}
+
+public sealed class SystemUserInput
+{
+    public Guid Id { get; set; }
+
+    public string Username { get; set; } = string.Empty;
+
+    public string? Password { get; set; }
+
+    public MatmonUserRole Role { get; set; } = MatmonUserRole.Viewer;
+
+    public bool IsEnabled { get; set; } = true;
+}
+
+public sealed class StorageCleanupInput
+{
+    public StorageCleanupScope Scope { get; set; } = StorageCleanupScope.Telemetry;
+
+    public int OlderThanDays { get; set; } = 30;
 }

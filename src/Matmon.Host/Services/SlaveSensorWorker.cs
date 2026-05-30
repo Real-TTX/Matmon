@@ -113,6 +113,8 @@ public sealed class SlaveSensorWorker : BackgroundService
             success: true);
 
         var reports = new List<ProbeSensorObservationReport>();
+        var pendingResults = new List<SlaveProbePendingResult>();
+        var upcomingExecutions = new List<SlaveProbeUpcomingExecution>();
         var now = DateTimeOffset.UtcNow;
         foreach (var assignment in assignments.Sensors)
         {
@@ -126,22 +128,47 @@ public sealed class SlaveSensorWorker : BackgroundService
             var lastExecutedUtc = _lastExecutedUtc.TryGetValue(assignment.SensorId, out var localLastExecuted)
                 ? localLastExecuted
                 : assignment.LastObservationUtc;
+            upcomingExecutions.Add(new SlaveProbeUpcomingExecution(
+                assignment.SensorId,
+                assignment.Name,
+                assignment.Path,
+                assignment.SensorTypeKey,
+                MonitoringScheduleCalculator.GetNextDueUtc(
+                    assignment.Settings,
+                    lastExecutedUtc,
+                    now,
+                    TimeSpan.FromSeconds(15)),
+                lastExecutedUtc,
+                BuildScheduleSummary(assignment.Settings)));
+
             if (!MonitoringScheduleCalculator.IsDue(assignment.Settings, lastExecutedUtc, now, TimeSpan.FromSeconds(15)))
             {
                 continue;
             }
 
             var result = await ExecuteAssignmentAsync(assignment, cancellationToken);
-            reports.Add(new ProbeSensorObservationReport(assignment.SensorId, result, DateTimeOffset.UtcNow));
-            _lastExecutedUtc[assignment.SensorId] = DateTimeOffset.UtcNow;
+            var executedUtc = DateTimeOffset.UtcNow;
+            reports.Add(new ProbeSensorObservationReport(assignment.SensorId, result, executedUtc));
+            pendingResults.Add(new SlaveProbePendingResult(
+                assignment.SensorId,
+                assignment.Name,
+                assignment.Path,
+                result.State,
+                MonitoringStatePresentation.Key(result.State),
+                MonitoringStatePresentation.Label(result.State),
+                result.Message,
+                executedUtc));
+            _lastExecutedUtc[assignment.SensorId] = executedUtc;
         }
+
+        _runtimeState.UpdateUpcomingExecutions(upcomingExecutions);
 
         if (reports.Count == 0)
         {
             return;
         }
 
-        await PostResultsAsync(client, probeId, reports, cancellationToken);
+        await PostResultsAsync(client, probeId, reports, pendingResults, cancellationToken);
     }
 
     private async ValueTask<SensorExecutionResult> ExecuteAssignmentAsync(
@@ -179,6 +206,7 @@ public sealed class SlaveSensorWorker : BackgroundService
         HttpClient client,
         string probeId,
         IReadOnlyList<ProbeSensorObservationReport> reports,
+        IReadOnlyList<SlaveProbePendingResult> pendingResults,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/probes/{Uri.EscapeDataString(probeId)}/observations")
@@ -187,9 +215,17 @@ public sealed class SlaveSensorWorker : BackgroundService
         };
         AddProbeToken(request);
 
-        using var response = await client.SendAsync(request, cancellationToken);
-        var message = $"{reports.Count} result{(reports.Count == 1 ? string.Empty : "s")} posted: {(int)response.StatusCode} {response.ReasonPhrase}";
-        _runtimeState.RecordResultPost(reports.Count, message, response.IsSuccessStatusCode);
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            var message = $"{reports.Count} result{(reports.Count == 1 ? string.Empty : "s")} posted: {(int)response.StatusCode} {response.ReasonPhrase}";
+            _runtimeState.RecordResultPost(reports.Count, message, response.IsSuccessStatusCode, pendingResults);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var message = $"{reports.Count} result{(reports.Count == 1 ? string.Empty : "s")} transfer failed: {ex.Message}";
+            _runtimeState.RecordResultPost(reports.Count, message, success: false, pendingResults);
+        }
     }
 
     private async Task SyncDiscoveryJobsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
@@ -215,6 +251,7 @@ public sealed class SlaveSensorWorker : BackgroundService
 
             try
             {
+                var lastReportedScannedHosts = 0;
                 var hosts = await _discoveryService.DiscoverAsync(
                     new NetworkDiscoveryRequest(job.JobId, job.Network, job.Options),
                     async (host, token) =>
@@ -225,7 +262,36 @@ public sealed class SlaveSensorWorker : BackgroundService
                             [new ProbeDiscoveryJobResult(job.JobId, [host], null, IsComplete: false)],
                             token);
                     },
-                    cancellationToken);
+                    cancellationToken,
+                    async (progress, token) =>
+                    {
+                        var reportEvery = Math.Max(progress.TotalHosts / 100, 1);
+                        var shouldReport =
+                            progress.ScannedHosts >= progress.TotalHosts ||
+                            progress.ScannedHosts - Volatile.Read(ref lastReportedScannedHosts) >= reportEvery;
+                        if (!shouldReport)
+                        {
+                            return;
+                        }
+
+                        var previous = Interlocked.Exchange(ref lastReportedScannedHosts, progress.ScannedHosts);
+                        if (previous >= progress.ScannedHosts)
+                        {
+                            return;
+                        }
+
+                        await PostDiscoveryResultsAsync(
+                            client,
+                            probeId,
+                            [new ProbeDiscoveryJobResult(
+                                job.JobId,
+                                [],
+                                null,
+                                IsComplete: false,
+                                progress.ScannedHosts,
+                                progress.TotalHosts)],
+                            token);
+                    });
                 await PostDiscoveryResultsAsync(
                     client,
                     probeId,
@@ -235,6 +301,10 @@ public sealed class SlaveSensorWorker : BackgroundService
                     $"Discovery {job.Network}",
                     $"{hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} discovered",
                     success: true);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _runtimeState.RecordExecution($"Discovery {job.Network}", "cancelled by master", success: true);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -266,10 +336,24 @@ public sealed class SlaveSensorWorker : BackgroundService
         AddProbeToken(postRequest);
 
         using var postResponse = await client.SendAsync(postRequest, cancellationToken);
+        var cancelled = false;
+        if (postResponse.IsSuccessStatusCode)
+        {
+            var result = await postResponse.Content.ReadFromJsonAsync<ProbeDiscoveryJobResultPostResponse>(JsonOptions, cancellationToken);
+            cancelled = result?.Cancelled == true;
+        }
+
         _runtimeState.RecordResultPost(
             results.Count,
-            $"{results.Count} discovery result{(results.Count == 1 ? string.Empty : "s")} posted: {(int)postResponse.StatusCode} {postResponse.ReasonPhrase}",
+            cancelled
+                ? "discovery job was cancelled by master"
+                : $"{results.Count} discovery result{(results.Count == 1 ? string.Empty : "s")} posted: {(int)postResponse.StatusCode} {postResponse.ReasonPhrase}",
             postResponse.IsSuccessStatusCode);
+
+        if (cancelled)
+        {
+            throw new OperationCanceledException("Discovery job was cancelled by master.");
+        }
     }
 
     private void AddProbeToken(HttpRequestMessage request)
@@ -278,6 +362,16 @@ public sealed class SlaveSensorWorker : BackgroundService
         {
             request.Headers.TryAddWithoutValidation("X-Matmon-Probe-Token", _runtimeOptions.ProbeToken);
         }
+    }
+
+    private static string BuildScheduleSummary(MonitoringSettings settings)
+    {
+        if (settings.PollingSchedule is { } schedule)
+        {
+            return schedule.Summary();
+        }
+
+        return $"every {MonitoringSchedule.FormatDuration(settings.PollingInterval ?? TimeSpan.FromSeconds(15))}";
     }
 
     private static SensorExecutionResult ApplyDefaultChannelSelection(

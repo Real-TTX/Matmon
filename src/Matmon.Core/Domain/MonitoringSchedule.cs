@@ -101,6 +101,50 @@ public static class MonitoringScheduleCalculator
         return lastRunUtc is not DateTimeOffset lastRun || nowUtc - lastRun >= interval;
     }
 
+    public static DateTimeOffset? GetNextDueUtc(
+        MonitoringSettings settings,
+        DateTimeOffset? lastRunUtc,
+        DateTimeOffset nowUtc,
+        TimeSpan fallbackInterval)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (settings.PollingSchedule is not { } schedule)
+        {
+            var interval = settings.PollingInterval ?? fallbackInterval;
+            if (lastRunUtc is not DateTimeOffset lastRun)
+            {
+                return nowUtc;
+            }
+
+            var nextRun = lastRun + interval;
+            return nextRun <= nowUtc ? nowUtc : nextRun;
+        }
+
+        if (schedule.Mode == MonitoringScheduleMode.Every)
+        {
+            var seconds = Math.Max(schedule.EverySeconds ?? 0, 1);
+            if (lastRunUtc is not DateTimeOffset lastRun)
+            {
+                return nowUtc;
+            }
+
+            var nextRun = lastRun + TimeSpan.FromSeconds(seconds);
+            return nextRun <= nowUtc ? nowUtc : nextRun;
+        }
+
+        var nowLocal = nowUtc.ToLocalTime();
+        var lastLocal = lastRunUtc?.ToLocalTime();
+        var latestOccurrence = GetLatestOccurrence(schedule, nowLocal);
+        if (latestOccurrence is not null &&
+            (lastLocal is null || lastLocal.Value < latestOccurrence.Value))
+        {
+            return nowUtc;
+        }
+
+        return GetNextOccurrence(schedule, nowLocal)?.ToUniversalTime();
+    }
+
     private static bool IsScheduleDue(MonitoringSchedule schedule, DateTimeOffset? lastRunUtc, DateTimeOffset nowUtc)
     {
         if (schedule.Mode == MonitoringScheduleMode.Every)
@@ -129,6 +173,18 @@ public static class MonitoringScheduleCalculator
             MonitoringScheduleMode.Daily => GetDailyOccurrence(nowLocal, time),
             MonitoringScheduleMode.Weekly => GetWeeklyOccurrence(nowLocal, schedule.DayOfWeek ?? DayOfWeek.Monday, time),
             MonitoringScheduleMode.Monthly => GetMonthlyOccurrence(nowLocal, Math.Clamp(schedule.DayOfMonth ?? 1, 1, 31), time),
+            _ => null
+        };
+    }
+
+    private static DateTimeOffset? GetNextOccurrence(MonitoringSchedule schedule, DateTimeOffset nowLocal)
+    {
+        var time = schedule.TimeOfDay ?? TimeSpan.Zero;
+        return schedule.Mode switch
+        {
+            MonitoringScheduleMode.Daily => GetNextDailyOccurrence(nowLocal, time),
+            MonitoringScheduleMode.Weekly => GetNextWeeklyOccurrence(nowLocal, schedule.DayOfWeek ?? DayOfWeek.Monday, time),
+            MonitoringScheduleMode.Monthly => GetNextMonthlyOccurrence(nowLocal, Math.Clamp(schedule.DayOfMonth ?? 1, 1, 31), time),
             _ => null
         };
     }
@@ -163,6 +219,31 @@ public static class MonitoringScheduleCalculator
     {
         var day = Math.Min(dayOfMonth, DateTime.DaysInMonth(year, month));
         return AtLocalTime(new DateTime(year, month, day), time, offset);
+    }
+
+    private static DateTimeOffset GetNextDailyOccurrence(DateTimeOffset nowLocal, TimeSpan time)
+    {
+        var occurrence = AtLocalTime(nowLocal.Date, time, nowLocal.Offset);
+        return occurrence > nowLocal ? occurrence : occurrence.AddDays(1);
+    }
+
+    private static DateTimeOffset GetNextWeeklyOccurrence(DateTimeOffset nowLocal, DayOfWeek dayOfWeek, TimeSpan time)
+    {
+        var daysUntil = ((int)dayOfWeek - (int)nowLocal.DayOfWeek + 7) % 7;
+        var occurrence = AtLocalTime(nowLocal.Date.AddDays(daysUntil), time, nowLocal.Offset);
+        return occurrence > nowLocal ? occurrence : occurrence.AddDays(7);
+    }
+
+    private static DateTimeOffset GetNextMonthlyOccurrence(DateTimeOffset nowLocal, int dayOfMonth, TimeSpan time)
+    {
+        var occurrence = BuildMonthlyOccurrence(nowLocal.Year, nowLocal.Month, dayOfMonth, time, nowLocal.Offset);
+        if (occurrence > nowLocal)
+        {
+            return occurrence;
+        }
+
+        var nextMonth = nowLocal.AddMonths(1);
+        return BuildMonthlyOccurrence(nextMonth.Year, nextMonth.Month, dayOfMonth, time, nowLocal.Offset);
     }
 
     private static DateTimeOffset AtLocalTime(DateTime date, TimeSpan time, TimeSpan offset)

@@ -1,0 +1,145 @@
+@page "/Maps/Public/{token}"
+@model MapPublicModel
+@{
+    Layout = null;
+    var display = Model.Display!;
+    ViewData["Title"] = display.Map.Name;
+}
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="30" />
+    <title>@display.Map.Name - Matmon</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="public-map-body">
+    <main class="public-map-shell">
+        <header class="public-map-header">
+            <div>
+                <span>Matmon Map</span>
+                <h1>@display.Map.Name</h1>
+            </div>
+            <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
+        </header>
+
+        <section class="map-canvas public-map-canvas" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows;">
+            @foreach (var tile in display.Tiles)
+            {
+                <article class="map-tile map-tile-display" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
+                    @if (tile.Tile.ShowTitle || tile.Tile.ShowStateBadge)
+                    {
+                        <div class="map-tile-head">
+                            <span class="map-tile-icon">@MatmonIcons.Render(tile.IconKey)</span>
+                            @if (tile.Tile.ShowTitle)
+                            {
+                                <strong>@tile.Tile.Title</strong>
+                            }
+                            @if (tile.Tile.ShowStateBadge)
+                            {
+                                <span class="state-pill" data-state="@tile.StateKey">@tile.StateLabel</span>
+                            }
+                        </div>
+                    }
+
+                    @if (tile.Tile.Kind == MonitoringMapTileKind.Graph)
+                    {
+                        <div class="map-tile-graph-frame">
+                            @if (!string.IsNullOrWhiteSpace(tile.GraphLinePath))
+                            {
+                                <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                                    @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Area && !string.IsNullOrWhiteSpace(tile.GraphAreaPath))
+                                    {
+                                        <path class="map-graph-area" d="@tile.GraphAreaPath"></path>
+                                    }
+                                    @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Bars && !string.IsNullOrWhiteSpace(tile.GraphBarPath))
+                                    {
+                                        <path class="map-graph-bars" d="@tile.GraphBarPath"></path>
+                                    }
+                                    else
+                                    {
+                                        <path class="map-graph-line" d="@tile.GraphLinePath"></path>
+                                    }
+                                </svg>
+                            }
+                            else
+                            {
+                                <span>No graph data yet</span>
+                            }
+                        </div>
+                    }
+
+                    @if (tile.ProgressPercent.HasValue && tile.Tile.VisualType == MonitoringMapTileVisualType.Gauge)
+                    {
+                        <div class="map-tile-gauge" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
+                            <span>
+                                <strong>@FormatProgressLabel(tile.ProgressPercent)</strong>
+                                <small>@tile.ProgressLabel</small>
+                            </span>
+                        </div>
+                    }
+                    else if (tile.ProgressPercent.HasValue && tile.Tile.VisualType == MonitoringMapTileVisualType.ProgressBar)
+                    {
+                        <div class="map-tile-progress-wrap">
+                            <div class="map-tile-progress" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
+                                <span></span>
+                            </div>
+                            <small>@tile.ProgressLabel</small>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(tile.Value) && tile.Tile.VisualType != MonitoringMapTileVisualType.Gauge)
+                    {
+                        <div class="map-tile-value">@tile.Value</div>
+                    }
+
+                    <p>@tile.Subtitle</p>
+                    <small>
+                        @tile.KindLabel
+                        @if (tile.Tile.ShowElementName && tile.Element is not null)
+                        {
+                            <text> - @tile.Element.Name</text>
+                        }
+                    </small>
+                </article>
+            }
+        </section>
+    </main>
+</body>
+</html>
+
+@functions {
+    private static string TileStyle(MonitoringMapTile tile)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(tile.BackgroundColor))
+        {
+            parts.Add($"--map-tile-custom-bg: {tile.BackgroundColor}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tile.AccentColor))
+        {
+            parts.Add($"--map-tile-custom-accent: {tile.AccentColor}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tile.TextColor))
+        {
+            parts.Add($"--map-tile-custom-text: {tile.TextColor}");
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join("; ", parts) + ";";
+    }
+
+    private static string FormatProgressPercent(double? value)
+    {
+        return Math.Clamp(value.GetValueOrDefault(), 0, 100)
+            .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatProgressLabel(double? value)
+    {
+        return $"{Math.Clamp(value.GetValueOrDefault(), 0, 100):0.#}%";
+    }
+}
