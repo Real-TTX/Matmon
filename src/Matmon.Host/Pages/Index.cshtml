@@ -1,0 +1,255 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Monitoring";
+    var visibleDashboardSensors = Model.Snapshot.TelemetrySeries
+        .OrderByDescending(series => series.StateKey?.ToLowerInvariant() switch
+        {
+            "error" => 4,
+            "warning" => 3,
+            "paused" => 2,
+            "unknown" => 1,
+            _ => 0
+        })
+        .ThenBy(series => series.Path)
+        .Take(24)
+        .ToArray();
+}
+
+@if (Model.IsSlave)
+{
+    <section class="dashboard-shell">
+        <div class="page-header sensor-header">
+            <div class="sensor-header-main">
+                <div class="page-title">
+                    @MatmonIcons.Render("probe")
+                    <h1>Probe</h1>
+                </div>
+                <div class="sensor-path">@Model.RuntimeOptions.ProbeName (@Model.RuntimeOptions.ProbeId)</div>
+                <div class="sensor-meta">
+                    <span class="sensor-chip">Mode: Slave</span>
+                    <span class="sensor-chip">Master: @Model.RuntimeOptions.MasterUrl</span>
+                    <span class="sensor-chip">Interval: @Model.RuntimeOptions.HeartbeatIntervalSeconds s</span>
+                </div>
+            </div>
+            <div class="sensor-header-side">
+                <span class="state-pill" data-state="@(Model.SlaveSnapshot.IsConnected ? "ok" : "error")">
+                    @(Model.SlaveSnapshot.IsConnected ? "Connected" : "Disconnected")
+                </span>
+                <div class="sensor-current-value">
+                    <strong>@Model.SlaveSnapshot.AssignedSensorCount</strong>
+                    <span>assigned</span>
+                </div>
+                <div class="sensor-header-meta">
+                    <span class="panel-hint">@Model.SlaveSnapshot.StatusMessage</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-grid">
+            <article class="metric-card panel">
+                <span class="metric-label">@MatmonIcons.Render("signal")<span>Heartbeat</span></span>
+                <strong>@(Model.SlaveSnapshot.LastHeartbeatUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "-")</strong>
+            </article>
+            <article class="metric-card panel">
+                <span class="metric-label">@MatmonIcons.Render("sensor")<span>Assignments</span></span>
+                <strong>@(Model.SlaveSnapshot.LastAssignmentSyncUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "-")</strong>
+            </article>
+            <article class="metric-card panel">
+                <span class="metric-label">@MatmonIcons.Render("spark")<span>Last Run</span></span>
+                <strong>@Model.SlaveSnapshot.LastExecutedSensorCount</strong>
+            </article>
+            <article class="metric-card panel">
+                <span class="metric-label">@MatmonIcons.Render("arrow-right")<span>Results</span></span>
+                <strong>@(Model.SlaveSnapshot.LastResultPostUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "-")</strong>
+            </article>
+        </div>
+
+        <section class="panel panel-stack">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("list")<span>Probe Events</span></h2>
+                <span class="panel-hint">@Model.SlaveSnapshot.Events.Count exchanged events</span>
+            </div>
+
+            @if (Model.SlaveSnapshot.Events.Count == 0)
+            {
+                <div class="empty-state">No probe events yet.</div>
+            }
+            else
+            {
+                <div class="event-list compact-event-list">
+                    @foreach (var entry in Model.SlaveSnapshot.Events)
+                    {
+                        <article class="event-row" data-state="@(entry.IsError ? "error" : "ok")">
+                            <span class="event-row-time">@entry.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                            <span class="event-row-kind">@entry.Direction</span>
+                            <span class="event-row-state">@entry.Kind</span>
+                            <span class="event-row-message">@entry.Message</span>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    </section>
+}
+else
+{
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("monitoring")
+            <div>
+                <div class="eyebrow">@Model.Snapshot.WorkspaceName</div>
+                <h1>Monitoring</h1>
+            </div>
+        </div>
+        <div class="mode-chip">
+            <span>Mode</span>
+            <strong>@Model.Snapshot.Mode</strong>
+        </div>
+    </div>
+
+    <div class="metric-grid">
+        <a class="metric-card panel metric-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="host">
+            <span class="metric-label">@MatmonIcons.Render("host")<span>Hosts</span></span>
+            <strong>@Model.Snapshot.HostCount</strong>
+        </a>
+        <a class="metric-card panel metric-link" asp-page="/Alerts">
+            <span class="metric-label">@MatmonIcons.Render("warning")<span>Open Alerts</span></span>
+            <strong>@Model.Snapshot.ActiveAlertCount</strong>
+        </a>
+        <a class="metric-card panel metric-link" asp-page="/Templates">
+            <span class="metric-label">@MatmonIcons.Render("template")<span>Templates</span></span>
+            <strong>@Model.Snapshot.TemplateCount</strong>
+        </a>
+        <a class="metric-card panel metric-link" asp-page="/Notifications">
+            <span class="metric-label">@MatmonIcons.Render("bell")<span>Notifications</span></span>
+            <strong>@Model.Snapshot.NotificationRuleCount</strong>
+        </a>
+    </div>
+
+    <section class="panel panel-stack" data-dashboard-highlight-strip>
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("star")<span>Highlights</span></h2>
+            <span class="panel-hint">@Model.Snapshot.HighlightedTelemetrySeries.Count highlighted</span>
+        </div>
+
+        @if (Model.Snapshot.HighlightedTelemetrySeries.Count == 0)
+        {
+            <div class="empty-state">No highlights yet. Mark a sensor as Highlight to pin it here.</div>
+        }
+        else
+        {
+            <div class="sensor-highlights-strip" id="matmon-graph-grid">
+                @foreach (var series in Model.Snapshot.HighlightedTelemetrySeries)
+                {
+                    <a class="panel graph-card sensor-card sensor-highlight-card sensor-card-link"
+                       asp-page="/SensorDetails"
+                       asp-route-sensorId="@series.SensorId"
+                       data-series-key="@series.Key"
+                       data-state="@series.StateKey"
+                       style="--series-color:@series.StateColor">
+                        <div class="graph-card-head sensor-card-head">
+                            <div class="sensor-card-main">
+                                <div class="sensor-card-title">
+                                    @MatmonIcons.Render("sensor")
+                                    <span data-role="sensor-title">@series.Title</span>
+                                </div>
+                                <div class="sensor-card-path" data-role="sensor-path">@series.Path</div>
+                                <div class="sensor-card-meta">
+                                    <span class="sensor-chip" data-role="sensor-type">@series.SensorTypeLabel</span>
+                                    <span class="sensor-chip" data-role="sensor-target">@series.Target</span>
+                                    <span class="sensor-chip" data-role="sensor-summary">@series.Description</span>
+                                </div>
+                            </div>
+                            <div class="graph-metric sensor-card-metric">
+                                <span class="state-pill sensor-state-pill" data-role="state" data-state="@series.StateKey">@series.StateLabel</span>
+                                <strong data-role="current-value">@(series.CurrentValue.HasValue ? series.CurrentValue.Value.ToString("0.0") : "-")</strong>
+                                <span data-role="current-unit">@series.Unit</span>
+                            </div>
+                        </div>
+
+                        <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                            <path data-role="area"></path>
+                            <path data-role="line"></path>
+                        </svg>
+
+                        <div class="graph-footer">
+                            <span>@(series.Points.Count == 0 ? "no data" : $"{series.Points.Count} samples")</span>
+                            <span class="sensor-card-link-hint">@MatmonIcons.Render("chart")<span>Details</span></span>
+                        </div>
+                    </a>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="panel panel-stack dashboard-sensors-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("monitoring")<span>Live Sensors</span></h2>
+            <a class="workspace-action-link dashboard-panel-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
+                @MatmonIcons.Render("arrow-right")
+                <span>@Model.Snapshot.SensorCount all</span>
+            </a>
+        </div>
+
+        @if (visibleDashboardSensors.Length == 0)
+        {
+            <div class="empty-state">No sensor data yet.</div>
+        }
+        else
+        {
+            <div class="dashboard-sensor-board">
+                @foreach (var series in visibleDashboardSensors)
+                {
+                    <a class="dashboard-sensor-tile"
+                       asp-page="/SensorDetails"
+                       asp-route-sensorId="@series.SensorId"
+                       data-series-key="@series.Key"
+                       data-state="@series.StateKey"
+                       style="--series-color:@series.StateColor">
+                        <div class="dashboard-sensor-tile-main">
+                            <div class="dashboard-sensor-title-row">
+                                <span class="dashboard-sensor-icon">@MatmonIcons.Render("sensor")</span>
+                                <span class="dashboard-sensor-title" data-role="sensor-title">@series.Title</span>
+                                @if (series.IsHighlighted)
+                                {
+                                    <span class="highlight-pill dashboard-highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
+                                }
+                            </div>
+                            <div class="dashboard-sensor-path" data-role="sensor-path">@series.Path</div>
+                            <div class="dashboard-sensor-meta">
+                                <span data-role="sensor-type">@series.SensorTypeLabel</span>
+                                <span data-role="sensor-target">@series.Target</span>
+                            </div>
+                            <div class="dashboard-sensor-message" data-role="sensor-summary">@series.Description</div>
+                        </div>
+
+                        <div class="dashboard-sensor-side">
+                            <span class="state-pill sensor-state-pill" data-role="state" data-state="@series.StateKey">@series.StateLabel</span>
+                            <div class="dashboard-sensor-value">
+                                <strong data-role="current-value">@(series.CurrentValue.HasValue ? series.CurrentValue.Value.ToString("0.0") : "-")</strong>
+                                <span data-role="current-unit">@series.Unit</span>
+                            </div>
+                            <svg class="sparkline dashboard-sensor-sparkline" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                                <path data-role="area"></path>
+                                <path data-role="line"></path>
+                            </svg>
+                        </div>
+                    </a>
+                }
+            </div>
+
+            @if (Model.Snapshot.SensorCount > visibleDashboardSensors.Length)
+            {
+                <div class="dashboard-sensor-more">
+                    <a class="workspace-action-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
+                        @MatmonIcons.Render("arrow-right")
+                        <span>@(Model.Snapshot.SensorCount - visibleDashboardSensors.Length) more sensors</span>
+                    </a>
+                </div>
+            }
+        }
+    </section>
+</section>
+}

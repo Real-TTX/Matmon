@@ -1,0 +1,151 @@
+@page "/notifications/rule"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "Notification rule";
+    var isCreateMode = Model.SelectedNotificationRuleId is null || Model.NotificationRuleEditor.Id == Guid.Empty;
+    var backUrl = Model.GetSafeReturnUrl("/Notifications");
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("bell")
+            <h1>Notification rule</h1>
+        </div>
+    </div>
+
+    <div class="workspace-tabs">
+        <a class="workspace-tab is-active" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
+        <a class="workspace-tab" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
+        <a class="workspace-tab" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel panel-stack workspace-editor-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("bell")<span>@(isCreateMode ? "Create rule" : "Edit rule")</span></h2>
+            <span class="panel-hint">@Model.View.SelectedNotificationRuleKind</span>
+        </div>
+
+        @if (isCreateMode)
+        {
+            <form method="post" asp-page-handler="CreateNotificationRule" class="workspace-form">
+                <input type="hidden" asp-for="ReturnUrl" />
+                <div class="workspace-form-grid">
+                    <label>
+                        <span>Name</span>
+                        <input asp-for="NewNotificationRule.Name" class="form-control workspace-input" />
+                    </label>
+                    <label>
+                        <span>Sender</span>
+                        <select asp-for="NewNotificationRule.SenderId" class="form-select workspace-select" asp-items="Model.NewNotificationRule.SenderOptions"></select>
+                    </label>
+                    <label>
+                        <span>Receiver</span>
+                        <select asp-for="NewNotificationRule.ReceiverId" class="form-select workspace-select" asp-items="Model.NewNotificationRule.ReceiverOptions"></select>
+                    </label>
+                    <label>
+                        <span>Target</span>
+                        <select asp-for="NewNotificationRule.TargetElementId" class="form-select workspace-select" asp-items="Model.NewNotificationRule.TargetOptions"></select>
+                    </label>
+                    <label>
+                        <span>Enabled</span>
+                        <select asp-for="NewNotificationRule.Enabled" class="form-select workspace-select">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Include descendants</span>
+                        <select asp-for="NewNotificationRule.IncludeDescendants" class="form-select workspace-select">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Cooldown minutes</span>
+                        <input asp-for="NewNotificationRule.CooldownMinutes" type="number" min="1" class="form-control workspace-input" />
+                    </label>
+                    <label class="workspace-span-2">
+                        <span>Trigger states</span>
+                        <select asp-for="NewNotificationRule.TriggerStates" class="form-select workspace-select" asp-items="Model.NewNotificationRule.TriggerStateOptions" multiple size="5"></select>
+                    </label>
+                </div>
+
+                <div class="workspace-form-actions">
+                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create rule</span></button>
+                </div>
+            </form>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="SaveNotificationRule" class="workspace-form">
+                <input type="hidden" asp-for="NotificationRuleEditor.Id" />
+                <input type="hidden" asp-for="ReturnUrl" />
+
+                <div class="workspace-form-grid">
+                    <label>
+                        <span>Name</span>
+                        <input asp-for="NotificationRuleEditor.Name" class="form-control workspace-input" />
+                    </label>
+                    <label>
+                        <span>Sender</span>
+                        <select asp-for="NotificationRuleEditor.SenderId" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.SenderOptions"></select>
+                    </label>
+                    <label>
+                        <span>Receiver</span>
+                        <select asp-for="NotificationRuleEditor.ReceiverId" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.ReceiverOptions"></select>
+                    </label>
+                    <label>
+                        <span>Target</span>
+                        <select asp-for="NotificationRuleEditor.TargetElementId" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.TargetOptions"></select>
+                    </label>
+                    <label>
+                        <span>Enabled</span>
+                        <select asp-for="NotificationRuleEditor.Enabled" class="form-select workspace-select">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Include descendants</span>
+                        <select asp-for="NotificationRuleEditor.IncludeDescendants" class="form-select workspace-select">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Cooldown minutes</span>
+                        <input asp-for="NotificationRuleEditor.CooldownMinutes" type="number" min="1" class="form-control workspace-input" />
+                    </label>
+                    <label class="workspace-span-2">
+                        <span>Trigger states</span>
+                        <select asp-for="NotificationRuleEditor.TriggerStates" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.TriggerStateOptions" multiple size="5"></select>
+                    </label>
+                </div>
+
+                <div class="workspace-form-actions">
+                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save rule</span></button>
+                </div>
+            </form>
+
+            <div class="workspace-inline-actions">
+                <form method="post" asp-page-handler="DeleteNotificationRule" onsubmit="return confirm('Delete this notification rule?');">
+                    <input type="hidden" asp-for="NotificationRuleEditor.Id" />
+                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete rule</span></button>
+                </form>
+            </div>
+        }
+    </section>
+</section>

@@ -1,0 +1,209 @@
+@page "/templates"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "Templates";
+    var returnUrl = Request.Path + Request.QueryString;
+    var templates = Model.View.Templates;
+    var sensorTemplateCount = templates.Count(template => template.IsSensorTemplate);
+    var linkedTemplateCount = templates.Count(template => !string.IsNullOrWhiteSpace(template.ParentName));
+    var configuredTemplateCount = templates.Count(template =>
+        template.ParameterCount > 0 ||
+        template.ThresholdCount > 0 ||
+        template.CredentialCount > 0 ||
+        !string.Equals(template.Summary, "default", StringComparison.OrdinalIgnoreCase));
+    var impactedSensorLinks = templates.Sum(template => template.ImpactCount);
+    var scopeOrder = new[] { "Any", "Probe", "Folder", "Host", "Sensor" };
+    var groupedTemplates = templates
+        .GroupBy(template => template.Scope)
+        .OrderBy(group =>
+        {
+            var index = Array.IndexOf(scopeOrder, group.Key);
+            return index < 0 ? 99 : index;
+        })
+        .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+<section class="dashboard-shell">
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.TemplateApply.TemplateId != Guid.Empty)
+    {
+        var applyTemplate = templates.FirstOrDefault(template => template.Id == Model.TemplateApply.TemplateId);
+
+        <section class="panel panel-stack workspace-editor-panel template-apply-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("spark")<span>Apply Template</span></h2>
+                <a class="workspace-action-link" asp-page="/Templates">@MatmonIcons.Render("x")<span>Close</span></a>
+            </div>
+
+            @if (applyTemplate is null)
+            {
+                <div class="empty-state">Template not found.</div>
+            }
+            else
+            {
+                <div class="template-apply-summary">
+                    <span class="template-scope-badge" data-scope="@applyTemplate.ScopeKey">@applyTemplate.Scope</span>
+                    <strong>@applyTemplate.Name</strong>
+                    <span>@applyTemplate.Summary</span>
+                </div>
+
+                <form method="post" asp-page-handler="ApplyTemplate" class="workspace-form">
+                    <input type="hidden" asp-for="TemplateApply.TemplateId" />
+                    <div class="workspace-form-grid">
+                        <label class="workspace-span-2">
+                            <span>Target element</span>
+                            <select asp-for="TemplateApply.TargetElementId" class="form-select workspace-select" asp-items="Model.TemplateApply.TargetOptions">
+                                <option value="">Select target</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="workspace-form-actions">
+                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
+                    </div>
+                </form>
+            }
+        </section>
+    }
+
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("template")
+            <h1>Templates</h1>
+        </div>
+    </div>
+
+    <section class="panel panel-stack workspace-panel workspace-assistant-panel template-guide-panel">
+        <div class="assistant-steps" aria-label="Template assistant flow">
+            <span class="assistant-step is-active">Scope</span>
+            <span class="assistant-step is-active">Inheritance</span>
+            <span class="assistant-step is-active">Defaults</span>
+            <span class="assistant-step">Apply</span>
+        </div>
+        <div class="template-guide-copy">
+            <strong>Templates stay linked.</strong>
+            A parent template provides defaults, this template can override specific fields, and the element or sensor may still override only what is special for that target.
+        </div>
+    </section>
+
+    <section class="template-metric-grid">
+        <article class="panel template-metric-card">
+            <span>@MatmonIcons.Render("template")<span>Total</span></span>
+            <strong>@templates.Count</strong>
+        </article>
+        <article class="panel template-metric-card">
+            <span>@MatmonIcons.Render("sensor")<span>Sensor templates</span></span>
+            <strong>@sensorTemplateCount</strong>
+        </article>
+        <article class="panel template-metric-card">
+            <span>@MatmonIcons.Render("arrow-right")<span>Inherited</span></span>
+            <strong>@linkedTemplateCount</strong>
+        </article>
+        <article class="panel template-metric-card">
+            <span>@MatmonIcons.Render("signal")<span>Affected sensors</span></span>
+            <strong>@impactedSensorLinks</strong>
+        </article>
+    </section>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("template")<span>Template Library</span></h2>
+            <span class="panel-hint">@configuredTemplateCount configured / @templates.Count total</span>
+        </div>
+
+        @if (templates.Count == 0)
+        {
+            <div class="empty-state">No templates yet. Create one below and Matmon will open the detail assistant directly.</div>
+        }
+        else
+        {
+            <div class="template-library">
+                @foreach (var group in groupedTemplates)
+                {
+                    <section class="template-scope-group">
+                        <div class="template-scope-heading">
+                            <span class="template-scope-badge" data-scope="@group.First().ScopeKey">@group.Key</span>
+                            <span>@group.Count() template@(group.Count() == 1 ? string.Empty : "s")</span>
+                        </div>
+
+                        <div class="template-row-list">
+                            @foreach (var template in group.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
+                            {
+                                <article class="template-row" data-scope="@template.ScopeKey">
+                                    <div class="template-row-icon">
+                                        @MatmonIcons.Render(template.IsSensorTemplate ? "sensor" : "template")
+                                    </div>
+
+                                    <div class="template-row-main">
+                                        <div class="template-row-title">
+                                            <strong>@template.Name</strong>
+                                            <span class="template-scope-badge" data-scope="@template.ScopeKey">@template.Scope</span>
+                                            @if (!string.IsNullOrWhiteSpace(template.SensorTypeLabel))
+                                            {
+                                                <span class="sensor-chip">@template.SensorTypeLabel</span>
+                                            }
+                                        </div>
+
+                                        <div class="template-flow-line">
+                                            <span>@(string.IsNullOrWhiteSpace(template.ParentName) ? "Base defaults" : template.ParentName)</span>
+                                            @MatmonIcons.Render("arrow-right")
+                                            <span>@template.Name</span>
+                                            @MatmonIcons.Render("arrow-right")
+                                            <span>@template.ImpactCount sensor@(template.ImpactCount == 1 ? string.Empty : "s")</span>
+                                        </div>
+
+                                        <div class="template-chip-list">
+                                            <span>@template.Summary</span>
+                                            <span>@template.ParameterCount param@(template.ParameterCount == 1 ? string.Empty : "s")</span>
+                                            <span>@template.ThresholdCount threshold@(template.ThresholdCount == 1 ? string.Empty : "s")</span>
+                                            <span>@template.CredentialCount credential@(template.CredentialCount == 1 ? string.Empty : "s")</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="template-row-side">
+                                        <div class="template-impact-mini">
+                                            <strong>@template.ImpactCount</strong>
+                                            <span>affected</span>
+                                            @if (template.InheritedImpactCount > 0)
+                                            {
+                                                <small>@template.InheritedImpactCount inherited</small>
+                                            }
+                                        </div>
+
+                                        <details class="workspace-action-menu">
+                                            <summary class="workspace-action-link" aria-label="Template actions">
+                                                @MatmonIcons.Render("more")
+                                                <span>Actions</span>
+                                            </summary>
+                                            <div class="workspace-action-menu-panel">
+                                                @if (template.IsSensorTemplate && !string.IsNullOrWhiteSpace(template.SensorTypeKey))
+                                                {
+                                                    <a class="workspace-action-menu-link" asp-page="/SensorCreate" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("spark")<span>Create sensor</span></a>
+                                                }
+                                                <a class="workspace-action-menu-link" asp-page="/Templates" asp-route-applyTemplateId="@template.Id">@MatmonIcons.Render("check")<span>Apply</span></a>
+                                                <a class="workspace-action-menu-link" asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+        }
+    </section>
+
+    <div class="page-actions">
+        <a class="workspace-action-link" asp-page="/TemplateEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>New Template</span></a>
+    </div>
+</section>

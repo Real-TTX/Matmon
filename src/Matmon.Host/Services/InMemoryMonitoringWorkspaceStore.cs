@@ -1,0 +1,2691 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Matmon.Core.Domain;
+using Matmon.Core.Sample;
+using Microsoft.AspNetCore.DataProtection;
+
+namespace Matmon.Host.Services;
+
+public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore, IDisposable
+{
+    private static readonly JsonSerializerOptions FileSerializerOptions = CreateSerializerOptions();
+    private const int DefaultEventRetentionDays = 30;
+    private const int DefaultObservationRetentionDays = 7;
+    private const int DefaultStatisticsRetentionDays = 90;
+    private const int DefaultStatisticsBucketMinutes = 60;
+    private static readonly TimeSpan ConfigurationSaveDelay = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan TelemetrySaveDelay = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MaxDirtySaveDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan BackupRefreshInterval = TimeSpan.FromMinutes(5);
+
+    private readonly object _gate = new();
+    private readonly object _saveGate = new();
+    private readonly ILogger<InMemoryMonitoringWorkspaceStore> _logger;
+    private readonly IDataProtector _credentialProtector;
+    private readonly string _workspacePath;
+    private readonly string _workspaceBackupPath;
+    private readonly Timer _saveTimer;
+    private readonly Dictionary<Guid, List<SensorObservation>> _sensorHistoryBySensor = new();
+    private readonly Dictionary<Guid, SensorObservation> _latestSensorObservations = new();
+    private WorkspaceDocument _document;
+    private DateTimeOffset? _firstDirtyUtc;
+    private DateTimeOffset _lastBackupUtc = DateTimeOffset.MinValue;
+    private bool _saveInProgress;
+    private bool _disposed;
+    private long _dirtyVersion;
+    private long _savedVersion;
+
+    public InMemoryMonitoringWorkspaceStore(
+        IHostEnvironment environment,
+        MatmonRuntimeOptions runtimeOptions,
+        IDataProtectionProvider dataProtectionProvider,
+        ILogger<InMemoryMonitoringWorkspaceStore> logger)
+    {
+        _logger = logger;
+        _credentialProtector = dataProtectionProvider.CreateProtector("Matmon.Credentials");
+
+        var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
+            ? "data/workspace.json"
+            : runtimeOptions.WorkspacePath;
+
+        _workspacePath = Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
+        _workspaceBackupPath = _workspacePath + ".bak";
+        _saveTimer = new Timer(FlushPendingSaveFromTimer);
+
+        _document = LoadDocument();
+        HydrateCredentialBundles(_document);
+        RebuildObservationIndexesLocked();
+        EnsureSensorDefinitionCatalog();
+        EnsureDefaultTemplates();
+        EnsureDefaultProbeMetadata();
+        EnsureDefaultDockerSlaveProbe();
+        EnsureDefaultWindowsHealthSensor();
+        EnsureDefaultProxmoxSensor();
+        EnsureDefaultNotificationConfiguration();
+        EnsureDefaultAlertCollection();
+        EnsureDefaultObservationCollection();
+        EnsureDefaultEventCollection();
+        EnsureDefaultStatisticsCollection();
+        SaveNow();
+    }
+
+    public MonitoringWorkspaceSnapshot Workspace
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return CreateSnapshot();
+            }
+        }
+    }
+
+    public IReadOnlyList<MonitoringElement> GetAllElements()
+    {
+        lock (_gate)
+        {
+            return EnumerateElements(_document.RootProbe).ToArray();
+        }
+    }
+
+    public IReadOnlyList<MonitoringTemplate> GetAllTemplates()
+    {
+        lock (_gate)
+        {
+            return _document.Templates.ToArray();
+        }
+    }
+
+    public ProbeElement? FindProbeByProbeId(string probeId)
+    {
+        if (string.IsNullOrWhiteSpace(probeId))
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            return EnumerateElements(_document.RootProbe)
+                .OfType<ProbeElement>()
+                .FirstOrDefault(probe => string.Equals(probe.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    public MonitoringElement? FindElement(Guid id)
+    {
+        lock (_gate)
+        {
+            return EnumerateElements(_document.RootProbe)
+                .FirstOrDefault(element => element.Id == id);
+        }
+    }
+
+    public MonitoringTemplate? FindTemplate(Guid id)
+    {
+        lock (_gate)
+        {
+            return _document.Templates.FirstOrDefault(template => template.Id == id);
+        }
+    }
+
+    public NotificationSender? FindNotificationSender(Guid id)
+    {
+        lock (_gate)
+        {
+            return _document.NotificationSenders.FirstOrDefault(sender => sender.Id == id);
+        }
+    }
+
+    public NotificationReceiver? FindNotificationReceiver(Guid id)
+    {
+        lock (_gate)
+        {
+            return _document.NotificationReceivers.FirstOrDefault(receiver => receiver.Id == id);
+        }
+    }
+
+    public NotificationRule? FindNotificationRule(Guid id)
+    {
+        lock (_gate)
+        {
+            return _document.NotificationRules.FirstOrDefault(rule => rule.Id == id);
+        }
+    }
+
+    public bool AcknowledgeAlert(Guid alertId, string? acknowledgedBy = null)
+    {
+        lock (_gate)
+        {
+            var alert = _document.Alerts.FirstOrDefault(candidate => candidate.Id == alertId);
+            if (alert is null || !alert.IsActive)
+            {
+                return false;
+            }
+
+            var changed = false;
+            if (!alert.IsAcknowledged)
+            {
+                alert.AcknowledgedUtc = DateTimeOffset.UtcNow;
+                changed = true;
+            }
+
+            if (alert.AcknowledgedState != alert.State)
+            {
+                alert.AcknowledgedState = alert.State;
+                changed = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(acknowledgedBy) &&
+                !string.Equals(alert.AcknowledgedBy, acknowledgedBy.Trim(), StringComparison.Ordinal))
+            {
+                alert.AcknowledgedBy = acknowledgedBy.Trim();
+                changed = true;
+            }
+
+            if (changed)
+            {
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = DateTimeOffset.UtcNow,
+                    Kind = MonitoringEventKind.AlertAcknowledged,
+                    ElementId = alert.ElementId,
+                    ElementKind = alert.ElementKind,
+                    ElementName = alert.ElementName,
+                    ElementPath = alert.ElementPath,
+                    State = alert.State,
+                    Message = $"Alert acknowledged{(string.IsNullOrWhiteSpace(alert.AcknowledgedBy) ? string.Empty : $" by {alert.AcknowledgedBy}")}"
+                });
+                QueueSave(SavePriority.Configuration);
+            }
+
+            return true;
+        }
+    }
+
+    public void RecordSensorObservation(
+        Guid sensorId,
+        SensorExecutionResult result,
+        DateTimeOffset timestampUtc,
+        MonitoringSettings? settings = null,
+        string? executedByProbeId = null,
+        string? executedByProbeName = null)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+            EnsureDefaultEventCollection();
+            EnsureDefaultStatisticsCollection();
+            EnsureDefaultAlertCollection();
+
+            var previousObservation = FindLatestSensorObservationLocked(sensorId);
+
+            var observation = new SensorObservation
+            {
+                SensorId = sensorId,
+                TimestampUtc = timestampUtc,
+                State = result.State,
+                Value = result.Value,
+                DefaultChannelKey = result.DefaultChannelKey,
+                Channels = result.Channels.Select(channel => channel with { }).ToList(),
+                ExecutedByProbeId = string.IsNullOrWhiteSpace(executedByProbeId) ? null : executedByProbeId.Trim(),
+                ExecutedByProbeName = string.IsNullOrWhiteSpace(executedByProbeName) ? null : executedByProbeName.Trim(),
+                Duration = result.Duration,
+                Message = result.Message
+            };
+
+            _document.SensorHistory.Add(observation);
+            AddSensorObservationToIndex(observation);
+
+            if (ShouldRecordStateChangeEvent(previousObservation, result))
+            {
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = timestampUtc,
+                    Kind = MonitoringEventKind.StateChanged,
+                    ElementId = sensorId,
+                    ElementKind = MonitoringElementKind.Sensor,
+                    ElementName = GetElementName(sensorId),
+                    ElementPath = GetElementPath(sensorId),
+                    State = result.State,
+                    Message = AppendExecutionProbe(
+                        BuildStateChangeMessage(previousObservation?.State, result.State, result.Message),
+                        executedByProbeName,
+                        executedByProbeId)
+                });
+            }
+
+            SyncSensorAlertFromObservation(sensorId, result, timestampUtc);
+            PruneSensorHistory(sensorId, timestampUtc, settings);
+            UpdateSensorStatistics(sensorId, result, timestampUtc, settings);
+            PruneEvents(timestampUtc, settings);
+            PruneStatistics(sensorId, timestampUtc, settings);
+            QueueSave(SavePriority.Telemetry);
+        }
+    }
+
+    public IReadOnlyList<SensorObservation> GetSensorHistory()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+            return _document.SensorHistory
+                .OrderBy(entry => entry.TimestampUtc)
+                .ToArray();
+        }
+    }
+
+    public IReadOnlyList<SensorObservation> GetSensorHistory(Guid sensorId, TimeSpan? window = null, int? maxCount = null)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+
+            if (maxCount is <= 0)
+            {
+                return Array.Empty<SensorObservation>();
+            }
+
+            var cutoffUtc = window is { } requestedWindow && requestedWindow > TimeSpan.Zero
+                ? DateTimeOffset.UtcNow - requestedWindow
+                : DateTimeOffset.MinValue;
+            if (!_sensorHistoryBySensor.TryGetValue(sensorId, out var sensorHistory))
+            {
+                return Array.Empty<SensorObservation>();
+            }
+
+            var query = sensorHistory.Where(observation => observation.TimestampUtc >= cutoffUtc);
+            if (maxCount is int limit)
+            {
+                query = query.TakeLast(limit);
+            }
+
+            return query.ToArray();
+        }
+    }
+
+    public IReadOnlyDictionary<Guid, SensorObservation> GetLatestSensorObservations()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+            return new Dictionary<Guid, SensorObservation>(_latestSensorObservations);
+        }
+    }
+
+    public IReadOnlyDictionary<Guid, SensorObservation[]> GetRecentSensorHistoryBySensor(TimeSpan window, int maxPerSensor)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultObservationCollection();
+
+            var limit = Math.Max(maxPerSensor, 1);
+            var cutoffUtc = window > TimeSpan.Zero
+                ? DateTimeOffset.UtcNow - window
+                : DateTimeOffset.MinValue;
+            var result = new Dictionary<Guid, SensorObservation[]>(_latestSensorObservations.Count);
+            foreach (var (sensorId, latestObservation) in _latestSensorObservations)
+            {
+                var observations = _sensorHistoryBySensor.TryGetValue(sensorId, out var sensorHistory)
+                    ? sensorHistory
+                        .Where(observation => observation.TimestampUtc >= cutoffUtc)
+                        .TakeLast(limit)
+                        .ToList()
+                    : new List<SensorObservation>();
+
+                if (!observations.Any(observation => observation.TimestampUtc == latestObservation.TimestampUtc))
+                {
+                    observations.Add(latestObservation);
+                }
+
+                result[sensorId] = observations
+                    .OrderBy(observation => observation.TimestampUtc)
+                    .TakeLast(limit)
+                    .ToArray();
+            }
+
+            return result;
+        }
+    }
+
+    public IReadOnlyList<MonitoringEvent> GetEvents(int take = 500)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultEventCollection();
+
+            if (take <= 0)
+            {
+                return Array.Empty<MonitoringEvent>();
+            }
+
+            return _document.Events
+                .OrderByDescending(entry => entry.TimestampUtc)
+                .Take(take)
+                .ToArray();
+        }
+    }
+
+    public IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultStatisticsCollection();
+            return _document.SensorStatistics
+                .Where(bucket => bucket.SensorId == sensorId)
+                .OrderBy(bucket => bucket.BucketStartUtc)
+                .ToArray();
+        }
+    }
+
+    public ProbeElement CreateProbe(Guid? parentId, string name, string? description)
+    {
+        lock (_gate)
+        {
+            var parent = ResolveParentContainer(parentId, MonitoringElementKind.Probe);
+            var probe = new ProbeElement(string.IsNullOrWhiteSpace(name) ? "Probe" : name.Trim())
+            {
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+                ProbeId = GenerateUniqueProbeId(name),
+                EnrollmentToken = CreateToken()
+            };
+
+            AddChild(parent, probe);
+            EnsureProbeHeartbeatSensor(probe);
+            QueueSave(SavePriority.Configuration);
+            return probe;
+        }
+    }
+
+    public FolderElement CreateFolder(Guid parentId, string name, string? description)
+    {
+        lock (_gate)
+        {
+            var parent = ResolveParentContainer(parentId, MonitoringElementKind.Probe, MonitoringElementKind.Folder);
+            var folder = new FolderElement(string.IsNullOrWhiteSpace(name) ? "Folder" : name.Trim())
+            {
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim()
+            };
+
+            AddChild(parent, folder);
+            QueueSave(SavePriority.Configuration);
+            return folder;
+        }
+    }
+
+    public HostElement CreateHost(Guid parentId, string name, string address, string? description)
+    {
+        lock (_gate)
+        {
+            var parent = ResolveParentContainer(parentId, MonitoringElementKind.Probe, MonitoringElementKind.Folder);
+            var host = new HostElement(string.IsNullOrWhiteSpace(name) ? "Host" : name.Trim())
+            {
+                Address = address?.Trim() ?? string.Empty,
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim()
+            };
+
+            AddChild(parent, host);
+            QueueSave(SavePriority.Configuration);
+            return host;
+        }
+    }
+
+    public SensorElement CreateSensor(
+        Guid parentId,
+        string name,
+        string sensorTypeKey,
+        string target,
+        string? description,
+        MonitoringSettings? settings = null)
+    {
+        lock (_gate)
+        {
+            if (string.Equals(sensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(target))
+            {
+                throw new InvalidOperationException("Heartbeat sensors must be attached to a non-root probe.");
+            }
+
+            var parent = ResolveParentContainer(parentId, MonitoringElementKind.Probe, MonitoringElementKind.Folder, MonitoringElementKind.Host);
+            if (!_document.SensorDefinitions.Any(definition => string.Equals(definition.Key, sensorTypeKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"Unknown sensor type '{sensorTypeKey}'.");
+            }
+
+            var sensor = new SensorElement(
+                string.IsNullOrWhiteSpace(name) ? "Sensor" : name.Trim(),
+                sensorTypeKey.Trim(),
+                target?.Trim() ?? string.Empty)
+            {
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim()
+            };
+
+            if (settings is not null)
+            {
+                sensor.Settings.ApplyFrom(settings);
+            }
+
+            AddChild(parent, sensor);
+            QueueSave(SavePriority.Configuration);
+            return sensor;
+        }
+    }
+
+    public MonitoringTemplate CreateTemplate(string name, MonitoringTemplateScope targetKind, Guid? parentTemplateId)
+    {
+        lock (_gate)
+        {
+            if (parentTemplateId is Guid parentId && _document.Templates.All(template => template.Id != parentId))
+            {
+                throw new InvalidOperationException($"Template parent '{parentId}' does not exist.");
+            }
+
+            var template = new MonitoringTemplate
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? "Template" : name.Trim(),
+                TargetKind = targetKind,
+                ParentTemplateId = parentTemplateId
+            };
+
+            _document.Templates.Add(template);
+            QueueSave(SavePriority.Configuration);
+            return template;
+        }
+    }
+
+    public NotificationSender CreateNotificationSender(string name)
+    {
+        lock (_gate)
+        {
+            var sender = new NotificationSender
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? "Notification sender" : name.Trim()
+            };
+
+            _document.NotificationSenders.Add(sender);
+            QueueSave(SavePriority.Configuration);
+            return sender;
+        }
+    }
+
+    public NotificationReceiver CreateNotificationReceiver(string name)
+    {
+        lock (_gate)
+        {
+            var receiver = new NotificationReceiver
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? "Notification receiver" : name.Trim()
+            };
+
+            _document.NotificationReceivers.Add(receiver);
+            QueueSave(SavePriority.Configuration);
+            return receiver;
+        }
+    }
+
+    public NotificationRule CreateNotificationRule(string name)
+    {
+        lock (_gate)
+        {
+            var rule = new NotificationRule
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? "Notification rule" : name.Trim()
+            };
+
+            rule.TriggerStates.Add(SensorState.Warning);
+            rule.TriggerStates.Add(SensorState.Critical);
+
+            _document.NotificationRules.Add(rule);
+            QueueSave(SavePriority.Configuration);
+            return rule;
+        }
+    }
+
+    public bool DeleteElement(Guid id)
+    {
+        lock (_gate)
+        {
+            if (_document.RootProbe.Id == id)
+            {
+                return false;
+            }
+
+            if (FindElement(id) is SensorElement sensor &&
+                string.Equals(sensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var removed = RemoveChild(_document.RootProbe, id);
+            if (removed)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+
+            return removed;
+        }
+    }
+
+    public bool DeleteTemplate(Guid id)
+    {
+        lock (_gate)
+        {
+            var template = _document.Templates.FirstOrDefault(candidate => candidate.Id == id);
+            if (template is null)
+            {
+                return false;
+            }
+
+            _document.Templates.Remove(template);
+
+            foreach (var element in EnumerateElements(_document.RootProbe))
+            {
+                element.AppliedTemplateIds.RemoveAll(templateId => templateId == id);
+            }
+
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool DeleteNotificationSender(Guid id)
+    {
+        lock (_gate)
+        {
+            if (_document.NotificationRules.Any(rule => rule.SenderId == id))
+            {
+                return false;
+            }
+
+            var sender = _document.NotificationSenders.FirstOrDefault(candidate => candidate.Id == id);
+            if (sender is null)
+            {
+                return false;
+            }
+
+            _document.NotificationSenders.Remove(sender);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool DeleteNotificationReceiver(Guid id)
+    {
+        lock (_gate)
+        {
+            if (_document.NotificationRules.Any(rule => rule.ReceiverId == id))
+            {
+                return false;
+            }
+
+            var receiver = _document.NotificationReceivers.FirstOrDefault(candidate => candidate.Id == id);
+            if (receiver is null)
+            {
+                return false;
+            }
+
+            _document.NotificationReceivers.Remove(receiver);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool DeleteNotificationRule(Guid id)
+    {
+        lock (_gate)
+        {
+            var rule = _document.NotificationRules.FirstOrDefault(candidate => candidate.Id == id);
+            if (rule is null)
+            {
+                return false;
+            }
+
+            _document.NotificationRules.Remove(rule);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool MoveElement(Guid elementId, Guid newParentId)
+    {
+        lock (_gate)
+        {
+            if (_document.RootProbe.Id == elementId)
+            {
+                return false;
+            }
+
+            var element = FindElement(elementId);
+            if (element is null)
+            {
+                return false;
+            }
+
+            if (element is MonitoringContainerElement container &&
+                EnumerateElements(container).Any(candidate => candidate.Id == newParentId))
+            {
+                return false;
+            }
+
+            var oldParent = FindParentContainer(_document.RootProbe, elementId);
+            var newParent = ResolveParentContainer(newParentId, GetAllowedParentKinds(element));
+
+            if (oldParent is null)
+            {
+                return false;
+            }
+
+            if (oldParent.Id == newParent.Id)
+            {
+                return true;
+            }
+
+            if (!oldParent.Children.Remove(element))
+            {
+                return false;
+            }
+
+            AddChild(newParent, element);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool SetSensorPaused(Guid sensorId, bool paused)
+    {
+        lock (_gate)
+        {
+            var sensor = EnumerateElements(_document.RootProbe)
+                .OfType<SensorElement>()
+                .FirstOrDefault(candidate => candidate.Id == sensorId);
+
+            if (sensor is null)
+            {
+                return false;
+            }
+
+            if (sensor.IsPaused == paused)
+            {
+                return true;
+            }
+
+            sensor.IsPaused = paused;
+
+            if (paused)
+            {
+                ResolveAlertsForElement(sensor.Id, DateTimeOffset.UtcNow, "sensor paused");
+            }
+
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                Kind = paused ? MonitoringEventKind.Paused : MonitoringEventKind.Resumed,
+                ElementId = sensor.Id,
+                ElementKind = sensor.Kind,
+                ElementName = sensor.Name,
+                ElementPath = GetElementPath(sensor),
+                State = paused ? SensorState.Paused : SensorState.Healthy,
+                Message = paused ? "Sensor paused" : "Sensor resumed"
+            });
+
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public void SyncAlerts(IEnumerable<MonitoringAlertCandidate> activeAlerts, DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultAlertCollection();
+
+            var activeAlertList = activeAlerts.ToList();
+            var activeByElementId = activeAlertList.ToDictionary(candidate => candidate.ElementId);
+            var changed = false;
+
+            foreach (var candidate in activeAlertList)
+            {
+                var existing = _document.Alerts.FirstOrDefault(alert => alert.IsActive && alert.ElementId == candidate.ElementId);
+                if (existing is null)
+                {
+                    _document.Alerts.Add(new MonitoringAlert
+                    {
+                        ElementId = candidate.ElementId,
+                        ElementKind = candidate.ElementKind,
+                        ElementName = candidate.ElementName,
+                        ElementPath = candidate.ElementPath,
+                        State = candidate.State,
+                        Message = candidate.Message,
+                        FirstSeenUtc = now,
+                        LastSeenUtc = now
+                    });
+                    AddEvent(new MonitoringEvent
+                    {
+                        TimestampUtc = now,
+                        Kind = MonitoringEventKind.AlertRaised,
+                        ElementId = candidate.ElementId,
+                        ElementKind = candidate.ElementKind,
+                        ElementName = candidate.ElementName,
+                        ElementPath = candidate.ElementPath,
+                        State = candidate.State,
+                        Message = candidate.Message
+                    });
+                    changed = true;
+                    continue;
+                }
+
+                if (existing.ElementKind != candidate.ElementKind)
+                {
+                    existing.ElementKind = candidate.ElementKind;
+                    changed = true;
+                }
+
+                if (!string.Equals(existing.ElementName, candidate.ElementName, StringComparison.Ordinal))
+                {
+                    existing.ElementName = candidate.ElementName;
+                    changed = true;
+                }
+
+                if (!string.Equals(existing.ElementPath, candidate.ElementPath, StringComparison.Ordinal))
+                {
+                    existing.ElementPath = candidate.ElementPath;
+                    changed = true;
+                }
+
+                if (existing.State != candidate.State)
+                {
+                    existing.State = candidate.State;
+                    changed = true;
+                }
+
+                if (!string.Equals(existing.Message, candidate.Message, StringComparison.Ordinal))
+                {
+                    existing.Message = candidate.Message;
+                    changed = true;
+                }
+
+                existing.LastSeenUtc = now;
+            }
+
+            foreach (var alert in _document.Alerts.Where(alert => alert.IsActive))
+            {
+                if (activeByElementId.ContainsKey(alert.ElementId))
+                {
+                    continue;
+                }
+
+                alert.ResolvedUtc = now;
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = now,
+                    Kind = MonitoringEventKind.AlertResolved,
+                    ElementId = alert.ElementId,
+                    ElementKind = alert.ElementKind,
+                    ElementName = alert.ElementName,
+                    ElementPath = alert.ElementPath,
+                    State = alert.State,
+                    Message = alert.Message
+                });
+                changed = true;
+            }
+
+            if (changed)
+            {
+                QueueSave(SavePriority.Telemetry);
+            }
+        }
+    }
+
+    public string RotateProbeToken(Guid probeId)
+    {
+        lock (_gate)
+        {
+            var probe = EnumerateElements(_document.RootProbe)
+                .OfType<ProbeElement>()
+                .FirstOrDefault(candidate => candidate.Id == probeId);
+
+            if (probe is null)
+            {
+                throw new InvalidOperationException($"Probe '{probeId}' does not exist.");
+            }
+
+            probe.EnrollmentToken = CreateToken();
+            QueueSave(SavePriority.Configuration);
+            return probe.EnrollmentToken;
+        }
+    }
+
+    public bool TryValidateProbe(string probeId, string? probeToken)
+    {
+        if (string.IsNullOrWhiteSpace(probeId))
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            var probe = EnumerateElements(_document.RootProbe)
+                .OfType<ProbeElement>()
+                .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
+
+            if (probe is null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(probe.EnrollmentToken))
+            {
+                return true;
+            }
+
+            return string.Equals(probe.EnrollmentToken, probeToken, StringComparison.Ordinal);
+        }
+    }
+
+    public void Save()
+    {
+        QueueSave(SavePriority.Configuration);
+    }
+
+    public void Dispose()
+    {
+        lock (_saveGate)
+        {
+            _disposed = true;
+            _saveTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+            while (_saveInProgress)
+            {
+                Monitor.Wait(_saveGate);
+            }
+        }
+
+        try
+        {
+            FlushPendingSave();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to flush workspace during shutdown");
+        }
+
+        _saveTimer.Dispose();
+    }
+
+    private MonitoringWorkspaceSnapshot CreateSnapshot()
+    {
+        return new MonitoringWorkspaceSnapshot(
+            _document.RootProbe,
+            _document.Templates,
+            _document.SensorDefinitions,
+            _document.NotificationConfiguration,
+            _document.NotificationSenders,
+            _document.NotificationReceivers,
+            _document.NotificationRules,
+            _document.Alerts);
+    }
+
+    private WorkspaceDocument LoadDocument()
+    {
+        var loaded = TryLoadWorkspaceDocument(_workspacePath);
+        if (loaded?.RootProbe is not null)
+        {
+            _logger.LogInformation("Workspace loaded from {WorkspacePath}", _workspacePath);
+            return loaded;
+        }
+
+        loaded = TryLoadWorkspaceDocument(_workspaceBackupPath);
+        if (loaded?.RootProbe is not null)
+        {
+            _logger.LogWarning(
+                "Workspace loaded from backup {WorkspacePathBackup} because the primary file could not be read.",
+                _workspaceBackupPath);
+            return loaded;
+        }
+
+        if (File.Exists(_workspacePath) || File.Exists(_workspaceBackupPath))
+        {
+            _logger.LogWarning(
+                "Failed to load workspace from {WorkspacePath} or backup {WorkspacePathBackup}, falling back to sample data",
+                _workspacePath,
+                _workspaceBackupPath);
+        }
+
+        var sample = SampleTopologyFactory.Create();
+        return new WorkspaceDocument
+        {
+            RootProbe = sample.RootProbe,
+            Templates = sample.Templates.ToList(),
+            SensorDefinitions = sample.SensorDefinitions.ToList(),
+            NotificationConfiguration = sample.NotificationConfiguration,
+            NotificationRules = sample.NotificationRules.ToList(),
+            Alerts = sample.Alerts.ToList(),
+            SensorHistory = [],
+            Events = [],
+            SensorStatistics = []
+        };
+    }
+
+    private void QueueSave(SavePriority priority)
+    {
+        Interlocked.Increment(ref _dirtyVersion);
+
+        lock (_saveGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            _firstDirtyUtc ??= now;
+            ScheduleSaveLocked(priority, now);
+        }
+    }
+
+    private void ScheduleSaveLocked(SavePriority priority, DateTimeOffset now)
+    {
+        var delay = priority == SavePriority.Configuration
+            ? ConfigurationSaveDelay
+            : TelemetrySaveDelay;
+
+        if (_firstDirtyUtc is DateTimeOffset firstDirtyUtc)
+        {
+            var maxDelay = MaxDirtySaveDelay - (now - firstDirtyUtc);
+            if (maxDelay < delay)
+            {
+                delay = maxDelay;
+            }
+        }
+
+        if (delay < TimeSpan.Zero)
+        {
+            delay = TimeSpan.Zero;
+        }
+
+        _saveTimer.Change(delay, Timeout.InfiniteTimeSpan);
+    }
+
+    private void FlushPendingSaveFromTimer(object? _)
+    {
+        FlushPendingSave(scheduleAgain: true);
+    }
+
+    private void FlushPendingSave(bool scheduleAgain = false)
+    {
+        long versionToSave;
+
+        lock (_saveGate)
+        {
+            if (_saveInProgress)
+            {
+                return;
+            }
+
+            versionToSave = Volatile.Read(ref _dirtyVersion);
+            if (versionToSave == Volatile.Read(ref _savedVersion))
+            {
+                _firstDirtyUtc = null;
+                return;
+            }
+
+            _saveInProgress = true;
+            _firstDirtyUtc = null;
+        }
+
+        try
+        {
+            SaveNow(versionToSave);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Background workspace save failed");
+        }
+        finally
+        {
+            lock (_saveGate)
+            {
+                _saveInProgress = false;
+                Monitor.PulseAll(_saveGate);
+
+                if (scheduleAgain &&
+                    !_disposed &&
+                    Volatile.Read(ref _dirtyVersion) != Volatile.Read(ref _savedVersion))
+                {
+                    _firstDirtyUtc ??= DateTimeOffset.UtcNow;
+                    ScheduleSaveLocked(SavePriority.Configuration, DateTimeOffset.UtcNow);
+                }
+            }
+        }
+    }
+
+    private void SaveNow(long? versionToSave = null)
+    {
+        lock (_gate)
+        {
+            SaveDocumentLocked();
+        }
+
+        Interlocked.Exchange(ref _savedVersion, versionToSave ?? Volatile.Read(ref _dirtyVersion));
+    }
+
+    private void SaveDocumentLocked()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_workspacePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            ProtectCredentialBundles(_document);
+            var json = JsonSerializer.Serialize(_document, FileSerializerOptions);
+            var tempPath = _workspacePath + ".tmp";
+            try
+            {
+                WriteUtf8File(tempPath, json);
+                File.Move(tempPath, _workspacePath, overwrite: true);
+            }
+            catch (Exception moveEx)
+            {
+                _logger.LogWarning(moveEx, "Atomic workspace move failed, falling back to direct write");
+                WriteUtf8File(_workspacePath, json);
+            }
+            finally
+            {
+                TryDeleteTempFile(tempPath);
+            }
+
+            RefreshBackupIfDue();
+
+            HydrateCredentialBundles(_document);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save workspace to {WorkspacePath}", _workspacePath);
+            throw;
+        }
+    }
+
+    private static void WriteUtf8File(string path, string content)
+    {
+        File.WriteAllText(path, content, Encoding.UTF8);
+    }
+
+    private static void TryDeleteTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+        catch
+        {
+            // A stale temp file is harmless and will be overwritten on the next save.
+        }
+    }
+
+    private void RefreshBackupIfDue()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (File.Exists(_workspaceBackupPath) && now - _lastBackupUtc < BackupRefreshInterval)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Copy(_workspacePath, _workspaceBackupPath, overwrite: true);
+            _lastBackupUtc = now;
+        }
+        catch (Exception backupEx)
+        {
+            _logger.LogWarning(backupEx, "Failed to refresh workspace backup {WorkspacePathBackup}", _workspaceBackupPath);
+        }
+    }
+
+    private static WorkspaceDocument? TryLoadWorkspaceDocument(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var json = File.ReadAllText(path, Encoding.UTF8);
+            return JsonSerializer.Deserialize<WorkspaceDocument>(json, FileSerializerOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void EnsureDefaultProbeMetadata()
+    {
+        lock (_gate)
+        {
+            EnsureProbeMetadataRecursive(_document.RootProbe, isRoot: true);
+            EnsureProbeHeartbeatSensorsRecursive(_document.RootProbe, isRoot: true);
+            EnsureProbeHealthSensorsRecursive(_document.RootProbe);
+        }
+    }
+
+    private void EnsureDefaultDockerSlaveProbe()
+    {
+        const string probeId = "probe-01";
+        const string probeName = "Remote Probe 01";
+        const string probeToken = "probe-01-token";
+
+        var probe = EnumerateElements(_document.RootProbe)
+            .OfType<ProbeElement>()
+            .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
+
+        if (probe is null)
+        {
+            probe = new ProbeElement(probeName)
+            {
+                ProbeId = probeId,
+                EnrollmentToken = probeToken,
+                Description = "Local Docker slave probe"
+            };
+            AddChild(_document.RootProbe, probe);
+        }
+        else if (string.IsNullOrWhiteSpace(probe.EnrollmentToken))
+        {
+            probe.EnrollmentToken = probeToken;
+        }
+
+        if (string.IsNullOrWhiteSpace(probe.Name))
+        {
+            probe.Name = probeName;
+        }
+
+        probe.ParentId = _document.RootProbe.Id;
+        EnsureProbeMetadataRecursive(probe);
+        EnsureProbeHeartbeatSensor(probe);
+        EnsureProbeHealthSensor(probe);
+        EnsureDefaultDockerSlaveTestSensor(probe);
+    }
+
+    private static void EnsureDefaultDockerSlaveTestSensor(ProbeElement probe)
+    {
+        const string sensorName = "Slave -> Master Port 8099";
+
+        var sensor = probe.Children
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.SensorTypeKey, TcpPortSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement(sensorName, TcpPortSensorExecutor.Definition.Key, "master")
+            {
+                Description = "Local Docker slave execution test"
+            };
+            AddChild(probe, sensor);
+        }
+
+        sensor.ParentId = probe.Id;
+        sensor.SensorTypeKey = TcpPortSensorExecutor.Definition.Key;
+        sensor.Target = "master";
+        sensor.Settings.Parameters["tcp.port"] = "8099";
+        sensor.Settings.Parameters["tcp.expectedOpen"] = "true";
+        sensor.Settings.Timeout ??= TimeSpan.FromSeconds(3);
+    }
+
+    private void HydrateCredentialBundles(WorkspaceDocument document)
+    {
+        foreach (var settings in EnumerateSettings(document))
+        {
+            foreach (var credential in settings.Credentials)
+            {
+                if (credential.Values.Count > 0 || string.IsNullOrWhiteSpace(credential.ProtectedValues))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var payload = _credentialProtector.Unprotect(credential.ProtectedValues);
+                    var values = JsonSerializer.Deserialize<Dictionary<string, string>>(payload, FileSerializerOptions);
+                    credential.Values = values is null
+                        ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        : new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to decrypt credential bundle {CredentialId}", credential.Id);
+                    credential.Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
+    }
+
+    private void ProtectCredentialBundles(WorkspaceDocument document)
+    {
+        foreach (var settings in EnumerateSettings(document))
+        {
+            foreach (var credential in settings.Credentials)
+            {
+                try
+                {
+                    var payload = JsonSerializer.Serialize(credential.Values, FileSerializerOptions);
+                    credential.ProtectedValues = _credentialProtector.Protect(payload);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to protect credential bundle {CredentialId}", credential.Id);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<MonitoringSettings> EnumerateSettings(WorkspaceDocument document)
+    {
+        yield return document.RootProbe.Settings;
+
+        foreach (var element in EnumerateElements(document.RootProbe))
+        {
+            yield return element.Settings;
+        }
+
+        foreach (var template in document.Templates)
+        {
+            yield return template.Settings;
+        }
+    }
+
+    private void EnsureDefaultTemplates()
+    {
+        lock (_gate)
+        {
+            EnsureWindowsHealthTemplate();
+            EnsureSynologyNasTemplates();
+            EnsureProxmoxPveTemplates();
+        }
+    }
+
+    private void EnsureDefaultNotificationConfiguration()
+    {
+        lock (_gate)
+        {
+            _document.NotificationConfiguration ??= new NotificationWorkspaceConfiguration();
+            _document.NotificationConfiguration.Email ??= new EmailNotificationSettings();
+            _document.NotificationConfiguration.Webhook ??= new WebhookNotificationSettings();
+            _document.NotificationSenders ??= [];
+            _document.NotificationReceivers ??= [];
+            _document.NotificationRules ??= [];
+
+            if (_document.NotificationSenders.Count == 0)
+            {
+                _document.NotificationSenders.Add(CreateDefaultEmailSender(_document.NotificationConfiguration.Email));
+                _document.NotificationSenders.Add(CreateDefaultWebhookSender(_document.NotificationConfiguration.Webhook));
+            }
+
+            EnsureDefaultReceivers();
+
+            foreach (var rule in _document.NotificationRules)
+            {
+                if (rule.TriggerStates.Count == 0)
+                {
+                    rule.TriggerStates.Add(SensorState.Warning);
+                    rule.TriggerStates.Add(SensorState.Critical);
+                }
+
+                if (rule.SenderId is null || _document.NotificationSenders.All(sender => sender.Id != rule.SenderId))
+                {
+                    rule.SenderId = ResolveSenderIdForRule(rule.ChannelKind);
+                }
+
+                if (rule.ReceiverId is null || _document.NotificationReceivers.All(receiver => receiver.Id != rule.ReceiverId))
+                {
+                    rule.ReceiverId = ResolveReceiverIdForRule(rule.ChannelKind, rule.Recipient);
+                }
+
+                SynchronizeLegacyRuleFields(rule);
+            }
+        }
+    }
+
+    private NotificationSender CreateDefaultEmailSender(EmailNotificationSettings settings)
+    {
+        return new NotificationSender
+        {
+            Name = "Email sender",
+            Kind = NotificationEndpointKind.Email,
+            Email = new EmailNotificationSettings
+            {
+                SenderName = settings.SenderName,
+                SenderEmail = settings.SenderEmail,
+                SmtpHost = settings.SmtpHost,
+                SmtpPort = settings.SmtpPort,
+                UseSsl = settings.UseSsl,
+                Username = settings.Username,
+                Password = settings.Password
+            }
+        };
+    }
+
+    private static NotificationSender CreateDefaultWebhookSender(WebhookNotificationSettings settings)
+    {
+        return new NotificationSender
+        {
+            Name = "Webhook sender",
+            Kind = NotificationEndpointKind.Webhook,
+            Webhook = new WebhookNotificationSettings
+            {
+                EndpointUrl = settings.EndpointUrl,
+                Secret = settings.Secret,
+                TimeoutSeconds = settings.TimeoutSeconds
+            }
+        };
+    }
+
+    private void EnsureDefaultReceivers()
+    {
+        if (_document.NotificationReceivers.Count > 0)
+        {
+            return;
+        }
+
+        var emailTarget = _document.NotificationRules
+            .Where(rule => rule.ChannelKind == NotificationChannelKind.Email && !string.IsNullOrWhiteSpace(rule.Recipient))
+            .Select(rule => rule.Recipient.Trim())
+            .FirstOrDefault();
+        var webhookTarget = _document.NotificationRules
+            .Where(rule => rule.ChannelKind == NotificationChannelKind.Webhook && !string.IsNullOrWhiteSpace(rule.Recipient))
+            .Select(rule => rule.Recipient.Trim())
+            .FirstOrDefault();
+
+        _document.NotificationReceivers.Add(new NotificationReceiver
+        {
+            Name = string.IsNullOrWhiteSpace(emailTarget) ? "Email receiver" : $"Email receiver ({emailTarget})",
+            Kind = NotificationEndpointKind.Email,
+            Target = emailTarget ?? "ops@example.local"
+        });
+
+        _document.NotificationReceivers.Add(new NotificationReceiver
+        {
+            Name = string.IsNullOrWhiteSpace(webhookTarget) ? "Webhook receiver" : $"Webhook receiver ({webhookTarget})",
+            Kind = NotificationEndpointKind.Webhook,
+            Target = webhookTarget ?? "https://hooks.example.local/matmon"
+        });
+    }
+
+    private Guid? ResolveSenderIdForRule(NotificationChannelKind channelKind)
+    {
+        var kind = channelKind == NotificationChannelKind.Webhook
+            ? NotificationEndpointKind.Webhook
+            : NotificationEndpointKind.Email;
+
+        var sender = _document.NotificationSenders.FirstOrDefault(candidate => candidate.Kind == kind)
+            ?? _document.NotificationSenders.FirstOrDefault();
+
+        return sender?.Id;
+    }
+
+    private Guid? ResolveReceiverIdForRule(NotificationChannelKind channelKind, string recipient)
+    {
+        var kind = channelKind == NotificationChannelKind.Webhook
+            ? NotificationEndpointKind.Webhook
+            : NotificationEndpointKind.Email;
+
+        var normalizedRecipient = recipient?.Trim() ?? string.Empty;
+
+        var receiver = _document.NotificationReceivers.FirstOrDefault(candidate =>
+            candidate.Kind == kind &&
+            string.Equals(candidate.Target, normalizedRecipient, StringComparison.OrdinalIgnoreCase));
+
+        if (receiver is not null)
+        {
+            return receiver.Id;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedRecipient))
+        {
+            return _document.NotificationReceivers.FirstOrDefault(candidate => candidate.Kind == kind)?.Id
+                ?? _document.NotificationReceivers.FirstOrDefault()?.Id;
+        }
+
+        receiver = new NotificationReceiver
+        {
+            Name = kind == NotificationEndpointKind.Webhook
+                ? $"Webhook receiver ({normalizedRecipient})"
+                : $"Email receiver ({normalizedRecipient})",
+            Kind = kind,
+            Target = normalizedRecipient
+        };
+
+        _document.NotificationReceivers.Add(receiver);
+        return receiver.Id;
+    }
+
+    private void SynchronizeLegacyRuleFields(NotificationRule rule)
+    {
+        if (rule.SenderId is Guid senderId)
+        {
+            var sender = _document.NotificationSenders.FirstOrDefault(candidate => candidate.Id == senderId);
+            if (sender is not null)
+            {
+                rule.ChannelKind = sender.Kind == NotificationEndpointKind.Webhook
+                    ? NotificationChannelKind.Webhook
+                    : NotificationChannelKind.Email;
+            }
+        }
+
+        if (rule.ReceiverId is Guid receiverId)
+        {
+            var receiver = _document.NotificationReceivers.FirstOrDefault(candidate => candidate.Id == receiverId);
+            if (receiver is not null)
+            {
+                rule.Recipient = receiver.Target;
+            }
+        }
+    }
+
+    private void EnsureDefaultAlertCollection()
+    {
+        lock (_gate)
+        {
+            _document.Alerts ??= [];
+        }
+    }
+
+    private void EnsureDefaultObservationCollection()
+    {
+        lock (_gate)
+        {
+            _document.SensorHistory ??= [];
+        }
+    }
+
+    private void RebuildObservationIndexesLocked()
+    {
+        _sensorHistoryBySensor.Clear();
+        _latestSensorObservations.Clear();
+
+        foreach (var observation in _document.SensorHistory.OrderBy(entry => entry.TimestampUtc))
+        {
+            AddSensorObservationToIndex(observation);
+        }
+    }
+
+    private void AddSensorObservationToIndex(SensorObservation observation)
+    {
+        if (!_sensorHistoryBySensor.TryGetValue(observation.SensorId, out var sensorHistory))
+        {
+            sensorHistory = [];
+            _sensorHistoryBySensor[observation.SensorId] = sensorHistory;
+        }
+
+        sensorHistory.Add(observation);
+        if (sensorHistory.Count > 1 && sensorHistory[^2].TimestampUtc > observation.TimestampUtc)
+        {
+            sensorHistory.Sort((left, right) => left.TimestampUtc.CompareTo(right.TimestampUtc));
+        }
+
+        if (!_latestSensorObservations.TryGetValue(observation.SensorId, out var latest) ||
+            observation.TimestampUtc >= latest.TimestampUtc)
+        {
+            _latestSensorObservations[observation.SensorId] = observation;
+        }
+    }
+
+    private void EnsureDefaultEventCollection()
+    {
+        lock (_gate)
+        {
+            _document.Events ??= [];
+        }
+    }
+
+    private void EnsureDefaultStatisticsCollection()
+    {
+        lock (_gate)
+        {
+            _document.SensorStatistics ??= [];
+        }
+    }
+
+    private void EnsureSensorDefinitionCatalog()
+    {
+        lock (_gate)
+        {
+            var builtIns = new[]
+            {
+                PingSensorExecutor.Definition,
+                HttpSensorExecutor.Definition,
+                SnmpSensorExecutor.Definition,
+                SynologyNasSensorExecutor.Definition,
+                ProxmoxPveSensorExecutor.Definition,
+                PowerShellRemoteSensorExecutor.Definition,
+                SslCertificateSensorExecutor.Definition,
+                MssqlSensorExecutor.Definition,
+                TcpPortSensorExecutor.Definition,
+                ProbeHeartbeatSensorExecutor.Definition,
+                ProbeHealthSensorExecutor.Definition
+            };
+
+            var merged = new List<SensorDefinition>(_document.SensorDefinitions.Count + builtIns.Length);
+            var addedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var builtIn in builtIns)
+            {
+                merged.Add(CloneSensorDefinition(builtIn));
+                addedKeys.Add(builtIn.Key);
+            }
+
+            foreach (var definition in _document.SensorDefinitions)
+            {
+                if (addedKeys.Contains(definition.Key))
+                {
+                    continue;
+                }
+
+                merged.Add(CloneSensorDefinition(definition));
+            }
+
+            _document.SensorDefinitions = merged;
+        }
+    }
+
+    private void EnsureWindowsHealthTemplate()
+    {
+        const string templateKey = "windows-health";
+        const string templateName = "Windows Health";
+
+        var template = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, templateKey, StringComparison.OrdinalIgnoreCase) ||
+            (string.IsNullOrWhiteSpace(candidate.Key) &&
+             string.Equals(candidate.Name, templateName, StringComparison.OrdinalIgnoreCase) &&
+             candidate.TargetKind == MonitoringTemplateScope.Sensor));
+
+        if (template is null)
+        {
+            template = new MonitoringTemplate
+            {
+                Key = templateKey,
+                Name = templateName,
+                TargetKind = MonitoringTemplateScope.Sensor,
+                SensorTypeKey = PowerShellRemoteSensorExecutor.Definition.Key
+            };
+            _document.Templates.Add(template);
+        }
+        else if (string.IsNullOrWhiteSpace(template.Key))
+        {
+            template.Key = templateKey;
+        }
+
+        template.TargetKind = MonitoringTemplateScope.Sensor;
+        template.SensorTypeKey = string.IsNullOrWhiteSpace(template.SensorTypeKey)
+            ? PowerShellRemoteSensorExecutor.Definition.Key
+            : template.SensorTypeKey;
+        template.Settings.Enabled ??= true;
+        template.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        template.Settings.Timeout ??= TimeSpan.FromSeconds(30);
+        template.Settings.DefaultChannelKey ??= "cpuLoad";
+
+        template.Settings.Parameters["outputFormat"] = "json";
+        template.Settings.Parameters["defaultChannelKey"] = "cpuLoad";
+        template.Settings.Parameters["script"] = """
+$ErrorActionPreference = 'SilentlyContinue'
+$os = Get-CimInstance Win32_OperatingSystem
+$cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
+$totalMemoryMb = [double]$os.TotalVisibleMemorySize / 1024
+$freeMemoryMb = [double]$os.FreePhysicalMemory / 1024
+$memoryUsedPercent = if ($totalMemoryMb -gt 0) { (($totalMemoryMb - $freeMemoryMb) / $totalMemoryMb) * 100 } else { 0 }
+
+$systemDriveId = $env:SystemDrive
+if ([string]::IsNullOrWhiteSpace($systemDriveId)) { $systemDriveId = 'C:' }
+$systemDriveId = $systemDriveId.Replace('\', '')
+$systemDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$systemDriveId'"
+$systemDriveFreeGb = if ($systemDrive) { [double]$systemDrive.FreeSpace / 1GB } else { 0 }
+$systemDriveSizeGb = if ($systemDrive) { [double]$systemDrive.Size / 1GB } else { 0 }
+$systemDriveFreePercent = if ($systemDriveSizeGb -gt 0) { ($systemDriveFreeGb / $systemDriveSizeGb) * 100 } else { 0 }
+
+$lastHotfix = Get-HotFix | Where-Object InstalledOn | Sort-Object InstalledOn -Descending | Select-Object -First 1
+$daysSinceLastUpdate = if ($lastHotfix -and $lastHotfix.InstalledOn) {
+    [math]::Round(((Get-Date) - $lastHotfix.InstalledOn).TotalDays, 2)
+} else {
+    -1
+}
+
+$pendingUpdates = -1
+try {
+    $updateSession = New-Object -ComObject Microsoft.Update.Session
+    $updateSearcher = $updateSession.CreateUpdateSearcher()
+    $pendingUpdates = $updateSearcher.Search("IsInstalled=0 and Type='Software'").Updates.Count
+} catch {
+    $pendingUpdates = -1
+}
+
+$diskHealthOk = 1
+try {
+    $physicalDisks = Get-PhysicalDisk
+    if ($physicalDisks) {
+        $diskHealthOk = @($physicalDisks | Where-Object { $_.HealthStatus -notin @('Healthy', 'OK') }).Count -eq 0
+        $diskHealthOk = if ($diskHealthOk) { 1 } else { 0 }
+    }
+} catch {
+    $diskHealthOk = 1
+}
+
+$rebootPending = 0
+if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') { $rebootPending = 1 }
+if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { $rebootPending = 1 }
+try {
+    $sessionManager = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager'
+    if ($sessionManager.PendingFileRenameOperations) { $rebootPending = 1 }
+} catch {}
+
+[pscustomobject]@{
+    cpuLoad = [math]::Round([double]$cpu, 2)
+    memoryUsedPercent = [math]::Round([double]$memoryUsedPercent, 2)
+    memoryFreeMb = [math]::Round([double]$freeMemoryMb, 2)
+    systemDriveFreePercent = [math]::Round([double]$systemDriveFreePercent, 2)
+    systemDriveFreeGb = [math]::Round([double]$systemDriveFreeGb, 2)
+    daysSinceLastUpdate = [math]::Round([double]$daysSinceLastUpdate, 2)
+    pendingUpdates = [double]$pendingUpdates
+    diskHealthOk = [double]$diskHealthOk
+    rebootPending = [double]$rebootPending
+}
+""";
+
+        SetDefaultChannelThreshold(template.Settings, "cpuLoad", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(template.Settings, "cpuLoad", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(template.Settings, "memoryUsedPercent", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(template.Settings, "memoryUsedPercent", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(template.Settings, "systemDriveFreePercent", "warning", new ThresholdRule(ThresholdDirection.Below, 15));
+        SetDefaultChannelThreshold(template.Settings, "systemDriveFreePercent", "critical", new ThresholdRule(ThresholdDirection.Below, 8));
+        SetDefaultChannelThreshold(template.Settings, "daysSinceLastUpdate", "warning", new ThresholdRule(ThresholdDirection.Above, 35));
+        SetDefaultChannelThreshold(template.Settings, "daysSinceLastUpdate", "critical", new ThresholdRule(ThresholdDirection.Above, 60));
+        SetDefaultOrMigrateChannelThreshold(template.Settings, "pendingUpdates", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5), "above:0");
+        SetDefaultChannelThreshold(template.Settings, "pendingUpdates", "critical", new ThresholdRule(ThresholdDirection.Above, 10));
+        SetDefaultOrMigrateChannelThreshold(template.Settings, "diskHealthOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5), "below:1");
+        SetDefaultOrMigrateChannelThreshold(template.Settings, "rebootPending", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5), "above:0");
+    }
+
+    private void EnsureSynologyNasTemplates()
+    {
+        const string hostTemplateKey = "synology-nas-host-defaults";
+        const string hostTemplateName = "Synology NAS Defaults";
+        const string sensorTemplateKey = "synology-nas";
+        const string sensorTemplateName = "Synology NAS";
+
+        var hostTemplate = EnsureTemplate(hostTemplateKey, hostTemplateName, MonitoringTemplateScope.Host);
+        hostTemplate.Settings.Enabled ??= true;
+        hostTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        hostTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        SetDefaultParameter(hostTemplate.Settings, "snmp.community", "public");
+        SetDefaultParameter(hostTemplate.Settings, "snmp.version", "v2c");
+        SetDefaultParameter(hostTemplate.Settings, "snmp.port", "161");
+
+        var sensorTemplate = EnsureTemplate(
+            sensorTemplateKey,
+            sensorTemplateName,
+            MonitoringTemplateScope.Sensor,
+            SynologyNasSensorExecutor.Definition.Key,
+            hostTemplate.Id);
+        sensorTemplate.Settings.Enabled ??= true;
+        sensorTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        sensorTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+    }
+
+    private void EnsureProxmoxPveTemplates()
+    {
+        const string hostTemplateKey = "proxmox-pve-host-defaults";
+        const string hostTemplateName = "Proxmox PVE Defaults";
+        const string clusterTemplateKey = "proxmox-pve-cluster";
+        const string clusterTemplateName = "Proxmox PVE Cluster";
+        const string nodeTemplateKey = "proxmox-pve-node";
+        const string nodeTemplateName = "Proxmox PVE Node";
+
+        var hostTemplate = EnsureTemplate(hostTemplateKey, hostTemplateName, MonitoringTemplateScope.Host);
+        hostTemplate.Settings.Enabled ??= true;
+        hostTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(20);
+        hostTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        SetDefaultParameter(hostTemplate.Settings, "pve.port", "8006");
+        SetDefaultParameter(hostTemplate.Settings, "pve.user", "root@pam");
+        SetDefaultParameter(hostTemplate.Settings, "pve.tokenId", "monitoring");
+        SetDefaultParameter(hostTemplate.Settings, "pve.verifySsl", "false");
+
+        var clusterTemplate = EnsureTemplate(
+            clusterTemplateKey,
+            clusterTemplateName,
+            MonitoringTemplateScope.Sensor,
+            ProxmoxPveSensorExecutor.Definition.Key,
+            hostTemplate.Id);
+        clusterTemplate.Settings.Enabled ??= true;
+        clusterTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(20);
+        clusterTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        SetDefaultParameter(clusterTemplate.Settings, "pve.scope", "cluster");
+
+        var nodeTemplate = EnsureTemplate(
+            nodeTemplateKey,
+            nodeTemplateName,
+            MonitoringTemplateScope.Sensor,
+            ProxmoxPveSensorExecutor.Definition.Key,
+            hostTemplate.Id);
+        nodeTemplate.Settings.Enabled ??= true;
+        nodeTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(20);
+        nodeTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        SetDefaultParameter(nodeTemplate.Settings, "pve.scope", "node");
+    }
+
+    private MonitoringTemplate EnsureTemplate(
+        string templateKey,
+        string templateName,
+        MonitoringTemplateScope targetKind,
+        string? sensorTypeKey = null,
+        Guid? parentTemplateId = null)
+    {
+        var template = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, templateKey, StringComparison.OrdinalIgnoreCase) ||
+            (string.IsNullOrWhiteSpace(candidate.Key) &&
+             string.Equals(candidate.Name, templateName, StringComparison.OrdinalIgnoreCase) &&
+             candidate.TargetKind == targetKind));
+
+        if (template is null)
+        {
+            template = new MonitoringTemplate
+            {
+                Key = templateKey,
+                Name = templateName,
+                TargetKind = targetKind,
+                SensorTypeKey = sensorTypeKey,
+                ParentTemplateId = parentTemplateId
+            };
+            _document.Templates.Add(template);
+            return template;
+        }
+
+        if (string.IsNullOrWhiteSpace(template.Key))
+        {
+            template.Key = templateKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(template.Name))
+        {
+            template.Name = templateName;
+        }
+
+        if (template.TargetKind == MonitoringTemplateScope.Any)
+        {
+            template.TargetKind = targetKind;
+        }
+
+        if (string.IsNullOrWhiteSpace(template.SensorTypeKey) && !string.IsNullOrWhiteSpace(sensorTypeKey))
+        {
+            template.SensorTypeKey = sensorTypeKey;
+        }
+
+        if (template.ParentTemplateId is null && parentTemplateId.HasValue)
+        {
+            template.ParentTemplateId = parentTemplateId;
+        }
+
+        return template;
+    }
+
+    private static void SetDefaultParameter(MonitoringSettings settings, string key, string value)
+    {
+        if (!settings.Parameters.TryGetValue(key, out var currentValue) || string.IsNullOrWhiteSpace(currentValue))
+        {
+            settings.Parameters[key] = value;
+        }
+    }
+
+    private static void SetDefaultChannelThreshold(
+        MonitoringSettings settings,
+        string channelKey,
+        string severity,
+        ThresholdRule rule)
+    {
+        var key = MonitoringSettings.BuildChannelThresholdKey(channelKey, severity);
+        if (!settings.Thresholds.ContainsKey(key))
+        {
+            MonitoringSettings.SetChannelThreshold(settings, channelKey, severity, rule);
+        }
+    }
+
+    private static void SetDefaultOrMigrateChannelThreshold(
+        MonitoringSettings settings,
+        string channelKey,
+        string severity,
+        ThresholdRule rule,
+        params string[] migrateFrom)
+    {
+        var key = MonitoringSettings.BuildChannelThresholdKey(channelKey, severity);
+        if (!settings.Thresholds.TryGetValue(key, out var currentValue) ||
+            migrateFrom.Contains(currentValue, StringComparer.OrdinalIgnoreCase))
+        {
+            MonitoringSettings.SetChannelThreshold(settings, channelKey, severity, rule);
+        }
+    }
+
+    private void EnsureDefaultWindowsHealthSensor()
+    {
+        const string sensorName = "Windows Health";
+        const string sensorTarget = "pc-terminal";
+        const string templateKey = "windows-health";
+
+        var template = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, templateKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase));
+
+        var sensor = EnumerateElements(_document.RootProbe)
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.SensorTypeKey, PowerShellRemoteSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Target, sensorTarget, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement(sensorName, PowerShellRemoteSensorExecutor.Definition.Key, sensorTarget)
+            {
+                Description = "Windows workstation health monitor"
+            };
+            AddChild(_document.RootProbe, sensor);
+        }
+
+        sensor.ParentId = _document.RootProbe.Id;
+        sensor.SensorTypeKey = PowerShellRemoteSensorExecutor.Definition.Key;
+        sensor.Target = sensorTarget;
+
+        if (template is not null && !sensor.AppliedTemplateIds.Contains(template.Id))
+        {
+            sensor.AppliedTemplateIds.Add(template.Id);
+        }
+
+        if (!sensor.Settings.Parameters.ContainsKey("winrm.username"))
+        {
+            sensor.Settings.Parameters["winrm.username"] = "Matthias";
+        }
+
+        if (!sensor.Settings.Parameters.ContainsKey("winrm.password"))
+        {
+            sensor.Settings.Parameters["winrm.password"] = "Miriam2207";
+        }
+
+        sensor.Settings.Highlight = true;
+    }
+
+    private void EnsureDefaultProxmoxSensor()
+    {
+        const string sensorName = "PVE";
+        const string sensorTarget = "10.10.2.11";
+        const string templateKey = "proxmox-pve-node";
+
+        var template = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, templateKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(candidate.Name, "Proxmox PVE Node", StringComparison.OrdinalIgnoreCase));
+
+        var sensor = EnumerateElements(_document.RootProbe)
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.SensorTypeKey, ProxmoxPveSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Target, sensorTarget, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement(sensorName, ProxmoxPveSensorExecutor.Definition.Key, sensorTarget)
+            {
+                Description = "Proxmox node health monitor"
+            };
+            AddChild(_document.RootProbe, sensor);
+        }
+
+        sensor.ParentId = _document.RootProbe.Id;
+        sensor.SensorTypeKey = ProxmoxPveSensorExecutor.Definition.Key;
+        sensor.Target = sensorTarget;
+
+        if (template is not null && !sensor.AppliedTemplateIds.Contains(template.Id))
+        {
+            sensor.AppliedTemplateIds.Add(template.Id);
+        }
+
+        if (sensor.Settings.Parameters.TryGetValue("payloadSize", out var legacyScope) &&
+            !sensor.Settings.Parameters.ContainsKey("pve.scope"))
+        {
+            sensor.Settings.Parameters["pve.scope"] = string.Equals(legacyScope, "node", StringComparison.OrdinalIgnoreCase)
+                ? "node"
+                : "node";
+            sensor.Settings.Parameters.Remove("payloadSize");
+        }
+        else
+        {
+            sensor.Settings.Parameters["pve.scope"] = "node";
+            sensor.Settings.Parameters.Remove("payloadSize");
+        }
+
+        if (!sensor.Settings.Parameters.ContainsKey("pve.user"))
+        {
+            sensor.Settings.Parameters["pve.user"] = "root@pam";
+        }
+
+        if (!sensor.Settings.Parameters.ContainsKey("pve.tokenId"))
+        {
+            sensor.Settings.Parameters["pve.tokenId"] = "monitoring";
+        }
+
+        sensor.Settings.Highlight = true;
+    }
+
+    private void EnsureProbeMetadataRecursive(ProbeElement probe, bool isRoot = false)
+    {
+        if (string.IsNullOrWhiteSpace(probe.ProbeId))
+        {
+            probe.ProbeId = isRoot
+                ? "master"
+                : GenerateUniqueProbeId(probe.Name);
+        }
+
+        if (string.IsNullOrWhiteSpace(probe.EnrollmentToken) && !isRoot)
+        {
+            probe.EnrollmentToken = CreateToken();
+        }
+
+        foreach (var childProbe in probe.Children.OfType<ProbeElement>())
+        {
+            EnsureProbeMetadataRecursive(childProbe);
+        }
+    }
+
+    private void EnsureProbeHeartbeatSensorsRecursive(ProbeElement probe, bool isRoot = false)
+    {
+        if (!isRoot)
+        {
+            EnsureProbeHeartbeatSensor(probe);
+        }
+
+        foreach (var childProbe in probe.Children.OfType<ProbeElement>())
+        {
+            EnsureProbeHeartbeatSensorsRecursive(childProbe);
+        }
+    }
+
+    private void EnsureProbeHealthSensorsRecursive(ProbeElement probe)
+    {
+        EnsureProbeHealthSensor(probe);
+
+        foreach (var childProbe in probe.Children.OfType<ProbeElement>())
+        {
+            EnsureProbeHealthSensorsRecursive(childProbe);
+        }
+    }
+
+    private static void EnsureProbeHeartbeatSensor(ProbeElement probe)
+    {
+        var sensor = probe.Children
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate => string.Equals(candidate.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement("Heartbeat", ProbeHeartbeatSensorExecutor.Definition.Key, probe.ProbeId)
+            {
+                Description = "Probe heartbeat monitor"
+            };
+            AddChild(probe, sensor);
+        }
+        else
+        {
+            sensor.ParentId = probe.Id;
+            sensor.Target = probe.ProbeId;
+            if (string.IsNullOrWhiteSpace(sensor.Name))
+            {
+                sensor.Name = "Heartbeat";
+            }
+        }
+
+        ApplyParameterDefaults(sensor.Settings, ProbeHeartbeatSensorExecutor.Definition);
+        EnsureHeartbeatThresholdDefaults(sensor.Settings);
+    }
+
+    private static void EnsureProbeHealthSensor(ProbeElement probe)
+    {
+        var sensor = probe.Children
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate => string.Equals(candidate.SensorTypeKey, ProbeHealthSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement("Probe Health", ProbeHealthSensorExecutor.Definition.Key, probe.ProbeId)
+            {
+                Description = "Probe connection and storage health"
+            };
+            AddChild(probe, sensor);
+        }
+        else
+        {
+            sensor.ParentId = probe.Id;
+            sensor.Target = probe.ProbeId;
+            if (string.IsNullOrWhiteSpace(sensor.Name))
+            {
+                sensor.Name = "Probe Health";
+            }
+        }
+
+        sensor.Settings.Enabled ??= true;
+        sensor.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        sensor.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        sensor.Settings.DefaultChannelKey ??= "storageFreePercent";
+        ApplyParameterDefaults(sensor.Settings, ProbeHealthSensorExecutor.Definition);
+        EnsureProbeHealthThresholdDefaults(sensor.Settings);
+    }
+
+    private static void EnsureHeartbeatThresholdDefaults(MonitoringSettings settings)
+    {
+        var warningKey = MonitoringSettings.BuildChannelThresholdKey("ageSeconds", "warning");
+        var criticalKey = MonitoringSettings.BuildChannelThresholdKey("ageSeconds", "critical");
+
+        if (!settings.Thresholds.ContainsKey(warningKey))
+        {
+            settings.Thresholds[warningKey] = MonitoringSettings.FormatThresholdRule(new ThresholdRule(ThresholdDirection.Above, 30));
+        }
+
+        if (!settings.Thresholds.ContainsKey(criticalKey))
+        {
+            settings.Thresholds[criticalKey] = MonitoringSettings.FormatThresholdRule(new ThresholdRule(ThresholdDirection.Above, 60));
+        }
+    }
+
+    private static void EnsureProbeHealthThresholdDefaults(MonitoringSettings settings)
+    {
+        SetDefaultChannelThreshold(settings, "storageFreePercent", "warning", new ThresholdRule(ThresholdDirection.Below, 15));
+        SetDefaultChannelThreshold(settings, "storageFreePercent", "critical", new ThresholdRule(ThresholdDirection.Below, 8));
+        SetDefaultChannelThreshold(settings, "connected", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(settings, "dataPathAvailable", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+    }
+
+    private static void ApplyParameterDefaults(MonitoringSettings settings, SensorDefinition definition)
+    {
+        foreach (var parameter in definition.Parameters)
+        {
+            if (parameter.DefaultValue is null)
+            {
+                continue;
+            }
+
+            if (!settings.Parameters.ContainsKey(parameter.Key))
+            {
+                settings.Parameters[parameter.Key] = parameter.DefaultValue;
+            }
+        }
+    }
+
+    private MonitoringContainerElement ResolveParentContainer(Guid? parentId, params MonitoringElementKind[] allowedKinds)
+    {
+        var parent = parentId is Guid id
+            ? FindElement(id)
+            : _document.RootProbe;
+
+        if (parent is null)
+        {
+            throw new InvalidOperationException("Parent element was not found.");
+        }
+
+        if (parent is not MonitoringContainerElement container)
+        {
+            throw new InvalidOperationException("Selected parent cannot contain children.");
+        }
+
+        if (allowedKinds.Length > 0 && !allowedKinds.Contains(parent.Kind))
+        {
+            throw new InvalidOperationException($"Parent kind '{parent.Kind}' is not allowed here.");
+        }
+
+        return container;
+    }
+
+    private static MonitoringElementKind[] GetAllowedParentKinds(MonitoringElement element)
+    {
+        return element switch
+        {
+            ProbeElement => [MonitoringElementKind.Probe],
+            FolderElement => [MonitoringElementKind.Probe, MonitoringElementKind.Folder],
+            HostElement => [MonitoringElementKind.Probe, MonitoringElementKind.Folder],
+            SensorElement => [MonitoringElementKind.Probe, MonitoringElementKind.Folder, MonitoringElementKind.Host],
+            _ => []
+        };
+    }
+
+    private static MonitoringContainerElement? FindParentContainer(MonitoringContainerElement parent, Guid childId)
+    {
+        if (parent.Children.Any(candidate => candidate.Id == childId))
+        {
+            return parent;
+        }
+
+        foreach (var childContainer in parent.Children.OfType<MonitoringContainerElement>())
+        {
+            var found = FindParentContainer(childContainer, childId);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static void AddChild(MonitoringContainerElement parent, MonitoringElement child)
+    {
+        child.ParentId = parent.Id;
+        parent.Children.Add(child);
+    }
+
+    private static bool RemoveChild(MonitoringContainerElement parent, Guid id)
+    {
+        var child = parent.Children.FirstOrDefault(candidate => candidate.Id == id);
+        if (child is not null)
+        {
+            parent.Children.Remove(child);
+            return true;
+        }
+
+        foreach (var childContainer in parent.Children.OfType<MonitoringContainerElement>())
+        {
+            if (RemoveChild(childContainer, id))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<MonitoringElement> EnumerateElements(MonitoringElement element)
+    {
+        yield return element;
+
+        if (element is not MonitoringContainerElement container)
+        {
+            yield break;
+        }
+
+        foreach (var child in container.Children)
+        {
+            foreach (var nested in EnumerateElements(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    private string GenerateUniqueProbeId(string name)
+    {
+        var baseId = Slugify(name);
+        if (string.IsNullOrWhiteSpace(baseId))
+        {
+            baseId = "probe";
+        }
+
+        var existing = EnumerateElements(_document.RootProbe)
+            .OfType<ProbeElement>()
+            .Select(probe => probe.ProbeId)
+            .Where(probeId => !string.IsNullOrWhiteSpace(probeId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var candidate = baseId;
+        var suffix = 2;
+        while (existing.Contains(candidate))
+        {
+            candidate = $"{baseId}-{suffix++}";
+        }
+
+        return candidate;
+    }
+
+    private static string Slugify(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        var lastWasDash = false;
+
+        foreach (var character in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(character);
+                lastWasDash = false;
+                continue;
+            }
+
+            if (!lastWasDash)
+            {
+                builder.Append('-');
+                lastWasDash = true;
+            }
+        }
+
+        return builder.ToString().Trim('-');
+    }
+
+    private static string CreateToken()
+    {
+        Span<byte> buffer = stackalloc byte[16];
+        RandomNumberGenerator.Fill(buffer);
+        return Convert.ToHexString(buffer).ToLowerInvariant();
+    }
+
+    private void AddEvent(MonitoringEvent monitoringEvent)
+    {
+        EnsureDefaultEventCollection();
+        _document.Events.Add(monitoringEvent);
+    }
+
+    private void PruneEvents(DateTimeOffset now, MonitoringSettings? settings)
+    {
+        var retentionDays = ResolveRetentionDays(settings?.EventRetentionDays, DefaultEventRetentionDays);
+        if (retentionDays <= 0)
+        {
+            return;
+        }
+
+        var cutoff = now - TimeSpan.FromDays(retentionDays);
+        _document.Events.RemoveAll(entry => entry.TimestampUtc < cutoff);
+    }
+
+    private void PruneSensorHistory(Guid sensorId, DateTimeOffset now, MonitoringSettings? settings)
+    {
+        var retentionDays = ResolveRetentionDays(settings?.ObservationRetentionDays, DefaultObservationRetentionDays);
+        if (retentionDays <= 0)
+        {
+            return;
+        }
+
+        var cutoff = now - TimeSpan.FromDays(retentionDays);
+        _document.SensorHistory.RemoveAll(entry => entry.SensorId == sensorId && entry.TimestampUtc < cutoff);
+
+        if (!_sensorHistoryBySensor.TryGetValue(sensorId, out var sensorHistory))
+        {
+            _latestSensorObservations.Remove(sensorId);
+            return;
+        }
+
+        sensorHistory.RemoveAll(entry => entry.TimestampUtc < cutoff);
+        if (sensorHistory.Count == 0)
+        {
+            _sensorHistoryBySensor.Remove(sensorId);
+            _latestSensorObservations.Remove(sensorId);
+            return;
+        }
+
+        _latestSensorObservations[sensorId] = sensorHistory[^1];
+    }
+
+    private void PruneStatistics(Guid sensorId, DateTimeOffset now, MonitoringSettings? settings)
+    {
+        var retentionDays = ResolveRetentionDays(settings?.StatisticsRetentionDays, DefaultStatisticsRetentionDays);
+        if (retentionDays <= 0)
+        {
+            return;
+        }
+
+        var cutoff = now - TimeSpan.FromDays(retentionDays);
+        _document.SensorStatistics.RemoveAll(bucket => bucket.SensorId == sensorId && bucket.BucketStartUtc < cutoff);
+    }
+
+    private void UpdateSensorStatistics(Guid sensorId, SensorExecutionResult result, DateTimeOffset timestampUtc, MonitoringSettings? settings)
+    {
+        if (!TryGetStatisticSample(result, out var sampleValue, out var channelKey, out var unit))
+        {
+            return;
+        }
+
+        var bucketMinutes = ResolveRetentionDays(settings?.StatisticsBucketMinutes, DefaultStatisticsBucketMinutes);
+        if (bucketMinutes <= 0)
+        {
+            return;
+        }
+
+        var bucketStartUtc = FloorToBucket(timestampUtc, bucketMinutes);
+        var bucket = _document.SensorStatistics.FirstOrDefault(entry =>
+            entry.SensorId == sensorId &&
+            entry.BucketMinutes == bucketMinutes &&
+            entry.BucketStartUtc == bucketStartUtc);
+
+        if (bucket is null)
+        {
+            bucket = new SensorStatisticsBucket
+            {
+                SensorId = sensorId,
+                BucketStartUtc = bucketStartUtc,
+                BucketMinutes = bucketMinutes,
+                DefaultChannelKey = channelKey,
+                Unit = unit
+            };
+            _document.SensorStatistics.Add(bucket);
+        }
+
+        bucket.DefaultChannelKey = channelKey;
+        bucket.Unit = unit ?? bucket.Unit;
+        bucket.SampleCount++;
+        bucket.Average = bucket.Average is double average
+            ? ((average * (bucket.SampleCount - 1)) + sampleValue) / bucket.SampleCount
+            : sampleValue;
+        bucket.Minimum = bucket.Minimum is double minimum ? Math.Min(minimum, sampleValue) : sampleValue;
+        bucket.Maximum = bucket.Maximum is double maximum ? Math.Max(maximum, sampleValue) : sampleValue;
+        bucket.LastValue = sampleValue;
+        bucket.State = result.State;
+        bucket.Message = result.Message;
+    }
+
+    private static bool TryGetStatisticSample(
+        SensorExecutionResult result,
+        out double value,
+        out string channelKey,
+        out string? unit)
+    {
+        var defaultChannel = result.Channels.FirstOrDefault(channel =>
+            channel.IsDefault ||
+            (!string.IsNullOrWhiteSpace(result.DefaultChannelKey) &&
+             string.Equals(channel.Key, result.DefaultChannelKey, StringComparison.OrdinalIgnoreCase)));
+
+        if (defaultChannel is null && result.Channels.Count > 0)
+        {
+            defaultChannel = result.Channels[0];
+        }
+
+        if (defaultChannel?.Value is double channelValue)
+        {
+            value = channelValue;
+            channelKey = string.IsNullOrWhiteSpace(defaultChannel.Key) ? result.DefaultChannelKey ?? "default" : defaultChannel.Key;
+            unit = defaultChannel.Unit;
+            return true;
+        }
+
+        if (result.Value.HasValue)
+        {
+            value = result.Value.Value;
+            channelKey = string.IsNullOrWhiteSpace(result.DefaultChannelKey) ? "default" : result.DefaultChannelKey;
+            unit = defaultChannel?.Unit;
+            return true;
+        }
+
+        if (result.State == SensorState.Critical)
+        {
+            value = 0d;
+            channelKey = string.IsNullOrWhiteSpace(result.DefaultChannelKey) ? "default" : result.DefaultChannelKey;
+            unit = defaultChannel?.Unit;
+            return true;
+        }
+
+        value = default;
+        channelKey = string.Empty;
+        unit = null;
+        return false;
+    }
+
+    private static int ResolveRetentionDays(int? configuredValue, int fallback)
+    {
+        return configuredValue is int configured && configured > 0 ? configured : fallback;
+    }
+
+    private static DateTimeOffset FloorToBucket(DateTimeOffset timestampUtc, int bucketMinutes)
+    {
+        var bucketSpan = TimeSpan.FromMinutes(Math.Max(bucketMinutes, 1));
+        var ticks = timestampUtc.UtcTicks - (timestampUtc.UtcTicks % bucketSpan.Ticks);
+        return new DateTimeOffset(ticks, TimeSpan.Zero);
+    }
+
+    private bool ShouldRecordStateChangeEvent(SensorObservation? previousObservation, SensorExecutionResult result)
+    {
+        return previousObservation is null || previousObservation.State != result.State;
+    }
+
+    private string GetElementName(Guid elementId)
+    {
+        return FindElementInternal(elementId)?.Name ?? elementId.ToString("N");
+    }
+
+    private string GetElementPath(Guid elementId)
+    {
+        var element = FindElementInternal(elementId);
+        return element is null ? elementId.ToString("N") : GetElementPath(element);
+    }
+
+    private string GetElementPath(MonitoringElement element)
+    {
+        var lineage = BuildLineage(element);
+        return string.Join(" / ", lineage.Select(node => node.Name));
+    }
+
+    private IReadOnlyList<MonitoringElement> BuildLineage(MonitoringElement element)
+    {
+        var lineage = new List<MonitoringElement>();
+        var current = element;
+
+        while (true)
+        {
+            lineage.Add(current);
+
+            if (current.ParentId is not Guid parentId)
+            {
+                break;
+            }
+
+            var parent = FindElementInternal(parentId);
+            if (parent is null)
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        lineage.Reverse();
+        return lineage;
+    }
+
+    private MonitoringElement? FindElementInternal(Guid id)
+    {
+        return EnumerateElements(_document.RootProbe).FirstOrDefault(element => element.Id == id);
+    }
+
+    private SensorObservation? FindLatestSensorObservationLocked(Guid sensorId)
+    {
+        return _latestSensorObservations.TryGetValue(sensorId, out var latest)
+            ? latest
+            : null;
+    }
+
+    private static string BuildStateChangeMessage(SensorState? previousState, SensorState currentState, string? message)
+    {
+        var transition = previousState is null
+            ? $"state {MonitoringStatePresentation.Label(currentState)}"
+            : $"{MonitoringStatePresentation.Label(previousState.Value)} -> {MonitoringStatePresentation.Label(currentState)}";
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return transition;
+        }
+
+        return $"{transition}: {message}";
+    }
+
+    private static string AppendExecutionProbe(string message, string? probeName, string? probeId)
+    {
+        if (string.IsNullOrWhiteSpace(probeName) && string.IsNullOrWhiteSpace(probeId))
+        {
+            return message;
+        }
+
+        var probe = string.IsNullOrWhiteSpace(probeName)
+            ? probeId!.Trim()
+            : string.IsNullOrWhiteSpace(probeId)
+                ? probeName.Trim()
+                : $"{probeName.Trim()} ({probeId.Trim()})";
+        return $"{message} via {probe}";
+    }
+
+    private void ResolveAlertsForElement(Guid elementId, DateTimeOffset resolvedAt, string message)
+    {
+        foreach (var alert in _document.Alerts.Where(alert => alert.IsActive && alert.ElementId == elementId))
+        {
+            alert.ResolvedUtc = resolvedAt;
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                alert.Message = message;
+            }
+
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = resolvedAt,
+                Kind = MonitoringEventKind.AlertResolved,
+                ElementId = alert.ElementId,
+                ElementKind = alert.ElementKind,
+                ElementName = alert.ElementName,
+                ElementPath = alert.ElementPath,
+                State = alert.State,
+                Message = alert.Message
+            });
+        }
+    }
+
+    private void SyncSensorAlertFromObservation(
+        Guid sensorId,
+        SensorExecutionResult result,
+        DateTimeOffset timestampUtc)
+    {
+        if (result.State is not (SensorState.Warning or SensorState.Critical))
+        {
+            ResolveAlertsForElement(sensorId, timestampUtc, string.Empty);
+            return;
+        }
+
+        var sensor = FindElementInternal(sensorId) as SensorElement;
+        if (sensor is null)
+        {
+            return;
+        }
+
+        var path = GetElementPath(sensor);
+        var message = string.IsNullOrWhiteSpace(result.Message)
+            ? MonitoringStatePresentation.Label(result.State)
+            : result.Message;
+        var existing = _document.Alerts.FirstOrDefault(alert => alert.IsActive && alert.ElementId == sensorId);
+        if (existing is null)
+        {
+            _document.Alerts.Add(new MonitoringAlert
+            {
+                ElementId = sensor.Id,
+                ElementKind = sensor.Kind,
+                ElementName = sensor.Name,
+                ElementPath = path,
+                State = result.State,
+                Message = message,
+                FirstSeenUtc = timestampUtc,
+                LastSeenUtc = timestampUtc
+            });
+
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = timestampUtc,
+                Kind = MonitoringEventKind.AlertRaised,
+                ElementId = sensor.Id,
+                ElementKind = sensor.Kind,
+                ElementName = sensor.Name,
+                ElementPath = path,
+                State = result.State,
+                Message = message
+            });
+            return;
+        }
+
+        existing.ElementKind = sensor.Kind;
+        existing.ElementName = sensor.Name;
+        existing.ElementPath = path;
+        existing.State = result.State;
+        existing.Message = message;
+        existing.LastSeenUtc = timestampUtc;
+    }
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = false
+        };
+
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
+    private static SensorDefinition CloneSensorDefinition(SensorDefinition source)
+    {
+        return new SensorDefinition
+        {
+            Key = source.Key,
+            DisplayName = source.DisplayName,
+            Description = source.Description,
+            ChannelMode = source.ChannelMode,
+            Parameters = source.Parameters.Select(parameter => new SensorParameterDefinition
+            {
+                Key = parameter.Key,
+                Label = parameter.Label,
+                Kind = parameter.Kind,
+                Description = parameter.Description,
+                Required = parameter.Required,
+                DefaultValue = parameter.DefaultValue,
+                Placeholder = parameter.Placeholder,
+                Min = parameter.Min,
+                Max = parameter.Max,
+                Step = parameter.Step,
+                CredentialKind = parameter.CredentialKind,
+                Options = parameter.Options.Select(option => new SensorParameterOption
+                {
+                    Value = option.Value,
+                    Label = option.Label
+                }).ToArray()
+            }).ToArray()
+        };
+    }
+
+    private sealed class WorkspaceDocument
+    {
+        public ProbeElement RootProbe { get; set; } = default!;
+
+        public List<MonitoringTemplate> Templates { get; set; } = [];
+
+        public List<SensorDefinition> SensorDefinitions { get; set; } = [];
+
+        public NotificationWorkspaceConfiguration NotificationConfiguration { get; set; } = new();
+
+        public List<NotificationSender> NotificationSenders { get; set; } = [];
+
+        public List<NotificationReceiver> NotificationReceivers { get; set; } = [];
+
+        public List<NotificationRule> NotificationRules { get; set; } = [];
+
+        public List<MonitoringAlert> Alerts { get; set; } = [];
+
+        public List<SensorObservation> SensorHistory { get; set; } = [];
+
+        public List<MonitoringEvent> Events { get; set; } = [];
+
+        public List<SensorStatisticsBucket> SensorStatistics { get; set; } = [];
+    }
+
+    private enum SavePriority
+    {
+        Configuration,
+        Telemetry
+    }
+}

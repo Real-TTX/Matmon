@@ -1,0 +1,20 @@
+@page "/workspace"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "Infrastructure";
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("monitoring")
+            <h1>Infrastructure</h1>
+        </div>
+        <div class="workspace-inline-actions">
+            <a class="workspace-action-link" asp-page="/Index">@MatmonIcons.Render("monitoring")<span>Monitoring</span></a>
+            <a class="workspace-action-link" asp-page="/Monitoring">@MatmonIcons.Render("sensor")<span>Sensors</span></a>
+            <a class="workspace-action-link" asp-page="/Templates">@MatmonIcons.Render("template")<span>Templates</span></a>
+            <a class="workspace-action-link" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Notifications</span></a>
+        </div>
+    </div>
+</section>

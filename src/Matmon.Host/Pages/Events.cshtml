@@ -1,0 +1,132 @@
+@page "/Events"
+@model EventsModel
+@{
+    ViewData["Title"] = "Events";
+    var returnUrl = Request.Path + Request.QueryString;
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("list")
+            <h1>Events</h1>
+        </div>
+        <span class="panel-hint">@Model.View.Events.Count loaded</span>
+    </div>
+
+    <section class="panel panel-stack monitoring-controls">
+        <form method="get" class="monitoring-filter-bar">
+            <label class="monitoring-filter-field">
+                <span>@MatmonIcons.Render("search")<small>Search</small></span>
+                <input type="search" name="search" value="@Model.View.Search" class="form-control workspace-input" placeholder="Name, path, message" />
+            </label>
+
+            <label class="monitoring-filter-field">
+                <span>@MatmonIcons.Render("warning")<small>Kind</small></span>
+                <select name="kind" class="form-select workspace-select">
+                    <option value="all" selected="@(Model.View.KindFilter == "all" ? "selected" : null)">All</option>
+                    @foreach (var kind in Enum.GetValues<MonitoringEventKind>())
+                    {
+                        <option value="@kind.ToString()" selected="@(string.Equals(Model.View.KindFilter, kind.ToString(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@kind</option>
+                    }
+                </select>
+            </label>
+
+            <label class="monitoring-filter-field">
+                <span>@MatmonIcons.Render("sensor")<small>State</small></span>
+                <select name="state" class="form-select workspace-select">
+                    <option value="all" selected="@(Model.View.StateFilter == "all" ? "selected" : null)">All</option>
+                    <option value="ok" selected="@(Model.View.StateFilter == "ok" ? "selected" : null)">OK</option>
+                    <option value="warning" selected="@(Model.View.StateFilter == "warning" ? "selected" : null)">Warning</option>
+                    <option value="error" selected="@(Model.View.StateFilter == "error" ? "selected" : null)">Error</option>
+                    <option value="paused" selected="@(Model.View.StateFilter == "paused" ? "selected" : null)">Paused</option>
+                    <option value="unknown" selected="@(Model.View.StateFilter == "unknown" ? "selected" : null)">Unknown</option>
+                    <option value="disabled" selected="@(Model.View.StateFilter == "disabled" ? "selected" : null)">Disabled</option>
+                </select>
+            </label>
+
+            <label class="monitoring-filter-field">
+                <span>@MatmonIcons.Render("clock")<small>Limit</small></span>
+                <input type="number" name="take" min="50" max="1000" value="@Model.View.Take" class="form-control workspace-input" />
+            </label>
+
+            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
+            <a class="workspace-secondary-submit" asp-page="/Events">@MatmonIcons.Render("arrow-left")<span>Reset</span></a>
+        </form>
+    </section>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("list")<span>Log</span></h2>
+            <span class="panel-hint">@Model.View.Events.Count entries</span>
+        </div>
+
+        @if (Model.View.Events.Count == 0)
+        {
+            <div class="empty-state">No events found.</div>
+        }
+        else
+        {
+            <div class="events-list">
+                @foreach (var entry in Model.View.Events)
+                {
+                    <details class="event-row" data-state="@entry.StateKey">
+                        <summary class="event-row-summary">
+                            <span class="tree-kind event-row-kind" data-kind="@entry.ElementKind.ToLowerInvariant()">@entry.KindLabel</span>
+                            <div class="event-row-main">
+                                <span class="event-row-name">@entry.ElementName</span>
+                                <span class="event-row-separator">&middot;</span>
+                                <span class="event-row-path">@entry.ElementPath</span>
+                                <span class="event-row-separator">&middot;</span>
+                                <span class="event-row-message">@(string.IsNullOrWhiteSpace(entry.Details) ? entry.Message : entry.Details)</span>
+                            </div>
+                            <div class="event-row-side">
+                                @if (!string.IsNullOrWhiteSpace(entry.StateLabel))
+                                {
+                                    <span class="state-pill" data-state="@entry.StateKey">@entry.StateLabel</span>
+                                }
+                                <span class="event-row-time">@entry.Timestamp</span>
+                                <span class="event-row-chevron">@MatmonIcons.Render("arrow-right")</span>
+                            </div>
+                        </summary>
+
+                        <div class="event-row-body">
+                            <div class="event-row-body-grid">
+                                <div class="event-row-field">
+                                    <span class="workspace-label">Message</span>
+                                    <div>@entry.Message</div>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(entry.Details))
+                                {
+                                    <div class="event-row-field">
+                                        <span class="workspace-label">Details</span>
+                                        <div>@entry.Details</div>
+                                    </div>
+                                }
+                                <div class="event-row-field">
+                                    <span class="workspace-label">Path</span>
+                                    <div>@entry.ElementPath</div>
+                                </div>
+                                <div class="event-row-field">
+                                    <span class="workspace-label">Time</span>
+                                    <div>@entry.Timestamp</div>
+                                </div>
+                            </div>
+
+                            @if (entry.ElementId is Guid elementId)
+                            {
+                                <div class="workspace-row-actions event-row-actions">
+                                    @if (string.Equals(entry.ElementKind, MonitoringElementKind.Sensor.ToString(), StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@elementId">@MatmonIcons.Render("chart")<span>Details</span></a>
+                                    }
+                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@elementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                </div>
+                            }
+                        </div>
+                    </details>
+                }
+            </div>
+        }
+    </section>
+</section>

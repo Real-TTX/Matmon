@@ -1,0 +1,73 @@
+@page "/Paused"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "Paused";
+    var pausedSensors = Model.View.Nodes.Where(node => node.Kind == MonitoringElementKind.Sensor && node.IsPaused).ToArray();
+}
+
+<section class="dashboard-shell">
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("pause")
+            <h1>Paused</h1>
+        </div>
+        <span class="panel-hint">@pausedSensors.Length sensors paused</span>
+    </div>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("pause")<span>Sensors</span></h2>
+            <span class="panel-hint">@pausedSensors.Length</span>
+        </div>
+
+        @if (pausedSensors.Length == 0)
+        {
+            <div class="empty-state">No paused sensors.</div>
+        }
+        else
+        {
+            <div class="tree-list">
+                @foreach (var node in pausedSensors)
+                {
+                    <article class="workspace-row tree-row" style="--depth:@node.Depth" data-state="paused">
+                        <span class="tree-kind" data-kind="sensor">Sensor</span>
+                        <div class="tree-main">
+                            <div class="tree-name">@node.Name</div>
+                            <div class="tree-details">@node.Path</div>
+                        </div>
+                        <div class="tree-meta">
+                            <div>@node.Target</div>
+                            <div class="tree-state">
+                                <span class="state-pill" data-state="paused">Paused</span>
+                            </div>
+                            <div class="tree-state-message">@node.StateMessage</div>
+                            <div class="workspace-row-actions">
+                                <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@node.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
+                                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@node.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                <form method="post"
+                                      asp-page-handler="ToggleSensorPause"
+                                      asp-route-sensorId="@node.Id"
+                                      asp-route-returnUrl="@(Request.Path + Request.QueryString)">
+                                    <button type="submit" class="workspace-secondary-submit">
+                                        @MatmonIcons.Render("play")
+                                        <span>Resume</span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</section>

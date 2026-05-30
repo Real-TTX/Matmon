@@ -1,0 +1,314 @@
+@model WorkspaceMonitoringTreeNode
+@{
+    var returnUrl = Context.Request.Path + Context.Request.QueryString;
+    var canAddFolder = Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder;
+    var canAddHost = Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder;
+    var canAddSensor = Model.Kind != MonitoringElementKind.Sensor;
+    var canDiscover = Model.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
+    var hasChildActions = canAddFolder || canAddHost || canAddSensor;
+    var sensorChildren = Model.Children.Where(child => child.Kind == MonitoringElementKind.Sensor).ToArray();
+    var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
+    var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
+    var statusIcon = Model.StateKey switch
+    {
+        "ok" => "check",
+        "warning" => "warning",
+        "error" => "x",
+        "paused" => "pause",
+        "disabled" => "pause",
+        _ => Model.KindIconKey
+    };
+}
+
+<article class="monitoring-tree-node @(Model.Children.Count > 0 ? "is-branch" : "is-leaf")"
+         data-tree-node
+         data-tree-node-id="@Model.Id"
+         data-tree-kind="@Model.Kind.ToString().ToLowerInvariant()"
+         data-tree-depth="@Model.Depth"
+         data-tree-path="@Model.Path"
+         data-state="@Model.StateKey"
+         style="--tree-state-color:@Model.StateColor">
+    @if (isSensorNode)
+    {
+        <div class="monitoring-sensor-strip is-single-sensor">
+            <article class="monitoring-sensor-chip"
+                     data-series-key="@Model.SeriesKey"
+                     data-tree-node
+                     data-tree-node-id="@Model.Id"
+                     data-tree-kind="sensor"
+                     data-tree-depth="@Model.Depth"
+                     data-tree-path="@Model.Path"
+                     data-state="@Model.StateKey"
+                     style="--tree-state-color:@Model.StateColor;--series-color:@(Model.SeriesLineColor ?? Model.StateColor)">
+                <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" title="@Model.Path">
+                    <span class="monitoring-sensor-status">@MatmonIcons.Render(statusIcon)</span>
+                    <span class="tree-name monitoring-sensor-name">@Model.Name</span>
+                    <span class="monitoring-sensor-value">
+                        <span data-role="current-value">@((Model.CurrentValue.HasValue ? Model.CurrentValue.Value.ToString("0.###") : "-"))</span>
+                        <span data-role="current-unit">@Model.Unit</span>
+                    </span>
+                    <span class="monitoring-sensor-meta">
+                        <span>@(Model.SensorTypeLabel ?? Model.SensorTypeKey ?? "Sensor")</span>
+                        @if (!string.IsNullOrWhiteSpace(Model.LastCheck))
+                        {
+                            <span>@Model.LastCheck</span>
+                        }
+                    </span>
+                    <svg class="sparkline monitoring-sensor-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                        <path data-role="area"></path>
+                        <path data-role="line"></path>
+                    </svg>
+                </a>
+                <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
+                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
+                        @MatmonIcons.Render("more")
+                        <span>Actions</span>
+                    </summary>
+                    <div class="workspace-action-menu-panel">
+                        <a class="workspace-action-menu-link" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
+                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
+                            @MatmonIcons.Render("move")
+                            <span>Move</span>
+                        </button>
+                        <form method="post"
+                              asp-page-handler="ToggleSensorPause"
+                              asp-route-sensorId="@Model.Id"
+                              asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
+                            <button type="submit" class="workspace-action-menu-link">
+                                @MatmonIcons.Render(Model.IsPaused ? "play" : "pause")
+                                <span>@(Model.IsPaused ? "Resume" : "Pause")</span>
+                            </button>
+                        </form>
+                    </div>
+                </details>
+            </article>
+        </div>
+    }
+    else
+    {
+        <div class="monitoring-tree-row">
+        @if (branchChildren.Length > 0 || sensorChildren.Length > 0)
+        {
+            <button type="button"
+                    class="monitoring-tree-toggle"
+                    data-tree-toggle
+                    aria-expanded="true"
+                    aria-label="Collapse @Model.Name">
+                @MatmonIcons.Render("arrow-right")
+            </button>
+        }
+        else
+        {
+            <span class="monitoring-tree-toggle monitoring-tree-toggle-spacer"></span>
+        }
+
+        <span class="tree-kind" data-kind="@Model.Kind.ToString().ToLowerInvariant()">
+            @MatmonIcons.Render(Model.KindIconKey)
+            <span>@Model.Kind</span>
+        </span>
+
+        <div class="monitoring-tree-main">
+            <div class="tree-name">@Model.Name</div>
+            @if (!string.IsNullOrWhiteSpace(Model.Details))
+            {
+                <div class="monitoring-tree-details">@Model.Details</div>
+            }
+
+            <div class="monitoring-tree-meta">
+                @if (Model.Kind == MonitoringElementKind.Sensor)
+                {
+                    <span class="monitoring-tree-value">
+                        <span class="monitoring-tree-value-label">Value</span>
+                        <span class="monitoring-tree-value-number">
+                            @((Model.CurrentValue.HasValue ? Model.CurrentValue.Value.ToString("0.###") : "-"))
+                            @if (!string.IsNullOrWhiteSpace(Model.Unit))
+                            {
+                                <text>@Model.Unit</text>
+                            }
+                        </span>
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(Model.LastCheck))
+                    {
+                        <span class="monitoring-tree-lastcheck">Last @Model.LastCheck</span>
+                    }
+                }
+                else
+                {
+                    <span class="monitoring-tree-count">Sensors @Model.SensorCount</span>
+                    @if (Model.WarningCount > 0)
+                    {
+                        <span class="monitoring-tree-count is-warning">@Model.WarningCount warning</span>
+                    }
+                    @if (Model.ErrorCount > 0)
+                    {
+                        <span class="monitoring-tree-count is-error">@Model.ErrorCount error</span>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="monitoring-tree-side">
+            @if (!string.IsNullOrWhiteSpace(Model.StateLabel))
+            {
+                <span class="state-pill" data-state="@Model.StateKey">@Model.StateLabel</span>
+            }
+            @if (Model.IsHighlighted)
+            {
+                <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
+            }
+            <div class="workspace-row-actions">
+                <details class="workspace-action-menu @(hasChildActions ? string.Empty : "is-empty")">
+                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Add child element" title="Add child element">
+                        @MatmonIcons.Render("plus")
+                        <span>Add</span>
+                    </summary>
+                    <div class="workspace-action-menu-panel">
+                        @if (hasChildActions)
+                        {
+                            @if (canAddFolder)
+                            {
+                                <a class="workspace-action-menu-link" asp-page="/FolderCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                                    @MatmonIcons.Render("folder")
+                                    <span>Folder</span>
+                                </a>
+                            }
+                            @if (canAddHost)
+                            {
+                                <a class="workspace-action-menu-link" asp-page="/HostCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                                    @MatmonIcons.Render("host")
+                                    <span>Host</span>
+                                </a>
+                            }
+                            @if (canAddSensor)
+                            {
+                                <a class="workspace-action-menu-link" asp-page="/SensorCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                                    @MatmonIcons.Render("sensor")
+                                    <span>Sensor</span>
+                                </a>
+                            }
+                        }
+                        else
+                        {
+                            <span class="workspace-action-menu-empty">No child actions</span>
+                        }
+                    </div>
+                </details>
+
+                <details class="workspace-action-menu">
+                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Element actions" title="Element actions">
+                        @MatmonIcons.Render("more")
+                        <span>Actions</span>
+                    </summary>
+                    <div class="workspace-action-menu-panel">
+                        @if (canDiscover)
+                        {
+                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
+                                <input type="hidden" name="scopeElementId" value="@Model.Id" />
+                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                <button type="submit" class="workspace-action-menu-link">
+                                    @MatmonIcons.Render("search")
+                                    <span>Discover sensors</span>
+                                </button>
+                            </form>
+                        }
+                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
+                            @MatmonIcons.Render("pencil")
+                            <span>Edit</span>
+                        </a>
+                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
+                            @MatmonIcons.Render("move")
+                            <span>Move</span>
+                        </button>
+                    </div>
+                </details>
+                <button type="button" class="workspace-secondary-submit monitoring-action-trigger monitoring-move-target" data-tree-move-target hidden aria-label="Move element here" title="Move element here">
+                    @MatmonIcons.Render("arrow-right")
+                    <span>Move here</span>
+                </button>
+            </div>
+        </div>
+        </div>
+
+        @if (branchChildren.Length > 0 || sensorChildren.Length > 0)
+        {
+            <div class="monitoring-tree-children">
+                @if (sensorChildren.Length > 0)
+                {
+                    <div class="monitoring-sensor-strip monitoring-tree-sensor-level">
+                        @foreach (var sensor in sensorChildren)
+                        {
+                            var sensorStatusIcon = sensor.StateKey switch
+                            {
+                                "ok" => "check",
+                                "warning" => "warning",
+                                "error" => "x",
+                                "paused" => "pause",
+                                "disabled" => "pause",
+                                _ => sensor.KindIconKey
+                            };
+
+                            <article class="monitoring-sensor-chip"
+                                     data-series-key="@sensor.SeriesKey"
+                                     data-tree-node
+                                     data-tree-node-id="@sensor.Id"
+                                     data-tree-kind="sensor"
+                                     data-tree-depth="@sensor.Depth"
+                                     data-tree-path="@sensor.Path"
+                                     data-state="@sensor.StateKey"
+                                     style="--tree-state-color:@sensor.StateColor;--series-color:@(sensor.SeriesLineColor ?? sensor.StateColor)">
+                                <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" title="@sensor.Path">
+                                    <span class="monitoring-sensor-status">@MatmonIcons.Render(sensorStatusIcon)</span>
+                                    <span class="tree-name monitoring-sensor-name">@sensor.Name</span>
+                                    <span class="monitoring-sensor-value">
+                                        <span data-role="current-value">@((sensor.CurrentValue.HasValue ? sensor.CurrentValue.Value.ToString("0.###") : "-"))</span>
+                                        <span data-role="current-unit">@sensor.Unit</span>
+                                    </span>
+                                    <span class="monitoring-sensor-meta">
+                                        <span>@(sensor.SensorTypeLabel ?? sensor.SensorTypeKey ?? "Sensor")</span>
+                                        @if (!string.IsNullOrWhiteSpace(sensor.LastCheck))
+                                        {
+                                            <span>@sensor.LastCheck</span>
+                                        }
+                                    </span>
+                                    <svg class="sparkline monitoring-sensor-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                                        <path data-role="area"></path>
+                                        <path data-role="line"></path>
+                                    </svg>
+                                </a>
+                                <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
+                                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
+                                        @MatmonIcons.Render("more")
+                                        <span>Actions</span>
+                                    </summary>
+                                    <div class="workspace-action-menu-panel">
+                                        <a class="workspace-action-menu-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
+                                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
+                                            @MatmonIcons.Render("move")
+                                            <span>Move</span>
+                                        </button>
+                                        <form method="post"
+                                              asp-page-handler="ToggleSensorPause"
+                                              asp-route-sensorId="@sensor.Id"
+                                              asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
+                                            <button type="submit" class="workspace-action-menu-link">
+                                                @MatmonIcons.Render(sensor.IsPaused ? "play" : "pause")
+                                                <span>@(sensor.IsPaused ? "Resume" : "Pause")</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </details>
+                            </article>
+                        }
+                    </div>
+                }
+
+                @foreach (var child in branchChildren)
+                {
+                    <partial name="_MonitoringTreeNode" model="child" />
+                }
+            </div>
+        }
+    }
+</article>

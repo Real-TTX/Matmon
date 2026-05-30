@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Matmon.Core/Matmon.Core.csproj" />
+    <Project Path="src/Matmon.Host/Matmon.Host.csproj" />
+  </Folder>
+</Solution>

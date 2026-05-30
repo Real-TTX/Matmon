@@ -1,0 +1,38 @@
+@page "/monitoring/folder/new"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "New folder";
+    var backUrl = Model.GetSafeReturnUrl("/Monitoring");
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("folder")
+            <h1>New folder</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel panel-stack workspace-panel">
+        <form method="post" asp-page-handler="CreateFolder" class="workspace-form">
+            <input type="hidden" asp-for="ReturnUrl" />
+            <input asp-for="NewFolder.Name" class="form-control workspace-input" placeholder="Folder name" />
+            <select asp-for="NewFolder.ParentId" class="form-select workspace-select" asp-items="Model.View.FolderParentOptions"></select>
+            <input asp-for="NewFolder.Description" class="form-control workspace-input" placeholder="Description" />
+            <div class="workspace-form-actions">
+                <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create folder</span></button>
+            </div>
+        </form>
+    </section>
+</section>

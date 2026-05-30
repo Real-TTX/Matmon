@@ -1,0 +1,135 @@
+@page "/notifications/receiver"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "Notification receiver";
+    var isCreateMode = Model.SelectedNotificationReceiverId is null || Model.NotificationReceiverEditor.Id == Guid.Empty;
+    var backUrl = Model.GetSafeReturnUrl("/NotificationReceivers");
+    var receiverKind = isCreateMode ? Model.NewNotificationReceiver.Kind : Model.NotificationReceiverEditor.Kind;
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("inbox")
+            <h1>Notification receiver</h1>
+        </div>
+    </div>
+
+    <div class="workspace-tabs">
+        <a class="workspace-tab" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
+        <a class="workspace-tab" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
+        <a class="workspace-tab is-active" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel panel-stack workspace-editor-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("inbox")<span>@(isCreateMode ? "Create receiver" : "Edit receiver")</span></h2>
+            <span class="panel-hint">@Model.View.SelectedNotificationReceiverKind</span>
+        </div>
+
+        @if (isCreateMode)
+        {
+            <form method="post" asp-page-handler="CreateNotificationReceiver" class="workspace-form">
+                <input type="hidden" asp-for="ReturnUrl" />
+                <div class="workspace-form-grid">
+                    <label class="workspace-span-2">
+                        <span>Name</span>
+                        <input asp-for="NewNotificationReceiver.Name" class="form-control workspace-input" />
+                    </label>
+                    <label>
+                        <span>Enabled</span>
+                        <select asp-for="NewNotificationReceiver.Enabled" class="form-select workspace-select">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Kind</span>
+                        <select asp-for="NewNotificationReceiver.Kind" class="form-select workspace-select" data-notification-kind-select>
+                            <option value="Email">Email</option>
+                            <option value="Webhook">Webhook</option>
+                        </select>
+                    </label>
+                    <label class="workspace-span-2">
+                        <span>@(receiverKind == NotificationEndpointKind.Webhook ? "Webhook URL" : "Email address")</span>
+                        <input asp-for="NewNotificationReceiver.Target" class="form-control workspace-input" placeholder="target" />
+                    </label>
+                    <label>
+                        <span>Timeout seconds</span>
+                        <input asp-for="NewNotificationReceiver.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" />
+                    </label>
+                    <label class="workspace-span-2">
+                        <span>Secret</span>
+                        <input asp-for="NewNotificationReceiver.Secret" type="password" class="form-control workspace-input" placeholder="leave blank to keep current" />
+                    </label>
+                </div>
+
+                <div class="workspace-form-actions">
+                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create receiver</span></button>
+                </div>
+            </form>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="SaveNotificationReceiver" class="workspace-form">
+                <input type="hidden" asp-for="NotificationReceiverEditor.Id" />
+                <input type="hidden" asp-for="ReturnUrl" />
+                <div class="workspace-form-grid">
+                    <label class="workspace-span-2">
+                        <span>Name</span>
+                        <input asp-for="NotificationReceiverEditor.Name" class="form-control workspace-input" />
+                    </label>
+                    <label>
+                        <span>Enabled</span>
+                        <select asp-for="NotificationReceiverEditor.Enabled" class="form-select workspace-select">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Kind</span>
+                        <select asp-for="NotificationReceiverEditor.Kind" class="form-select workspace-select" data-notification-kind-select>
+                            <option value="Email">Email</option>
+                            <option value="Webhook">Webhook</option>
+                        </select>
+                    </label>
+                    <label class="workspace-span-2">
+                        <span>@(receiverKind == NotificationEndpointKind.Webhook ? "Webhook URL" : "Email address")</span>
+                        <input asp-for="NotificationReceiverEditor.Target" class="form-control workspace-input" placeholder="target" />
+                    </label>
+                    <label>
+                        <span>Timeout seconds</span>
+                        <input asp-for="NotificationReceiverEditor.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" />
+                    </label>
+                    <label class="workspace-span-2">
+                        <span>Secret</span>
+                        <input asp-for="NotificationReceiverEditor.Secret" type="password" class="form-control workspace-input" placeholder="leave blank to keep current" />
+                    </label>
+                </div>
+
+                <div class="workspace-form-actions">
+                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save receiver</span></button>
+                </div>
+            </form>
+
+            <div class="workspace-inline-actions">
+                <form method="post" asp-page-handler="DeleteNotificationReceiver" onsubmit="return confirm('Delete this notification receiver?');">
+                    <input type="hidden" asp-for="NotificationReceiverEditor.Id" />
+                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete receiver</span></button>
+                </form>
+            </div>
+        }
+    </section>
+</section>

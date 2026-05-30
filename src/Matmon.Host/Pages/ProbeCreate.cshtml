@@ -1,0 +1,38 @@
+@page "/monitoring/probe/new"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "New probe";
+    var backUrl = Model.GetSafeReturnUrl("/Monitoring");
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("probe")
+            <h1>New probe</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel panel-stack workspace-panel">
+        <form method="post" asp-page-handler="CreateProbe" class="workspace-form">
+            <input type="hidden" asp-for="ReturnUrl" />
+            <input asp-for="NewProbe.Name" class="form-control workspace-input" placeholder="Probe name" />
+            <select asp-for="NewProbe.ParentId" class="form-select workspace-select" asp-items="Model.View.ProbeParentOptions"></select>
+            <input asp-for="NewProbe.Description" class="form-control workspace-input" placeholder="Description" />
+            <div class="workspace-form-actions">
+                <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create probe</span></button>
+            </div>
+        </form>
+    </section>
+</section>

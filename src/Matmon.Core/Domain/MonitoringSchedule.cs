@@ -1,0 +1,172 @@
+using System.Globalization;
+
+namespace Matmon.Core.Domain;
+
+public enum MonitoringScheduleMode
+{
+    Every = 0,
+    Daily = 1,
+    Weekly = 2,
+    Monthly = 3
+}
+
+public sealed class MonitoringSchedule
+{
+    public MonitoringScheduleMode Mode { get; set; } = MonitoringScheduleMode.Every;
+
+    public int? EverySeconds { get; set; }
+
+    public DayOfWeek? DayOfWeek { get; set; }
+
+    public int? DayOfMonth { get; set; }
+
+    public TimeSpan? TimeOfDay { get; set; }
+
+    public MonitoringSchedule Clone()
+    {
+        return new MonitoringSchedule
+        {
+            Mode = Mode,
+            EverySeconds = EverySeconds,
+            DayOfWeek = DayOfWeek,
+            DayOfMonth = DayOfMonth,
+            TimeOfDay = TimeOfDay
+        };
+    }
+
+    public bool ContentEquals(MonitoringSchedule? other)
+    {
+        return other is not null &&
+            Mode == other.Mode &&
+            EverySeconds == other.EverySeconds &&
+            DayOfWeek == other.DayOfWeek &&
+            DayOfMonth == other.DayOfMonth &&
+            TimeOfDay == other.TimeOfDay;
+    }
+
+    public string Summary()
+    {
+        return Mode switch
+        {
+            MonitoringScheduleMode.Every => $"every {FormatDuration(TimeSpan.FromSeconds(Math.Max(EverySeconds ?? 0, 1)))}",
+            MonitoringScheduleMode.Daily => $"daily {FormatTime(TimeOfDay)}",
+            MonitoringScheduleMode.Weekly => $"weekly {DayOfWeek ?? System.DayOfWeek.Monday} {FormatTime(TimeOfDay)}",
+            MonitoringScheduleMode.Monthly => $"monthly day {Math.Clamp(DayOfMonth ?? 1, 1, 31)} {FormatTime(TimeOfDay)}",
+            _ => "schedule"
+        };
+    }
+
+    public static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalSeconds < 60)
+        {
+            return $"{duration.TotalSeconds:0}s";
+        }
+
+        if (duration.TotalMinutes < 60)
+        {
+            return $"{duration.TotalMinutes:0.#}m";
+        }
+
+        if (duration.TotalHours < 24)
+        {
+            return $"{duration.TotalHours:0.#}h";
+        }
+
+        return $"{duration.TotalDays:0.#}d";
+    }
+
+    private static string FormatTime(TimeSpan? time)
+    {
+        return (time ?? TimeSpan.Zero).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+    }
+}
+
+public static class MonitoringScheduleCalculator
+{
+    public static bool IsDue(
+        MonitoringSettings settings,
+        DateTimeOffset? lastRunUtc,
+        DateTimeOffset nowUtc,
+        TimeSpan fallbackInterval)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (settings.PollingSchedule is { } schedule)
+        {
+            return IsScheduleDue(schedule, lastRunUtc, nowUtc);
+        }
+
+        var interval = settings.PollingInterval ?? fallbackInterval;
+        return lastRunUtc is not DateTimeOffset lastRun || nowUtc - lastRun >= interval;
+    }
+
+    private static bool IsScheduleDue(MonitoringSchedule schedule, DateTimeOffset? lastRunUtc, DateTimeOffset nowUtc)
+    {
+        if (schedule.Mode == MonitoringScheduleMode.Every)
+        {
+            var seconds = Math.Max(schedule.EverySeconds ?? 0, 1);
+            return lastRunUtc is not DateTimeOffset lastRun || nowUtc - lastRun >= TimeSpan.FromSeconds(seconds);
+        }
+
+        var nowLocal = nowUtc.ToLocalTime();
+        var lastLocal = lastRunUtc?.ToLocalTime();
+        var latestOccurrence = GetLatestOccurrence(schedule, nowLocal);
+
+        if (latestOccurrence is null)
+        {
+            return false;
+        }
+
+        return lastLocal is null || lastLocal.Value < latestOccurrence.Value;
+    }
+
+    private static DateTimeOffset? GetLatestOccurrence(MonitoringSchedule schedule, DateTimeOffset nowLocal)
+    {
+        var time = schedule.TimeOfDay ?? TimeSpan.Zero;
+        return schedule.Mode switch
+        {
+            MonitoringScheduleMode.Daily => GetDailyOccurrence(nowLocal, time),
+            MonitoringScheduleMode.Weekly => GetWeeklyOccurrence(nowLocal, schedule.DayOfWeek ?? DayOfWeek.Monday, time),
+            MonitoringScheduleMode.Monthly => GetMonthlyOccurrence(nowLocal, Math.Clamp(schedule.DayOfMonth ?? 1, 1, 31), time),
+            _ => null
+        };
+    }
+
+    private static DateTimeOffset GetDailyOccurrence(DateTimeOffset nowLocal, TimeSpan time)
+    {
+        var occurrence = AtLocalTime(nowLocal.Date, time, nowLocal.Offset);
+        return occurrence <= nowLocal ? occurrence : occurrence.AddDays(-1);
+    }
+
+    private static DateTimeOffset GetWeeklyOccurrence(DateTimeOffset nowLocal, DayOfWeek dayOfWeek, TimeSpan time)
+    {
+        var daysSince = ((int)nowLocal.DayOfWeek - (int)dayOfWeek + 7) % 7;
+        var date = nowLocal.Date.AddDays(-daysSince);
+        var occurrence = AtLocalTime(date, time, nowLocal.Offset);
+        return occurrence <= nowLocal ? occurrence : occurrence.AddDays(-7);
+    }
+
+    private static DateTimeOffset GetMonthlyOccurrence(DateTimeOffset nowLocal, int dayOfMonth, TimeSpan time)
+    {
+        var occurrence = BuildMonthlyOccurrence(nowLocal.Year, nowLocal.Month, dayOfMonth, time, nowLocal.Offset);
+        if (occurrence <= nowLocal)
+        {
+            return occurrence;
+        }
+
+        var previousMonth = nowLocal.AddMonths(-1);
+        return BuildMonthlyOccurrence(previousMonth.Year, previousMonth.Month, dayOfMonth, time, nowLocal.Offset);
+    }
+
+    private static DateTimeOffset BuildMonthlyOccurrence(int year, int month, int dayOfMonth, TimeSpan time, TimeSpan offset)
+    {
+        var day = Math.Min(dayOfMonth, DateTime.DaysInMonth(year, month));
+        return AtLocalTime(new DateTime(year, month, day), time, offset);
+    }
+
+    private static DateTimeOffset AtLocalTime(DateTime date, TimeSpan time, TimeSpan offset)
+    {
+        return new DateTimeOffset(date.Add(time), offset);
+    }
+}

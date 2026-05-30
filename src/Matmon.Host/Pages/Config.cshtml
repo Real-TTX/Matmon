@@ -1,0 +1,233 @@
+@page
+@model ConfigModel
+@{
+    ViewData["Title"] = "System";
+    var storage = Model.Overview.Storage;
+    var usedPercent = storage.DriveFreePercent.HasValue
+        ? Math.Clamp(100 - storage.DriveFreePercent.Value, 0, 100)
+        : 0;
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("gear")
+            <h1>System</h1>
+        </div>
+        <div class="mode-chip">
+            <span>Mode</span>
+            <strong>@Model.Overview.Mode</strong>
+        </div>
+    </div>
+
+    <div class="workspace-tabs system-tabs" role="tablist" aria-label="System sections">
+        <a class="workspace-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">General</a>
+        <a class="workspace-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
+        <a class="workspace-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+    </div>
+
+    @if (Model.IsActiveTab("general"))
+    {
+        <div class="config-grid">
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("gear")<span>Runtime</span></h2>
+                    <span class="panel-hint">current values</span>
+                </div>
+
+                <dl class="config-list">
+                    <div class="config-row">
+                        <dt>Mode</dt>
+                        <dd>@Model.Overview.Mode</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Heartbeat</dt>
+                        <dd>@Model.Overview.HeartbeatIntervalSeconds s</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Probe ID</dt>
+                        <dd>@(Model.Overview.ProbeId ?? "-")</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Probe name</dt>
+                        <dd>@(Model.Overview.ProbeName ?? "-")</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Master URL</dt>
+                        <dd>@(Model.Overview.MasterUrl ?? "-")</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Workspace</dt>
+                        <dd>@Model.Overview.WorkspacePath</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Login</dt>
+                        <dd>@Model.Overview.AuthUsername / @Model.Overview.AuthPassword</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("arrow-right")<span>Docker env</span></h2>
+                    <span class="panel-hint">master / slave</span>
+                </div>
+
+                <pre class="config-code">@Model.Overview.DockerMasterSnippet</pre>
+                <div class="mt-3"></div>
+                <pre class="config-code">@Model.Overview.DockerSlaveSnippet</pre>
+            </section>
+        </div>
+
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("spark")<span>Local appsettings</span></h2>
+                <span class="panel-hint">src/Matmon.Host/appsettings.json</span>
+            </div>
+
+            <pre class="config-code">@Model.Overview.AppSettingsSnippet</pre>
+        </section>
+    }
+    else if (Model.IsActiveTab("probes"))
+    {
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("probe")<span>Probe status</span></h2>
+                <span class="panel-hint">@Model.Overview.Probes.Count configured</span>
+            </div>
+
+            <div class="system-table" role="table" aria-label="Configured probes">
+                <div class="system-table-row system-table-head" role="row">
+                    <span role="columnheader">Probe</span>
+                    <span role="columnheader">Role</span>
+                    <span role="columnheader">Status</span>
+                    <span role="columnheader">Last seen</span>
+                    <span role="columnheader">Sensors</span>
+                    <span role="columnheader">Token</span>
+                </div>
+                @foreach (var probe in Model.Overview.Probes)
+                {
+                    var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+                        ? "error"
+                        : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
+                    <div class="system-table-row" role="row">
+                        <span role="cell">
+                            <strong>@probe.Name</strong>
+                            <small>@probe.ProbeId</small>
+                        </span>
+                        <span role="cell">@probe.Role</span>
+                        <span role="cell">
+                            <span class="state-pill" data-state="@state">@probe.State</span>
+                            <small>@probe.Message</small>
+                        </span>
+                        <span role="cell">@Model.FormatDateTime(probe.LastSeenUtc)</span>
+                        <span role="cell">@probe.SensorCount</span>
+                        <span role="cell">@(probe.EnrollmentToken ?? "-")</span>
+                    </div>
+                }
+            </div>
+        </section>
+
+        @if (string.Equals(Model.Overview.Mode, "Slave", StringComparison.OrdinalIgnoreCase))
+        {
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Slave exchange</span></h2>
+                    <span class="panel-hint">@Model.Overview.SlaveRuntime.StatusMessage</span>
+                </div>
+
+                <dl class="config-list compact-config-list">
+                    <div class="config-row">
+                        <dt>Connected</dt>
+                        <dd>@(Model.Overview.SlaveRuntime.IsConnected ? "yes" : "no")</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Last heartbeat</dt>
+                        <dd>@Model.FormatDateTime(Model.Overview.SlaveRuntime.LastHeartbeatUtc)</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Assignments</dt>
+                        <dd>@Model.Overview.SlaveRuntime.AssignedSensorCount</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Last results</dt>
+                        <dd>@Model.Overview.SlaveRuntime.LastExecutedSensorCount</dd>
+                    </div>
+                </dl>
+            </section>
+        }
+    }
+    else
+    {
+        <div class="system-storage-grid">
+            <section class="panel config-block system-storage-summary">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Storage usage</span></h2>
+                    <span class="panel-hint">@storage.DriveName</span>
+                </div>
+
+                <div class="storage-number">
+                    <strong>@storage.FormatBytes(storage.DataDirectoryBytes)</strong>
+                    <span>Matmon data</span>
+                </div>
+
+                <div class="storage-meter" aria-label="Disk usage">
+                    <span style="width: @usedPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                </div>
+
+                <dl class="config-list compact-config-list">
+                    <div class="config-row">
+                        <dt>Drive free</dt>
+                        <dd>@ConfigModel.FormatPercent(storage.DriveFreePercent)</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Drive available</dt>
+                        <dd>@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : "-")</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Drive total</dt>
+                        <dd>@(storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveTotalGigabytes.Value:0.##} GB" : "-")</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("list")<span>Files</span></h2>
+                    <span class="panel-hint">@storage.DataFileCount files</span>
+                </div>
+
+                <dl class="config-list">
+                    <div class="config-row">
+                        <dt>Data path</dt>
+                        <dd>@storage.DataPath</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Data directory</dt>
+                        <dd>@(storage.DataDirectoryExists ? "available" : "missing")</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Workspace file</dt>
+                        <dd>@storage.FormatBytes(storage.WorkspaceFileBytes)</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Workspace backup</dt>
+                        <dd>@storage.FormatBytes(storage.BackupFileBytes)</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Workspace path</dt>
+                        <dd>@storage.WorkspacePath</dd>
+                    </div>
+                </dl>
+            </section>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(storage.ErrorMessage))
+        {
+            <section class="workspace-banner workspace-banner-warning">
+                @MatmonIcons.Render("warning")
+                <span>@storage.ErrorMessage</span>
+            </section>
+        }
+    }
+</section>

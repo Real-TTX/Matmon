@@ -1,0 +1,38 @@
+@page "/login"
+@model LoginModel
+@{
+    ViewData["Title"] = "Login";
+}
+
+<section class="auth-shell">
+    <div class="auth-card panel">
+        <div class="page-title">
+            @MatmonIcons.Render("lock")
+            <h1>Login</h1>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="auth-error">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" class="auth-form">
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <div class="auth-field">
+                <label asp-for="Username"></label>
+                <input asp-for="Username" autocomplete="username" />
+            </div>
+
+            <div class="auth-field">
+                <label asp-for="Password"></label>
+                <input asp-for="Password" type="password" autocomplete="current-password" />
+            </div>
+
+            <div class="auth-actions">
+                <span class="auth-note">Default: admin / admin</span>
+                <button type="submit" class="auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
+            </div>
+        </form>
+    </div>
+</section>

@@ -1,0 +1,249 @@
+@page "/monitoring/sensor/{sensorId:guid}"
+@model SensorDetailsModel
+@{
+    ViewData["Title"] = Model.View.Name;
+}
+
+<section class="dashboard-shell">
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <div class="page-header sensor-header" style="--sensor-state-color:@Model.View.StateColor">
+        <div class="sensor-header-main">
+            <div class="page-title">
+                @MatmonIcons.Render("sensor")
+                <h1>@Model.View.Name</h1>
+            </div>
+            <div class="sensor-path">@Model.View.Path</div>
+            <div class="sensor-meta">
+                <span class="sensor-chip">@Model.View.SensorTypeLabel</span>
+                <span class="sensor-chip">@Model.View.Target</span>
+                <span class="sensor-chip">graph: @Model.View.DefaultChannelLabel</span>
+                @if (!string.IsNullOrWhiteSpace(Model.View.ExecutionProbe))
+                {
+                    <span class="sensor-chip">probe: @Model.View.ExecutionProbe</span>
+                }
+                <span class="sensor-chip">@Model.View.SettingsSummary</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.View.StateMessage))
+            {
+                <div class="sensor-state-message">@Model.View.StateMessage</div>
+            }
+        </div>
+
+        <div class="sensor-header-side">
+            <span class="state-pill" data-state="@Model.View.StateKey">@Model.View.StateLabel</span>
+            <div class="sensor-current-value">
+                <strong>@Model.View.CurrentValueText</strong>
+                <span>@Model.View.Unit</span>
+            </div>
+            <div class="sensor-header-meta">
+                @if (!string.IsNullOrWhiteSpace(Model.View.LastSeenText))
+                {
+                    <span class="panel-hint">last @Model.View.LastSeenText</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.View.LastDurationText))
+                {
+                    <span class="panel-hint">duration @Model.View.LastDurationText</span>
+                }
+            </div>
+            <div class="workspace-row-actions sensor-header-actions">
+                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.SensorId">
+                    @MatmonIcons.Render("pencil")
+                    <span>Edit</span>
+                </a>
+                <form method="post" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
+                    <button type="submit" class="workspace-secondary-submit">
+                        @MatmonIcons.Render("spark")
+                        <span>Run now</span>
+                    </button>
+                </form>
+                <form method="post" asp-page-handler="ToggleSensorPause" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
+                    <button type="submit" class="workspace-secondary-submit">
+                        @MatmonIcons.Render(Model.View.IsPaused ? "play" : "pause")
+                        <span>@(Model.View.IsPaused ? "Resume" : "Pause")</span>
+                    </button>
+                </form>
+                <a class="workspace-action-link" asp-page="/Monitoring">
+                    @MatmonIcons.Render("arrow-left")
+                    <span>Back</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="sensor-stats-grid">
+        @foreach (var window in Model.View.Windows)
+        {
+            <article class="panel sensor-window-card @(window.Key == Model.View.SelectedWindow.Key ? "is-selected" : string.Empty)" data-state="@window.StateKey">
+                <div class="sensor-window-head">
+                    <span class="metric-label">@window.Label</span>
+                    <span class="state-pill" data-state="@window.StateKey">@window.StateLabel</span>
+                </div>
+                <div class="sensor-window-figure">
+                    <span>AVG</span>
+                    <strong>@(window.Average?.ToString("0.###") ?? "-")</strong>
+                    <small>@Model.View.Unit</small>
+                </div>
+                <div class="sensor-window-mini">
+                    <span>MIN @(window.Minimum?.ToString("0.###") ?? "-")</span>
+                    <span>MAX @(window.Maximum?.ToString("0.###") ?? "-")</span>
+                </div>
+                <div class="sensor-window-mini">
+                    <span>Samples @window.SampleCount</span>
+                    <span>Latest @(window.LatestValue?.ToString("0.###") ?? "-")</span>
+                </div>
+            </article>
+        }
+    </div>
+
+    <div class="sensor-detail-grid">
+        <section class="panel panel-stack sensor-chart-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("chart")<span>@Model.View.SelectedWindow.Label</span></h2>
+                <div class="sensor-window-tabs">
+                    @foreach (var window in Model.View.Windows)
+                    {
+                        <a class="sensor-window-tab @(window.Key == Model.View.SelectedWindow.Key ? "is-active" : string.Empty)"
+                           asp-page="/SensorDetails"
+                           asp-route-sensorId="@Model.View.SensorId"
+                           asp-route-window="@window.Key">
+                            @window.Label
+                        </a>
+                    }
+                </div>
+            </div>
+
+            @if (Model.View.SelectedWindow.SampleCount == 0)
+            {
+                <div class="empty-state">No history in this window.</div>
+            }
+            else
+            {
+                <div class="sensor-window-summary">
+                    <span>AVG @(Model.View.SelectedWindow.Average?.ToString("0.###") ?? "-") @Model.View.Unit</span>
+                    <span>MIN @(Model.View.SelectedWindow.Minimum?.ToString("0.###") ?? "-")</span>
+                    <span>MAX @(Model.View.SelectedWindow.Maximum?.ToString("0.###") ?? "-")</span>
+                    <span>@Model.View.SelectedWindow.SampleCount samples</span>
+                </div>
+                <div class="sensor-chart-legend">
+                    <span class="sensor-chart-legend-line" style="--series-color:@Model.View.SelectedWindow.LineColor"></span>
+                    <span>Graph: @Model.View.DefaultChannelLabel</span>
+                    <span class="panel-hint">used for overview and chart</span>
+                </div>
+                <svg class="sparkline sensor-chart" viewBox="0 0 100 40" preserveAspectRatio="none" style="--series-color:@Model.View.SelectedWindow.LineColor">
+                    <path data-role="area" d="@Model.View.SelectedWindow.AreaPath"></path>
+                    <path data-role="line" d="@Model.View.SelectedWindow.LinePath"></path>
+                </svg>
+                <div class="graph-footer">
+                    <span>@Model.View.SelectedWindow.FromUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
+                    <span>@Model.View.SelectedWindow.ToUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
+                </div>
+            }
+        </section>
+
+        <aside class="sensor-side-stack">
+            <section class="panel panel-stack sensor-side-panel">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels</span></h2>
+                    <span class="panel-hint">@Model.View.Channels.Count</span>
+                </div>
+
+                @if (Model.View.Channels.Count == 0)
+                {
+                    <div class="empty-state">No channels yet.</div>
+                }
+                else
+                {
+                    <div class="sensor-channel-list">
+                        @foreach (var channel in Model.View.Channels)
+                        {
+                            <article class="sensor-channel-row" data-state="@channel.StateKey" data-default="@(channel.IsDefault ? "true" : "false")">
+                                <div class="sensor-channel-main">
+                                    <div class="sensor-channel-name">
+                                        <span>@channel.Label</span>
+                                        @if (channel.IsDefault)
+                                        {
+                                            <span class="state-pill" data-state="ok">Graph</span>
+                                        }
+                                    </div>
+                                    <div class="sensor-channel-meta">
+                                        @channel.Key
+                                        @if (!string.IsNullOrWhiteSpace(channel.Message))
+                                        {
+                                            <text>| @channel.Message</text>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="sensor-channel-side">
+                                    <div class="sensor-channel-value">@channel.ValueText @channel.Unit</div>
+                                    <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
+                                    <div class="sensor-channel-actions">
+                                        <form method="post"
+                                              asp-page-handler="SetDefaultChannel"
+                                              asp-route-sensorId="@Model.View.SensorId"
+                                              asp-route-window="@Model.Window"
+                                              asp-route-channelKey="@channel.Key">
+                                            <button type="submit" class="workspace-secondary-submit sensor-channel-default-button @(channel.IsDefault ? "is-active" : string.Empty)">
+                                                @MatmonIcons.Render(channel.IsDefault ? "chart" : "spark")
+                                                <span>@(channel.IsDefault ? "Graph" : "Set graph")</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="panel panel-stack sensor-side-panel">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Recent</span></h2>
+                    <span class="panel-hint">@Model.View.RecentObservations.Count</span>
+                </div>
+
+                @if (Model.View.RecentObservations.Count == 0)
+                {
+                    <div class="empty-state">No measurements yet.</div>
+                }
+                else
+                {
+                    <div class="sensor-observation-list">
+                        @foreach (var observation in Model.View.RecentObservations)
+                        {
+                            <article class="sensor-observation-row" data-state="@observation.StateKey">
+                                <div class="sensor-observation-main">
+                                    <div class="sensor-observation-name">
+                                        <span>@observation.TimestampText</span>
+                                        @if (observation.ChannelCount > 1)
+                                        {
+                                            <span class="state-pill" data-state="paused">@observation.ChannelCount channels</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(observation.ExecutionProbe))
+                                        {
+                                            <span class="state-pill" data-state="ok">@observation.ExecutionProbe</span>
+                                        }
+                                    </div>
+                                    <div class="sensor-observation-meta">@observation.Message</div>
+                                </div>
+                                <div class="sensor-observation-side">
+                                    <div class="sensor-channel-value">@observation.ValueText @observation.Unit</div>
+                                    <span class="state-pill" data-state="@observation.StateKey">@observation.StateLabel</span>
+                                    <span class="sensor-observation-meta">duration @observation.DurationText</span>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </aside>
+    </div>
+</section>

@@ -1,0 +1,23 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: linear-gradient(180deg, var(--matmon-sidebar-bg), var(--matmon-sidebar-bg-2));
+  border-right: 1px solid var(--matmon-sidebar-item-border);
+}
+
+.brand {
+  color: var(--matmon-foreground);
+  font-size: 0.96rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: none;
+}
+
+.brand:hover {
+  color: var(--matmon-accent);
+}

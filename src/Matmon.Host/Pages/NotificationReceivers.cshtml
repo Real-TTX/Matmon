@@ -1,0 +1,61 @@
+@page "/notifications/receivers"
+@model WorkspaceModel
+@{
+    ViewData["Title"] = "Notification receivers";
+    var returnUrl = Request.Path + Request.QueryString;
+}
+
+<section class="dashboard-shell">
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("inbox")
+            <h1>Receivers</h1>
+        </div>
+    </div>
+
+    <div class="workspace-tabs">
+        <a class="workspace-tab" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
+        <a class="workspace-tab" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
+        <a class="workspace-tab is-active" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
+    </div>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("inbox")<span>Receivers</span></h2>
+            <span class="panel-hint">@Model.View.NotificationReceiverCount receivers</span>
+        </div>
+
+        <div class="notification-rule-list">
+            @foreach (var receiver in Model.View.NotificationReceivers)
+            {
+                <article class="notification-rule-row @(Model.NotificationReceiverEditor.Id == receiver.Id ? "is-selected" : string.Empty)">
+                    <div class="notification-rule-main">
+                        <div class="notification-rule-name">@receiver.Name</div>
+                        <div class="notification-rule-meta">@receiver.Kind | @receiver.Target</div>
+                        <div class="notification-rule-meta">@receiver.Summary</div>
+                    </div>
+                    <div class="notification-rule-side">
+                        <span class="notification-rule-state @(receiver.Enabled ? "is-enabled" : "is-disabled")">@(receiver.Enabled ? "Enabled" : "Disabled")</span>
+                        <div class="workspace-row-actions">
+                            <a class="workspace-action-link" asp-page="/NotificationReceiverEditor" asp-route-selectedNotificationReceiverId="@receiver.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <div class="page-actions">
+            <a class="workspace-action-link" asp-page="/NotificationReceiverEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>Receiver</span></a>
+        </div>
+    </section>
+</section>

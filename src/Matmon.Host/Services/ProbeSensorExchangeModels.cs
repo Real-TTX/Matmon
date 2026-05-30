@@ -1,0 +1,27 @@
+using Matmon.Core.Domain;
+
+namespace Matmon.Host.Services;
+
+public sealed record ProbeSensorAssignmentsResponse(
+    string ProbeId,
+    string ProbeName,
+    DateTimeOffset GeneratedUtc,
+    IReadOnlyList<ProbeSensorAssignment> Sensors);
+
+public sealed record ProbeSensorAssignment(
+    Guid SensorId,
+    string Name,
+    string Path,
+    string SensorTypeKey,
+    string Target,
+    bool IsPaused,
+    MonitoringSettings Settings,
+    DateTimeOffset? LastObservationUtc);
+
+public sealed record ProbeSensorObservationBatch(
+    IReadOnlyList<ProbeSensorObservationReport> Observations);
+
+public sealed record ProbeSensorObservationReport(
+    Guid SensorId,
+    SensorExecutionResult Result,
+    DateTimeOffset TimestampUtc);

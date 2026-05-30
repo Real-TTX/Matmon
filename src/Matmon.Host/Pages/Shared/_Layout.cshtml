@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+@inject Matmon.Host.Services.MatmonRuntimeOptions RuntimeOptions
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Matmon</title>
+    <script>
+        (() => {
+            const storageKey = "matmon-theme";
+            let theme = "dark";
+            try {
+                const stored = localStorage.getItem(storageKey);
+                if (stored === "light" || stored === "dark") {
+                    theme = stored;
+                }
+            } catch {
+                theme = "dark";
+            }
+
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/Matmon.Host.styles.css" asp-append-version="true" />
+</head>
+<body class="matmon-shell">
+    @{
+        var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
+        string NavClass(string page) => string.Equals(currentPage, page, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
+        var isSlaveMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Slave;
+    }
+    <div class="app-shell">
+        <aside class="topbar app-sidebar">
+            <div class="container-fluid px-2 py-2 sidebar-inner">
+                <div class="sidebar-brand-block">
+                    <a class="brand" asp-area="" asp-page="/Index">
+                        @MatmonIcons.Render("monitoring")
+                        <span>Matmon</span>
+                    </a>
+                    <div class="brand-note">Monitoring</div>
+                </div>
+
+                @if (User.Identity?.IsAuthenticated == true && !isSlaveMode)
+                {
+                    <a class="sidebar-alert-status @NavClass("/Alerts")" asp-area="" asp-page="/Alerts" data-nav-alert-status>
+                        <span class="sidebar-alert-status-label">Alerts</span>
+                        <span class="sidebar-alert-status-value">
+                            <span class="sidebar-alert-status-count" data-nav-alert-count>0</span>
+                            <span class="sidebar-alert-status-state" data-nav-alert-state>OK</span>
+                        </span>
+                        <span class="sidebar-alert-status-hint" data-nav-alert-hint>All clear</span>
+                        <span class="sidebar-alert-status-meta" aria-label="Alert summary">
+                            <span data-tone="error"><strong data-nav-error-count>0</strong><small>Err</small></span>
+                            <span data-tone="warning"><strong data-nav-warning-count>0</strong><small>Warn</small></span>
+                            <span data-tone="ack"><strong data-nav-ack-count>0</strong><small>Ack</small></span>
+                            <span data-tone="paused"><strong data-nav-paused-inline-count>0</strong><small>Pause</small></span>
+                        </span>
+                    </a>
+                }
+
+                <nav class="topnav sidebar-nav">
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        @if (isSlaveMode)
+                        {
+                            <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">@MatmonIcons.Render("probe")<span>Probe</span></a>
+                            <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">@MatmonIcons.Render("gear")<span>System</span></a>
+                        }
+                        else
+                        {
+                            <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">@MatmonIcons.Render("monitoring")<span>Monitoring</span></a>
+                            <a asp-area="" asp-page="/Monitoring" class="topnav-link @NavClass("/Monitoring")">@MatmonIcons.Render("sensor")<span>Sensors</span></a>
+                            <a asp-area="" asp-page="/Discovery" class="topnav-link @NavClass("/Discovery")">@MatmonIcons.Render("network")<span>Discovery</span></a>
+                            <a asp-area="" asp-page="/Templates" class="topnav-link @NavClass("/Templates")">@MatmonIcons.Render("template")<span>Templates</span></a>
+                            <a asp-area="" asp-page="/Notifications" class="topnav-link @NavClass("/Notifications")">@MatmonIcons.Render("bell")<span>Notifications</span></a>
+                            <a asp-area="" asp-page="/Events" class="topnav-link @NavClass("/Events")">@MatmonIcons.Render("list")<span>Events</span></a>
+                            <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">@MatmonIcons.Render("gear")<span>System</span></a>
+                        }
+                    }
+                    else
+                    {
+                        <a asp-area="" asp-page="/Login" class="topnav-link @NavClass("/Login")">@MatmonIcons.Render("lock")<span>Login</span></a>
+                    }
+                </nav>
+
+                <div class="sidebar-footer">
+                    <button type="button" class="topnav-button topnav-theme-toggle" data-theme-toggle>
+                        <span class="theme-toggle-icon theme-toggle-icon-light-target">@MatmonIcons.Render("sun")</span>
+                        <span class="theme-toggle-icon theme-toggle-icon-dark-target">@MatmonIcons.Render("moon")</span>
+                        <span data-theme-label>Bright</span>
+                    </button>
+
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <span class="topnav-user">@User.Identity?.Name</span>
+                        <form asp-page="/Logout" method="post" class="topnav-form">
+                            <button type="submit" class="topnav-button">@MatmonIcons.Render("arrow-left")<span>Logout</span></button>
+                        </form>
+                    }
+                </div>
+            </div>
+        </aside>
+
+        <div class="app-main">
+            <main class="container-fluid px-2 py-2">
+                @{
+                    var breadcrumbTrail = ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>;
+                    var breadcrumbs = BreadcrumbBuilder.Build(
+                        Context.Request.Path.Value ?? string.Empty,
+                        ViewData["Title"]?.ToString(),
+                        breadcrumbTrail);
+                }
+
+                @if (breadcrumbs.Count > 0)
+                {
+                    <nav class="breadcrumb-bar" aria-label="Breadcrumb">
+                        <ol class="breadcrumb-list">
+                            @for (var index = 0; index < breadcrumbs.Count; index++)
+                            {
+                                var crumb = breadcrumbs[index];
+                                var isLast = index == breadcrumbs.Count - 1;
+
+                                <li class="breadcrumb-item">
+                                    @if (!isLast && !string.IsNullOrWhiteSpace(crumb.Page))
+                                    {
+                                        <a class="breadcrumb-link" asp-page="@crumb.Page">@crumb.Label</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="breadcrumb-current" aria-current="page">@crumb.Label</span>
+                                    }
+                                </li>
+
+                                @if (!isLast)
+                                {
+                                    <li class="breadcrumb-separator" aria-hidden="true">
+                                        @MatmonIcons.Render("arrow-right")
+                                    </li>
+                                }
+                            }
+                        </ol>
+                    </nav>
+                }
+
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
