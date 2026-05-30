@@ -7,3 +7,7 @@
 *.userosscache
 *.sln.docstates
 data/
+matmon-data/
+.env
+.env.*
+!.env.master.example

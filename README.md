@@ -131,9 +131,43 @@ Stop:
 docker compose down
 ```
 
+## Portable Master Deployment
+
+For a real master installation on any Docker host, use the master-only compose file. It pulls the published image from GitHub Container Registry:
+
+```bash
+cp .env.master.example .env.master
+docker compose --env-file .env.master -f docker-compose.master.yml pull
+docker compose --env-file .env.master -f docker-compose.master.yml up -d
+```
+
+Open Matmon from another device in the same network:
+
+```text
+http://<docker-host-ip>:8099
+```
+
+The portable compose uses `ghcr.io/real-ttx/matmon:latest`, binds the web UI to `0.0.0.0:8099` by default, stores runtime data in the Docker volume `matmon-data`, and maps `host.docker.internal` to the Docker host gateway. In normal bridge mode, the container can reach the LAN through the Docker host, which is the most portable setup across Linux, Windows and macOS Docker hosts.
+
+On Linux only, you can alternatively run Matmon in the host network namespace:
+
+```bash
+cp .env.master.example .env.master
+docker compose --env-file .env.master -f docker-compose.master.host-network.yml pull
+docker compose --env-file .env.master -f docker-compose.master.host-network.yml up -d
+```
+
+Host networking makes Matmon behave more like a native process on the Docker host, but it is not portable to Docker Desktop. Use the normal `docker-compose.master.yml` unless you specifically need host networking.
+
+To build from a local checkout instead of pulling GHCR:
+
+```bash
+docker compose --env-file .env.master -f docker-compose.master.yml -f docker-compose.master.build.yml up -d --build
+```
+
 ## GitHub Actions
 
-The repository includes a Docker build workflow:
+The repository includes a Docker build and publish workflow:
 
 ```text
 .github/workflows/docker-image.yml
@@ -145,7 +179,7 @@ The workflow runs on:
 - `pull_request`
 - `workflow_dispatch`
 
-It currently builds the Docker image but does not publish it to a container registry.
+Pull requests only build the image. Pushes publish to GitHub Container Registry using the repository name, for example `ghcr.io/real-ttx/matmon:latest` on the default branch.
 
 ## Development
 

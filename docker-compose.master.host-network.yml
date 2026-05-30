@@ -1,0 +1,32 @@
+# Linux-only Matmon master deployment using the Docker host network namespace.
+# This is useful when probes/sensors should behave as if Matmon runs directly
+# on the Docker host. Do not use this file on Docker Desktop for Windows/macOS.
+#
+# Start:
+#   cp .env.master.example .env.master
+#   docker compose --env-file .env.master -f docker-compose.master.host-network.yml pull
+#   docker compose --env-file .env.master -f docker-compose.master.host-network.yml up -d
+#
+# Open:
+#   http://<docker-host-ip>:8099
+
+services:
+  matmon-master:
+    image: ${MATMON_IMAGE:-ghcr.io/real-ttx/matmon:latest}
+    pull_policy: ${MATMON_PULL_POLICY:-always}
+    container_name: ${MATMON_CONTAINER_NAME:-matmon-master}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ASPNETCORE_URLS: http://+:${MATMON_HTTP_PORT:-8099}
+      Matmon__Mode: Master
+      Matmon__HeartbeatIntervalSeconds: ${MATMON_HEARTBEAT_SECONDS:-30}
+      Matmon__WorkspacePath: /app/data/workspace.json
+      Matmon__Auth__Username: ${MATMON_ADMIN_USER:-admin}
+      Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-admin}
+    volumes:
+      - matmon-data:/app/data
+
+volumes:
+  matmon-data:
+    name: ${MATMON_DATA_VOLUME:-matmon-data}

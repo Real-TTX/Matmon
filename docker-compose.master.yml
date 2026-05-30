@@ -1,0 +1,42 @@
+# Portable Matmon master deployment.
+# Use this on any Docker host that should run the central Matmon UI/API.
+#
+# Start:
+#   cp .env.master.example .env.master
+#   docker compose --env-file .env.master -f docker-compose.master.yml pull
+#   docker compose --env-file .env.master -f docker-compose.master.yml up -d
+#
+# Open:
+#   http://<docker-host-ip>:8099
+
+services:
+  matmon-master:
+    image: ${MATMON_IMAGE:-ghcr.io/real-ttx/matmon:latest}
+    pull_policy: ${MATMON_PULL_POLICY:-always}
+    container_name: ${MATMON_CONTAINER_NAME:-matmon-master}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8099
+      Matmon__Mode: Master
+      Matmon__HeartbeatIntervalSeconds: ${MATMON_HEARTBEAT_SECONDS:-30}
+      Matmon__WorkspacePath: /app/data/workspace.json
+      Matmon__Auth__Username: ${MATMON_ADMIN_USER:-admin}
+      Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-admin}
+    ports:
+      - "${MATMON_HTTP_BIND:-0.0.0.0}:${MATMON_HTTP_PORT:-8099}:8099"
+    volumes:
+      - matmon-data:/app/data
+    extra_hosts:
+      # Lets sensors reach services on the Docker host through host.docker.internal.
+      # Works on Docker Desktop and modern Linux Docker engines.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - matmon
+
+networks:
+  matmon:
+    name: ${MATMON_NETWORK_NAME:-matmon}
+
+volumes:
+  matmon-data:
+    name: ${MATMON_DATA_VOLUME:-matmon-data}
