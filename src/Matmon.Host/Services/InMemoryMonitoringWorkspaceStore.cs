@@ -25,6 +25,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     private readonly ILogger<InMemoryMonitoringWorkspaceStore> _logger;
     private readonly IDataProtector _credentialProtector;
     private readonly MatmonAuthOptions _authOptions;
+    private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly string _workspacePath;
     private readonly string _workspaceBackupPath;
     private readonly Timer _saveTimer;
@@ -47,6 +48,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     {
         _logger = logger;
         _authOptions = authOptions;
+        _runtimeOptions = runtimeOptions;
         _credentialProtector = dataProtectionProvider.CreateProtector("Matmon.Credentials");
 
         var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
@@ -64,13 +66,21 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         RebuildObservationIndexesLocked();
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
-        EnsureDefaultProbeMetadata();
-        EnsureDefaultDockerSlaveProbe();
-        EnsureDefaultWindowsHealthSensor();
-        EnsureDefaultProxmoxSensor();
+        EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
+        if (_runtimeOptions.ProvisionLocalDockerProbe)
+        {
+            EnsureDefaultDockerSlaveProbe();
+        }
+
+        if (_runtimeOptions.ProvisionDemoSensors)
+        {
+            EnsureDefaultWindowsHealthSensor();
+            EnsureDefaultProxmoxSensor();
+        }
+
         EnsureDefaultNotificationConfiguration();
         EnsureDefaultUsers();
-        EnsureDefaultMaps();
+        EnsureDefaultMaps(_runtimeOptions.CreateStarterMap);
         EnsureDefaultAlertCollection();
         EnsureDefaultObservationCollection();
         EnsureDefaultEventCollection();
@@ -1321,23 +1331,55 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         if (File.Exists(_workspacePath) || File.Exists(_workspaceBackupPath))
         {
             _logger.LogWarning(
-                "Failed to load workspace from {WorkspacePath} or backup {WorkspacePathBackup}, falling back to sample data",
+                "Failed to load workspace from {WorkspacePath} or backup {WorkspacePathBackup}, creating a new plain workspace",
                 _workspacePath,
                 _workspaceBackupPath);
         }
 
-        var sample = SampleTopologyFactory.Create();
+        if (_runtimeOptions.SeedSampleData)
+        {
+            _logger.LogInformation("Seeding sample workspace because Matmon:SeedSampleData is enabled");
+            var sample = SampleTopologyFactory.Create();
+            return new WorkspaceDocument
+            {
+                RootProbe = sample.RootProbe,
+                Templates = sample.Templates.ToList(),
+                SensorDefinitions = sample.SensorDefinitions.ToList(),
+                NotificationConfiguration = sample.NotificationConfiguration,
+                NotificationSenders = sample.NotificationSenders.ToList(),
+                NotificationReceivers = sample.NotificationReceivers.ToList(),
+                NotificationRules = sample.NotificationRules.ToList(),
+                Alerts = sample.Alerts.ToList(),
+                SensorHistory = [],
+                Events = [],
+                SensorStatistics = []
+            };
+        }
+
+        return CreatePlainWorkspaceDocument();
+    }
+
+    private static WorkspaceDocument CreatePlainWorkspaceDocument()
+    {
         return new WorkspaceDocument
         {
-            RootProbe = sample.RootProbe,
-            Templates = sample.Templates.ToList(),
-            SensorDefinitions = sample.SensorDefinitions.ToList(),
-            NotificationConfiguration = sample.NotificationConfiguration,
-            NotificationRules = sample.NotificationRules.ToList(),
-            Alerts = sample.Alerts.ToList(),
+            RootProbe = new ProbeElement("Master Probe")
+            {
+                ProbeId = "master",
+                Description = "Local master probe"
+            },
+            Templates = [],
+            SensorDefinitions = [],
+            NotificationConfiguration = new NotificationWorkspaceConfiguration(),
+            NotificationSenders = [],
+            NotificationReceivers = [],
+            NotificationRules = [],
+            Alerts = [],
             SensorHistory = [],
             Events = [],
-            SensorStatistics = []
+            SensorStatistics = [],
+            Maps = [],
+            Users = []
         };
     }
 
@@ -1540,13 +1582,16 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         }
     }
 
-    private void EnsureDefaultProbeMetadata()
+    private void EnsureDefaultProbeMetadata(bool createSystemSensors)
     {
         lock (_gate)
         {
             EnsureProbeMetadataRecursive(_document.RootProbe, isRoot: true);
-            EnsureProbeHeartbeatSensorsRecursive(_document.RootProbe, isRoot: true);
-            EnsureProbeHealthSensorsRecursive(_document.RootProbe);
+            if (createSystemSensors)
+            {
+                EnsureProbeHeartbeatSensorsRecursive(_document.RootProbe, isRoot: true);
+                EnsureProbeHealthSensorsRecursive(_document.RootProbe);
+            }
         }
     }
 
@@ -1758,11 +1803,11 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         });
     }
 
-    private void EnsureDefaultMaps()
+    private void EnsureDefaultMaps(bool createStarterMap = false)
     {
         _document.Maps ??= [];
 
-        if (_document.Maps.Count > 0)
+        if (_document.Maps.Count > 0 || !createStarterMap)
         {
             EnsureMapPublicTokens();
             return;
@@ -2333,7 +2378,7 @@ try {
     private void EnsureDefaultWindowsHealthSensor()
     {
         const string sensorName = "Windows Health";
-        const string sensorTarget = "pc-terminal";
+        const string sensorTarget = "windows-host";
         const string templateKey = "windows-health";
 
         var template = _document.Templates.FirstOrDefault(candidate =>
@@ -2365,23 +2410,13 @@ try {
             sensor.AppliedTemplateIds.Add(template.Id);
         }
 
-        if (!sensor.Settings.Parameters.ContainsKey("winrm.username"))
-        {
-            sensor.Settings.Parameters["winrm.username"] = "Matthias";
-        }
-
-        if (!sensor.Settings.Parameters.ContainsKey("winrm.password"))
-        {
-            sensor.Settings.Parameters["winrm.password"] = "Miriam2207";
-        }
-
         sensor.Settings.Highlight = true;
     }
 
     private void EnsureDefaultProxmoxSensor()
     {
         const string sensorName = "PVE";
-        const string sensorTarget = "10.10.2.11";
+        const string sensorTarget = "proxmox-host";
         const string templateKey = "proxmox-pve-node";
 
         var template = _document.Templates.FirstOrDefault(candidate =>

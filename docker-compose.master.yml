@@ -22,6 +22,11 @@ services:
       Matmon__WorkspacePath: /app/data/workspace.json
       Matmon__Auth__Username: ${MATMON_ADMIN_USER:-admin}
       Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-admin}
+      Matmon__SeedSampleData: ${MATMON_SEED_SAMPLE_DATA:-false}
+      Matmon__ProvisionLocalDockerProbe: ${MATMON_PROVISION_LOCAL_DOCKER_PROBE:-false}
+      Matmon__ProvisionDemoSensors: ${MATMON_PROVISION_DEMO_SENSORS:-false}
+      Matmon__AutoCreateProbeSystemSensors: ${MATMON_AUTO_CREATE_PROBE_SYSTEM_SENSORS:-false}
+      Matmon__CreateStarterMap: ${MATMON_CREATE_STARTER_MAP:-false}
     ports:
       - "${MATMON_HTTP_BIND:-0.0.0.0}:${MATMON_HTTP_PORT:-8099}:8099"
     volumes:

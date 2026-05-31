@@ -182,18 +182,16 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
         remoteProbe.ParentId = rootProbe.Id;
         rootProbe.Children.Add(remoteProbe);
 
-        var pcTerminalHost = new HostElement("pc-terminal")
+        var pcTerminalHost = new HostElement("demo-windows-host")
         {
-            Address = "pc-terminal",
+            Address = "demo-windows-host",
             Description = "Windows workstation"
         };
         pcTerminalHost.ParentId = rootProbe.Id;
 
-        var pcTerminalWindowsHealth = new SensorElement("Windows Health", PowerShellRemoteSensorExecutor.Definition.Key, "pc-terminal");
+        var pcTerminalWindowsHealth = new SensorElement("Windows Health", PowerShellRemoteSensorExecutor.Definition.Key, "demo-windows-host");
         pcTerminalWindowsHealth.ParentId = pcTerminalHost.Id;
         pcTerminalWindowsHealth.AppliedTemplateIds.Add(windowsHealthSensor.Id);
-        pcTerminalWindowsHealth.Settings.Parameters["winrm.username"] = "Matthias";
-        pcTerminalWindowsHealth.Settings.Parameters["winrm.password"] = "Miriam2207";
         pcTerminalWindowsHealth.Settings.Highlight = true;
 
         pcTerminalHost.Children.Add(pcTerminalWindowsHealth);

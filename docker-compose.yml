@@ -11,6 +11,9 @@ services:
       Matmon__WorkspacePath: data/workspace.json
       Matmon__Auth__Username: admin
       Matmon__Auth__Password: admin
+      Matmon__ProvisionLocalDockerProbe: true
+      Matmon__AutoCreateProbeSystemSensors: true
+      Matmon__CreateStarterMap: true
     ports:
       - "8099:8099"
     volumes:

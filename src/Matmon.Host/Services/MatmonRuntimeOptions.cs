@@ -17,4 +17,14 @@ public sealed class MatmonRuntimeOptions
     public string? ProbeToken { get; set; }
 
     public string WorkspacePath { get; set; } = "data/workspace.json";
+
+    public bool SeedSampleData { get; set; }
+
+    public bool ProvisionLocalDockerProbe { get; set; }
+
+    public bool ProvisionDemoSensors { get; set; }
+
+    public bool AutoCreateProbeSystemSensors { get; set; }
+
+    public bool CreateStarterMap { get; set; }
 }

@@ -90,6 +90,11 @@ Matmon__WorkspacePath=data/workspace.json
 Matmon__Auth__Username=admin
 Matmon__Auth__Password=admin
 Matmon__HeartbeatIntervalSeconds=30
+Matmon__SeedSampleData=false
+Matmon__ProvisionLocalDockerProbe=false
+Matmon__ProvisionDemoSensors=false
+Matmon__AutoCreateProbeSystemSensors=false
+Matmon__CreateStarterMap=false
 ```
 
 Slave probe settings:
@@ -105,6 +110,8 @@ Matmon__MasterUrl=http://master:8099
 Runtime data is stored in `data/`.
 
 The workspace file is generated automatically on first start if it does not exist. Runtime files such as `workspace.json`, backups, data protection keys and temporary files are not intended to be committed to Git.
+
+New master installations are plain by default: no hosts, sensors, demo probes or starter maps are created unless one of the explicit seed/provisioning flags is enabled. Existing Docker volumes keep their stored workspace, so remove or rename the volume if you want a truly fresh installation.
 
 ## Docker
 
@@ -149,6 +156,13 @@ http://<docker-host-ip>:8099
 
 The portable compose uses `ghcr.io/real-ttx/matmon:latest`, binds the web UI to `0.0.0.0:8099` by default, stores runtime data in the Docker volume `matmon-data`, and maps `host.docker.internal` to the Docker host gateway. In normal bridge mode, the container can reach the LAN through the Docker host, which is the most portable setup across Linux, Windows and macOS Docker hosts.
 
+The portable master compose sets all sample/demo flags to `false`, so pulling a newer image does not create demo sensors. To reset an existing installation, stop the container and remove the named Docker volume:
+
+```bash
+docker compose --env-file .env.master -f docker-compose.master.yml down
+docker volume rm matmon-data
+```
+
 On Linux only, you can alternatively run Matmon in the host network namespace:
 
 ```bash
@@ -164,6 +178,34 @@ To build from a local checkout instead of pulling GHCR:
 ```bash
 docker compose --env-file .env.master -f docker-compose.master.yml -f docker-compose.master.build.yml up -d --build
 ```
+
+### Caddy Reverse Proxy
+
+If Caddy runs directly on the Docker host and Matmon exposes port `8099`:
+
+```caddyfile
+matmon.example.com {
+    reverse_proxy 127.0.0.1:8099
+}
+```
+
+If Caddy runs in Docker, `127.0.0.1` is the Caddy container, not the Docker host. Prefer putting Caddy on the `matmon` Docker network and proxying to the service name:
+
+```caddyfile
+matmon.example.com {
+    reverse_proxy matmon-master:8099
+}
+```
+
+For the Linux host-network compose, a Dockerized Caddy container must proxy to the Docker host gateway instead:
+
+```caddyfile
+matmon.example.com {
+    reverse_proxy host.docker.internal:8099
+}
+```
+
+In that case the Caddy container also needs `host.docker.internal:host-gateway` configured as an extra host.
 
 ## GitHub Actions
 
