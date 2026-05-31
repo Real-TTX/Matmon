@@ -284,13 +284,13 @@
 
                         <div class="workspace-span-2 sensor-threshold-section" data-threshold-section>
                             <div class="panel-header">
-                                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels & thresholds</span></h2>
+                                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels & conditions</span></h2>
                                 <span class="panel-hint">@(hasFixedChannels ? "fixed channels" : "dynamic channels")</span>
                             </div>
                             <div class="workspace-inline-note">
                                 @(hasFixedChannels
                                     ? "Fixed channels come from the sensor type and cannot be added or removed."
-                                    : "Dynamic channels can be added or removed. Use the Graph button on a channel row to choose the default.")
+                                    : "Dynamic channels can be added or removed. Error conditions always override warning conditions.")
                             </div>
 
                             @if (Model.ElementEditor.SensorChannelThresholdFields.Count == 0)
@@ -350,18 +350,26 @@
                                                     <span>Warning</span>
                                                     <div class="sensor-threshold-rule">
                                                         <select asp-for="ElementEditor.SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select">
-                                                            <option value="above">above</option>
-                                                            <option value="below">below</option>
+                                                            <option value=">">&gt;</option>
+                                                            <option value=">=">&gt;=</option>
+                                                            <option value="<">&lt;</option>
+                                                            <option value="<=">&lt;=</option>
+                                                            <option value="=">=</option>
+                                                            <option value="<>">&lt;&gt;</option>
                                                         </select>
                                                         <input asp-for="ElementEditor.SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
                                                     </div>
                                                 </label>
                                                 <label>
-                                                    <span>Critical</span>
+                                                    <span>Error</span>
                                                     <div class="sensor-threshold-rule">
                                                         <select asp-for="ElementEditor.SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select">
-                                                            <option value="above">above</option>
-                                                            <option value="below">below</option>
+                                                            <option value=">">&gt;</option>
+                                                            <option value=">=">&gt;=</option>
+                                                            <option value="<">&lt;</option>
+                                                            <option value="<=">&lt;=</option>
+                                                            <option value="=">=</option>
+                                                            <option value="<>">&lt;&gt;</option>
                                                         </select>
                                                         <input asp-for="ElementEditor.SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
                                                     </div>

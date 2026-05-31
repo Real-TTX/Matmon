@@ -1,0 +1,97 @@
+@page "/system/users/edit"
+@model UserEditModel
+@{
+    ViewData["Title"] = "Edit user";
+    ViewData["WorkspaceSummarySuppress"] = true;
+    var backUrl = Model.GetSafeReturnUrl("/Config?tab=users");
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("pencil")
+            <h1>Edit user</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.UserRecord is null)
+    {
+        <div class="empty-state">User not found.</div>
+    }
+    else
+    {
+        <section class="panel panel-stack workspace-editor-panel">
+            <div class="workspace-summary-card user-edit-summary" aria-label="User summary">
+                <div class="workspace-summary-main">
+                    <span class="workspace-summary-kicker">User</span>
+                    <strong>@Model.UserRecord.Username</strong>
+                    <span class="panel-hint">@Model.UserRecord.Id</span>
+                </div>
+                <div class="workspace-summary-metrics">
+                    <span class="workspace-summary-chip">
+                        <strong>@Model.UserRecord.Role</strong>
+                        <span>Role</span>
+                    </span>
+                    <span class="workspace-summary-chip">
+                        <strong>@(Model.UserRecord.IsEnabled ? "Enabled" : "Disabled")</strong>
+                        <span>Status</span>
+                    </span>
+                </div>
+            </div>
+
+            @if (!Model.CanEdit)
+            {
+                <div class="workspace-banner workspace-banner-warning">
+                    Your own account cannot be edited here.
+                </div>
+            }
+            else
+            {
+                <form method="post" class="workspace-form">
+                    <input type="hidden" asp-for="UserId" />
+                    <input type="hidden" asp-for="ReturnUrl" />
+
+                    <div class="workspace-form-grid">
+                        <label class="workspace-field">
+                            <span class="workspace-label">Username</span>
+                            <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
+                        </label>
+
+                        <label class="workspace-field">
+                            <span class="workspace-label">Role</span>
+                            <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="form-select workspace-select"></select>
+                        </label>
+
+                        <label class="workspace-field">
+                            <span class="workspace-label">Password</span>
+                            <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" placeholder="leave unchanged" />
+                        </label>
+
+                        <label class="workspace-field">
+                            <span class="workspace-label">Enabled</span>
+                            <label class="workspace-check">
+                                <input asp-for="UserInput.IsEnabled" />
+                                Active
+                            </label>
+                        </label>
+                    </div>
+
+                    <div class="workspace-form-actions">
+                        <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save</span></button>
+                    </div>
+                </form>
+            }
+        </section>
+    }
+</section>

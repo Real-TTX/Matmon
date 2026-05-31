@@ -83,6 +83,21 @@ public static class BreadcrumbBuilder
                 items.Add(new("Probes", "/Config"));
                 items.Add(new("New probe"));
                 break;
+            case "/system/probes/install":
+                items.Add(new("System", "/Config"));
+                items.Add(new("Probes", "/Config?tab=probes"));
+                items.Add(new("Install"));
+                break;
+            case "/system/users/new":
+                items.Add(new("System", "/Config"));
+                items.Add(new("Users", "/Config?tab=users"));
+                items.Add(new("New user"));
+                break;
+            case "/system/users/edit":
+                items.Add(new("System", "/Config"));
+                items.Add(new("Users", "/Config?tab=users"));
+                items.Add(new("Edit user"));
+                break;
             case "/monitoring/folder/new":
                 items.Add(new("Infrastructure", "/Workspace"));
                 items.Add(new("New folder"));

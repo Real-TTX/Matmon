@@ -14,6 +14,8 @@ public sealed class MonitoringMap
 
     public int Rows { get; set; } = 8;
 
+    public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
+
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;

@@ -60,10 +60,19 @@ public static class MatmonIcons
             <path d="M8 3v10" />
             <path d="M3 8h10" />
             """,
+        ["copy"] = """
+            <rect x="5.2" y="5.2" width="7.8" height="7.8" rx="1.2" />
+            <path d="M4.2 10.2H3.3A1.6 1.6 0 0 1 1.7 8.6V3.3A1.6 1.6 0 0 1 3.3 1.7h5.3A1.6 1.6 0 0 1 10.2 3.3v.9" />
+            """,
         ["more"] = """
             <circle cx="4" cy="8" r="0.8" fill="currentColor" stroke="none" />
             <circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none" />
             <circle cx="12" cy="8" r="0.8" fill="currentColor" stroke="none" />
+            """,
+        ["menu"] = """
+            <path d="M3 4h10" />
+            <path d="M3 8h10" />
+            <path d="M3 12h10" />
             """,
         ["probe"] = """
             <path d="M2.3 11.2a8 8 0 0 1 11.4 0" />

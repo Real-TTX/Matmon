@@ -2,6 +2,7 @@
 @model IndexModel
 @{
     ViewData["Title"] = "Monitoring";
+    ViewData["WorkspaceSummarySuppress"] = true;
 
     string FormatPercent(int count, int total)
     {
@@ -93,13 +94,10 @@
         <div class="page-header sensor-header">
             <div class="sensor-header-main">
                 <div class="page-title">
-                    @MatmonIcons.Render("probe")
                     <h1>Remote Probe</h1>
                 </div>
-                <div class="sensor-path">@Model.RuntimeOptions.ProbeName (@Model.RuntimeOptions.ProbeId)</div>
                 <div class="sensor-meta">
                     <span class="sensor-chip">Mode: Slave</span>
-                    <span class="sensor-chip">Master: @Model.RuntimeOptions.MasterUrl</span>
                 </div>
             </div>
             <div class="sensor-header-side">
@@ -114,7 +112,7 @@
 
         <section class="panel panel-stack probe-connection-panel">
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Main connection</span></h2>
+                <h2 class="section-title">Main connection</h2>
                 <span class="panel-hint">Probe to master only</span>
             </div>
 
@@ -173,7 +171,7 @@
 
         <section class="panel panel-stack">
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Next remote sensor runs</span></h2>
+                <h2 class="section-title">Next remote sensor runs</h2>
                 <span class="panel-hint">@Model.SlaveSnapshot.UpcomingExecutions.Count remote-executed sensor runs</span>
             </div>
             <div class="workspace-inline-note">Heartbeat is sent by the probe service itself and is checked by the master. It is not listed as an assigned remote sensor run.</div>
@@ -200,7 +198,7 @@
 
         <section class="panel panel-stack">
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("spark")<span>Last results</span></h2>
+                <h2 class="section-title">Last results</h2>
                 <span class="panel-hint">@Model.SlaveSnapshot.LastResultTransferStatus</span>
             </div>
 
@@ -240,7 +238,7 @@
 
         <section class="panel panel-stack">
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("list")<span>Transferred events</span></h2>
+                <h2 class="section-title">Transferred events</h2>
                 <span class="panel-hint">@Model.SlaveSnapshot.Events.Count exchanged events</span>
             </div>
 
@@ -289,17 +287,25 @@ else
         (Model.Snapshot.OtherSensorCount, "#7c8eab"));
 
 <section class="dashboard-shell dashboard-home-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("monitoring")
-            <div>
-                <div class="eyebrow">@Model.Snapshot.WorkspaceName</div>
-                <h1>Monitoring</h1>
-            </div>
+    <div class="page-header dashboard-header">
+        <div class="dashboard-header-main">
+            <h1>Monitoring</h1>
         </div>
-        <div class="mode-chip">
-            <span>Mode</span>
-            <strong>@Model.Snapshot.Mode</strong>
+        <div class="workspace-summary-card dashboard-header-summary" aria-label="Workspace summary">
+            <div class="workspace-summary-main">
+                <span class="workspace-summary-kicker">Master</span>
+                <strong>@Model.Snapshot.WorkspaceName</strong>
+            </div>
+            <div class="workspace-summary-metrics">
+                <a class="workspace-summary-chip" asp-page="/Config" asp-route-tab="probes" aria-label="Configured probes">
+                    <strong>@Model.Snapshot.ConfiguredProbeCount</strong>
+                    <span>Probes</span>
+                </a>
+                <a class="workspace-summary-chip" asp-page="/Monitoring" asp-route-monitoringKind="sensor" aria-label="Total sensors">
+                    <strong>@Model.Snapshot.SensorCount</strong>
+                    <span>Sensors</span>
+                </a>
+            </div>
         </div>
     </div>
 
@@ -325,7 +331,7 @@ else
     <section class="panel dashboard-status-panel" data-dashboard-status-chart>
         <div class="dashboard-status-copy">
             <div class="panel-header dashboard-status-header">
-                <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Sensor Status</span></h2>
+                <h2 class="section-title">Sensor Status</h2>
                 <a class="workspace-action-link dashboard-panel-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
                     @MatmonIcons.Render("arrow-right")
                     <span>All sensors</span>
@@ -382,7 +388,7 @@ else
 
     <section class="panel panel-stack" data-dashboard-highlight-strip>
         <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("star")<span>Highlights</span></h2>
+            <h2 class="section-title">Highlights</h2>
             <span class="panel-hint">@Model.Snapshot.HighlightedTelemetrySeries.Count highlighted</span>
         </div>
 
@@ -438,7 +444,7 @@ else
 
     <section class="panel panel-stack dashboard-sensors-panel">
         <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("monitoring")<span>Live Sensors</span></h2>
+            <h2 class="section-title">Live Sensors</h2>
             <a class="workspace-action-link dashboard-panel-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
                 @MatmonIcons.Render("arrow-right")
                 <span>@Model.Snapshot.SensorCount all</span>

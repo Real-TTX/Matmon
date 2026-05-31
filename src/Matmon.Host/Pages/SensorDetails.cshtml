@@ -2,6 +2,7 @@
 @model SensorDetailsModel
 @{
     ViewData["Title"] = Model.View.Name;
+    ViewData["WorkspaceSummarySuppress"] = true;
 }
 
 <section class="dashboard-shell">
@@ -24,6 +25,7 @@
             <div class="sensor-path">@Model.View.Path</div>
             <div class="sensor-meta">
                 <span class="sensor-chip">@Model.View.SensorTypeLabel</span>
+                <span class="usage-level-pill" data-level="@Model.View.UsageLevelKey">@Model.View.UsageLevelLabel</span>
                 <span class="sensor-chip">@Model.View.Target</span>
                 <span class="sensor-chip">graph: @Model.View.DefaultChannelLabel</span>
                 @if (!string.IsNullOrWhiteSpace(Model.View.ExecutionProbe))
@@ -55,7 +57,7 @@
                 }
             </div>
             <div class="workspace-row-actions sensor-header-actions">
-                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.SensorId">
+                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
                     @MatmonIcons.Render("pencil")
                     <span>Edit</span>
                 </a>

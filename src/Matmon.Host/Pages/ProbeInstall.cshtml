@@ -1,0 +1,119 @@
+@page "/system/probes/install"
+@model ProbeInstallModel
+@{
+    ViewData["Title"] = "Install probe";
+    ViewData["WorkspaceSummarySuppress"] = true;
+    var backUrl = Model.GetSafeReturnUrl("/Config?tab=probes");
+}
+
+<section class="dashboard-shell probe-install-shell">
+    <div class="page-header probe-install-header">
+        <div class="dashboard-header-main">
+            <h1>Install probe</h1>
+            <div class="panel-hint">Copy one of the commands below and start the probe on the target host.</div>
+        </div>
+
+        @if (Model.Probe is not null)
+        {
+            <div class="workspace-summary-card probe-install-summary" aria-label="Probe summary">
+                <div class="workspace-summary-main">
+                    <span class="workspace-summary-kicker">Probe</span>
+                    <strong>@Model.Probe.Name</strong>
+                    <span class="panel-hint">@Model.Probe.State - @Model.Probe.Message</span>
+                </div>
+                <div class="workspace-summary-metrics">
+                    <span class="workspace-summary-chip">
+                        <strong>@Model.Probe.Role</strong>
+                        <span>Role</span>
+                    </span>
+                    <span class="workspace-summary-chip">
+                        <strong>@Model.Probe.ProbeId</strong>
+                        <span>ID</span>
+                    </span>
+                    <span class="workspace-summary-chip">
+                        <strong>@(Model.CanInstall ? "Ready" : "Missing")</strong>
+                        <span>Token</span>
+                    </span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="workspace-form-actions probe-install-actions">
+        <a class="workspace-secondary-submit" href="@backUrl">
+            @MatmonIcons.Render("arrow-left")
+            <span>Back</span>
+        </a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Probe is null)
+    {
+        <div class="empty-state">No probe selected.</div>
+    }
+    else if (!Model.CanInstall)
+    {
+        <div class="workspace-banner workspace-banner-warning">
+            This probe cannot be installed yet. Only slave probes with an enrollment token can be deployed.
+        </div>
+    }
+    else
+    {
+        <div class="probe-install-grid">
+            <section class="probe-install-method">
+                <div class="probe-install-method-header">
+                    <div class="probe-install-method-title">
+                        <h2 class="section-title">@MatmonIcons.Render("probe")<span>Docker run</span></h2>
+                        <span class="panel-hint">fastest</span>
+                    </div>
+                    <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="probe-install-docker">
+                        @MatmonIcons.Render("copy")
+                        <span data-copy-label>Copy</span>
+                    </button>
+                </div>
+                <pre class="config-code probe-install-code" id="probe-install-docker">@Model.BuildDockerRun()</pre>
+            </section>
+
+            <section class="probe-install-method">
+                <div class="probe-install-method-header">
+                    <div class="probe-install-method-title">
+                        <h2 class="section-title">@MatmonIcons.Render("list")<span>Compose</span></h2>
+                        <span class="panel-hint">recommended for servers</span>
+                    </div>
+                    <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="probe-install-compose">
+                        @MatmonIcons.Render("copy")
+                        <span data-copy-label>Copy</span>
+                    </button>
+                </div>
+                <pre class="config-code probe-install-code" id="probe-install-compose">@Model.BuildCompose()</pre>
+            </section>
+
+            <section class="probe-install-method">
+                <div class="probe-install-method-header">
+                    <div class="probe-install-method-title">
+                        <h2 class="section-title">@MatmonIcons.Render("search")<span>Curl installer</span></h2>
+                        <span class="panel-hint">one-liner</span>
+                    </div>
+                    <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="probe-install-curl">
+                        @MatmonIcons.Render("copy")
+                        <span data-copy-label>Copy</span>
+                    </button>
+                </div>
+                <pre class="config-code probe-install-code" id="probe-install-curl">@Model.BuildCurlInstaller()</pre>
+            </section>
+        </div>
+
+        <div class="workspace-inline-note probe-install-note">
+            If master and slave run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.
+        </div>
+    }
+</section>

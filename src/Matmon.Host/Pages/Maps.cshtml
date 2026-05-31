@@ -7,20 +7,20 @@
     string PublicUrl(MonitoringMap candidate)
         => Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme)
             ?? $"/Maps/Public/{candidate.PublicToken}";
+
+    string MapPresetText(MonitoringMap map)
+    {
+        var preset = MonitoringMapDisplayPresetCatalog.Resolve(map.DisplayPreset);
+        return $"{preset.Label} ({preset.Dimensions})";
+    }
 }
 
 <section class="dashboard-shell maps-shell">
-    <div class="page-header">
+    <div class="page-header has-summary">
         <div class="page-title">
             @MatmonIcons.Render("dashboard")
             <h1>Maps</h1>
         </div>
-        @if (Model.CanEditMaps)
-        {
-            <div class="page-actions">
-                <a class="workspace-submit" asp-page="/MapEditor">@MatmonIcons.Render("plus")<span>New map</span></a>
-            </div>
-        }
     </div>
 
     @if (Model.Maps.Count == 0)
@@ -34,7 +34,6 @@
         <section class="panel map-library-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("list")<span>Map Library</span></h2>
-                <span class="panel-hint">Open a wallboard or manage public monitor links</span>
             </div>
 
             <div class="map-library-list">
@@ -44,7 +43,7 @@
                     <article class="map-library-row">
                         <a class="map-library-main" asp-page="/Maps" asp-route-mapId="@candidate.Id">
                             <strong>@candidate.Name</strong>
-                            <span>@candidate.Tiles.Count tile@(candidate.Tiles.Count == 1 ? "" : "s") - @candidate.Columns x @candidate.Rows - updated @candidate.UpdatedUtc.LocalDateTime.ToString("g")</span>
+                            <span>@candidate.Tiles.Count tile@(candidate.Tiles.Count == 1 ? "" : "s") - @candidate.Columns x @candidate.Rows - @MapPresetText(candidate) - updated @candidate.UpdatedUtc.LocalDateTime.ToString("g")</span>
                         </a>
                         @if (Model.CanEditMaps)
                         {
@@ -67,6 +66,13 @@
                     </article>
                 }
             </div>
+
+            @if (Model.CanEditMaps)
+            {
+                <div class="page-actions">
+                    <a class="workspace-submit" asp-page="/MapEditor">@MatmonIcons.Render("plus")<span>New map</span></a>
+                </div>
+            }
         </section>
     }
     else if (Model.Display is not null)
@@ -75,7 +81,7 @@
         <section class="panel map-view-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("dashboard")<span>@map.Name</span></h2>
-                <span class="panel-hint">@(string.IsNullOrWhiteSpace(map.Description) ? "monitor display" : map.Description)</span>
+                <span class="panel-hint">@MapPresetText(map)</span>
             </div>
 
             <div class="map-view-toolbar">
@@ -96,7 +102,7 @@
                 }
             </div>
 
-            <div class="map-canvas" style="--map-columns: @map.Columns; --map-rows: @map.Rows;">
+            <div class="map-canvas" style="--map-columns: @map.Columns; --map-rows: @map.Rows; --map-display-width: @MonitoringMapDisplayPresetCatalog.Resolve(map.DisplayPreset).Width; --map-display-height: @MonitoringMapDisplayPresetCatalog.Resolve(map.DisplayPreset).Height;">
                 @foreach (var tile in Model.Display.Tiles)
                 {
                     <article class="map-tile map-tile-display" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
@@ -182,6 +188,12 @@
 </section>
 
 @functions {
+    private static string MapPresetText(MonitoringMapDisplayPreset preset)
+    {
+        var info = MonitoringMapDisplayPresetCatalog.Resolve(preset);
+        return $"{info.Label} ({info.Dimensions})";
+    }
+
     private static string TileStyle(MonitoringMapTile tile)
     {
         var parts = new List<string>();

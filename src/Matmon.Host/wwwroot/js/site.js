@@ -2,9 +2,18 @@ const dashboardRefreshMs = 5000;
 const themeStorageKey = "matmon-theme";
 const monitoringTreeCollapsedStorageKey = "matmon-monitoring-tree-collapsed";
 const monitoringTreeMoveStorageKey = "matmon-monitoring-tree-move";
+const monitoringViewStorageKey = "matmon-monitoring-view";
+const monitoringTreeSizeStorageKey = "matmon-monitoring-tree-size";
+const monitoringListSizeStorageKey = "matmon-monitoring-list-size";
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeThemeToggle();
+  initializeMobileSidebarMenu();
+  initializeWorkspaceSummaryPlacement();
+  initializeClipboardButtons();
+  if (initializeMonitoringPreferences()) {
+    return;
+  }
   initializeAccountMenu();
   initializeWorkspaceActionMenus();
   initializeMonitoringTree();
@@ -18,8 +27,35 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeCredentialEditors();
   initializeNotificationKindEditors();
   initializeDiscoveryJobRefresh();
+  initializeDiscoveryResultTable();
+  initializeDiscoveryJobList();
   initializeMapDesigner();
 });
+
+function initializeWorkspaceSummaryPlacement() {
+  const summaryStrip = document.querySelector(".workspace-summary-strip");
+  if (!summaryStrip) {
+    return;
+  }
+
+  const targetHeader = document.querySelector("main .page-header");
+  if (!targetHeader) {
+    return;
+  }
+
+  const shouldSkipMove = targetHeader.matches(
+    ".dashboard-header, .sensor-header, .probe-install-header"
+  ) || targetHeader.querySelector(
+    ".dashboard-header-summary, .page-header-summary, .probe-install-summary, .user-edit-summary"
+  );
+
+  if (shouldSkipMove) {
+    return;
+  }
+
+  targetHeader.classList.add("has-summary");
+  targetHeader.appendChild(summaryStrip);
+}
 
 function initializeThemeToggle() {
   const buttons = Array.from(document.querySelectorAll("[data-theme-toggle]"));
@@ -59,6 +95,152 @@ function initializeThemeToggle() {
       applyTheme(nextTheme);
     });
   });
+}
+
+function initializeMobileSidebarMenu() {
+  const shell = document.querySelector(".app-shell");
+  const sidebar = document.querySelector(".app-sidebar");
+  const toggle = document.querySelector("[data-sidebar-toggle]");
+  const backdrop = document.querySelector("[data-sidebar-backdrop]");
+  if (!shell || !sidebar || !toggle || !backdrop) {
+    return;
+  }
+
+  const mobileQuery = window.matchMedia("(max-width: 991.98px)");
+
+  const setOpen = (open) => {
+    const shouldOpen = Boolean(open) && mobileQuery.matches;
+    shell.classList.toggle("is-sidebar-open", shouldOpen);
+    document.body.classList.toggle("is-sidebar-open", shouldOpen);
+    toggle.setAttribute("aria-expanded", String(shouldOpen));
+    toggle.setAttribute("aria-label", shouldOpen ? "Close navigation menu" : "Open navigation menu");
+    backdrop.hidden = !shouldOpen;
+  };
+
+  const syncResponsiveState = () => {
+    if (!mobileQuery.matches) {
+      setOpen(false);
+    } else {
+      backdrop.hidden = !shell.classList.contains("is-sidebar-open");
+    }
+  };
+
+  toggle.addEventListener("click", () => {
+    setOpen(!shell.classList.contains("is-sidebar-open"));
+  });
+
+  backdrop.addEventListener("click", () => setOpen(false));
+
+  sidebar.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) {
+      return;
+    }
+
+    const navLink = target.closest("a.topnav-link, a.account-login-button, .sidebar-alert-status-main");
+    if (navLink && mobileQuery.matches) {
+      setOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+    }
+  });
+
+  if (typeof mobileQuery.addEventListener === "function") {
+    mobileQuery.addEventListener("change", syncResponsiveState);
+  } else if (typeof mobileQuery.addListener === "function") {
+    mobileQuery.addListener(syncResponsiveState);
+  }
+
+  syncResponsiveState();
+}
+
+function initializeMonitoringPreferences() {
+  const shell = document.querySelector("[data-monitoring-shell]");
+  if (!shell) {
+    return false;
+  }
+
+  const normalizeView = (value) => String(value || "").trim().toLowerCase() === "list" ? "list" : "tree";
+  const normalizeTreeSize = (value) => {
+    switch (String(value || "").trim().toLowerCase()) {
+      case "s":
+        return "s";
+      case "l":
+        return "l";
+      default:
+        return "m";
+    }
+  };
+  const normalizeListSize = (value) => String(value || "").trim().toLowerCase() === "s" ? "s" : "l";
+
+  const readStorageValue = (key) => {
+    try {
+      return localStorage.getItem(key) || "";
+    } catch {
+      return "";
+    }
+  };
+
+  const writeStorageValue = (key, value) => {
+    try {
+      if (value) {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // The preference still works for the current visit even if persistence fails.
+    }
+  };
+
+  const currentView = normalizeView(shell.dataset.monitoringView);
+  const currentSize = currentView === "list" ? normalizeListSize(shell.dataset.monitoringSize) : normalizeTreeSize(shell.dataset.monitoringSize);
+  const storedView = normalizeView(readStorageValue(monitoringViewStorageKey) || currentView);
+  const storedTreeSize = normalizeTreeSize(readStorageValue(monitoringTreeSizeStorageKey));
+  const storedListSize = normalizeListSize(readStorageValue(monitoringListSizeStorageKey));
+
+  const url = new URL(window.location.href);
+  const hasMonitoringView = url.searchParams.has("monitoringView");
+  const hasMonitoringSize = url.searchParams.has("monitoringSize");
+  if (!hasMonitoringView || !hasMonitoringSize) {
+    const targetUrl = new URL(window.location.href);
+    const targetView = storedView;
+    const targetSize = targetView === "list" ? storedListSize : storedTreeSize;
+
+    targetUrl.searchParams.set("monitoringView", targetView);
+    targetUrl.searchParams.set("monitoringSize", targetSize);
+    window.location.replace(targetUrl.toString());
+    return true;
+  }
+
+  writeStorageValue(monitoringViewStorageKey, currentView);
+  writeStorageValue(currentView === "list" ? monitoringListSizeStorageKey : monitoringTreeSizeStorageKey, currentSize);
+
+  const buildUrl = (baseHref, view, size) => {
+    const url = new URL(baseHref || window.location.href, window.location.origin);
+    url.searchParams.set("monitoringView", view);
+    url.searchParams.set("monitoringSize", size);
+    return url;
+  };
+
+  shell.querySelectorAll("[data-monitoring-view-link]").forEach((link) => {
+    const targetView = normalizeView(link.dataset.monitoringViewLink);
+    const targetSize = targetView === "list" ? storedListSize : storedTreeSize;
+    link.href = buildUrl(link.getAttribute("href"), targetView, targetSize).toString();
+  });
+
+  shell.querySelectorAll("[data-monitoring-size-link]").forEach((link) => {
+    const targetSize = currentView === "list"
+      ? normalizeListSize(link.dataset.monitoringSizeLink)
+      : normalizeTreeSize(link.dataset.monitoringSizeLink);
+    link.href = buildUrl(link.getAttribute("href"), currentView, targetSize).toString();
+  });
+
+  return false;
 }
 
 function initializeAccountMenu() {
@@ -221,6 +403,97 @@ function initializeWorkspaceActionMenus() {
 
   window.addEventListener("resize", repositionOpenMenus);
   document.addEventListener("scroll", repositionOpenMenus, { capture: true, passive: true });
+}
+
+function initializeClipboardButtons() {
+  const buttons = Array.from(document.querySelectorAll("[data-copy-button]"));
+  if (buttons.length === 0) {
+    return;
+  }
+
+  const copyTextToClipboard = async (text) => {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall back to the legacy clipboard path below.
+      }
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "readonly");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-9999px";
+    textarea.style.left = "-9999px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    } finally {
+      document.body.removeChild(textarea);
+    }
+
+    return copied;
+  };
+
+  buttons.forEach((button) => {
+    const targetId = button.dataset.copyTarget || "";
+    const label = button.querySelector("[data-copy-label]");
+    const defaultLabel = label?.textContent?.trim() || "Copy";
+    const defaultTitle = button.getAttribute("title") || defaultLabel;
+    let resetHandle = null;
+
+    const resetButtonState = () => {
+      if (label) {
+        label.textContent = defaultLabel;
+      }
+      button.classList.remove("is-copied");
+      button.title = defaultTitle;
+      button.setAttribute("aria-label", defaultTitle);
+    };
+
+    button.setAttribute("aria-label", defaultTitle);
+
+    button.addEventListener("click", async () => {
+      const target = targetId ? document.getElementById(targetId) : null;
+      const text = (button.dataset.copyText || target?.textContent || "")
+        .replace(/^(?:\r?\n)+/, "")
+        .trimEnd();
+      if (!text) {
+        return;
+      }
+
+      const copied = await copyTextToClipboard(text);
+      window.clearTimeout(resetHandle);
+
+      if (copied) {
+        if (label) {
+          label.textContent = "Copied";
+        }
+        button.classList.add("is-copied");
+        button.title = "Copied";
+        button.setAttribute("aria-label", "Copied");
+      } else {
+        if (label) {
+          label.textContent = "Copy failed";
+        }
+        button.classList.remove("is-copied");
+        button.title = "Copy failed";
+        button.setAttribute("aria-label", "Copy failed");
+      }
+
+      resetHandle = window.setTimeout(resetButtonState, 1400);
+    });
+  });
 }
 
 function initializeMonitoringTree() {
@@ -1010,30 +1283,45 @@ function renderDiscoveryJob(job, elements) {
 
   const selectedByAddress = new Map();
   const selectedSuggestions = new Map();
+  const expandedByAddress = new Map();
   if (elements.importMode) {
     elements.resultList.querySelectorAll("[data-discovery-address]").forEach((row) => {
       const address = row.dataset.discoveryAddress || "";
-      const checkbox = row.querySelector("input[type='checkbox'][name$='.Selected']");
+      const checkbox = row.querySelector("input[type='checkbox'][name='SelectedHostAddresses']");
       if (address && checkbox) {
         selectedByAddress.set(address, checkbox.checked);
       }
 
-      row.querySelectorAll("[data-discovery-suggestion-key]").forEach((suggestionRow) => {
-        const suggestionKey = suggestionRow.dataset.discoverySuggestionKey || "";
-        const suggestionCheckbox = suggestionRow.querySelector("input[type='checkbox'][name$='.Selected']");
-        if (suggestionKey && suggestionCheckbox) {
-          selectedSuggestions.set(suggestionKey, suggestionCheckbox.checked);
-        }
-      });
+      if (address) {
+        expandedByAddress.set(address, row.dataset.discoveryExpanded === "true");
+      }
+
+    });
+
+    elements.resultList.querySelectorAll("[data-discovery-suggestion-key]").forEach((suggestionRow) => {
+      const suggestionKey = suggestionRow.dataset.discoverySuggestionKey || "";
+      const suggestionCheckbox = suggestionRow.querySelector("input[type='checkbox'][name='SelectedSuggestionKeys']");
+      if (suggestionKey && suggestionCheckbox) {
+        selectedSuggestions.set(suggestionKey, suggestionCheckbox.checked);
+      }
+    });
+  } else {
+    elements.resultList.querySelectorAll("[data-discovery-address]").forEach((row) => {
+      const address = row.dataset.discoveryAddress || "";
+      if (address) {
+        expandedByAddress.set(address, row.dataset.discoveryExpanded === "true");
+      }
     });
   }
 
   elements.resultList.innerHTML = results
-    .map((result, index) => renderDiscoveryResultRow(result, index, selectedByAddress, selectedSuggestions, elements.importMode))
+    .map((result, index) => renderDiscoveryResultRow(result, index, selectedByAddress, selectedSuggestions, expandedByAddress, elements.importMode))
     .join("");
+
+  applyDiscoveryTableState(document.querySelector("[data-discovery-results-panel]"));
 }
 
-function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSuggestions, importMode) {
+function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSuggestions, expandedByAddress, importMode) {
   const address = String(result.address ?? "");
   const hostName = String(result.hostName ?? "");
   const message = String(result.message ?? "");
@@ -1045,52 +1333,58 @@ function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSugg
   const snmpSummary = String(result.snmpSummary ?? "");
   const selected = selectedByAddress.has(address) ? selectedByAddress.get(address) : true;
   const suggestedSensors = Array.isArray(result.suggestedSensors) ? result.suggestedSensors : [];
+  const expanded = expandedByAddress.has(address) ? expandedByAddress.get(address) : false;
+  const sensorCount = suggestedSensors.length;
+  const searchText = [
+    address,
+    hostName,
+    openPortsText,
+    snmpSummary,
+    message,
+    ...suggestedSensors.flatMap((suggestion) => [
+      String(suggestion.sensorTypeKey ?? ""),
+      String(suggestion.name ?? ""),
+      String(suggestion.target ?? ""),
+      String(suggestion.reason ?? "")
+    ])
+  ].join(" ");
   const suggestionRows = suggestedSensors
     .map((suggestion, sensorIndex) => renderDiscoverySuggestionRow(address, suggestion, index, sensorIndex, selectedSuggestions, importMode))
     .join("");
   const hostControl = importMode
     ? `
-        <label class="discovery-select">
-          <input type="checkbox" name="Results[${index}].Selected" value="true" ${selected ? "checked" : ""} />
-          <input type="hidden" name="Results[${index}].Selected" value="false" />
-          <span class="tree-kind" data-kind="host"><span>Host</span></span>
-        </label>
-      `
-    : `<span class="tree-kind" data-kind="host"><span>Host</span></span>`;
-  const hiddenFields = importMode
-    ? `
-        <input type="hidden" name="Results[${index}].Address" value="${escapeAttribute(address)}" />
-        <input type="hidden" name="Results[${index}].HostName" value="${escapeAttribute(hostName)}" />
-        <input type="hidden" name="Results[${index}].PingAlive" value="${pingAlive}" />
-        <input type="hidden" name="Results[${index}].PingMs" value="${escapeAttribute(String(result.pingMs ?? ""))}" />
-        <input type="hidden" name="Results[${index}].OpenPortsText" value="${escapeAttribute(openPortsText)}" />
-        <input type="hidden" name="Results[${index}].SnmpResponded" value="${snmpResponded}" />
-        <input type="hidden" name="Results[${index}].SnmpSummary" value="${escapeAttribute(snmpSummary)}" />
-        <input type="hidden" name="Results[${index}].Message" value="${escapeAttribute(message)}" />
+        <input type="checkbox" name="SelectedHostAddresses" value="${escapeAttribute(address)}" ${selected ? "checked" : ""} />
       `
     : "";
 
   return `
-    <article class="event-row discovery-result-row" data-state="ok" data-discovery-address="${escapeAttribute(address)}">
-      <div class="event-row-summary">
+    <tr class="discovery-host-row"
+        data-discovery-address="${escapeAttribute(address)}"
+        data-discovery-host="${escapeAttribute(hostName)}"
+        data-discovery-text="${escapeAttribute(searchText)}"
+        data-discovery-ping="${pingAlive ? "ok" : "none"}"
+        data-discovery-ping-ms="${escapeAttribute(String(result.pingMs ?? ""))}"
+        data-discovery-port-count="${openPorts.length}"
+        data-discovery-snmp="${snmpResponded ? "true" : "false"}"
+        data-discovery-sensor-count="${sensorCount}"
+        data-discovery-expanded="${expanded ? "true" : "false"}">
+      <td class="discovery-table-select">
+        <button type="button" class="discovery-row-toggle" data-discovery-toggle aria-expanded="${expanded ? "true" : "false"}">${expanded ? "-" : "+"}</button>
         ${hostControl}
-        <div class="event-row-main">
-          <span class="event-row-name">${escapeHtml(address)}</span>
-          ${hostName ? `<span class="event-row-separator">&middot;</span><span class="event-row-path">${escapeHtml(hostName)}</span>` : ""}
-          <span class="event-row-separator">&middot;</span>
-          <span class="event-row-message">${escapeHtml(message)}</span>
-        </div>
-        <div class="event-row-side">
-          ${pingAlive ? `<span class="state-pill" data-state="ok">Ping ${escapeHtml(pingMs)} ms</span>` : ""}
-          ${openPortsText ? `<span class="state-pill" data-state="warning">Ports ${escapeHtml(openPortsText)}</span>` : ""}
-          ${snmpResponded ? `<span class="state-pill" data-state="ok">SNMP</span>` : ""}
-        </div>
-      </div>
-
-      ${suggestionRows ? `<div class="discovery-suggestion-list">${suggestionRows}</div>` : ""}
-
-      ${hiddenFields}
-    </article>
+      </td>
+      <td class="discovery-address-cell"><span class="tree-kind" data-kind="host"><span>Host</span></span><strong>${escapeHtml(address)}</strong></td>
+      <td>${hostName ? escapeHtml(hostName) : "-"}</td>
+      <td>${pingAlive ? `${escapeHtml(pingMs)} ms` : "-"}</td>
+      <td title="${escapeAttribute(openPortsText)}">${openPorts.length > 0 ? `${openPorts.length} open` : "-"}</td>
+      <td>${snmpResponded ? "yes" : "-"}</td>
+      <td><span class="state-pill" data-state="${sensorCount > 0 ? "ok" : "warning"}">${sensorCount} service${sensorCount === 1 ? "" : "s"}</span></td>
+    </tr>
+    <tr class="discovery-suggestion-panel" data-discovery-parent-address="${escapeAttribute(address)}" ${expanded ? "" : "hidden"}>
+      <td colspan="7">
+        <div class="discovery-host-message">${escapeHtml(message || "No summary.")}</div>
+        ${suggestionRows ? `<div class="discovery-suggestion-list">${suggestionRows}</div>` : `<div class="empty-state">No sensor suggestions.</div>`}
+      </td>
+    </tr>
   `;
 }
 
@@ -1100,7 +1394,6 @@ function renderDiscoverySuggestionRow(address, suggestion, resultIndex, sensorIn
   const target = String(suggestion.target ?? "");
   const reason = String(suggestion.reason ?? "");
   const confidence = Number(suggestion.confidence ?? 0);
-  const settingsJson = JSON.stringify(suggestion.settings ?? {});
   const suggestionKey = buildDiscoverySuggestionKey(address, sensorTypeKey, target, name);
   const selected = selectedSuggestions.has(suggestionKey) ? selectedSuggestions.get(suggestionKey) : true;
 
@@ -1118,20 +1411,12 @@ function renderDiscoverySuggestionRow(address, suggestion, resultIndex, sensorIn
 
   return `
     <label class="discovery-suggestion-row" data-discovery-suggestion-key="${escapeAttribute(suggestionKey)}">
-      <input type="checkbox" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].Selected" value="true" ${selected ? "checked" : ""} />
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].Selected" value="false" />
+      <input type="checkbox" name="SelectedSuggestionKeys" value="${escapeAttribute(suggestionKey)}" ${selected ? "checked" : ""} />
       <span class="sensor-chip">${escapeHtml(sensorTypeKey)}</span>
       <span class="discovery-suggestion-name">${escapeHtml(name)}</span>
       ${target ? `<span class="event-row-path">${escapeHtml(target)}</span>` : ""}
       ${reason ? `<span class="event-row-message">${escapeHtml(reason)}</span>` : ""}
       <span class="state-pill" data-state="ok">${Number.isFinite(confidence) ? confidence : 0}%</span>
-
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].SensorTypeKey" value="${escapeAttribute(sensorTypeKey)}" />
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].Name" value="${escapeAttribute(name)}" />
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].Target" value="${escapeAttribute(target)}" />
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].Reason" value="${escapeAttribute(reason)}" />
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].Confidence" value="${escapeAttribute(String(confidence))}" />
-      <input type="hidden" name="Results[${resultIndex}].SuggestedSensors[${sensorIndex}].SettingsJson" value="${escapeAttribute(settingsJson)}" />
     </label>
   `;
 }
@@ -1147,13 +1432,230 @@ function initializeDiscoveryAssistantActions() {
   }
 
   const setChecked = (checked) => {
-    form.querySelectorAll(".discovery-suggestion-row input[type='checkbox'], .discovery-select input[type='checkbox']").forEach((checkbox) => {
+    form.querySelectorAll(".discovery-suggestion-row input[type='checkbox'], .discovery-host-row input[type='checkbox']").forEach((checkbox) => {
       checkbox.checked = checked;
     });
   };
 
   document.querySelector("[data-discovery-select-all]")?.addEventListener("click", () => setChecked(true));
   document.querySelector("[data-discovery-select-none]")?.addEventListener("click", () => setChecked(false));
+}
+
+function initializeDiscoveryResultTable() {
+  const panel = document.querySelector("[data-discovery-results-panel]");
+  if (!panel || panel.dataset.discoveryTableInitialized === "true") {
+    return;
+  }
+
+  panel.dataset.discoveryTableInitialized = "true";
+  panel.dataset.discoverySort = panel.dataset.discoverySort || "address";
+  panel.dataset.discoverySortDirection = panel.dataset.discoverySortDirection || "asc";
+
+  panel.querySelector("[data-discovery-filter]")?.addEventListener("input", () => applyDiscoveryTableState(panel));
+  panel.querySelector("[data-discovery-service-filter]")?.addEventListener("change", () => applyDiscoveryTableState(panel));
+
+  panel.querySelectorAll("[data-discovery-sort]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const sortKey = button.dataset.discoverySort || "address";
+      const currentSort = panel.dataset.discoverySort || "address";
+      const currentDirection = panel.dataset.discoverySortDirection || "asc";
+      panel.dataset.discoverySort = sortKey;
+      panel.dataset.discoverySortDirection = currentSort === sortKey && currentDirection === "asc" ? "desc" : "asc";
+      applyDiscoveryTableState(panel);
+    });
+  });
+
+  panel.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-discovery-toggle]");
+    if (!toggle) {
+      return;
+    }
+
+    const row = toggle.closest(".discovery-host-row");
+    if (!row) {
+      return;
+    }
+
+    const expanded = row.dataset.discoveryExpanded !== "true";
+    row.dataset.discoveryExpanded = expanded ? "true" : "false";
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggle.textContent = expanded ? "-" : "+";
+    applyDiscoveryTableState(panel);
+  });
+
+  applyDiscoveryTableState(panel);
+}
+
+function initializeDiscoveryJobList() {
+  const panel = document.querySelector("[data-discovery-jobs-panel]");
+  if (!panel) {
+    return;
+  }
+
+  const searchInput = panel.querySelector("[data-discovery-job-filter]");
+  const statusSelect = panel.querySelector("[data-discovery-job-status-filter]");
+  const visibleCount = panel.querySelector("[data-discovery-job-visible-count]");
+  const rows = Array.from(panel.querySelectorAll("[data-discovery-job-row]"));
+  const apply = () => {
+    const search = String(searchInput?.value || "").trim().toLowerCase();
+    const status = String(statusSelect?.value || "all").toLowerCase();
+    let count = 0;
+
+    rows.forEach((row) => {
+      const rowText = String(row.dataset.discoveryJobText || "").toLowerCase();
+      const rowStatus = String(row.dataset.discoveryJobStatus || "").toLowerCase();
+      const visible = (!search || rowText.includes(search)) && (status === "all" || rowStatus === status);
+      row.hidden = !visible;
+      if (visible) {
+        count++;
+      }
+    });
+
+    if (visibleCount) {
+      visibleCount.textContent = String(count);
+    }
+  };
+
+  searchInput?.addEventListener("input", apply);
+  statusSelect?.addEventListener("change", apply);
+  apply();
+}
+
+function applyDiscoveryTableState(panel) {
+  if (!panel) {
+    return;
+  }
+
+  const body = panel.querySelector("[data-discovery-result-list]");
+  if (!body) {
+    return;
+  }
+
+  const sortKey = panel.dataset.discoverySort || "address";
+  const sortDirection = panel.dataset.discoverySortDirection === "desc" ? "desc" : "asc";
+  const search = String(panel.querySelector("[data-discovery-filter]")?.value || "").trim().toLowerCase();
+  const serviceFilter = String(panel.querySelector("[data-discovery-service-filter]")?.value || "all");
+  const pairs = Array.from(body.querySelectorAll(".discovery-host-row")).map((row) => ({
+    row,
+    details: row.nextElementSibling?.classList.contains("discovery-suggestion-panel") ? row.nextElementSibling : null
+  }));
+
+  pairs.sort((left, right) => compareDiscoveryRows(left.row, right.row, sortKey, sortDirection));
+  pairs.forEach((pair) => {
+    body.appendChild(pair.row);
+    if (pair.details) {
+      body.appendChild(pair.details);
+    }
+  });
+
+  let visibleCount = 0;
+  pairs.forEach((pair) => {
+    const visible = discoveryRowMatches(pair.row, search, serviceFilter);
+    pair.row.hidden = !visible;
+    if (visible) {
+      visibleCount++;
+    }
+
+    const expanded = visible && pair.row.dataset.discoveryExpanded === "true";
+    const toggle = pair.row.querySelector("[data-discovery-toggle]");
+    if (toggle) {
+      toggle.textContent = expanded ? "-" : "+";
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+
+    if (pair.details) {
+      pair.details.hidden = !expanded;
+    }
+  });
+
+  panel.querySelectorAll("[data-discovery-sort]").forEach((button) => {
+    const active = button.dataset.discoverySort === sortKey;
+    button.classList.toggle("is-active", active);
+    button.dataset.direction = active ? sortDirection : "";
+  });
+
+  const visibleCountElement = panel.querySelector("[data-discovery-visible-count]");
+  if (visibleCountElement) {
+    visibleCountElement.textContent = String(visibleCount);
+  }
+}
+
+function discoveryRowMatches(row, search, serviceFilter) {
+  const searchableText = String(row.dataset.discoveryText || "").toLowerCase();
+  if (search && !searchableText.includes(search)) {
+    return false;
+  }
+
+  switch (serviceFilter) {
+    case "ping":
+      return row.dataset.discoveryPing === "ok";
+    case "ports":
+      return Number(row.dataset.discoveryPortCount || "0") > 0;
+    case "snmp":
+      return row.dataset.discoverySnmp === "true";
+    case "sensors":
+      return Number(row.dataset.discoverySensorCount || "0") > 0;
+    default:
+      return true;
+  }
+}
+
+function compareDiscoveryRows(left, right, sortKey, direction) {
+  const multiplier = direction === "desc" ? -1 : 1;
+  let result = 0;
+
+  switch (sortKey) {
+    case "host":
+      result = compareText(left.dataset.discoveryHost || "", right.dataset.discoveryHost || "");
+      break;
+    case "ping":
+      result = compareNumber(readDiscoveryNumber(left.dataset.discoveryPingMs, Number.POSITIVE_INFINITY), readDiscoveryNumber(right.dataset.discoveryPingMs, Number.POSITIVE_INFINITY));
+      break;
+    case "ports":
+      result = compareNumber(Number(left.dataset.discoveryPortCount || "0"), Number(right.dataset.discoveryPortCount || "0"));
+      break;
+    case "sensors":
+      result = compareNumber(Number(left.dataset.discoverySensorCount || "0"), Number(right.dataset.discoverySensorCount || "0"));
+      break;
+    default:
+      result = compareDiscoveryAddress(left.dataset.discoveryAddress || "", right.dataset.discoveryAddress || "");
+      break;
+  }
+
+  if (result === 0) {
+    result = compareDiscoveryAddress(left.dataset.discoveryAddress || "", right.dataset.discoveryAddress || "");
+  }
+
+  return result * multiplier;
+}
+
+function readDiscoveryNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function compareNumber(left, right) {
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+
+function compareText(left, right) {
+  return String(left || "").localeCompare(String(right || ""), undefined, { sensitivity: "base", numeric: true });
+}
+
+function compareDiscoveryAddress(left, right) {
+  const leftParts = String(left).split(".").map((part) => Number(part));
+  const rightParts = String(right).split(".").map((part) => Number(part));
+  if (leftParts.length === 4 && rightParts.length === 4 && leftParts.every(Number.isFinite) && rightParts.every(Number.isFinite)) {
+    for (let index = 0; index < 4; index++) {
+      if (leftParts[index] !== rightParts[index]) {
+        return leftParts[index] - rightParts[index];
+      }
+    }
+
+    return 0;
+  }
+
+  return compareText(left, right);
 }
 
 function discoveryStatusTone(status) {
@@ -1184,6 +1686,7 @@ function initializeMapDesigner() {
   const rowInput = form?.querySelector("[data-map-rows]");
   const mapNameInput = form?.querySelector("[data-map-name]");
   const mapDescriptionInput = form?.querySelector("[data-map-description]");
+  const displayPresetInput = form?.querySelector("[data-map-display-preset]");
   const mapPanel = form?.querySelector("[data-map-property-map-panel]");
   const mapSelectButton = form?.querySelector("[data-map-select-map]");
   const mapTitlePreview = form?.querySelector("[data-map-title-preview]");
@@ -1231,6 +1734,12 @@ function initializeMapDesigner() {
     Graph: "Uses the selected sensor history as a compact trend graph."
   };
   const colorPattern = /^#[0-9a-fA-F]{6}$/;
+  const presetOptions = {
+    FullHd1080: { width: 1920, height: 1080, label: "Optimized for Full HD" },
+    Qhd1440: { width: 2560, height: 1440, label: "Optimized for QHD" },
+    Uhd2160: { width: 3840, height: 2160, label: "Optimized for 4K UHD" },
+    Ultrawide3440x1440: { width: 3440, height: 1440, label: "Optimized for ultrawide" }
+  };
 
   const readGridValue = (value, fallback, min, max) => {
     const numeric = Number(value);
@@ -1246,6 +1755,7 @@ function initializeMapDesigner() {
   const syncMapSummary = (grid = readGrid()) => {
     const name = mapNameInput?.value?.trim() || "New Map";
     const description = mapDescriptionInput?.value?.trim() || "No description";
+    const preset = readDisplayPreset();
     if (mapTitlePreview) {
       mapTitlePreview.textContent = name;
     }
@@ -1253,12 +1763,27 @@ function initializeMapDesigner() {
       mapDescriptionPreview.textContent = description;
     }
     if (mapGridPreview) {
-      mapGridPreview.textContent = `${grid.columns} x ${grid.rows} grid`;
+      mapGridPreview.textContent = `${preset.label} · ${grid.columns} x ${grid.rows} grid`;
     }
+  };
+
+  const readDisplayPreset = () => {
+    const selected = displayPresetInput?.selectedOptions?.[0];
+    const key = String(displayPresetInput?.value || "").trim();
+    const preset = presetOptions[key] || presetOptions.FullHd1080;
+    const width = Number(selected?.dataset.displayWidth || preset.width || 1920);
+    const height = Number(selected?.dataset.displayHeight || preset.height || 1080);
+    const label = selected?.textContent?.trim() || preset.label;
+    return {
+      width: Number.isFinite(width) && width > 0 ? width : 1920,
+      height: Number.isFinite(height) && height > 0 ? height : 1080,
+      label
+    };
   };
 
   const syncGrid = (commit = false) => {
     const grid = readGrid();
+    const preset = readDisplayPreset();
     if (commit && columnInput) {
       columnInput.value = String(grid.columns);
     }
@@ -1268,6 +1793,10 @@ function initializeMapDesigner() {
 
     canvas.style.setProperty("--map-columns", String(grid.columns));
     canvas.style.setProperty("--map-rows", String(grid.rows));
+    canvas.style.setProperty("--map-display-width", String(preset.width));
+    canvas.style.setProperty("--map-display-height", String(preset.height));
+    canvas.style.width = `min(100%, ${preset.width}px)`;
+    canvas.style.aspectRatio = `${preset.width} / ${preset.height}`;
     const canvasWidth = Math.max(720, grid.columns * 72);
     canvas.style.minWidth = `${canvasWidth}px`;
     canvas.style.minHeight = `${Math.max(560, grid.rows * 72)}px`;
@@ -1652,6 +2181,8 @@ function initializeMapDesigner() {
   mapSelectButton?.addEventListener("click", selectMap);
   mapNameInput?.addEventListener("input", () => syncMapSummary());
   mapDescriptionInput?.addEventListener("input", () => syncMapSummary());
+  displayPresetInput?.addEventListener("change", () => syncGrid(true));
+  displayPresetInput?.addEventListener("input", () => syncGrid(true));
   columnInput?.addEventListener("input", () => syncGrid());
   columnInput?.addEventListener("change", () => syncGrid(true));
   rowInput?.addEventListener("input", () => syncGrid());

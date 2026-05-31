@@ -97,8 +97,10 @@ public static class SensorThresholdEvaluator
 
     private static string BuildThresholdMessage(string severity, ThresholdRule rule)
     {
-        var direction = rule.Direction == ThresholdDirection.Below ? "below" : "above";
-        return $"{severity} {direction} {FormatValue(rule.Value)}";
+        var severityLabel = string.Equals(severity, "critical", StringComparison.OrdinalIgnoreCase)
+            ? "error"
+            : severity;
+        return $"{severityLabel} {MonitoringSettings.FormatThresholdRule(rule)}";
     }
 
     private static string AppendMessage(string? existing, string addition)

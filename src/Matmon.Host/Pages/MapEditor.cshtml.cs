@@ -47,6 +47,8 @@ public sealed class MapEditorModel : PageModel
         new("Gauge", MonitoringMapTileVisualType.Gauge.ToString())
     ];
 
+    public IReadOnlyList<MonitoringMapDisplayPresetInfo> DisplayPresetOptions { get; } = MonitoringMapDisplayPresetCatalog.All;
+
     public bool IsCreateMode => !Input.Id.HasValue || Input.Id.Value == Guid.Empty;
 
     public IActionResult OnGet()
@@ -104,11 +106,11 @@ public sealed class MapEditorModel : PageModel
             MonitoringMap map;
             if (mapId == Guid.Empty)
             {
-                map = _workspaceStore.CreateMap(Input.Name, Input.Description, Input.Columns, Input.Rows, tiles);
+                map = _workspaceStore.CreateMap(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, tiles);
             }
             else
             {
-                if (!_workspaceStore.UpdateMap(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, tiles))
+                if (!_workspaceStore.UpdateMap(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, tiles))
                 {
                     return NotFound();
                 }
@@ -148,6 +150,7 @@ public sealed class MapEditorModel : PageModel
                 Description = map.Description,
                 Columns = map.Columns,
                 Rows = map.Rows,
+                DisplayPreset = map.DisplayPreset,
                 Tiles = map.Tiles.Select(tile => new MapTileInput
                 {
                     Id = tile.Id,
@@ -179,6 +182,7 @@ public sealed class MapEditorModel : PageModel
                 Description = "Wall display for the office.",
                 Columns = 12,
                 Rows = 8,
+                DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
                 Tiles =
                 [
                     new MapTileInput
@@ -241,6 +245,8 @@ public sealed class MapEditorInput
     public int Columns { get; set; } = 12;
 
     public int Rows { get; set; } = 8;
+
+    public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
 
     public List<MapTileInput> Tiles { get; set; } = [];
 }

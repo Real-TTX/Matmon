@@ -23,4 +23,10 @@ public sealed class NotificationRule
     public List<SensorState> TriggerStates { get; set; } = [];
 
     public int? CooldownMinutes { get; set; }
+
+    public string SubjectTemplate { get; set; } = string.Empty;
+
+    public string TextTemplate { get; set; } = string.Empty;
+
+    public string HtmlTemplate { get; set; } = string.Empty;
 }

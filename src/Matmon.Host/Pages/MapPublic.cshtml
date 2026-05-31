@@ -4,6 +4,7 @@
     Layout = null;
     var display = Model.Display!;
     ViewData["Title"] = display.Map.Name;
+    var preset = MonitoringMapDisplayPresetCatalog.Resolve(display.Map.DisplayPreset);
 }
 
 <!doctype html>
@@ -25,7 +26,7 @@
             <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
         </header>
 
-        <section class="map-canvas public-map-canvas" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows;">
+        <section class="map-canvas public-map-canvas" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows; --map-display-width: @preset.Width; --map-display-height: @preset.Height;">
             @foreach (var tile in display.Tiles)
             {
                 <article class="map-tile map-tile-display" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">

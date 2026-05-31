@@ -41,6 +41,15 @@ public sealed class DiscoveryModel : PageModel
     [BindProperty]
     public List<DiscoveryResultInput> Results { get; set; } = [];
 
+    [BindProperty]
+    public Guid ImportJobId { get; set; }
+
+    [BindProperty]
+    public List<string> SelectedHostAddresses { get; set; } = [];
+
+    [BindProperty]
+    public List<string> SelectedSuggestionKeys { get; set; } = [];
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -135,8 +144,14 @@ public sealed class DiscoveryModel : PageModel
     {
         try
         {
-            var probe = ResolveProbe(Input.ProbeElementId);
-            var selected = Results.Where(result => result.Selected).ToArray();
+            var job = ImportJobId == Guid.Empty ? null : _discoveryJobs.Find(ImportJobId);
+            var probe = job is not null
+                ? ResolveProbe(job.ProbeElementId)
+                : ResolveProbe(Input.ProbeElementId);
+            var importInput = Input;
+            var selected = job is not null
+                ? BuildSelectedResultsFromJob(job, out importInput)
+                : Results.Where(result => result.Selected).ToArray();
             if (selected.Length == 0)
             {
                 throw new InvalidOperationException("No discovered hosts selected.");
@@ -163,7 +178,7 @@ public sealed class DiscoveryModel : PageModel
                     reusedHosts++;
                 }
 
-                createdSensors += EnsureSelectedSensors(host, result, Input);
+                createdSensors += EnsureSelectedSensors(host, result, importInput);
             }
 
             StatusMessage = $"Discovery import done: {createdHosts} host{(createdHosts == 1 ? string.Empty : "s")} created, {reusedHosts} reused, {createdSensors} sensor{(createdSensors == 1 ? string.Empty : "s")} added.";
@@ -197,6 +212,7 @@ public sealed class DiscoveryModel : PageModel
                 Input.Network = job.Request.Network;
                 ApplyOptionsToInput(job.Request.Options, Input);
                 Results = job.Results.Select(ToInput).ToList();
+                ImportJobId = job.JobId;
             }
         }
 
@@ -207,6 +223,47 @@ public sealed class DiscoveryModel : PageModel
                 probe.Id == Input.ProbeElementId)).ToArray(),
             _discoveryJobs.GetRecent(),
             job);
+    }
+
+    private DiscoveryResultInput[] BuildSelectedResultsFromJob(
+        DiscoveryJobSnapshot job,
+        out DiscoveryInput importInput)
+    {
+        importInput = new DiscoveryInput
+        {
+            ProbeElementId = job.ProbeElementId,
+            Network = job.Request.Network
+        };
+        ApplyOptionsToInput(job.Request.Options, importInput);
+
+        var selectedAddresses = SelectedHostAddresses
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedAddresses.Count == 0)
+        {
+            return [];
+        }
+
+        var selectedSuggestions = SelectedSuggestionKeys
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToHashSet(StringComparer.Ordinal);
+
+        return job.Results
+            .Select(ToInput)
+            .Where(result => selectedAddresses.Contains(result.Address))
+            .Select(result =>
+            {
+                result.Selected = true;
+                foreach (var suggestion in result.SuggestedSensors)
+                {
+                    suggestion.Selected = selectedSuggestions.Contains(BuildSuggestionKey(result.Address, suggestion));
+                }
+
+                return result;
+            })
+            .ToArray();
     }
 
     private ProbeElement ResolveProbe(Guid probeElementId)
@@ -384,7 +441,7 @@ public sealed class DiscoveryModel : PageModel
             SnmpCommunity: snmpCommunity,
             SnmpVersion: snmpVersion,
             SnmpPort: snmpPort,
-            UseReverseDns: false,
+            UseReverseDns: true,
             TimeoutMs: timeoutMs,
             MaxHosts: Math.Max(hostCount, 1),
             Parallelism: Math.Min(Math.Max(hostCount, 1), defaults.Parallelism)).Normalized();
@@ -491,6 +548,11 @@ public sealed class DiscoveryModel : PageModel
             Confidence = suggestion.Confidence,
             SettingsJson = JsonSerializer.Serialize(suggestion.Settings, SettingsJsonOptions)
         };
+    }
+
+    private static string BuildSuggestionKey(string address, DiscoverySensorSuggestionInput suggestion)
+    {
+        return $"{address}|{suggestion.SensorTypeKey}|{suggestion.Target}|{suggestion.Name}";
     }
 
     private static HostElement? FindHostByAddress(ProbeElement probe, string address)
@@ -695,7 +757,7 @@ public sealed class DiscoveryInput
 
     public int? SnmpPort { get; set; } = 161;
 
-    public bool UseReverseDns { get; set; }
+    public bool UseReverseDns { get; set; } = true;
 
     public int? TimeoutMs { get; set; } = 650;
 

@@ -12,14 +12,10 @@
 }
 
 <section class="dashboard-shell">
-    <div class="page-header">
+    <div class="page-header has-summary">
         <div class="page-title">
             @MatmonIcons.Render("gear")
             <h1>System</h1>
-        </div>
-        <div class="mode-chip">
-            <span>Mode</span>
-            <strong>@Model.Overview.Mode</strong>
         </div>
     </div>
 
@@ -151,6 +147,13 @@
                                     @MatmonIcons.Render("pencil")
                                     <span>Edit</span>
                                 </a>
+                                @if (Model.CanInstallProbe(probe))
+                                {
+                                    <a class="workspace-secondary-submit" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes">
+                                        @MatmonIcons.Render("play")
+                                        <span>Install</span>
+                                    </a>
+                                }
                                 <form method="post" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId">
                                     <button type="submit" class="workspace-secondary-submit">
                                         @MatmonIcons.Render("arrow-right")
@@ -331,7 +334,6 @@
         <section class="panel config-block">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("lock")<span>Users</span></h2>
-                <span class="panel-hint">Admin, User, Viewer</span>
             </div>
 
             <div class="system-table system-user-table" role="table" aria-label="Matmon users">
@@ -339,67 +341,50 @@
                     <span role="columnheader">User</span>
                     <span role="columnheader">Role</span>
                     <span role="columnheader">Enabled</span>
-                    <span role="columnheader">Password</span>
+                    <span role="columnheader">Updated</span>
                     <span role="columnheader">Actions</span>
                 </div>
                 @foreach (var user in Model.Users)
                 {
-                    <form method="post" asp-page-handler="UpdateUser" class="system-table-row system-user-row" role="row">
-                        <input type="hidden" name="UserInput.Id" value="@user.Id" />
+                    <div class="system-table-row system-user-row" role="row">
                         <span role="cell">
-                            <input class="form-control workspace-input" name="UserInput.Username" value="@user.Username" />
-                            <small>Updated @Model.FormatDateTime(user.UpdatedUtc)</small>
+                            <strong>@user.Username</strong>
+                            <small>@user.Id</small>
+                            @if (Model.IsCurrentUser(user))
+                            {
+                                <span class="state-pill" data-state="ok">Current</span>
+                            }
                         </span>
+                        <span role="cell">@user.Role</span>
                         <span role="cell">
-                            <select class="form-select workspace-select" name="UserInput.Role">
-                                @foreach (var role in Enum.GetValues<MatmonUserRole>().OrderByDescending(role => role))
-                                {
-                                    <option value="@role" selected="@(role == user.Role ? "selected" : null)">@role</option>
-                                }
-                            </select>
+                            <span class="state-pill" data-state="@(user.IsEnabled ? "ok" : "error")">@(user.IsEnabled ? "Enabled" : "Disabled")</span>
                         </span>
-                        <span role="cell">
-                            <label class="workspace-check">
-                                <input type="checkbox" name="UserInput.IsEnabled" value="true" checked="@(user.IsEnabled ? "checked" : null)" />
-                                <input type="hidden" name="UserInput.IsEnabled" value="false" />
-                                Active
-                            </label>
-                        </span>
-                        <span role="cell">
-                            <input class="form-control workspace-input" type="password" name="UserInput.Password" placeholder="leave unchanged" autocomplete="new-password" />
-                        </span>
+                        <span role="cell">@Model.FormatDateTime(user.UpdatedUtc)</span>
                         <span role="cell" class="system-user-actions">
-                            <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("check")<span>Save</span></button>
-                            <button type="submit" asp-page-handler="DeleteUser" asp-route-userId="@user.Id" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
+                            @if (!Model.IsCurrentUser(user))
+                            {
+                                <a class="workspace-secondary-submit" asp-page="/UserEdit" asp-route-userId="@user.Id" asp-route-returnUrl="/Config?tab=users">
+                                    @MatmonIcons.Render("pencil")
+                                    <span>Edit</span>
+                                </a>
+                                <form method="post" asp-page-handler="DeleteUser" asp-route-userId="@user.Id" onsubmit="return confirm('Delete user @user.Username?');">
+                                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="workspace-inline-note">Current account</span>
+                            }
                         </span>
-                    </form>
+                    </div>
                 }
             </div>
-        </section>
-
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("plus")<span>New user</span></h2>
-                <span class="panel-hint">Admin can manage all areas, User can acknowledge alerts, Viewer is read-only.</span>
+            <div class="page-actions workspace-toolbar system-user-create-actions">
+                <a class="workspace-submit" asp-page="/UserCreate" asp-route-returnUrl="/Config?tab=users">
+                    @MatmonIcons.Render("plus")
+                    <span>Create user</span>
+                </a>
             </div>
-
-            <form method="post" asp-page-handler="CreateUser" class="workspace-form-grid">
-                <label class="workspace-field">
-                    <span class="workspace-label">Username</span>
-                    <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
-                </label>
-                <label class="workspace-field">
-                    <span class="workspace-label">Password</span>
-                    <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" />
-                </label>
-                <label class="workspace-field">
-                    <span class="workspace-label">Role</span>
-                    <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="form-select workspace-select"></select>
-                </label>
-                <div class="workspace-form-actions workspace-span-2">
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create user</span></button>
-                </div>
-            </form>
         </section>
     }
 </section>

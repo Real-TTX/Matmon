@@ -1,11 +1,32 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Matmon.Host.Services;
 
 public sealed class DiscoveryJobStore
 {
+    private const int PersistedJobLimit = 50;
+    private static readonly JsonSerializerOptions FileJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly ConcurrentDictionary<Guid, DiscoveryJobSnapshot> _jobs = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationSources = new();
+    private readonly ILogger<DiscoveryJobStore> _logger;
+    private readonly string _storePath;
+
+    public DiscoveryJobStore(
+        IHostEnvironment environment,
+        MatmonRuntimeOptions runtimeOptions,
+        ILogger<DiscoveryJobStore> logger)
+    {
+        _logger = logger;
+        _storePath = ResolveStorePath(environment, runtimeOptions);
+        LoadPersistedJobs();
+    }
 
     public DiscoveryJobSnapshot Create(
         Guid probeElementId,
@@ -28,6 +49,7 @@ public sealed class DiscoveryJobStore
 
         _jobs[job.JobId] = job;
         _cancellationSources[job.JobId] = new CancellationTokenSource();
+        PersistRecentJobs();
         return job;
     }
 
@@ -220,6 +242,7 @@ public sealed class DiscoveryJobStore
             source.Cancel();
         }
 
+        PersistRecentJobs();
         return true;
     }
 
@@ -261,7 +284,107 @@ public sealed class DiscoveryJobStore
                 : errorMessage.Trim();
         }
 
+        PersistRecentJobs();
         return true;
+    }
+
+    private void LoadPersistedJobs()
+    {
+        try
+        {
+            if (!File.Exists(_storePath))
+            {
+                return;
+            }
+
+            var document = JsonSerializer.Deserialize<DiscoveryJobStoreDocument>(
+                File.ReadAllText(_storePath),
+                FileJsonOptions);
+            if (document?.Jobs is null)
+            {
+                return;
+            }
+
+            foreach (var job in document.Jobs
+                .Where(job => job.JobId != Guid.Empty)
+                .OrderByDescending(job => job.CreatedUtc)
+                .Take(PersistedJobLimit))
+            {
+                if (job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running)
+                {
+                    job.Status = DiscoveryJobStatus.Cancelled;
+                    job.CompletedUtc ??= DateTimeOffset.UtcNow;
+                    job.Message = "Discovery was interrupted by an application restart.";
+                }
+
+                _jobs[job.JobId] = job;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load persisted discovery jobs from {DiscoveryJobStorePath}", _storePath);
+        }
+    }
+
+    private void PersistRecentJobs()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_storePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var jobs = _jobs.Values
+                .OrderByDescending(job => job.CreatedUtc)
+                .Take(PersistedJobLimit)
+                .Select(CloneJob)
+                .ToArray();
+            var document = new DiscoveryJobStoreDocument(jobs);
+            File.WriteAllText(_storePath, JsonSerializer.Serialize(document, FileJsonOptions));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist discovery jobs to {DiscoveryJobStorePath}", _storePath);
+        }
+    }
+
+    private static DiscoveryJobSnapshot CloneJob(DiscoveryJobSnapshot job)
+    {
+        lock (job)
+        {
+            return new DiscoveryJobSnapshot
+            {
+                JobId = job.JobId,
+                ProbeElementId = job.ProbeElementId,
+                ProbeId = job.ProbeId,
+                ProbeName = job.ProbeName,
+                Request = job.Request,
+                Status = job.Status,
+                CreatedUtc = job.CreatedUtc,
+                StartedUtc = job.StartedUtc,
+                CompletedUtc = job.CompletedUtc,
+                Results = job.Results.ToArray(),
+                Message = job.Message,
+                TotalHosts = job.TotalHosts,
+                ScannedHosts = job.ScannedHosts
+            };
+        }
+    }
+
+    private static string ResolveStorePath(IHostEnvironment environment, MatmonRuntimeOptions runtimeOptions)
+    {
+        var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
+            ? "data/workspace.json"
+            : runtimeOptions.WorkspacePath;
+        var workspacePath = Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
+        var dataDirectory = Path.GetDirectoryName(workspacePath)
+            ?? Path.Combine(environment.ContentRootPath, "data");
+
+        return Path.Combine(dataDirectory, "discovery-jobs.json");
     }
 
     private static int CountTargets(NetworkDiscoveryRequest request)
@@ -358,6 +481,9 @@ public sealed record DiscoveryJobStatusResponse(
     int TotalHosts,
     int ProgressPercent,
     IReadOnlyList<NetworkDiscoveryResult> Results);
+
+public sealed record DiscoveryJobStoreDocument(
+    IReadOnlyList<DiscoveryJobSnapshot> Jobs);
 
 public static class DiscoveryDefaults
 {

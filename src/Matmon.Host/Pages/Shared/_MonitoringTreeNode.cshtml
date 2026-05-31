@@ -6,6 +6,8 @@
     var canAddSensor = Model.Kind != MonitoringElementKind.Sensor;
     var canDiscover = Model.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
+    var canDelete = !(Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0);
+    var isRootMasterProbe = Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0;
     var sensorChildren = Model.Children.Where(child => child.Kind == MonitoringElementKind.Sensor).ToArray();
     var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
     var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
@@ -20,7 +22,7 @@
     };
 }
 
-<article class="monitoring-tree-node @(Model.Children.Count > 0 ? "is-branch" : "is-leaf")"
+<article class="monitoring-tree-node @(Model.Children.Count > 0 ? "is-branch" : "is-leaf") @(isRootMasterProbe ? "is-master-probe" : string.Empty)"
          data-tree-node
          data-tree-node-id="@Model.Id"
          data-tree-kind="@Model.Kind.ToString().ToLowerInvariant()"
@@ -71,6 +73,7 @@
                             @MatmonIcons.Render("move")
                             <span>Move</span>
                         </button>
+                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
                         <form method="post"
                               asp-page-handler="ToggleSensorPause"
                               asp-route-sensorId="@Model.Id"
@@ -80,6 +83,20 @@
                                 <span>@(Model.IsPaused ? "Resume" : "Pause")</span>
                             </button>
                         </form>
+                        @if (canDelete)
+                        {
+                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                            <form method="post"
+                                  asp-page-handler="DeleteElement"
+                                  onsubmit="return confirm('Delete this sensor?');">
+                                <input type="hidden" name="ElementEditor.Id" value="@Model.Id" />
+                                <input type="hidden" name="ReturnUrl" value="@returnUrl" />
+                                <button type="submit" class="workspace-action-menu-link">
+                                    @MatmonIcons.Render("trash")
+                                    <span>Delete</span>
+                                </button>
+                            </form>
+                        }
                     </div>
                 </details>
             </article>
@@ -158,14 +175,41 @@
                 <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
             }
             <div class="workspace-row-actions">
-                <details class="workspace-action-menu @(hasChildActions ? string.Empty : "is-empty")">
-                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Add child element" title="Add child element">
-                        @MatmonIcons.Render("plus")
-                        <span>Add</span>
+                <details class="workspace-action-menu">
+                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Element actions" title="Element actions">
+                        @MatmonIcons.Render("more")
+                        <span>Actions</span>
                     </summary>
                     <div class="workspace-action-menu-panel">
+                        @if (canDiscover)
+                        {
+                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
+                                <input type="hidden" name="scopeElementId" value="@Model.Id" />
+                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                <button type="submit" class="workspace-action-menu-link">
+                                    @MatmonIcons.Render("search")
+                                    <span>Discover sensors</span>
+                                </button>
+                            </form>
+                        }
+                        @if (Model.Kind == MonitoringElementKind.Probe)
+                        {
+                            <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                                @MatmonIcons.Render("chart")
+                                <span>Usage details</span>
+                            </a>
+                        }
+                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
+                            @MatmonIcons.Render("pencil")
+                            <span>Edit</span>
+                        </a>
+                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
+                            @MatmonIcons.Render("move")
+                            <span>Move</span>
+                        </button>
                         @if (hasChildActions)
                         {
+                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
                             @if (canAddFolder)
                             {
                                 <a class="workspace-action-menu-link" asp-page="/FolderCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
@@ -188,38 +232,20 @@
                                 </a>
                             }
                         }
-                        else
+                        @if (canDelete)
                         {
-                            <span class="workspace-action-menu-empty">No child actions</span>
-                        }
-                    </div>
-                </details>
-
-                <details class="workspace-action-menu">
-                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Element actions" title="Element actions">
-                        @MatmonIcons.Render("more")
-                        <span>Actions</span>
-                    </summary>
-                    <div class="workspace-action-menu-panel">
-                        @if (canDiscover)
-                        {
-                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
-                                <input type="hidden" name="scopeElementId" value="@Model.Id" />
-                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                            <form method="post"
+                                  asp-page-handler="DeleteElement"
+                                  onsubmit="return confirm('Delete this element and all children?');">
+                                <input type="hidden" name="ElementEditor.Id" value="@Model.Id" />
+                                <input type="hidden" name="ReturnUrl" value="@returnUrl" />
                                 <button type="submit" class="workspace-action-menu-link">
-                                    @MatmonIcons.Render("search")
-                                    <span>Discover sensors</span>
+                                    @MatmonIcons.Render("trash")
+                                    <span>Delete</span>
                                 </button>
                             </form>
                         }
-                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
-                            @MatmonIcons.Render("pencil")
-                            <span>Edit</span>
-                        </a>
-                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
-                            @MatmonIcons.Render("move")
-                            <span>Move</span>
-                        </button>
                     </div>
                 </details>
                 <button type="button" class="workspace-secondary-submit monitoring-action-trigger monitoring-move-target" data-tree-move-target hidden aria-label="Move element here" title="Move element here">
@@ -236,8 +262,9 @@
                 @if (sensorChildren.Length > 0)
                 {
                     <div class="monitoring-sensor-strip monitoring-tree-sensor-level">
-                        @foreach (var sensor in sensorChildren)
+                        @for (var sensorIndex = 0; sensorIndex < sensorChildren.Length; sensorIndex++)
                         {
+                            var sensor = sensorChildren[sensorIndex];
                             var sensorStatusIcon = sensor.StateKey switch
                             {
                                 "ok" => "check",
@@ -288,6 +315,32 @@
                                             @MatmonIcons.Render("move")
                                             <span>Move</span>
                                         </button>
+                                        @if (sensorIndex > 0)
+                                        {
+                                            <form method="post"
+                                                  asp-page-handler="MoveElementBefore"
+                                                  asp-route-elementId="@sensor.Id"
+                                                  asp-route-siblingId="@sensorChildren[sensorIndex - 1].Id"
+                                                  asp-route-returnUrl="@returnUrl">
+                                                <button type="submit" class="workspace-action-menu-link">
+                                                    @MatmonIcons.Render("arrow-left")
+                                                    <span>Move left</span>
+                                                </button>
+                                            </form>
+                                        }
+                                        @if (sensorIndex < sensorChildren.Length - 1)
+                                        {
+                                            <form method="post"
+                                                  asp-page-handler="MoveElementAfter"
+                                                  asp-route-elementId="@sensor.Id"
+                                                  asp-route-siblingId="@sensorChildren[sensorIndex + 1].Id"
+                                                  asp-route-returnUrl="@returnUrl">
+                                                <button type="submit" class="workspace-action-menu-link">
+                                                    @MatmonIcons.Render("arrow-right")
+                                                    <span>Move right</span>
+                                                </button>
+                                            </form>
+                                        }
                                         <form method="post"
                                               asp-page-handler="ToggleSensorPause"
                                               asp-route-sensorId="@sensor.Id"

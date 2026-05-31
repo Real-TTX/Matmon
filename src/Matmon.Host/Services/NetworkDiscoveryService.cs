@@ -2,7 +2,9 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using Matmon.Core.Domain;
 
 namespace Matmon.Host.Services;
@@ -111,11 +113,16 @@ public sealed class NetworkDiscoveryService
         var openPorts = options.UseTcpPorts
             ? await FindOpenTcpPortsAsync(address, options.TcpPorts, timeout, cancellationToken)
             : [];
-        var (snmpResponded, snmpSummary) = options.UseSnmp
+        var (snmpResponded, snmpSummary, snmpHostName) = options.UseSnmp
             ? await TryProbeSnmpAsync(address, options, timeout, cancellationToken)
-            : (false, null);
-        var hostName = options.UseReverseDns
+            : (false, null, null);
+        var hasDiscoverySignal = pingMs is not null || openPorts.Count > 0 || snmpResponded;
+        var hostName = hasDiscoverySignal && options.UseReverseDns
             ? await TryReverseDnsAsync(address, TimeSpan.FromMilliseconds(Math.Min(options.TimeoutMs, 900)), cancellationToken)
+            : null;
+        hostName ??= snmpHostName;
+        hostName ??= hasDiscoverySignal && options.UseReverseDns
+            ? await TryTlsCertificateHostNameAsync(address, openPorts, timeout, cancellationToken)
             : null;
         var suggestedSensors = await DiscoverSensorSuggestionsAsync(
             new SensorDiscoveryContext(
@@ -259,7 +266,7 @@ public sealed class NetworkDiscoveryService
         }
     }
 
-    private static async Task<(bool Responded, string? Summary)> TryProbeSnmpAsync(
+    private static async Task<(bool Responded, string? Summary, string? HostName)> TryProbeSnmpAsync(
         string address,
         NetworkDiscoveryOptions options,
         TimeSpan timeout,
@@ -282,13 +289,14 @@ public sealed class NetworkDiscoveryService
                 timeout,
                 cancellationToken);
 
+            var hostName = items.FirstOrDefault(item => item.Oid.EndsWith(".5.0", StringComparison.Ordinal))?.Value;
             var summary = items.FirstOrDefault(item => item.Oid.EndsWith(".1.0", StringComparison.Ordinal))?.Value
                 ?? items.FirstOrDefault()?.Value;
-            return (items.Count > 0, Truncate(summary, 80));
+            return (items.Count > 0, Truncate(summary, 80), NormalizeDiscoveredHostName(hostName));
         }
         catch
         {
-            return (false, null);
+            return (false, null, null);
         }
     }
 
@@ -297,15 +305,241 @@ public sealed class NetworkDiscoveryService
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        var hostName = await TryPtrReverseDnsAsync(address, timeout, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(hostName))
+        {
+            return hostName;
+        }
+
+        return await TryNetBiosNameAsync(address, timeout, cancellationToken);
+    }
+
+    private static async Task<string?> TryTlsCertificateHostNameAsync(
+        string address,
+        IReadOnlyList<int> openPorts,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var candidatePorts = openPorts
+            .Where(port => port is 443 or 5001 or 5986 or 8006 or 8443)
+            .Take(3)
+            .ToArray();
+        if (candidatePorts.Length == 0)
+        {
+            return null;
+        }
+
+        foreach (var port in candidatePorts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var hostName = await TryTlsCertificateHostNameAsync(address, port, timeout, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(hostName))
+            {
+                return hostName;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<string?> TryTlsCertificateHostNameAsync(
+        string address,
+        int port,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var entry = await Dns.GetHostEntryAsync(address, cancellationToken).WaitAsync(timeout, cancellationToken);
-            return string.IsNullOrWhiteSpace(entry.HostName) ? null : entry.HostName;
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeout);
+            using var client = new TcpClient();
+            await client.ConnectAsync(address, port, timeoutCts.Token);
+            await using var stream = client.GetStream();
+            using var sslStream = new SslStream(stream, leaveInnerStreamOpen: false, (_, _, _, _) => true);
+            await sslStream.AuthenticateAsClientAsync(address).WaitAsync(timeout, timeoutCts.Token);
+
+            if (sslStream.RemoteCertificate is null)
+            {
+                return null;
+            }
+
+            using var certificate = new X509Certificate2(sslStream.RemoteCertificate);
+            return NormalizeDiscoveredHostName(certificate.GetNameInfo(X509NameType.DnsName, forIssuer: false));
         }
         catch
         {
             return null;
         }
+    }
+
+    private static async Task<string?> TryPtrReverseDnsAsync(
+        string address,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var entry = await Dns.GetHostEntryAsync(address, cancellationToken).WaitAsync(timeout, cancellationToken);
+            return NormalizeDiscoveredHostName(entry.HostName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task<string?> TryNetBiosNameAsync(
+        string address,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (!IPAddress.TryParse(address, out var ipAddress) ||
+            ipAddress.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeout);
+            using var client = new UdpClient(AddressFamily.InterNetwork);
+            var endpoint = new IPEndPoint(ipAddress, 137);
+            var query = BuildNetBiosStatusQuery();
+
+            await client.SendAsync(query, query.Length, endpoint).WaitAsync(timeout, timeoutCts.Token);
+            var response = await client.ReceiveAsync().WaitAsync(timeout, timeoutCts.Token);
+            return NormalizeDiscoveredHostName(ParseNetBiosName(response.Buffer));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static byte[] BuildNetBiosStatusQuery()
+    {
+        var query = new byte[50];
+        var transactionId = (ushort)Random.Shared.Next(1, ushort.MaxValue);
+        query[0] = (byte)(transactionId >> 8);
+        query[1] = (byte)transactionId;
+        query[5] = 1;
+        query[12] = 32;
+
+        Span<byte> encodedName = query.AsSpan(13, 32);
+        Span<byte> netBiosName = stackalloc byte[16];
+        netBiosName.Fill((byte)' ');
+        netBiosName[0] = (byte)'*';
+
+        for (var index = 0; index < netBiosName.Length; index++)
+        {
+            var value = netBiosName[index];
+            encodedName[index * 2] = (byte)('A' + ((value >> 4) & 0x0F));
+            encodedName[index * 2 + 1] = (byte)('A' + (value & 0x0F));
+        }
+
+        query[45] = 0;
+        query[46] = 0;
+        query[47] = 0x21;
+        query[48] = 0;
+        query[49] = 1;
+        return query;
+    }
+
+    private static string? ParseNetBiosName(byte[] response)
+    {
+        const int headerLength = 12;
+        if (response.Length < headerLength + 12)
+        {
+            return null;
+        }
+
+        var offset = headerLength;
+        if (!SkipDnsName(response, ref offset) || offset + 4 > response.Length)
+        {
+            return null;
+        }
+
+        offset += 4;
+        if (!SkipDnsName(response, ref offset) || offset + 10 > response.Length)
+        {
+            return null;
+        }
+
+        offset += 8;
+        var dataLength = (response[offset] << 8) | response[offset + 1];
+        offset += 2;
+        if (dataLength <= 1 || offset + dataLength > response.Length)
+        {
+            return null;
+        }
+
+        var nameCount = response[offset++];
+        string? fallbackName = null;
+
+        for (var index = 0; index < nameCount && offset + 18 <= response.Length; index++, offset += 18)
+        {
+            var rawName = System.Text.Encoding.ASCII.GetString(response, offset, 15).Trim();
+            var suffix = response[offset + 15];
+            var flags = (response[offset + 16] << 8) | response[offset + 17];
+            var isGroupName = (flags & 0x8000) != 0;
+
+            if (string.IsNullOrWhiteSpace(rawName) || rawName == "*")
+            {
+                continue;
+            }
+
+            if (!isGroupName && suffix is 0x00 or 0x20)
+            {
+                return rawName;
+            }
+
+            fallbackName ??= rawName;
+        }
+
+        return fallbackName;
+    }
+
+    private static bool SkipDnsName(byte[] packet, ref int offset)
+    {
+        while (offset < packet.Length)
+        {
+            var length = packet[offset++];
+            if (length == 0)
+            {
+                return true;
+            }
+
+            if ((length & 0xC0) == 0xC0)
+            {
+                offset++;
+                return offset <= packet.Length;
+            }
+
+            offset += length;
+            if (offset > packet.Length)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static string? NormalizeDiscoveredHostName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var hostName = value.Trim().TrimEnd('.');
+        if (hostName.Length == 0 || IPAddress.TryParse(hostName, out _))
+        {
+            return null;
+        }
+
+        return hostName;
     }
 
     private static string? Truncate(string? value, int maxLength)

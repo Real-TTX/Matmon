@@ -112,6 +112,9 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizePage("/MapEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ProbeCreate", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/ProbeInstall", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/UserCreate", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/UserEdit", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/FolderCreate", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/HostCreate", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SensorCreate", MatmonSecurity.AdminPolicy);
@@ -343,13 +346,26 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, PingSensorExecutor>();
     services.AddHttpClient<HttpSensorExecutor>();
     services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<HttpSensorExecutor>());
+    services.AddHttpClient<HttpAdvancedSensorExecutor>();
+    services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<HttpAdvancedSensorExecutor>());
     services.AddTransient<ISensorExecutor, SnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, SynologyNasSensorExecutor>();
+    services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
+    services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxPveSensorExecutor>();
     services.AddTransient<ISensorExecutor, PowerShellRemoteSensorExecutor>();
+    services.AddTransient<ISensorExecutor, WindowsServiceSensorExecutor>();
+    services.AddTransient<ISensorExecutor, WindowsProcessSensorExecutor>();
+    services.AddTransient<ISensorExecutor, LinuxSshHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, SslCertificateSensorExecutor>();
+    services.AddTransient<ISensorExecutor, CertificateChainSensorExecutor>();
     services.AddTransient<ISensorExecutor, MssqlSensorExecutor>();
     services.AddTransient<ISensorExecutor, TcpPortSensorExecutor>();
+    services.AddTransient<ISensorExecutor, DnsSensorExecutor>();
+    services.AddTransient<ISensorExecutor, NtpSensorExecutor>();
+    services.AddTransient<ISensorExecutor, DockerContainerSensorExecutor>();
+    services.AddTransient<ISensorExecutor, BackupJobSensorExecutor>();
+    services.AddTransient<ISensorExecutor, DiskSmartSensorExecutor>();
     services.AddTransient<ProbeHeartbeatSensorExecutor>();
     services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHeartbeatSensorExecutor>());
     services.AddTransient<ProbeHealthSensorExecutor>();

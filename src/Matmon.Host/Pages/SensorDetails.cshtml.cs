@@ -34,6 +34,8 @@ public sealed class SensorDetailsModel : PageModel
     [TempData]
     public string? ErrorMessage { get; set; }
 
+    public string CurrentUrl => $"{Request.Path}{Request.QueryString}";
+
     public SensorDetailsViewModel View { get; private set; } = default!;
 
     public IActionResult OnGet()
@@ -122,6 +124,7 @@ public sealed class SensorDetailsModel : PageModel
         var effectiveSettings = _resolver.Resolve(lineage, templateMap);
         var sensorDefinition = workspace.SensorDefinitions.FirstOrDefault(def =>
             string.Equals(def.Key, sensor.SensorTypeKey, StringComparison.OrdinalIgnoreCase));
+        var usageLevel = sensorDefinition?.UsageLevel ?? SensorUsageCatalog.Resolve(sensor.SensorTypeKey);
         var history = _workspaceStore.GetSensorHistory(sensor.Id, TimeSpan.FromDays(7), maxCount: 5000);
         var latestObservation = history.LastOrDefault();
         var defaultChannelKey = effectiveSettings.DefaultChannelKey;
@@ -157,6 +160,8 @@ public sealed class SensorDetailsModel : PageModel
             string.Join(" / ", lineage.Select(item => item.Name)),
             sensorDefinition?.DisplayName ?? sensor.SensorTypeKey,
             sensor.SensorTypeKey,
+            SensorUsageCatalog.Key(usageLevel),
+            SensorUsageCatalog.Label(usageLevel),
             SensorTargetResolver.Resolve(sensor, lineage),
             effectiveSettings.Summary(),
             currentStateKey,
@@ -423,6 +428,8 @@ public sealed record SensorDetailsViewModel(
     string Path,
     string SensorTypeLabel,
     string SensorTypeKey,
+    string UsageLevelKey,
+    string UsageLevelLabel,
     string Target,
     string SettingsSummary,
     string StateKey,

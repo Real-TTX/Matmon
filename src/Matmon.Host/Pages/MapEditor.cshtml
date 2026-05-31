@@ -69,7 +69,7 @@
                             <strong data-map-title-preview>@Model.Input.Name</strong>
                             <small data-map-description-preview>@(string.IsNullOrWhiteSpace(Model.Input.Description) ? "No description" : Model.Input.Description)</small>
                         </span>
-                        <em data-map-grid-preview>@Model.Input.Columns x @Model.Input.Rows grid</em>
+                        <em data-map-grid-preview>@MapPresetText(Model.Input.DisplayPreset) · @Model.Input.Columns x @Model.Input.Rows grid</em>
                     </button>
                     <div class="map-editor-canvas"
                          data-map-designer
@@ -116,6 +116,17 @@
                         <label class="workspace-field">
                             <span class="workspace-label">Description</span>
                             <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Optimized for</span>
+                            <select asp-for="Input.DisplayPreset" class="form-select workspace-select" data-map-display-preset>
+                                @foreach (var option in Model.DisplayPresetOptions)
+                                {
+                                    <option value="@option.Value" data-display-width="@option.Width" data-display-height="@option.Height" selected="@(Model.Input.DisplayPreset == option.Value ? "selected" : null)">
+                                        @option.Label
+                                    </option>
+                                }
+                            </select>
                         </label>
                         <div class="map-property-section">
                             <span class="workspace-label">Canvas</span>
@@ -299,6 +310,12 @@
 </section>
 
 @functions {
+    private static string MapPresetText(MonitoringMapDisplayPreset preset)
+    {
+        var info = MonitoringMapDisplayPresetCatalog.Resolve(preset);
+        return $"{info.Width} x {info.Height}";
+    }
+
     private static string KindLabel(MonitoringMapTileKind kind)
     {
         return kind switch

@@ -8,6 +8,8 @@ public sealed record SensorDefinition
 
     public string Description { get; init; } = string.Empty;
 
+    public SensorUsageLevel? UsageLevel { get; init; }
+
     public SensorChannelMode ChannelMode { get; init; } = SensorChannelMode.Dynamic;
 
     public IReadOnlyList<SensorParameterDefinition> Parameters { get; init; } = [];

@@ -5,7 +5,11 @@ namespace Matmon.Core.Domain;
 public enum ThresholdDirection
 {
     Above = 0,
-    Below = 1
+    AboveOrEqual = 1,
+    Below = 2,
+    BelowOrEqual = 3,
+    Equal = 4,
+    NotEqual = 5
 }
 
 public readonly record struct ThresholdRule(ThresholdDirection Direction, double Value);
@@ -325,7 +329,8 @@ public sealed class MonitoringSettings
             return true;
         }
 
-        return TryReadLegacyChannelThreshold(settings, channelKey, severity, out rule);
+        rule = default;
+        return false;
     }
 
     public static void SetChannelThreshold(
@@ -351,27 +356,27 @@ public sealed class MonitoringSettings
             return true;
         }
 
-        if (double.TryParse(trimmed, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var numericValue))
-        {
-            rule = new ThresholdRule(ThresholdDirection.Above, numericValue);
-            return true;
-        }
-
         rule = default;
         return false;
     }
 
     public static string FormatThresholdRule(ThresholdRule rule)
     {
-        var direction = rule.Direction == ThresholdDirection.Below ? "below" : "above";
-        return $"{direction}:{rule.Value.ToString("0.###", CultureInfo.InvariantCulture)}";
+        return $"{GetThresholdSymbol(rule.Direction)} {rule.Value.ToString("0.###", CultureInfo.InvariantCulture)}";
     }
 
     public static bool IsThresholdBreached(ThresholdRule rule, double value)
     {
+        const double epsilon = 0.000001d;
+
         return rule.Direction switch
         {
-            ThresholdDirection.Below => value <= rule.Value,
+            ThresholdDirection.Above => value > rule.Value,
+            ThresholdDirection.AboveOrEqual => value >= rule.Value,
+            ThresholdDirection.Below => value < rule.Value,
+            ThresholdDirection.BelowOrEqual => value <= rule.Value,
+            ThresholdDirection.Equal => Math.Abs(value - rule.Value) <= epsilon,
+            ThresholdDirection.NotEqual => Math.Abs(value - rule.Value) > epsilon,
             _ => value >= rule.Value
         };
     }
@@ -517,75 +522,49 @@ public sealed class MonitoringSettings
 
     private static bool TryParseThresholdDirectionValue(string raw, out ThresholdRule rule)
     {
-        if (raw.StartsWith(">=", StringComparison.Ordinal))
+        var symbolPrefixes = new (string Prefix, ThresholdDirection Direction)[]
         {
-            var valueText = raw[2..].Trim();
+            (">=", ThresholdDirection.AboveOrEqual),
+            ("<=", ThresholdDirection.BelowOrEqual),
+            ("<>", ThresholdDirection.NotEqual),
+            ("!=", ThresholdDirection.NotEqual),
+            ("==", ThresholdDirection.Equal),
+            (">", ThresholdDirection.Above),
+            ("<", ThresholdDirection.Below),
+            ("=", ThresholdDirection.Equal)
+        };
+
+        foreach (var (prefix, symbolDirection) in symbolPrefixes)
+        {
+            if (!raw.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var valueText = raw[prefix.Length..].Trim();
             if (double.TryParse(valueText, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
             {
-                rule = new ThresholdRule(ThresholdDirection.Above, value);
+                rule = new ThresholdRule(symbolDirection, value);
                 return true;
             }
-        }
-
-        if (raw.StartsWith("<=", StringComparison.Ordinal))
-        {
-            var valueText = raw[2..].Trim();
-            if (double.TryParse(valueText, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
-            {
-                rule = new ThresholdRule(ThresholdDirection.Below, value);
-                return true;
-            }
-        }
-
-        if (raw.StartsWith(">", StringComparison.Ordinal))
-        {
-            var valueText = raw[1..].Trim();
-            if (double.TryParse(valueText, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
-            {
-                rule = new ThresholdRule(ThresholdDirection.Above, value);
-                return true;
-            }
-        }
-
-        if (raw.StartsWith("<", StringComparison.Ordinal))
-        {
-            var valueText = raw[1..].Trim();
-            if (double.TryParse(valueText, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
-            {
-                rule = new ThresholdRule(ThresholdDirection.Below, value);
-                return true;
-            }
-        }
-
-        var parts = raw.Split(':', 2, StringSplitOptions.TrimEntries);
-        if (parts.Length == 2 && TryParseThresholdDirection(parts[0], out var direction) &&
-            double.TryParse(parts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var numericValue))
-        {
-            rule = new ThresholdRule(direction, numericValue);
-            return true;
         }
 
         rule = default;
         return false;
     }
 
-    private static bool TryParseThresholdDirection(string raw, out ThresholdDirection direction)
+    private static string GetThresholdSymbol(ThresholdDirection direction)
     {
-        var normalized = raw.Trim().ToLowerInvariant();
-        if (normalized is "below" or "under" or "lt" or "lower")
+        return direction switch
         {
-            direction = ThresholdDirection.Below;
-            return true;
-        }
-
-        if (normalized is "above" or "over" or "gt" or "higher")
-        {
-            direction = ThresholdDirection.Above;
-            return true;
-        }
-
-        direction = default;
-        return false;
+            ThresholdDirection.Above => ">",
+            ThresholdDirection.AboveOrEqual => ">=",
+            ThresholdDirection.Below => "<",
+            ThresholdDirection.BelowOrEqual => "<=",
+            ThresholdDirection.Equal => "=",
+            ThresholdDirection.NotEqual => "<>",
+            _ => ">"
+        };
     }
 
     private static string NormalizeSeverity(string severity)
@@ -597,42 +576,6 @@ public sealed class MonitoringSettings
             WarningSeverity => WarningSeverity,
             _ => throw new ArgumentException("Severity must be warning or critical.", nameof(severity))
         };
-    }
-
-    private static bool TryReadLegacyChannelThreshold(
-        MonitoringSettings settings,
-        string channelKey,
-        string severity,
-        out ThresholdRule rule)
-    {
-        if (string.Equals(channelKey, "latency", StringComparison.OrdinalIgnoreCase))
-        {
-            var legacyKey = string.Equals(NormalizeSeverity(severity), CriticalSeverity, StringComparison.OrdinalIgnoreCase)
-                ? "criticalLatencyMs"
-                : "warningLatencyMs";
-
-            if (TryReadThresholdMs(settings, legacyKey, out var latencyThreshold))
-            {
-                rule = new ThresholdRule(ThresholdDirection.Above, latencyThreshold);
-                return true;
-            }
-        }
-
-        if (string.Equals(channelKey, "ageSeconds", StringComparison.OrdinalIgnoreCase))
-        {
-            var legacyKey = string.Equals(NormalizeSeverity(severity), CriticalSeverity, StringComparison.OrdinalIgnoreCase)
-                ? "criticalAgeSeconds"
-                : "warningAgeSeconds";
-
-            if (TryReadParameterInt(settings, legacyKey, out var ageThreshold))
-            {
-                rule = new ThresholdRule(ThresholdDirection.Above, ageThreshold);
-                return true;
-            }
-        }
-
-        rule = default;
-        return false;
     }
 
     private static string FormatDuration(TimeSpan duration)

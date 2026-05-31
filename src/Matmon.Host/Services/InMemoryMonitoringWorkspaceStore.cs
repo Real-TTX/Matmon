@@ -127,6 +127,16 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         }
     }
 
+    public MatmonUser? FindUser(Guid userId)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            return user is null ? null : CloneUser(user);
+        }
+    }
+
     public MatmonUser? ValidateUser(string username, string password)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
@@ -288,6 +298,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         string? description,
         int columns,
         int rows,
+        MonitoringMapDisplayPreset displayPreset,
         IReadOnlyList<MonitoringMapTile> tiles)
     {
         lock (_gate)
@@ -300,6 +311,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
                 Columns = Math.Clamp(columns, 4, 24),
                 Rows = Math.Clamp(rows, 3, 16),
+                DisplayPreset = displayPreset,
                 PublicToken = CreateToken(),
                 CreatedUtc = now,
                 UpdatedUtc = now,
@@ -318,6 +330,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         string? description,
         int columns,
         int rows,
+        MonitoringMapDisplayPreset displayPreset,
         IReadOnlyList<MonitoringMapTile> tiles)
     {
         lock (_gate)
@@ -335,6 +348,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             map.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
             map.Columns = normalizedColumns;
             map.Rows = normalizedRows;
+            map.DisplayPreset = displayPreset;
             map.Tiles = NormalizeMapTiles(tiles, normalizedColumns, normalizedRows).ToList();
             map.UpdatedUtc = DateTimeOffset.UtcNow;
             QueueSave(SavePriority.Configuration);
@@ -1076,6 +1090,16 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         }
     }
 
+    public bool MoveElementBefore(Guid elementId, Guid siblingId)
+    {
+        return MoveElementRelative(elementId, siblingId, before: true);
+    }
+
+    public bool MoveElementAfter(Guid elementId, Guid siblingId)
+    {
+        return MoveElementRelative(elementId, siblingId, before: false);
+    }
+
     public bool SetSensorPaused(Guid sensorId, bool paused)
     {
         lock (_gate)
@@ -1113,6 +1137,66 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 Message = paused ? "Sensor paused" : "Sensor resumed"
             });
 
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    private bool MoveElementRelative(Guid elementId, Guid siblingId, bool before)
+    {
+        lock (_gate)
+        {
+            if (_document.RootProbe.Id == elementId || elementId == siblingId)
+            {
+                return false;
+            }
+
+            var element = FindElement(elementId);
+            var sibling = FindElement(siblingId);
+            if (element is null || sibling is null)
+            {
+                return false;
+            }
+
+            if (element is MonitoringContainerElement container &&
+                EnumerateElements(container).Any(candidate => candidate.Id == siblingId))
+            {
+                return false;
+            }
+
+            var oldParent = FindParentContainer(_document.RootProbe, elementId);
+            var newParent = FindParentContainer(_document.RootProbe, siblingId);
+            if (oldParent is null || newParent is null)
+            {
+                return false;
+            }
+
+            if (!GetAllowedParentKinds(element).Contains(newParent.Kind))
+            {
+                return false;
+            }
+
+            var sourceIndex = oldParent.Children.FindIndex(candidate => candidate.Id == elementId);
+            var targetIndex = newParent.Children.FindIndex(candidate => candidate.Id == siblingId);
+            if (sourceIndex < 0 || targetIndex < 0)
+            {
+                return false;
+            }
+
+            if (!oldParent.Children.Remove(element))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(oldParent, newParent) && targetIndex > sourceIndex)
+            {
+                targetIndex--;
+            }
+
+            var insertIndex = before ? targetIndex : targetIndex + 1;
+            insertIndex = Math.Clamp(insertIndex, 0, newParent.Children.Count);
+            newParent.Children.Insert(insertIndex, element);
+            element.ParentId = newParent.Id;
             QueueSave(SavePriority.Configuration);
             return true;
         }
@@ -1725,6 +1809,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     {
         lock (_gate)
         {
+            EnsureSmallOfficeHomeLabTemplates();
             EnsureWindowsHealthTemplate();
             EnsureSynologyNasTemplates();
             EnsureProxmoxPveTemplates();
@@ -1818,6 +1903,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         {
             Name = "Operations Wall",
             Description = "A starter map for wall displays and office screens.",
+            DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
             PublicToken = CreateToken(),
             Columns = 12,
             Rows = 6,
@@ -2067,13 +2153,25 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             {
                 PingSensorExecutor.Definition,
                 HttpSensorExecutor.Definition,
+                HttpAdvancedSensorExecutor.Definition,
                 SnmpSensorExecutor.Definition,
                 SynologyNasSensorExecutor.Definition,
+                SnmpInterfaceSensorExecutor.Definition,
+                UpsSnmpSensorExecutor.Definition,
                 ProxmoxPveSensorExecutor.Definition,
                 PowerShellRemoteSensorExecutor.Definition,
+                WindowsServiceSensorExecutor.Definition,
+                WindowsProcessSensorExecutor.Definition,
+                LinuxSshHealthSensorExecutor.Definition,
                 SslCertificateSensorExecutor.Definition,
+                CertificateChainSensorExecutor.Definition,
                 MssqlSensorExecutor.Definition,
                 TcpPortSensorExecutor.Definition,
+                DnsSensorExecutor.Definition,
+                NtpSensorExecutor.Definition,
+                DockerContainerSensorExecutor.Definition,
+                BackupJobSensorExecutor.Definition,
+                DiskSmartSensorExecutor.Definition,
                 ProbeHeartbeatSensorExecutor.Definition,
                 ProbeHealthSensorExecutor.Definition
             };
@@ -2105,6 +2203,8 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     {
         const string templateKey = "windows-health";
         const string templateName = "Windows Health";
+        var windowsHostTemplate = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, "windows-host-defaults", StringComparison.OrdinalIgnoreCase));
 
         var template = _document.Templates.FirstOrDefault(candidate =>
             string.Equals(candidate.Key, templateKey, StringComparison.OrdinalIgnoreCase) ||
@@ -2132,8 +2232,9 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         template.SensorTypeKey = string.IsNullOrWhiteSpace(template.SensorTypeKey)
             ? PowerShellRemoteSensorExecutor.Definition.Key
             : template.SensorTypeKey;
+        template.ParentTemplateId ??= windowsHostTemplate?.Id;
         template.Settings.Enabled ??= true;
-        template.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        SetDefaultPollingInterval(template.Settings, TimeSpan.FromSeconds(30));
         template.Settings.Timeout ??= TimeSpan.FromSeconds(30);
         template.Settings.DefaultChannelKey ??= "cpuLoad";
 
@@ -2217,16 +2318,369 @@ try {
         SetDefaultOrMigrateChannelThreshold(template.Settings, "rebootPending", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5), "above:0");
     }
 
+    private void EnsureSmallOfficeHomeLabTemplates()
+    {
+        var baseline = EnsureTemplate("small-office-baseline", "Small Office Baseline", MonitoringTemplateScope.Any);
+        baseline.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(baseline.Settings, TimeSpan.FromMinutes(1));
+        baseline.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        baseline.Settings.RetryCount ??= 1;
+        baseline.Settings.EventRetentionDays ??= 30;
+        baseline.Settings.ObservationRetentionDays ??= 14;
+        baseline.Settings.StatisticsRetentionDays ??= 365;
+        baseline.Settings.StatisticsBucketMinutes ??= 60;
+        SetDefaultParameter(baseline.Settings, "profile", "small-office-home-lab");
+
+        var networkDevice = EnsureTemplate(
+            "network-device-defaults",
+            "Network Device Defaults",
+            MonitoringTemplateScope.Host,
+            parentTemplateId: baseline.Id);
+        networkDevice.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(networkDevice.Settings, TimeSpan.FromMinutes(1));
+        networkDevice.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        SetDefaultParameter(networkDevice.Settings, "snmp.community", "public");
+        SetDefaultParameter(networkDevice.Settings, "snmp.version", "v2c");
+        SetDefaultParameter(networkDevice.Settings, "snmp.port", "161");
+
+        var windowsHost = EnsureTemplate(
+            "windows-host-defaults",
+            "Windows Host Defaults",
+            MonitoringTemplateScope.Host,
+            parentTemplateId: baseline.Id);
+        windowsHost.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(windowsHost.Settings, TimeSpan.FromMinutes(1));
+        windowsHost.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        SetDefaultParameter(windowsHost.Settings, "winrm.port", "5985");
+        SetDefaultParameter(windowsHost.Settings, "winrm.useSsl", "false");
+        SetDefaultParameter(windowsHost.Settings, "winrm.configurationName", "Microsoft.PowerShell");
+
+        var ping = EnsureTemplate(
+            "ping-availability",
+            "Ping - Availability",
+            MonitoringTemplateScope.Sensor,
+            PingSensorExecutor.Definition.Key,
+            baseline.Id);
+        ping.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(ping.Settings, TimeSpan.FromSeconds(30));
+        ping.Settings.Timeout ??= TimeSpan.FromSeconds(2);
+        ping.Settings.DefaultChannelKey ??= "latency";
+        SetDefaultParameter(ping.Settings, "payloadSize", "32");
+        SetDefaultParameter(ping.Settings, "dontFragment", "false");
+        SetDefaultChannelThreshold(ping.Settings, "latency", "warning", new ThresholdRule(ThresholdDirection.Above, 80));
+        SetDefaultChannelThreshold(ping.Settings, "latency", "critical", new ThresholdRule(ThresholdDirection.Above, 200));
+
+        var http = EnsureTemplate(
+            "http-web-endpoint",
+            "HTTP - Web Endpoint",
+            MonitoringTemplateScope.Sensor,
+            HttpSensorExecutor.Definition.Key,
+            baseline.Id);
+        http.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(http.Settings, TimeSpan.FromMinutes(1));
+        http.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        http.Settings.DefaultChannelKey ??= "latency";
+        SetDefaultParameter(http.Settings, "method", "GET");
+        SetDefaultParameter(http.Settings, "expectedStatus", "200");
+        SetDefaultChannelThreshold(http.Settings, "latency", "warning", new ThresholdRule(ThresholdDirection.Above, 500));
+        SetDefaultChannelThreshold(http.Settings, "latency", "critical", new ThresholdRule(ThresholdDirection.Above, 2000));
+
+        var httpAdvanced = EnsureTemplate(
+            "http-advanced-extraction",
+            "HTTP Advanced - Extraction",
+            MonitoringTemplateScope.Sensor,
+            HttpAdvancedSensorExecutor.Definition.Key,
+            baseline.Id);
+        httpAdvanced.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(httpAdvanced.Settings, TimeSpan.FromMinutes(1));
+        httpAdvanced.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        httpAdvanced.Settings.DefaultChannelKey ??= "latency";
+        SetDefaultParameter(httpAdvanced.Settings, "method", "GET");
+        SetDefaultParameter(httpAdvanced.Settings, "expectedStatus", "200");
+        SetDefaultParameter(httpAdvanced.Settings, "extractMode", "none");
+        SetDefaultChannelThreshold(httpAdvanced.Settings, "latency", "warning", new ThresholdRule(ThresholdDirection.Above, 1000));
+        SetDefaultChannelThreshold(httpAdvanced.Settings, "latency", "critical", new ThresholdRule(ThresholdDirection.Above, 3000));
+
+        var sslCertificate = EnsureTemplate(
+            "ssl-certificate-30-7",
+            "SSL Certificate - 30/7 Days",
+            MonitoringTemplateScope.Sensor,
+            SslCertificateSensorExecutor.Definition.Key,
+            baseline.Id);
+        sslCertificate.Settings.Enabled ??= true;
+        SetDefaultDailySchedule(sslCertificate.Settings, TimeSpan.FromHours(6));
+        sslCertificate.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        sslCertificate.Settings.DefaultChannelKey ??= "remainingDays";
+        SetDefaultParameter(sslCertificate.Settings, "ssl.port", "443");
+        SetDefaultParameter(sslCertificate.Settings, "ssl.warningDays", "30");
+        SetDefaultParameter(sslCertificate.Settings, "ssl.criticalDays", "7");
+        SetDefaultChannelThreshold(sslCertificate.Settings, "remainingDays", "warning", new ThresholdRule(ThresholdDirection.Below, 30));
+        SetDefaultChannelThreshold(sslCertificate.Settings, "remainingDays", "critical", new ThresholdRule(ThresholdDirection.Below, 7));
+        SetDefaultChannelThreshold(sslCertificate.Settings, "valid", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+
+        var certificateChain = EnsureTemplate(
+            "certificate-chain-validation",
+            "Certificate Chain - Validation",
+            MonitoringTemplateScope.Sensor,
+            CertificateChainSensorExecutor.Definition.Key,
+            baseline.Id);
+        certificateChain.Settings.Enabled ??= true;
+        SetDefaultDailySchedule(certificateChain.Settings, TimeSpan.FromHours(6));
+        certificateChain.Settings.Timeout ??= TimeSpan.FromSeconds(8);
+        certificateChain.Settings.DefaultChannelKey ??= "valid";
+        SetDefaultParameter(certificateChain.Settings, "cert.port", "443");
+        SetDefaultParameter(certificateChain.Settings, "cert.checkRevocation", "false");
+        SetDefaultChannelThreshold(certificateChain.Settings, "valid", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(certificateChain.Settings, "hostnameMatch", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(certificateChain.Settings, "chainErrors", "critical", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(certificateChain.Settings, "remainingDays", "warning", new ThresholdRule(ThresholdDirection.Below, 30));
+        SetDefaultChannelThreshold(certificateChain.Settings, "remainingDays", "critical", new ThresholdRule(ThresholdDirection.Below, 7));
+
+        var tcpGeneric = EnsureTemplate(
+            "tcp-port-generic",
+            "TCP Port - Generic",
+            MonitoringTemplateScope.Sensor,
+            TcpPortSensorExecutor.Definition.Key,
+            baseline.Id);
+        tcpGeneric.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(tcpGeneric.Settings, TimeSpan.FromMinutes(1));
+        tcpGeneric.Settings.Timeout ??= TimeSpan.FromSeconds(3);
+        tcpGeneric.Settings.DefaultChannelKey ??= "connectMs";
+        SetDefaultParameter(tcpGeneric.Settings, "tcp.expectedOpen", "true");
+        SetDefaultChannelThreshold(tcpGeneric.Settings, "open", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(tcpGeneric.Settings, "connectMs", "warning", new ThresholdRule(ThresholdDirection.Above, 500));
+        SetDefaultChannelThreshold(tcpGeneric.Settings, "connectMs", "critical", new ThresholdRule(ThresholdDirection.Above, 2000));
+
+        var tcpSsh = EnsureTemplate(
+            "tcp-port-ssh",
+            "TCP Port - SSH",
+            MonitoringTemplateScope.Sensor,
+            TcpPortSensorExecutor.Definition.Key,
+            tcpGeneric.Id);
+        SetDefaultParameter(tcpSsh.Settings, "tcp.port", "22");
+
+        var tcpRdp = EnsureTemplate(
+            "tcp-port-rdp",
+            "TCP Port - RDP",
+            MonitoringTemplateScope.Sensor,
+            TcpPortSensorExecutor.Definition.Key,
+            tcpGeneric.Id);
+        SetDefaultParameter(tcpRdp.Settings, "tcp.port", "3389");
+
+        var snmpUptime = EnsureTemplate(
+            "snmp-uptime",
+            "SNMP - Uptime",
+            MonitoringTemplateScope.Sensor,
+            SnmpSensorExecutor.Definition.Key,
+            networkDevice.Id);
+        snmpUptime.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(snmpUptime.Settings, TimeSpan.FromMinutes(5));
+        snmpUptime.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        snmpUptime.Settings.DefaultChannelKey ??= "uptime";
+        SetDefaultParameter(snmpUptime.Settings, "snmp.oids", "1.3.6.1.2.1.1.3.0|Uptime");
+
+        var snmpInterface = EnsureTemplate(
+            "snmp-interface-basic",
+            "SNMP - Interface",
+            MonitoringTemplateScope.Sensor,
+            SnmpInterfaceSensorExecutor.Definition.Key,
+            networkDevice.Id);
+        snmpInterface.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(snmpInterface.Settings, TimeSpan.FromMinutes(1));
+        snmpInterface.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        snmpInterface.Settings.DefaultChannelKey ??= "oper_status";
+        SetDefaultParameter(snmpInterface.Settings, "snmp.interfaceIndex", "1");
+        SetDefaultChannelThreshold(snmpInterface.Settings, "oper_status", "critical", new ThresholdRule(ThresholdDirection.Above, 1.5));
+        SetDefaultChannelThreshold(snmpInterface.Settings, "in_errors", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(snmpInterface.Settings, "out_errors", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+
+        var ups = EnsureTemplate(
+            "ups-snmp-basic",
+            "UPS - SNMP",
+            MonitoringTemplateScope.Sensor,
+            UpsSnmpSensorExecutor.Definition.Key,
+            networkDevice.Id);
+        ups.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(ups.Settings, TimeSpan.FromMinutes(1));
+        ups.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        ups.Settings.DefaultChannelKey ??= "battery_charge";
+        SetDefaultChannelThreshold(ups.Settings, "battery_charge", "warning", new ThresholdRule(ThresholdDirection.Below, 50));
+        SetDefaultChannelThreshold(ups.Settings, "battery_charge", "critical", new ThresholdRule(ThresholdDirection.Below, 20));
+        SetDefaultChannelThreshold(ups.Settings, "runtime_minutes", "warning", new ThresholdRule(ThresholdDirection.Below, 15));
+        SetDefaultChannelThreshold(ups.Settings, "runtime_minutes", "critical", new ThresholdRule(ThresholdDirection.Below, 5));
+        SetDefaultChannelThreshold(ups.Settings, "load_percent", "warning", new ThresholdRule(ThresholdDirection.Above, 80));
+        SetDefaultChannelThreshold(ups.Settings, "load_percent", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+
+        var mssql = EnsureTemplate(
+            "mssql-query-value",
+            "MSSQL - Query Value",
+            MonitoringTemplateScope.Sensor,
+            MssqlSensorExecutor.Definition.Key,
+            baseline.Id);
+        mssql.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(mssql.Settings, TimeSpan.FromMinutes(5));
+        mssql.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        mssql.Settings.DefaultChannelKey ??= "value";
+        SetDefaultParameter(mssql.Settings, "mssql.database", "master");
+        SetDefaultParameter(mssql.Settings, "mssql.port", "1433");
+        SetDefaultParameter(mssql.Settings, "mssql.encrypt", "true");
+        SetDefaultParameter(mssql.Settings, "mssql.trustServerCertificate", "true");
+        SetDefaultParameter(mssql.Settings, "defaultChannelKey", "value");
+        SetDefaultParameter(mssql.Settings, "query", "SELECT CAST(1 AS float) AS value;");
+        SetDefaultChannelThreshold(mssql.Settings, "value", "critical", new ThresholdRule(ThresholdDirection.Below, 1));
+
+        var dns = EnsureTemplate(
+            "dns-resolution",
+            "DNS - Resolution",
+            MonitoringTemplateScope.Sensor,
+            DnsSensorExecutor.Definition.Key,
+            baseline.Id);
+        dns.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(dns.Settings, TimeSpan.FromMinutes(1));
+        dns.Settings.Timeout ??= TimeSpan.FromSeconds(3);
+        dns.Settings.DefaultChannelKey ??= "resolveMs";
+        SetDefaultParameter(dns.Settings, "dns.recordType", "A");
+        SetDefaultParameter(dns.Settings, "dns.port", "53");
+        SetDefaultChannelThreshold(dns.Settings, "resolveMs", "warning", new ThresholdRule(ThresholdDirection.Above, 100));
+        SetDefaultChannelThreshold(dns.Settings, "resolveMs", "critical", new ThresholdRule(ThresholdDirection.Above, 500));
+        SetDefaultChannelThreshold(dns.Settings, "recordCount", "critical", new ThresholdRule(ThresholdDirection.Below, 1));
+        SetDefaultChannelThreshold(dns.Settings, "expectedMatched", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+
+        var ntp = EnsureTemplate(
+            "ntp-time-offset",
+            "NTP - Time Offset",
+            MonitoringTemplateScope.Sensor,
+            NtpSensorExecutor.Definition.Key,
+            baseline.Id);
+        ntp.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(ntp.Settings, TimeSpan.FromMinutes(5));
+        ntp.Settings.Timeout ??= TimeSpan.FromSeconds(3);
+        ntp.Settings.DefaultChannelKey ??= "absoluteOffsetMs";
+        SetDefaultParameter(ntp.Settings, "ntp.port", "123");
+        SetDefaultChannelThreshold(ntp.Settings, "absoluteOffsetMs", "warning", new ThresholdRule(ThresholdDirection.Above, 100));
+        SetDefaultChannelThreshold(ntp.Settings, "absoluteOffsetMs", "critical", new ThresholdRule(ThresholdDirection.Above, 1000));
+        SetDefaultChannelThreshold(ntp.Settings, "delayMs", "warning", new ThresholdRule(ThresholdDirection.Above, 500));
+        SetDefaultChannelThreshold(ntp.Settings, "reachable", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+
+        var linuxHealth = EnsureTemplate(
+            "linux-ssh-health",
+            "Linux SSH Health",
+            MonitoringTemplateScope.Sensor,
+            LinuxSshHealthSensorExecutor.Definition.Key,
+            baseline.Id);
+        linuxHealth.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(linuxHealth.Settings, TimeSpan.FromMinutes(1));
+        linuxHealth.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        linuxHealth.Settings.DefaultChannelKey ??= "load1";
+        SetDefaultParameter(linuxHealth.Settings, "ssh.port", "22");
+        SetDefaultChannelThreshold(linuxHealth.Settings, "load1", "warning", new ThresholdRule(ThresholdDirection.Above, 2));
+        SetDefaultChannelThreshold(linuxHealth.Settings, "load1", "critical", new ThresholdRule(ThresholdDirection.Above, 5));
+        SetDefaultChannelThreshold(linuxHealth.Settings, "memoryUsedPercent", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(linuxHealth.Settings, "memoryUsedPercent", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(linuxHealth.Settings, "rootUsedPercent", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(linuxHealth.Settings, "rootUsedPercent", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+
+        var dockerContainer = EnsureTemplate(
+            "docker-container-running",
+            "Docker Container - Running",
+            MonitoringTemplateScope.Sensor,
+            DockerContainerSensorExecutor.Definition.Key,
+            baseline.Id);
+        dockerContainer.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(dockerContainer.Settings, TimeSpan.FromMinutes(1));
+        dockerContainer.Settings.Timeout ??= TimeSpan.FromSeconds(5);
+        dockerContainer.Settings.DefaultChannelKey ??= "running";
+        SetDefaultParameter(dockerContainer.Settings, "docker.socket", "/var/run/docker.sock");
+        SetDefaultChannelThreshold(dockerContainer.Settings, "running", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(dockerContainer.Settings, "healthOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+
+        var windowsService = EnsureTemplate(
+            "windows-service-running",
+            "Windows Service - Running",
+            MonitoringTemplateScope.Sensor,
+            WindowsServiceSensorExecutor.Definition.Key,
+            windowsHost.Id);
+        windowsService.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(windowsService.Settings, TimeSpan.FromMinutes(1));
+        windowsService.Settings.Timeout ??= TimeSpan.FromSeconds(15);
+        windowsService.Settings.DefaultChannelKey ??= "stateOk";
+        SetDefaultParameter(windowsService.Settings, "windows.serviceExpectedState", "Running");
+        SetDefaultChannelThreshold(windowsService.Settings, "stateOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(windowsService.Settings, "exists", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+
+        var windowsProcess = EnsureTemplate(
+            "windows-process-count",
+            "Windows Process - Count",
+            MonitoringTemplateScope.Sensor,
+            WindowsProcessSensorExecutor.Definition.Key,
+            windowsHost.Id);
+        windowsProcess.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(windowsProcess.Settings, TimeSpan.FromMinutes(1));
+        windowsProcess.Settings.Timeout ??= TimeSpan.FromSeconds(15);
+        windowsProcess.Settings.DefaultChannelKey ??= "processCount";
+        SetDefaultParameter(windowsProcess.Settings, "windows.processMinCount", "1");
+        SetDefaultChannelThreshold(windowsProcess.Settings, "countOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+
+        var backupJob = EnsureTemplate(
+            "backup-job-windows",
+            "Backup Job - Windows",
+            MonitoringTemplateScope.Sensor,
+            BackupJobSensorExecutor.Definition.Key,
+            windowsHost.Id);
+        backupJob.Settings.Enabled ??= true;
+        SetDefaultDailySchedule(backupJob.Settings, TimeSpan.FromHours(7));
+        backupJob.Settings.Timeout ??= TimeSpan.FromSeconds(30);
+        backupJob.Settings.DefaultChannelKey ??= "success";
+        SetDefaultParameter(backupJob.Settings, "backup.mode", "windows-eventlog");
+        SetDefaultParameter(backupJob.Settings, "backup.lookbackHours", "48");
+        SetDefaultChannelThreshold(backupJob.Settings, "success", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(backupJob.Settings, "ageHours", "warning", new ThresholdRule(ThresholdDirection.Above, 36));
+        SetDefaultChannelThreshold(backupJob.Settings, "ageHours", "critical", new ThresholdRule(ThresholdDirection.Above, 48));
+        SetDefaultChannelThreshold(backupJob.Settings, "failedEvents", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+
+        var diskSmart = EnsureTemplate(
+            "disk-smart-windows",
+            "Disk SMART - Windows",
+            MonitoringTemplateScope.Sensor,
+            DiskSmartSensorExecutor.Definition.Key,
+            windowsHost.Id);
+        diskSmart.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(diskSmart.Settings, TimeSpan.FromMinutes(30));
+        diskSmart.Settings.Timeout ??= TimeSpan.FromSeconds(20);
+        diskSmart.Settings.DefaultChannelKey ??= "healthy";
+        SetDefaultChannelThreshold(diskSmart.Settings, "healthy", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(diskSmart.Settings, "unhealthyDisks", "critical", new ThresholdRule(ThresholdDirection.Above, 0.5));
+
+        var heartbeat = EnsureTemplate(
+            "probe-heartbeat-default",
+            "Probe Heartbeat",
+            MonitoringTemplateScope.Sensor,
+            ProbeHeartbeatSensorExecutor.Definition.Key,
+            baseline.Id);
+        heartbeat.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(heartbeat.Settings, TimeSpan.FromSeconds(30));
+        heartbeat.Settings.Timeout ??= TimeSpan.FromSeconds(2);
+        heartbeat.Settings.DefaultChannelKey ??= "ageSeconds";
+        SetDefaultChannelThreshold(heartbeat.Settings, "ageSeconds", "warning", new ThresholdRule(ThresholdDirection.Above, 45));
+        SetDefaultChannelThreshold(heartbeat.Settings, "ageSeconds", "critical", new ThresholdRule(ThresholdDirection.Above, 90));
+    }
+
     private void EnsureSynologyNasTemplates()
     {
         const string hostTemplateKey = "synology-nas-host-defaults";
         const string hostTemplateName = "Synology NAS Defaults";
         const string sensorTemplateKey = "synology-nas";
         const string sensorTemplateName = "Synology NAS";
+        var networkDeviceTemplate = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, "network-device-defaults", StringComparison.OrdinalIgnoreCase));
 
-        var hostTemplate = EnsureTemplate(hostTemplateKey, hostTemplateName, MonitoringTemplateScope.Host);
+        var hostTemplate = EnsureTemplate(
+            hostTemplateKey,
+            hostTemplateName,
+            MonitoringTemplateScope.Host,
+            parentTemplateId: networkDeviceTemplate?.Id);
         hostTemplate.Settings.Enabled ??= true;
-        hostTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        SetDefaultPollingInterval(hostTemplate.Settings, TimeSpan.FromSeconds(30));
         hostTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
         SetDefaultParameter(hostTemplate.Settings, "snmp.community", "public");
         SetDefaultParameter(hostTemplate.Settings, "snmp.version", "v2c");
@@ -2239,8 +2693,10 @@ try {
             SynologyNasSensorExecutor.Definition.Key,
             hostTemplate.Id);
         sensorTemplate.Settings.Enabled ??= true;
-        sensorTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(30);
+        SetDefaultPollingInterval(sensorTemplate.Settings, TimeSpan.FromSeconds(30));
         sensorTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        sensorTemplate.Settings.DefaultChannelKey ??= "uptime";
+        SetDefaultParameter(sensorTemplate.Settings, "snmp.oids", "1.3.6.1.2.1.1.3.0|Uptime");
     }
 
     private void EnsureProxmoxPveTemplates()
@@ -2251,10 +2707,16 @@ try {
         const string clusterTemplateName = "Proxmox PVE Cluster";
         const string nodeTemplateKey = "proxmox-pve-node";
         const string nodeTemplateName = "Proxmox PVE Node";
+        var baselineTemplate = _document.Templates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, "small-office-baseline", StringComparison.OrdinalIgnoreCase));
 
-        var hostTemplate = EnsureTemplate(hostTemplateKey, hostTemplateName, MonitoringTemplateScope.Host);
+        var hostTemplate = EnsureTemplate(
+            hostTemplateKey,
+            hostTemplateName,
+            MonitoringTemplateScope.Host,
+            parentTemplateId: baselineTemplate?.Id);
         hostTemplate.Settings.Enabled ??= true;
-        hostTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(20);
+        SetDefaultPollingInterval(hostTemplate.Settings, TimeSpan.FromSeconds(20));
         hostTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
         SetDefaultParameter(hostTemplate.Settings, "pve.port", "8006");
         SetDefaultParameter(hostTemplate.Settings, "pve.user", "root@pam");
@@ -2268,9 +2730,12 @@ try {
             ProxmoxPveSensorExecutor.Definition.Key,
             hostTemplate.Id);
         clusterTemplate.Settings.Enabled ??= true;
-        clusterTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(20);
+        SetDefaultPollingInterval(clusterTemplate.Settings, TimeSpan.FromSeconds(20));
         clusterTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        clusterTemplate.Settings.DefaultChannelKey ??= "onlineNodes";
         SetDefaultParameter(clusterTemplate.Settings, "pve.scope", "cluster");
+        SetDefaultChannelThreshold(clusterTemplate.Settings, "offlineNodes", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(clusterTemplate.Settings, "nodeOnlineRatio", "critical", new ThresholdRule(ThresholdDirection.Below, 100));
 
         var nodeTemplate = EnsureTemplate(
             nodeTemplateKey,
@@ -2279,9 +2744,16 @@ try {
             ProxmoxPveSensorExecutor.Definition.Key,
             hostTemplate.Id);
         nodeTemplate.Settings.Enabled ??= true;
-        nodeTemplate.Settings.PollingInterval ??= TimeSpan.FromSeconds(20);
+        SetDefaultPollingInterval(nodeTemplate.Settings, TimeSpan.FromSeconds(20));
         nodeTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        nodeTemplate.Settings.DefaultChannelKey ??= "cpu";
         SetDefaultParameter(nodeTemplate.Settings, "pve.scope", "node");
+        SetDefaultChannelThreshold(nodeTemplate.Settings, "cpu", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(nodeTemplate.Settings, "cpu", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(nodeTemplate.Settings, "memory", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(nodeTemplate.Settings, "memory", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(nodeTemplate.Settings, "rootfs", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(nodeTemplate.Settings, "rootfs", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
     }
 
     private MonitoringTemplate EnsureTemplate(
@@ -2347,6 +2819,26 @@ try {
         }
     }
 
+    private static void SetDefaultPollingInterval(MonitoringSettings settings, TimeSpan interval)
+    {
+        if (settings.PollingInterval is null && settings.PollingSchedule is null)
+        {
+            settings.PollingInterval = interval;
+        }
+    }
+
+    private static void SetDefaultDailySchedule(MonitoringSettings settings, TimeSpan timeOfDay)
+    {
+        if (settings.PollingInterval is null && settings.PollingSchedule is null)
+        {
+            settings.PollingSchedule = new MonitoringSchedule
+            {
+                Mode = MonitoringScheduleMode.Daily,
+                TimeOfDay = timeOfDay
+            };
+        }
+    }
+
     private static void SetDefaultChannelThreshold(
         MonitoringSettings settings,
         string channelKey,
@@ -2367,9 +2859,9 @@ try {
         ThresholdRule rule,
         params string[] migrateFrom)
     {
+        _ = migrateFrom;
         var key = MonitoringSettings.BuildChannelThresholdKey(channelKey, severity);
-        if (!settings.Thresholds.TryGetValue(key, out var currentValue) ||
-            migrateFrom.Contains(currentValue, StringComparer.OrdinalIgnoreCase))
+        if (!settings.Thresholds.ContainsKey(key))
         {
             MonitoringSettings.SetChannelThreshold(settings, channelKey, severity, rule);
         }
@@ -3128,6 +3620,7 @@ try {
             Key = source.Key,
             DisplayName = source.DisplayName,
             Description = source.Description,
+            UsageLevel = source.UsageLevel ?? SensorUsageCatalog.Resolve(source.Key),
             ChannelMode = source.ChannelMode,
             Parameters = source.Parameters.Select(parameter => new SensorParameterDefinition
             {
@@ -3175,6 +3668,7 @@ try {
             PublicToken = source.PublicToken,
             Columns = source.Columns,
             Rows = source.Rows,
+            DisplayPreset = source.DisplayPreset,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc,
             Tiles = source.Tiles.Select(tile => new MonitoringMapTile

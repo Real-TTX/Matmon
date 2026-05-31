@@ -215,13 +215,25 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
         {
             PingSensorExecutor.Definition,
             HttpSensorExecutor.Definition,
+            HttpAdvancedSensorExecutor.Definition,
             SnmpSensorExecutor.Definition,
             SynologyNasSensorExecutor.Definition,
+            SnmpInterfaceSensorExecutor.Definition,
+            UpsSnmpSensorExecutor.Definition,
             ProxmoxPveSensorExecutor.Definition,
             PowerShellRemoteSensorExecutor.Definition,
+            WindowsServiceSensorExecutor.Definition,
+            WindowsProcessSensorExecutor.Definition,
+            LinuxSshHealthSensorExecutor.Definition,
             SslCertificateSensorExecutor.Definition,
+            CertificateChainSensorExecutor.Definition,
             MssqlSensorExecutor.Definition,
             TcpPortSensorExecutor.Definition,
+            DnsSensorExecutor.Definition,
+            NtpSensorExecutor.Definition,
+            DockerContainerSensorExecutor.Definition,
+            BackupJobSensorExecutor.Definition,
+            DiskSmartSensorExecutor.Definition,
             ProbeHeartbeatSensorExecutor.Definition
         };
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Matmon.Core.Domain;
@@ -132,8 +133,9 @@ public sealed class WorkspaceModel : PageModel
         try
         {
             var probe = _workspaceStore.CreateProbe(NewProbe.ParentId, NewProbe.Name, NewProbe.Description);
-            StatusMessage = $"Probe '{probe.Name}' angelegt.";
-            return RedirectAfterAction(ReturnUrl, "/Config", new { tab = "probes" });
+            StatusMessage = $"Probe '{probe.Name}' angelegt. Install script is ready.";
+            var backUrl = GetSafeReturnUrl("/Config?tab=probes");
+            return RedirectToPage("/ProbeInstall", new { probeId = probe.Id, returnUrl = backUrl });
         }
         catch (Exception ex)
         {
@@ -387,6 +389,16 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    public IActionResult OnPostMoveElementBefore(Guid elementId, Guid siblingId, string? returnUrl)
+    {
+        return MoveElementRelative(elementId, siblingId, before: true, returnUrl);
+    }
+
+    public IActionResult OnPostMoveElementAfter(Guid elementId, Guid siblingId, string? returnUrl)
+    {
+        return MoveElementRelative(elementId, siblingId, before: false, returnUrl);
+    }
+
     private int RecordSensorCredentialConfigurationIssues(MonitoringElement element)
     {
         var issueCount = 0;
@@ -420,6 +432,37 @@ public sealed class WorkspaceModel : PageModel
         }
 
         return issueCount;
+    }
+
+    private IActionResult MoveElementRelative(Guid elementId, Guid siblingId, bool before, string? returnUrl)
+    {
+        try
+        {
+            var moved = before
+                ? _workspaceStore.MoveElementBefore(elementId, siblingId)
+                : _workspaceStore.MoveElementAfter(elementId, siblingId);
+
+            if (!moved)
+            {
+                throw new InvalidOperationException("Element could not be reordered.");
+            }
+
+            var element = _workspaceStore.FindElement(elementId)
+                ?? throw new InvalidOperationException("Element not found after reorder.");
+
+            var credentialIssueCount = RecordSensorCredentialConfigurationIssues(element);
+            var direction = before ? "before" : "after";
+            StatusMessage = credentialIssueCount == 0
+                ? $"Element '{element.Name}' moved {direction}."
+                : $"Element '{element.Name}' moved {direction}. {credentialIssueCount} sensor credential issue{(credentialIssueCount == 1 ? string.Empty : "s")} found.";
+            return RedirectAfterAction(returnUrl, "/Monitoring");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
     }
 
     private static bool TryBuildCredentialIssueMessage(
@@ -1426,13 +1469,32 @@ public sealed class WorkspaceModel : PageModel
         NotificationRuleEditor.TargetOptions = BuildNotificationTargetOptions(nodes, NotificationRuleEditor.TargetElementId);
         NotificationRuleEditor.TriggerStateOptions = BuildNotificationStateOptions(NotificationRuleEditor.TriggerStates);
 
+        var notificationTemplateGroups = NotificationTemplateCatalog.GetGroups();
+        var notificationPreview = BuildNotificationRulePreview(
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.Name : NewNotificationRule.Name,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.SubjectTemplate : NewNotificationRule.SubjectTemplate,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.TextTemplate : NewNotificationRule.TextTemplate,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.HtmlTemplate : NewNotificationRule.HtmlTemplate,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.TargetElementId : NewNotificationRule.TargetElementId,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.IncludeDescendants : NewNotificationRule.IncludeDescendants,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.TriggerStates : NewNotificationRule.TriggerStates,
+            snapshot,
+            nodes,
+            latestSensorObservations,
+            DateTimeOffset.UtcNow);
+
         View = View with
         {
             SelectedElementKind = selectedElement?.Kind.ToString(),
             SelectedTemplateKind = selectedTemplate?.TargetKind.ToString(),
             SelectedNotificationRuleKind = notificationRule is null ? null : $"{notificationRule.Name}",
             SelectedNotificationSenderKind = notificationSender is null ? null : $"{notificationSender.Name} ({notificationSender.Kind})",
-            SelectedNotificationReceiverKind = notificationReceiver is null ? null : $"{notificationReceiver.Name} ({notificationReceiver.Kind})"
+            SelectedNotificationReceiverKind = notificationReceiver is null ? null : $"{notificationReceiver.Name} ({notificationReceiver.Kind})",
+            NotificationTemplateGroups = notificationTemplateGroups,
+            NotificationRulePreviewSummary = notificationPreview.Summary,
+            NotificationRulePreviewSubject = notificationPreview.Subject,
+            NotificationRulePreviewText = notificationPreview.Text,
+            NotificationRulePreviewHtml = notificationPreview.Html
         };
     }
 
@@ -1794,6 +1856,9 @@ public sealed class WorkspaceModel : PageModel
             IncludeDescendants = rule.IncludeDescendants,
             TriggerStates = rule.TriggerStates.ToList(),
             CooldownMinutes = rule.CooldownMinutes,
+            SubjectTemplate = string.IsNullOrWhiteSpace(rule.SubjectTemplate) ? NotificationTemplateCatalog.DefaultSubjectTemplate : rule.SubjectTemplate,
+            TextTemplate = string.IsNullOrWhiteSpace(rule.TextTemplate) ? NotificationTemplateCatalog.DefaultTextTemplate : rule.TextTemplate,
+            HtmlTemplate = string.IsNullOrWhiteSpace(rule.HtmlTemplate) ? NotificationTemplateCatalog.DefaultHtmlTemplate : rule.HtmlTemplate,
             SenderOptions = BuildNotificationSenderOptions(snapshot.NotificationSenders, rule.SenderId),
             ReceiverOptions = BuildNotificationReceiverOptions(snapshot.NotificationReceivers, rule.ReceiverId),
             TargetOptions = BuildNotificationTargetOptions(nodes, rule.TargetElementId),
@@ -1847,7 +1912,10 @@ public sealed class WorkspaceModel : PageModel
             editor.TargetElementId,
             editor.IncludeDescendants,
             editor.TriggerStates,
-            editor.CooldownMinutes);
+            editor.CooldownMinutes,
+            editor.SubjectTemplate,
+            editor.TextTemplate,
+            editor.HtmlTemplate);
     }
 
     private static void ApplyNotificationSenderEditor(NotificationSender sender, CreateNotificationSenderInput editor)
@@ -1933,7 +2001,10 @@ public sealed class WorkspaceModel : PageModel
             editor.TargetElementId,
             editor.IncludeDescendants,
             editor.TriggerStates,
-            editor.CooldownMinutes);
+            editor.CooldownMinutes,
+            editor.SubjectTemplate,
+            editor.TextTemplate,
+            editor.HtmlTemplate);
     }
 
     private static void ApplyNotificationRuleValues(
@@ -1945,7 +2016,10 @@ public sealed class WorkspaceModel : PageModel
         Guid? targetElementId,
         bool includeDescendants,
         IEnumerable<SensorState>? triggerStates,
-        int? cooldownMinutes)
+        int? cooldownMinutes,
+        string? subjectTemplate,
+        string? textTemplate,
+        string? htmlTemplate)
     {
         var triggerStateList = (triggerStates ?? Enumerable.Empty<SensorState>()).Distinct().ToList();
         if (triggerStateList.Count == 0)
@@ -1960,6 +2034,9 @@ public sealed class WorkspaceModel : PageModel
         rule.TargetElementId = targetElementId;
         rule.IncludeDescendants = includeDescendants;
         rule.CooldownMinutes = cooldownMinutes is int cooldown && cooldown > 0 ? cooldown : null;
+        rule.SubjectTemplate = string.IsNullOrWhiteSpace(subjectTemplate) ? string.Empty : subjectTemplate;
+        rule.TextTemplate = string.IsNullOrWhiteSpace(textTemplate) ? string.Empty : textTemplate;
+        rule.HtmlTemplate = string.IsNullOrWhiteSpace(htmlTemplate) ? string.Empty : htmlTemplate;
         rule.TriggerStates.Clear();
 
         foreach (var state in triggerStateList)
@@ -2061,15 +2138,8 @@ public sealed class WorkspaceModel : PageModel
 
     private void PopulateSensorParameterEditor(WorkspaceElementEditorInput editor, IReadOnlyList<SensorDefinition> sensorDefinitions)
     {
-        var inheritedValues = string.Equals(editor.Kind, "Sensor", StringComparison.OrdinalIgnoreCase)
-            ? BuildTransientSensorExecutionSettings(editor).Parameters
-            : null;
+        var inheritedValues = TryBuildSensorEditorInheritedParameters(editor);
         var state = BuildSensorParameterEditorState(
-            editor.SensorTypeKey,
-            editor.SensorParameterFields,
-            editor.SensorAdvancedParametersText,
-            sensorDefinitions);
-        state = BuildSensorParameterEditorState(
             editor.SensorTypeKey,
             editor.SensorParameterFields,
             editor.SensorAdvancedParametersText,
@@ -2078,6 +2148,27 @@ public sealed class WorkspaceModel : PageModel
 
         editor.SensorParameterFields = state.Fields;
         editor.SensorAdvancedParametersText = state.AdvancedText;
+    }
+
+    private IReadOnlyDictionary<string, string>? TryBuildSensorEditorInheritedParameters(WorkspaceElementEditorInput editor)
+    {
+        if (!string.Equals(editor.Kind, "Sensor", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            return BuildTransientSensorExecutionSettings(editor).Parameters;
+        }
+        catch (InvalidOperationException)
+        {
+            // Opening the editor must stay possible even when required sensor values
+            // are missing. Save/test paths still validate and surface the error.
+            return editor.Id != Guid.Empty && _workspaceStore.FindElement(editor.Id) is SensorElement existingSensor
+                ? ResolveElementEffectiveSettings(existingSensor).Parameters
+                : null;
+        }
     }
 
     private void PopulateSensorThresholdEditor(
@@ -3090,10 +3181,17 @@ public sealed class WorkspaceModel : PageModel
             throw new InvalidOperationException("Threshold values must be numeric.");
         }
 
-        var normalizedComparison = comparison?.Trim().ToLowerInvariant();
-        var direction = normalizedComparison is "below" or "under" or "lt" or "<" or "<="
-            ? ThresholdDirection.Below
-            : ThresholdDirection.Above;
+        var normalizedComparison = comparison?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedComparison))
+        {
+            rule = new ThresholdRule(ThresholdDirection.Above, numericValue);
+            return true;
+        }
+
+        if (!TryParseThresholdComparison(normalizedComparison, out var direction))
+        {
+            throw new InvalidOperationException("Threshold comparison must be one of >, >=, <, <=, =, <>.");
+        }
 
         rule = new ThresholdRule(direction, numericValue);
         return true;
@@ -3101,7 +3199,59 @@ public sealed class WorkspaceModel : PageModel
 
     private static string ToThresholdComparisonText(ThresholdDirection direction)
     {
-        return direction == ThresholdDirection.Below ? "below" : "above";
+        return direction switch
+        {
+            ThresholdDirection.Above => ">",
+            ThresholdDirection.AboveOrEqual => ">=",
+            ThresholdDirection.Below => "<",
+            ThresholdDirection.BelowOrEqual => "<=",
+            ThresholdDirection.Equal => "=",
+            ThresholdDirection.NotEqual => "<>",
+            _ => ">"
+        };
+    }
+
+    private static bool TryParseThresholdComparison(string comparison, out ThresholdDirection direction)
+    {
+        var normalized = comparison.Trim().ToLowerInvariant();
+        if (normalized is ">")
+        {
+            direction = ThresholdDirection.Above;
+            return true;
+        }
+
+        if (normalized is ">=")
+        {
+            direction = ThresholdDirection.AboveOrEqual;
+            return true;
+        }
+
+        if (normalized is "<")
+        {
+            direction = ThresholdDirection.Below;
+            return true;
+        }
+
+        if (normalized is "<=")
+        {
+            direction = ThresholdDirection.BelowOrEqual;
+            return true;
+        }
+
+        if (normalized is "=" or "==")
+        {
+            direction = ThresholdDirection.Equal;
+            return true;
+        }
+
+        if (normalized is "<>" or "!=")
+        {
+            direction = ThresholdDirection.NotEqual;
+            return true;
+        }
+
+        direction = default;
+        return false;
     }
 
     private static string FormatThresholdValue(double value)
@@ -4446,6 +4596,290 @@ public sealed class WorkspaceModel : PageModel
             : "no cooldown";
     }
 
+    private (string Summary, string Subject, string Text, string Html) BuildNotificationRulePreview(
+        string ruleName,
+        string subjectTemplate,
+        string textTemplate,
+        string htmlTemplate,
+        Guid? targetElementId,
+        bool includeDescendants,
+        IEnumerable<SensorState> triggerStates,
+        MonitoringWorkspaceSnapshot snapshot,
+        IReadOnlyList<WorkspaceNodeRow> nodes,
+        IReadOnlyDictionary<Guid, SensorObservation> latestSensorObservations,
+        DateTimeOffset now)
+    {
+        var targetNode = targetElementId is Guid id
+            ? nodes.FirstOrDefault(node => node.Id == id)
+            : null;
+
+        var alertCandidates = snapshot.Alerts
+            .Where(alert => targetNode is null || IsAlertWithinRuleScope(alert.ElementPath, targetNode.Path, includeDescendants))
+            .ToArray();
+
+        var selectedAlert = alertCandidates
+            .Where(alert => alert.IsActive)
+            .OrderByDescending(alert => GetNotificationSeverityRank(alert.State))
+            .ThenByDescending(alert => alert.LastSeenUtc)
+            .FirstOrDefault()
+            ?? alertCandidates.OrderByDescending(alert => alert.LastSeenUtc).FirstOrDefault();
+
+        var selectedSensorNode = selectedAlert is not null
+            ? nodes.FirstOrDefault(node => node.Id == selectedAlert.ElementId)
+            : targetNode?.Kind == MonitoringElementKind.Sensor
+                ? targetNode
+                : null;
+
+        if (selectedSensorNode is null && targetNode is not null && targetNode.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host)
+        {
+            selectedSensorNode = nodes.FirstOrDefault(node =>
+                node.Kind == MonitoringElementKind.Sensor &&
+                IsAlertWithinRuleScope(node.Path, targetNode.Path, includeDescendants));
+        }
+
+        if (selectedSensorNode is null)
+        {
+            selectedSensorNode = nodes.FirstOrDefault(node =>
+                    node.Kind == MonitoringElementKind.Sensor && latestSensorObservations.ContainsKey(node.Id))
+                ?? nodes.FirstOrDefault(node => node.Kind == MonitoringElementKind.Sensor);
+        }
+
+        latestSensorObservations.TryGetValue(selectedSensorNode?.Id ?? Guid.Empty, out var latestObservation);
+
+        var templateContext = BuildNotificationTemplateContext(
+            ruleName,
+            targetNode,
+            selectedSensorNode,
+            selectedAlert,
+            latestObservation,
+            now);
+
+        var summary = selectedAlert is null
+            ? targetNode is null
+                ? "Preview uses sample sensor data from the workspace."
+                : $"Preview uses data from {targetNode.Path}."
+            : $"Preview uses alert data from {selectedAlert.ElementPath}.";
+
+        if (!triggerStates.Any())
+        {
+            summary += " No trigger states selected.";
+        }
+
+        return (
+            summary,
+            NotificationTemplateRenderer.RenderText(subjectTemplate, templateContext, NotificationTemplateCatalog.DefaultSubjectTemplate),
+            NotificationTemplateRenderer.RenderText(textTemplate, templateContext, NotificationTemplateCatalog.DefaultTextTemplate),
+            NotificationTemplateRenderer.RenderHtml(htmlTemplate, templateContext, NotificationTemplateCatalog.DefaultHtmlTemplate));
+    }
+
+    private static NotificationTemplateContext BuildNotificationTemplateContext(
+        string ruleName,
+        WorkspaceNodeRow? targetNode,
+        WorkspaceNodeRow? sensorNode,
+        MonitoringAlert? alert,
+        SensorObservation? observation,
+        DateTimeOffset now)
+    {
+        var context = new NotificationTemplateContext();
+        var elementNode = sensorNode ?? targetNode;
+        var defaultChannelKey = observation?.DefaultChannelKey;
+        var defaultChannel = observation?.Channels.FirstOrDefault(channel =>
+            channel.IsDefault ||
+            (!string.IsNullOrWhiteSpace(defaultChannelKey) &&
+             string.Equals(channel.Key, defaultChannelKey, StringComparison.OrdinalIgnoreCase)))
+            ?? observation?.Channels.FirstOrDefault();
+        var sensorUnit = defaultChannel?.Unit ?? string.Empty;
+        var state = alert?.State ?? observation?.State ?? (elementNode?.IsPaused == true ? SensorState.Paused : SensorState.Unknown);
+        var stateLabel = alert is not null
+            ? FormatSensorStateLabel(alert.State)
+            : observation is not null
+                ? FormatSensorStateLabel(observation.State)
+                : elementNode?.StateLabel ?? MonitoringStatePresentation.Label(state);
+        var stateColor = alert is not null
+            ? MonitoringStatePresentation.Color(alert.State)
+            : observation is not null
+                ? MonitoringStatePresentation.Color(observation.State)
+                : MonitoringStatePresentation.Color(state);
+        var stateKey = alert is not null
+            ? GetAlertStateKey(alert.State)
+            : observation is not null
+                ? MonitoringStatePresentation.Key(observation.State)
+                : elementNode?.StateKey ?? string.Empty;
+
+        context.SetValue("rule.name", ruleName);
+        context.SetValue("state.label", stateLabel);
+        context.SetValue("state.key", stateKey);
+        context.SetValue("state.color", stateColor);
+        context.SetValue("message", alert?.Message ?? observation?.Message ?? elementNode?.StateMessage ?? string.Empty);
+        context.SetValue("rendered_at", now);
+
+        context.SetValue("element.name", elementNode?.Name ?? string.Empty);
+        context.SetValue("element.path", elementNode?.Path ?? targetNode?.Path ?? string.Empty);
+        context.SetValue("element.kind", elementNode?.Kind.ToString() ?? string.Empty);
+        context.SetValue("element.details", elementNode?.Details ?? string.Empty);
+
+        context.SetValue("sensor.name", sensorNode?.Name ?? string.Empty);
+        context.SetValue("sensor.type", sensorNode?.SensorTypeKey ?? string.Empty);
+        context.SetValue("sensor.target", sensorNode?.Target ?? string.Empty);
+        context.SetValue("sensor.value", observation?.DefaultValue, sensorUnit);
+        context.SetValue("sensor.unit", sensorUnit);
+        context.SetValue("sensor.value_with_unit", observation?.DefaultValue, sensorUnit);
+        context.SetValue("sensor.last_check", observation?.TimestampUtc);
+
+        context.SetValue("alert.first_seen", alert?.FirstSeenUtc);
+        context.SetValue("alert.last_seen", alert?.LastSeenUtc);
+        context.SetValue("alert.acknowledged_at", alert?.AcknowledgedUtc);
+        context.SetValue("alert.acknowledged_by", alert?.AcknowledgedBy ?? string.Empty);
+        context.SetValue("alert.resolved_at", alert?.ResolvedUtc);
+        context.SetValue("problem.since", alert?.FirstSeenUtc ?? observation?.TimestampUtc);
+        context.SetValue("problem.age", alert is not null ? now - alert.FirstSeenUtc : observation is not null ? now - observation.TimestampUtc : null);
+
+        context.SetValue("probe.name", observation?.ExecutedByProbeName ?? DeriveProbeName(sensorNode, targetNode));
+        context.SetValue("probe.id", observation?.ExecutedByProbeId ?? string.Empty);
+        context.SetValue("probe.last_seen", observation?.TimestampUtc);
+
+        context.SetValue("channels.summary", BuildChannelsSummary(observation));
+        context.SetRawHtml("state.badge_html", BuildStateBadgeHtml(stateLabel, stateColor));
+        context.SetRawHtml("channels.table_html", BuildChannelsTableHtml(observation, state));
+
+        return context;
+    }
+
+    private static string BuildChannelsSummary(SensorObservation? observation)
+    {
+        if (observation is null || observation.Channels.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(" · ", observation.Channels.Select(channel =>
+        {
+            var value = channel.Value?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-";
+            var unit = string.IsNullOrWhiteSpace(channel.Unit) ? string.Empty : $" {channel.Unit}";
+            return string.IsNullOrWhiteSpace(channel.Label)
+                ? $"{channel.Key}: {value}{unit}"
+                : $"{channel.Label}: {value}{unit}";
+        }));
+    }
+
+    private static string BuildStateBadgeHtml(string stateLabel, string stateColor)
+    {
+        var background = string.IsNullOrWhiteSpace(stateColor) ? "#4567d2" : stateColor.Trim();
+        var foreground = IsLightHexColor(background) ? "#16202c" : "#ffffff";
+
+        return $"<span style=\"display:inline-flex;align-items:center;gap:0.4rem;border-radius:999px;padding:0.35rem 0.75rem;font-size:0.78rem;font-weight:700;color:{foreground};background:{background};\">{WebUtility.HtmlEncode(stateLabel)}</span>";
+    }
+
+    private static string BuildChannelsTableHtml(SensorObservation? observation, SensorState state)
+    {
+        if (observation is null || observation.Channels.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var rows = observation.Channels.Select(channel =>
+        {
+            var label = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(channel.Label) ? channel.Key : channel.Label);
+            var value = channel.Value?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-";
+            var unit = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(channel.Unit) ? string.Empty : $" {channel.Unit}");
+            var channelState = channel.State ?? state;
+            var badge = WebUtility.HtmlEncode(FormatSensorStateLabel(channelState));
+            var rowStyle = channel.IsDefault ? "font-weight:600;" : string.Empty;
+            return $"<tr style=\"{rowStyle}\"><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);\">{label}</td><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);text-align:right;\">{WebUtility.HtmlEncode(value)}{unit}</td><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);text-align:right;\">{badge}</td></tr>";
+        });
+
+        return $"""
+<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+  <thead>
+    <tr>
+      <th style="text-align:left;padding:0 0 0.45rem 0;color:#6b7280;font-weight:600;">Channel</th>
+      <th style="text-align:right;padding:0 0 0.45rem 0;color:#6b7280;font-weight:600;">Value</th>
+      <th style="text-align:right;padding:0 0 0.45rem 0;color:#6b7280;font-weight:600;">State</th>
+    </tr>
+  </thead>
+  <tbody>
+    {string.Join(Environment.NewLine, rows)}
+  </tbody>
+</table>
+""";
+    }
+
+    private static string DeriveProbeName(WorkspaceNodeRow? sensorNode, WorkspaceNodeRow? targetNode)
+    {
+        var source = sensorNode ?? targetNode;
+        if (source is null || string.IsNullOrWhiteSpace(source.Path))
+        {
+            return string.Empty;
+        }
+
+        return source.Path.Split(" / ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
+    }
+
+    private static DateTimeOffset? ParseLastCheck(string? lastCheck)
+    {
+        if (string.IsNullOrWhiteSpace(lastCheck))
+        {
+            return null;
+        }
+
+        return DateTimeOffset.TryParse(lastCheck, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static bool IsAlertWithinRuleScope(string alertPath, string targetPath, bool includeDescendants)
+    {
+        if (string.IsNullOrWhiteSpace(alertPath) || string.IsNullOrWhiteSpace(targetPath))
+        {
+            return true;
+        }
+
+        if (string.Equals(alertPath, targetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return includeDescendants && alertPath.StartsWith(targetPath + " /", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLightHexColor(string color)
+    {
+        if (string.IsNullOrWhiteSpace(color) || !color.StartsWith('#'))
+        {
+            return false;
+        }
+
+        var hex = color.Trim().TrimStart('#');
+        if (hex.Length != 6 && hex.Length != 8)
+        {
+            return false;
+        }
+
+        try
+        {
+            var r = Convert.ToInt32(hex[..2], 16);
+            var g = Convert.ToInt32(hex.Substring(2, 2), 16);
+            var b = Convert.ToInt32(hex.Substring(4, 2), 16);
+            var brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return brightness >= 180;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static int GetNotificationSeverityRank(SensorState state)
+    {
+        return state switch
+        {
+            SensorState.Critical => 3,
+            SensorState.Warning => 2,
+            SensorState.Healthy => 1,
+            _ => 0
+        };
+    }
+
     private static string FormatInheritedEnabledLabel(bool? value)
     {
         return value switch
@@ -5477,6 +5911,16 @@ public sealed record WorkspacePageViewModel
 
     public IReadOnlyList<WorkspaceNotificationReceiverRow> NotificationReceivers { get; init; } = [];
 
+    public IReadOnlyList<NotificationTemplatePlaceholderGroup> NotificationTemplateGroups { get; init; } = [];
+
+    public string NotificationRulePreviewSummary { get; init; } = string.Empty;
+
+    public string NotificationRulePreviewSubject { get; init; } = string.Empty;
+
+    public string NotificationRulePreviewText { get; init; } = string.Empty;
+
+    public string NotificationRulePreviewHtml { get; init; } = string.Empty;
+
     public IReadOnlyList<WorkspaceNodeRow> MonitoringTreeNodes { get; init; } = [];
 
     public IReadOnlyList<WorkspaceMonitoringTreeNode> MonitoringTreeRoots { get; init; } = [];
@@ -5822,6 +6266,12 @@ public sealed class CreateNotificationRuleInput
 
     public int? CooldownMinutes { get; set; }
 
+    public string SubjectTemplate { get; set; } = NotificationTemplateCatalog.DefaultSubjectTemplate;
+
+    public string TextTemplate { get; set; } = NotificationTemplateCatalog.DefaultTextTemplate;
+
+    public string HtmlTemplate { get; set; } = NotificationTemplateCatalog.DefaultHtmlTemplate;
+
     public List<SelectListItem> SenderOptions { get; set; } = [];
 
     public List<SelectListItem> ReceiverOptions { get; set; } = [];
@@ -6047,13 +6497,13 @@ public sealed class WorkspaceSensorChannelThresholdFieldInput
 
     public bool IsDefault { get; set; }
 
-    public string WarningComparison { get; set; } = "above";
+    public string WarningComparison { get; set; } = ">";
 
     public string WarningValue { get; set; } = string.Empty;
 
     public string? WarningValuePlaceholder { get; set; }
 
-    public string CriticalComparison { get; set; } = "above";
+    public string CriticalComparison { get; set; } = ">";
 
     public string CriticalValue { get; set; } = string.Empty;
 
@@ -6263,6 +6713,12 @@ public sealed class WorkspaceNotificationRuleEditorInput
     public List<SensorState> TriggerStates { get; set; } = [];
 
     public int? CooldownMinutes { get; set; }
+
+    public string SubjectTemplate { get; set; } = NotificationTemplateCatalog.DefaultSubjectTemplate;
+
+    public string TextTemplate { get; set; } = NotificationTemplateCatalog.DefaultTextTemplate;
+
+    public string HtmlTemplate { get; set; } = NotificationTemplateCatalog.DefaultHtmlTemplate;
 
     public List<SelectListItem> SenderOptions { get; set; } = [];
 

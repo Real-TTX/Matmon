@@ -81,6 +81,64 @@
                     </label>
                 </div>
 
+                <section class="workspace-notification-template-block">
+                    <div class="panel-header workspace-subsection-header">
+                        <h3 class="section-title">Message templates</h3>
+                        <span class="panel-hint">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets</span>
+                    </div>
+
+                    <div class="workspace-form-grid">
+                        <label class="workspace-span-2">
+                            <span>Subject template</span>
+                            <input asp-for="NewNotificationRule.SubjectTemplate" class="form-control workspace-input" placeholder="{{state.label}}: {{element.path}}" />
+                        </label>
+                        <label class="workspace-span-2">
+                            <span>Text template</span>
+                            <textarea asp-for="NewNotificationRule.TextTemplate" rows="6" class="form-control workspace-textarea"></textarea>
+                        </label>
+                        <label class="workspace-span-2">
+                            <span>HTML template</span>
+                            <textarea asp-for="NewNotificationRule.HtmlTemplate" rows="10" class="form-control workspace-textarea"></textarea>
+                        </label>
+                    </div>
+
+                    <div class="notification-template-layout">
+                        <div class="notification-template-help panel">
+                            <div class="notification-template-panel-title">Placeholders</div>
+                            <div class="notification-template-help-note">The preview uses the latest matching alert or sensor data available in the workspace.</div>
+
+                            @foreach (var group in Model.View.NotificationTemplateGroups)
+                            {
+                                <div class="notification-template-group">
+                                    <div class="notification-template-group-title">@group.Title</div>
+                                    <div class="notification-template-group-items">
+                                        @foreach (var placeholder in group.Placeholders)
+                                        {
+                                            <div class="notification-template-placeholder">
+                                                <code>@((placeholder.IsHtmlSnippet ? "{{{" : "{{") + placeholder.Key + (placeholder.IsHtmlSnippet ? "}}}" : "}}"))</code>
+                                                <span>@placeholder.Description</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="notification-template-preview panel">
+                            <div class="notification-template-panel-title">Preview</div>
+                            <div class="notification-template-preview-summary">@Model.View.NotificationRulePreviewSummary</div>
+                            <div class="notification-template-preview-subject">
+                                <span>Subject</span>
+                                <strong>@Model.View.NotificationRulePreviewSubject</strong>
+                            </div>
+                            <pre class="notification-template-preview-text">@Model.View.NotificationRulePreviewText</pre>
+                            <div class="notification-template-preview-html">
+                                @Html.Raw(Model.View.NotificationRulePreviewHtml)
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <div class="workspace-form-actions">
                     <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
                     <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create rule</span></button>
@@ -133,6 +191,64 @@
                         <select asp-for="NotificationRuleEditor.TriggerStates" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.TriggerStateOptions" multiple size="5"></select>
                     </label>
                 </div>
+
+                <section class="workspace-notification-template-block">
+                    <div class="panel-header workspace-subsection-header">
+                        <h3 class="section-title">Message templates</h3>
+                        <span class="panel-hint">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets</span>
+                    </div>
+
+                    <div class="workspace-form-grid">
+                        <label class="workspace-span-2">
+                            <span>Subject template</span>
+                            <input asp-for="NotificationRuleEditor.SubjectTemplate" class="form-control workspace-input" placeholder="{{state.label}}: {{element.path}}" />
+                        </label>
+                        <label class="workspace-span-2">
+                            <span>Text template</span>
+                            <textarea asp-for="NotificationRuleEditor.TextTemplate" rows="6" class="form-control workspace-textarea"></textarea>
+                        </label>
+                        <label class="workspace-span-2">
+                            <span>HTML template</span>
+                            <textarea asp-for="NotificationRuleEditor.HtmlTemplate" rows="10" class="form-control workspace-textarea"></textarea>
+                        </label>
+                    </div>
+
+                    <div class="notification-template-layout">
+                        <div class="notification-template-help panel">
+                            <div class="notification-template-panel-title">Placeholders</div>
+                            <div class="notification-template-help-note">The preview uses the latest matching alert or sensor data available in the workspace.</div>
+
+                            @foreach (var group in Model.View.NotificationTemplateGroups)
+                            {
+                                <div class="notification-template-group">
+                                    <div class="notification-template-group-title">@group.Title</div>
+                                    <div class="notification-template-group-items">
+                                        @foreach (var placeholder in group.Placeholders)
+                                        {
+                                            <div class="notification-template-placeholder">
+                                                <code>@((placeholder.IsHtmlSnippet ? "{{{" : "{{") + placeholder.Key + (placeholder.IsHtmlSnippet ? "}}}" : "}}"))</code>
+                                                <span>@placeholder.Description</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="notification-template-preview panel">
+                            <div class="notification-template-panel-title">Preview</div>
+                            <div class="notification-template-preview-summary">@Model.View.NotificationRulePreviewSummary</div>
+                            <div class="notification-template-preview-subject">
+                                <span>Subject</span>
+                                <strong>@Model.View.NotificationRulePreviewSubject</strong>
+                            </div>
+                            <pre class="notification-template-preview-text">@Model.View.NotificationRulePreviewText</pre>
+                            <div class="notification-template-preview-html">
+                                @Html.Raw(Model.View.NotificationRulePreviewHtml)
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
                 <div class="workspace-form-actions">
                     <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>

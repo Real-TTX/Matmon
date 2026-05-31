@@ -1,0 +1,55 @@
+@page "/system/users/new"
+@model UserCreateModel
+@{
+    ViewData["Title"] = "New user";
+    var backUrl = Model.GetSafeReturnUrl("/Config?tab=users");
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("plus")
+            <h1>New user</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel panel-stack workspace-editor-panel">
+        <form method="post" class="workspace-form">
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <div class="workspace-form-grid">
+                <label class="workspace-field">
+                    <span class="workspace-label">Username</span>
+                    <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
+                </label>
+
+                <label class="workspace-field">
+                    <span class="workspace-label">Password</span>
+                    <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" />
+                </label>
+
+                <label class="workspace-field">
+                    <span class="workspace-label">Role</span>
+                    <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="form-select workspace-select"></select>
+                </label>
+            </div>
+
+            <div class="workspace-inline-note">New users are created as enabled accounts.</div>
+
+            <div class="workspace-form-actions">
+                <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create user</span></button>
+            </div>
+        </form>
+    </section>
+</section>

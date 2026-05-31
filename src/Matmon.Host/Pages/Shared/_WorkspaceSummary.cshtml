@@ -1,0 +1,26 @@
+@using Matmon.Host.Services
+@{
+    if (ViewData["WorkspaceSummary"] is not DashboardSnapshot workspaceSummary)
+    {
+        return;
+    }
+}
+
+<div class="workspace-summary-card page-header-summary" aria-label="Workspace summary">
+    <div class="workspace-summary-main">
+        <span class="workspace-summary-kicker">Master</span>
+        <strong>@workspaceSummary.WorkspaceName</strong>
+    </div>
+    <div class="workspace-summary-metrics">
+        <a class="workspace-summary-chip" asp-page="/Config" asp-route-tab="probes" aria-label="Configured probes">
+            @MatmonIcons.Render("probe")
+            <strong>@workspaceSummary.ConfiguredProbeCount</strong>
+            <span>Probes</span>
+        </a>
+        <a class="workspace-summary-chip" asp-page="/Monitoring" asp-route-monitoringKind="sensor" aria-label="Total sensors">
+            @MatmonIcons.Render("sensor")
+            <strong>@workspaceSummary.SensorCount</strong>
+            <span>Sensors</span>
+        </a>
+    </div>
+</div>

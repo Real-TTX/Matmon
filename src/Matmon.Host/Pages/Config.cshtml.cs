@@ -1,5 +1,6 @@
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -24,8 +25,6 @@ public class ConfigModel : PageModel
 
     public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
 
-    public IReadOnlyList<SelectListItem> RoleOptions { get; private set; } = [];
-
     public StorageTelemetryOverview StorageTelemetry { get; private set; } = new(0, 0, 0);
 
     public IReadOnlyList<SelectListItem> StorageCleanupScopeOptions { get; private set; } = [];
@@ -35,8 +34,8 @@ public class ConfigModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Tab { get; set; }
 
-    [BindProperty]
-    public SystemUserInput UserInput { get; set; } = new();
+    [BindProperty(SupportsGet = true)]
+    public Guid? InstallProbeId { get; set; }
 
     [BindProperty]
     public StorageCleanupInput StorageCleanup { get; set; } = new();
@@ -51,6 +50,11 @@ public class ConfigModel : PageModel
 
     public IActionResult OnGet()
     {
+        if (InstallProbeId.HasValue)
+        {
+            return RedirectToPage("/ProbeInstall", new { probeId = InstallProbeId.Value, returnUrl = "/Config?tab=probes" });
+        }
+
         if (IsUsersTabRequestedByNonAdmin())
         {
             return Forbid();
@@ -58,50 +62,6 @@ public class ConfigModel : PageModel
 
         LoadView();
         return Page();
-    }
-
-    public IActionResult OnPostCreateUser()
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            _workspaceStore.CreateUser(UserInput.Username, UserInput.Password ?? string.Empty, UserInput.Role);
-            StatusMessage = $"User '{UserInput.Username}' created.";
-            return RedirectToPage(new { tab = "users" });
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            Tab = "users";
-            LoadView();
-            return Page();
-        }
-    }
-
-    public IActionResult OnPostUpdateUser()
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            _workspaceStore.UpdateUser(UserInput.Id, UserInput.Username, UserInput.Role, UserInput.IsEnabled, UserInput.Password);
-            StatusMessage = $"User '{UserInput.Username}' updated.";
-            return RedirectToPage(new { tab = "users" });
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            Tab = "users";
-            LoadView();
-            return Page();
-        }
     }
 
     public IActionResult OnPostDeleteUser(Guid userId)
@@ -113,6 +73,11 @@ public class ConfigModel : PageModel
 
         try
         {
+            if (MatmonSecurity.IsCurrentUser(User, userId))
+            {
+                throw new InvalidOperationException("You cannot delete the account you are currently using.");
+            }
+
             _workspaceStore.DeleteUser(userId);
             StatusMessage = "User deleted.";
         }
@@ -201,6 +166,16 @@ public class ConfigModel : PageModel
         return value.ToString("N0", CultureInfo.CurrentCulture);
     }
 
+    public bool IsCurrentUser(MatmonUser user)
+    {
+        return MatmonSecurity.IsCurrentUser(User, user.Id);
+    }
+
+    public bool CanInstallProbe(SystemProbeOverview probe)
+    {
+        return ProbeInstallCommandBuilder.CanInstallProbe(probe);
+    }
+
     private static string NormalizeTab(string? tab)
     {
         return tab?.Trim().ToLowerInvariant() switch
@@ -223,10 +198,6 @@ public class ConfigModel : PageModel
         Overview = _configurationOverviewProvider.GetOverview();
         Users = _workspaceStore.GetUsers();
         StorageTelemetry = _workspaceStore.GetStorageTelemetryOverview();
-        RoleOptions = Enum.GetValues<MatmonUserRole>()
-            .OrderByDescending(role => role)
-            .Select(role => new SelectListItem(role.ToString(), role.ToString()))
-            .ToArray();
         StorageCleanupScopeOptions =
         [
             new SelectListItem("Telemetry history + statistics", StorageCleanupScope.Telemetry.ToString()),
@@ -245,19 +216,6 @@ public class ConfigModel : PageModel
             new SelectListItem("All selected data", "0")
         ];
     }
-}
-
-public sealed class SystemUserInput
-{
-    public Guid Id { get; set; }
-
-    public string Username { get; set; } = string.Empty;
-
-    public string? Password { get; set; }
-
-    public MatmonUserRole Role { get; set; } = MatmonUserRole.Viewer;
-
-    public bool IsEnabled { get; set; } = true;
 }
 
 public sealed class StorageCleanupInput

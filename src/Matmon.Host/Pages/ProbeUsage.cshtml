@@ -1,0 +1,389 @@
+@page "/monitoring/probe/{probeElementId:guid}/usage"
+@model ProbeUsageModel
+@using System.Globalization
+@{
+    ViewData["Title"] = $"{Model.View.Name} Usage";
+    ViewData["WorkspaceSummarySuppress"] = true;
+    var isGroupedView = string.Equals(Model.View.ViewMode, "grouped", StringComparison.OrdinalIgnoreCase);
+    var returnUrl = string.IsNullOrWhiteSpace(Model.ReturnUrl) ? "/Monitoring" : Model.ReturnUrl;
+}
+
+<section class="dashboard-shell">
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <div class="page-header sensor-header probe-usage-header" style="--sensor-state-color:@Model.View.StatusColor">
+        <div class="sensor-header-main">
+            <div class="page-title">
+                @MatmonIcons.Render("chart")
+                <h1>Usage details</h1>
+            </div>
+            <div class="sensor-path">@Model.View.Path</div>
+            <div class="sensor-meta">
+                <span class="sensor-chip">@Model.View.RoleLabel</span>
+                <span class="sensor-chip">Probe: @Model.View.ProbeId</span>
+                <span class="sensor-chip">View: @(isGroupedView ? "Grouped" : "Table")</span>
+                <span class="state-pill" data-state="@Model.View.StatusKey">@Model.View.StatusLabel</span>
+                <span class="sensor-chip">Sensors @Model.View.SensorCount / @Model.View.TotalSensorCount</span>
+                <span class="sensor-chip">Groups @Model.View.GroupCount / @Model.View.TotalGroupCount</span>
+            </div>
+            <div class="sensor-state-message">@Model.View.StatusMessage</div>
+        </div>
+
+        <div class="sensor-header-side probe-usage-side">
+            <span class="state-pill" data-state="@Model.View.StatusKey">@Model.View.StatusLabel</span>
+            <div class="probe-usage-summary">
+                <div class="probe-usage-metric">
+                    <span>Bytes / h</span>
+                    <strong>@Model.View.EstimatedBytesPerHourText</strong>
+                </div>
+                <div class="probe-usage-metric">
+                    <span>Bytes / d</span>
+                    <strong>@Model.View.EstimatedBytesPerDayText</strong>
+                </div>
+                <div class="probe-usage-metric">
+                    <span>Storage used</span>
+                    <strong>@Model.View.DataSizeText</strong>
+                </div>
+                <div class="probe-usage-metric">
+                    <span>Storage free</span>
+                    <strong>@Model.View.StorageFreeText</strong>
+                </div>
+            </div>
+            <div class="sensor-header-meta">
+                <span class="panel-hint">last @Model.View.LastSeenText</span>
+                <span class="panel-hint">@Model.View.HealthySensorCount ok / @Model.View.WarningSensorCount warn / @Model.View.ErrorSensorCount err / @Model.View.PausedSensorCount paused</span>
+            </div>
+            <div class="workspace-row-actions sensor-header-actions probe-usage-actions">
+                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.ProbeElementId" asp-route-returnUrl="@Model.CurrentUrl">
+                    @MatmonIcons.Render("pencil")
+                    <span>Edit</span>
+                </a>
+                <a class="workspace-action-link" href="@returnUrl">
+                    @MatmonIcons.Render("arrow-left")
+                    <span>Back</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <section class="panel panel-stack probe-usage-toolbar-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("filter")<span>Usage view</span></h2>
+            <span class="panel-hint">@Model.View.FilterSummary</span>
+        </div>
+
+        <form method="get" class="probe-usage-toolbar">
+            <input type="hidden" name="probeElementId" value="@Model.ProbeElementId" />
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <input type="hidden" name="viewMode" value="@Model.View.ViewMode" />
+
+            <div class="probe-usage-view-switch">
+                <a class="workspace-tab @(isGroupedView ? "is-active" : string.Empty)"
+                   asp-page="/ProbeUsage"
+                   asp-route-probeElementId="@Model.ProbeElementId"
+                   asp-route-returnUrl="@Model.ReturnUrl"
+                   asp-route-viewMode="grouped"
+                   asp-route-search="@Model.View.Search"
+                   asp-route-stateFilter="@Model.View.StateFilter"
+                   asp-route-usageFilter="@Model.View.UsageFilter"
+                   asp-route-sortBy="@Model.View.SortBy"
+                   asp-route-highlightedOnly="@Model.View.HighlightedOnly">
+                    Grouped
+                </a>
+                <a class="workspace-tab @(!isGroupedView ? "is-active" : string.Empty)"
+                   asp-page="/ProbeUsage"
+                   asp-route-probeElementId="@Model.ProbeElementId"
+                   asp-route-returnUrl="@Model.ReturnUrl"
+                   asp-route-viewMode="table"
+                   asp-route-search="@Model.View.Search"
+                   asp-route-stateFilter="@Model.View.StateFilter"
+                   asp-route-usageFilter="@Model.View.UsageFilter"
+                   asp-route-sortBy="@Model.View.SortBy"
+                   asp-route-highlightedOnly="@Model.View.HighlightedOnly">
+                    Table
+                </a>
+            </div>
+
+            <label class="monitoring-filter-field probe-usage-filter-field">
+                <span>@MatmonIcons.Render("search")<small>Search</small></span>
+                <input type="search" name="search" value="@Model.View.Search" class="form-control workspace-input" placeholder="Name, path, target, type" />
+            </label>
+
+            <label class="monitoring-filter-field probe-usage-filter-field">
+                <span>@MatmonIcons.Render("warning")<small>State</small></span>
+                <select name="stateFilter" class="form-select workspace-select">
+                    <option value="all" selected="@(Model.View.StateFilter == "all" ? "selected" : null)">All</option>
+                    <option value="ok" selected="@(Model.View.StateFilter == "ok" ? "selected" : null)">OK</option>
+                    <option value="warning" selected="@(Model.View.StateFilter == "warning" ? "selected" : null)">Warning</option>
+                    <option value="error" selected="@(Model.View.StateFilter == "error" ? "selected" : null)">Error</option>
+                    <option value="paused" selected="@(Model.View.StateFilter == "paused" ? "selected" : null)">Paused</option>
+                    <option value="unknown" selected="@(Model.View.StateFilter == "unknown" ? "selected" : null)">Unknown</option>
+                    <option value="disabled" selected="@(Model.View.StateFilter == "disabled" ? "selected" : null)">Disabled</option>
+                </select>
+            </label>
+
+            <label class="monitoring-filter-field probe-usage-filter-field">
+                <span>@MatmonIcons.Render("sensor")<small>Usage</small></span>
+                <select name="usageFilter" class="form-select workspace-select">
+                    <option value="all" selected="@(Model.View.UsageFilter == "all" ? "selected" : null)">All</option>
+                    <option value="low" selected="@(Model.View.UsageFilter == "low" ? "selected" : null)">Low</option>
+                    <option value="moderate" selected="@(Model.View.UsageFilter == "moderate" ? "selected" : null)">Moderate</option>
+                    <option value="high" selected="@(Model.View.UsageFilter == "high" ? "selected" : null)">High</option>
+                </select>
+            </label>
+
+            <label class="monitoring-filter-field probe-usage-filter-field">
+                <span>@MatmonIcons.Render("list")<small>Sort</small></span>
+                <select name="sortBy" class="form-select workspace-select">
+                    <option value="load" selected="@(Model.View.SortBy == "load" ? "selected" : null)">Load</option>
+                    <option value="name" selected="@(Model.View.SortBy == "name" ? "selected" : null)">Name</option>
+                    <option value="type" selected="@(Model.View.SortBy == "type" ? "selected" : null)">Type</option>
+                    <option value="state" selected="@(Model.View.SortBy == "state" ? "selected" : null)">State</option>
+                    <option value="bytes" selected="@(Model.View.SortBy == "bytes" ? "selected" : null)">Bytes</option>
+                </select>
+            </label>
+
+            <label class="workspace-check probe-usage-highlight-check">
+                <input type="checkbox" name="highlightedOnly" value="true" @(Model.View.HighlightedOnly ? "checked" : null) />
+                Highlighted only
+            </label>
+
+            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
+            <a class="workspace-secondary-submit"
+               asp-page="/ProbeUsage"
+               asp-route-probeElementId="@Model.ProbeElementId"
+               asp-route-returnUrl="@Model.ReturnUrl"
+               asp-route-viewMode="@Model.View.ViewMode">
+                @MatmonIcons.Render("arrow-left")
+                <span>Reset</span>
+            </a>
+        </form>
+
+        <div class="probe-usage-distribution">
+            <div class="probe-usage-distribution-header">
+                <span class="workspace-label">Load distribution</span>
+                <span class="panel-hint">@Model.View.DistributionLabel</span>
+            </div>
+            @if (Model.View.DistributionSegments.Count == 0)
+            {
+                <div class="empty-state probe-usage-distribution-empty">No visible load data for the current filters.</div>
+            }
+            else
+            {
+                <div class="probe-usage-distribution-bar" aria-label="Load distribution">
+                    @foreach (var segment in Model.View.DistributionSegments)
+                    {
+                        <span class="probe-usage-distribution-segment"
+                              data-level="@segment.UsageLevelKey"
+                              title="@segment.Label @segment.Percent.ToString("0.#", CultureInfo.InvariantCulture)% - @segment.DetailText"
+                              style="width:@segment.Percent.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
+                    }
+                </div>
+                <div class="probe-usage-distribution-legend">
+                    @foreach (var segment in Model.View.DistributionSegments)
+                    {
+                        <span class="probe-usage-distribution-chip" data-level="@segment.UsageLevelKey" title="@segment.DetailText">
+                            <strong>@segment.Label</strong>
+                            <span>@segment.Percent.ToString("0.#", CultureInfo.InvariantCulture)%</span>
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="panel panel-stack">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("signal")<span>@(isGroupedView ? "Sensor groups" : "Sensors")</span></h2>
+            <span class="panel-hint">@Model.View.SensorCount visible / @Model.View.TotalSensorCount total</span>
+        </div>
+
+        @if (Model.View.SensorCount == 0)
+        {
+            <div class="empty-state">No sensors match the current filters.</div>
+        }
+        else if (isGroupedView)
+        {
+            <div class="probe-usage-group-list">
+                @foreach (var group in Model.View.Groups)
+                {
+                    <details class="probe-usage-group" @(group.IsExpanded ? "open" : null)>
+                        <summary class="probe-usage-group-summary">
+                            <div class="probe-usage-group-main">
+                                <div class="probe-usage-group-title">
+                                    <span class="probe-usage-group-name">@group.SensorTypeLabel</span>
+                                    <span class="usage-level-pill" data-level="@group.UsageLevelKey">@group.UsageLevelLabel</span>
+                                    <span class="probe-usage-group-count">@group.SensorCount sensors</span>
+                                </div>
+                                <div class="probe-usage-group-meta">
+                                    <span>@group.SamplesPerHour samples/h</span>
+                                    <span>@group.EstimatedBytesPerHourText / h</span>
+                                    <span>@group.EstimatedBytesPerDayText / d</span>
+                                </div>
+                                <div class="probe-usage-load-bar" style="width:100%">
+                                    <span style="width:@group.RelativeLoadPercent.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
+                                </div>
+                            </div>
+                            <div class="probe-usage-group-side">
+                                <strong>@group.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                <span class="panel-hint">group share</span>
+                            </div>
+                        </summary>
+
+                        <div class="probe-usage-group-table-wrap">
+                            <table class="probe-usage-table probe-usage-sensor-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sensor</th>
+                                        <th>State</th>
+                                        <th>Schedule</th>
+                                        <th>Load</th>
+                                        <th>Traffic</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var sensor in group.Sensors)
+                                    {
+                                        <tr class="probe-usage-table-row" data-state="@sensor.StateKey" data-level="@sensor.UsageLevelKey">
+                                            <td class="probe-usage-cell-main">
+                                                <div class="probe-usage-cell-title-row">
+                                                    <strong>@sensor.Name</strong>
+                                                    @if (sensor.IsHighlighted)
+                                                    {
+                                                        <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
+                                                    }
+                                                </div>
+                                                <small>@sensor.Path</small>
+                                                @if (!string.IsNullOrWhiteSpace(sensor.Target))
+                                                {
+                                                    <small>Target: @sensor.Target</small>
+                                                }
+                                            </td>
+                                            <td class="probe-usage-cell-state">
+                                                <span class="state-pill" data-state="@sensor.StateKey">@sensor.StateLabel</span>
+                                                <span class="usage-level-pill" data-level="@sensor.UsageLevelKey">@sensor.UsageLevelLabel</span>
+                                                @if (!string.IsNullOrWhiteSpace(sensor.StateMessage))
+                                                {
+                                                    <small>@sensor.StateMessage</small>
+                                                }
+                                            </td>
+                                            <td class="probe-usage-cell-schedule">
+                                                <strong>@sensor.ScheduleSummary</strong>
+                                                <small>Last @sensor.LastSeenText</small>
+                                            </td>
+                                            <td class="probe-usage-cell-load">
+                                                <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                                <div class="probe-usage-load-bar">
+                                                    <span style="width:@sensor.RelativeLoadPercent.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
+                                                </div>
+                                                <small>@sensor.SamplesPerHourText samples/h · @sensor.AverageDurationText avg</small>
+                                            </td>
+                                            <td class="probe-usage-cell-traffic">
+                                                <strong>@sensor.EstimatedBytesPerHourText / h</strong>
+                                                <small>@sensor.EstimatedBytesPerDayText / d</small>
+                                            </td>
+                                            <td class="probe-usage-cell-actions">
+                                                <div class="workspace-row-actions probe-usage-sensor-actions">
+                                                    <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.SensorId" asp-route-window="1d">
+                                                        @MatmonIcons.Render("chart")
+                                                        <span>Details</span>
+                                                    </a>
+                                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
+                                                        @MatmonIcons.Render("pencil")
+                                                        <span>Edit</span>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="probe-usage-table-wrap">
+                <table class="probe-usage-table probe-usage-flat-table">
+                    <thead>
+                        <tr>
+                            <th>Sensor</th>
+                            <th>State</th>
+                            <th>Schedule</th>
+                            <th>Load</th>
+                            <th>Traffic</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sensor in Model.View.Sensors)
+                        {
+                            <tr class="probe-usage-table-row" data-state="@sensor.StateKey" data-level="@sensor.UsageLevelKey">
+                                <td class="probe-usage-cell-main">
+                                    <div class="probe-usage-cell-title-row">
+                                        <strong>@sensor.Name</strong>
+                                        @if (sensor.IsHighlighted)
+                                        {
+                                            <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
+                                        }
+                                    </div>
+                                    <small>@sensor.Path</small>
+                                    @if (!string.IsNullOrWhiteSpace(sensor.Target))
+                                    {
+                                        <small>Target: @sensor.Target</small>
+                                    }
+                                </td>
+                                <td class="probe-usage-cell-state">
+                                    <span class="state-pill" data-state="@sensor.StateKey">@sensor.StateLabel</span>
+                                    <span class="usage-level-pill" data-level="@sensor.UsageLevelKey">@sensor.UsageLevelLabel</span>
+                                    @if (!string.IsNullOrWhiteSpace(sensor.StateMessage))
+                                    {
+                                        <small>@sensor.StateMessage</small>
+                                    }
+                                </td>
+                                <td class="probe-usage-cell-schedule">
+                                    <strong>@sensor.ScheduleSummary</strong>
+                                    <small>Last @sensor.LastSeenText</small>
+                                </td>
+                                <td class="probe-usage-cell-load">
+                                    <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                    <div class="probe-usage-load-bar">
+                                        <span style="width:@sensor.RelativeLoadPercent.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
+                                    </div>
+                                    <small>@sensor.SamplesPerHourText samples/h · @sensor.AverageDurationText avg</small>
+                                </td>
+                                <td class="probe-usage-cell-traffic">
+                                    <strong>@sensor.EstimatedBytesPerHourText / h</strong>
+                                    <small>@sensor.EstimatedBytesPerDayText / d</small>
+                                </td>
+                                <td class="probe-usage-cell-actions">
+                                    <div class="workspace-row-actions probe-usage-sensor-actions">
+                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.SensorId" asp-route-window="1d">
+                                            @MatmonIcons.Render("chart")
+                                            <span>Details</span>
+                                        </a>
+                                        <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
+                                            @MatmonIcons.Render("pencil")
+                                            <span>Edit</span>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</section>

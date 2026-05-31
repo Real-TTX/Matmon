@@ -31,7 +31,7 @@
             "ack" => alert.IsActive && alert.IsAcknowledged,
             "paused" => alert.IsActive && string.Equals(alert.StateKey, "paused", StringComparison.OrdinalIgnoreCase),
             "history" => !alert.IsActive,
-            _ => true
+            _ => alert.IsActive
         };
     }
 
@@ -50,7 +50,7 @@
             "ack" => "acknowledged",
             "paused" => "paused",
             "history" => "history",
-            _ => "all alerts"
+            _ => "all active alerts"
         };
     }
 
@@ -64,11 +64,12 @@
     var warningAlertCount = allAlerts.Count(alert => alert.IsActive && string.Equals(alert.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
     var acknowledgedAlertCount = allAlerts.Count(alert => alert.IsActive && alert.IsAcknowledged);
     var pausedAlertCount = allAlerts.Count(alert => alert.IsActive && string.Equals(alert.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
+    var activeAlertCount = allAlerts.Count(alert => alert.IsActive);
     var resolvedAlertCount = allAlerts.Count(alert => !alert.IsActive);
 
     var showOpenSection = alertFilter is "all" or "open" or "error" or "warning" or "paused";
     var showAcknowledgedSection = alertFilter is "all" or "ack" or "error" or "warning" or "paused";
-    var showHistorySection = alertFilter is "all" or "history";
+    var showHistorySection = alertFilter is "history";
 }
 
 <section class="dashboard-shell">
@@ -82,18 +83,17 @@
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
 
-    <div class="page-header">
+    <div class="page-header has-summary">
         <div class="page-title">
             @MatmonIcons.Render("warning")
             <h1>Alerts</h1>
         </div>
-        <span class="panel-hint">@openAlertCount open / @acknowledgedAlertCount acknowledged / @resolvedAlertCount history</span>
     </div>
 
     <nav class="page-actions alert-filter-bar" aria-label="Alert filters">
         <a class="workspace-tab alert-filter-tab @AlertFilterClass("all")" asp-page="/Alerts">
             <span>All</span>
-            <strong>@allAlerts.Count</strong>
+            <strong>@activeAlertCount</strong>
         </a>
         <a class="workspace-tab alert-filter-tab @AlertFilterClass("open")" asp-page="/Alerts" asp-route-alertFilter="open">
             <span>Open</span>

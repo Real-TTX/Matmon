@@ -7,6 +7,9 @@
     var treeRoots = Model.View.MonitoringTreeRoots;
     var returnUrl = Request.Path + Request.QueryString;
     var monitoringSize = Model.View.MonitoringSize;
+    var viewSize = isListView
+        ? (string.Equals(monitoringSize, "s", StringComparison.OrdinalIgnoreCase) ? "s" : "l")
+        : monitoringSize;
 }
 
 <section class="dashboard-shell">
@@ -31,7 +34,7 @@
         </button>
     </div>
 
-    <div class="page-header">
+    <div class="page-header has-summary">
         <div class="page-title">
             @MatmonIcons.Render("sensor")
             <div>
@@ -39,7 +42,6 @@
                 <h1>Sensors</h1>
             </div>
         </div>
-        <span class="panel-hint">@Model.View.MonitoringFilterSummary</span>
     </div>
 
     <form method="post" asp-page-handler="MoveElement" hidden data-tree-move-form>
@@ -48,62 +50,100 @@
         <input type="hidden" name="returnUrl" value="@(Request.Path + Request.QueryString)" />
     </form>
 
-    <section class="panel panel-stack monitoring-controls">
+    <section class="panel panel-stack monitoring-controls" data-monitoring-shell data-monitoring-view="@Model.View.MonitoringViewMode" data-monitoring-size="@viewSize">
         <form method="get" class="monitoring-filter-bar">
             <input type="hidden" name="monitoringView" value="@Model.View.MonitoringViewMode" />
-            <input type="hidden" name="monitoringSize" value="@monitoringSize" />
+            <input type="hidden" name="monitoringSize" value="@viewSize" />
 
             <div class="monitoring-view-switch">
                 <a class="workspace-action-link @(isListView ? string.Empty : "is-active")"
                    asp-page="/Monitoring"
                    asp-route-monitoringView="tree"
-                   asp-route-monitoringSize="@monitoringSize"
+                   asp-route-monitoringSize="@(isListView ? viewSize : viewSize)"
                    asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
                    asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch">
+                   asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                   data-monitoring-view-link="tree">
                     @MatmonIcons.Render("monitoring")
                     <span>Tree</span>
                 </a>
                 <a class="workspace-action-link @(isListView ? "is-active" : string.Empty)"
                    asp-page="/Monitoring"
                    asp-route-monitoringView="list"
-                   asp-route-monitoringSize="@monitoringSize"
+                   asp-route-monitoringSize="@(isListView ? viewSize : viewSize)"
                    asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
                    asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch">
+                   asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                   data-monitoring-view-link="list">
                     @MatmonIcons.Render("list")
                     <span>List</span>
                 </a>
             </div>
 
-            <div class="monitoring-size-switch" aria-label="Sensor tile size">
-                <a class="workspace-action-link @(monitoringSize == "s" ? "is-active" : string.Empty)"
-                   asp-page="/Monitoring"
-                   asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                   asp-route-monitoringSize="s"
-                   asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                   asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch">
-                    <span>S</span>
-                </a>
-                <a class="workspace-action-link @(monitoringSize == "m" ? "is-active" : string.Empty)"
-                   asp-page="/Monitoring"
-                   asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                   asp-route-monitoringSize="m"
-                   asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                   asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch">
-                    <span>M</span>
-                </a>
-                <a class="workspace-action-link @(monitoringSize == "l" ? "is-active" : string.Empty)"
-                   asp-page="/Monitoring"
-                   asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                   asp-route-monitoringSize="l"
-                   asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                   asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch">
-                    <span>L</span>
-                </a>
+            <div class="monitoring-size-switch @(isListView ? "is-list-view" : "is-tree-view")" aria-label="Sensor tile size">
+                @if (isListView)
+                {
+                    <a class="workspace-action-link @(viewSize == "s" ? "is-active" : string.Empty)"
+                       asp-page="/Monitoring"
+                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
+                       asp-route-monitoringSize="s"
+                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                       data-monitoring-size-link="s">
+                        <span>S</span>
+                    </a>
+                    <button type="button"
+                            class="workspace-action-link is-disabled"
+                            disabled
+                            title="Deactivated"
+                            aria-disabled="true">
+                        <span>M</span>
+                    </button>
+                    <a class="workspace-action-link @(viewSize == "l" ? "is-active" : string.Empty)"
+                       asp-page="/Monitoring"
+                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
+                       asp-route-monitoringSize="l"
+                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                       data-monitoring-size-link="l">
+                        <span>L</span>
+                    </a>
+                }
+                else
+                {
+                    <a class="workspace-action-link @(viewSize == "s" ? "is-active" : string.Empty)"
+                       asp-page="/Monitoring"
+                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
+                       asp-route-monitoringSize="s"
+                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                       data-monitoring-size-link="s">
+                        <span>S</span>
+                    </a>
+                    <a class="workspace-action-link @(viewSize == "m" ? "is-active" : string.Empty)"
+                       asp-page="/Monitoring"
+                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
+                       asp-route-monitoringSize="m"
+                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                       data-monitoring-size-link="m">
+                        <span>M</span>
+                    </a>
+                    <a class="workspace-action-link @(viewSize == "l" ? "is-active" : string.Empty)"
+                       asp-page="/Monitoring"
+                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
+                       asp-route-monitoringSize="l"
+                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
+                       data-monitoring-size-link="l">
+                        <span>L</span>
+                    </a>
+                }
             </div>
 
             <label class="monitoring-filter-field">
@@ -142,7 +182,7 @@
 
     <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>@(isListView ? "List" : $"Tree {monitoringSize.ToUpperInvariant()}")</span></h2>
+            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>@(isListView ? $"List {viewSize.ToUpperInvariant()}" : $"Tree {viewSize.ToUpperInvariant()}")</span></h2>
             <span class="panel-hint">@Model.View.MonitoringVisibleCount shown</span>
         </div>
 
@@ -152,7 +192,14 @@
         }
         else if (isListView)
         {
-            <div class="monitoring-list">
+            <div class="monitoring-list-shell" data-monitoring-list-size="@viewSize">
+                <div class="monitoring-list-head" role="row">
+                    <span>Status</span>
+                    <span>Object</span>
+                    <span>Endpoint</span>
+                    <span>Information</span>
+                    <span>Actions</span>
+                </div>
                 @foreach (var node in nodes)
                 {
                     var canAddFolder = node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder;
@@ -160,41 +207,110 @@
                     var canAddSensor = node.Kind != MonitoringElementKind.Sensor;
                     var canDiscover = node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
                     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
+                    var canDelete = !(node.Kind == MonitoringElementKind.Probe && node.Depth == 0);
+                    var kindKey = node.Kind.ToString().ToLowerInvariant();
+                    var rowState = string.IsNullOrWhiteSpace(node.StateKey) ? "neutral" : node.StateKey;
+                    var hasState = !string.IsNullOrWhiteSpace(node.StateKey) && !string.IsNullOrWhiteSpace(node.StateLabel);
+                    var endpointLabel = node.Kind switch
+                    {
+                        MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.Target) => node.Target,
+                        MonitoringElementKind.Sensor => "(no target)",
+                        MonitoringElementKind.Host when !string.IsNullOrWhiteSpace(node.Address) => node.Address,
+                        MonitoringElementKind.Probe when !string.IsNullOrWhiteSpace(node.ProbeId) => node.ProbeId,
+                        _ => "-"
+                    };
+                    var endpointHint = node.Kind switch
+                    {
+                        MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.SensorTypeKey) => node.SensorTypeKey,
+                        MonitoringElementKind.Host => "host address",
+                        MonitoringElementKind.Probe => "probe id",
+                        MonitoringElementKind.Folder => "folder",
+                        _ => node.Kind.ToString()
+                    };
+                    var primaryInfo = !string.IsNullOrWhiteSpace(node.Details)
+                        ? node.Details
+                        : !string.IsNullOrWhiteSpace(node.SettingsSummary)
+                            ? node.SettingsSummary
+                            : "No extra information";
 
-                    <article class="monitoring-list-row" data-state="@node.StateKey">
-                        <div class="monitoring-list-kind">
-                            <span class="tree-kind" data-kind="@node.Kind.ToString().ToLowerInvariant()">
-                                @MatmonIcons.Render(node.KindIconKey)
-                                <span>@node.Kind</span>
-                            </span>
-                        </div>
-                        <div class="monitoring-list-main">
-                            <div class="tree-name">@node.Name</div>
-                            <div class="tree-details">@node.Path</div>
-                            @if (!string.IsNullOrWhiteSpace(node.Details))
+                    <article class="monitoring-list-row" data-state="@rowState" data-kind="@kindKey" data-depth="@node.Depth">
+                        <div class="monitoring-list-status">
+                            <span class="monitoring-list-state-dot" aria-hidden="true"></span>
+                            @if (hasState)
                             {
-                                <div class="tree-state-message">@node.Details</div>
+                                <span class="state-pill" data-state="@node.StateKey">@node.StateLabel</span>
                             }
-                            @if (!string.IsNullOrWhiteSpace(node.TemplateSummary))
+                            else
                             {
-                                <div class="tree-state-message">@node.TemplateSummary</div>
+                                <span class="monitoring-list-muted-pill">@node.Kind</span>
                             }
-                        </div>
-                        <div class="monitoring-list-side">
-                            <span class="state-pill" data-state="@node.StateKey">@node.StateLabel</span>
                             @if (node.IsHighlighted)
                             {
                                 <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
                             }
+                        </div>
+
+                        <div class="monitoring-list-main">
+                            <div class="monitoring-list-title-row">
+                                <span class="tree-kind" data-kind="@kindKey" title="@node.Kind">
+                                    @MatmonIcons.Render(node.KindIconKey)
+                                </span>
+                                @if (node.Kind == MonitoringElementKind.Sensor)
+                                {
+                                    <a class="monitoring-list-title" asp-page="/SensorDetails" asp-route-sensorId="@node.Id">@node.Name</a>
+                                }
+                                else
+                                {
+                                    <a class="monitoring-list-title" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@node.Name</a>
+                                }
+                            </div>
+                            <div class="monitoring-list-path">@node.Path</div>
+                        </div>
+
+                        <div class="monitoring-list-endpoint">
+                            <strong>@endpointLabel</strong>
+                            <small>@endpointHint</small>
+                        </div>
+
+                        <div class="monitoring-list-info">
+                            <span>@primaryInfo</span>
+                            @if (!string.IsNullOrWhiteSpace(node.TemplateSummary))
+                            {
+                                <small>@node.TemplateSummary</small>
+                            }
+                        </div>
+
+                        <div class="monitoring-list-side">
                             <div class="workspace-row-actions">
-                                <details class="workspace-action-menu @(hasChildActions ? string.Empty : "is-empty")">
-                                    <summary class="workspace-secondary-submit" aria-label="Add child element" title="Add child element">
-                                        @MatmonIcons.Render("plus")
-                                        <span>Add</span>
+                                @if (node.Kind == MonitoringElementKind.Sensor)
+                                {
+                                    <a class="workspace-action-link monitoring-list-icon-action" asp-page="/SensorDetails" asp-route-sensorId="@node.Id" aria-label="Open sensor details" title="Open sensor details">@MatmonIcons.Render("chart")<span>Details</span></a>
+                                }
+
+                                <details class="workspace-action-menu">
+                                    <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Element actions" title="Element actions">
+                                        @MatmonIcons.Render("more")
+                                        <span>Actions</span>
                                     </summary>
                                     <div class="workspace-action-menu-panel">
+                                        @if (canDiscover)
+                                        {
+                                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
+                                                <input type="hidden" name="scopeElementId" value="@node.Id" />
+                                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                <button type="submit" class="workspace-action-menu-link">
+                                                    @MatmonIcons.Render("search")
+                                                    <span>Discover sensors</span>
+                                                </button>
+                                            </form>
+                                        }
+                                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
+                                            @MatmonIcons.Render("pencil")
+                                            <span>Edit</span>
+                                        </a>
                                         @if (hasChildActions)
                                         {
+                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
                                             @if (canAddFolder)
                                             {
                                                 <a class="workspace-action-menu-link" asp-page="/FolderCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
@@ -217,49 +333,35 @@
                                                 </a>
                                             }
                                         }
-                                        else
+                                        @if (node.Kind == MonitoringElementKind.Sensor)
                                         {
-                                            <span class="workspace-action-menu-empty">No child actions</span>
+                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                                            <form method="post"
+                                                  asp-page-handler="ToggleSensorPause"
+                                                  asp-route-sensorId="@node.Id"
+                                                  asp-route-returnUrl="@(Request.Path + Request.QueryString)">
+                                                <button type="submit" class="workspace-action-menu-link">
+                                                    @MatmonIcons.Render(node.IsPaused ? "play" : "pause")
+                                                    <span>@(node.IsPaused ? "Resume" : "Pause")</span>
+                                                </button>
+                                            </form>
+                                        }
+                                        @if (canDelete)
+                                        {
+                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                                            <form method="post"
+                                                  asp-page-handler="DeleteElement"
+                                                  onsubmit="return confirm('Delete this element and all children?');">
+                                                <input type="hidden" name="ElementEditor.Id" value="@node.Id" />
+                                                <input type="hidden" name="ReturnUrl" value="@returnUrl" />
+                                                <button type="submit" class="workspace-action-menu-link">
+                                                    @MatmonIcons.Render("trash")
+                                                    <span>Delete</span>
+                                                </button>
+                                            </form>
                                         }
                                     </div>
                                 </details>
-
-                                @if (node.Kind == MonitoringElementKind.Sensor)
-                                {
-                                    <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@node.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                }
-                                @if (canDiscover)
-                                {
-                                    <details class="workspace-action-menu">
-                                        <summary class="workspace-secondary-submit" aria-label="Element actions" title="Element actions">
-                                            @MatmonIcons.Render("more")
-                                            <span>Actions</span>
-                                        </summary>
-                                        <div class="workspace-action-menu-panel">
-                                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
-                                                <input type="hidden" name="scopeElementId" value="@node.Id" />
-                                                <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                                <button type="submit" class="workspace-action-menu-link">
-                                                    @MatmonIcons.Render("search")
-                                                    <span>Discover sensors</span>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </details>
-                                }
-                                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@node.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                @if (node.Kind == MonitoringElementKind.Sensor)
-                                {
-                                    <form method="post"
-                                          asp-page-handler="ToggleSensorPause"
-                                          asp-route-sensorId="@node.Id"
-                                          asp-route-returnUrl="@(Request.Path + Request.QueryString)">
-                                        <button type="submit" class="workspace-secondary-submit">
-                                            @MatmonIcons.Render(node.IsPaused ? "play" : "pause")
-                                            <span>@(node.IsPaused ? "Resume" : "Pause")</span>
-                                        </button>
-                                    </form>
-                                }
                             </div>
                         </div>
                     </article>
@@ -268,7 +370,7 @@
         }
         else
         {
-            <div class="monitoring-tree" data-monitoring-tree data-tree-size="@monitoringSize">
+            <div class="monitoring-tree" data-monitoring-tree data-tree-size="@viewSize">
                 @foreach (var root in treeRoots)
                 {
                     <partial name="_MonitoringTreeNode" model="root" />

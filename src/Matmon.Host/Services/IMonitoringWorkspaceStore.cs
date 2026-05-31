@@ -13,6 +13,8 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyList<MatmonUser> GetUsers();
 
+    MatmonUser? FindUser(Guid userId);
+
     MatmonUser? ValidateUser(string username, string password);
 
     MatmonUser CreateUser(string username, string password, MatmonUserRole role);
@@ -27,9 +29,9 @@ public interface IMonitoringWorkspaceStore
 
     MonitoringMap? FindMapByPublicToken(string publicToken);
 
-    MonitoringMap CreateMap(string name, string? description, int columns, int rows, IReadOnlyList<MonitoringMapTile> tiles);
+    MonitoringMap CreateMap(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapTile> tiles);
 
-    bool UpdateMap(Guid mapId, string name, string? description, int columns, int rows, IReadOnlyList<MonitoringMapTile> tiles);
+    bool UpdateMap(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapTile> tiles);
 
     string RotateMapPublicToken(Guid mapId);
 
@@ -106,6 +108,10 @@ public interface IMonitoringWorkspaceStore
     bool DeleteNotificationRule(Guid id);
 
     bool MoveElement(Guid elementId, Guid newParentId);
+
+    bool MoveElementBefore(Guid elementId, Guid siblingId);
+
+    bool MoveElementAfter(Guid elementId, Guid siblingId);
 
     bool SetSensorPaused(Guid sensorId, bool paused);
 
