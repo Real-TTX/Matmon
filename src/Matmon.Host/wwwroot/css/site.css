@@ -60,8 +60,7 @@ html {
 }
 
 body {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 0;
   margin: 0;
   color: var(--matmon-foreground);
   background: linear-gradient(180deg, var(--matmon-page-bg) 0%, var(--matmon-page-bg-2) 100%);
@@ -92,8 +91,8 @@ body.is-sidebar-open {
 .app-shell {
   display: grid;
   grid-template-columns: clamp(250px, 18vw, 300px) minmax(0, 1fr);
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 0;
+  align-items: start;
 }
 
 .app-main {
@@ -242,8 +241,7 @@ body.is-sidebar-open {
   position: sticky;
   top: 0;
   z-index: 10;
-  height: 100vh;
-  height: 100dvh;
+  height: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -258,7 +256,7 @@ body.is-sidebar-open {
   align-items: stretch;
   justify-content: flex-start;
   gap: 0.85rem;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .sidebar-brand-block {
