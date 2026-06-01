@@ -61,6 +61,7 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   color: var(--matmon-foreground);
   background: linear-gradient(180deg, var(--matmon-page-bg) 0%, var(--matmon-page-bg-2) 100%);
@@ -92,6 +93,7 @@ body.is-sidebar-open {
   display: grid;
   grid-template-columns: clamp(250px, 18vw, 300px) minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .app-main {
@@ -619,6 +621,63 @@ body.is-sidebar-open {
   .sidebar-footer {
     gap: 0.3rem;
     padding-top: 0.55rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (min-width: 768px) and (max-width: 1199.98px) {
+  .topbar {
+    height: 100dvh;
+  }
+
+  .sidebar-inner {
+    gap: 0.45rem;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+  }
+
+  .sidebar-brand-block {
+    padding-bottom: 0.2rem;
+  }
+
+  .brand {
+    font-size: 1.04rem;
+  }
+
+  .brand-note {
+    display: none;
+  }
+
+  .sidebar-alert-status {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .sidebar-alert-status-hint,
+  .sidebar-alert-status-meta {
+    display: none;
+  }
+
+  .topnav-link,
+  .topnav-button {
+    min-height: 28px;
+    padding: 0.18rem 0.25rem 0.18rem 0.5rem;
+  }
+
+  .sidebar-footer {
+    gap: 0.25rem;
+    padding-top: 0.45rem;
+  }
+
+  .account-menu-trigger {
+    min-height: 2rem;
+    padding-block: 0.2rem;
+  }
+
+  .account-trigger-label {
+    font-size: 0.5rem;
+  }
+
+  .account-trigger-name {
+    font-size: 0.7rem;
   }
 }
 
@@ -7399,7 +7458,7 @@ button.workspace-action-menu-link {
     position: fixed;
     inset: 0 auto 0 0;
     width: min(88vw, 320px);
-    height: 100vh;
+    height: 100dvh;
     border-right: 1px solid var(--matmon-topbar-border);
     border-bottom: 0;
     box-shadow: 18px 0 36px rgba(0, 0, 0, 0.18);
@@ -7414,6 +7473,26 @@ button.workspace-action-menu-link {
 
   .sidebar-inner {
     min-height: 100%;
+    gap: 0.45rem;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+  }
+
+  .sidebar-brand-block {
+    padding-bottom: 0.2rem;
+  }
+
+  .brand-note {
+    display: none;
+  }
+
+  .sidebar-alert-status {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .sidebar-alert-status-hint,
+  .sidebar-alert-status-meta {
+    display: none;
   }
 
   .sidebar-backdrop {
@@ -7455,6 +7534,8 @@ button.workspace-action-menu-link {
   .topnav-user {
     flex: 0 0 auto;
     width: 100%;
+    min-height: 28px;
+    padding-block: 0.18rem;
     white-space: nowrap;
   }
 
@@ -7466,6 +7547,20 @@ button.workspace-action-menu-link {
     margin-top: 0.2rem;
     display: flex;
     flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .account-menu-trigger {
+    min-height: 2rem;
+    padding-block: 0.2rem;
+  }
+
+  .account-trigger-label {
+    font-size: 0.5rem;
+  }
+
+  .account-trigger-name {
+    font-size: 0.7rem;
   }
 
   .sidebar-footer-tools {
