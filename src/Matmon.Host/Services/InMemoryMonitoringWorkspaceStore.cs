@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -28,6 +29,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly string _workspacePath;
     private readonly string _workspaceBackupPath;
+    private readonly string _backupDirectoryPath;
     private readonly Timer _saveTimer;
     private readonly Dictionary<Guid, List<SensorObservation>> _sensorHistoryBySensor = new();
     private readonly Dictionary<Guid, SensorObservation> _latestSensorObservations = new();
@@ -59,6 +61,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             ? configuredPath
             : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
         _workspaceBackupPath = _workspacePath + ".bak";
+        _backupDirectoryPath = ResolveBackupDirectoryPath(environment, runtimeOptions, _workspacePath);
         _saveTimer = new Timer(FlushPendingSaveFromTimer);
 
         _document = LoadDocument();
@@ -86,6 +89,17 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         EnsureDefaultEventCollection();
         EnsureDefaultStatisticsCollection();
         SaveNow();
+    }
+
+    private static string ResolveBackupDirectoryPath(IHostEnvironment environment, MatmonRuntimeOptions runtimeOptions, string workspacePath)
+    {
+        var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.BackupPath)
+            ? Path.Combine(Path.GetDirectoryName(workspacePath) ?? environment.ContentRootPath, "backups")
+            : runtimeOptions.BackupPath;
+
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
     }
 
     public MonitoringWorkspaceSnapshot Workspace
@@ -757,6 +771,221 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         return result;
     }
 
+    public IReadOnlyList<WorkspaceBackupJob> GetBackupJobs()
+    {
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            return _document.BackupJobs
+                .OrderBy(job => job.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(job => job.Clone())
+                .ToArray();
+        }
+    }
+
+    public WorkspaceBackupJob? FindBackupJob(Guid jobId)
+    {
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var job = _document.BackupJobs.FirstOrDefault(candidate => candidate.Id == jobId);
+            return job?.Clone();
+        }
+    }
+
+    public WorkspaceBackupJob CreateBackupJob(WorkspaceBackupJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var clone = job.Clone();
+            clone.Name = NormalizeBackupJobName(clone.Name);
+            if (_document.BackupJobs.Any(candidate => string.Equals(candidate.Name, clone.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"Backup job '{clone.Name}' already exists.");
+            }
+
+            NormalizeBackupJob(clone);
+            clone.NextRunUtc = CalculateNextRunUtc(clone, DateTimeOffset.UtcNow);
+            _document.BackupJobs.Add(clone);
+            QueueSave(SavePriority.Configuration);
+            return clone.Clone();
+        }
+    }
+
+    public bool UpdateBackupJob(WorkspaceBackupJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var existing = _document.BackupJobs.FirstOrDefault(candidate => candidate.Id == job.Id);
+            if (existing is null)
+            {
+                return false;
+            }
+
+            var normalizedName = NormalizeBackupJobName(job.Name);
+            if (_document.BackupJobs.Any(candidate =>
+                    candidate.Id != job.Id &&
+                    string.Equals(candidate.Name, normalizedName, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"Backup job '{normalizedName}' already exists.");
+            }
+
+            existing.Name = normalizedName;
+            existing.Description = job.Description?.Trim();
+            existing.Enabled = job.Enabled;
+            existing.Schedule = job.Schedule?.Clone() ?? new MonitoringSchedule();
+            existing.Sections = job.Sections == WorkspaceBackupSection.None ? WorkspaceBackupSection.All : job.Sections;
+            existing.RetentionCount = Math.Clamp(job.RetentionCount, 1, 100);
+            existing.LastRunUtc = job.LastRunUtc;
+            existing.NextRunUtc = CalculateNextRunUtc(existing, DateTimeOffset.UtcNow);
+            existing.LastStatus = job.LastStatus?.Trim();
+            existing.LastMessage = job.LastMessage?.Trim();
+            existing.LastSnapshotFileName = job.LastSnapshotFileName?.Trim();
+            existing.LastSnapshotBytes = job.LastSnapshotBytes;
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool DeleteBackupJob(Guid jobId)
+    {
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var existing = _document.BackupJobs.FirstOrDefault(candidate => candidate.Id == jobId);
+            if (existing is null)
+            {
+                return false;
+            }
+
+            _document.BackupJobs.Remove(existing);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public IReadOnlyList<WorkspaceBackupSnapshotInfo> GetBackupSnapshots(int take = 50)
+    {
+        var directory = ResolveBackupDirectoryPath();
+        if (!Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly)
+            .Select(TryLoadBackupSnapshotInfo)
+            .Where(snapshot => snapshot is not null)
+            .Select(snapshot => snapshot!)
+            .OrderByDescending(snapshot => snapshot.CreatedUtc)
+            .Take(Math.Clamp(take, 1, 500))
+            .ToArray();
+    }
+
+    public WorkspaceBackupSnapshotInfo? FindBackupSnapshot(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var path = ResolveBackupFilePath(fileName);
+        return TryLoadBackupSnapshotInfo(path);
+    }
+
+    public WorkspaceBackupSnapshotInfo RunBackupJob(Guid jobId, string? reason = null)
+    {
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var job = _document.BackupJobs.FirstOrDefault(candidate => candidate.Id == jobId)
+                ?? throw new InvalidOperationException("Backup job not found.");
+
+            try
+            {
+                var package = CreateBackupPackageLocked(job, _document, reason);
+                var fileName = BuildBackupFileName(job, package.CreatedUtc, package.Id);
+                var filePath = ResolveBackupFilePath(fileName);
+                var directory = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var json = JsonSerializer.Serialize(package, FileSerializerOptions);
+                var tempPath = filePath + ".tmp";
+                try
+                {
+                    WriteUtf8File(tempPath, json);
+                    File.Move(tempPath, filePath, overwrite: true);
+                }
+                finally
+                {
+                    TryDeleteTempFile(tempPath);
+                }
+
+                var snapshot = CreateSnapshotInfo(filePath, package);
+                job.LastRunUtc = package.CreatedUtc;
+                job.NextRunUtc = CalculateNextRunUtc(job, package.CreatedUtc);
+                job.LastStatus = "ok";
+                job.LastMessage = string.IsNullOrWhiteSpace(reason)
+                    ? "Backup created."
+                    : reason.Trim();
+                job.LastSnapshotFileName = fileName;
+                job.LastSnapshotBytes = snapshot.Bytes;
+                QueueSave(SavePriority.Configuration);
+
+                PruneBackupHistoryLocked(job);
+                return snapshot;
+            }
+            catch (Exception ex)
+            {
+                job.LastRunUtc = DateTimeOffset.UtcNow;
+                job.NextRunUtc = CalculateNextRunUtc(job, job.LastRunUtc.Value);
+                job.LastStatus = "error";
+                job.LastMessage = ex.Message;
+                QueueSave(SavePriority.Configuration);
+                throw;
+            }
+        }
+    }
+
+    public WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new ArgumentException("File name is required.", nameof(fileName));
+        }
+
+        if (sections == WorkspaceBackupSection.None)
+        {
+            throw new ArgumentException("At least one restore section must be selected.", nameof(sections));
+        }
+
+        var path = ResolveBackupFilePath(fileName);
+        var package = TryLoadBackupPackage(path) ?? throw new InvalidOperationException("Backup file could not be read.");
+
+        lock (_gate)
+        {
+            HydrateCredentialBundles(package.Document);
+            ApplyBackupSections(_document, package.Document, sections);
+            RebuildObservationIndexesLocked();
+            QueueSave(SavePriority.Configuration);
+        }
+
+        var restoredCount = CountSelectedSections(sections);
+        return new WorkspaceBackupRestoreResult(
+            fileName,
+            sections,
+            restoredCount,
+            $"Restored {restoredCount} section(s) from '{fileName}'.");
+    }
+
     private static bool ShouldCleanupHistory(StorageCleanupScope scope)
     {
         return scope is StorageCleanupScope.Telemetry
@@ -775,6 +1004,239 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         return scope is StorageCleanupScope.Telemetry
             or StorageCleanupScope.Statistics
             or StorageCleanupScope.Everything;
+    }
+
+    private void EnsureBackupJobsCollection()
+    {
+        _document.BackupJobs ??= [];
+        foreach (var job in _document.BackupJobs)
+        {
+            NormalizeBackupJob(job);
+        }
+    }
+
+    private static string NormalizeBackupJobName(string? name)
+    {
+        return string.IsNullOrWhiteSpace(name) ? "Backup job" : name.Trim();
+    }
+
+    private static void NormalizeBackupJob(WorkspaceBackupJob job)
+    {
+        job.Name = NormalizeBackupJobName(job.Name);
+        job.Description = job.Description?.Trim();
+        job.RetentionCount = Math.Clamp(job.RetentionCount, 1, 100);
+        job.Sections = job.Sections == WorkspaceBackupSection.None ? WorkspaceBackupSection.All : job.Sections;
+        job.Schedule ??= new MonitoringSchedule();
+        job.NextRunUtc ??= CalculateNextRunUtc(job, DateTimeOffset.UtcNow);
+    }
+
+    private string ResolveBackupDirectoryPath()
+    {
+        return _backupDirectoryPath;
+    }
+
+    private string ResolveBackupFilePath(string fileName)
+    {
+        var safeFileName = Path.GetFileName(fileName);
+        return Path.Combine(ResolveBackupDirectoryPath(), safeFileName);
+    }
+
+    private WorkspaceBackupPackage CreateBackupPackageLocked(WorkspaceBackupJob job, WorkspaceDocument document, string? reason)
+    {
+        ProtectCredentialBundles(document);
+        try
+        {
+            var documentJson = JsonSerializer.Serialize(document, FileSerializerOptions);
+            var documentClone = JsonSerializer.Deserialize<WorkspaceDocument>(documentJson, FileSerializerOptions)
+                ?? CreatePlainWorkspaceDocument();
+
+            return new WorkspaceBackupPackage
+            {
+                Id = Guid.NewGuid(),
+                JobId = job.Id,
+                JobName = job.Name,
+                Description = string.IsNullOrWhiteSpace(reason) ? job.Description : reason.Trim(),
+                CreatedUtc = DateTimeOffset.UtcNow,
+                Sections = job.Sections,
+                Document = documentClone
+            };
+        }
+        finally
+        {
+            HydrateCredentialBundles(document);
+        }
+    }
+
+    private static string BuildBackupFileName(WorkspaceBackupJob job, DateTimeOffset createdUtc, Guid packageId)
+    {
+        var stamp = createdUtc.ToUniversalTime().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        return $"backup-{stamp}-{job.Id:N}-{packageId:N}.json";
+    }
+
+    private WorkspaceBackupSnapshotInfo CreateSnapshotInfo(string filePath, WorkspaceBackupPackage package)
+    {
+        var info = new FileInfo(filePath);
+        var elements = EnumerateElements(package.Document.RootProbe).ToArray();
+        var probes = elements.OfType<ProbeElement>().Count();
+        var sensors = elements.OfType<SensorElement>().Count();
+
+        return new WorkspaceBackupSnapshotInfo(
+            Path.GetFileName(filePath),
+            package.JobName ?? Path.GetFileNameWithoutExtension(filePath),
+            package.JobId,
+            package.JobName,
+            package.CreatedUtc,
+            info.Exists ? info.Length : 0,
+            package.Sections,
+            probes,
+            sensors,
+            package.Document.Templates.Count,
+            package.Document.Users.Count,
+            package.Document.Alerts.Count,
+            package.Document.SensorHistory.Count,
+            package.Document.Events.Count,
+            package.Document.SensorStatistics.Count);
+    }
+
+    private WorkspaceBackupSnapshotInfo? TryLoadBackupSnapshotInfo(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var package = TryLoadBackupPackage(path);
+            return package is null ? null : CreateSnapshotInfo(path, package);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read backup snapshot info from {BackupPath}", path);
+            return null;
+        }
+    }
+
+    private static WorkspaceBackupPackage? TryLoadBackupPackage(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var json = File.ReadAllText(path, Encoding.UTF8);
+            return JsonSerializer.Deserialize<WorkspaceBackupPackage>(json, FileSerializerOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void ApplyBackupSections(WorkspaceDocument target, WorkspaceDocument source, WorkspaceBackupSection sections)
+    {
+        if (sections.HasFlag(WorkspaceBackupSection.Topology))
+        {
+            target.RootProbe = source.RootProbe;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Templates))
+        {
+            target.Templates = source.Templates;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.SensorDefinitions))
+        {
+            target.SensorDefinitions = source.SensorDefinitions;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Notifications))
+        {
+            target.NotificationConfiguration = source.NotificationConfiguration;
+            target.NotificationSenders = source.NotificationSenders;
+            target.NotificationReceivers = source.NotificationReceivers;
+            target.NotificationRules = source.NotificationRules;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Maps))
+        {
+            target.Maps = source.Maps;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Users))
+        {
+            target.Users = source.Users;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Alerts))
+        {
+            target.Alerts = source.Alerts;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.SensorHistory))
+        {
+            target.SensorHistory = source.SensorHistory;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Events))
+        {
+            target.Events = source.Events;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Statistics))
+        {
+            target.SensorStatistics = source.SensorStatistics;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.BackupJobs))
+        {
+            target.BackupJobs = source.BackupJobs;
+        }
+    }
+
+    private static int CountSelectedSections(WorkspaceBackupSection sections)
+    {
+        return Enum.GetValues<WorkspaceBackupSection>()
+            .Count(section => section is not WorkspaceBackupSection.None and not WorkspaceBackupSection.All && sections.HasFlag(section));
+    }
+
+    private static DateTimeOffset? CalculateNextRunUtc(WorkspaceBackupJob job, DateTimeOffset nowUtc)
+    {
+        var settings = new MonitoringSettings
+        {
+            PollingSchedule = job.Schedule?.Clone()
+        };
+
+        return MonitoringScheduleCalculator.GetNextDueUtc(settings, job.LastRunUtc, nowUtc, TimeSpan.FromSeconds(1));
+    }
+
+    private void PruneBackupHistoryLocked(WorkspaceBackupJob job)
+    {
+        var directory = ResolveBackupDirectoryPath();
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        var jobToken = $"-{job.Id:N}-";
+        var files = Directory.EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly)
+            .Where(file => Path.GetFileName(file).Contains(jobToken, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(file => File.GetCreationTimeUtc(file))
+            .ToArray();
+
+        foreach (var file in files.Skip(Math.Max(job.RetentionCount, 1)))
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to prune backup snapshot {BackupFile}", file);
+            }
+        }
     }
 
     public ProbeElement CreateProbe(Guid? parentId, string name, string? description)
@@ -1434,6 +1896,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 NotificationReceivers = sample.NotificationReceivers.ToList(),
                 NotificationRules = sample.NotificationRules.ToList(),
                 Alerts = sample.Alerts.ToList(),
+                BackupJobs = [],
                 SensorHistory = [],
                 Events = [],
                 SensorStatistics = []
@@ -1459,6 +1922,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             NotificationReceivers = [],
             NotificationRules = [],
             Alerts = [],
+            BackupJobs = [],
             SensorHistory = [],
             Events = [],
             SensorStatistics = [],
@@ -2156,6 +2620,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 HttpAdvancedSensorExecutor.Definition,
                 SnmpSensorExecutor.Definition,
                 SynologyNasSensorExecutor.Definition,
+                SynologyHealthSensorExecutor.Definition,
                 SnmpInterfaceSensorExecutor.Definition,
                 UpsSnmpSensorExecutor.Definition,
                 ProxmoxPveSensorExecutor.Definition,
@@ -2697,6 +3162,34 @@ try {
         sensorTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
         sensorTemplate.Settings.DefaultChannelKey ??= "uptime";
         SetDefaultParameter(sensorTemplate.Settings, "snmp.oids", "1.3.6.1.2.1.1.3.0|Uptime");
+
+        var healthTemplate = EnsureTemplate(
+            "synology-health",
+            "Synology Health",
+            MonitoringTemplateScope.Sensor,
+            SynologyHealthSensorExecutor.Definition.Key,
+            hostTemplate.Id);
+        healthTemplate.Settings.Enabled ??= true;
+        SetDefaultPollingInterval(healthTemplate.Settings, TimeSpan.FromSeconds(30));
+        healthTemplate.Settings.Timeout ??= TimeSpan.FromSeconds(10);
+        healthTemplate.Settings.DefaultChannelKey ??= "cpuUtilization";
+        SetDefaultChannelThreshold(healthTemplate.Settings, "cpuUtilization", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "cpuUtilization", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "memoryUtilization", "warning", new ThresholdRule(ThresholdDirection.Above, 85));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "memoryUtilization", "critical", new ThresholdRule(ThresholdDirection.Above, 95));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "storageFreePercent", "warning", new ThresholdRule(ThresholdDirection.Below, 15));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "storageFreePercent", "critical", new ThresholdRule(ThresholdDirection.Below, 8));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "diskWarningCount", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "diskCriticalCount", "critical", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "diskFailingCount", "critical", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "raidWarningCount", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "raidDegradedCount", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "raidCrashedCount", "critical", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "systemStatusOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "powerStatusOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "systemFanStatusOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "cpuFanStatusOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
+        SetDefaultChannelThreshold(healthTemplate.Settings, "thermalStatusOk", "critical", new ThresholdRule(ThresholdDirection.Below, 0.5));
     }
 
     private void EnsureProxmoxPveTemplates()
@@ -3825,11 +4318,30 @@ try {
 
         public List<MonitoringAlert> Alerts { get; set; } = [];
 
+        public List<WorkspaceBackupJob> BackupJobs { get; set; } = [];
+
         public List<SensorObservation> SensorHistory { get; set; } = [];
 
         public List<MonitoringEvent> Events { get; set; } = [];
 
         public List<SensorStatisticsBucket> SensorStatistics { get; set; } = [];
+    }
+
+    private sealed class WorkspaceBackupPackage
+    {
+        public Guid Id { get; set; }
+
+        public Guid? JobId { get; set; }
+
+        public string? JobName { get; set; }
+
+        public string? Description { get; set; }
+
+        public DateTimeOffset CreatedUtc { get; set; }
+
+        public WorkspaceBackupSection Sections { get; set; } = WorkspaceBackupSection.All;
+
+        public WorkspaceDocument Document { get; set; } = new();
     }
 
     private enum SavePriority

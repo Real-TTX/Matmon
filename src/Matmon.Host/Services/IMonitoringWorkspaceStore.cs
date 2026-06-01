@@ -75,6 +75,24 @@ public interface IMonitoringWorkspaceStore
 
     StorageCleanupResult CleanupStorage(StorageCleanupScope scope, int olderThanDays);
 
+    IReadOnlyList<WorkspaceBackupJob> GetBackupJobs();
+
+    WorkspaceBackupJob? FindBackupJob(Guid jobId);
+
+    WorkspaceBackupJob CreateBackupJob(WorkspaceBackupJob job);
+
+    bool UpdateBackupJob(WorkspaceBackupJob job);
+
+    bool DeleteBackupJob(Guid jobId);
+
+    IReadOnlyList<WorkspaceBackupSnapshotInfo> GetBackupSnapshots(int take = 50);
+
+    WorkspaceBackupSnapshotInfo? FindBackupSnapshot(string fileName);
+
+    WorkspaceBackupSnapshotInfo RunBackupJob(Guid jobId, string? reason = null);
+
+    WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections);
+
     ProbeElement CreateProbe(Guid? parentId, string name, string? description);
 
     FolderElement CreateFolder(Guid parentId, string name, string? description);

@@ -1,10 +1,11 @@
 @page "/access-denied"
 @model AccessDeniedModel
 @{
+    Layout = "_AnonymousLayout";
     ViewData["Title"] = "Access denied";
 }
 
-<section class="dashboard-shell">
+<section class="dashboard-shell auth-shell">
     <div class="page-header">
         <div class="page-title">
             @MatmonIcons.Render("lock")
@@ -12,7 +13,7 @@
         </div>
     </div>
 
-    <section class="panel config-block">
+    <section class="panel auth-card">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("warning")<span>Permission required</span></h2>
             <span class="panel-hint">role based access</span>
@@ -23,4 +24,3 @@
         </div>
     </section>
 </section>
-

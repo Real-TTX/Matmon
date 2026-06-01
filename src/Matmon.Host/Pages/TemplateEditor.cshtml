@@ -470,12 +470,7 @@
                         <div class="workspace-span-2 sensor-threshold-section" data-threshold-section data-template-sensor-only>
                             <div class="panel-header">
                                 <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels & thresholds</span></h2>
-                                <span class="panel-hint">@(hasFixedChannels ? "fixed channels" : "dynamic channels")</span>
-                            </div>
-                            <div class="workspace-inline-note">
-                                @(hasFixedChannels
-                                    ? "Fixed channels come from the sensor type and cannot be added or removed."
-                                    : "Dynamic channels can be added or removed. Use the Graph button on a channel row to choose the default.")
+                                <span class="channel-mode-pill" data-mode="@(hasFixedChannels ? "fixed" : "dynamic")">@(hasFixedChannels ? "FIXED" : "DYNAMIC")</span>
                             </div>
                             <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
 

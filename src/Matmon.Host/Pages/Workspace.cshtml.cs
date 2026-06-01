@@ -2692,6 +2692,7 @@ public sealed class WorkspaceModel : PageModel
         if (observedChannels is { Count: > 0 })
         {
             var ordered = observedChannels
+                .Where(channel => !channel.IsVirtual)
                 .OrderByDescending(channel => !string.IsNullOrWhiteSpace(defaultChannelKey) &&
                     string.Equals(channel.Key, defaultChannelKey, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(channel => channel.IsDefault)
@@ -4688,7 +4689,10 @@ public sealed class WorkspaceModel : PageModel
             (!string.IsNullOrWhiteSpace(defaultChannelKey) &&
              string.Equals(channel.Key, defaultChannelKey, StringComparison.OrdinalIgnoreCase)))
             ?? observation?.Channels.FirstOrDefault();
+        var sensorMeasurementKind = defaultChannel?.MeasurementKind ?? SensorUnitConverter.GuessMeasurementKind(defaultChannel?.Unit);
         var sensorUnit = defaultChannel?.Unit ?? string.Empty;
+        var sensorScale = SensorUnitConverter.CreateScale(GetScaleReferenceValue(observation, defaultChannelKey), sensorUnit, sensorMeasurementKind);
+        var sensorValueDisplay = SensorUnitConverter.Format(observation?.DefaultValue, sensorScale, sensorMeasurementKind);
         var state = alert?.State ?? observation?.State ?? (elementNode?.IsPaused == true ? SensorState.Paused : SensorState.Unknown);
         var stateLabel = alert is not null
             ? FormatSensorStateLabel(alert.State)
@@ -4721,9 +4725,9 @@ public sealed class WorkspaceModel : PageModel
         context.SetValue("sensor.name", sensorNode?.Name ?? string.Empty);
         context.SetValue("sensor.type", sensorNode?.SensorTypeKey ?? string.Empty);
         context.SetValue("sensor.target", sensorNode?.Target ?? string.Empty);
-        context.SetValue("sensor.value", observation?.DefaultValue, sensorUnit);
-        context.SetValue("sensor.unit", sensorUnit);
-        context.SetValue("sensor.value_with_unit", observation?.DefaultValue, sensorUnit);
+        context.SetValue("sensor.value", sensorValueDisplay.Text);
+        context.SetValue("sensor.unit", sensorValueDisplay.Unit);
+        context.SetValue("sensor.value_with_unit", sensorValueDisplay.CombinedText);
         context.SetValue("sensor.last_check", observation?.TimestampUtc);
 
         context.SetValue("alert.first_seen", alert?.FirstSeenUtc);
@@ -4752,13 +4756,18 @@ public sealed class WorkspaceModel : PageModel
             return string.Empty;
         }
 
-        return string.Join(" · ", observation.Channels.Select(channel =>
+        var channels = observation.Channels.Where(channel => !channel.IsVirtual).ToArray();
+        if (channels.Length == 0)
         {
-            var value = channel.Value?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-";
-            var unit = string.IsNullOrWhiteSpace(channel.Unit) ? string.Empty : $" {channel.Unit}";
+            return string.Empty;
+        }
+
+        return string.Join(" · ", channels.Select(channel =>
+        {
+            var display = SensorUnitConverter.Format(channel.Value, channel.Unit, channel.MeasurementKind);
             return string.IsNullOrWhiteSpace(channel.Label)
-                ? $"{channel.Key}: {value}{unit}"
-                : $"{channel.Label}: {value}{unit}";
+                ? $"{channel.Key}: {display.CombinedText}"
+                : $"{channel.Label}: {display.CombinedText}";
         }));
     }
 
@@ -4777,15 +4786,22 @@ public sealed class WorkspaceModel : PageModel
             return string.Empty;
         }
 
-        var rows = observation.Channels.Select(channel =>
+        var channels = observation.Channels.Where(channel => !channel.IsVirtual).ToArray();
+        if (channels.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var rows = channels.Select(channel =>
         {
             var label = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(channel.Label) ? channel.Key : channel.Label);
-            var value = channel.Value?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-";
-            var unit = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(channel.Unit) ? string.Empty : $" {channel.Unit}");
+            var display = SensorUnitConverter.Format(channel.Value, channel.Unit, channel.MeasurementKind);
+            var value = WebUtility.HtmlEncode(display.Text);
+            var unit = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(display.Unit) ? string.Empty : $" {display.Unit}");
             var channelState = channel.State ?? state;
             var badge = WebUtility.HtmlEncode(FormatSensorStateLabel(channelState));
             var rowStyle = channel.IsDefault ? "font-weight:600;" : string.Empty;
-            return $"<tr style=\"{rowStyle}\"><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);\">{label}</td><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);text-align:right;\">{WebUtility.HtmlEncode(value)}{unit}</td><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);text-align:right;\">{badge}</td></tr>";
+            return $"<tr style=\"{rowStyle}\"><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);\">{label}</td><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);text-align:right;\">{value}{unit}</td><td style=\"padding:0.35rem 0;border-bottom:1px solid rgba(148,163,184,0.18);text-align:right;\">{badge}</td></tr>";
         });
 
         return $"""
@@ -4802,6 +4818,28 @@ public sealed class WorkspaceModel : PageModel
   </tbody>
 </table>
 """;
+    }
+
+    private static double? GetScaleReferenceValue(SensorObservation? observation, string? defaultChannelKey)
+    {
+        if (observation is null)
+        {
+            return null;
+        }
+
+        var values = new List<double>();
+
+        var defaultValue = SensorHistoryAnalytics.GetDefaultValue(observation, defaultChannelKey);
+        if (defaultValue.HasValue)
+        {
+            values.Add(Math.Abs(defaultValue.Value));
+        }
+
+        values.AddRange(observation.Channels
+            .Where(channel => !channel.IsVirtual && channel.Value.HasValue)
+            .Select(channel => Math.Abs(channel.Value!.Value)));
+
+        return values.Count == 0 ? null : values.Max();
     }
 
     private static string DeriveProbeName(WorkspaceNodeRow? sensorNode, WorkspaceNodeRow? targetNode)
@@ -5414,8 +5452,14 @@ public sealed class WorkspaceModel : PageModel
             if (node.ParentId is Guid parentId && builders.TryGetValue(parentId, out var parent))
             {
                 parent.Children.Add(builder);
+
+                if (node.Kind != MonitoringElementKind.Probe)
+                {
+                    parent.DisplayChildren.Add(builder);
+                }
             }
-            else
+
+            if (node.Kind == MonitoringElementKind.Probe || node.ParentId is null)
             {
                 roots.Add(builder);
             }
@@ -5445,6 +5489,8 @@ public sealed class WorkspaceModel : PageModel
         }
 
         public List<MonitoringTreeNodeBuilder> Children { get; } = [];
+
+        public List<MonitoringTreeNodeBuilder> DisplayChildren { get; } = [];
 
         public int SensorCount { get; private set; }
 
@@ -5520,12 +5566,12 @@ public sealed class WorkspaceModel : PageModel
                 SensorCount = SensorCount,
                 WarningCount = WarningCount,
                 ErrorCount = ErrorCount,
-                ChildCount = Children.Count,
+                ChildCount = DisplayChildren.Count,
                 SeriesKey = _series?.Key,
                 SeriesLineColor = _series?.LineColor,
                 SeriesPointCount = _series?.Points.Count ?? 0,
                 SensorTypeLabel = _series?.SensorTypeLabel,
-                Children = Children.Select(child => child.ToViewModel()).ToArray()
+                Children = DisplayChildren.Select(child => child.ToViewModel()).ToArray()
             };
         }
     }

@@ -23,54 +23,17 @@
         <div class="sensor-header-main">
             <div class="page-title">
                 @MatmonIcons.Render("chart")
-                <h1>Usage details</h1>
+                <h1>Usage</h1>
             </div>
             <div class="sensor-path">@Model.View.Path</div>
             <div class="sensor-meta">
                 <span class="sensor-chip">@Model.View.RoleLabel</span>
                 <span class="sensor-chip">Probe: @Model.View.ProbeId</span>
-                <span class="sensor-chip">View: @(isGroupedView ? "Grouped" : "Table")</span>
                 <span class="state-pill" data-state="@Model.View.StatusKey">@Model.View.StatusLabel</span>
                 <span class="sensor-chip">Sensors @Model.View.SensorCount / @Model.View.TotalSensorCount</span>
                 <span class="sensor-chip">Groups @Model.View.GroupCount / @Model.View.TotalGroupCount</span>
             </div>
             <div class="sensor-state-message">@Model.View.StatusMessage</div>
-        </div>
-
-        <div class="sensor-header-side probe-usage-side">
-            <span class="state-pill" data-state="@Model.View.StatusKey">@Model.View.StatusLabel</span>
-            <div class="probe-usage-summary">
-                <div class="probe-usage-metric">
-                    <span>Bytes / h</span>
-                    <strong>@Model.View.EstimatedBytesPerHourText</strong>
-                </div>
-                <div class="probe-usage-metric">
-                    <span>Bytes / d</span>
-                    <strong>@Model.View.EstimatedBytesPerDayText</strong>
-                </div>
-                <div class="probe-usage-metric">
-                    <span>Storage used</span>
-                    <strong>@Model.View.DataSizeText</strong>
-                </div>
-                <div class="probe-usage-metric">
-                    <span>Storage free</span>
-                    <strong>@Model.View.StorageFreeText</strong>
-                </div>
-            </div>
-            <div class="sensor-header-meta">
-                <span class="panel-hint">last @Model.View.LastSeenText</span>
-                <span class="panel-hint">@Model.View.HealthySensorCount ok / @Model.View.WarningSensorCount warn / @Model.View.ErrorSensorCount err / @Model.View.PausedSensorCount paused</span>
-            </div>
-            <div class="workspace-row-actions sensor-header-actions probe-usage-actions">
-                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.ProbeElementId" asp-route-returnUrl="@Model.CurrentUrl">
-                    @MatmonIcons.Render("pencil")
-                    <span>Edit</span>
-                </a>
-                <a class="workspace-action-link" href="@returnUrl">
-                    @MatmonIcons.Render("arrow-left")
-                    <span>Back</span>
-                </a>
-            </div>
         </div>
     </div>
 
@@ -92,7 +55,6 @@
                    asp-route-returnUrl="@Model.ReturnUrl"
                    asp-route-viewMode="grouped"
                    asp-route-search="@Model.View.Search"
-                   asp-route-stateFilter="@Model.View.StateFilter"
                    asp-route-usageFilter="@Model.View.UsageFilter"
                    asp-route-sortBy="@Model.View.SortBy"
                    asp-route-highlightedOnly="@Model.View.HighlightedOnly">
@@ -104,7 +66,6 @@
                    asp-route-returnUrl="@Model.ReturnUrl"
                    asp-route-viewMode="table"
                    asp-route-search="@Model.View.Search"
-                   asp-route-stateFilter="@Model.View.StateFilter"
                    asp-route-usageFilter="@Model.View.UsageFilter"
                    asp-route-sortBy="@Model.View.SortBy"
                    asp-route-highlightedOnly="@Model.View.HighlightedOnly">
@@ -115,19 +76,6 @@
             <label class="monitoring-filter-field probe-usage-filter-field">
                 <span>@MatmonIcons.Render("search")<small>Search</small></span>
                 <input type="search" name="search" value="@Model.View.Search" class="form-control workspace-input" placeholder="Name, path, target, type" />
-            </label>
-
-            <label class="monitoring-filter-field probe-usage-filter-field">
-                <span>@MatmonIcons.Render("warning")<small>State</small></span>
-                <select name="stateFilter" class="form-select workspace-select">
-                    <option value="all" selected="@(Model.View.StateFilter == "all" ? "selected" : null)">All</option>
-                    <option value="ok" selected="@(Model.View.StateFilter == "ok" ? "selected" : null)">OK</option>
-                    <option value="warning" selected="@(Model.View.StateFilter == "warning" ? "selected" : null)">Warning</option>
-                    <option value="error" selected="@(Model.View.StateFilter == "error" ? "selected" : null)">Error</option>
-                    <option value="paused" selected="@(Model.View.StateFilter == "paused" ? "selected" : null)">Paused</option>
-                    <option value="unknown" selected="@(Model.View.StateFilter == "unknown" ? "selected" : null)">Unknown</option>
-                    <option value="disabled" selected="@(Model.View.StateFilter == "disabled" ? "selected" : null)">Disabled</option>
-                </select>
             </label>
 
             <label class="monitoring-filter-field probe-usage-filter-field">
@@ -166,6 +114,29 @@
                 <span>Reset</span>
             </a>
         </form>
+
+        <div class="probe-usage-overview" aria-label="Usage overview">
+            <div class="probe-usage-overview-card">
+                <span>Estimated bytes per second</span>
+                <strong>@Model.View.EstimatedBytesPerSecondText</strong>
+            </div>
+            <div class="probe-usage-overview-card">
+                <span>Estimated bytes per hour</span>
+                <strong>@Model.View.EstimatedBytesPerHourText</strong>
+            </div>
+            <div class="probe-usage-overview-card">
+                <span>Estimated bytes per day</span>
+                <strong>@Model.View.EstimatedBytesPerDayText</strong>
+            </div>
+            <div class="probe-usage-overview-card">
+                <span>Storage used</span>
+                <strong>@Model.View.DataSizeText</strong>
+            </div>
+            <div class="probe-usage-overview-card">
+                <span>Storage free</span>
+                <strong>@Model.View.StorageFreeText</strong>
+            </div>
+        </div>
 
         <div class="probe-usage-distribution">
             <div class="probe-usage-distribution-header">
@@ -240,13 +211,21 @@
 
                         <div class="probe-usage-group-table-wrap">
                             <table class="probe-usage-table probe-usage-sensor-table">
+                                <colgroup>
+                                    <col class="probe-usage-col-sensor" />
+                                    <col class="probe-usage-col-state" />
+                                    <col class="probe-usage-col-schedule" />
+                                    <col class="probe-usage-col-load" />
+                                    <col class="probe-usage-col-traffic" />
+                                    <col class="probe-usage-col-actions" />
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <th>Sensor</th>
-                                        <th>State</th>
-                                        <th>Schedule</th>
+                                        <th>Status</th>
+                                        <th>Interval</th>
                                         <th>Load</th>
-                                        <th>Traffic</th>
+                                        <th>Data</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -260,44 +239,62 @@
                                                     @if (sensor.IsHighlighted)
                                                     {
                                                         <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
-                                                    }
-                                                </div>
-                                                <small>@sensor.Path</small>
-                                                @if (!string.IsNullOrWhiteSpace(sensor.Target))
-                                                {
-                                                    <small>Target: @sensor.Target</small>
-                                                }
+                                                        }
+                                                    </div>
+                                                    <div class="probe-usage-cell-detail-line">
+                                                        <small class="probe-usage-cell-path" title="@sensor.Path">@sensor.Path</small>
+                                                        @if (!string.IsNullOrWhiteSpace(sensor.Target))
+                                                        {
+                                                            <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                                            <small class="probe-usage-cell-target" title="@sensor.Target">Target: @sensor.Target</small>
+                                                        }
+                                                        <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                                        <small class="probe-usage-cell-summary" title="@sensor.SensorTypeLabel">@sensor.SensorTypeLabel</small>
+                                                    </div>
                                             </td>
                                             <td class="probe-usage-cell-state">
-                                                <span class="state-pill" data-state="@sensor.StateKey">@sensor.StateLabel</span>
-                                                <span class="usage-level-pill" data-level="@sensor.UsageLevelKey">@sensor.UsageLevelLabel</span>
-                                                @if (!string.IsNullOrWhiteSpace(sensor.StateMessage))
-                                                {
-                                                    <small>@sensor.StateMessage</small>
-                                                }
+                                                <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-state">
+                                                    <span class="state-pill" data-state="@sensor.StateKey">@sensor.StateLabel</span>
+                                                    <span class="usage-level-pill" data-level="@sensor.UsageLevelKey">@sensor.UsageLevelLabel</span>
+                                                    @if (!string.IsNullOrWhiteSpace(sensor.StateMessage))
+                                                    {
+                                                        <small class="probe-usage-cell-inline-note" title="@sensor.StateMessage">@sensor.StateMessage</small>
+                                                    }
+                                                </div>
                                             </td>
                                             <td class="probe-usage-cell-schedule">
-                                                <strong>@sensor.ScheduleSummary</strong>
-                                                <small>Last @sensor.LastSeenText</small>
+                                                <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-schedule">
+                                                    <strong>@sensor.ScheduleSummary</strong>
+                                                    <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                                    <small>Last @sensor.LastSeenText</small>
+                                                </div>
                                             </td>
                                             <td class="probe-usage-cell-load">
-                                                <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                                <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-load">
+                                                    <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                                    <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                                    <small>@sensor.SamplesPerHourText samples/h</small>
+                                                    <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                                    <small>@sensor.AverageDurationText avg</small>
+                                                </div>
                                                 <div class="probe-usage-load-bar">
                                                     <span style="width:@sensor.RelativeLoadPercent.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
                                                 </div>
-                                                <small>@sensor.SamplesPerHourText samples/h · @sensor.AverageDurationText avg</small>
                                             </td>
                                             <td class="probe-usage-cell-traffic">
-                                                <strong>@sensor.EstimatedBytesPerHourText / h</strong>
-                                                <small>@sensor.EstimatedBytesPerDayText / d</small>
+                                                <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-traffic">
+                                                    <strong>@sensor.EstimatedBytesPerHourText / h</strong>
+                                                    <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                                    <small>@sensor.EstimatedBytesPerDayText / d</small>
+                                                </div>
                                             </td>
                                             <td class="probe-usage-cell-actions">
                                                 <div class="workspace-row-actions probe-usage-sensor-actions">
-                                                    <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.SensorId" asp-route-window="1d">
+                                                    <a class="workspace-action-link" title="Details" aria-label="Details" asp-page="/SensorDetails" asp-route-sensorId="@sensor.SensorId" asp-route-window="1d">
                                                         @MatmonIcons.Render("chart")
                                                         <span>Details</span>
                                                     </a>
-                                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
+                                                    <a class="workspace-action-link" title="Edit" aria-label="Edit" asp-page="/ElementEditor" asp-route-selectedId="@sensor.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
                                                         @MatmonIcons.Render("pencil")
                                                         <span>Edit</span>
                                                     </a>
@@ -316,13 +313,21 @@
         {
             <div class="probe-usage-table-wrap">
                 <table class="probe-usage-table probe-usage-flat-table">
+                    <colgroup>
+                        <col class="probe-usage-col-sensor" />
+                        <col class="probe-usage-col-state" />
+                        <col class="probe-usage-col-schedule" />
+                        <col class="probe-usage-col-load" />
+                        <col class="probe-usage-col-traffic" />
+                        <col class="probe-usage-col-actions" />
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Sensor</th>
-                            <th>State</th>
-                            <th>Schedule</th>
+                            <th>Status</th>
+                            <th>Interval</th>
                             <th>Load</th>
-                            <th>Traffic</th>
+                            <th>Data</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -331,49 +336,67 @@
                         {
                             <tr class="probe-usage-table-row" data-state="@sensor.StateKey" data-level="@sensor.UsageLevelKey">
                                 <td class="probe-usage-cell-main">
-                                    <div class="probe-usage-cell-title-row">
-                                        <strong>@sensor.Name</strong>
-                                        @if (sensor.IsHighlighted)
-                                        {
-                                            <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
-                                        }
-                                    </div>
-                                    <small>@sensor.Path</small>
-                                    @if (!string.IsNullOrWhiteSpace(sensor.Target))
+                                <div class="probe-usage-cell-title-row">
+                                    <strong>@sensor.Name</strong>
+                                    @if (sensor.IsHighlighted)
                                     {
-                                        <small>Target: @sensor.Target</small>
+                                        <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
                                     }
+                                </div>
+                                    <div class="probe-usage-cell-detail-line">
+                                        <small class="probe-usage-cell-path" title="@sensor.Path">@sensor.Path</small>
+                                        @if (!string.IsNullOrWhiteSpace(sensor.Target))
+                                        {
+                                            <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                            <small class="probe-usage-cell-target" title="@sensor.Target">Target: @sensor.Target</small>
+                                        }
+                                        <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                        <small class="probe-usage-cell-summary" title="@sensor.SensorTypeLabel">@sensor.SensorTypeLabel</small>
+                                    </div>
                                 </td>
                                 <td class="probe-usage-cell-state">
-                                    <span class="state-pill" data-state="@sensor.StateKey">@sensor.StateLabel</span>
-                                    <span class="usage-level-pill" data-level="@sensor.UsageLevelKey">@sensor.UsageLevelLabel</span>
-                                    @if (!string.IsNullOrWhiteSpace(sensor.StateMessage))
-                                    {
-                                        <small>@sensor.StateMessage</small>
-                                    }
+                                    <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-state">
+                                        <span class="state-pill" data-state="@sensor.StateKey">@sensor.StateLabel</span>
+                                        <span class="usage-level-pill" data-level="@sensor.UsageLevelKey">@sensor.UsageLevelLabel</span>
+                                        @if (!string.IsNullOrWhiteSpace(sensor.StateMessage))
+                                        {
+                                            <small class="probe-usage-cell-inline-note" title="@sensor.StateMessage">@sensor.StateMessage</small>
+                                        }
+                                    </div>
                                 </td>
                                 <td class="probe-usage-cell-schedule">
-                                    <strong>@sensor.ScheduleSummary</strong>
-                                    <small>Last @sensor.LastSeenText</small>
+                                    <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-schedule">
+                                        <strong>@sensor.ScheduleSummary</strong>
+                                        <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                        <small>Last @sensor.LastSeenText</small>
+                                    </div>
                                 </td>
                                 <td class="probe-usage-cell-load">
-                                    <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                    <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-load">
+                                        <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
+                                        <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                        <small>@sensor.SamplesPerHourText samples/h</small>
+                                        <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                        <small>@sensor.AverageDurationText avg</small>
+                                    </div>
                                     <div class="probe-usage-load-bar">
                                         <span style="width:@sensor.RelativeLoadPercent.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
                                     </div>
-                                    <small>@sensor.SamplesPerHourText samples/h · @sensor.AverageDurationText avg</small>
                                 </td>
                                 <td class="probe-usage-cell-traffic">
-                                    <strong>@sensor.EstimatedBytesPerHourText / h</strong>
-                                    <small>@sensor.EstimatedBytesPerDayText / d</small>
+                                    <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-traffic">
+                                        <strong>@sensor.EstimatedBytesPerHourText / h</strong>
+                                        <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
+                                        <small>@sensor.EstimatedBytesPerDayText / d</small>
+                                    </div>
                                 </td>
                                 <td class="probe-usage-cell-actions">
                                     <div class="workspace-row-actions probe-usage-sensor-actions">
-                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.SensorId" asp-route-window="1d">
+                                        <a class="workspace-action-link" title="Details" aria-label="Details" asp-page="/SensorDetails" asp-route-sensorId="@sensor.SensorId" asp-route-window="1d">
                                             @MatmonIcons.Render("chart")
                                             <span>Details</span>
                                         </a>
-                                        <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
+                                        <a class="workspace-action-link" title="Edit" aria-label="Edit" asp-page="/ElementEditor" asp-route-selectedId="@sensor.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
                                             @MatmonIcons.Render("pencil")
                                             <span>Edit</span>
                                         </a>

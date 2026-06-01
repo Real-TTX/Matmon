@@ -18,6 +18,10 @@ public sealed class MatmonRuntimeOptions
 
     public string WorkspacePath { get; set; } = "data/workspace.json";
 
+    public string? BackupPath { get; set; }
+
+    public string? DataProtectionPath { get; set; }
+
     public bool SeedSampleData { get; set; }
 
     public bool ProvisionLocalDockerProbe { get; set; }

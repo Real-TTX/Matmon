@@ -28,7 +28,7 @@ var resolvedWorkspacePath = Path.IsPathRooted(workspacePath)
     : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, workspacePath));
 var workspaceDirectory = Path.GetDirectoryName(resolvedWorkspacePath)
     ?? Path.Combine(builder.Environment.ContentRootPath, "data");
-var dataProtectionDirectory = Path.Combine(workspaceDirectory, "dataprotection-keys");
+var dataProtectionDirectory = ResolveDataProtectionDirectory(builder.Environment, runtimeOptions, workspaceDirectory);
 Directory.CreateDirectory(dataProtectionDirectory);
 
 builder.Services.AddSingleton(runtimeOptions);
@@ -124,12 +124,15 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/NotificationRuleEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationSenderEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationReceiverEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/BackupJobEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/BackupRestore", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 
 if (runtimeOptions.Mode == AppMode.Master)
 {
     builder.Services.AddHostedService<SensorPollingService>();
+    builder.Services.AddHostedService<BackupSchedulerService>();
 }
 else
 {
@@ -350,6 +353,7 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<HttpAdvancedSensorExecutor>());
     services.AddTransient<ISensorExecutor, SnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, SynologyNasSensorExecutor>();
+    services.AddTransient<ISensorExecutor, SynologyHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
     services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxPveSensorExecutor>();
@@ -403,4 +407,15 @@ static string SanitizeCookieNamePart(string? value)
         .ToArray();
     var result = new string(chars).Trim('-', '.', '_');
     return string.IsNullOrWhiteSpace(result) ? "node" : result;
+}
+
+static string ResolveDataProtectionDirectory(IHostEnvironment environment, MatmonRuntimeOptions options, string workspaceDirectory)
+{
+    var configuredPath = string.IsNullOrWhiteSpace(options.DataProtectionPath)
+        ? Path.Combine(workspaceDirectory, "dataprotection-keys")
+        : options.DataProtectionPath;
+
+    return Path.IsPathRooted(configuredPath)
+        ? configuredPath
+        : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
 }

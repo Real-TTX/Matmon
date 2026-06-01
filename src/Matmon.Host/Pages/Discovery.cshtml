@@ -5,6 +5,9 @@
 @{
     ViewData["Title"] = "Discovery";
     var selectedJob = Model.View.SelectedJob;
+    var runningJobs = Model.View.RunningJobs;
+    var historyJobs = Model.View.HistoryJobs;
+    var discoveryTabImport = Model.Import ? "true" : null;
     var showResults = selectedJob is not null || Model.Results.Count > 0;
     var selectedJobIsActive = selectedJob?.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running;
     var selectedJobTone = selectedJob?.Status == DiscoveryJobStatus.Failed
@@ -81,7 +84,15 @@
         </section>
     }
 
-    <section class="panel panel-stack workspace-panel">
+    <div class="workspace-tabs discovery-tabs" role="tablist" aria-label="Discovery sections">
+        <a class="workspace-tab @(Model.IsActiveTab("scan") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="scan" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("search")<span>Scan</span></a>
+        <a class="workspace-tab @(Model.IsActiveTab("running") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="running" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>Running</span><span class="workspace-tab-count">@runningJobs.Count</span></a>
+        <a class="workspace-tab @(Model.IsActiveTab("history") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="history" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>History</span><span class="workspace-tab-count">@historyJobs.Count</span></a>
+    </div>
+
+    @if (Model.IsActiveTab("scan"))
+    {
+        <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("search")<span>Scan</span></h2>
             <span class="panel-hint">CIDR, range or single IP</span>
@@ -146,6 +157,7 @@
             </div>
         </form>
     </section>
+    }
 
     @if (showResults)
     {
@@ -400,12 +412,76 @@
         </section>
     }
 
-    @if (Model.View.RecentJobs.Count > 0)
+    @if (Model.IsActiveTab("running"))
+    {
+        <section class="panel panel-stack workspace-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Running</span></h2>
+                <span class="panel-hint">Active discovery jobs on probes</span>
+            </div>
+
+            @if (runningJobs.Count == 0)
+            {
+                <div class="empty-state">No running discovery...</div>
+            }
+            else
+            {
+                <div class="discovery-result-table-wrap">
+                    <table class="discovery-result-table discovery-job-table">
+                        <thead>
+                            <tr>
+                                <th>Probe</th>
+                                <th>Network</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Message</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var running in runningJobs)
+                            {
+                                var runningTone = running.Status == DiscoveryJobStatus.Failed
+                                    ? "error"
+                                    : running.Status == DiscoveryJobStatus.Completed
+                                        ? "ok"
+                                        : "warning";
+                                <tr>
+                                    <td>
+                                        <a class="tree-kind discovery-job-link" data-kind="probe" asp-page="/Discovery" asp-route-jobId="@running.JobId" asp-route-tab="running">@running.ProbeName</a>
+                                    </td>
+                                    <td>
+                                        <a class="discovery-job-main-link" asp-page="/Discovery" asp-route-jobId="@running.JobId" asp-route-tab="running">
+                                            <strong>@running.Request.Network</strong>
+                                            <span>@(running.Message ?? running.Status.ToString())</span>
+                                        </a>
+                                    </td>
+                                    <td><span class="state-pill" data-state="@runningTone">@running.Status</span></td>
+                                    <td>@running.ProgressPercent%</td>
+                                    <td>@(string.IsNullOrWhiteSpace(running.Message) ? "-" : running.Message)</td>
+                                    <td>
+                                        <div class="discovery-job-actions">
+                                            <a class="workspace-action-link" asp-page="/Discovery" asp-route-jobId="@running.JobId" asp-route-tab="running">@MatmonIcons.Render("search")<span>Open</span></a>
+                                            <form method="post" asp-page-handler="Cancel" asp-route-jobId="@running.JobId">
+                                                <button type="submit" class="workspace-action-link workspace-danger-submit">@MatmonIcons.Render("x")<span>Cancel</span></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+
+    @if (Model.IsActiveTab("history"))
     {
         <section class="panel panel-stack workspace-panel" data-discovery-jobs-panel>
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Recent scans</span></h2>
-                <span class="panel-hint"><span data-discovery-job-visible-count>@Model.View.RecentJobs.Count</span> / @Model.View.RecentJobs.Count visible</span>
+                <h2 class="section-title">@MatmonIcons.Render("clock")<span>History</span></h2>
+                <span class="panel-hint"><span data-discovery-job-visible-count>@historyJobs.Count</span> / @historyJobs.Count visible</span>
             </div>
 
             <div class="discovery-result-tools">
@@ -426,9 +502,9 @@
                 </label>
             </div>
 
-            <div class="discovery-result-table-wrap">
-                <table class="discovery-result-table discovery-job-table">
-                    <thead>
+                <div class="discovery-result-table-wrap">
+                    <table class="discovery-result-table discovery-job-table">
+                        <thead>
                         <tr>
                             <th>Probe</th>
                             <th>Network</th>
@@ -438,9 +514,19 @@
                             <th>Created</th>
                             <th>Actions</th>
                         </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var recent in Model.View.RecentJobs)
+                        </thead>
+                        <tbody>
+                        @if (historyJobs.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="7">
+                                    <div class="empty-state">No discovery history yet.</div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var recent in historyJobs)
                         {
                             var recentCanImport = recent.Status == DiscoveryJobStatus.Completed && recent.Results.Count > 0;
                             var recentTone = recent.Status == DiscoveryJobStatus.Failed
@@ -475,6 +561,7 @@
                                     </div>
                                 </td>
                             </tr>
+                        }
                         }
                     </tbody>
                 </table>

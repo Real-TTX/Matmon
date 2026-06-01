@@ -44,7 +44,10 @@
             <span class="state-pill" data-state="@Model.View.StateKey">@Model.View.StateLabel</span>
             <div class="sensor-current-value">
                 <strong>@Model.View.CurrentValueText</strong>
-                <span>@Model.View.Unit</span>
+                @if (!string.IsNullOrWhiteSpace(Model.View.Unit))
+                {
+                    <span>@Model.View.Unit</span>
+                }
             </div>
             <div class="sensor-header-meta">
                 @if (!string.IsNullOrWhiteSpace(Model.View.LastSeenText))
@@ -92,7 +95,10 @@
                 <div class="sensor-window-figure">
                     <span>AVG</span>
                     <strong>@(window.Average?.ToString("0.###") ?? "-")</strong>
-                    <small>@Model.View.Unit</small>
+                    @if (!string.IsNullOrWhiteSpace(Model.View.Unit))
+                    {
+                        <small>@Model.View.Unit</small>
+                    }
                 </div>
                 <div class="sensor-window-mini">
                     <span>MIN @(window.Minimum?.ToString("0.###") ?? "-")</span>
@@ -130,7 +136,7 @@
             else
             {
                 <div class="sensor-window-summary">
-                    <span>AVG @(Model.View.SelectedWindow.Average?.ToString("0.###") ?? "-") @Model.View.Unit</span>
+                    <span>AVG @(Model.View.SelectedWindow.Average?.ToString("0.###") ?? "-")@(string.IsNullOrWhiteSpace(Model.View.Unit) ? string.Empty : $" {Model.View.Unit}")</span>
                     <span>MIN @(Model.View.SelectedWindow.Minimum?.ToString("0.###") ?? "-")</span>
                     <span>MAX @(Model.View.SelectedWindow.Maximum?.ToString("0.###") ?? "-")</span>
                     <span>@Model.View.SelectedWindow.SampleCount samples</span>

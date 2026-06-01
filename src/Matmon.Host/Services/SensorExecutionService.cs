@@ -165,7 +165,7 @@ public sealed class SensorExecutionService : ISensorExecutionService
     {
         var context = new SensorExecutionContext(sensorTypeKey, target, settings);
         var result = await executor.ExecuteAsync(context, cancellationToken);
-        result = ApplyDefaultChannelSelection(settings, result);
+        result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(settings, result);
 
         if (recordObservation && sensorId is Guid id)
         {
@@ -175,38 +175,4 @@ public sealed class SensorExecutionService : ISensorExecutionService
         return result;
     }
 
-    private static SensorExecutionResult ApplyDefaultChannelSelection(
-        MonitoringSettings settings,
-        SensorExecutionResult result)
-    {
-        if (string.IsNullOrWhiteSpace(settings.DefaultChannelKey) || result.Channels.Count == 0)
-        {
-            return result;
-        }
-
-        var selectedChannel = result.Channels.FirstOrDefault(channel =>
-            string.Equals(channel.Key, settings.DefaultChannelKey, StringComparison.OrdinalIgnoreCase));
-        if (selectedChannel is null)
-        {
-            return result;
-        }
-
-        var selectedValue = selectedChannel.Value ?? result.Value;
-        if (!selectedValue.HasValue)
-        {
-            return result;
-        }
-
-        return result with
-        {
-            DefaultChannelKey = selectedChannel.Key,
-            Value = selectedValue,
-            Channels = result.Channels
-                .Select(channel => channel with
-                {
-                    IsDefault = string.Equals(channel.Key, selectedChannel.Key, StringComparison.OrdinalIgnoreCase)
-                })
-                .ToArray()
-        };
-    }
 }

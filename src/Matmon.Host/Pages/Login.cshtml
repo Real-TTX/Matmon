@@ -1,37 +1,45 @@
 @page "/login"
 @model LoginModel
 @{
+    Layout = "_AnonymousLayout";
     ViewData["Title"] = "Login";
 }
 
-<section class="auth-shell">
-    <div class="auth-card panel">
+<section class="dashboard-shell auth-shell">
+    <div class="page-header">
         <div class="page-title">
             @MatmonIcons.Render("lock")
             <h1>Login</h1>
         </div>
+    </div>
+
+    <div class="panel auth-card">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("spark")<span>Access</span></h2>
+            <span class="panel-hint">default: admin / admin</span>
+        </div>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
         {
-            <div class="auth-error">@Model.ErrorMessage</div>
+            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
         }
 
-        <form method="post" class="auth-form">
+        <form method="post" class="workspace-form auth-form">
             <input type="hidden" asp-for="ReturnUrl" />
 
-            <div class="auth-field">
-                <label asp-for="Username"></label>
-                <input asp-for="Username" autocomplete="username" />
-            </div>
+            <label class="workspace-field">
+                <span>Username</span>
+                <input asp-for="Username" class="workspace-input" autocomplete="username" />
+            </label>
 
-            <div class="auth-field">
-                <label asp-for="Password"></label>
-                <input asp-for="Password" type="password" autocomplete="current-password" />
-            </div>
+            <label class="workspace-field">
+                <span>Password</span>
+                <input asp-for="Password" class="workspace-input" type="password" autocomplete="current-password" />
+            </label>
 
             <div class="auth-actions">
                 <span class="auth-note">Default: admin / admin</span>
-                <button type="submit" class="auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
+                <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
             </div>
         </form>
     </div>

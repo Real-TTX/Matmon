@@ -49,13 +49,16 @@ public static class SensorHistoryAnalytics
             }
         }
 
-        var markedDefault = observation.Channels.FirstOrDefault(channel => channel.IsDefault);
+        var markedDefault = observation.Channels.FirstOrDefault(channel => channel.IsDefault && !channel.IsVirtual)
+            ?? observation.Channels.FirstOrDefault(channel => channel.IsDefault);
         if (markedDefault is not null)
         {
             return markedDefault;
         }
 
-        return observation.Channels[0];
+        return observation.Channels.FirstOrDefault(channel => !channel.IsVirtual && channel.Value.HasValue)
+            ?? observation.Channels.FirstOrDefault(channel => channel.Value.HasValue)
+            ?? observation.Channels[0];
     }
 
     public static SensorWindowStatistics BuildWindowStatistics(
@@ -66,6 +69,7 @@ public static class SensorHistoryAnalytics
         DateTimeOffset now,
         string lineColor,
         string? defaultChannelKeyOverride = null,
+        SensorUnitScale? scale = null,
         int maxGraphPoints = 240)
     {
         var fromUtc = now - window;
@@ -74,19 +78,19 @@ public static class SensorHistoryAnalytics
             .ToArray();
 
         var allPoints = windowObservations
-            .Select(observation => BuildGraphPoint(observation, defaultChannelKeyOverride))
+            .Select(observation => BuildGraphPoint(observation, defaultChannelKeyOverride, scale))
             .Where(point => point is not null)
             .Select(point => point!)
             .ToArray();
         var points = DownsampleGraphPoints(allPoints, maxGraphPoints);
 
         var values = windowObservations
-            .Select(observation => GetDefaultValue(observation, defaultChannelKeyOverride))
+            .Select(observation => ApplyScale(GetDefaultValue(observation, defaultChannelKeyOverride), scale))
             .Where(value => value.HasValue)
             .Select(value => value!.Value)
             .ToArray();
         var latestObservation = windowObservations.LastOrDefault();
-        var latestValue = GetDefaultValue(latestObservation, defaultChannelKeyOverride);
+        var latestValue = ApplyScale(GetDefaultValue(latestObservation, defaultChannelKeyOverride), scale);
         var latestState = latestObservation?.State ?? SensorState.Unknown;
         var (linePath, areaPath) = BuildPaths(points, fromUtc, now);
 
@@ -110,17 +114,32 @@ public static class SensorHistoryAnalytics
             lineColor);
     }
 
-    public static TelemetrySamplePoint? BuildGraphPoint(SensorObservation observation, string? defaultChannelKeyOverride = null)
+    public static TelemetrySamplePoint? BuildGraphPoint(
+        SensorObservation observation,
+        string? defaultChannelKeyOverride = null,
+        SensorUnitScale? scale = null)
     {
         if (observation.State == SensorState.Critical)
         {
             return new TelemetrySamplePoint(observation.TimestampUtc, 0d, observation.State);
         }
 
-        var value = GetDefaultValue(observation, defaultChannelKeyOverride);
+        var value = ApplyScale(GetDefaultValue(observation, defaultChannelKeyOverride), scale);
         return value.HasValue
             ? new TelemetrySamplePoint(observation.TimestampUtc, value.Value, observation.State)
             : null;
+    }
+
+    private static double? ApplyScale(double? value, SensorUnitScale? scale)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return scale is { } actualScale
+            ? actualScale.Convert(value.Value)
+            : value;
     }
 
     private static (string LinePath, string AreaPath) BuildPaths(

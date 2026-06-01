@@ -1,0 +1,164 @@
+@page
+@model BackupJobEditorModel
+@{
+    ViewData["Title"] = Model.PageMode;
+}
+
+<section class="dashboard-shell">
+    <div class="page-header has-summary">
+        <div class="page-title">
+            @MatmonIcons.Render("clock")
+            <h1>@Model.PageMode</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <form method="post" class="workspace-form">
+        <input type="hidden" asp-for="ReturnUrl" />
+
+        <div class="config-grid">
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("pencil")<span>Backup job</span></h2>
+                    <span class="panel-hint">name, retention and state</span>
+                </div>
+
+                <div class="workspace-form-grid workspace-core-grid">
+                    <label class="workspace-field">
+                        <span>Name</span>
+                        <input asp-for="Input.Name" class="form-control workspace-input" />
+                    </label>
+                    <label class="workspace-field">
+                        <span>Description</span>
+                        <textarea asp-for="Input.Description" class="form-control workspace-textarea" rows="3"></textarea>
+                    </label>
+                    <label class="workspace-field">
+                        <span>Retention count</span>
+                        <input asp-for="Input.RetentionCount" type="number" min="1" max="100" class="form-control workspace-input" />
+                    </label>
+                    <label class="workspace-check">
+                        <input asp-for="Input.Enabled" type="checkbox" />
+                        <span>Enabled</span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("spark")<span>Schedule</span></h2>
+                    <span class="panel-hint">when backups run</span>
+                </div>
+
+                <div class="workspace-form-grid workspace-core-grid">
+                    <label class="workspace-field" data-schedule-field="mode">
+                        <span>Mode</span>
+                        <select asp-for="Input.ScheduleMode" asp-items="Model.ScheduleModeOptions" class="form-select workspace-select" data-schedule-mode></select>
+                    </label>
+                    <label class="workspace-field" data-schedule-field="hourly">
+                        <span>Every hours</span>
+                        <input asp-for="Input.EveryHours" type="number" min="1" max="8760" class="form-control workspace-input" data-schedule-hourly />
+                    </label>
+                    <label class="workspace-field" data-schedule-field="weekly">
+                        <span>Day of week</span>
+                        <select asp-for="Input.WeekDay" asp-items="Model.WeekDayOptions" class="form-select workspace-select" data-schedule-weekday></select>
+                    </label>
+                    <label class="workspace-field" data-schedule-field="monthly">
+                        <span>Day of month</span>
+                        <input asp-for="Input.DayOfMonth" type="number" min="1" max="31" class="form-control workspace-input" data-schedule-monthday />
+                    </label>
+                    <label class="workspace-field" data-schedule-field="daily">
+                        <span>Time of day</span>
+                        <input asp-for="Input.TimeOfDay" type="time" class="form-control workspace-input" data-schedule-time />
+                    </label>
+                </div>
+            </section>
+        </div>
+
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("folder")<span>Sections</span></h2>
+                <span class="panel-hint">what gets stored in the backup</span>
+            </div>
+
+            <div class="backup-section-grid">
+                <label class="backup-section-item"><input asp-for="Input.Sections.Topology" /> <span>Topology</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Templates" /> <span>Templates</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.SensorDefinitions" /> <span>Sensor defs</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Notifications" /> <span>Notifications</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Maps" /> <span>Maps</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Users" /> <span>Users</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Alerts" /> <span>Alerts</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.SensorHistory" /> <span>History</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Events" /> <span>Events</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Statistics" /> <span>Statistics</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.BackupJobs" /> <span>Backup jobs</span></label>
+            </div>
+        </section>
+
+        <div class="page-actions workspace-toolbar">
+            <a class="workspace-secondary-submit" asp-page="/Config" asp-route-tab="backup">
+                @MatmonIcons.Render("arrow-left")
+                <span>Back</span>
+            </a>
+            <button type="submit" class="workspace-submit">
+                @MatmonIcons.Render("check")
+                <span>Save</span>
+            </button>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const modeSelect = document.querySelector('[data-schedule-mode]');
+            const fields = {
+                hourly: document.querySelector('[data-schedule-field="hourly"]'),
+                daily: document.querySelector('[data-schedule-field="daily"]'),
+                weekly: document.querySelector('[data-schedule-field="weekly"]'),
+                monthly: document.querySelector('[data-schedule-field="monthly"]')
+            };
+
+            if (!modeSelect) {
+                return;
+            }
+
+            const updateVisibility = () => {
+                const mode = modeSelect.value;
+                const show = new Set();
+
+                if (mode === 'Hourly') {
+                    show.add('hourly');
+                } else if (mode === 'Daily') {
+                    show.add('daily');
+                } else if (mode === 'Weekly') {
+                    show.add('weekly');
+                    show.add('daily');
+                } else if (mode === 'Monthly') {
+                    show.add('monthly');
+                    show.add('daily');
+                }
+
+                Object.entries(fields).forEach(([key, field]) => {
+                    if (!field) {
+                        return;
+                    }
+
+                    field.hidden = !show.has(key);
+                });
+            };
+
+            modeSelect.addEventListener('change', updateVisibility);
+            updateVisibility();
+        })();
+    </script>
+}

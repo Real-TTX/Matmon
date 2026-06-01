@@ -23,6 +23,10 @@
         <a class="workspace-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">General</a>
         <a class="workspace-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
         <a class="workspace-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+        @if (canManageSystem)
+        {
+            <a class="workspace-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
+        }
         @if (canManageUsers)
         {
             <a class="workspace-tab @(Model.IsActiveTab("users") ? "is-active" : "")" asp-page="/Config" asp-route-tab="users">Users</a>
@@ -260,7 +264,11 @@
                         <dd>@storage.FormatBytes(storage.WorkspaceFileBytes)</dd>
                     </div>
                     <div class="config-row">
-                        <dt>Workspace backup</dt>
+                        <dt>Backup path</dt>
+                        <dd>@storage.BackupPath</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Backups</dt>
                         <dd>@storage.FormatBytes(storage.BackupFileBytes)</dd>
                     </div>
                     <div class="config-row">
@@ -328,6 +336,135 @@
                 <span>@storage.ErrorMessage</span>
             </section>
         }
+    }
+    else if (Model.IsActiveTab("backup") && canManageSystem)
+    {
+        <div class="config-grid">
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Backup jobs</span></h2>
+                    <span class="panel-hint">@Model.BackupJobs.Count jobs</span>
+                </div>
+
+                @if (Model.BackupJobs.Count == 0)
+                {
+                    <div class="empty-state">No backup jobs configured yet.</div>
+                }
+                else
+                {
+                    <div class="system-table system-backup-table" role="table" aria-label="Backup jobs">
+                        <div class="system-table-row system-table-head" role="row">
+                            <span role="columnheader">Job</span>
+                            <span role="columnheader">Schedule</span>
+                            <span role="columnheader">Sections</span>
+                            <span role="columnheader">Next run</span>
+                            <span role="columnheader">Last run</span>
+                            <span role="columnheader">Status</span>
+                            <span role="columnheader">Actions</span>
+                        </div>
+                        @foreach (var job in Model.BackupJobs)
+                        {
+                            var statusState = string.Equals(job.LastStatus, "ok", StringComparison.OrdinalIgnoreCase)
+                                ? "ok"
+                                : string.Equals(job.LastStatus, "running", StringComparison.OrdinalIgnoreCase)
+                                    ? "warning"
+                                    : "error";
+                            <div class="system-table-row system-backup-row" role="row">
+                                <span role="cell">
+                                    <strong>@job.Name</strong>
+                                    <small>@(job.Description ?? "-")</small>
+                                </span>
+                                <span role="cell">@job.Schedule.Summary()</span>
+                                <span role="cell">@ConfigModel.FormatBackupSections(job.Sections)</span>
+                                <span role="cell">@Model.FormatDateTime(job.NextRunUtc)</span>
+                                <span role="cell">@Model.FormatDateTime(job.LastRunUtc)</span>
+                                <span role="cell">
+                                    <span class="state-pill" data-state="@statusState">@(job.LastStatus ?? "idle")</span>
+                                    <small>@(job.LastMessage ?? "-")</small>
+                                </span>
+                                <span role="cell" class="system-backup-actions">
+                                    <a class="workspace-secondary-submit" asp-page="/BackupJobEditor" asp-route-jobId="@job.Id" asp-route-returnUrl="/Config?tab=backup">
+                                        @MatmonIcons.Render("pencil")
+                                        <span>Edit</span>
+                                    </a>
+                                    <form method="post" asp-page-handler="RunBackupJob" asp-route-backupJobId="@job.Id">
+                                        <button type="submit" class="workspace-secondary-submit">
+                                            @MatmonIcons.Render("spark")
+                                            <span>Run now</span>
+                                        </button>
+                                    </form>
+                                    @if (!string.IsNullOrWhiteSpace(job.LastSnapshotFileName))
+                                    {
+                                        <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-route-fileName="@job.LastSnapshotFileName">
+                                            @MatmonIcons.Render("arrow-right")
+                                            <span>Restore</span>
+                                        </a>
+                                    }
+                                    <form method="post" asp-page-handler="DeleteBackupJob" asp-route-backupJobId="@job.Id" onsubmit="return confirm('Delete backup job @job.Name?');">
+                                        <button type="submit" class="workspace-danger-submit">
+                                            @MatmonIcons.Render("trash")
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="page-actions workspace-toolbar system-backup-create-actions">
+                    <a class="workspace-submit" asp-page="/BackupJobEditor" asp-route-returnUrl="/Config?tab=backup">
+                        @MatmonIcons.Render("plus")
+                        <span>New backup job</span>
+                    </a>
+                </div>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("folder")<span>Snapshots</span></h2>
+                    <span class="panel-hint">@Model.BackupSnapshots.Count files</span>
+                </div>
+
+                @if (Model.BackupSnapshots.Count == 0)
+                {
+                    <div class="empty-state">No backups have been created yet.</div>
+                }
+                else
+                {
+                    <div class="system-table system-backup-snapshot-table" role="table" aria-label="Backup snapshots">
+                        <div class="system-table-row system-table-head" role="row">
+                            <span role="columnheader">Snapshot</span>
+                            <span role="columnheader">Created</span>
+                            <span role="columnheader">Size</span>
+                            <span role="columnheader">Contents</span>
+                            <span role="columnheader">Actions</span>
+                        </div>
+                        @foreach (var snapshot in Model.BackupSnapshots)
+                        {
+                            <div class="system-table-row system-backup-row" role="row">
+                                <span role="cell">
+                                    <strong>@snapshot.DisplayName</strong>
+                                    <small>@snapshot.FileName</small>
+                                </span>
+                                <span role="cell">@Model.FormatDateTime(snapshot.CreatedUtc)</span>
+                                <span role="cell">@storage.FormatBytes(snapshot.Bytes)</span>
+                                <span role="cell">
+                                    <span class="state-pill" data-state="ok">@snapshot.SectionsLabel</span>
+                                    <small>@snapshot.ProbeCount probes, @snapshot.SensorCount sensors</small>
+                                </span>
+                                <span role="cell" class="system-backup-actions">
+                                    <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-route-fileName="@snapshot.FileName">
+                                        @MatmonIcons.Render("arrow-right")
+                                        <span>Restore</span>
+                                    </a>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
     }
     else if (Model.IsActiveTab("users") && canManageUsers)
     {

@@ -136,6 +136,17 @@ public sealed class ProbeUsageModel : PageModel
                 : latestObservation?.Duration.TotalMilliseconds;
             var loadScore = EstimateLoadScore(usageLevel, estimatedRunsPerDay, averageDuration, state);
             var target = SensorTargetResolver.Resolve(sensor, sensorLineage);
+            var metaSummaryParts = new List<string>
+            {
+                string.Join(" / ", sensorLineage.Select(element => element.Name)),
+                definition?.DisplayName ?? sensor.SensorTypeKey
+            };
+
+            if (!string.IsNullOrWhiteSpace(target))
+            {
+                metaSummaryParts.Add($"Target: {target}");
+            }
+
             var searchText = string.Join(' ',
                 sensor.Name,
                 string.Join(" / ", sensorLineage.Select(element => element.Name)),
@@ -152,6 +163,7 @@ public sealed class ProbeUsageModel : PageModel
                 sensor.Name,
                 string.Join(" / ", sensorLineage.Select(element => element.Name)),
                 target,
+                string.Join(" · ", metaSummaryParts),
                 sensor.SensorTypeKey,
                 definition?.DisplayName ?? sensor.SensorTypeKey,
                 SensorUsageCatalog.Key(usageLevel),
@@ -208,7 +220,7 @@ public sealed class ProbeUsageModel : PageModel
             })
             .ToArray();
 
-        var groups = BuildUsageGroups(filteredSensorRowsWithPercent, visibleLoadScore, filtersActive, storage);
+        var groups = BuildUsageGroups(filteredSensorRowsWithPercent, visibleLoadScore, storage);
         var distributionSegments = BuildDistributionSegments(normalizedViewMode, groups, filteredSensorRowsWithPercent);
         var healthySensorCount = filteredSensorRowsWithPercent.Count(row => row.StateKey == MonitoringStatePresentation.Key(MonitoringSeverity.Ok));
         var warningSensorCount = filteredSensorRowsWithPercent.Count(row => row.StateKey == MonitoringStatePresentation.Key(MonitoringSeverity.Warning));
@@ -216,6 +228,7 @@ public sealed class ProbeUsageModel : PageModel
         var pausedSensorCount = filteredSensorRowsWithPercent.Count(row => row.StateKey == MonitoringStatePresentation.PausedKey);
         var estimatedBytesPerHourTotal = filteredSensorRowsWithPercent.Sum(row => row.EstimatedBytesPerHourValue);
         var estimatedBytesPerDayTotal = filteredSensorRowsWithPercent.Sum(row => row.EstimatedBytesPerDayValue);
+        var estimatedBytesPerSecondTotal = estimatedBytesPerHourTotal / 3600d;
 
         View = new ProbeUsageViewModel(
             probe.Id,
@@ -231,6 +244,7 @@ public sealed class ProbeUsageModel : PageModel
             storage.DriveFreePercent.HasValue
                 ? $"{storage.DriveFreePercent.Value:0.#}% free"
                 : "-",
+            storage.FormatBytes((long)Math.Round(estimatedBytesPerSecondTotal)),
             storage.FormatBytes((long)Math.Round(estimatedBytesPerHourTotal)),
             storage.FormatBytes((long)Math.Round(estimatedBytesPerDayTotal)),
             statusColor,
@@ -544,7 +558,6 @@ public sealed class ProbeUsageModel : PageModel
     private static IReadOnlyList<ProbeUsageGroupRow> BuildUsageGroups(
         IReadOnlyList<ProbeUsageSensorRow> sensorRows,
         double visibleLoadScore,
-        bool filtersActive,
         StorageOverview storage)
     {
         return sensorRows
@@ -571,7 +584,7 @@ public sealed class ProbeUsageModel : PageModel
                     storage.FormatBytes((long)Math.Round(groupBytesPerHour)),
                     storage.FormatBytes((long)Math.Round(groupBytesPerDay)),
                     visibleLoadScore <= 0 ? 0 : groupLoad / visibleLoadScore * 100d,
-                    filtersActive || sensorRows.Count <= 6 || orderedSensors.Length <= 4,
+                    false,
                     orderedSensors);
             })
             .OrderByDescending(group => group.RelativeLoadPercent)
@@ -661,8 +674,8 @@ public sealed class ProbeUsageModel : PageModel
         var baseSummary = $"Showing {visibleSensorCount}/{totalSensorCount} sensors in {visibleGroupCount}/{totalGroupCount} groups";
         var modeLabel = string.Equals(viewMode, "table", StringComparison.OrdinalIgnoreCase) ? "table view" : "grouped view";
         return parts.Count == 0
-            ? $"{baseSummary} · {modeLabel}"
-            : $"{baseSummary} · {modeLabel} · {string.Join(" · ", parts)}";
+            ? $"{baseSummary} | {modeLabel}"
+            : $"{baseSummary} | {modeLabel} | {string.Join(" | ", parts)}";
     }
 
     private static string BuildDistributionLabel(string viewMode)
@@ -677,12 +690,12 @@ public sealed class ProbeUsageModel : PageModel
         return stateFilter switch
         {
             "ok" => "OK",
-            "warning" => "warning",
-            "error" => "error",
-            "paused" => "paused",
-            "unknown" => "unknown",
-            "disabled" => "disabled",
-            _ => "all"
+            "warning" => "Warning",
+            "error" => "Error",
+            "paused" => "Paused",
+            "unknown" => "Unknown",
+            "disabled" => "Disabled",
+            _ => "All"
         };
     }
 
@@ -690,10 +703,10 @@ public sealed class ProbeUsageModel : PageModel
     {
         return usageFilter switch
         {
-            "low" => "low",
-            "moderate" => "moderate",
-            "high" => "high",
-            _ => "all"
+            "low" => "Low",
+            "moderate" => "Moderate",
+            "high" => "High",
+            _ => "All"
         };
     }
 }
@@ -710,6 +723,7 @@ public sealed record ProbeUsageViewModel(
     string LastSeenText,
     string DataSizeText,
     string StorageFreeText,
+    string EstimatedBytesPerSecondText,
     string EstimatedBytesPerHourText,
     string EstimatedBytesPerDayText,
     string StatusColor,
@@ -758,6 +772,7 @@ public sealed record ProbeUsageSensorRow(
     string Name,
     string Path,
     string Target,
+    string MetaSummary,
     string SensorTypeKey,
     string SensorTypeLabel,
     string UsageLevelKey,

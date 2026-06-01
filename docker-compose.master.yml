@@ -20,6 +20,8 @@ services:
       Matmon__Mode: Master
       Matmon__HeartbeatIntervalSeconds: ${MATMON_HEARTBEAT_SECONDS:-30}
       Matmon__WorkspacePath: /app/data/workspace.json
+      Matmon__BackupPath: /app/backups
+      Matmon__DataProtectionPath: /app/keys
       Matmon__Auth__Username: ${MATMON_ADMIN_USER:-admin}
       Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-admin}
       Matmon__SeedSampleData: ${MATMON_SEED_SAMPLE_DATA:-false}
@@ -31,6 +33,8 @@ services:
       - "${MATMON_HTTP_BIND:-0.0.0.0}:${MATMON_HTTP_PORT:-8099}:8099"
     volumes:
       - matmon-data:/app/data
+      - matmon-backups:/app/backups
+      - matmon-keys:/app/keys
     extra_hosts:
       # Lets sensors reach services on the Docker host through host.docker.internal.
       # Works on Docker Desktop and modern Linux Docker engines.
@@ -45,3 +49,7 @@ networks:
 volumes:
   matmon-data:
     name: ${MATMON_DATA_VOLUME:-matmon-data}
+  matmon-backups:
+    name: ${MATMON_BACKUP_VOLUME:-matmon-backups}
+  matmon-keys:
+    name: ${MATMON_KEYS_VOLUME:-matmon-keys}

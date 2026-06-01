@@ -25,6 +25,10 @@ public class ConfigModel : PageModel
 
     public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
 
+    public IReadOnlyList<WorkspaceBackupJob> BackupJobs { get; private set; } = [];
+
+    public IReadOnlyList<WorkspaceBackupSnapshotInfo> BackupSnapshots { get; private set; } = [];
+
     public StorageTelemetryOverview StorageTelemetry { get; private set; } = new(0, 0, 0);
 
     public IReadOnlyList<SelectListItem> StorageCleanupScopeOptions { get; private set; } = [];
@@ -55,7 +59,7 @@ public class ConfigModel : PageModel
             return RedirectToPage("/ProbeInstall", new { probeId = InstallProbeId.Value, returnUrl = "/Config?tab=probes" });
         }
 
-        if (IsUsersTabRequestedByNonAdmin())
+        if (IsRestrictedTabRequestedByNonAdmin())
         {
             return Forbid();
         }
@@ -139,6 +143,50 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "storage" });
     }
 
+    public IActionResult OnPostRunBackupJob(Guid backupJobId)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var snapshot = _workspaceStore.RunBackupJob(backupJobId, "Manual backup triggered from System > Backup.");
+            StatusMessage = $"Backup '{snapshot.DisplayName}' created.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "backup" });
+    }
+
+    public IActionResult OnPostDeleteBackupJob(Guid backupJobId)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            if (!_workspaceStore.DeleteBackupJob(backupJobId))
+            {
+                throw new InvalidOperationException("Backup job not found.");
+            }
+
+            StatusMessage = "Backup job deleted.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "backup" });
+    }
+
     public bool IsActiveTab(string tab)
     {
         return string.Equals(ActiveTab, tab, StringComparison.OrdinalIgnoreCase);
@@ -176,20 +224,28 @@ public class ConfigModel : PageModel
         return ProbeInstallCommandBuilder.CanInstallProbe(probe);
     }
 
+    public static string FormatBackupSections(WorkspaceBackupSection sections)
+    {
+        return BackupSectionCatalog.Format(sections);
+    }
+
     private static string NormalizeTab(string? tab)
     {
         return tab?.Trim().ToLowerInvariant() switch
         {
             "probes" => "probes",
             "storage" => "storage",
+            "backup" => "backup",
             "users" => "users",
             _ => "general"
         };
     }
 
-    private bool IsUsersTabRequestedByNonAdmin()
+    private bool IsRestrictedTabRequestedByNonAdmin()
     {
-        return string.Equals(NormalizeTab(Tab), "users", StringComparison.OrdinalIgnoreCase) &&
+        var tab = NormalizeTab(Tab);
+        return (string.Equals(tab, "users", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(tab, "backup", StringComparison.OrdinalIgnoreCase)) &&
             !MatmonSecurity.IsAdmin(User);
     }
 
@@ -197,6 +253,8 @@ public class ConfigModel : PageModel
     {
         Overview = _configurationOverviewProvider.GetOverview();
         Users = _workspaceStore.GetUsers();
+        BackupJobs = _workspaceStore.GetBackupJobs();
+        BackupSnapshots = _workspaceStore.GetBackupSnapshots();
         StorageTelemetry = _workspaceStore.GetStorageTelemetryOverview();
         StorageCleanupScopeOptions =
         [

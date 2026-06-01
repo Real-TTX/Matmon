@@ -22,6 +22,8 @@ services:
       Matmon__Mode: Master
       Matmon__HeartbeatIntervalSeconds: ${MATMON_HEARTBEAT_SECONDS:-30}
       Matmon__WorkspacePath: /app/data/workspace.json
+      Matmon__BackupPath: /app/backups
+      Matmon__DataProtectionPath: /app/keys
       Matmon__Auth__Username: ${MATMON_ADMIN_USER:-admin}
       Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-admin}
       Matmon__SeedSampleData: ${MATMON_SEED_SAMPLE_DATA:-false}
@@ -31,7 +33,13 @@ services:
       Matmon__CreateStarterMap: ${MATMON_CREATE_STARTER_MAP:-false}
     volumes:
       - matmon-data:/app/data
+      - matmon-backups:/app/backups
+      - matmon-keys:/app/keys
 
 volumes:
   matmon-data:
     name: ${MATMON_DATA_VOLUME:-matmon-data}
+  matmon-backups:
+    name: ${MATMON_BACKUP_VOLUME:-matmon-backups}
+  matmon-keys:
+    name: ${MATMON_KEYS_VOLUME:-matmon-keys}

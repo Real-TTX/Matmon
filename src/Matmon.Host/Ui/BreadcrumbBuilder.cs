@@ -98,6 +98,16 @@ public static class BreadcrumbBuilder
                 items.Add(new("Users", "/Config?tab=users"));
                 items.Add(new("Edit user"));
                 break;
+            case "/backupjobeditor":
+                items.Add(new("System", "/Config"));
+                items.Add(new("Backup", "/Config?tab=backup"));
+                items.Add(new("Backup job"));
+                break;
+            case "/backuprestore":
+                items.Add(new("System", "/Config"));
+                items.Add(new("Backup", "/Config?tab=backup"));
+                items.Add(new("Restore assistant"));
+                break;
             case "/monitoring/folder/new":
                 items.Add(new("Infrastructure", "/Workspace"));
                 items.Add(new("New folder"));

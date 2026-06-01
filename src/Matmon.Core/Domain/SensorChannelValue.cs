@@ -10,9 +10,13 @@ public sealed record SensorChannelValue
 
     public string? Unit { get; init; }
 
+    public SensorMeasurementKind MeasurementKind { get; init; } = SensorMeasurementKind.Unknown;
+
     public SensorState? State { get; init; }
 
     public string? Message { get; init; }
 
     public bool IsDefault { get; init; }
+
+    public bool IsVirtual { get; init; }
 }

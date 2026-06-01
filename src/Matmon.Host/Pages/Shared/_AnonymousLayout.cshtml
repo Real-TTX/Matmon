@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Matmon</title>
+    <script>
+        (() => {
+            const storageKey = "matmon-theme";
+            let theme = "dark";
+            try {
+                const stored = localStorage.getItem(storageKey);
+                if (stored === "light" || stored === "dark") {
+                    theme = stored;
+                }
+            } catch {
+                theme = "dark";
+            }
+
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/Matmon.Host.styles.css" asp-append-version="true" />
+</head>
+<body class="matmon-shell matmon-anonymous-shell">
+    <div class="anonymous-shell">
+        <header class="anonymous-topbar">
+            <a class="brand anonymous-brand" asp-area="" asp-page="/Index">
+                @MatmonIcons.Render("monitoring")
+                <span>MATMON</span>
+            </a>
+            <button type="button" class="sidebar-icon-button topnav-theme-toggle anonymous-theme-toggle" data-theme-toggle title="Toggle theme">
+                <span class="theme-toggle-icon theme-toggle-icon-light-target">@MatmonIcons.Render("sun")</span>
+                <span class="theme-toggle-icon theme-toggle-icon-dark-target">@MatmonIcons.Render("moon")</span>
+                <span class="workspace-sr-only" data-theme-label>Bright</span>
+            </button>
+        </header>
+
+        <main class="anonymous-main container-fluid px-2 py-2">
+            @RenderBody()
+        </main>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

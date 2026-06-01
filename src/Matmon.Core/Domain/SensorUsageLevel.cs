@@ -24,6 +24,7 @@ public static class SensorUsageCatalog
             ["snmp-interface"] = SensorUsageLevel.Moderate,
             ["ups-snmp"] = SensorUsageLevel.Moderate,
             ["synology-nas"] = SensorUsageLevel.Moderate,
+            ["synology-health"] = SensorUsageLevel.Moderate,
             ["ssl-certificate"] = SensorUsageLevel.Moderate,
             ["certificate-chain"] = SensorUsageLevel.Moderate,
             ["windows-service"] = SensorUsageLevel.Moderate,

@@ -131,7 +131,12 @@ public sealed class SensorDetailsModel : PageModel
         var defaultChannel = SensorHistoryAnalytics.GetDefaultChannel(latestObservation, defaultChannelKey);
         var currentValue = SensorHistoryAnalytics.GetDefaultValue(latestObservation, defaultChannelKey);
         var fallbackUnit = GetFallbackUnit(sensor.SensorTypeKey);
-        var unit = defaultChannel?.Unit ?? fallbackUnit;
+        var rawUnit = defaultChannel?.Unit ?? fallbackUnit;
+        var scaleReferenceValue = GetScaleReferenceValue(currentValue, history, defaultChannelKey);
+        var measurementKind = defaultChannel?.MeasurementKind ?? SensorUnitConverter.GuessMeasurementKind(rawUnit);
+        var displayScale = SensorUnitConverter.CreateScale(scaleReferenceValue, rawUnit, measurementKind);
+        var currentDisplay = SensorUnitConverter.Format(currentValue, displayScale, measurementKind);
+        var unit = currentDisplay.Unit;
         var currentState = sensor.IsPaused ? SensorState.Paused : latestObservation?.State ?? SensorState.Unknown;
         var currentStateKey = sensor.IsPaused
             ? MonitoringStatePresentation.PausedKey
@@ -144,8 +149,8 @@ public sealed class SensorDetailsModel : PageModel
             : MonitoringStatePresentation.Color(currentState);
         var currentMessage = sensor.IsPaused
             ? "sensor paused"
-            : latestObservation?.Message ?? BuildDefaultMessage(sensor.SensorTypeKey, currentValue, currentState);
-        var windows = BuildWindows(history, currentStateColor, defaultChannelKey).ToArray();
+            : latestObservation?.Message ?? BuildDefaultMessage(sensor.SensorTypeKey, currentValue, currentState, displayScale);
+        var windows = BuildWindows(history, currentStateColor, defaultChannelKey, displayScale).ToArray();
         var selectedWindow = windows.FirstOrDefault(window => string.Equals(window.Key, Window, StringComparison.OrdinalIgnoreCase))
             ?? windows.FirstOrDefault(window => string.Equals(window.Key, "1d", StringComparison.OrdinalIgnoreCase))
             ?? windows[0];
@@ -172,13 +177,13 @@ public sealed class SensorDetailsModel : PageModel
             executionProbe,
             defaultChannelLabel,
             unit,
-            currentValue.HasValue ? FormatValue(currentValue.Value) : "—",
+            currentValue.HasValue ? currentDisplay.Text : "—",
             latestObservation is null ? null : latestObservation.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss"),
             latestObservation is null ? null : FormatDuration(latestObservation.Duration),
             windows,
             selectedWindow,
             BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey),
-            BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey));
+            BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey, displayScale));
 
         return true;
     }
@@ -186,12 +191,13 @@ public sealed class SensorDetailsModel : PageModel
     private static IEnumerable<SensorWindowStatistics> BuildWindows(
         IReadOnlyList<SensorObservation> observations,
         string lineColor,
-        string? defaultChannelKey)
+        string? defaultChannelKey,
+        SensorUnitScale? scale = null)
     {
         var now = DateTimeOffset.UtcNow;
-        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1h", "1h", TimeSpan.FromHours(1), now, lineColor, defaultChannelKey);
-        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1d", "1D", TimeSpan.FromDays(1), now, lineColor, defaultChannelKey);
-        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1w", "1W", TimeSpan.FromDays(7), now, lineColor, defaultChannelKey);
+        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1h", "1h", TimeSpan.FromHours(1), now, lineColor, defaultChannelKey, scale);
+        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1d", "1D", TimeSpan.FromDays(1), now, lineColor, defaultChannelKey, scale);
+        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1w", "1W", TimeSpan.FromDays(7), now, lineColor, defaultChannelKey, scale);
     }
 
     private static IReadOnlyList<SensorChannelRow> BuildChannelRows(SensorObservation? latestObservation, string fallbackUnit, string? defaultChannelKey)
@@ -215,8 +221,8 @@ public sealed class SensorDetailsModel : PageModel
                 new SensorChannelRow(
                     "default",
                     "Default",
-                    FormatValue(latestObservation.Value),
-                    fallbackUnit,
+                    SensorUnitConverter.Format(latestObservation.Value, fallbackUnit).Text,
+                    SensorUnitConverter.Format(latestObservation.Value, fallbackUnit).Unit,
                     MonitoringStatePresentation.Key(state),
                     MonitoringStatePresentation.Label(state),
                     latestObservation.Message,
@@ -235,8 +241,8 @@ public sealed class SensorDetailsModel : PageModel
                 return new SensorChannelRow(
                     channel.Key,
                     string.IsNullOrWhiteSpace(channel.Label) ? channel.Key : channel.Label,
-                    FormatValue(channel.Value),
-                    channel.Unit ?? fallbackUnit,
+                    SensorUnitConverter.Format(channel.Value, channel.Unit, channel.MeasurementKind).Text,
+                    SensorUnitConverter.Format(channel.Value, channel.Unit, channel.MeasurementKind).Unit,
                     MonitoringStatePresentation.Key(state),
                     MonitoringStatePresentation.Label(state),
                     channel.Message ?? latestObservation.Message,
@@ -248,29 +254,53 @@ public sealed class SensorDetailsModel : PageModel
     private static IReadOnlyList<SensorObservationRow> BuildRecentObservationRows(
         IReadOnlyList<SensorObservation> history,
         string fallbackUnit,
-        string? defaultChannelKey)
+        string? defaultChannelKey,
+        SensorUnitScale? scale = null)
     {
+        var displayScale = scale ?? SensorUnitScale.Identity(fallbackUnit);
+
         return history
             .TakeLast(12)
             .Select(observation =>
             {
                 var defaultValue = SensorHistoryAnalytics.GetDefaultValue(observation, defaultChannelKey);
                 var channelCount = observation.Channels.Count > 0
-                    ? observation.Channels.Count
+                    ? observation.Channels.Count(channel => !channel.IsVirtual)
                     : observation.Value.HasValue ? 1 : 0;
 
+                var display = SensorUnitConverter.Format(defaultValue, displayScale);
                 return new SensorObservationRow(
                     observation.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss"),
                     MonitoringStatePresentation.Key(observation.State),
                     MonitoringStatePresentation.Label(observation.State),
-                    defaultValue.HasValue ? FormatValue(defaultValue) : "—",
-                    fallbackUnit,
+                    defaultValue.HasValue ? display.Text : "—",
+                    display.Unit,
                     FormatDuration(observation.Duration),
                     observation.Message,
                     FormatExecutionProbe(observation),
                     channelCount);
             })
             .ToArray();
+    }
+
+    private static double? GetScaleReferenceValue(
+        double? currentValue,
+        IReadOnlyList<SensorObservation> history,
+        string? defaultChannelKey)
+    {
+        var values = new List<double>();
+
+        if (currentValue.HasValue)
+        {
+            values.Add(Math.Abs(currentValue.Value));
+        }
+
+        values.AddRange(history
+            .Select(observation => SensorHistoryAnalytics.GetDefaultValue(observation, defaultChannelKey))
+            .Where(value => value.HasValue)
+            .Select(value => Math.Abs(value!.Value)));
+
+        return values.Count == 0 ? null : values.Max();
     }
 
     private static string? FormatExecutionProbe(SensorObservation? observation)
@@ -329,7 +359,7 @@ public sealed class SensorDetailsModel : PageModel
         };
     }
 
-    private static string BuildDefaultMessage(string sensorTypeKey, double? value, SensorState state)
+    private static string BuildDefaultMessage(string sensorTypeKey, double? value, SensorState state, SensorUnitScale scale)
     {
         if (state == SensorState.Disabled)
         {
@@ -348,10 +378,10 @@ public sealed class SensorDetailsModel : PageModel
             return state == SensorState.Critical ? "measurement failed" : "no measurements yet";
         }
 
-        var unit = GetFallbackUnit(sensorTypeKey);
-        return string.IsNullOrWhiteSpace(unit)
-            ? $"value {FormatValue(value)}"
-            : $"value {FormatValue(value)} {unit}";
+        var display = SensorUnitConverter.Format(value, scale);
+        return string.IsNullOrWhiteSpace(display.Unit)
+            ? $"value {display.Text}"
+            : $"value {display.Text} {display.Unit}";
     }
 
     private static string GetFallbackUnit(string sensorTypeKey)
@@ -363,7 +393,7 @@ public sealed class SensorDetailsModel : PageModel
             "snmp" => string.Empty,
             "probe-heartbeat" => "s",
             "powershell" => string.Empty,
-            _ => "value"
+            _ => string.Empty
         };
     }
 

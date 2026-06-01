@@ -18,16 +18,17 @@ public sealed class StorageOverviewProvider
         var workspacePath = ResolveWorkspacePath();
         var dataPath = Path.GetDirectoryName(workspacePath)
             ?? Path.Combine(_environment.ContentRootPath, "data");
-        var backupPath = workspacePath + ".bak";
+        var backupPath = ResolveBackupPath(dataPath);
 
         var scan = ScanDirectory(dataPath);
         var workspaceFileBytes = GetFileSize(workspacePath);
-        var backupFileBytes = GetFileSize(backupPath);
+        var backupFileBytes = GetPathSize(backupPath);
         var drive = ResolveDrive(dataPath);
 
         return new StorageOverview(
             workspacePath,
             dataPath,
+            backupPath,
             File.Exists(workspacePath),
             Directory.Exists(dataPath),
             scan.TotalBytes,
@@ -46,6 +47,17 @@ public sealed class StorageOverviewProvider
         var configuredPath = string.IsNullOrWhiteSpace(_runtimeOptions.WorkspacePath)
             ? "data/workspace.json"
             : _runtimeOptions.WorkspacePath;
+
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configuredPath));
+    }
+
+    private string ResolveBackupPath(string dataPath)
+    {
+        var configuredPath = string.IsNullOrWhiteSpace(_runtimeOptions.BackupPath)
+            ? Path.Combine(dataPath, "backups")
+            : _runtimeOptions.BackupPath;
 
         return Path.IsPathRooted(configuredPath)
             ? configuredPath
@@ -112,6 +124,23 @@ public sealed class StorageOverviewProvider
         }
     }
 
+    private static long? GetPathSize(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                return ScanDirectory(path).TotalBytes;
+            }
+
+            return GetFileSize(path);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static DriveInfo? ResolveDrive(string path)
     {
         try
@@ -147,6 +176,7 @@ public sealed class StorageOverviewProvider
 public sealed record StorageOverview(
     string WorkspacePath,
     string DataPath,
+    string BackupPath,
     bool WorkspaceFileExists,
     bool DataDirectoryExists,
     long DataDirectoryBytes,

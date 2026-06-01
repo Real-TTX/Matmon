@@ -1,0 +1,100 @@
+@page
+@model BackupRestoreModel
+@{
+    ViewData["Title"] = "Restore backup";
+}
+
+<section class="dashboard-shell">
+    <div class="page-header has-summary">
+        <div class="page-title">
+            @MatmonIcons.Render("arrow-right")
+            <h1>Restore backup</h1>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Snapshot is null)
+    {
+        <section class="panel config-block">
+            <div class="empty-state">Backup snapshot not found.</div>
+        </section>
+    }
+    else
+    {
+        <form method="post" class="workspace-form">
+            <input type="hidden" asp-for="FileName" />
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <div class="config-grid">
+                <section class="panel config-block">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("folder")<span>Snapshot</span></h2>
+                        <span class="panel-hint">@Model.Snapshot.DisplayName</span>
+                    </div>
+
+                    <dl class="config-list compact-config-list">
+                        <div class="config-row">
+                            <dt>File</dt>
+                            <dd>@Model.Snapshot.FileName</dd>
+                        </div>
+                        <div class="config-row">
+                            <dt>Created</dt>
+                            <dd>@Model.FormatDateTime(Model.Snapshot.CreatedUtc)</dd>
+                        </div>
+                        <div class="config-row">
+                            <dt>Size</dt>
+                            <dd>@Model.Snapshot.Bytes.ToString("N0") bytes</dd>
+                        </div>
+                        <div class="config-row">
+                            <dt>Contents</dt>
+                            <dd>@Model.FormatSections(Model.Snapshot.Sections)</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="panel config-block">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("spark")<span>Selection</span></h2>
+                        <span class="panel-hint">choose what to restore</span>
+                    </div>
+
+                    <div class="backup-section-grid">
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Topology" /> <span>Topology</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Templates" /> <span>Templates</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.SensorDefinitions" /> <span>Sensor defs</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Notifications" /> <span>Notifications</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Maps" /> <span>Maps</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Users" /> <span>Users</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Alerts" /> <span>Alerts</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.SensorHistory" /> <span>History</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Events" /> <span>Events</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.Statistics" /> <span>Statistics</span></label>
+                        <label class="backup-section-item"><input asp-for="Input.Sections.BackupJobs" /> <span>Backup jobs</span></label>
+                    </div>
+                </section>
+            </div>
+
+            <div asp-validation-summary="All" class="workspace-inline-note"></div>
+
+            <div class="page-actions workspace-toolbar">
+                <a class="workspace-secondary-submit" asp-page="/Config" asp-route-tab="backup">
+                    @MatmonIcons.Render("arrow-left")
+                    <span>Back</span>
+                </a>
+                <button type="submit" class="workspace-danger-submit" onclick="return confirm('Restore selected sections from this backup?');">
+                    @MatmonIcons.Render("arrow-right")
+                    <span>Restore now</span>
+                </button>
+            </div>
+        </form>
+    }
+</section>

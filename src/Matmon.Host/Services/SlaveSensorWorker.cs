@@ -187,7 +187,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             var result = await executor.ExecuteAsync(
                 new SensorExecutionContext(assignment.SensorTypeKey, assignment.Target, assignment.Settings),
                 cancellationToken);
-            result = ApplyDefaultChannelSelection(assignment.Settings, result);
+            result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(assignment.Settings, result);
 
             _runtimeState.RecordExecution(
                 assignment.Name,
@@ -374,32 +374,4 @@ public sealed class SlaveSensorWorker : BackgroundService
         return $"every {MonitoringSchedule.FormatDuration(settings.PollingInterval ?? TimeSpan.FromSeconds(15))}";
     }
 
-    private static SensorExecutionResult ApplyDefaultChannelSelection(
-        MonitoringSettings settings,
-        SensorExecutionResult result)
-    {
-        if (string.IsNullOrWhiteSpace(settings.DefaultChannelKey) || result.Channels.Count == 0)
-        {
-            return result;
-        }
-
-        var selectedChannel = result.Channels.FirstOrDefault(channel =>
-            string.Equals(channel.Key, settings.DefaultChannelKey, StringComparison.OrdinalIgnoreCase));
-        if (selectedChannel is null || !selectedChannel.Value.HasValue)
-        {
-            return result;
-        }
-
-        return result with
-        {
-            DefaultChannelKey = selectedChannel.Key,
-            Value = selectedChannel.Value,
-            Channels = result.Channels
-                .Select(channel => channel with
-                {
-                    IsDefault = string.Equals(channel.Key, selectedChannel.Key, StringComparison.OrdinalIgnoreCase)
-                })
-                .ToArray()
-        };
-    }
 }

@@ -35,6 +35,9 @@ public sealed class DiscoveryModel : PageModel
     [BindProperty(SupportsGet = true)]
     public bool Import { get; set; }
 
+    [BindProperty(SupportsGet = true)]
+    public string? Tab { get; set; }
+
     [BindProperty]
     public DiscoveryInput Input { get; set; } = new();
 
@@ -76,11 +79,11 @@ public sealed class DiscoveryModel : PageModel
             {
                 StartLocalDiscovery(job);
                 StatusMessage = $"Discovery job started on '{probe.Name}'.";
-                return RedirectToPage(new { jobId = job.JobId });
+                return RedirectToPage(new { jobId = job.JobId, tab = "running" });
             }
 
             StatusMessage = $"Discovery job queued for probe '{probe.Name}'. The slave will pick it up on its next sync.";
-            return RedirectToPage(new { jobId = job.JobId });
+            return RedirectToPage(new { jobId = job.JobId, tab = "running" });
         }
         catch (Exception ex)
         {
@@ -108,11 +111,11 @@ public sealed class DiscoveryModel : PageModel
             {
                 StartLocalDiscovery(job);
                 StatusMessage = $"Discovery job started for {hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} below {scopeLabel} '{scope.Name}'.";
-                return RedirectToPage(new { jobId = job.JobId });
+                return RedirectToPage(new { jobId = job.JobId, tab = "running" });
             }
 
             StatusMessage = $"Discovery job queued on probe '{probe.Name}' for {hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} below {scopeLabel} '{scope.Name}'.";
-            return RedirectToPage(new { jobId = job.JobId });
+            return RedirectToPage(new { jobId = job.JobId, tab = "running" });
         }
         catch (Exception ex)
         {
@@ -137,7 +140,7 @@ public sealed class DiscoveryModel : PageModel
             ErrorMessage = "Discovery job could not be cancelled. It may already be finished.";
         }
 
-        return RedirectToPage(new { jobId });
+        return RedirectToPage(new { jobId, tab = "history" });
     }
 
     public IActionResult OnPostCreateSelected()
@@ -216,13 +219,60 @@ public sealed class DiscoveryModel : PageModel
             }
         }
 
+        var recentJobs = _discoveryJobs.GetRecent();
+        var runningJobs = recentJobs
+            .Where(job => job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running)
+            .ToArray();
+        var historyJobs = recentJobs
+            .Where(job => job.Status is not DiscoveryJobStatus.Pending and not DiscoveryJobStatus.Running)
+            .ToArray();
+        var activeTab = ResolveActiveTab(job);
+        Tab = activeTab;
+
         View = new DiscoveryPageViewModel(
             probes.Select(probe => new SelectListItem(
                 $"{probe.Name} ({probe.ProbeId})",
                 probe.Id.ToString(),
                 probe.Id == Input.ProbeElementId)).ToArray(),
-            _discoveryJobs.GetRecent(),
-            job);
+            recentJobs,
+            runningJobs,
+            historyJobs,
+            job,
+            activeTab);
+    }
+
+    private string ResolveActiveTab(DiscoveryJobSnapshot? job)
+    {
+        var requestedTab = NormalizeTab(Tab);
+        if (requestedTab is not null)
+        {
+            return requestedTab;
+        }
+
+        if (job is not null)
+        {
+            return job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running
+                ? "running"
+                : "history";
+        }
+
+        return "scan";
+    }
+
+    public bool IsActiveTab(string tab)
+    {
+        return string.Equals(View.ActiveTab, tab, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? NormalizeTab(string? tab)
+    {
+        return tab?.Trim().ToLowerInvariant() switch
+        {
+            "scan" => "scan",
+            "running" => "running",
+            "history" => "history",
+            _ => null
+        };
     }
 
     private DiscoveryResultInput[] BuildSelectedResultsFromJob(
@@ -817,4 +867,7 @@ public sealed class DiscoverySensorSuggestionInput
 public sealed record DiscoveryPageViewModel(
     IReadOnlyList<SelectListItem> ProbeOptions,
     IReadOnlyList<DiscoveryJobSnapshot> RecentJobs,
-    DiscoveryJobSnapshot? SelectedJob);
+    IReadOnlyList<DiscoveryJobSnapshot> RunningJobs,
+    IReadOnlyList<DiscoveryJobSnapshot> HistoryJobs,
+    DiscoveryJobSnapshot? SelectedJob,
+    string ActiveTab);

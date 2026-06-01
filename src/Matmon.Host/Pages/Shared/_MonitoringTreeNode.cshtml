@@ -8,6 +8,7 @@
     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
     var canDelete = !(Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0);
     var isRootMasterProbe = Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0;
+    var isProbeRoot = Model.Kind == MonitoringElementKind.Probe && Model.Depth > 0;
     var sensorChildren = Model.Children.Where(child => child.Kind == MonitoringElementKind.Sensor).ToArray();
     var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
     var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
@@ -22,7 +23,7 @@
     };
 }
 
-<article class="monitoring-tree-node @(Model.Children.Count > 0 ? "is-branch" : "is-leaf") @(isRootMasterProbe ? "is-master-probe" : string.Empty)"
+<article class="monitoring-tree-node @(Model.Children.Count > 0 ? "is-branch" : "is-leaf") @(isRootMasterProbe ? "is-master-probe" : string.Empty) @(isProbeRoot ? "is-probe-root" : string.Empty)"
          data-tree-node
          data-tree-node-id="@Model.Id"
          data-tree-kind="@Model.Kind.ToString().ToLowerInvariant()"
@@ -196,7 +197,7 @@
                         {
                             <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@Model.Id" asp-route-returnUrl="@returnUrl">
                                 @MatmonIcons.Render("chart")
-                                <span>Usage details</span>
+                                <span>Usage</span>
                             </a>
                         }
                         <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
@@ -214,21 +215,21 @@
                             {
                                 <a class="workspace-action-menu-link" asp-page="/FolderCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
                                     @MatmonIcons.Render("folder")
-                                    <span>Folder</span>
+                                    <span>Create folder</span>
                                 </a>
                             }
                             @if (canAddHost)
                             {
                                 <a class="workspace-action-menu-link" asp-page="/HostCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
                                     @MatmonIcons.Render("host")
-                                    <span>Host</span>
+                                    <span>Create host</span>
                                 </a>
                             }
                             @if (canAddSensor)
                             {
                                 <a class="workspace-action-menu-link" asp-page="/SensorCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
                                     @MatmonIcons.Render("sensor")
-                                    <span>Sensor</span>
+                                    <span>Create sensor</span>
                                 </a>
                             }
                         }
