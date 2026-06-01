@@ -241,6 +241,7 @@ body.is-sidebar-open {
   top: 0;
   z-index: 10;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -573,6 +574,52 @@ body.is-sidebar-open {
   color: var(--matmon-foreground);
   background: var(--matmon-sidebar-item-hover-bg);
   border-left-color: rgba(95, 141, 255, 0.35);
+}
+
+@media (min-width: 992px) and (max-width: 1199.98px) {
+  .sidebar-inner {
+    gap: 0.6rem;
+  }
+
+  .sidebar-brand-block {
+    padding-bottom: 0.45rem;
+  }
+
+  .sidebar-alert-status {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .sidebar-alert-status-meta {
+    gap: 0.16rem;
+  }
+
+  .sidebar-alert-status-meta a,
+  .sidebar-alert-status-meta span {
+    padding: 0.16rem 0.2rem;
+  }
+
+  .brand {
+    font-size: 1.04rem;
+  }
+
+  .brand-note {
+    font-size: 0.6rem;
+  }
+
+  .topnav-link {
+    min-height: 28px;
+    padding: 0.2rem 0.25rem 0.2rem 0.5rem;
+  }
+
+  .topnav-button {
+    min-height: 28px;
+    padding: 0.2rem 0.25rem 0.2rem 0.5rem;
+  }
+
+  .sidebar-footer {
+    gap: 0.3rem;
+    padding-top: 0.55rem;
+  }
 }
 
 .topnav-theme-toggle {
