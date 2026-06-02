@@ -8,7 +8,7 @@ public sealed class ProbeHeartbeatSensorExecutor : ISensorExecutor
     {
         Key = "probe-heartbeat",
         DisplayName = "Probe Heartbeat",
-        Description = "Monitors the age of the last heartbeat received from a slave probe.",
+        Description = "Monitors the age of the last heartbeat received from a secondary probe.",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters = []
     };

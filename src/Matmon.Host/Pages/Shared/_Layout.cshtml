@@ -31,11 +31,11 @@
     @{
         var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
         string NavClass(string page) => string.Equals(currentPage, page, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
-        var isSlaveMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Slave;
+        var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
         var suppressWorkspaceSummary = string.Equals(ViewData["WorkspaceSummarySuppress"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         Matmon.Host.Services.DashboardSnapshot? workspaceSummary = null;
 
-        if (User.Identity?.IsAuthenticated == true && !isSlaveMode)
+        if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
         {
             try
             {
@@ -50,6 +50,21 @@
         ViewData["WorkspaceSummary"] = workspaceSummary;
     }
     <div class="app-shell">
+        <div class="mobile-nav-bar">
+            <button type="button"
+                    class="mobile-nav-toggle"
+                    data-sidebar-toggle
+                    aria-controls="app-sidebar"
+                    aria-expanded="false"
+                    aria-label="Open navigation menu">
+                @MatmonIcons.Render("menu")
+            </button>
+            <div class="mobile-nav-copy">
+                <span class="mobile-nav-brand">MATMON</span>
+                <strong>@(ViewData["Title"]?.ToString() ?? "Matmon")</strong>
+            </div>
+        </div>
+
         <aside class="topbar app-sidebar" id="app-sidebar">
             <div class="container-fluid px-2 py-2 sidebar-inner">
                 <div class="sidebar-brand-block">
@@ -57,10 +72,10 @@
                         @MatmonIcons.Render("monitoring")
                         <span>MATMON</span>
                     </a>
-                    <div class="brand-note">@(isSlaveMode ? "Remote probe node" : "Lightweight monitoring")</div>
+                    <div class="brand-note">@(isSecondaryMode ? "Secondary probe node" : "Lightweight monitoring")</div>
                 </div>
 
-                @if (User.Identity?.IsAuthenticated == true && !isSlaveMode)
+                @if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
                 {
                     <div class="sidebar-alert-status @NavClass("/Alerts")" data-nav-alert-status>
                         <a class="sidebar-alert-status-main" asp-area="" asp-page="/Alerts" asp-route-alertFilter="open">
@@ -83,7 +98,7 @@
                 <nav class="topnav sidebar-nav">
                     @if (User.Identity?.IsAuthenticated == true)
                     {
-                        @if (isSlaveMode)
+                        @if (isSecondaryMode)
                         {
                             <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">Probe</a>
                         }
@@ -91,6 +106,7 @@
                         {
                             <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">Monitoring</a>
                             <a asp-area="" asp-page="/Monitoring" class="topnav-link @NavClass("/Monitoring")">Sensors</a>
+                            <a asp-area="" asp-page="/Probes" class="topnav-link @NavClass("/Probes")">Probes</a>
                             <a asp-area="" asp-page="/Discovery" class="topnav-link @NavClass("/Discovery")">Discovery</a>
                             <a asp-area="" asp-page="/Maps" class="topnav-link @NavClass("/Maps")">Maps</a>
                             <a asp-area="" asp-page="/Templates" class="topnav-link @NavClass("/Templates")">Templates</a>
@@ -156,22 +172,8 @@
         <div class="sidebar-backdrop" data-sidebar-backdrop hidden></div>
 
         <div class="app-main">
-            <div class="mobile-nav-bar">
-                <button type="button"
-                        class="mobile-nav-toggle"
-                        data-sidebar-toggle
-                        aria-controls="app-sidebar"
-                        aria-expanded="false"
-                        aria-label="Open navigation menu">
-                    @MatmonIcons.Render("menu")
-                </button>
-                <div class="mobile-nav-copy">
-                    <span class="mobile-nav-brand">MATMON</span>
-                    <strong>@(ViewData["Title"]?.ToString() ?? "Matmon")</strong>
-                </div>
-            </div>
 
-            <main class="container-fluid px-2 py-2">
+            <main class="container-fluid px-2 app-content">
                 @{
                     var breadcrumbTrail = ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>;
                     var breadcrumbs = BreadcrumbBuilder.Build(
@@ -214,13 +216,13 @@
                 @if (workspaceSummary is not null && !suppressWorkspaceSummary)
                 {
                     <section class="workspace-summary-strip" aria-label="Workspace summary">
-                        <div class="workspace-summary-card">
+                                <div class="workspace-summary-card">
                             <div class="workspace-summary-main">
-                                <span class="workspace-summary-kicker">Master</span>
+                                <span class="workspace-summary-kicker">Primary</span>
                                 <strong>@workspaceSummary.WorkspaceName</strong>
                             </div>
                             <div class="workspace-summary-metrics">
-                                <a class="workspace-summary-chip" asp-page="/Config" asp-route-tab="probes" aria-label="Configured probes">
+                                <a class="workspace-summary-chip" asp-page="/Probes" aria-label="Configured probes">
                                     @MatmonIcons.Render("probe")
                                     <strong>@workspaceSummary.ConfiguredProbeCount</strong>
                                     <span>Probes</span>

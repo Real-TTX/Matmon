@@ -454,7 +454,7 @@
                         <label>
                             <span>Highlight</span>
                             <select asp-for="NewSensor.Highlight" class="form-select workspace-select">
-                                <option value="">inherit@if (!string.IsNullOrWhiteSpace(Model.NewSensor.HighlightInheritedLabel) && !string.Equals(Model.NewSensor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase)) {<text> (@Model.NewSensor.HighlightInheritedLabel)</text>}</option>
+                                <option value="">@(string.IsNullOrWhiteSpace(Model.NewSensor.HighlightInheritedLabel) || string.Equals(Model.NewSensor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.NewSensor.HighlightInheritedLabel})")</option>
                                 <option value="true">on</option>
                                 <option value="false">off</option>
                             </select>

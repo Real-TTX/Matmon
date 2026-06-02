@@ -1,0 +1,82 @@
+@page "/Probes"
+@model Matmon.Host.Pages.ProbesModel
+@{
+    ViewData["Title"] = "Probes";
+    var probes = Model.Probes;
+}
+
+<section class="dashboard-shell">
+    <div class="page-header has-summary">
+        <div class="page-title">
+            @MatmonIcons.Render("probe")
+            <div>
+                <div class="eyebrow">Sensors</div>
+                <h1>Probes</h1>
+            </div>
+        </div>
+    </div>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("probe")<span>Probe overview</span></h2>
+            <span class="panel-hint">@probes.Count configured</span>
+        </div>
+
+        @if (probes.Count == 0)
+        {
+            <div class="empty-state">No probes configured yet.</div>
+        }
+        else
+        {
+            <div class="system-table system-probe-table probe-overview-table" role="table" aria-label="Probe overview">
+                <div class="system-table-row system-table-head probe-overview-row" role="row">
+                    <span role="columnheader">Probe</span>
+                    <span role="columnheader">Role</span>
+                    <span role="columnheader">Status</span>
+                    <span role="columnheader">Last seen</span>
+                    <span role="columnheader">Sensors</span>
+                    <span role="columnheader">Actions</span>
+                </div>
+
+                @foreach (var probe in probes)
+                {
+                    var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+                        ? "error"
+                        : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
+
+                    <div class="system-table-row probe-overview-row" role="row">
+                        <span role="cell">
+                            <strong>@probe.Name</strong>
+                            <small>@probe.ProbeId</small>
+                        </span>
+                        <span role="cell">@probe.Role</span>
+                        <span role="cell">
+                            <span class="state-pill" data-state="@state">@probe.State</span>
+                            <small>@probe.Message</small>
+                        </span>
+                        <span role="cell">@(probe.LastSeenUtc.HasValue ? probe.LastSeenUtc.Value.ToLocalTime().ToString("g") : "-")</span>
+                        <span role="cell">@probe.SensorCount</span>
+                        <span role="cell" class="probe-overview-actions">
+                            <details class="workspace-action-menu">
+                                <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Probe actions" title="Probe actions">
+                                    @MatmonIcons.Render("more")
+                                    <span>Actions</span>
+                                </summary>
+                                <div class="workspace-action-menu-panel">
+                                    <a class="workspace-action-menu-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">
+                                        @MatmonIcons.Render("sensor")
+                                        <span>Sensors</span>
+                                    </a>
+                                    <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@probe.ElementId">
+                                        @MatmonIcons.Render("chart")
+                                        <span>Usage</span>
+                                    </a>
+                                </div>
+                            </details>
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</section>

@@ -177,7 +177,7 @@
                         <label>
                             <span>Highlight</span>
                             <select asp-for="TemplateEditor.Highlight" class="form-select workspace-select">
-                                <option value="">inherit@if (!string.IsNullOrWhiteSpace(Model.TemplateEditor.HighlightInheritedLabel) && !string.Equals(Model.TemplateEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase)) {<text> (@Model.TemplateEditor.HighlightInheritedLabel)</text>}</option>
+                                <option value="">@(string.IsNullOrWhiteSpace(Model.TemplateEditor.HighlightInheritedLabel) || string.Equals(Model.TemplateEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.TemplateEditor.HighlightInheritedLabel})")</option>
                                 <option value="true">on</option>
                                 <option value="false">off</option>
                             </select>
@@ -192,7 +192,7 @@
                     <label>
                         <span>Enabled</span>
                         <select asp-for="TemplateEditor.EnabledMode" class="form-select workspace-select">
-                            <option value="inherit">inherit@if (!string.IsNullOrWhiteSpace(Model.TemplateEditor.EnabledInheritedLabel) && !string.Equals(Model.TemplateEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase)) {<text> (@Model.TemplateEditor.EnabledInheritedLabel)</text>}</option>
+                            <option value="inherit">@(string.IsNullOrWhiteSpace(Model.TemplateEditor.EnabledInheritedLabel) || string.Equals(Model.TemplateEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.TemplateEditor.EnabledInheritedLabel})")</option>
                             <option value="enabled">enabled</option>
                             <option value="disabled">disabled</option>
                         </select>

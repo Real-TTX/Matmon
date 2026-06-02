@@ -1080,7 +1080,7 @@ public sealed class WorkspaceModel : PageModel
             NotificationReceivers = notificationReceivers,
             NotificationRules = notificationRules,
             WorkspacePath = _runtimeOptions.WorkspacePath,
-            MasterUrl = BuildMasterUrl(),
+            PrimaryUrl = BuildPrimaryUrl(),
             ProbeCount = nodes.Count(node => node.Kind == MonitoringElementKind.Probe),
             HostCount = nodes.Count(node => node.Kind == MonitoringElementKind.Host),
             SensorCount = nodes.Count(node => node.Kind == MonitoringElementKind.Sensor),
@@ -5288,7 +5288,7 @@ public sealed class WorkspaceModel : PageModel
                 MonitoringStatePresentation.Label(severity),
                 probeStatus?.LastSeenUtc.ToLocalTime().ToString("HH:mm:ss") ?? (node.Depth == 0 ? "local" : "-"),
                 probeStatus is null
-                    ? (node.Depth == 0 ? "local master" : "no heartbeat")
+                    ? (node.Depth == 0 ? "local primary" : "no heartbeat")
                     : BuildProbeStatusMessage(severity, now - probeStatus.LastSeenUtc),
                 BuildProbeBootstrapSnippet(node.ProbeId, node.Name, enrollmentToken)));
 
@@ -5768,23 +5768,23 @@ public sealed class WorkspaceModel : PageModel
             return "Probe ID fehlt.";
         }
 
-        var masterUrl = BuildMasterUrl();
+        var primaryUrl = BuildPrimaryUrl();
         return $"""
-Matmon__Mode=Slave
+Matmon__Mode=Secondary
 Matmon__ProbeId={probeId}
 Matmon__ProbeName={probeName}
 Matmon__ProbeToken={probeToken ?? "token-here"}
-Matmon__MasterUrl={masterUrl}
+Matmon__PrimaryUrl={primaryUrl}
 Matmon__HeartbeatIntervalSeconds={_runtimeOptions.HeartbeatIntervalSeconds}
 Matmon__WorkspacePath={_runtimeOptions.WorkspacePath}
 """;
     }
 
-    private string BuildMasterUrl()
+    private string BuildPrimaryUrl()
     {
-        if (!string.IsNullOrWhiteSpace(_runtimeOptions.MasterUrl))
+        if (!string.IsNullOrWhiteSpace(_runtimeOptions.PrimaryUrl))
         {
-            return _runtimeOptions.MasterUrl;
+            return _runtimeOptions.PrimaryUrl;
         }
 
         if (Request is not null)
@@ -5993,7 +5993,7 @@ public sealed record WorkspacePageViewModel
 
     public string WorkspacePath { get; init; } = string.Empty;
 
-    public string MasterUrl { get; init; } = string.Empty;
+    public string PrimaryUrl { get; init; } = string.Empty;
 
     public int ProbeCount { get; init; }
 

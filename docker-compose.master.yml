@@ -1,4 +1,4 @@
-# Portable Matmon master deployment.
+# Portable Matmon primary deployment.
 # Use this on any Docker host that should run the central Matmon UI/API.
 #
 # Start:
@@ -10,14 +10,14 @@
 #   http://<docker-host-ip>:8099
 
 services:
-  matmon-master:
+  matmon-primary:
     image: ${MATMON_IMAGE:-ghcr.io/real-ttx/matmon:latest}
     pull_policy: ${MATMON_PULL_POLICY:-always}
-    container_name: ${MATMON_CONTAINER_NAME:-matmon-master}
+    container_name: ${MATMON_CONTAINER_NAME:-matmon-primary}
     restart: unless-stopped
     environment:
       ASPNETCORE_URLS: http://+:8099
-      Matmon__Mode: Master
+      Matmon__Mode: Primary
       Matmon__HeartbeatIntervalSeconds: ${MATMON_HEARTBEAT_SECONDS:-30}
       Matmon__WorkspacePath: /app/data/workspace.json
       Matmon__BackupPath: /app/backups

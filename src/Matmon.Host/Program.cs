@@ -129,7 +129,7 @@ builder.Services.AddRazorPages(options =>
 }).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 
-if (runtimeOptions.Mode == AppMode.Master)
+if (runtimeOptions.Mode == AppMode.Primary)
 {
     builder.Services.AddHostedService<SensorPollingService>();
     builder.Services.AddHostedService<BackupSchedulerService>();
@@ -144,7 +144,7 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 
-if (!app.Environment.IsDevelopment() && runtimeOptions.Mode == AppMode.Master)
+if (!app.Environment.IsDevelopment() && runtimeOptions.Mode == AppMode.Primary)
 {
     app.UseExceptionHandler("/Error");
 }
@@ -165,7 +165,7 @@ app.MapGet("/api/mode", () => Results.Ok(new
     mode = runtimeOptions.Mode.ToString().ToLowerInvariant()
 })).AllowAnonymous();
 
-if (runtimeOptions.Mode == AppMode.Master)
+if (runtimeOptions.Mode == AppMode.Primary)
 {
     app.MapGet("/api/dashboard", (IDashboardSnapshotProvider provider) =>
         Results.Ok(provider.CreateSnapshot()));
@@ -391,9 +391,9 @@ static string? ReadProbeToken(HttpRequest request)
 
 static string BuildAuthCookieName(MatmonRuntimeOptions options)
 {
-    var node = options.Mode == AppMode.Slave
+    var node = options.Mode == AppMode.Secondary
         ? $"Probe.{SanitizeCookieNamePart(options.ProbeId)}"
-        : "Master";
+        : "Primary";
     return $".Matmon.{node}.Auth";
 }
 

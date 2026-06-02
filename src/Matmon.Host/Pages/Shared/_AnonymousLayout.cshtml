@@ -38,7 +38,7 @@
             </button>
         </header>
 
-        <main class="anonymous-main container-fluid px-2 py-2">
+        <main class="anonymous-main container-fluid px-2 py-2 @(ViewData["AnonymousMainExtraClass"]?.ToString())">
             @RenderBody()
         </main>
     </div>

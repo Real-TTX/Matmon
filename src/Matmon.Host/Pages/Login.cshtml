@@ -3,9 +3,10 @@
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Login";
+    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
 }
 
-<section class="dashboard-shell auth-shell">
+<section class="dashboard-shell auth-shell auth-shell-login">
     <div class="page-header">
         <div class="page-title">
             @MatmonIcons.Render("lock")

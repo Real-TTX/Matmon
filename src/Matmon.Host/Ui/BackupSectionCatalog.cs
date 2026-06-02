@@ -80,23 +80,23 @@ public sealed class BackupSectionSelectionModel
     }
 }
 
-public sealed record BackupSectionChoice(WorkspaceBackupSection Section, string Label);
+public sealed record BackupSectionChoice(WorkspaceBackupSection Section, string Label, string Description);
 
 public static class BackupSectionCatalog
 {
     private static readonly BackupSectionChoice[] Choices =
     [
-        new(WorkspaceBackupSection.Topology, "Topology"),
-        new(WorkspaceBackupSection.Templates, "Templates"),
-        new(WorkspaceBackupSection.SensorDefinitions, "Sensor defs"),
-        new(WorkspaceBackupSection.Notifications, "Notifications"),
-        new(WorkspaceBackupSection.Maps, "Maps"),
-        new(WorkspaceBackupSection.Users, "Users"),
-        new(WorkspaceBackupSection.Alerts, "Alerts"),
-        new(WorkspaceBackupSection.SensorHistory, "History"),
-        new(WorkspaceBackupSection.Events, "Events"),
-        new(WorkspaceBackupSection.Statistics, "Statistics"),
-        new(WorkspaceBackupSection.BackupJobs, "Backup jobs")
+        new(WorkspaceBackupSection.Topology, "Topology", "Probes, folders, hosts and sensors"),
+        new(WorkspaceBackupSection.Templates, "Templates", "Template library and inheritance"),
+        new(WorkspaceBackupSection.SensorDefinitions, "Sensor defs", "Built-in sensor catalog and parameter metadata"),
+        new(WorkspaceBackupSection.Notifications, "Notifications", "Senders, receivers and rules"),
+        new(WorkspaceBackupSection.Maps, "Maps", "Dashboard maps and tile layouts"),
+        new(WorkspaceBackupSection.Users, "Users", "Accounts, roles and access state"),
+        new(WorkspaceBackupSection.Alerts, "Alerts", "Open alerts and acknowledgement state"),
+        new(WorkspaceBackupSection.SensorHistory, "History", "Raw sensor observation history"),
+        new(WorkspaceBackupSection.Events, "Events", "Event log and audit trail"),
+        new(WorkspaceBackupSection.Statistics, "Statistics", "Aggregated sensor statistics buckets"),
+        new(WorkspaceBackupSection.BackupJobs, "Backup jobs", "Scheduled backup definitions")
     ];
 
     public static IReadOnlyList<BackupSectionChoice> GetChoices()

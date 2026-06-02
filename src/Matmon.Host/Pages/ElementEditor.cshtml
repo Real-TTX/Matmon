@@ -401,7 +401,7 @@
                                     <label>
                                         <span>Highlight</span>
                                         <select asp-for="ElementEditor.Highlight" class="form-select workspace-select">
-                                            <option value="">inherit@if (!string.IsNullOrWhiteSpace(Model.ElementEditor.HighlightInheritedLabel) && !string.Equals(Model.ElementEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase)) {<text> (@Model.ElementEditor.HighlightInheritedLabel)</text>}</option>
+                                            <option value="">@(string.IsNullOrWhiteSpace(Model.ElementEditor.HighlightInheritedLabel) || string.Equals(Model.ElementEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.ElementEditor.HighlightInheritedLabel})")</option>
                                             <option value="true">on</option>
                                             <option value="false">off</option>
                                         </select>
@@ -411,7 +411,7 @@
                                 <label>
                                     <span>Enabled</span>
                                     <select asp-for="ElementEditor.EnabledMode" class="form-select workspace-select">
-                                        <option value="inherit">inherit@if (!string.IsNullOrWhiteSpace(Model.ElementEditor.EnabledInheritedLabel) && !string.Equals(Model.ElementEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase)) {<text> (@Model.ElementEditor.EnabledInheritedLabel)</text>}</option>
+                                        <option value="inherit">@(string.IsNullOrWhiteSpace(Model.ElementEditor.EnabledInheritedLabel) || string.Equals(Model.ElementEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.ElementEditor.EnabledInheritedLabel})")</option>
                                         <option value="enabled">enabled</option>
                                         <option value="disabled">disabled</option>
                                     </select>

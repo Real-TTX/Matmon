@@ -10,7 +10,7 @@ public static class ProbeInstallCommandBuilder
 
     public static bool CanInstallProbe(SystemProbeOverview probe)
     {
-        return !string.Equals(probe.Role, "Master", StringComparison.OrdinalIgnoreCase) &&
+        return !string.Equals(probe.Role, "Primary", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(probe.EnrollmentToken);
     }
 
@@ -19,7 +19,7 @@ public static class ProbeInstallCommandBuilder
         var token = probe.EnrollmentToken ?? "token-here";
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
-        var masterUrl = BuildMasterUrl(request, overview.MasterUrl);
+        var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
         var authUsername = string.IsNullOrWhiteSpace(overview.AuthUsername) ? "admin" : overview.AuthUsername;
         var authPassword = string.IsNullOrWhiteSpace(overview.AuthPassword) ? "admin" : overview.AuthPassword;
 
@@ -30,11 +30,11 @@ docker run -d \
   -p 8099:8099 \
   -v {volumeName}:/app/data \
   -e ASPNETCORE_URLS=http://+:8099 \
-  -e Matmon__Mode=Slave \
+  -e Matmon__Mode=Secondary \
   -e Matmon__ProbeId={probe.ProbeId} \
   -e Matmon__ProbeName={ShellQuote(probe.Name)} \
   -e Matmon__ProbeToken={ShellQuote(token)} \
-  -e Matmon__MasterUrl={ShellQuote(masterUrl)} \
+  -e Matmon__PrimaryUrl={ShellQuote(primaryUrl)} \
   -e Matmon__HeartbeatIntervalSeconds={overview.HeartbeatIntervalSeconds} \
   -e Matmon__WorkspacePath=/app/data/workspace.json \
   -e Matmon__Auth__Username={ShellQuote(authUsername)} \
@@ -48,7 +48,7 @@ docker run -d \
         var token = probe.EnrollmentToken ?? "token-here";
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
-        var masterUrl = BuildMasterUrl(request, overview.MasterUrl);
+        var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
         var authUsername = string.IsNullOrWhiteSpace(overview.AuthUsername) ? "admin" : overview.AuthUsername;
         var authPassword = string.IsNullOrWhiteSpace(overview.AuthPassword) ? "admin" : overview.AuthPassword;
 
@@ -63,11 +63,11 @@ services:
       - "8099:8099"
     environment:
       ASPNETCORE_URLS: http://+:8099
-      Matmon__Mode: Slave
+      Matmon__Mode: Secondary
       Matmon__ProbeId: {probe.ProbeId}
       Matmon__ProbeName: {YamlQuote(probe.Name)}
       Matmon__ProbeToken: {YamlQuote(token)}
-      Matmon__MasterUrl: {YamlQuote(masterUrl)}
+      Matmon__PrimaryUrl: {YamlQuote(primaryUrl)}
       Matmon__HeartbeatIntervalSeconds: {overview.HeartbeatIntervalSeconds}
       Matmon__WorkspacePath: /app/data/workspace.json
       Matmon__Auth__Username: {YamlQuote(authUsername)}
@@ -86,7 +86,7 @@ volumes:
         var token = probe.EnrollmentToken ?? "token-here";
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
-        var masterUrl = BuildMasterUrl(request, overview.MasterUrl);
+        var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
         var authUsername = string.IsNullOrWhiteSpace(overview.AuthUsername) ? "admin" : overview.AuthUsername;
         var authPassword = string.IsNullOrWhiteSpace(overview.AuthPassword) ? "admin" : overview.AuthPassword;
 
@@ -95,7 +95,7 @@ curl -fsSL https://raw.githubusercontent.com/Real-TTX/Matmon/main/scripts/instal
   MATMON_PROBE_ID={probe.ProbeId} \
   MATMON_PROBE_NAME={ShellQuote(probe.Name)} \
   MATMON_PROBE_TOKEN={ShellQuote(token)} \
-  MATMON_MASTER_URL={ShellQuote(masterUrl)} \
+  MATMON_PRIMARY_URL={ShellQuote(primaryUrl)} \
   MATMON_CONTAINER_NAME={containerName} \
   MATMON_DATA_VOLUME={volumeName} \
   MATMON_ADMIN_USER={ShellQuote(authUsername)} \
@@ -104,11 +104,11 @@ curl -fsSL https://raw.githubusercontent.com/Real-TTX/Matmon/main/scripts/instal
 """;
     }
 
-    private static string BuildMasterUrl(HttpRequest request, string? configuredMasterUrl)
+    private static string BuildPrimaryUrl(HttpRequest request, string? configuredPrimaryUrl)
     {
-        if (!string.IsNullOrWhiteSpace(configuredMasterUrl))
+        if (!string.IsNullOrWhiteSpace(configuredPrimaryUrl))
         {
-            return configuredMasterUrl;
+            return configuredPrimaryUrl;
         }
 
         return $"{request.Scheme}://{request.Host}{request.PathBase}";

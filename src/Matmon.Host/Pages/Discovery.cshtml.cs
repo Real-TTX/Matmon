@@ -82,7 +82,7 @@ public sealed class DiscoveryModel : PageModel
                 return RedirectToPage(new { jobId = job.JobId, tab = "running" });
             }
 
-            StatusMessage = $"Discovery job queued for probe '{probe.Name}'. The slave will pick it up on its next sync.";
+            StatusMessage = $"Discovery job queued for probe '{probe.Name}'. The secondary probe will pick it up on its next sync.";
             return RedirectToPage(new { jobId = job.JobId, tab = "running" });
         }
         catch (Exception ex)
@@ -418,7 +418,7 @@ public sealed class DiscoveryModel : PageModel
 
             try
             {
-                _discoveryJobs.Start(job.JobId, "Discovery is running on master probe.");
+                _discoveryJobs.Start(job.JobId, "Discovery is running on the primary probe.");
                 await _discoveryService.DiscoverAsync(
                     job.Request,
                     (result, _) =>

@@ -89,6 +89,12 @@ public interface IMonitoringWorkspaceStore
 
     WorkspaceBackupSnapshotInfo? FindBackupSnapshot(string fileName);
 
+    WorkspaceBackupSnapshotDetails? FindBackupSnapshotDetails(string fileName);
+
+    Stream? OpenBackupSnapshotReadStream(string fileName);
+
+    WorkspaceBackupSnapshotInfo ImportBackupSnapshot(Stream content, string originalFileName);
+
     WorkspaceBackupSnapshotInfo RunBackupJob(Guid jobId, string? reason = null);
 
     WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections);

@@ -8,6 +8,7 @@ HTTP_PORT="${MATMON_HTTP_PORT:-8099}"
 HEARTBEAT_SECONDS="${MATMON_HEARTBEAT_SECONDS:-30}"
 ADMIN_USER="${MATMON_ADMIN_USER:-admin}"
 ADMIN_PASSWORD="${MATMON_ADMIN_PASSWORD:-admin}"
+PRIMARY_URL="${MATMON_PRIMARY_URL:-${MATMON_MASTER_URL:-}}"
 
 if [ -z "${MATMON_PROBE_ID:-}" ]; then
   echo "MATMON_PROBE_ID is required." >&2
@@ -19,8 +20,8 @@ if [ -z "${MATMON_PROBE_TOKEN:-}" ]; then
   exit 1
 fi
 
-if [ -z "${MATMON_MASTER_URL:-}" ]; then
-  echo "MATMON_MASTER_URL is required." >&2
+if [ -z "$PRIMARY_URL" ]; then
+  echo "MATMON_PRIMARY_URL is required." >&2
   exit 1
 fi
 
@@ -44,11 +45,11 @@ docker run -d \
   -p "$HTTP_PORT:8099" \
   -v "$DATA_VOLUME:/app/data" \
   -e ASPNETCORE_URLS=http://+:8099 \
-  -e Matmon__Mode=Slave \
+  -e Matmon__Mode=Secondary \
   -e "Matmon__ProbeId=$MATMON_PROBE_ID" \
   -e "Matmon__ProbeName=$PROBE_NAME" \
   -e "Matmon__ProbeToken=$MATMON_PROBE_TOKEN" \
-  -e "Matmon__MasterUrl=$MATMON_MASTER_URL" \
+  -e "Matmon__PrimaryUrl=$PRIMARY_URL" \
   -e "Matmon__HeartbeatIntervalSeconds=$HEARTBEAT_SECONDS" \
   -e Matmon__WorkspacePath=/app/data/workspace.json \
   -e "Matmon__Auth__Username=$ADMIN_USER" \

@@ -8,7 +8,7 @@ It is designed as a compact, self-hosted alternative to classic monitoring tools
 
 - Docker-first deployment
 - ASP.NET Core backend with a web-based UI
-- Master / slave probe architecture
+- Primary / secondary probe architecture
 - Probe, folder, host and sensor tree
 - Inherited settings, templates and credentials
 - Sensor templates for reusable monitoring setups
@@ -38,9 +38,9 @@ Matmon currently includes sensor support for:
 
 ## Architecture
 
-Matmon uses a master / slave model.
+Matmon uses a primary / secondary model.
 
-The master instance owns the UI, configuration, alerts, history and global state. Slave probes connect outbound to the master, receive assigned sensor work and report results back. This allows remote probes to run behind firewalls or NAT without exposing inbound ports.
+The primary instance owns the UI, configuration, alerts, history and global state. Secondary probes connect outbound to the primary, receive assigned sensor work and report results back. This allows remote probes to run behind firewalls or NAT without exposing inbound ports.
 
 Core structure:
 
@@ -53,7 +53,7 @@ Settings can be inherited from parents and templates. Sensors can override only 
 
 ## Quick Start
 
-Start the local master and sample slave probe:
+Start the local primary and sample secondary probe:
 
 ```bash
 docker compose up --build
@@ -72,7 +72,7 @@ Username: admin
 Password: admin
 ```
 
-The local slave probe is exposed on:
+The local secondary probe is exposed on:
 
 ```text
 http://localhost:8100
@@ -85,7 +85,7 @@ Matmon is configured through environment variables.
 Common settings:
 
 ```text
-Matmon__Mode=Master|Slave
+Matmon__Mode=Primary|Secondary
 Matmon__WorkspacePath=data/workspace.json
 Matmon__Auth__Username=admin
 Matmon__Auth__Password=admin
@@ -97,27 +97,27 @@ Matmon__AutoCreateProbeSystemSensors=false
 Matmon__CreateStarterMap=false
 ```
 
-Slave probe settings:
+Secondary probe settings:
 
 ```text
-Matmon__Mode=Slave
+Matmon__Mode=Secondary
 Matmon__ProbeId=probe-01
 Matmon__ProbeName=Remote Probe 01
 Matmon__ProbeToken=probe-01-token
-Matmon__MasterUrl=http://master:8099
+Matmon__PrimaryUrl=http://primary:8099
 ```
 
 Runtime data is stored in `data/`.
 
 The workspace file is generated automatically on first start if it does not exist. Runtime files such as `workspace.json`, backups, data protection keys and temporary files are not intended to be committed to Git.
 
-New master installations are plain by default: no hosts, sensors, demo probes or starter maps are created unless one of the explicit seed/provisioning flags is enabled. Existing Docker volumes keep their stored workspace, so remove or rename the volume if you want a truly fresh installation.
+New primary installations are plain by default: no hosts, sensors, demo probes or starter maps are created unless one of the explicit seed/provisioning flags is enabled. Existing Docker volumes keep their stored workspace, so remove or rename the volume if you want a truly fresh installation.
 
 ## Docker
 
 The included `docker-compose.yml` starts:
 
-- `master` on port `8099`
+- `primary` on port `8099`
 - `probe-01` on port `8100`
 
 Build manually:
@@ -138,9 +138,9 @@ Stop:
 docker compose down
 ```
 
-## Portable Master Deployment
+## Portable Primary Deployment
 
-For a real master installation on any Docker host, use the master-only compose file. It pulls the published image from GitHub Container Registry:
+For a real primary installation on any Docker host, use the primary-only compose file. It pulls the published image from GitHub Container Registry:
 
 ```bash
 cp .env.master.example .env.master
@@ -156,7 +156,7 @@ http://<docker-host-ip>:8099
 
 The portable compose uses `ghcr.io/real-ttx/matmon:latest`, binds the web UI to `0.0.0.0:8099` by default, stores runtime data in the Docker volume `matmon-data`, and maps `host.docker.internal` to the Docker host gateway. In normal bridge mode, the container can reach the LAN through the Docker host, which is the most portable setup across Linux, Windows and macOS Docker hosts.
 
-The portable master compose sets all sample/demo flags to `false`, so pulling a newer image does not create demo sensors. To reset an existing installation, stop the container and remove the named Docker volume:
+The portable primary compose sets all sample/demo flags to `false`, so pulling a newer image does not create demo sensors. To reset an existing installation, stop the container and remove the named Docker volume:
 
 ```bash
 docker compose --env-file .env.master -f docker-compose.master.yml down
@@ -193,7 +193,7 @@ If Caddy runs in Docker, `127.0.0.1` is the Caddy container, not the Docker host
 
 ```caddyfile
 matmon.example.com {
-    reverse_proxy matmon-master:8099
+    reverse_proxy matmon-primary:8099
 }
 ```
 

@@ -63,7 +63,7 @@
     else if (!Model.CanInstall)
     {
         <div class="workspace-banner workspace-banner-warning">
-            This probe cannot be installed yet. Only slave probes with an enrollment token can be deployed.
+            This probe cannot be installed yet. Only secondary probes with an enrollment token can be deployed.
         </div>
     }
     else
@@ -113,7 +113,7 @@
         </div>
 
         <div class="workspace-inline-note probe-install-note">
-            If master and slave run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.
+            If primary and secondary run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.
         </div>
     }
 </section>

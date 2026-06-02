@@ -25,7 +25,7 @@ public sealed class SensorPollingService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_runtimeOptions.Mode != AppMode.Master)
+        if (_runtimeOptions.Mode != AppMode.Primary)
         {
             return;
         }

@@ -33,6 +33,10 @@ public static class BreadcrumbBuilder
             case "/monitoring":
                 items.Add(new("Sensors"));
                 break;
+            case "/probes":
+                items.Add(new("Sensors", "/Monitoring"));
+                items.Add(new("Probes"));
+                break;
             case "/discovery":
                 items.Add(new("Discovery"));
                 break;

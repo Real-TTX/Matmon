@@ -35,7 +35,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
             new SensorParameterDefinition
             {
                 Key = "connection.criticalWhenDisconnected",
-                Label = "Error when slave is disconnected",
+                Label = "Error when secondary is disconnected",
                 Kind = SensorParameterKind.Boolean,
                 DefaultValue = "true"
             }
@@ -68,9 +68,9 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
         try
         {
             var storage = _storageOverviewProvider.GetOverview();
-            var slaveRuntime = _slaveRuntimeState.Snapshot();
-            var isMaster = _runtimeOptions.Mode == AppMode.Master;
-            var connected = isMaster || slaveRuntime.IsConnected;
+            var secondaryRuntime = _slaveRuntimeState.Snapshot();
+            var isPrimary = _runtimeOptions.Mode == AppMode.Primary;
+            var connected = isPrimary || secondaryRuntime.IsConnected;
             var warningFreePercent = ReadPercentParameter(context.Settings, "storage.warningFreePercent", 15);
             var criticalFreePercent = ReadPercentParameter(context.Settings, "storage.criticalFreePercent", 8);
             var criticalWhenDisconnected = !MonitoringSettings.TryReadParameterBool(
@@ -82,7 +82,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
             var channels = BuildChannels(
                 storage,
                 connected,
-                isMaster,
+                isPrimary,
                 criticalWhenDisconnected,
                 warningFreePercent,
                 criticalFreePercent);
@@ -97,7 +97,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
 
             var defaultChannel = storage.DriveFreePercent.HasValue ? "storageFreePercent" : "dataUsedMb";
             var defaultValue = channels.FirstOrDefault(channel => channel.Key == defaultChannel)?.Value;
-            var message = BuildMessage(storage, isMaster, connected, slaveRuntime, state);
+            var message = BuildMessage(storage, isPrimary, connected, secondaryRuntime, state);
 
             watch.Stop();
 
@@ -120,7 +120,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
     private static IReadOnlyList<SensorChannelValue> BuildChannels(
         StorageOverview storage,
         bool connected,
-        bool isMaster,
+        bool isPrimary,
         bool criticalWhenDisconnected,
         int warningFreePercent,
         int criticalFreePercent)
@@ -130,7 +130,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
             new()
             {
                 Key = "connected",
-                Label = isMaster ? "Local mode" : "Master connection",
+                Label = isPrimary ? "Local mode" : "Primary connection",
                 Value = connected ? 1 : 0,
                 State = connected
                     ? SensorState.Healthy
@@ -210,14 +210,14 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
 
     private static string BuildMessage(
         StorageOverview storage,
-        bool isMaster,
+        bool isPrimary,
         bool connected,
-        SlaveProbeRuntimeSnapshot slaveRuntime,
+        SlaveProbeRuntimeSnapshot secondaryRuntime,
         SensorState state)
     {
-        var modeMessage = isMaster
-            ? "local master"
-            : connected ? "master connected" : $"master disconnected: {slaveRuntime.StatusMessage}";
+        var modeMessage = isPrimary
+            ? "local primary"
+            : connected ? "primary connected" : $"primary disconnected: {secondaryRuntime.StatusMessage}";
         var storageMessage = storage.DriveFreePercent.HasValue
             ? $"storage free {storage.DriveFreePercent.Value:0.##}%"
             : $"data {storage.DataDirectoryMegabytes:0.##} MB";

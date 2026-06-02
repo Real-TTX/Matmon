@@ -23,7 +23,7 @@ public sealed class DockerContainerSensorExecutor : ISensorExecutor
                 Kind = SensorParameterKind.Text,
                 Description = "Container name or ID. Empty uses the sensor target.",
                 Required = true,
-                Placeholder = "matmon-master"
+                Placeholder = "matmon-primary"
             },
             new SensorParameterDefinition
             {

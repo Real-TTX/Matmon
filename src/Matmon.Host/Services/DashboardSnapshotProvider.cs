@@ -129,7 +129,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                 probeHealthMap[probe.Id] = new ProbeHealthSnapshot(
                     MonitoringSeverity.Ok,
                     "local",
-                    "local master");
+                    "local primary");
                 continue;
             }
 

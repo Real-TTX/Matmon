@@ -72,6 +72,7 @@ public sealed record WorkspaceBackupSnapshotInfo(
     string DisplayName,
     Guid? JobId,
     string? JobName,
+    string? Description,
     DateTimeOffset CreatedUtc,
     long Bytes,
     WorkspaceBackupSection Sections,
@@ -90,6 +91,18 @@ public sealed record WorkspaceBackupSnapshotInfo(
             .Where(section => section is not WorkspaceBackupSection.None and not WorkspaceBackupSection.All && Sections.HasFlag(section))
             .Select(section => section.ToString()));
 }
+
+public sealed record WorkspaceBackupSectionPreview(
+    WorkspaceBackupSection Section,
+    string Label,
+    string Description,
+    string Summary,
+    int ItemCount,
+    bool Included);
+
+public sealed record WorkspaceBackupSnapshotDetails(
+    WorkspaceBackupSnapshotInfo Snapshot,
+    IReadOnlyList<WorkspaceBackupSectionPreview> Sections);
 
 public sealed record WorkspaceBackupRestoreResult(
     string FileName,

@@ -106,10 +106,15 @@ function initializeMobileSidebarMenu() {
     return;
   }
 
-  const mobileQuery = window.matchMedia("(max-width: 991.98px)");
+  const mobileQuery = window.matchMedia("(max-width: 991.98px), (hover: none) and (pointer: coarse)");
 
   const setOpen = (open) => {
     const shouldOpen = Boolean(open) && mobileQuery.matches;
+
+    if (shouldOpen && window.scrollY > 0) {
+      window.scrollTo(0, 0);
+    }
+
     shell.classList.toggle("is-sidebar-open", shouldOpen);
     document.body.classList.toggle("is-sidebar-open", shouldOpen);
     toggle.setAttribute("aria-expanded", String(shouldOpen));
@@ -137,8 +142,10 @@ function initializeMobileSidebarMenu() {
       return;
     }
 
-    const navLink = target.closest("a.topnav-link, a.account-login-button, .sidebar-alert-status-main");
-    if (navLink && mobileQuery.matches) {
+    const actionable = target.closest(
+      "a.topnav-link, a.account-login-button, .sidebar-alert-status-main, .sidebar-icon-button, .account-menu-action, .account-menu-form button"
+    );
+    if (actionable && mobileQuery.matches) {
       setOpen(false);
     }
   });

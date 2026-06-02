@@ -95,11 +95,13 @@ public sealed class ProbeUsageModel : PageModel
         var recentCutoff = now - TimeSpan.FromHours(1);
         var lineage = BuildLineage(probe, elementsById);
         var path = string.Join(" / ", lineage.Select(element => element.Name));
-        var isLocalMaster = probe.ParentId is null || string.Equals(probe.ProbeId, "master", StringComparison.OrdinalIgnoreCase);
+        var isPrimary = probe.ParentId is null ||
+            string.Equals(probe.ProbeId, "primary", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(probe.ProbeId, "master", StringComparison.OrdinalIgnoreCase);
         var liveStatus = !string.IsNullOrWhiteSpace(probe.ProbeId) && probeStatuses.TryGetValue(probe.ProbeId, out var snapshot)
             ? snapshot
             : null;
-        var status = ResolveProbeStatus(isLocalMaster, liveStatus);
+        var status = ResolveProbeStatus(isPrimary, liveStatus);
         var statusColor = status.StateKey == MonitoringStatePresentation.Key(MonitoringSeverity.Error)
             ? MonitoringStatePresentation.Color(SensorState.Critical)
             : MonitoringStatePresentation.Color(SensorState.Healthy);
@@ -235,7 +237,7 @@ public sealed class ProbeUsageModel : PageModel
             probe.Name,
             path,
             probe.ProbeId ?? "-",
-            isLocalMaster ? "Master" : "Slave",
+            isPrimary ? "Primary" : "Secondary",
             status.StateKey,
             status.StateLabel,
             status.Message,
@@ -272,14 +274,14 @@ public sealed class ProbeUsageModel : PageModel
         return true;
     }
 
-    private static ProbeUsageStatus ResolveProbeStatus(bool isLocalMaster, ProbeStatusSnapshot? liveStatus)
+    private static ProbeUsageStatus ResolveProbeStatus(bool isPrimary, ProbeStatusSnapshot? liveStatus)
     {
-        if (isLocalMaster)
+        if (isPrimary)
         {
             return new ProbeUsageStatus(
                 MonitoringStatePresentation.Key(MonitoringSeverity.Ok),
                 "Local",
-                "local master probe",
+                "local primary probe",
                 "local");
         }
 

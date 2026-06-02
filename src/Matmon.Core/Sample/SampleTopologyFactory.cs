@@ -14,7 +14,7 @@ public static class SampleTopologyFactory
         probeBaseline.Settings.Enabled = true;
         probeBaseline.Settings.PollingInterval = TimeSpan.FromSeconds(15);
         probeBaseline.Settings.Timeout = TimeSpan.FromSeconds(2);
-        probeBaseline.Settings.Parameters["role"] = "master-probe";
+        probeBaseline.Settings.Parameters["role"] = "primary-probe";
 
         var remoteFolderDefaults = new MonitoringTemplate
         {
@@ -130,8 +130,8 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
 }
 """;
 
-        var rootProbe = new ProbeElement("Berlin Master Probe");
-        rootProbe.ProbeId = "master";
+        var rootProbe = new ProbeElement("Berlin Primary Probe");
+        rootProbe.ProbeId = "primary";
         rootProbe.AppliedTemplateIds.Add(probeBaseline.Id);
         rootProbe.Settings.Parameters["cluster"] = "primary";
 
@@ -144,7 +144,7 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
         var remoteFolder = new FolderElement("Remote Network");
         remoteFolder.ParentId = remoteProbe.Id;
         remoteFolder.AppliedTemplateIds.Add(remoteFolderDefaults.Id);
-        remoteFolder.Description = "Remote segment under the master probe";
+        remoteFolder.Description = "Remote segment under the primary probe";
 
         var nasHost = new HostElement("NAS-01")
         {

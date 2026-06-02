@@ -1,6 +1,7 @@
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
 using Matmon.Host.Ui;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -43,6 +44,9 @@ public class ConfigModel : PageModel
 
     [BindProperty]
     public StorageCleanupInput StorageCleanup { get; set; } = new();
+
+    [BindProperty]
+    public IFormFile? BackupUpload { get; set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -161,6 +165,33 @@ public class ConfigModel : PageModel
         }
 
         return RedirectToPage(new { tab = "backup" });
+    }
+
+    public IActionResult OnPostUploadBackupSnapshot()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        if (BackupUpload is null || BackupUpload.Length == 0)
+        {
+            ErrorMessage = "Select a backup file to upload.";
+            return RedirectToPage(new { tab = "backup" });
+        }
+
+        try
+        {
+            using var stream = BackupUpload.OpenReadStream();
+            var snapshot = _workspaceStore.ImportBackupSnapshot(stream, BackupUpload.FileName);
+            StatusMessage = $"Backup '{snapshot.DisplayName}' uploaded.";
+            return RedirectToPage("/BackupRestore", new { fileName = snapshot.FileName, returnUrl = "/Config?tab=backup" });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            return RedirectToPage(new { tab = "backup" });
+        }
     }
 
     public IActionResult OnPostDeleteBackupJob(Guid backupJobId)

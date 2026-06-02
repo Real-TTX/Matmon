@@ -24,9 +24,11 @@ public class BackupRestoreModel : PageModel
     [BindProperty]
     public BackupRestoreInput Input { get; set; } = new();
 
-    public WorkspaceBackupSnapshotInfo? Snapshot { get; private set; }
+    public WorkspaceBackupSnapshotDetails? SnapshotDetails { get; private set; }
 
-    public IReadOnlyList<BackupSectionChoice> SectionChoices => BackupSectionCatalog.GetChoices();
+    public WorkspaceBackupSnapshotInfo? Snapshot => SnapshotDetails?.Snapshot;
+
+    public IReadOnlyList<BackupRestoreSectionItem> SectionItems { get; private set; } = [];
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -41,21 +43,10 @@ public class BackupRestoreModel : PageModel
             return Forbid();
         }
 
-        if (string.IsNullOrWhiteSpace(FileName))
+        if (!TryLoadSnapshot(resetSelection: true))
         {
-            ErrorMessage = "Backup snapshot not found.";
             return RedirectToConfig();
         }
-
-        Snapshot = _workspaceStore.FindBackupSnapshot(FileName);
-        if (Snapshot is null)
-        {
-            ErrorMessage = $"Backup snapshot '{FileName}' was not found.";
-            return RedirectToConfig();
-        }
-
-        Input = new BackupRestoreInput();
-        Input.Sections.ApplySections(Snapshot.Sections);
         return Page();
     }
 
@@ -66,16 +57,8 @@ public class BackupRestoreModel : PageModel
             return Forbid();
         }
 
-        if (string.IsNullOrWhiteSpace(FileName))
+        if (!TryLoadSnapshot(resetSelection: false))
         {
-            ErrorMessage = "Backup snapshot not found.";
-            return RedirectToConfig();
-        }
-
-        Snapshot = _workspaceStore.FindBackupSnapshot(FileName);
-        if (Snapshot is null)
-        {
-            ErrorMessage = $"Backup snapshot '{FileName}' was not found.";
             return RedirectToConfig();
         }
 
@@ -87,7 +70,7 @@ public class BackupRestoreModel : PageModel
 
         try
         {
-            var result = _workspaceStore.RestoreBackupSnapshot(FileName, Input.Sections.ToSections(defaultToAll: false));
+            var result = _workspaceStore.RestoreBackupSnapshot(FileName!, Input.Sections.ToSections(defaultToAll: false));
             StatusMessage = result.Message;
             return RedirectToConfig();
         }
@@ -96,6 +79,33 @@ public class BackupRestoreModel : PageModel
             ErrorMessage = ex.Message;
             return Page();
         }
+    }
+
+    public IActionResult OnGetDownload()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(FileName))
+        {
+            return NotFound();
+        }
+
+        var snapshot = _workspaceStore.FindBackupSnapshot(FileName);
+        if (snapshot is null)
+        {
+            return NotFound();
+        }
+
+        var stream = _workspaceStore.OpenBackupSnapshotReadStream(snapshot.FileName);
+        if (stream is null)
+        {
+            return NotFound();
+        }
+
+        return File(stream, "application/json", snapshot.FileName);
     }
 
     public string FormatDateTime(DateTimeOffset? timestampUtc)
@@ -113,6 +123,91 @@ public class BackupRestoreModel : PageModel
         return BackupSectionCatalog.Format(sections);
     }
 
+    public static string FormatCount(int value)
+    {
+        return value.ToString("N0");
+    }
+
+    public static int CountSections(WorkspaceBackupSection sections)
+    {
+        return Enum.GetValues<WorkspaceBackupSection>()
+            .Count(section => section is not WorkspaceBackupSection.None and not WorkspaceBackupSection.All && sections.HasFlag(section));
+    }
+
+    private bool TryLoadSnapshot(bool resetSelection)
+    {
+        if (string.IsNullOrWhiteSpace(FileName))
+        {
+            ErrorMessage = "Backup snapshot not found.";
+            return false;
+        }
+
+        SnapshotDetails = _workspaceStore.FindBackupSnapshotDetails(FileName);
+        if (SnapshotDetails is null)
+        {
+            ErrorMessage = $"Backup snapshot '{FileName}' was not found.";
+            return false;
+        }
+
+        if (resetSelection)
+        {
+            Input = new BackupRestoreInput();
+            Input.Sections.ApplySections(SnapshotDetails.Snapshot.Sections);
+        }
+
+        SectionItems = SnapshotDetails.Sections
+            .Select(section => new BackupRestoreSectionItem(
+                section.Section,
+                section.Label,
+                section.Description,
+                section.Summary,
+                section.ItemCount,
+                section.Included,
+                IsSectionSelected(section.Section),
+                GetSectionFieldName(section.Section)))
+            .ToArray();
+
+        return true;
+    }
+
+    private bool IsSectionSelected(WorkspaceBackupSection section)
+    {
+        return section switch
+        {
+            WorkspaceBackupSection.Topology => Input.Sections.Topology,
+            WorkspaceBackupSection.Templates => Input.Sections.Templates,
+            WorkspaceBackupSection.SensorDefinitions => Input.Sections.SensorDefinitions,
+            WorkspaceBackupSection.Notifications => Input.Sections.Notifications,
+            WorkspaceBackupSection.Maps => Input.Sections.Maps,
+            WorkspaceBackupSection.Users => Input.Sections.Users,
+            WorkspaceBackupSection.Alerts => Input.Sections.Alerts,
+            WorkspaceBackupSection.SensorHistory => Input.Sections.SensorHistory,
+            WorkspaceBackupSection.Events => Input.Sections.Events,
+            WorkspaceBackupSection.Statistics => Input.Sections.Statistics,
+            WorkspaceBackupSection.BackupJobs => Input.Sections.BackupJobs,
+            _ => false
+        };
+    }
+
+    private static string GetSectionFieldName(WorkspaceBackupSection section)
+    {
+        return section switch
+        {
+            WorkspaceBackupSection.Topology => "Input.Sections.Topology",
+            WorkspaceBackupSection.Templates => "Input.Sections.Templates",
+            WorkspaceBackupSection.SensorDefinitions => "Input.Sections.SensorDefinitions",
+            WorkspaceBackupSection.Notifications => "Input.Sections.Notifications",
+            WorkspaceBackupSection.Maps => "Input.Sections.Maps",
+            WorkspaceBackupSection.Users => "Input.Sections.Users",
+            WorkspaceBackupSection.Alerts => "Input.Sections.Alerts",
+            WorkspaceBackupSection.SensorHistory => "Input.Sections.SensorHistory",
+            WorkspaceBackupSection.Events => "Input.Sections.Events",
+            WorkspaceBackupSection.Statistics => "Input.Sections.Statistics",
+            WorkspaceBackupSection.BackupJobs => "Input.Sections.BackupJobs",
+            _ => string.Empty
+        };
+    }
+
     private IActionResult RedirectToConfig()
     {
         if (!string.IsNullOrWhiteSpace(ReturnUrl))
@@ -128,3 +223,13 @@ public sealed class BackupRestoreInput
 {
     public BackupSectionSelectionModel Sections { get; set; } = new();
 }
+
+public sealed record BackupRestoreSectionItem(
+    WorkspaceBackupSection Section,
+    string Label,
+    string Description,
+    string Summary,
+    int ItemCount,
+    bool Included,
+    bool Selected,
+    string FieldName);

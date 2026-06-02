@@ -4,13 +4,20 @@ namespace Matmon.Host.Services;
 
 public sealed class MatmonRuntimeOptions
 {
-    public AppMode Mode { get; set; } = AppMode.Master;
+    public AppMode Mode { get; set; } = AppMode.Primary;
 
     public string? ProbeId { get; set; }
 
     public string? ProbeName { get; set; }
 
-    public string? MasterUrl { get; set; }
+    public string? PrimaryUrl { get; set; }
+
+    [Obsolete("Use PrimaryUrl instead.")]
+    public string? MasterUrl
+    {
+        get => PrimaryUrl;
+        set => PrimaryUrl = value;
+    }
 
     public int HeartbeatIntervalSeconds { get; set; } = 30;
 

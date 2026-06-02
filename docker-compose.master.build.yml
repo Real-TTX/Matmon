@@ -5,8 +5,8 @@
 #   docker compose --env-file .env.master -f docker-compose.master.yml -f docker-compose.master.build.yml up -d --build
 
 services:
-  matmon-master:
-    image: ${MATMON_IMAGE:-matmon-master:local}
+  matmon-primary:
+    image: ${MATMON_IMAGE:-matmon-primary:local}
     pull_policy: build
     build:
       context: .

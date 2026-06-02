@@ -88,16 +88,16 @@
     }
 }
 
-@if (Model.IsSlave)
+@if (Model.IsSecondary)
 {
     <section class="dashboard-shell">
         <div class="page-header sensor-header">
             <div class="sensor-header-main">
                 <div class="page-title">
-                    <h1>Remote Probe</h1>
+                    <h1>Secondary Probe</h1>
                 </div>
                 <div class="sensor-meta">
-                    <span class="sensor-chip">Mode: Slave</span>
+                    <span class="sensor-chip">Mode: Secondary</span>
                 </div>
             </div>
             <div class="sensor-header-side">
@@ -112,8 +112,8 @@
 
         <section class="panel panel-stack probe-connection-panel">
             <div class="panel-header">
-                <h2 class="section-title">Main connection</h2>
-                <span class="panel-hint">Probe to master only</span>
+                <h2 class="section-title">Primary connection</h2>
+                <span class="panel-hint">Probe to primary only</span>
             </div>
 
             <dl class="config-list compact-config-list probe-connection-list">
@@ -126,8 +126,8 @@
                     </dd>
                 </div>
                 <div class="config-row">
-                    <dt>Main</dt>
-                    <dd>@Model.RuntimeOptions.MasterUrl</dd>
+                    <dt>Primary</dt>
+                    <dd>@Model.RuntimeOptions.PrimaryUrl</dd>
                 </div>
                 <div class="config-row">
                     <dt>Probe</dt>
@@ -142,7 +142,7 @@
                     <dd>Active independently from assigned sensors</dd>
                 </div>
                 <div class="config-row">
-                    <dt>Master-side check</dt>
+                    <dt>Primary-side check</dt>
                     <dd>Probe Heartbeat sensor validates the last accepted heartbeat</dd>
                 </div>
                 <div class="config-row">
@@ -171,10 +171,10 @@
 
         <section class="panel panel-stack">
             <div class="panel-header">
-                <h2 class="section-title">Next remote sensor runs</h2>
+                <h2 class="section-title">Next secondary sensor runs</h2>
                 <span class="panel-hint">@Model.SlaveSnapshot.UpcomingExecutions.Count remote-executed sensor runs</span>
             </div>
-            <div class="workspace-inline-note">Heartbeat is sent by the probe service itself and is checked by the master. It is not listed as an assigned remote sensor run.</div>
+            <div class="workspace-inline-note">Heartbeat is sent by the probe service itself and is checked by the primary. It is not listed as an assigned remote sensor run.</div>
 
             @if (Model.SlaveSnapshot.UpcomingExecutions.Count == 0)
             {
@@ -197,7 +197,7 @@
         </section>
 
         <section class="panel panel-stack">
-            <div class="panel-header">
+                <div class="panel-header">
                 <h2 class="section-title">Last results</h2>
                 <span class="panel-hint">@Model.SlaveSnapshot.LastResultTransferStatus</span>
             </div>
@@ -237,7 +237,7 @@
         </section>
 
         <section class="panel panel-stack">
-            <div class="panel-header">
+                <div class="panel-header">
                 <h2 class="section-title">Transferred events</h2>
                 <span class="panel-hint">@Model.SlaveSnapshot.Events.Count exchanged events</span>
             </div>
@@ -293,7 +293,7 @@ else
         </div>
         <div class="workspace-summary-card dashboard-header-summary" aria-label="Workspace summary">
             <div class="workspace-summary-main">
-                <span class="workspace-summary-kicker">Master</span>
+                <span class="workspace-summary-kicker">Primary</span>
                 <strong>@Model.Snapshot.WorkspaceName</strong>
             </div>
             <div class="workspace-summary-metrics">

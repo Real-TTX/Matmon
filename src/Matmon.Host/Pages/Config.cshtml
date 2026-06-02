@@ -70,7 +70,7 @@
                         <dd>@(Model.Overview.ProbeName ?? "-")</dd>
                     </div>
                     <div class="config-row">
-                        <dt>Master URL</dt>
+                        <dt>Primary URL</dt>
                         <dd>@(Model.Overview.MasterUrl ?? "-")</dd>
                     </div>
                     <div class="config-row">
@@ -87,7 +87,7 @@
             <section class="panel config-block">
                 <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("arrow-right")<span>Docker env</span></h2>
-                    <span class="panel-hint">master / slave</span>
+                    <span class="panel-hint">primary / secondary</span>
                 </div>
 
                 <pre class="config-code">@Model.Overview.DockerMasterSnippet</pre>
@@ -107,7 +107,7 @@
     }
     else if (Model.IsActiveTab("probes"))
     {
-        <section class="panel config-block">
+        <section class="panel config-block system-probe-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("probe")<span>Probe status</span></h2>
                 <span class="panel-hint">@Model.Overview.Probes.Count configured</span>
@@ -181,11 +181,11 @@
             }
         </section>
 
-        @if (string.Equals(Model.Overview.Mode, "Slave", StringComparison.OrdinalIgnoreCase))
+        @if (string.Equals(Model.Overview.Mode, "Secondary", StringComparison.OrdinalIgnoreCase))
         {
             <section class="panel config-block">
                 <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Slave exchange</span></h2>
+                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Secondary exchange</span></h2>
                     <span class="panel-hint">@Model.Overview.SlaveRuntime.StatusMessage</span>
                 </div>
 
@@ -339,7 +339,7 @@
     }
     else if (Model.IsActiveTab("backup") && canManageSystem)
     {
-        <div class="config-grid">
+        <div class="config-grid config-grid-stack backup-overview-layout">
             <section class="panel config-block">
                 <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("clock")<span>Backup jobs</span></h2>
@@ -352,16 +352,7 @@
                 }
                 else
                 {
-                    <div class="system-table system-backup-table" role="table" aria-label="Backup jobs">
-                        <div class="system-table-row system-table-head" role="row">
-                            <span role="columnheader">Job</span>
-                            <span role="columnheader">Schedule</span>
-                            <span role="columnheader">Sections</span>
-                            <span role="columnheader">Next run</span>
-                            <span role="columnheader">Last run</span>
-                            <span role="columnheader">Status</span>
-                            <span role="columnheader">Actions</span>
-                        </div>
+                    <div class="backup-job-list" role="list" aria-label="Backup jobs">
                         @foreach (var job in Model.BackupJobs)
                         {
                             var statusState = string.Equals(job.LastStatus, "ok", StringComparison.OrdinalIgnoreCase)
@@ -369,20 +360,38 @@
                                 : string.Equals(job.LastStatus, "running", StringComparison.OrdinalIgnoreCase)
                                     ? "warning"
                                     : "error";
-                            <div class="system-table-row system-backup-row" role="row">
-                                <span role="cell">
-                                    <strong>@job.Name</strong>
-                                    <small>@(job.Description ?? "-")</small>
-                                </span>
-                                <span role="cell">@job.Schedule.Summary()</span>
-                                <span role="cell">@ConfigModel.FormatBackupSections(job.Sections)</span>
-                                <span role="cell">@Model.FormatDateTime(job.NextRunUtc)</span>
-                                <span role="cell">@Model.FormatDateTime(job.LastRunUtc)</span>
-                                <span role="cell">
-                                    <span class="state-pill" data-state="@statusState">@(job.LastStatus ?? "idle")</span>
-                                    <small>@(job.LastMessage ?? "-")</small>
-                                </span>
-                                <span role="cell" class="system-backup-actions">
+                            <article class="backup-job-card" role="listitem">
+                                <div class="backup-job-card-head">
+                                    <div class="backup-job-card-main">
+                                        <strong>@job.Name</strong>
+                                        <small>@(job.Description ?? "-")</small>
+                                    </div>
+                                    <div class="backup-job-card-side">
+                                        <span class="state-pill" data-state="@statusState">@(job.LastStatus ?? "idle")</span>
+                                        <small>@job.Schedule.Summary()</small>
+                                    </div>
+                                </div>
+
+                                <div class="backup-job-card-meta">
+                                    <div class="backup-job-card-meta-item">
+                                        <span>Sections</span>
+                                        <strong>@ConfigModel.FormatBackupSections(job.Sections)</strong>
+                                    </div>
+                                    <div class="backup-job-card-meta-item">
+                                        <span>Next run</span>
+                                        <strong>@Model.FormatDateTime(job.NextRunUtc)</strong>
+                                    </div>
+                                    <div class="backup-job-card-meta-item">
+                                        <span>Last run</span>
+                                        <strong>@Model.FormatDateTime(job.LastRunUtc)</strong>
+                                    </div>
+                                    <div class="backup-job-card-meta-item">
+                                        <span>Last message</span>
+                                        <strong>@(job.LastMessage ?? "-")</strong>
+                                    </div>
+                                </div>
+
+                                <div class="backup-job-card-actions">
                                     <a class="workspace-secondary-submit" asp-page="/BackupJobEditor" asp-route-jobId="@job.Id" asp-route-returnUrl="/Config?tab=backup">
                                         @MatmonIcons.Render("pencil")
                                         <span>Edit</span>
@@ -406,8 +415,8 @@
                                             <span>Delete</span>
                                         </button>
                                     </form>
-                                </span>
-                            </div>
+                                </div>
+                            </article>
                         }
                     </div>
                 }
@@ -442,9 +451,10 @@
                         </div>
                         @foreach (var snapshot in Model.BackupSnapshots)
                         {
-                            <div class="system-table-row system-backup-row" role="row">
+                            <div class="system-table-row system-backup-row system-backup-snapshot-row" role="row">
                                 <span role="cell">
                                     <strong>@snapshot.DisplayName</strong>
+                                    <small>@(snapshot.Description ?? "-")</small>
                                     <small>@snapshot.FileName</small>
                                 </span>
                                 <span role="cell">@Model.FormatDateTime(snapshot.CreatedUtc)</span>
@@ -458,6 +468,10 @@
                                         @MatmonIcons.Render("arrow-right")
                                         <span>Restore</span>
                                     </a>
+                                    <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-page-handler="Download" asp-route-fileName="@snapshot.FileName">
+                                        @MatmonIcons.Render("download")
+                                        <span>Download</span>
+                                    </a>
                                 </span>
                             </div>
                         }
@@ -465,6 +479,31 @@
                 }
             </section>
         </div>
+
+        <section class="panel config-block backup-upload-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("upload")<span>Import backup</span></h2>
+                <span class="panel-hint">upload a backup file from disk</span>
+            </div>
+
+            <form method="post" asp-page-handler="UploadBackupSnapshot" enctype="multipart/form-data" class="workspace-form backup-upload-form">
+                <div class="workspace-form-grid workspace-core-grid">
+                    <label class="workspace-field workspace-span-2">
+                        <span>Backup file</span>
+                        <input type="file" asp-for="BackupUpload" accept=".json,application/json" class="form-control workspace-input" />
+                    </label>
+                    <p class="workspace-inline-note workspace-span-2">
+                        Matmon backup files are stored as JSON. Uploading a file validates it and copies it into the backup archive before opening the restore assistant.
+                    </p>
+                    <div class="workspace-form-actions workspace-span-2">
+                        <button type="submit" class="workspace-submit">
+                            @MatmonIcons.Render("upload")
+                            <span>Upload backup</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
     }
     else if (Model.IsActiveTab("users") && canManageUsers)
     {

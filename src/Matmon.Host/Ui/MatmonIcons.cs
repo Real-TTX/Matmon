@@ -64,6 +64,16 @@ public static class MatmonIcons
             <rect x="5.2" y="5.2" width="7.8" height="7.8" rx="1.2" />
             <path d="M4.2 10.2H3.3A1.6 1.6 0 0 1 1.7 8.6V3.3A1.6 1.6 0 0 1 3.3 1.7h5.3A1.6 1.6 0 0 1 10.2 3.3v.9" />
             """,
+        ["download"] = """
+            <path d="M8 2.8v6.4" />
+            <path d="M5.6 7.2 8 9.6l2.4-2.4" />
+            <path d="M3 12.8h10" />
+            """,
+        ["upload"] = """
+            <path d="M8 13.2V6.8" />
+            <path d="M5.6 9.4 8 7l2.4 2.4" />
+            <path d="M3 3.2h10" />
+            """,
         ["more"] = """
             <circle cx="4" cy="8" r="0.8" fill="currentColor" stroke="none" />
             <circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none" />

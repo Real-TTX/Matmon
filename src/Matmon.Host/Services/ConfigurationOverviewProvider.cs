@@ -37,7 +37,7 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             _runtimeOptions.Mode.ToString(),
             _runtimeOptions.ProbeId,
             _runtimeOptions.ProbeName,
-            _runtimeOptions.MasterUrl,
+            _runtimeOptions.PrimaryUrl,
             _runtimeOptions.HeartbeatIntervalSeconds,
             _runtimeOptions.WorkspacePath,
             _authOptions.Username,
@@ -66,9 +66,9 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                 var isRoot = !probe.ParentId.HasValue;
                 liveProbeMap.TryGetValue(probe.ProbeId, out var liveProbe);
                 var state = ResolveProbeState(isRoot, liveProbe, now, heartbeatGrace);
-                var role = isRoot ? "Master" : "Slave";
+                var role = isRoot ? "Primary" : "Secondary";
                 var message = isRoot
-                    ? "local master probe"
+                    ? "local primary probe"
                     : liveProbe?.Message ?? "waiting for probe heartbeat";
 
                 return new SystemProbeOverview(
@@ -128,7 +128,7 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
     private static string BuildMasterSnippet()
     {
         return """
-Matmon__Mode=Master
+Matmon__Mode=Primary
 Matmon__HeartbeatIntervalSeconds=30
 Matmon__WorkspacePath=data/workspace.json
 Matmon__Auth__Username=admin
@@ -139,10 +139,10 @@ Matmon__Auth__Password=admin
     private static string BuildSlaveSnippet()
     {
         return """
-Matmon__Mode=Slave
+Matmon__Mode=Secondary
 Matmon__ProbeId=probe-01
-Matmon__ProbeName=Remote Probe 01
-Matmon__MasterUrl=http://master:8099
+Matmon__ProbeName=Secondary Probe 01
+Matmon__PrimaryUrl=http://primary:8099
 Matmon__ProbeToken=probe-01-token
 Matmon__HeartbeatIntervalSeconds=30
 Matmon__WorkspacePath=data/workspace.json
@@ -153,7 +153,7 @@ Matmon__WorkspacePath=data/workspace.json
     {
         return """
 "Matmon": {
-  "Mode": "Master",
+  "Mode": "Primary",
   "HeartbeatIntervalSeconds": 30,
   "WorkspacePath": "data/workspace.json",
   "Auth": {

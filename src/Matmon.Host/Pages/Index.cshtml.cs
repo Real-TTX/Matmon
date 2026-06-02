@@ -20,7 +20,7 @@ public class IndexModel : PageModel
         _slaveRuntimeState = slaveRuntimeState;
     }
 
-    public bool IsSlave => _runtimeOptions.Mode == AppMode.Slave;
+    public bool IsSecondary => _runtimeOptions.Mode == AppMode.Secondary;
 
     public DashboardSnapshot Snapshot { get; private set; } = default!;
 
@@ -30,7 +30,7 @@ public class IndexModel : PageModel
 
     public void OnGet()
     {
-        if (IsSlave)
+        if (IsSecondary)
         {
             SlaveSnapshot = _slaveRuntimeState.Snapshot();
             return;

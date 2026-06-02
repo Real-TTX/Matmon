@@ -24,15 +24,15 @@ public sealed class SlaveHeartbeatService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_runtimeOptions.Mode != AppMode.Slave)
+        if (_runtimeOptions.Mode != AppMode.Secondary)
         {
             return;
         }
 
-        var masterUrl = _runtimeOptions.MasterUrl;
-        if (!Uri.TryCreate(masterUrl, UriKind.Absolute, out var masterUri))
+        var primaryUrl = _runtimeOptions.PrimaryUrl;
+        if (!Uri.TryCreate(primaryUrl, UriKind.Absolute, out var primaryUri))
         {
-            _logger.LogWarning("Slave mode is active, but no valid master URL is configured.");
+            _logger.LogWarning("Secondary mode is active, but no valid primary URL is configured.");
             await WaitIndefinitelyAsync(stoppingToken);
             return;
         }
@@ -53,14 +53,14 @@ public sealed class SlaveHeartbeatService : BackgroundService
         var interval = TimeSpan.FromSeconds(intervalSeconds);
 
         _logger.LogInformation(
-            "Slave probe {ProbeName} ({ProbeId}) heartbeats every {Interval} to {MasterUrl}",
+            "Secondary probe {ProbeName} ({ProbeId}) heartbeats every {Interval} to {PrimaryUrl}",
             probeName,
             probeId,
             interval,
-            masterUri);
+            primaryUri);
 
-        var client = _httpClientFactory.CreateClient(nameof(SlaveHeartbeatService));
-        client.BaseAddress = masterUri;
+        var client = _httpClientFactory.CreateClient("SecondaryHeartbeatService");
+        client.BaseAddress = primaryUri;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -83,7 +83,7 @@ public sealed class SlaveHeartbeatService : BackgroundService
             probeId,
             probeName,
             probeToken,
-            "slave heartbeat",
+            "secondary heartbeat",
             Environment.Version.ToString());
 
         try
@@ -97,7 +97,7 @@ public sealed class SlaveHeartbeatService : BackgroundService
                 return;
             }
 
-            _runtimeState.RecordHeartbeat(success: true, "heartbeat accepted by master");
+            _runtimeState.RecordHeartbeat(success: true, "heartbeat accepted by primary");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

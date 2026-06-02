@@ -39,14 +39,14 @@ public sealed class SlaveSensorWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_runtimeOptions.Mode != AppMode.Slave)
+        if (_runtimeOptions.Mode != AppMode.Secondary)
         {
             return;
         }
 
-        if (!Uri.TryCreate(_runtimeOptions.MasterUrl, UriKind.Absolute, out var masterUri))
+        if (!Uri.TryCreate(_runtimeOptions.PrimaryUrl, UriKind.Absolute, out var primaryUri))
         {
-            _runtimeState.RecordAssignmentSync(0, "No valid master URL configured.", success: false);
+            _runtimeState.RecordAssignmentSync(0, "No valid primary URL configured.", success: false);
             return;
         }
 
@@ -54,10 +54,10 @@ public sealed class SlaveSensorWorker : BackgroundService
             ? Environment.MachineName
             : _runtimeOptions.ProbeId;
         var interval = TimeSpan.FromSeconds(5);
-        var client = _httpClientFactory.CreateClient(nameof(SlaveSensorWorker));
-        client.BaseAddress = masterUri;
+        var client = _httpClientFactory.CreateClient("SecondarySensorWorker");
+        client.BaseAddress = primaryUri;
 
-        _logger.LogInformation("Slave sensor worker started for {ProbeId} against {MasterUrl}", probeId, masterUri);
+        _logger.LogInformation("Secondary sensor worker started for {ProbeId} against {PrimaryUrl}", probeId, primaryUri);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -73,7 +73,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             catch (Exception ex)
             {
                 _runtimeState.RecordAssignmentSync(0, ex.Message, success: false);
-                _logger.LogWarning(ex, "Slave sensor sync failed for {ProbeId}", probeId);
+                _logger.LogWarning(ex, "Secondary sensor sync failed for {ProbeId}", probeId);
             }
 
             try
@@ -304,7 +304,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                _runtimeState.RecordExecution($"Discovery {job.Network}", "cancelled by master", success: true);
+                _runtimeState.RecordExecution($"Discovery {job.Network}", "cancelled by primary", success: true);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -346,13 +346,13 @@ public sealed class SlaveSensorWorker : BackgroundService
         _runtimeState.RecordResultPost(
             results.Count,
             cancelled
-                ? "discovery job was cancelled by master"
+                ? "discovery job was cancelled by primary"
                 : $"{results.Count} discovery result{(results.Count == 1 ? string.Empty : "s")} posted: {(int)postResponse.StatusCode} {postResponse.ReasonPhrase}",
             postResponse.IsSuccessStatusCode);
 
         if (cancelled)
         {
-            throw new OperationCanceledException("Discovery job was cancelled by master.");
+            throw new OperationCanceledException("Discovery job was cancelled by primary.");
         }
     }
 

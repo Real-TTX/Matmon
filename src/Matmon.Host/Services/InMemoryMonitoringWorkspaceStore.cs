@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Matmon.Core.Domain;
 using Matmon.Core.Sample;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Matmon.Host.Services;
@@ -72,7 +73,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
         if (_runtimeOptions.ProvisionLocalDockerProbe)
         {
-            EnsureDefaultDockerSlaveProbe();
+            EnsureDefaultDockerSecondaryProbe();
         }
 
         if (_runtimeOptions.ProvisionDemoSensors)
@@ -898,6 +899,66 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         return TryLoadBackupSnapshotInfo(path);
     }
 
+    public WorkspaceBackupSnapshotDetails? FindBackupSnapshotDetails(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var path = ResolveBackupFilePath(fileName);
+        return TryLoadBackupSnapshotDetails(path);
+    }
+
+    public Stream? OpenBackupSnapshotReadStream(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var path = ResolveBackupFilePath(fileName);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+    }
+
+    public WorkspaceBackupSnapshotInfo ImportBackupSnapshot(Stream content, string originalFileName)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        lock (_gate)
+        {
+            var directory = ResolveBackupDirectoryPath();
+            Directory.CreateDirectory(directory);
+
+            var tempFileName = $"backup-upload-{Guid.NewGuid():N}.tmp";
+            var tempPath = Path.Combine(directory, tempFileName);
+            try
+            {
+                using (var tempStream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    content.CopyTo(tempStream);
+                }
+
+                var package = TryLoadBackupPackage(tempPath) ?? throw new InvalidOperationException("Uploaded backup file could not be read.");
+                var finalFileName = BuildImportedBackupFileName(originalFileName, package);
+                var finalPath = ResolveBackupFilePath(finalFileName);
+
+                File.Move(tempPath, finalPath, overwrite: true);
+                return CreateSnapshotInfo(finalPath, package);
+            }
+            catch
+            {
+                TryDeleteTempFile(tempPath);
+                throw;
+            }
+        }
+    }
+
     public WorkspaceBackupSnapshotInfo RunBackupJob(Guid jobId, string? reason = null)
     {
         lock (_gate)
@@ -1085,6 +1146,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             package.JobName ?? Path.GetFileNameWithoutExtension(filePath),
             package.JobId,
             package.JobName,
+            package.Description,
             package.CreatedUtc,
             info.Exists ? info.Length : 0,
             package.Sections,
@@ -1096,6 +1158,25 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             package.Document.SensorHistory.Count,
             package.Document.Events.Count,
             package.Document.SensorStatistics.Count);
+    }
+
+    private WorkspaceBackupSnapshotDetails? TryLoadBackupSnapshotDetails(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var package = TryLoadBackupPackage(path);
+            return package is null ? null : CreateSnapshotDetails(path, package);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read backup snapshot details from {BackupPath}", path);
+            return null;
+        }
     }
 
     private WorkspaceBackupSnapshotInfo? TryLoadBackupSnapshotInfo(string path)
@@ -1117,6 +1198,12 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         }
     }
 
+    private WorkspaceBackupSnapshotDetails CreateSnapshotDetails(string filePath, WorkspaceBackupPackage package)
+    {
+        var snapshot = CreateSnapshotInfo(filePath, package);
+        return new WorkspaceBackupSnapshotDetails(snapshot, BuildBackupSectionPreviews(package));
+    }
+
     private static WorkspaceBackupPackage? TryLoadBackupPackage(string path)
     {
         try
@@ -1133,6 +1220,96 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         {
             return null;
         }
+    }
+
+    private static IReadOnlyList<WorkspaceBackupSectionPreview> BuildBackupSectionPreviews(WorkspaceBackupPackage package)
+    {
+        var document = package.Document;
+        var elements = EnumerateElements(document.RootProbe).ToArray();
+        var probeCount = elements.OfType<ProbeElement>().Count();
+        var folderCount = elements.OfType<FolderElement>().Count();
+        var hostCount = elements.OfType<HostElement>().Count();
+        var sensorCount = elements.OfType<SensorElement>().Count();
+        var notificationCount = document.NotificationSenders.Count + document.NotificationReceivers.Count + document.NotificationRules.Count;
+
+        var previews = new List<WorkspaceBackupSectionPreview>();
+        foreach (var choice in BackupSectionCatalog.GetChoices())
+        {
+            var (itemCount, summary) = choice.Section switch
+            {
+                WorkspaceBackupSection.Topology => (
+                    probeCount + folderCount + hostCount + sensorCount,
+                    $"{probeCount} probes, {folderCount} folders, {hostCount} hosts, {sensorCount} sensors"),
+                WorkspaceBackupSection.Templates => (
+                    document.Templates.Count,
+                    $"{document.Templates.Count} templates"),
+                WorkspaceBackupSection.SensorDefinitions => (
+                    document.SensorDefinitions.Count,
+                    $"{document.SensorDefinitions.Count} sensor definitions"),
+                WorkspaceBackupSection.Notifications => (
+                    notificationCount,
+                    $"{document.NotificationSenders.Count} senders, {document.NotificationReceivers.Count} receivers, {document.NotificationRules.Count} rules"),
+                WorkspaceBackupSection.Maps => (
+                    document.Maps.Count,
+                    $"{document.Maps.Count} maps"),
+                WorkspaceBackupSection.Users => (
+                    document.Users.Count,
+                    $"{document.Users.Count} users"),
+                WorkspaceBackupSection.Alerts => (
+                    document.Alerts.Count,
+                    $"{document.Alerts.Count} alerts"),
+                WorkspaceBackupSection.SensorHistory => (
+                    document.SensorHistory.Count,
+                    $"{document.SensorHistory.Count} history entries"),
+                WorkspaceBackupSection.Events => (
+                    document.Events.Count,
+                    $"{document.Events.Count} events"),
+                WorkspaceBackupSection.Statistics => (
+                    document.SensorStatistics.Count,
+                    $"{document.SensorStatistics.Count} statistic buckets"),
+                WorkspaceBackupSection.BackupJobs => (
+                    document.BackupJobs.Count,
+                    $"{document.BackupJobs.Count} backup jobs"),
+                _ => (0, "No data")
+            };
+
+            previews.Add(new WorkspaceBackupSectionPreview(
+                choice.Section,
+                choice.Label,
+                choice.Description,
+                summary,
+                itemCount,
+                package.Sections.HasFlag(choice.Section)));
+        }
+
+        return previews;
+    }
+
+    private static string BuildImportedBackupFileName(string originalFileName, WorkspaceBackupPackage package)
+    {
+        var stamp = DateTimeOffset.UtcNow.ToUniversalTime().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var source = NormalizeBackupFileStem(originalFileName);
+        return $"backup-import-{stamp}-{source}-{package.Id:N}.json";
+    }
+
+    private static string NormalizeBackupFileStem(string? fileName)
+    {
+        var stem = Path.GetFileNameWithoutExtension(fileName?.Trim() ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(stem))
+        {
+            return "backup";
+        }
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(stem.Select(character => invalid.Contains(character) ? '-' : character).ToArray())
+            .Trim('-', '_', '.', ' ');
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            sanitized = "backup";
+        }
+
+        return sanitized.Length > 32 ? sanitized[..32] : sanitized;
     }
 
     private static void ApplyBackupSections(WorkspaceDocument target, WorkspaceDocument source, WorkspaceBackupSection sections)
@@ -1910,10 +2087,10 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     {
         return new WorkspaceDocument
         {
-            RootProbe = new ProbeElement("Master Probe")
+            RootProbe = new ProbeElement("Primary Probe")
             {
-                ProbeId = "master",
-                Description = "Local master probe"
+                ProbeId = "primary",
+                Description = "Local primary probe"
             },
             Templates = [],
             SensorDefinitions = [],
@@ -2143,7 +2320,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         }
     }
 
-    private void EnsureDefaultDockerSlaveProbe()
+    private void EnsureDefaultDockerSecondaryProbe()
     {
         const string probeId = "probe-01";
         const string probeName = "Remote Probe 01";
@@ -2159,7 +2336,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             {
                 ProbeId = probeId,
                 EnrollmentToken = probeToken,
-                Description = "Local Docker slave probe"
+                Description = "Local Docker secondary probe"
             };
             AddChild(_document.RootProbe, probe);
         }
@@ -2177,12 +2354,12 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         EnsureProbeMetadataRecursive(probe);
         EnsureProbeHeartbeatSensor(probe);
         EnsureProbeHealthSensor(probe);
-        EnsureDefaultDockerSlaveTestSensor(probe);
+        EnsureDefaultDockerSecondaryTestSensor(probe);
     }
 
-    private static void EnsureDefaultDockerSlaveTestSensor(ProbeElement probe)
+    private static void EnsureDefaultDockerSecondaryTestSensor(ProbeElement probe)
     {
-        const string sensorName = "Slave -> Master Port 8099";
+        const string sensorName = "Secondary -> Primary Port 8099";
 
         var sensor = probe.Children
             .OfType<SensorElement>()
@@ -2192,16 +2369,16 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
 
         if (sensor is null)
         {
-            sensor = new SensorElement(sensorName, TcpPortSensorExecutor.Definition.Key, "master")
+            sensor = new SensorElement(sensorName, TcpPortSensorExecutor.Definition.Key, "primary")
             {
-                Description = "Local Docker slave execution test"
+                Description = "Local Docker secondary execution test"
             };
             AddChild(probe, sensor);
         }
 
         sensor.ParentId = probe.Id;
         sensor.SensorTypeKey = TcpPortSensorExecutor.Definition.Key;
-        sensor.Target = "master";
+        sensor.Target = "primary";
         sensor.Settings.Parameters["tcp.port"] = "8099";
         sensor.Settings.Parameters["tcp.expectedOpen"] = "true";
         sensor.Settings.Timeout ??= TimeSpan.FromSeconds(3);
