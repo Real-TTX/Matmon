@@ -72,7 +72,12 @@ public sealed class DiscoveryModel : PageModel
         try
         {
             var probe = ResolveProbe(Input.ProbeElementId);
-            var request = new NetworkDiscoveryRequest(Guid.NewGuid(), Input.Network, BuildOptions(Input));
+            var request = new NetworkDiscoveryRequest(
+                Guid.NewGuid(),
+                Input.Network,
+                BuildOptions(Input),
+                ScopeElementId: probe.Id,
+                ScopeKind: MonitoringElementKind.Probe);
             var job = _discoveryJobs.Create(probe.Id, probe.ProbeId, probe.Name, request);
 
             if (probe.ParentId is null)
@@ -103,7 +108,9 @@ public sealed class DiscoveryModel : PageModel
             var request = new NetworkDiscoveryRequest(
                 Guid.NewGuid(),
                 network,
-                BuildScopeOptions(effectiveSettings, hosts.Count));
+                BuildScopeOptions(effectiveSettings, hosts.Count),
+                ScopeElementId: scope.Id,
+                ScopeKind: scope.Kind);
             var job = _discoveryJobs.Create(probe.Id, probe.ProbeId, probe.Name, request);
             var scopeLabel = scope is HostElement ? "host" : scope.Kind.ToString().ToLowerInvariant();
 
@@ -163,10 +170,19 @@ public sealed class DiscoveryModel : PageModel
             var createdHosts = 0;
             var reusedHosts = 0;
             var createdSensors = 0;
+            var hostScopeImport = job is not null &&
+                job.Request.ScopeKind == MonitoringElementKind.Host &&
+                job.Request.ScopeElementId is Guid;
+            HostElement? scopeHost = null;
+            if (hostScopeImport)
+            {
+                scopeHost = _workspaceStore.FindElement(job!.Request.ScopeElementId!.Value) as HostElement
+                    ?? throw new InvalidOperationException("The selected host scope could not be resolved.");
+            }
 
             foreach (var result in selected)
             {
-                var host = FindHostByAddress(probe, result.Address);
+                var host = scopeHost ?? FindHostByAddress(probe, result.Address);
                 if (host is null)
                 {
                     host = _workspaceStore.CreateHost(
@@ -290,6 +306,17 @@ public sealed class DiscoveryModel : PageModel
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selectedAddresses.Count == 0 &&
+            job.Request.ScopeKind == MonitoringElementKind.Host &&
+            job.Request.ScopeElementId.HasValue)
+        {
+            selectedAddresses = job.Results
+                .Select(result => result.Address)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
         if (selectedAddresses.Count == 0)
         {
             return [];

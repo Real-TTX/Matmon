@@ -207,7 +207,7 @@
                     var canAddSensor = node.Kind != MonitoringElementKind.Sensor;
                     var canDiscover = node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
                     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
-                    var canDelete = !(node.Kind == MonitoringElementKind.Probe && node.Depth == 0);
+                    var canDelete = node.Kind == MonitoringElementKind.Sensor;
                     var kindKey = node.Kind.ToString().ToLowerInvariant();
                     var rowState = string.IsNullOrWhiteSpace(node.StateKey) ? "neutral" : node.StateKey;
                     var hasState = !string.IsNullOrWhiteSpace(node.StateKey) && !string.IsNullOrWhiteSpace(node.StateLabel);

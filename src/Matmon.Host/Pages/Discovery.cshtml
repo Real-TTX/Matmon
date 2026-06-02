@@ -24,6 +24,7 @@
         .Where(value => !string.IsNullOrWhiteSpace(value))
         .ToHashSet(StringComparer.Ordinal);
     var hasImportSelection = selectedHostAddresses.Count > 0 || selectedSuggestionKeys.Count > 0;
+    var hostScopedImport = string.Equals(selectedJob?.Request.ScopeKind?.ToString(), "Host", StringComparison.OrdinalIgnoreCase);
 }
 
 <section class="dashboard-shell">
@@ -163,7 +164,7 @@
     {
         <section class="panel panel-stack workspace-panel" data-discovery-results-panel data-discovery-import-mode="@showImportAssistant.ToString().ToLowerInvariant()">
                 <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render(showImportAssistant ? "plus" : "host")<span>@(showImportAssistant ? "Create hosts and sensors" : "Discovery result")</span></h2>
+                <h2 class="section-title">@MatmonIcons.Render(showImportAssistant ? "plus" : "host")<span>@(showImportAssistant ? (hostScopedImport ? "Create sensors" : "Create hosts and sensors") : "Discovery result")</span></h2>
                 <span class="panel-hint"><span data-discovery-result-count>@Model.Results.Count</span> host@(Model.Results.Count == 1 ? string.Empty : "s") found</span>
             </div>
 
@@ -252,7 +253,15 @@
                                         data-discovery-expanded="false">
                                         <td class="discovery-table-select">
                                             <button type="button" class="discovery-row-toggle" data-discovery-toggle aria-expanded="false">+</button>
-                                            <input type="checkbox" name="SelectedHostAddresses" value="@result.Address" checked="@hostChecked" />
+                                            @if (hostScopedImport)
+                                            {
+                                                <input type="hidden" name="SelectedHostAddresses" value="@result.Address" />
+                                                <input type="checkbox" checked="checked" disabled="disabled" aria-label="Host selected for sensor import" />
+                                            }
+                                            else
+                                            {
+                                                <input type="checkbox" name="SelectedHostAddresses" value="@result.Address" checked="@hostChecked" />
+                                            }
                                         </td>
                                         <td class="discovery-address-cell"><span class="tree-kind" data-kind="host">@MatmonIcons.Render("host")<span>Host</span></span><strong>@result.Address</strong></td>
                                         <td>@(string.IsNullOrWhiteSpace(result.HostName) ? "-" : result.HostName)</td>
@@ -404,7 +413,7 @@
                 <div class="page-actions workspace-toolbar">
                     @if (selectedJob is not null)
                     {
-                        <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@selectedJob.JobId" asp-route-import="true" data-discovery-import-link hidden="@(!canImport ? "hidden" : null)">@MatmonIcons.Render("plus")<span>Create sensors from result</span></a>
+                        <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@selectedJob.JobId" asp-route-import="true" data-discovery-import-link hidden="@(!canImport ? "hidden" : null)">@MatmonIcons.Render("plus")<span>@(hostScopedImport ? "Create sensors from host" : "Create sensors from result")</span></a>
                     }
                     <a class="workspace-secondary-submit" asp-page="/Discovery">@MatmonIcons.Render("arrow-left")<span>New scan</span></a>
                 </div>

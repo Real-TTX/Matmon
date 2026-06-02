@@ -6,12 +6,12 @@
     var canAddSensor = Model.Kind != MonitoringElementKind.Sensor;
     var canDiscover = Model.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
-    var canDelete = !(Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0);
     var isRootMasterProbe = Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0;
     var isProbeRoot = Model.Kind == MonitoringElementKind.Probe && Model.Depth > 0;
     var sensorChildren = Model.Children.Where(child => child.Kind == MonitoringElementKind.Sensor).ToArray();
     var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
     var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
+    var canDelete = isSensorNode;
     var statusIcon = Model.StateKey switch
     {
         "ok" => "check",
@@ -349,6 +349,17 @@
                                             <button type="submit" class="workspace-action-menu-link">
                                                 @MatmonIcons.Render(sensor.IsPaused ? "play" : "pause")
                                                 <span>@(sensor.IsPaused ? "Resume" : "Pause")</span>
+                                            </button>
+                                        </form>
+                                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                                        <form method="post"
+                                              asp-page-handler="DeleteElement"
+                                              onsubmit="return confirm('Delete this sensor?');">
+                                            <input type="hidden" name="ElementEditor.Id" value="@sensor.Id" />
+                                            <input type="hidden" name="ReturnUrl" value="@returnUrl" />
+                                            <button type="submit" class="workspace-action-menu-link">
+                                                @MatmonIcons.Render("trash")
+                                                <span>Delete</span>
                                             </button>
                                         </form>
                                     </div>

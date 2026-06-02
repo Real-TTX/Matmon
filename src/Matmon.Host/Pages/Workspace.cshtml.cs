@@ -721,6 +721,19 @@ public sealed class WorkspaceModel : PageModel
             }
 
             StatusMessage = $"Element '{element.Name}' gelöscht.";
+            if (element is MonitoringElement monitoringElement)
+            {
+                return RedirectToPage("/Monitoring", new
+                {
+                    selectedId = monitoringElement.ParentId ?? _workspaceStore.Workspace.RootProbe.Id,
+                    monitoringView = MonitoringView,
+                    monitoringKind = MonitoringKind,
+                    monitoringState = MonitoringState,
+                    monitoringSearch = MonitoringSearch,
+                    monitoringSize = MonitoringSize
+                });
+            }
+
             return RedirectToPage(new { selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)

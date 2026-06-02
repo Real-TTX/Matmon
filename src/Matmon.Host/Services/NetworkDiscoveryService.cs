@@ -575,7 +575,9 @@ public sealed class NetworkDiscoveryService
 public sealed record NetworkDiscoveryRequest(
     Guid JobId,
     string Network,
-    NetworkDiscoveryOptions Options);
+    NetworkDiscoveryOptions Options,
+    Guid? ScopeElementId = null,
+    MonitoringElementKind? ScopeKind = null);
 
 public sealed record NetworkDiscoveryOptions(
     bool UsePing,
