@@ -11,3 +11,7 @@ matmon-data/
 .env
 .env.*
 !.env.master.example
+
+# Local dev artifacts
+cookies.txt
+tmp/
