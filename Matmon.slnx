@@ -3,7 +3,5 @@
     <Project Path="src/Matmon.Core/Matmon.Core.csproj" />
     <Project Path="src/Matmon.Host/Matmon.Host.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/Matmon.Tests/Matmon.Tests.csproj" />
-  </Folder>
+  <Folder Name="/tests/" />
 </Solution>
