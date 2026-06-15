@@ -24,25 +24,20 @@
     }
 
     <section class="panel panel-stack workspace-panel">
-        <div class="workspace-card-title">@MatmonIcons.Render("probe")<span>Probe details</span></div>
-        <p class="workspace-form-intro">A probe is an execution node. After creating it you can enroll a remote secondary against it from the probe list.</p>
         <form method="post" asp-page-handler="CreateProbe" class="workspace-form">
             <input type="hidden" asp-for="ReturnUrl" />
-            <div class="workspace-form-grid">
-                <label>
-                    <span class="workspace-label">Probe name <em>required</em></span>
-                    <input asp-for="NewProbe.Name" class="form-control workspace-input" placeholder="e.g. Remote site probe" autofocus />
-                </label>
-                <label>
-                    <span class="workspace-label">Parent</span>
-                    <select asp-for="NewProbe.ParentId" class="form-select workspace-select" asp-items="Model.View.ProbeParentOptions"></select>
-                </label>
-                <label class="workspace-span-2">
-                    <span class="workspace-label">Description</span>
-                    <input asp-for="NewProbe.Description" class="form-control workspace-input" placeholder="Optional notes about this probe" />
-                    <small class="workspace-hint">An enrollment token is generated automatically so a secondary can connect.</small>
-                </label>
-            </div>
+            <label class="workspace-field workspace-field-primary">
+                <span class="workspace-label">Probe name</span>
+                <input asp-for="NewProbe.Name" class="form-control workspace-input" placeholder="e.g. Remote site probe" autofocus />
+            </label>
+            <label class="workspace-field">
+                <span class="workspace-label">Parent</span>
+                <select asp-for="NewProbe.ParentId" class="form-select workspace-select" asp-items="Model.View.ProbeParentOptions"></select>
+            </label>
+            <label class="workspace-field">
+                <span class="workspace-label">Description <em>optional</em></span>
+                <input asp-for="NewProbe.Description" class="form-control workspace-input" placeholder="Notes about this probe" />
+            </label>
             <div class="workspace-form-actions">
                 <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
                 <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create probe</span></button>
