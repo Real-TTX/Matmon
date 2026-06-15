@@ -20,26 +20,60 @@ public sealed class StorageOverviewProvider
             ?? Path.Combine(_environment.ContentRootPath, "data");
         var backupPath = ResolveBackupPath(dataPath);
 
+        var telemetryPath = ResolveTelemetryPath(dataPath);
+
         var scan = ScanDirectory(dataPath);
         var workspaceFileBytes = GetFileSize(workspacePath);
         var backupFileBytes = GetPathSize(backupPath);
+        var telemetryFileBytes = GetTelemetrySize(telemetryPath);
         var drive = ResolveDrive(dataPath);
 
         return new StorageOverview(
             workspacePath,
             dataPath,
             backupPath,
+            telemetryPath,
             File.Exists(workspacePath),
             Directory.Exists(dataPath),
+            File.Exists(telemetryPath),
             scan.TotalBytes,
             scan.FileCount,
             workspaceFileBytes,
             backupFileBytes,
+            telemetryFileBytes,
             drive?.Name ?? Path.GetPathRoot(dataPath) ?? string.Empty,
             drive?.TotalSize,
             drive?.AvailableFreeSpace,
             CalculateFreePercent(drive),
             scan.ErrorMessage);
+    }
+
+    private string ResolveTelemetryPath(string dataPath)
+    {
+        var configuredPath = string.IsNullOrWhiteSpace(_runtimeOptions.TelemetryPath)
+            ? Path.Combine(dataPath, "telemetry.db")
+            : _runtimeOptions.TelemetryPath;
+
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configuredPath));
+    }
+
+    private static long? GetTelemetrySize(string path)
+    {
+        long total = 0;
+        var found = false;
+
+        foreach (var candidate in new[] { path, path + "-wal", path + "-shm" })
+        {
+            if (GetFileSize(candidate) is long size)
+            {
+                total += size;
+                found = true;
+            }
+        }
+
+        return found ? total : null;
     }
 
     private string ResolveWorkspacePath()
@@ -177,12 +211,15 @@ public sealed record StorageOverview(
     string WorkspacePath,
     string DataPath,
     string BackupPath,
+    string TelemetryPath,
     bool WorkspaceFileExists,
     bool DataDirectoryExists,
+    bool TelemetryFileExists,
     long DataDirectoryBytes,
     int DataFileCount,
     long? WorkspaceFileBytes,
     long? BackupFileBytes,
+    long? TelemetryFileBytes,
     string DriveName,
     long? DriveTotalBytes,
     long? DriveAvailableBytes,

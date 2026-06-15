@@ -264,6 +264,10 @@
                         <dd>@storage.FormatBytes(storage.WorkspaceFileBytes)</dd>
                     </div>
                     <div class="config-row">
+                        <dt>Telemetry database</dt>
+                        <dd>@storage.FormatBytes(storage.TelemetryFileBytes)@(storage.TelemetryFileExists ? "" : " (not created yet)")</dd>
+                    </div>
+                    <div class="config-row">
                         <dt>Backup path</dt>
                         <dd>@storage.BackupPath</dd>
                     </div>
@@ -274,6 +278,10 @@
                     <div class="config-row">
                         <dt>Workspace path</dt>
                         <dd>@storage.WorkspacePath</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Telemetry path</dt>
+                        <dd>@storage.TelemetryPath</dd>
                     </div>
                 </dl>
             </section>
