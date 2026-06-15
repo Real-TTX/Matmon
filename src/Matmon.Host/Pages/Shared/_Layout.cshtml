@@ -33,13 +33,13 @@
         string NavClass(string page) => string.Equals(currentPage, page, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
         var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
         var suppressWorkspaceSummary = string.Equals(ViewData["WorkspaceSummarySuppress"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
-        Matmon.Host.Services.DashboardSnapshot? workspaceSummary = null;
+        Matmon.Host.Services.WorkspaceSummary? workspaceSummary = null;
 
         if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
         {
             try
             {
-                workspaceSummary = DashboardSnapshotProvider.CreateSnapshot();
+                workspaceSummary = DashboardSnapshotProvider.GetWorkspaceSummary();
             }
             catch
             {

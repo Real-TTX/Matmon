@@ -20,6 +20,32 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         _runtimeOptions = runtimeOptions;
     }
 
+    public WorkspaceSummary GetWorkspaceSummary()
+    {
+        var elements = _workspaceStore.GetAllElements();
+        var workspaceName = elements
+            .OfType<ProbeElement>()
+            .FirstOrDefault(probe => probe.ParentId is null)?.Name
+            ?? "Workspace";
+
+        var probeCount = 0;
+        var sensorCount = 0;
+        foreach (var element in elements)
+        {
+            switch (element.Kind)
+            {
+                case MonitoringElementKind.Probe:
+                    probeCount++;
+                    break;
+                case MonitoringElementKind.Sensor:
+                    sensorCount++;
+                    break;
+            }
+        }
+
+        return new WorkspaceSummary(workspaceName, probeCount, sensorCount);
+    }
+
     public DashboardSnapshot CreateSnapshot()
     {
         var workspace = _workspaceStore.Workspace;
