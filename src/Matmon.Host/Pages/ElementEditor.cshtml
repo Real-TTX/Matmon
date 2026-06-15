@@ -344,28 +344,14 @@
                                                 <label>
                                                     <span>Warning</span>
                                                     <div class="sensor-threshold-rule">
-                                                        <select asp-for="ElementEditor.SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select">
-                                                            <option value=">">&gt;</option>
-                                                            <option value=">=">&gt;=</option>
-                                                            <option value="<">&lt;</option>
-                                                            <option value="<=">&lt;=</option>
-                                                            <option value="=">=</option>
-                                                            <option value="<>">&lt;&gt;</option>
-                                                        </select>
+                                                        <select asp-for="ElementEditor.SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
                                                         <input asp-for="ElementEditor.SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
                                                     </div>
                                                 </label>
                                                 <label>
                                                     <span>Error</span>
                                                     <div class="sensor-threshold-rule">
-                                                        <select asp-for="ElementEditor.SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select">
-                                                            <option value=">">&gt;</option>
-                                                            <option value=">=">&gt;=</option>
-                                                            <option value="<">&lt;</option>
-                                                            <option value="<=">&lt;=</option>
-                                                            <option value="=">=</option>
-                                                            <option value="<>">&lt;&gt;</option>
-                                                        </select>
+                                                        <select asp-for="ElementEditor.SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
                                                         <input asp-for="ElementEditor.SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
                                                     </div>
                                                 </label>

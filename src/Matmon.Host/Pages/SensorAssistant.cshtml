@@ -369,20 +369,14 @@
                                     <label>
                                         <span>Warning</span>
                                         <div class="sensor-threshold-rule">
-                                            <select asp-for="NewSensor.SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select">
-                                                <option value="above">above</option>
-                                                <option value="below">below</option>
-                                            </select>
+                                            <select asp-for="NewSensor.SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
                                             <input asp-for="NewSensor.SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
                                         </div>
                                     </label>
                                     <label>
                                         <span>Critical</span>
                                         <div class="sensor-threshold-rule">
-                                            <select asp-for="NewSensor.SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select">
-                                                <option value="above">above</option>
-                                                <option value="below">below</option>
-                                            </select>
+                                            <select asp-for="NewSensor.SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
                                             <input asp-for="NewSensor.SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
                                         </div>
                                     </label>
