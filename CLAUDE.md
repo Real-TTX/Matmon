@@ -13,7 +13,7 @@ A lightweight, self-hosted network monitoring platform (a compact PRTG-style alt
 - **Run locally (dev):** `dotnet run --project src/Matmon.Host` → http://localhost:5084 (`ASPNETCORE_ENVIRONMENT=Development`). Default login `admin` / `admin`.
 - **Run via Docker:** `docker compose up --build` → primary on http://localhost:8099, sample secondary probe on http://localhost:8100.
 - **Health check:** `GET /healthz` and `GET /api/mode` (both anonymous).
-- There is currently **no test project** — see "Known gaps".
+- **Tests:** `dotnet test tests/Matmon.Tests/Matmon.Tests.csproj` (xunit). Baseline covers the pure core logic (threshold parsing/evaluation, channel-threshold escalation, schedule calculator, settings inheritance). Coverage grows with each refactor.
 
 ## Solution layout
 
@@ -69,6 +69,6 @@ All under the `Matmon__` prefix (see `appsettings.json` + README). Common: `Matm
 
 ## Known gaps / cleanup targets
 
-- **No automated tests** for ~34k lines of C# — highest-value area to seed (inheritance resolver, threshold evaluator, schedule calculator, telemetry retention).
+- **Thin test coverage** — `Matmon.Tests` now exists with a baseline for core pure logic; the tree-level `MonitoringInheritanceResolver`, telemetry retention/migration and the executors are still uncovered.
 - `InMemoryMonitoringWorkspaceStore` is a god-class mixing many concerns; decompose into focused services.
 - JSON-everything persistence does not scale (see above) — SQLite telemetry migration is the planned fix.
