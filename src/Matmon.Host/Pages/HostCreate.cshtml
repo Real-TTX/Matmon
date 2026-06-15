@@ -24,12 +24,29 @@
     }
 
     <section class="panel panel-stack workspace-panel">
+        <div class="workspace-card-title">@MatmonIcons.Render("host")<span>Host details</span></div>
+        <p class="workspace-form-intro">A host is a monitored device or endpoint. Sensors you add to it inherit its address and settings.</p>
         <form method="post" asp-page-handler="CreateHost" class="workspace-form">
             <input type="hidden" asp-for="ReturnUrl" />
-            <input asp-for="NewHost.Name" class="form-control workspace-input" placeholder="Host name" />
-            <input asp-for="NewHost.Address" class="form-control workspace-input" placeholder="Address" />
-            <select asp-for="NewHost.ParentId" class="form-select workspace-select" asp-items="Model.View.HostParentOptions"></select>
-            <input asp-for="NewHost.Description" class="form-control workspace-input" placeholder="Description" />
+            <div class="workspace-form-grid">
+                <label>
+                    <span class="workspace-label">Host name <em>required</em></span>
+                    <input asp-for="NewHost.Name" class="form-control workspace-input" placeholder="e.g. Office NAS" autofocus />
+                </label>
+                <label>
+                    <span class="workspace-label">Address <em>required</em></span>
+                    <input asp-for="NewHost.Address" class="form-control workspace-input" placeholder="Hostname or IP, e.g. 192.168.1.10" />
+                </label>
+                <label>
+                    <span class="workspace-label">Parent</span>
+                    <select asp-for="NewHost.ParentId" class="form-select workspace-select" asp-items="Model.View.HostParentOptions"></select>
+                </label>
+                <label class="workspace-span-2">
+                    <span class="workspace-label">Description</span>
+                    <input asp-for="NewHost.Description" class="form-control workspace-input" placeholder="Optional notes about this host" />
+                    <small class="workspace-hint">Address is reused as the default target for sensors on this host.</small>
+                </label>
+            </div>
             <div class="workspace-form-actions">
                 <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
                 <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create host</span></button>

@@ -24,11 +24,25 @@
     }
 
     <section class="panel panel-stack workspace-panel">
+        <div class="workspace-card-title">@MatmonIcons.Render("folder")<span>Folder details</span></div>
+        <p class="workspace-form-intro">Folders group hosts and sensors and pass their inherited settings down the tree.</p>
         <form method="post" asp-page-handler="CreateFolder" class="workspace-form">
             <input type="hidden" asp-for="ReturnUrl" />
-            <input asp-for="NewFolder.Name" class="form-control workspace-input" placeholder="Folder name" />
-            <select asp-for="NewFolder.ParentId" class="form-select workspace-select" asp-items="Model.View.FolderParentOptions"></select>
-            <input asp-for="NewFolder.Description" class="form-control workspace-input" placeholder="Description" />
+            <div class="workspace-form-grid">
+                <label>
+                    <span class="workspace-label">Folder name <em>required</em></span>
+                    <input asp-for="NewFolder.Name" class="form-control workspace-input" placeholder="e.g. Network devices" autofocus />
+                </label>
+                <label>
+                    <span class="workspace-label">Parent</span>
+                    <select asp-for="NewFolder.ParentId" class="form-select workspace-select" asp-items="Model.View.FolderParentOptions"></select>
+                </label>
+                <label class="workspace-span-2">
+                    <span class="workspace-label">Description</span>
+                    <input asp-for="NewFolder.Description" class="form-control workspace-input" placeholder="Optional notes about this folder" />
+                    <small class="workspace-hint">Shown next to the folder in the monitoring tree.</small>
+                </label>
+            </div>
             <div class="workspace-form-actions">
                 <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
                 <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create folder</span></button>

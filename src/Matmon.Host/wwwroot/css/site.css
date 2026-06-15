@@ -5683,7 +5683,32 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .workspace-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.55rem 0.7rem;
+}
+
+.workspace-form-intro {
+  margin: -0.1rem 0 0.5rem;
+  color: var(--matmon-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.workspace-hint {
+  color: var(--matmon-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.workspace-form label span em,
+.workspace-label em {
+  font-style: normal;
+  margin-left: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--matmon-accent);
+  opacity: 0.85;
 }
 
 .workspace-notification-template-block {
