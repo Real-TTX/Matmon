@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.IO;
 using Matmon.Core;
 using Matmon.Core.Domain;
+using Matmon.Core.Telemetry;
 using Matmon.Host.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
@@ -30,6 +31,7 @@ var workspaceDirectory = Path.GetDirectoryName(resolvedWorkspacePath)
     ?? Path.Combine(builder.Environment.ContentRootPath, "data");
 var dataProtectionDirectory = ResolveDataProtectionDirectory(builder.Environment, runtimeOptions, workspaceDirectory);
 Directory.CreateDirectory(dataProtectionDirectory);
+var telemetryDatabasePath = ResolveTelemetryPath(builder.Environment, runtimeOptions, workspaceDirectory);
 
 builder.Services.AddSingleton(runtimeOptions);
 builder.Services.AddSingleton(authOptions);
@@ -49,6 +51,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
+builder.Services.AddSingleton<ITelemetryRepository>(_ => new SqliteTelemetryRepository(telemetryDatabasePath));
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
@@ -414,6 +417,17 @@ static string ResolveDataProtectionDirectory(IHostEnvironment environment, Matmo
     var configuredPath = string.IsNullOrWhiteSpace(options.DataProtectionPath)
         ? Path.Combine(workspaceDirectory, "dataprotection-keys")
         : options.DataProtectionPath;
+
+    return Path.IsPathRooted(configuredPath)
+        ? configuredPath
+        : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
+}
+
+static string ResolveTelemetryPath(IHostEnvironment environment, MatmonRuntimeOptions options, string workspaceDirectory)
+{
+    var configuredPath = string.IsNullOrWhiteSpace(options.TelemetryPath)
+        ? Path.Combine(workspaceDirectory, "telemetry.db")
+        : options.TelemetryPath;
 
     return Path.IsPathRooted(configuredPath)
         ? configuredPath

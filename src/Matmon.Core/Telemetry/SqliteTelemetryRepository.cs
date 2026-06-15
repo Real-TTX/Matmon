@@ -168,6 +168,26 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    public SensorObservation? GetLatestObservation(Guid sensorId)
+    {
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText =
+                """
+                SELECT sensor_id, ts, state, value, default_channel_key, channels,
+                       executed_probe_id, executed_probe_name, duration_ticks, message
+                FROM observation
+                WHERE sensor_id = $sensor
+                ORDER BY ts DESC, id DESC
+                LIMIT 1;
+                """;
+            cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? ReadObservation(reader) : null;
+        }
+    }
+
     public IReadOnlyList<SensorObservation> GetObservations(Guid sensorId, DateTimeOffset fromUtc, int? maxCount)
     {
         if (maxCount is <= 0)

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Matmon.Core.Domain;
 using Matmon.Core.Sample;
+using Matmon.Core.Telemetry;
 using Matmon.Host.Ui;
 using Microsoft.AspNetCore.DataProtection;
 
@@ -32,8 +33,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     private readonly string _workspaceBackupPath;
     private readonly string _backupDirectoryPath;
     private readonly Timer _saveTimer;
-    private readonly Dictionary<Guid, List<SensorObservation>> _sensorHistoryBySensor = new();
-    private readonly Dictionary<Guid, SensorObservation> _latestSensorObservations = new();
+    private readonly ITelemetryRepository _telemetry;
     private WorkspaceDocument _document;
     private DateTimeOffset? _firstDirtyUtc;
     private DateTimeOffset _lastBackupUtc = DateTimeOffset.MinValue;
@@ -47,11 +47,13 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         MatmonRuntimeOptions runtimeOptions,
         MatmonAuthOptions authOptions,
         IDataProtectionProvider dataProtectionProvider,
+        ITelemetryRepository telemetry,
         ILogger<InMemoryMonitoringWorkspaceStore> logger)
     {
         _logger = logger;
         _authOptions = authOptions;
         _runtimeOptions = runtimeOptions;
+        _telemetry = telemetry;
         _credentialProtector = dataProtectionProvider.CreateProtector("Matmon.Credentials");
 
         var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
@@ -67,7 +69,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
 
         _document = LoadDocument();
         HydrateCredentialBundles(_document);
-        RebuildObservationIndexesLocked();
+        MigrateDocumentTelemetryIntoRepository();
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
@@ -86,9 +88,6 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         EnsureDefaultUsers();
         EnsureDefaultMaps(_runtimeOptions.CreateStarterMap);
         EnsureDefaultAlertCollection();
-        EnsureDefaultObservationCollection();
-        EnsureDefaultEventCollection();
-        EnsureDefaultStatisticsCollection();
         SaveNow();
     }
 
@@ -522,12 +521,9 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
     {
         lock (_gate)
         {
-            EnsureDefaultObservationCollection();
-            EnsureDefaultEventCollection();
-            EnsureDefaultStatisticsCollection();
             EnsureDefaultAlertCollection();
 
-            var previousObservation = FindLatestSensorObservationLocked(sensorId);
+            var previousObservation = _telemetry.GetLatestObservation(sensorId);
 
             var observation = new SensorObservation
             {
@@ -543,8 +539,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
                 Message = result.Message
             };
 
-            _document.SensorHistory.Add(observation);
-            AddSensorObservationToIndex(observation);
+            _telemetry.AppendObservation(observation);
 
             if (ShouldRecordStateChangeEvent(previousObservation, result))
             {
@@ -575,131 +570,49 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
 
     public IReadOnlyList<SensorObservation> GetSensorHistory()
     {
-        lock (_gate)
-        {
-            EnsureDefaultObservationCollection();
-            return _document.SensorHistory
-                .OrderBy(entry => entry.TimestampUtc)
-                .ToArray();
-        }
+        return _telemetry.GetAllObservations();
     }
 
     public IReadOnlyList<SensorObservation> GetSensorHistory(Guid sensorId, TimeSpan? window = null, int? maxCount = null)
     {
-        lock (_gate)
+        if (maxCount is <= 0)
         {
-            EnsureDefaultObservationCollection();
-
-            if (maxCount is <= 0)
-            {
-                return Array.Empty<SensorObservation>();
-            }
-
-            var cutoffUtc = window is { } requestedWindow && requestedWindow > TimeSpan.Zero
-                ? DateTimeOffset.UtcNow - requestedWindow
-                : DateTimeOffset.MinValue;
-            if (!_sensorHistoryBySensor.TryGetValue(sensorId, out var sensorHistory))
-            {
-                return Array.Empty<SensorObservation>();
-            }
-
-            var query = sensorHistory.Where(observation => observation.TimestampUtc >= cutoffUtc);
-            if (maxCount is int limit)
-            {
-                query = query.TakeLast(limit);
-            }
-
-            return query.ToArray();
+            return Array.Empty<SensorObservation>();
         }
+
+        var cutoffUtc = window is { } requestedWindow && requestedWindow > TimeSpan.Zero
+            ? DateTimeOffset.UtcNow - requestedWindow
+            : DateTimeOffset.MinValue;
+        return _telemetry.GetObservations(sensorId, cutoffUtc, maxCount);
     }
 
     public IReadOnlyDictionary<Guid, SensorObservation> GetLatestSensorObservations()
     {
-        lock (_gate)
-        {
-            EnsureDefaultObservationCollection();
-            return new Dictionary<Guid, SensorObservation>(_latestSensorObservations);
-        }
+        return _telemetry.GetLatestObservations();
     }
 
     public IReadOnlyDictionary<Guid, SensorObservation[]> GetRecentSensorHistoryBySensor(TimeSpan window, int maxPerSensor)
     {
-        lock (_gate)
-        {
-            EnsureDefaultObservationCollection();
-
-            var limit = Math.Max(maxPerSensor, 1);
-            var cutoffUtc = window > TimeSpan.Zero
-                ? DateTimeOffset.UtcNow - window
-                : DateTimeOffset.MinValue;
-            var result = new Dictionary<Guid, SensorObservation[]>(_latestSensorObservations.Count);
-            foreach (var (sensorId, latestObservation) in _latestSensorObservations)
-            {
-                var observations = _sensorHistoryBySensor.TryGetValue(sensorId, out var sensorHistory)
-                    ? sensorHistory
-                        .Where(observation => observation.TimestampUtc >= cutoffUtc)
-                        .TakeLast(limit)
-                        .ToList()
-                    : new List<SensorObservation>();
-
-                if (!observations.Any(observation => observation.TimestampUtc == latestObservation.TimestampUtc))
-                {
-                    observations.Add(latestObservation);
-                }
-
-                result[sensorId] = observations
-                    .OrderBy(observation => observation.TimestampUtc)
-                    .TakeLast(limit)
-                    .ToArray();
-            }
-
-            return result;
-        }
+        var cutoffUtc = window > TimeSpan.Zero
+            ? DateTimeOffset.UtcNow - window
+            : DateTimeOffset.MinValue;
+        return _telemetry.GetRecentObservationsBySensor(cutoffUtc, maxPerSensor);
     }
 
     public IReadOnlyList<MonitoringEvent> GetEvents(int take = 500)
     {
-        lock (_gate)
-        {
-            EnsureDefaultEventCollection();
-
-            if (take <= 0)
-            {
-                return Array.Empty<MonitoringEvent>();
-            }
-
-            return _document.Events
-                .OrderByDescending(entry => entry.TimestampUtc)
-                .Take(take)
-                .ToArray();
-        }
+        return _telemetry.GetEvents(take);
     }
 
     public IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId)
     {
-        lock (_gate)
-        {
-            EnsureDefaultStatisticsCollection();
-            return _document.SensorStatistics
-                .Where(bucket => bucket.SensorId == sensorId)
-                .OrderBy(bucket => bucket.BucketStartUtc)
-                .ToArray();
-        }
+        return _telemetry.GetStatistics(sensorId);
     }
 
     public StorageTelemetryOverview GetStorageTelemetryOverview()
     {
-        lock (_gate)
-        {
-            EnsureDefaultObservationCollection();
-            EnsureDefaultEventCollection();
-            EnsureDefaultStatisticsCollection();
-
-            return new StorageTelemetryOverview(
-                _document.SensorHistory.Count,
-                _document.Events.Count,
-                _document.SensorStatistics.Count);
-        }
+        var counts = _telemetry.GetCounts();
+        return new StorageTelemetryOverview(counts.Observations, counts.Events, counts.Statistics);
     }
 
     public StorageCleanupResult CleanupStorage(StorageCleanupScope scope, int olderThanDays)
@@ -714,62 +627,15 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             throw new ArgumentOutOfRangeException(nameof(olderThanDays), olderThanDays, "Cleanup age must be zero or greater.");
         }
 
-        var removeAll = olderThanDays == 0;
-        var cutoffUtc = removeAll
-            ? DateTimeOffset.MaxValue
+        DateTimeOffset? olderThanUtc = olderThanDays == 0
+            ? null
             : DateTimeOffset.UtcNow - TimeSpan.FromDays(olderThanDays);
 
-        StorageCleanupResult result;
+        var historyRemoved = ShouldCleanupHistory(scope) ? _telemetry.DeleteObservations(olderThanUtc) : 0;
+        var eventsRemoved = ShouldCleanupEvents(scope) ? _telemetry.DeleteEvents(olderThanUtc) : 0;
+        var statisticsRemoved = ShouldCleanupStatistics(scope) ? _telemetry.DeleteStatistics(olderThanUtc) : 0;
 
-        lock (_gate)
-        {
-            EnsureDefaultObservationCollection();
-            EnsureDefaultEventCollection();
-            EnsureDefaultStatisticsCollection();
-
-            var historyRemoved = 0;
-            var eventsRemoved = 0;
-            var statisticsRemoved = 0;
-
-            if (ShouldCleanupHistory(scope))
-            {
-                var before = _document.SensorHistory.Count;
-                _document.SensorHistory.RemoveAll(entry => removeAll || entry.TimestampUtc < cutoffUtc);
-                historyRemoved = before - _document.SensorHistory.Count;
-
-                if (historyRemoved > 0)
-                {
-                    RebuildObservationIndexesLocked();
-                }
-            }
-
-            if (ShouldCleanupEvents(scope))
-            {
-                var before = _document.Events.Count;
-                _document.Events.RemoveAll(entry => removeAll || entry.TimestampUtc < cutoffUtc);
-                eventsRemoved = before - _document.Events.Count;
-            }
-
-            if (ShouldCleanupStatistics(scope))
-            {
-                var before = _document.SensorStatistics.Count;
-                _document.SensorStatistics.RemoveAll(entry => removeAll || entry.BucketStartUtc < cutoffUtc);
-                statisticsRemoved = before - _document.SensorStatistics.Count;
-            }
-
-            result = new StorageCleanupResult(historyRemoved, eventsRemoved, statisticsRemoved);
-            if (result.TotalRemoved > 0)
-            {
-                QueueSave(SavePriority.Configuration);
-            }
-        }
-
-        if (result.TotalRemoved > 0)
-        {
-            FlushPendingSave();
-        }
-
-        return result;
+        return new StorageCleanupResult(historyRemoved, eventsRemoved, statisticsRemoved);
     }
 
     public IReadOnlyList<WorkspaceBackupJob> GetBackupJobs()
@@ -1035,7 +901,6 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         {
             HydrateCredentialBundles(package.Document);
             ApplyBackupSections(_document, package.Document, sections);
-            RebuildObservationIndexesLocked();
             QueueSave(SavePriority.Configuration);
         }
 
@@ -1110,6 +975,22 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             var documentJson = JsonSerializer.Serialize(document, FileSerializerOptions);
             var documentClone = JsonSerializer.Deserialize<WorkspaceDocument>(documentJson, FileSerializerOptions)
                 ?? CreatePlainWorkspaceDocument();
+
+            // Telemetry lives in the repository; pull the selected sections into the snapshot.
+            if (job.Sections.HasFlag(WorkspaceBackupSection.SensorHistory))
+            {
+                documentClone.SensorHistory = _telemetry.GetAllObservations().ToList();
+            }
+
+            if (job.Sections.HasFlag(WorkspaceBackupSection.Events))
+            {
+                documentClone.Events = _telemetry.GetAllEvents().ToList();
+            }
+
+            if (job.Sections.HasFlag(WorkspaceBackupSection.Statistics))
+            {
+                documentClone.SensorStatistics = _telemetry.GetAllStatistics().ToList();
+            }
 
             return new WorkspaceBackupPackage
             {
@@ -1312,7 +1193,7 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         return sanitized.Length > 32 ? sanitized[..32] : sanitized;
     }
 
-    private static void ApplyBackupSections(WorkspaceDocument target, WorkspaceDocument source, WorkspaceBackupSection sections)
+    private void ApplyBackupSections(WorkspaceDocument target, WorkspaceDocument source, WorkspaceBackupSection sections)
     {
         if (sections.HasFlag(WorkspaceBackupSection.Topology))
         {
@@ -1352,19 +1233,20 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
             target.Alerts = source.Alerts;
         }
 
+        // Telemetry lives in the repository, not the document: restore straight into it.
         if (sections.HasFlag(WorkspaceBackupSection.SensorHistory))
         {
-            target.SensorHistory = source.SensorHistory;
+            _telemetry.ReplaceAllObservations(source.SensorHistory ?? []);
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.Events))
         {
-            target.Events = source.Events;
+            _telemetry.ReplaceAllEvents(source.Events ?? []);
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.Statistics))
         {
-            target.SensorStatistics = source.SensorStatistics;
+            _telemetry.ReplaceAllStatistics(source.SensorStatistics ?? []);
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.BackupJobs))
@@ -2730,60 +2612,32 @@ public sealed class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore
         }
     }
 
-    private void EnsureDefaultObservationCollection()
+    private void MigrateDocumentTelemetryIntoRepository()
     {
-        lock (_gate)
-        {
-            _document.SensorHistory ??= [];
-        }
-    }
+        _document.SensorHistory ??= [];
+        _document.Events ??= [];
+        _document.SensorStatistics ??= [];
 
-    private void RebuildObservationIndexesLocked()
-    {
-        _sensorHistoryBySensor.Clear();
-        _latestSensorObservations.Clear();
+        var hasDocumentTelemetry = _document.SensorHistory.Count > 0
+            || _document.Events.Count > 0
+            || _document.SensorStatistics.Count > 0;
 
-        foreach (var observation in _document.SensorHistory.OrderBy(entry => entry.TimestampUtc))
+        if (hasDocumentTelemetry && _telemetry.GetCounts().Total == 0)
         {
-            AddSensorObservationToIndex(observation);
-        }
-    }
-
-    private void AddSensorObservationToIndex(SensorObservation observation)
-    {
-        if (!_sensorHistoryBySensor.TryGetValue(observation.SensorId, out var sensorHistory))
-        {
-            sensorHistory = [];
-            _sensorHistoryBySensor[observation.SensorId] = sensorHistory;
+            _telemetry.ReplaceAllObservations(_document.SensorHistory);
+            _telemetry.ReplaceAllEvents(_document.Events);
+            _telemetry.ReplaceAllStatistics(_document.SensorStatistics);
+            _logger.LogInformation(
+                "Migrated telemetry from workspace into the telemetry database: {Observations} observations, {Events} events, {Statistics} statistics buckets",
+                _document.SensorHistory.Count,
+                _document.Events.Count,
+                _document.SensorStatistics.Count);
         }
 
-        sensorHistory.Add(observation);
-        if (sensorHistory.Count > 1 && sensorHistory[^2].TimestampUtc > observation.TimestampUtc)
-        {
-            sensorHistory.Sort((left, right) => left.TimestampUtc.CompareTo(right.TimestampUtc));
-        }
-
-        if (!_latestSensorObservations.TryGetValue(observation.SensorId, out var latest) ||
-            observation.TimestampUtc >= latest.TimestampUtc)
-        {
-            _latestSensorObservations[observation.SensorId] = observation;
-        }
-    }
-
-    private void EnsureDefaultEventCollection()
-    {
-        lock (_gate)
-        {
-            _document.Events ??= [];
-        }
-    }
-
-    private void EnsureDefaultStatisticsCollection()
-    {
-        lock (_gate)
-        {
-            _document.SensorStatistics ??= [];
-        }
+        // Telemetry now lives in the repository; never serialize it back into workspace.json.
+        _document.SensorHistory = [];
+        _document.Events = [];
+        _document.SensorStatistics = [];
     }
 
     private void EnsureSensorDefinitionCatalog()
@@ -3941,8 +3795,7 @@ try {
 
     private void AddEvent(MonitoringEvent monitoringEvent)
     {
-        EnsureDefaultEventCollection();
-        _document.Events.Add(monitoringEvent);
+        _telemetry.AppendEvent(monitoringEvent);
     }
 
     private void PruneEvents(DateTimeOffset now, MonitoringSettings? settings)
@@ -3954,7 +3807,7 @@ try {
         }
 
         var cutoff = now - TimeSpan.FromDays(retentionDays);
-        _document.Events.RemoveAll(entry => entry.TimestampUtc < cutoff);
+        _telemetry.PruneEvents(cutoff);
     }
 
     private void PruneSensorHistory(Guid sensorId, DateTimeOffset now, MonitoringSettings? settings)
@@ -3966,23 +3819,7 @@ try {
         }
 
         var cutoff = now - TimeSpan.FromDays(retentionDays);
-        _document.SensorHistory.RemoveAll(entry => entry.SensorId == sensorId && entry.TimestampUtc < cutoff);
-
-        if (!_sensorHistoryBySensor.TryGetValue(sensorId, out var sensorHistory))
-        {
-            _latestSensorObservations.Remove(sensorId);
-            return;
-        }
-
-        sensorHistory.RemoveAll(entry => entry.TimestampUtc < cutoff);
-        if (sensorHistory.Count == 0)
-        {
-            _sensorHistoryBySensor.Remove(sensorId);
-            _latestSensorObservations.Remove(sensorId);
-            return;
-        }
-
-        _latestSensorObservations[sensorId] = sensorHistory[^1];
+        _telemetry.PruneObservations(sensorId, cutoff);
     }
 
     private void PruneStatistics(Guid sensorId, DateTimeOffset now, MonitoringSettings? settings)
@@ -3994,7 +3831,7 @@ try {
         }
 
         var cutoff = now - TimeSpan.FromDays(retentionDays);
-        _document.SensorStatistics.RemoveAll(bucket => bucket.SensorId == sensorId && bucket.BucketStartUtc < cutoff);
+        _telemetry.PruneStatistics(sensorId, cutoff);
     }
 
     private void UpdateSensorStatistics(Guid sensorId, SensorExecutionResult result, DateTimeOffset timestampUtc, MonitoringSettings? settings)
@@ -4011,14 +3848,8 @@ try {
         }
 
         var bucketStartUtc = FloorToBucket(timestampUtc, bucketMinutes);
-        var bucket = _document.SensorStatistics.FirstOrDefault(entry =>
-            entry.SensorId == sensorId &&
-            entry.BucketMinutes == bucketMinutes &&
-            entry.BucketStartUtc == bucketStartUtc);
-
-        if (bucket is null)
-        {
-            bucket = new SensorStatisticsBucket
+        var bucket = _telemetry.GetStatisticsBucket(sensorId, bucketMinutes, bucketStartUtc)
+            ?? new SensorStatisticsBucket
             {
                 SensorId = sensorId,
                 BucketStartUtc = bucketStartUtc,
@@ -4026,8 +3857,6 @@ try {
                 DefaultChannelKey = channelKey,
                 Unit = unit
             };
-            _document.SensorStatistics.Add(bucket);
-        }
 
         bucket.DefaultChannelKey = channelKey;
         bucket.Unit = unit ?? bucket.Unit;
@@ -4040,6 +3869,7 @@ try {
         bucket.LastValue = sampleValue;
         bucket.State = result.State;
         bucket.Message = result.Message;
+        _telemetry.UpsertStatisticsBucket(bucket);
     }
 
     private static bool TryGetStatisticSample(
@@ -4152,13 +3982,6 @@ try {
     private MonitoringElement? FindElementInternal(Guid id)
     {
         return EnumerateElements(_document.RootProbe).FirstOrDefault(element => element.Id == id);
-    }
-
-    private SensorObservation? FindLatestSensorObservationLocked(Guid sensorId)
-    {
-        return _latestSensorObservations.TryGetValue(sensorId, out var latest)
-            ? latest
-            : null;
     }
 
     private static string BuildStateChangeMessage(SensorState? previousState, SensorState currentState, string? message)

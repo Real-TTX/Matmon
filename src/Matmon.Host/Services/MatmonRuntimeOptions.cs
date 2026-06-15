@@ -25,6 +25,8 @@ public sealed class MatmonRuntimeOptions
 
     public string WorkspacePath { get; set; } = "data/workspace.json";
 
+    public string? TelemetryPath { get; set; }
+
     public string? BackupPath { get; set; }
 
     public string? DataProtectionPath { get; set; }

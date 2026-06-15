@@ -19,6 +19,9 @@ public interface ITelemetryRepository
     /// <summary>Most recent observation per sensor, keyed by sensor id.</summary>
     IReadOnlyDictionary<Guid, SensorObservation> GetLatestObservations();
 
+    /// <summary>Most recent observation for a single sensor, or null if it has none.</summary>
+    SensorObservation? GetLatestObservation(Guid sensorId);
+
     /// <summary>
     /// Observations for one sensor at or after <paramref name="fromUtc"/>,
     /// ordered ascending, optionally limited to the last <paramref name="maxCount"/>.
