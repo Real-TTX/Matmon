@@ -7074,6 +7074,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   grid-column: 1 / -1;
 }
 
+.sensor-overview-section,
 .sensor-credential-section,
 .sensor-parameter-section,
 .sensor-schedule-section,

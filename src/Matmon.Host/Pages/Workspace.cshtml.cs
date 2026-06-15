@@ -15,6 +15,20 @@ namespace Matmon.Host.Pages;
 [Authorize]
 public sealed class WorkspaceModel : PageModel
 {
+    /// <summary>
+    /// Threshold comparison operators offered in channel/threshold dropdowns.
+    /// Values are the symbols the backend parser expects (see TryParseThresholdComparison).
+    /// </summary>
+    public static IReadOnlyList<SelectListItem> ThresholdComparisonOptions { get; } =
+    [
+        new SelectListItem("above ( > )", ">"),
+        new SelectListItem("at or above ( ≥ )", ">="),
+        new SelectListItem("below ( < )", "<"),
+        new SelectListItem("at or below ( ≤ )", "<="),
+        new SelectListItem("equal ( = )", "="),
+        new SelectListItem("not equal ( ≠ )", "<>")
+    ];
+
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly IProbeRegistry _probeRegistry;
     private readonly IDashboardSnapshotProvider _dashboardSnapshotProvider;
