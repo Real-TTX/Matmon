@@ -7608,8 +7608,41 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .sensor-threshold-rule {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr);
   gap: 0.35rem;
+}
+
+.sensor-threshold-grid > label:nth-child(2) > span,
+.sensor-threshold-grid > label:nth-child(3) > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  font-weight: 700;
+}
+
+.sensor-threshold-grid > label:nth-child(2) > span::before,
+.sensor-threshold-grid > label:nth-child(3) > span::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.sensor-threshold-grid > label:nth-child(2) > span {
+  color: var(--matmon-warning);
+}
+
+.sensor-threshold-grid > label:nth-child(2) > span::before {
+  background: var(--matmon-warning);
+}
+
+.sensor-threshold-grid > label:nth-child(3) > span {
+  color: var(--matmon-danger);
+}
+
+.sensor-threshold-grid > label:nth-child(3) > span::before {
+  background: var(--matmon-danger);
 }
 
 .sensor-threshold-actions {
