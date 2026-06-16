@@ -6616,7 +6616,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-editor-canvas {
   display: grid;
   grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
-  grid-template-rows: repeat(var(--map-rows, 8), minmax(4.2rem, 1fr));
+  grid-template-rows: repeat(var(--map-rows, 8), minmax(0, 1fr));
   gap: 0.45rem;
   width: min(100%, calc(var(--map-display-width, 1920) * 1px));
   aspect-ratio: var(--map-display-width, 1920) / var(--map-display-height, 1080);
@@ -6636,6 +6636,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-height: 36rem;
   width: 100%;
   max-width: none;
+}
+
+/* In-app map view: keep the board inside the viewport so it never forces a
+   page scrollbar. aspect-ratio holds the shape until max-height clamps it. */
+.map-view-panel .map-canvas {
+  min-height: 0;
+  max-height: calc(100vh - 15rem);
 }
 
 .map-tile {
@@ -7100,9 +7107,12 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .public-map-shell {
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 0.85rem;
-  min-height: 100vh;
+  height: 100vh;
   padding: 1rem;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .public-map-header {
@@ -7136,8 +7146,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   color: var(--matmon-muted);
 }
 
+/* Public wallboard fills the row the shell grid hands it (1fr) exactly, so the
+   board scales to the screen instead of overflowing into a scrollbar. */
 .public-map-canvas {
-  min-height: calc(100vh - 7rem);
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  max-width: none;
+  aspect-ratio: auto;
 }
 
 .system-user-table {
