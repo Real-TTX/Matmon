@@ -158,6 +158,9 @@ public sealed class SensorDetailsModel : PageModel
             ? (string.IsNullOrWhiteSpace(defaultChannelKey) ? "Default" : HumanizeChannelKey(defaultChannelKey))
             : string.IsNullOrWhiteSpace(defaultChannel.Label) ? defaultChannel.Key : defaultChannel.Label;
         var executionProbe = FormatExecutionProbe(latestObservation);
+        var statisticsBuckets = _workspaceStore.GetSensorStatistics(sensor.Id);
+        var statisticsSummary = BuildStatisticsSummary(statisticsBuckets, displayScale, measurementKind);
+        var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
 
         View = new SensorDetailsViewModel(
             sensor.Id,
@@ -183,10 +186,100 @@ public sealed class SensorDetailsModel : PageModel
             windows,
             selectedWindow,
             BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey),
-            BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey, displayScale));
+            BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey, displayScale),
+            statisticsSummary,
+            unitConversion);
 
         return true;
     }
+
+    private static SensorStatisticsSummary? BuildStatisticsSummary(
+        IReadOnlyList<SensorStatisticsBucket> buckets,
+        SensorUnitScale scale,
+        SensorMeasurementKind kind)
+    {
+        if (buckets.Count == 0)
+        {
+            return null;
+        }
+
+        var bucketMinutes = buckets[^1].BucketMinutes;
+        var rows = buckets
+            .OrderByDescending(bucket => bucket.BucketStartUtc)
+            .Take(16)
+            .Select(bucket => new SensorStatisticsRow(
+                FormatBucketPeriod(bucket.BucketStartUtc, bucketMinutes),
+                FormatStat(bucket.Average, scale, kind),
+                FormatStat(bucket.Minimum, scale, kind),
+                FormatStat(bucket.Maximum, scale, kind),
+                FormatStat(bucket.LowPercentile, scale, kind),
+                FormatStat(bucket.HighPercentile, scale, kind),
+                bucket.SampleCount,
+                bucket.UptimePercent is double uptime ? $"{uptime.ToString("0.#", CultureInfo.InvariantCulture)} %" : null,
+                MonitoringStatePresentation.Key(bucket.State)))
+            .ToArray();
+
+        var unit = string.IsNullOrWhiteSpace(scale.Unit) ? null : scale.Unit;
+        return new SensorStatisticsSummary(DescribeGranularity(bucketMinutes), buckets.Count, unit, rows);
+    }
+
+    private static SensorUnitConversion? BuildUnitConversion(
+        string rawUnit,
+        SensorUnitScale scale,
+        SensorMeasurementKind kind,
+        double? sampleValue)
+    {
+        var normalizedRaw = SensorUnitConverter.NormalizeUnit(rawUnit);
+        var sameUnit = string.Equals(normalizedRaw, scale.Unit, StringComparison.OrdinalIgnoreCase);
+        var unitFactor = Math.Abs(scale.Factor - 1d) < 1e-9;
+        if (sameUnit && unitFactor)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedRaw) && string.IsNullOrWhiteSpace(scale.Unit))
+        {
+            return null;
+        }
+
+        string? example = null;
+        if (sampleValue is double value && Math.Abs(value) > double.Epsilon)
+        {
+            var rawText = value.ToString("0.###", CultureInfo.InvariantCulture);
+            var rawCombined = string.IsNullOrWhiteSpace(normalizedRaw) ? rawText : $"{rawText} {normalizedRaw}";
+            var display = SensorUnitConverter.Format(value, scale, kind).CombinedText;
+            example = $"{rawCombined} = {display}";
+        }
+
+        return new SensorUnitConversion(
+            string.IsNullOrWhiteSpace(normalizedRaw) ? "raw" : normalizedRaw,
+            string.IsNullOrWhiteSpace(scale.Unit) ? "raw" : scale.Unit,
+            example);
+    }
+
+    private static string FormatStat(double? value, SensorUnitScale scale, SensorMeasurementKind kind)
+    {
+        return value.HasValue ? SensorUnitConverter.Format(value, scale, kind).Text : "—";
+    }
+
+    private static string FormatBucketPeriod(DateTimeOffset bucketStartUtc, int bucketMinutes)
+    {
+        var local = bucketStartUtc.ToLocalTime();
+        return bucketMinutes >= 1440 ? local.ToString("dd.MM") : local.ToString("dd.MM HH:mm");
+    }
+
+    private static string DescribeGranularity(int minutes) => minutes switch
+    {
+        <= 0 => "raw",
+        60 => "Hourly",
+        360 => "6-hourly",
+        720 => "12-hourly",
+        1440 => "Daily",
+        < 60 => $"{minutes}-minute",
+        _ when minutes % 1440 == 0 => $"{minutes / 1440}-day",
+        _ when minutes % 60 == 0 => $"{minutes / 60}-hour",
+        _ => $"{minutes}-minute"
+    };
 
     private static IEnumerable<SensorWindowStatistics> BuildWindows(
         IReadOnlyList<SensorObservation> observations,
@@ -476,7 +569,31 @@ public sealed record SensorDetailsViewModel(
     IReadOnlyList<SensorWindowStatistics> Windows,
     SensorWindowStatistics SelectedWindow,
     IReadOnlyList<SensorChannelRow> Channels,
-    IReadOnlyList<SensorObservationRow> RecentObservations);
+    IReadOnlyList<SensorObservationRow> RecentObservations,
+    SensorStatisticsSummary? Statistics,
+    SensorUnitConversion? UnitConversion);
+
+public sealed record SensorStatisticsSummary(
+    string GranularityLabel,
+    int BucketCount,
+    string? Unit,
+    IReadOnlyList<SensorStatisticsRow> Rows);
+
+public sealed record SensorStatisticsRow(
+    string PeriodText,
+    string AverageText,
+    string MinimumText,
+    string MaximumText,
+    string LowPercentileText,
+    string HighPercentileText,
+    int SampleCount,
+    string? UptimeText,
+    string StateKey);
+
+public sealed record SensorUnitConversion(
+    string RawUnit,
+    string DisplayUnit,
+    string? Example);
 
 public sealed record SensorChannelRow(
     string Key,

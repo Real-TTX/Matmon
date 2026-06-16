@@ -4334,6 +4334,91 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   gap: 0.45rem;
 }
 
+.sensor-statistics-panel {
+  gap: 0.4rem;
+}
+
+.sensor-statistics-intro {
+  margin: 0;
+}
+
+.sensor-statistics-scroll {
+  overflow-x: auto;
+}
+
+.sensor-statistics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sensor-statistics-table th {
+  text-align: right;
+  font-weight: 600;
+  color: var(--matmon-muted);
+  padding: 0.3rem 0.55rem;
+  border-bottom: 1px solid var(--matmon-border);
+  white-space: nowrap;
+}
+
+.sensor-statistics-table th:first-child,
+.sensor-statistics-table td:first-child {
+  text-align: left;
+}
+
+.sensor-statistics-table td {
+  text-align: right;
+  padding: 0.28rem 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--matmon-border) 55%, transparent);
+  white-space: nowrap;
+  color: var(--matmon-foreground);
+}
+
+.sensor-statistics-table td:first-child {
+  color: var(--matmon-muted);
+}
+
+.sensor-statistics-table td.is-strong {
+  font-weight: 600;
+}
+
+.sensor-statistics-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sensor-statistics-table tr[data-state="warning"] td:first-child {
+  box-shadow: inset 3px 0 0 var(--matmon-warning);
+}
+
+.sensor-statistics-table tr[data-state="critical"] td:first-child {
+  box-shadow: inset 3px 0 0 var(--matmon-danger);
+}
+
+.sensor-unit-conversion {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.74rem;
+  color: var(--matmon-muted);
+}
+
+.sensor-unit-conversion-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.62rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--matmon-accent) 16%, transparent);
+  color: var(--matmon-foreground);
+}
+
+.sensor-unit-conversion strong {
+  color: var(--matmon-foreground);
+  font-weight: 600;
+}
+
 .sensor-window-card {
   display: grid;
   gap: 0.5rem;

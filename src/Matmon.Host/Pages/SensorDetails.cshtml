@@ -49,6 +49,19 @@
                     <span>@Model.View.Unit</span>
                 }
             </div>
+            @if (Model.View.UnitConversion is { } conversion)
+            {
+                <div class="sensor-unit-conversion" title="How the stored measurement is converted for display">
+                    <span class="sensor-unit-conversion-tag">unit</span>
+                    <span class="sensor-unit-conversion-body">
+                        stored <strong>@conversion.RawUnit</strong> → shown <strong>@conversion.DisplayUnit</strong>
+                        @if (!string.IsNullOrWhiteSpace(conversion.Example))
+                        {
+                            <span class="sensor-unit-conversion-example">@conversion.Example</span>
+                        }
+                    </span>
+                </div>
+            }
             <div class="sensor-header-meta">
                 @if (!string.IsNullOrWhiteSpace(Model.View.LastSeenText))
                 {
@@ -111,6 +124,48 @@
             </article>
         }
     </div>
+
+    @if (Model.View.Statistics is { } stats && stats.Rows.Count > 0)
+    {
+        <section class="panel panel-stack sensor-statistics-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("chart")<span>Long-term statistics</span></h2>
+                <span class="panel-hint">@stats.GranularityLabel summaries · @stats.BucketCount kept</span>
+            </div>
+            <p class="panel-hint sensor-statistics-intro">Downsampled from raw samples — average, range and the 1 % / 99 % bands per @stats.GranularityLabel.ToLowerInvariant() period, plus uptime.</p>
+            <div class="sensor-statistics-scroll">
+                <table class="sensor-statistics-table">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Avg@(stats.Unit is null ? string.Empty : $" ({stats.Unit})")</th>
+                            <th>Min</th>
+                            <th>Max</th>
+                            <th title="bottom 1 %">1 %</th>
+                            <th title="top 1 %">99 %</th>
+                            <th>Uptime</th>
+                            <th>Samples</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in stats.Rows)
+                        {
+                            <tr data-state="@row.StateKey">
+                                <td>@row.PeriodText</td>
+                                <td class="is-strong">@row.AverageText</td>
+                                <td>@row.MinimumText</td>
+                                <td>@row.MaximumText</td>
+                                <td>@row.LowPercentileText</td>
+                                <td>@row.HighPercentileText</td>
+                                <td>@(row.UptimeText ?? "—")</td>
+                                <td>@row.SampleCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
 
     <div class="sensor-detail-grid">
         <section class="panel panel-stack sensor-chart-panel">
