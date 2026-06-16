@@ -7096,6 +7096,50 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: 0.5rem;
 }
 
+.sensor-tabs {
+  display: flex;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--matmon-border);
+  overflow-x: auto;
+}
+
+.sensor-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--matmon-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.sensor-tab .ui-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.sensor-tab:hover {
+  color: var(--matmon-foreground);
+}
+
+.sensor-tab.is-active {
+  color: var(--matmon-foreground);
+  border-bottom-color: var(--matmon-accent);
+}
+
+/* Hidden tab panels: this two-attribute selector outranks the section cards'
+   display:grid so the panel is actually hidden. */
+[data-sensor-tab][hidden] {
+  display: none;
+}
+
 .sensor-create-step {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;

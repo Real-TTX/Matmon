@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeWorkspaceActionMenus();
   initializeMonitoringTree();
   initializeDashboardRefresh();
+  initializeSensorTabs();
   initializeSensorNameSuggestion();
   initializeSensorTypePreview();
   initializeSensorParameterVisibility();
@@ -853,6 +854,33 @@ function initializeSensorTypePreview() {
         previewButton.click();
       }
     });
+  });
+}
+
+function initializeSensorTabs() {
+  document.querySelectorAll("[data-sensor-tabs]").forEach((tabBar) => {
+    const scope = tabBar.closest("form") || document;
+    const buttons = Array.from(tabBar.querySelectorAll("[data-sensor-tab-target]"));
+    const panels = Array.from(scope.querySelectorAll("[data-sensor-tab]"));
+    if (buttons.length === 0 || panels.length === 0) {
+      return;
+    }
+
+    const activate = (name) => {
+      buttons.forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.sensorTabTarget === name);
+        button.setAttribute("aria-selected", button.dataset.sensorTabTarget === name ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        panel.hidden = panel.dataset.sensorTab !== name;
+      });
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => activate(button.dataset.sensorTabTarget));
+    });
+
+    activate(buttons[0].dataset.sensorTabTarget);
   });
 }
 
