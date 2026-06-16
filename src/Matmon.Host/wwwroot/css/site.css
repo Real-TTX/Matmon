@@ -6141,6 +6141,81 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   align-items: start;
 }
 
+.discovery-scope-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.discovery-scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-soft);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.discovery-scope-option:hover {
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, var(--matmon-border));
+}
+
+.discovery-scope-option:has(input:checked) {
+  border-color: var(--matmon-accent);
+  background: color-mix(in srgb, var(--matmon-accent) 12%, transparent);
+}
+
+.discovery-scope-option input {
+  margin-top: 0.2rem;
+}
+
+.discovery-scope-text {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.discovery-scope-text strong {
+  font-size: 0.85rem;
+  color: var(--matmon-foreground);
+}
+
+.discovery-scope-text small {
+  font-size: 0.72rem;
+  color: var(--matmon-muted);
+}
+
+.discovery-subnet-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.discovery-subnet-chip {
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--matmon-foreground);
+  background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 38%, transparent);
+  cursor: pointer;
+}
+
+.discovery-subnet-chip:hover {
+  background: color-mix(in srgb, var(--matmon-accent) 24%, transparent);
+}
+
+@media (max-width: 720px) {
+  .discovery-scope-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 .discovery-check-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

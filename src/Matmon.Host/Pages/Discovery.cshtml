@@ -96,18 +96,48 @@
         <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("search")<span>Scan</span></h2>
-            <span class="panel-hint">CIDR, range or single IP</span>
+            <span class="panel-hint">whole subnet or known hosts</span>
         </div>
 
-        <form method="post" asp-page-handler="Scan" class="workspace-form-grid discovery-form">
+        <form method="post" asp-page-handler="Scan" class="workspace-form-grid discovery-form" data-discovery-scan-form>
             <label class="workspace-field workspace-span-2">
                 <span class="workspace-label">Probe / node</span>
                 <select asp-for="Input.ProbeElementId" asp-items="Model.View.ProbeOptions" class="form-select workspace-select"></select>
             </label>
 
-            <label class="workspace-field workspace-span-2">
+            <div class="workspace-field workspace-span-2 discovery-scope">
+                <span class="workspace-label">Scan scope</span>
+                <div class="discovery-scope-options">
+                    <label class="discovery-scope-option">
+                        <input type="radio" asp-for="Input.ScanScope" value="network" />
+                        <span class="discovery-scope-text">
+                            <strong>Whole subnet / range</strong>
+                            <small>Sweep a CIDR, range or single IP</small>
+                        </span>
+                    </label>
+                    <label class="discovery-scope-option">
+                        <input type="radio" asp-for="Input.ScanScope" value="known" />
+                        <span class="discovery-scope-text">
+                            <strong>Known hosts only</strong>
+                            <small>Re-scan the @Model.View.KnownHostCount host@(Model.View.KnownHostCount == 1 ? string.Empty : "s") already under this probe</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <label class="workspace-field workspace-span-2" data-discovery-network-field>
                 <span class="workspace-label">Network</span>
-                <input asp-for="Input.Network" class="form-control workspace-input" placeholder="10.10.2.0/24 or 10.10.2.1-254" />
+                <input asp-for="Input.Network" class="form-control workspace-input" placeholder="10.10.2.0/24 or 10.10.2.1-254" data-discovery-network-input />
+                @if (Model.View.SubnetSuggestions.Count > 0)
+                {
+                    <div class="discovery-subnet-suggestions">
+                        <span class="panel-hint">Suggested subnets:</span>
+                        @foreach (var subnet in Model.View.SubnetSuggestions)
+                        {
+                            <button type="button" class="discovery-subnet-chip" data-discovery-subnet="@subnet">@subnet</button>
+                        }
+                    </div>
+                }
             </label>
 
             <div class="workspace-field">

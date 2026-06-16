@@ -30,8 +30,46 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeDiscoveryJobRefresh();
   initializeDiscoveryResultTable();
   initializeDiscoveryJobList();
+  initializeDiscoveryScanForm();
   initializeMapDesigner();
 });
+
+function initializeDiscoveryScanForm() {
+  const form = document.querySelector("[data-discovery-scan-form]");
+  if (!form) {
+    return;
+  }
+
+  const networkField = form.querySelector("[data-discovery-network-field]");
+  const networkInput = form.querySelector("[data-discovery-network-input]");
+  const scopeRadios = form.querySelectorAll('input[name="Input.ScanScope"]');
+
+  const applyScope = () => {
+    const selected = form.querySelector('input[name="Input.ScanScope"]:checked');
+    const known = selected && selected.value === "known";
+    if (networkField) {
+      networkField.toggleAttribute("hidden", !!known);
+    }
+  };
+
+  scopeRadios.forEach((radio) => radio.addEventListener("change", applyScope));
+  applyScope();
+
+  form.querySelectorAll("[data-discovery-subnet]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      if (networkInput) {
+        networkInput.value = chip.getAttribute("data-discovery-subnet") || "";
+        networkInput.focus();
+      }
+
+      const networkRadio = form.querySelector('input[name="Input.ScanScope"][value="network"]');
+      if (networkRadio) {
+        networkRadio.checked = true;
+        applyScope();
+      }
+    });
+  });
+}
 
 function initializeWorkspaceSummaryPlacement() {
   const summaryStrip = document.querySelector(".workspace-summary-strip");

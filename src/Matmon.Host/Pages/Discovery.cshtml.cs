@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Text.Json;
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
@@ -72,9 +75,10 @@ public sealed class DiscoveryModel : PageModel
         try
         {
             var probe = ResolveProbe(Input.ProbeElementId);
+            var network = ResolveScanNetwork(probe, Input);
             var request = new NetworkDiscoveryRequest(
                 Guid.NewGuid(),
-                Input.Network,
+                network,
                 BuildOptions(Input),
                 ScopeElementId: probe.Id,
                 ScopeKind: MonitoringElementKind.Probe);
@@ -245,6 +249,12 @@ public sealed class DiscoveryModel : PageModel
         var activeTab = ResolveActiveTab(job);
         Tab = activeTab;
 
+        var scopeProbe = probes.FirstOrDefault(probe => probe.Id == Input.ProbeElementId)
+            ?? probes.FirstOrDefault(probe => probe.ParentId is null)
+            ?? probes.FirstOrDefault();
+        var knownHostAddresses = scopeProbe is null ? [] : GetKnownHostAddresses(scopeProbe);
+        var subnetSuggestions = BuildSubnetSuggestions(knownHostAddresses, includeLocal: scopeProbe?.ParentId is null);
+
         View = new DiscoveryPageViewModel(
             probes.Select(probe => new SelectListItem(
                 $"{probe.Name} ({probe.ProbeId})",
@@ -254,7 +264,9 @@ public sealed class DiscoveryModel : PageModel
             runningJobs,
             historyJobs,
             job,
-            activeTab);
+            activeTab,
+            subnetSuggestions,
+            knownHostAddresses.Count);
     }
 
     private string ResolveActiveTab(DiscoveryJobSnapshot? job)
@@ -352,6 +364,116 @@ public sealed class DiscoveryModel : PageModel
 
         return _workspaceStore.FindElement(probeElementId) as ProbeElement
             ?? throw new InvalidOperationException("Selected probe was not found.");
+    }
+
+    // Turns the chosen scan scope into a concrete network spec for the discovery
+    // engine: the existing host addresses under the probe ("known"), or the
+    // CIDR/range/address the user typed ("network", the default).
+    private static string ResolveScanNetwork(ProbeElement probe, DiscoveryInput input)
+    {
+        if (string.Equals(input.ScanScope, "known", StringComparison.OrdinalIgnoreCase))
+        {
+            var addresses = GetKnownHostAddresses(probe);
+            if (addresses.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"No hosts with an address exist under '{probe.Name}'. Add hosts first or scan a subnet.");
+            }
+
+            return string.Join(", ", addresses);
+        }
+
+        var network = (input.Network ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(network))
+        {
+            throw new InvalidOperationException(
+                "Enter a subnet (CIDR), range or address to scan, or choose 'Known hosts'.");
+        }
+
+        return network;
+    }
+
+    private static IReadOnlyList<string> GetKnownHostAddresses(ProbeElement probe)
+    {
+        return Enumerate(probe)
+            .OfType<HostElement>()
+            .Where(host => !string.IsNullOrWhiteSpace(host.Address))
+            .Select(host => host.Address.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(NetworkTargetParser.ToSortableAddress)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> BuildSubnetSuggestions(IReadOnlyList<string> knownAddresses, bool includeLocal)
+    {
+        var subnets = new List<string>();
+
+        void Add(string candidate)
+        {
+            if (!subnets.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+            {
+                subnets.Add(candidate);
+            }
+        }
+
+        foreach (var address in knownAddresses)
+        {
+            if (TryDeriveSlash24(address, out var cidr))
+            {
+                Add(cidr);
+            }
+        }
+
+        if (includeLocal)
+        {
+            foreach (var cidr in GetLocalSubnets())
+            {
+                Add(cidr);
+            }
+        }
+
+        return subnets.Take(6).ToArray();
+    }
+
+    private static bool TryDeriveSlash24(string address, out string cidr)
+    {
+        cidr = string.Empty;
+        if (!IPAddress.TryParse(address, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = ip.GetAddressBytes();
+        cidr = $"{bytes[0]}.{bytes[1]}.{bytes[2]}.0/24";
+        return true;
+    }
+
+    private static IEnumerable<string> GetLocalSubnets()
+    {
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != OperationalStatus.Up ||
+                nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+            {
+                continue;
+            }
+
+            foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
+            {
+                if (unicast.Address.AddressFamily != AddressFamily.InterNetwork ||
+                    IPAddress.IsLoopback(unicast.Address))
+                {
+                    continue;
+                }
+
+                var prefix = unicast.PrefixLength is > 0 and <= 32 ? unicast.PrefixLength : 24;
+                var bytes = unicast.Address.GetAddressBytes();
+                var value = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+                var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+                var network = value & mask;
+                yield return $"{(byte)(network >> 24)}.{(byte)(network >> 16)}.{(byte)(network >> 8)}.{(byte)network}/{prefix}";
+            }
+        }
     }
 
     private (ProbeElement Probe, MonitoringElement Scope, IReadOnlyList<HostElement> Hosts) ResolveDiscoveryScope(Guid scopeElementId)
@@ -816,6 +938,9 @@ public sealed class DiscoveryInput
 {
     public Guid ProbeElementId { get; set; }
 
+    /// <summary>"network" = scan the typed CIDR/range/IP; "known" = re-scan existing hosts under the probe.</summary>
+    public string ScanScope { get; set; } = "network";
+
     public string Network { get; set; } = string.Empty;
 
     public bool UsePing { get; set; } = true;
@@ -897,4 +1022,6 @@ public sealed record DiscoveryPageViewModel(
     IReadOnlyList<DiscoveryJobSnapshot> RunningJobs,
     IReadOnlyList<DiscoveryJobSnapshot> HistoryJobs,
     DiscoveryJobSnapshot? SelectedJob,
-    string ActiveTab);
+    string ActiveTab,
+    IReadOnlyList<string> SubnetSuggestions,
+    int KnownHostCount);
