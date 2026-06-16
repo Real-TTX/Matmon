@@ -17,6 +17,10 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
 
     private readonly object _sync = new();
     private readonly SqliteConnection _connection;
+
+    // Latest observation per sensor, kept in memory so the dashboard/polling hot
+    // paths don't scan the whole observation table on every call.
+    private readonly Dictionary<Guid, SensorObservation> _latestBySensor = new();
     private bool _disposed;
 
     public SqliteTelemetryRepository(string databasePath)
@@ -45,6 +49,8 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         _connection = new SqliteConnection(connectionString);
         _connection.Open();
         Initialize();
+        Execute("PRAGMA wal_checkpoint(TRUNCATE);");
+        LoadLatestObservationCache();
     }
 
     private static bool IsInMemory(string path)
@@ -55,6 +61,7 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
     {
         Execute("PRAGMA journal_mode=WAL;");
         Execute("PRAGMA synchronous=NORMAL;");
+        Execute("PRAGMA wal_autocheckpoint=1000;");
         Execute(
             """
             CREATE TABLE IF NOT EXISTS observation (
@@ -71,6 +78,7 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 message             TEXT    NULL
             );
             CREATE INDEX IF NOT EXISTS ix_obs_sensor_ts ON observation (sensor_id, ts);
+            CREATE INDEX IF NOT EXISTS ix_obs_ts ON observation (ts);
 
             CREATE TABLE IF NOT EXISTS event (
                 id           TEXT    PRIMARY KEY,
@@ -138,12 +146,37 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         cmd.Parameters.AddWithValue("$duration", observation.Duration.Ticks);
         cmd.Parameters.AddWithValue("$message", ToDb(observation.Message));
         cmd.ExecuteNonQuery();
+
+        if (!_latestBySensor.TryGetValue(observation.SensorId, out var current) ||
+            observation.TimestampUtc >= current.TimestampUtc)
+        {
+            _latestBySensor[observation.SensorId] = observation;
+        }
     }
 
     public IReadOnlyDictionary<Guid, SensorObservation> GetLatestObservations()
     {
         lock (_sync)
         {
+            return new Dictionary<Guid, SensorObservation>(_latestBySensor);
+        }
+    }
+
+    public SensorObservation? GetLatestObservation(Guid sensorId)
+    {
+        lock (_sync)
+        {
+            return _latestBySensor.TryGetValue(sensorId, out var observation) ? observation : null;
+        }
+    }
+
+    // Populates the in-memory latest-per-sensor cache from the table. Runs once at
+    // startup and after bulk operations (migration/restore/global delete).
+    private void LoadLatestObservationCache()
+    {
+        lock (_sync)
+        {
+            _latestBySensor.Clear();
             using var cmd = _connection.CreateCommand();
             cmd.CommandText =
                 """
@@ -155,37 +188,30 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 )
                 WHERE rn = 1;
                 """;
-
-            var result = new Dictionary<Guid, SensorObservation>();
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
                 var observation = ReadObservation(reader);
-                result[observation.SensorId] = observation;
+                _latestBySensor[observation.SensorId] = observation;
             }
-
-            return result;
         }
     }
 
-    public SensorObservation? GetLatestObservation(Guid sensorId)
+    private SensorObservation? QueryLatestObservationLocked(Guid sensorId)
     {
-        lock (_sync)
-        {
-            using var cmd = _connection.CreateCommand();
-            cmd.CommandText =
-                """
-                SELECT sensor_id, ts, state, value, default_channel_key, channels,
-                       executed_probe_id, executed_probe_name, duration_ticks, message
-                FROM observation
-                WHERE sensor_id = $sensor
-                ORDER BY ts DESC, id DESC
-                LIMIT 1;
-                """;
-            cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
-            using var reader = cmd.ExecuteReader();
-            return reader.Read() ? ReadObservation(reader) : null;
-        }
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText =
+            """
+            SELECT sensor_id, ts, state, value, default_channel_key, channels,
+                   executed_probe_id, executed_probe_name, duration_ticks, message
+            FROM observation
+            WHERE sensor_id = $sensor
+            ORDER BY ts DESC, id DESC
+            LIMIT 1;
+            """;
+        cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadObservation(reader) : null;
     }
 
     public IReadOnlyList<SensorObservation> GetObservations(Guid sensorId, DateTimeOffset fromUtc, int? maxCount)
@@ -321,7 +347,22 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             cmd.CommandText = "DELETE FROM observation WHERE sensor_id = $sensor AND ts < $cutoff;";
             cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
             cmd.Parameters.AddWithValue("$cutoff", cutoffUtc.ToUnixTimeMilliseconds());
-            return cmd.ExecuteNonQuery();
+            var removed = cmd.ExecuteNonQuery();
+
+            if (removed > 0)
+            {
+                var latest = QueryLatestObservationLocked(sensorId);
+                if (latest is null)
+                {
+                    _latestBySensor.Remove(sensorId);
+                }
+                else
+                {
+                    _latestBySensor[sensorId] = latest;
+                }
+            }
+
+            return removed;
         }
     }
 
@@ -536,7 +577,26 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
-    public int DeleteObservations(DateTimeOffset? olderThanUtc) => DeleteByTimestamp("observation", "ts", olderThanUtc);
+    public int DeleteObservations(DateTimeOffset? olderThanUtc)
+    {
+        var removed = DeleteByTimestamp("observation", "ts", olderThanUtc);
+        if (removed > 0)
+        {
+            lock (_sync)
+            {
+                if (olderThanUtc is null)
+                {
+                    _latestBySensor.Clear();
+                }
+                else
+                {
+                    LoadLatestObservationCache();
+                }
+            }
+        }
+
+        return removed;
+    }
 
     public int DeleteEvents(DateTimeOffset? olderThanUtc) => DeleteByTimestamp("event", "ts", olderThanUtc);
 
@@ -547,14 +607,21 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         ArgumentNullException.ThrowIfNull(observations);
         lock (_sync)
         {
-            using var transaction = _connection.BeginTransaction();
-            ExecuteLocked("DELETE FROM observation;");
-            foreach (var observation in observations)
+            _latestBySensor.Clear();
+            using (var transaction = _connection.BeginTransaction())
             {
-                InsertObservationLocked(observation);
+                ExecuteLocked("DELETE FROM observation;");
+                foreach (var observation in observations)
+                {
+                    InsertObservationLocked(observation);
+                }
+
+                transaction.Commit();
             }
 
-            transaction.Commit();
+            // Flush the (potentially large) WAL after a bulk import so it doesn't
+            // linger un-checkpointed and slow subsequent reads.
+            ExecuteLocked("PRAGMA wal_checkpoint(TRUNCATE);");
         }
     }
 
