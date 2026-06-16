@@ -246,6 +246,40 @@
 
             <section class="panel config-block">
                 <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Telemetry database</span></h2>
+                    <span class="panel-hint">SQLite · WAL</span>
+                </div>
+
+                <div class="storage-number">
+                    <strong>@storage.FormatBytes(storage.TelemetryFileBytes)</strong>
+                    <span>@(storage.TelemetryFileExists ? "telemetry.db (incl. WAL)" : "not created yet")</span>
+                </div>
+
+                <div class="storage-cleanup-metrics" aria-label="Stored telemetry rows">
+                    <div>
+                        <strong>@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</strong>
+                        <span>Observations</span>
+                    </div>
+                    <div>
+                        <strong>@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</strong>
+                        <span>Statistics</span>
+                    </div>
+                    <div>
+                        <strong>@ConfigModel.FormatCount(telemetry.EventCount)</strong>
+                        <span>Events</span>
+                    </div>
+                </div>
+
+                <dl class="config-list compact-config-list">
+                    <div class="config-row">
+                        <dt>Path</dt>
+                        <dd>@storage.TelemetryPath</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("list")<span>Files</span></h2>
                     <span class="panel-hint">@storage.DataFileCount files</span>
                 </div>
@@ -264,10 +298,6 @@
                         <dd>@storage.FormatBytes(storage.WorkspaceFileBytes)</dd>
                     </div>
                     <div class="config-row">
-                        <dt>Telemetry database</dt>
-                        <dd>@storage.FormatBytes(storage.TelemetryFileBytes)@(storage.TelemetryFileExists ? "" : " (not created yet)")</dd>
-                    </div>
-                    <div class="config-row">
                         <dt>Backup path</dt>
                         <dd>@storage.BackupPath</dd>
                     </div>
@@ -278,10 +308,6 @@
                     <div class="config-row">
                         <dt>Workspace path</dt>
                         <dd>@storage.WorkspacePath</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Telemetry path</dt>
-                        <dd>@storage.TelemetryPath</dd>
                     </div>
                 </dl>
             </section>
