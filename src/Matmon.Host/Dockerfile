@@ -23,6 +23,10 @@ RUN apt-get update \
     && pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module PSWSMan -Scope AllUsers -Force -AllowClobber; Install-WSMan" \
     && rm -rf /var/lib/apt/lists/*
 ENV ASPNETCORE_URLS=http://+:8099
+# Baked-in build version shown in the UI (see MatmonVersion). CI passes this as
+# a build-arg; an empty value makes the app fall back to "local-<builddate>".
+ARG MATMON_VERSION=""
+ENV MATMON_VERSION=${MATMON_VERSION}
 EXPOSE 8099
 COPY --from=build /app/publish .
 USER root

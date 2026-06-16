@@ -446,6 +446,211 @@ body.is-sidebar-open {
   min-width: 0;
 }
 
+.sidebar-version {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--matmon-muted);
+  font-size: 0.72rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-version:hover {
+  background: var(--matmon-sidebar-item-hover, rgba(124, 142, 171, 0.12));
+  color: var(--matmon-foreground);
+}
+
+.sidebar-version-brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--matmon-foreground);
+}
+
+.sidebar-version-tag {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.about-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.about-hero {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 1.3rem 1.4rem;
+  border-radius: 14px;
+  border: 1px solid var(--matmon-border);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--matmon-accent) 18%, transparent), transparent 22rem),
+    var(--matmon-surface);
+}
+
+.about-hero-mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 16px;
+  color: var(--matmon-accent);
+  background: color-mix(in srgb, var(--matmon-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 40%, transparent);
+}
+
+.about-hero-mark svg {
+  width: 2.1rem;
+  height: 2.1rem;
+}
+
+.about-hero-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.about-hero-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+  color: var(--matmon-muted);
+}
+
+.about-hero-copy h1 {
+  margin: 0;
+  font-size: 1.9rem;
+}
+
+.about-hero-copy p {
+  margin: 0;
+  color: var(--matmon-muted);
+  max-width: 46rem;
+}
+
+.about-version-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.about-version-tag {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  background: var(--matmon-surface-soft);
+  border: 1px solid var(--matmon-border);
+}
+
+.about-channel-badge {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--matmon-border);
+  color: var(--matmon-foreground);
+}
+
+.about-channel-badge[data-channel="release"] {
+  color: #78d5c8;
+  border-color: color-mix(in srgb, #78d5c8 50%, transparent);
+  background: color-mix(in srgb, #78d5c8 14%, transparent);
+}
+
+.about-channel-badge[data-channel="nightly"] {
+  color: var(--matmon-accent);
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
+}
+
+.about-channel-badge[data-channel="local"] {
+  color: var(--matmon-muted);
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.about-panel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.about-facts {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.about-facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--matmon-border) 55%, transparent);
+}
+
+.about-facts > div:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.about-facts dt {
+  color: var(--matmon-muted);
+  font-weight: 500;
+}
+
+.about-facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.about-text {
+  margin: 0;
+  color: var(--matmon-muted);
+  line-height: 1.55;
+}
+
+.about-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.about-license {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--matmon-muted);
+}
+
+.about-channel-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--matmon-muted);
+}
+
+.about-channel-list code {
+  color: var(--matmon-foreground);
+}
+
 .brand {
   display: inline-flex;
   align-items: center;

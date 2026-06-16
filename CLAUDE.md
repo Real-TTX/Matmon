@@ -60,7 +60,12 @@ All under the `Matmon__` prefix (see `appsettings.json` + README). Common: `Matm
 
 ## Docker
 
-`Dockerfile` at `src/Matmon.Host/Dockerfile` (SDK build → aspnet runtime; installs PowerShell + ssh + NTLM for sensors; binds `:8099`). Compose files: `docker-compose.yml` (local primary + sample probe), `docker-compose.master*.yml` (portable primary, GHCR pull / host-network / local build). CI: `.github/workflows/docker-image.yml` builds on PR, publishes to GHCR on push.
+`Dockerfile` at `src/Matmon.Host/Dockerfile` (SDK build → aspnet runtime; installs PowerShell + ssh + NTLM for sensors; binds `:8099`; takes a `MATMON_VERSION` build-arg → env). Compose files: `docker-compose.yml` (local primary + sample probe), `docker-compose.master*.yml` (portable primary, GHCR pull / host-network / local build). CI: `.github/workflows/docker-image.yml` builds on PR, publishes to GHCR on push to `main`/`dev`.
+
+## Branches & versioning
+
+- **`main`** = release branch (tagged `latest`); **`dev`** = ongoing work (tagged `nightly`). Day-to-day work happens on `dev`; merge to `main` for releases.
+- The build version is shown in the UI (sidebar footer "Matmon &lt;version&gt;", links to `/About`). It is resolved by `Services/MatmonVersion` from the `MATMON_VERSION` env var, which CI bakes into the image: **release** `0.1.<run>-<builddate>` (base from the root `VERSION` file), **dev** `nightly-<run>-<builddate>`. With no env var (plain local/compose build) it falls back to `local-<builddate>` from the assembly timestamp. `builddate` = UTC `yyyyMMdd-HHmm`.
 
 ## Conventions
 
