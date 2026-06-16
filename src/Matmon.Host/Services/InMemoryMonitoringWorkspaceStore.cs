@@ -1185,8 +1185,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             };
             AddChild(_document.RootProbe, probe);
         }
-        else if (string.IsNullOrWhiteSpace(probe.EnrollmentToken))
+        else if (!string.Equals(probe.EnrollmentToken, probeToken, StringComparison.Ordinal))
         {
+            // The local Docker secondary pairs with this well-known token (compose env
+            // Matmon__ProbeToken: probe-01-token). Repair any stale/rotated token so an
+            // existing bind-mounted workspace still authenticates the compose probe.
             probe.EnrollmentToken = probeToken;
         }
 
