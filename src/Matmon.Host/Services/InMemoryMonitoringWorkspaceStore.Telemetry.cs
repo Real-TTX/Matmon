@@ -13,6 +13,8 @@ namespace Matmon.Host.Services;
 
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
+    private readonly MonitoringInheritanceResolver _telemetryInheritanceResolver = new();
+
     public void RecordSensorObservation(
         Guid sensorId,
         SensorExecutionResult result,
@@ -62,10 +64,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             }
 
             SyncSensorAlertFromObservation(sensorId, result, timestampUtc);
-            PruneSensorHistory(sensorId, timestampUtc, settings);
-            UpdateSensorStatistics(sensorId, result, timestampUtc, settings);
-            PruneEvents(timestampUtc, settings);
-            PruneStatistics(sensorId, timestampUtc, settings);
+            // Statistics roll-up and telemetry retention run out-of-band in
+            // RunTelemetryMaintenance (driven by StatisticsRollupService) so the
+            // polling hot path only appends the raw observation and event.
             QueueSave(SavePriority.Telemetry);
         }
     }
@@ -173,124 +174,84 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         _telemetry.AppendEvent(monitoringEvent);
     }
 
-    private void PruneEvents(DateTimeOffset now, MonitoringSettings? settings)
+    /// <summary>
+    /// Recomputes the recent statistics buckets for every sensor from raw
+    /// observations and applies telemetry retention (raw/statistics/events).
+    /// Runs out-of-band (see <c>StatisticsRollupService</c>) so percentiles are
+    /// accurate and the polling hot path stays light. Retention/granularity is
+    /// the sensor's explicit override, else its per-type
+    /// <see cref="SensorTelemetryProfiles"/> default.
+    /// </summary>
+    public TelemetryMaintenanceResult RunTelemetryMaintenance(DateTimeOffset nowUtc)
     {
-        var retentionDays = ResolveRetentionDays(settings?.EventRetentionDays, DefaultEventRetentionDays);
-        if (retentionDays <= 0)
+        lock (_gate)
         {
-            return;
-        }
+            var templates = _document.Templates.ToDictionary(template => template.Id);
+            var sensors = EnumerateElements(_document.RootProbe).OfType<SensorElement>().ToList();
 
-        var cutoff = now - TimeSpan.FromDays(retentionDays);
-        _telemetry.PruneEvents(cutoff);
+            var bucketsWritten = 0;
+            var observationsPruned = 0;
+            var statisticsPruned = 0;
+
+            foreach (var sensor in sensors)
+            {
+                var settings = _telemetryInheritanceResolver.Resolve(BuildLineage(sensor), templates);
+                var profile = SensorTelemetryProfiles.Resolve(sensor.SensorTypeKey);
+
+                var bucketMinutes = ResolveRetentionDays(settings.StatisticsBucketMinutes, profile.StatisticsBucketMinutes);
+                bucketsWritten += RecomputeRecentBuckets(sensor.Id, nowUtc, bucketMinutes);
+
+                var rawDays = ResolveRetentionDays(settings.ObservationRetentionDays, profile.RawObservationDays);
+                if (rawDays > 0)
+                {
+                    observationsPruned += _telemetry.PruneObservations(sensor.Id, nowUtc - TimeSpan.FromDays(rawDays));
+                }
+
+                var statsDays = ResolveRetentionDays(settings.StatisticsRetentionDays, profile.StatisticsRetentionDays);
+                if (statsDays > 0)
+                {
+                    statisticsPruned += _telemetry.PruneStatistics(sensor.Id, nowUtc - TimeSpan.FromDays(statsDays));
+                }
+            }
+
+            var eventDays = SensorTelemetryProfiles.General.EventRetentionDays;
+            var eventsPruned = eventDays > 0
+                ? _telemetry.PruneEvents(nowUtc - TimeSpan.FromDays(eventDays))
+                : 0;
+
+            return new TelemetryMaintenanceResult(sensors.Count, bucketsWritten, observationsPruned, statisticsPruned, eventsPruned);
+        }
     }
 
-    private void PruneSensorHistory(Guid sensorId, DateTimeOffset now, MonitoringSettings? settings)
+    // Recomputes the current open bucket and the previous one (to absorb late,
+    // out-of-order observations from secondary probes) from raw observations.
+    private int RecomputeRecentBuckets(Guid sensorId, DateTimeOffset nowUtc, int bucketMinutes)
     {
-        var retentionDays = ResolveRetentionDays(settings?.ObservationRetentionDays, DefaultObservationRetentionDays);
-        if (retentionDays <= 0)
-        {
-            return;
-        }
-
-        var cutoff = now - TimeSpan.FromDays(retentionDays);
-        _telemetry.PruneObservations(sensorId, cutoff);
-    }
-
-    private void PruneStatistics(Guid sensorId, DateTimeOffset now, MonitoringSettings? settings)
-    {
-        var retentionDays = ResolveRetentionDays(settings?.StatisticsRetentionDays, DefaultStatisticsRetentionDays);
-        if (retentionDays <= 0)
-        {
-            return;
-        }
-
-        var cutoff = now - TimeSpan.FromDays(retentionDays);
-        _telemetry.PruneStatistics(sensorId, cutoff);
-    }
-
-    private void UpdateSensorStatistics(Guid sensorId, SensorExecutionResult result, DateTimeOffset timestampUtc, MonitoringSettings? settings)
-    {
-        if (!TryGetStatisticSample(result, out var sampleValue, out var channelKey, out var unit))
-        {
-            return;
-        }
-
-        var bucketMinutes = ResolveRetentionDays(settings?.StatisticsBucketMinutes, DefaultStatisticsBucketMinutes);
         if (bucketMinutes <= 0)
         {
-            return;
+            return 0;
         }
 
-        var bucketStartUtc = FloorToBucket(timestampUtc, bucketMinutes);
-        var bucket = _telemetry.GetStatisticsBucket(sensorId, bucketMinutes, bucketStartUtc)
-            ?? new SensorStatisticsBucket
+        var currentStart = FloorToBucket(nowUtc, bucketMinutes);
+        var fromUtc = currentStart - TimeSpan.FromMinutes(bucketMinutes);
+        var observations = _telemetry.GetObservations(sensorId, fromUtc, null);
+        if (observations.Count == 0)
+        {
+            return 0;
+        }
+
+        var written = 0;
+        foreach (var group in observations.GroupBy(observation => FloorToBucket(observation.TimestampUtc, bucketMinutes)))
+        {
+            var bucket = TelemetryRollup.Aggregate(sensorId, group.ToList(), group.Key, bucketMinutes);
+            if (bucket is not null)
             {
-                SensorId = sensorId,
-                BucketStartUtc = bucketStartUtc,
-                BucketMinutes = bucketMinutes,
-                DefaultChannelKey = channelKey,
-                Unit = unit
-            };
-
-        bucket.DefaultChannelKey = channelKey;
-        bucket.Unit = unit ?? bucket.Unit;
-        bucket.SampleCount++;
-        bucket.Average = bucket.Average is double average
-            ? ((average * (bucket.SampleCount - 1)) + sampleValue) / bucket.SampleCount
-            : sampleValue;
-        bucket.Minimum = bucket.Minimum is double minimum ? Math.Min(minimum, sampleValue) : sampleValue;
-        bucket.Maximum = bucket.Maximum is double maximum ? Math.Max(maximum, sampleValue) : sampleValue;
-        bucket.LastValue = sampleValue;
-        bucket.State = result.State;
-        bucket.Message = result.Message;
-        _telemetry.UpsertStatisticsBucket(bucket);
-    }
-
-    private static bool TryGetStatisticSample(
-        SensorExecutionResult result,
-        out double value,
-        out string channelKey,
-        out string? unit)
-    {
-        var defaultChannel = result.Channels.FirstOrDefault(channel =>
-            channel.IsDefault ||
-            (!string.IsNullOrWhiteSpace(result.DefaultChannelKey) &&
-             string.Equals(channel.Key, result.DefaultChannelKey, StringComparison.OrdinalIgnoreCase)));
-
-        if (defaultChannel is null && result.Channels.Count > 0)
-        {
-            defaultChannel = result.Channels[0];
+                _telemetry.UpsertStatisticsBucket(bucket);
+                written++;
+            }
         }
 
-        if (defaultChannel?.Value is double channelValue)
-        {
-            value = channelValue;
-            channelKey = string.IsNullOrWhiteSpace(defaultChannel.Key) ? result.DefaultChannelKey ?? "default" : defaultChannel.Key;
-            unit = defaultChannel.Unit;
-            return true;
-        }
-
-        if (result.Value.HasValue)
-        {
-            value = result.Value.Value;
-            channelKey = string.IsNullOrWhiteSpace(result.DefaultChannelKey) ? "default" : result.DefaultChannelKey;
-            unit = defaultChannel?.Unit;
-            return true;
-        }
-
-        if (result.State == SensorState.Critical)
-        {
-            value = 0d;
-            channelKey = string.IsNullOrWhiteSpace(result.DefaultChannelKey) ? "default" : result.DefaultChannelKey;
-            unit = defaultChannel?.Unit;
-            return true;
-        }
-
-        value = default;
-        channelKey = string.Empty;
-        unit = null;
-        return false;
+        return written;
     }
 
     private static int ResolveRetentionDays(int? configuredValue, int fallback)
@@ -310,3 +271,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return previousObservation is null || previousObservation.State != result.State;
     }
 }
+
+/// <summary>Summary of one <see cref="InMemoryMonitoringWorkspaceStore.RunTelemetryMaintenance"/> pass.</summary>
+public readonly record struct TelemetryMaintenanceResult(
+    int Sensors,
+    int BucketsWritten,
+    int ObservationsPruned,
+    int StatisticsPruned,
+    int EventsPruned);

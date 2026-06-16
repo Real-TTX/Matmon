@@ -71,6 +71,12 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId);
 
+    /// <summary>
+    /// Recomputes recent statistics buckets from raw observations and applies
+    /// telemetry retention. Invoked periodically by the rollup service.
+    /// </summary>
+    TelemetryMaintenanceResult RunTelemetryMaintenance(DateTimeOffset nowUtc);
+
     StorageTelemetryOverview GetStorageTelemetryOverview();
 
     StorageCleanupResult CleanupStorage(StorageCleanupScope scope, int olderThanDays);

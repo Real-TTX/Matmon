@@ -136,6 +136,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
 {
     builder.Services.AddHostedService<SensorPollingService>();
     builder.Services.AddHostedService<BackupSchedulerService>();
+    builder.Services.AddHostedService<StatisticsRollupService>();
 }
 else
 {

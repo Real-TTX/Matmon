@@ -14,10 +14,6 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorkspaceStore, IDisposable
 {
     private static readonly JsonSerializerOptions FileSerializerOptions = CreateSerializerOptions();
-    private const int DefaultEventRetentionDays = 30;
-    private const int DefaultObservationRetentionDays = 7;
-    private const int DefaultStatisticsRetentionDays = 90;
-    private const int DefaultStatisticsBucketMinutes = 60;
     private static readonly TimeSpan ConfigurationSaveDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan TelemetrySaveDelay = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan MaxDirtySaveDelay = TimeSpan.FromSeconds(30);

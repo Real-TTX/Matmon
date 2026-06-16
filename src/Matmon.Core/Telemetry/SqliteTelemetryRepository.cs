@@ -107,9 +107,49 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 last_value          REAL    NULL,
                 unit                TEXT    NULL,
                 message             TEXT    NULL,
+                low_percentile      REAL    NULL,
+                high_percentile     REAL    NULL,
+                healthy_count       INTEGER NOT NULL DEFAULT 0,
+                warning_count       INTEGER NOT NULL DEFAULT 0,
+                critical_count      INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (sensor_id, bucket_minutes, bucket_start)
             );
             """);
+
+        EnsureStatisticsColumns();
+    }
+
+    // Adds the richer-statistics columns to a sensor_statistics table created by
+    // an older Matmon build (SQLite has no ADD COLUMN IF NOT EXISTS).
+    private void EnsureStatisticsColumns()
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(sensor_statistics);";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        var additions = new (string Column, string Definition)[]
+        {
+            ("low_percentile", "REAL NULL"),
+            ("high_percentile", "REAL NULL"),
+            ("healthy_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("warning_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("critical_count", "INTEGER NOT NULL DEFAULT 0"),
+        };
+
+        foreach (var (column, definition) in additions)
+        {
+            if (!existing.Contains(column))
+            {
+                ExecuteLocked($"ALTER TABLE sensor_statistics ADD COLUMN {column} {definition};");
+            }
+        }
     }
 
     // --- Observations --------------------------------------------------------
@@ -458,7 +498,8 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             cmd.CommandText =
                 """
                 SELECT sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
-                       sample_count, average, minimum, maximum, last_value, unit, message
+                       sample_count, average, minimum, maximum, last_value, unit, message,
+                       low_percentile, high_percentile, healthy_count, warning_count, critical_count
                 FROM sensor_statistics
                 WHERE sensor_id = $sensor AND bucket_minutes = $minutes AND bucket_start = $start
                 LIMIT 1;
@@ -488,10 +529,12 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             """
             INSERT INTO sensor_statistics
                 (sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
-                 sample_count, average, minimum, maximum, last_value, unit, message)
+                 sample_count, average, minimum, maximum, last_value, unit, message,
+                 low_percentile, high_percentile, healthy_count, warning_count, critical_count)
             VALUES
                 ($sensor, $minutes, $start, $channelKey, $state,
-                 $count, $average, $minimum, $maximum, $lastValue, $unit, $message)
+                 $count, $average, $minimum, $maximum, $lastValue, $unit, $message,
+                 $lowPct, $highPct, $healthy, $warning, $critical)
             ON CONFLICT (sensor_id, bucket_minutes, bucket_start) DO UPDATE SET
                 default_channel_key = excluded.default_channel_key,
                 state               = excluded.state,
@@ -501,7 +544,12 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 maximum             = excluded.maximum,
                 last_value          = excluded.last_value,
                 unit                = excluded.unit,
-                message             = excluded.message;
+                message             = excluded.message,
+                low_percentile      = excluded.low_percentile,
+                high_percentile     = excluded.high_percentile,
+                healthy_count       = excluded.healthy_count,
+                warning_count       = excluded.warning_count,
+                critical_count      = excluded.critical_count;
             """;
         cmd.Parameters.AddWithValue("$sensor", bucket.SensorId.ToString());
         cmd.Parameters.AddWithValue("$minutes", bucket.BucketMinutes);
@@ -515,6 +563,11 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         cmd.Parameters.AddWithValue("$lastValue", ToDb(bucket.LastValue));
         cmd.Parameters.AddWithValue("$unit", ToDb(bucket.Unit));
         cmd.Parameters.AddWithValue("$message", ToDb(bucket.Message));
+        cmd.Parameters.AddWithValue("$lowPct", ToDb(bucket.LowPercentile));
+        cmd.Parameters.AddWithValue("$highPct", ToDb(bucket.HighPercentile));
+        cmd.Parameters.AddWithValue("$healthy", bucket.HealthyCount);
+        cmd.Parameters.AddWithValue("$warning", bucket.WarningCount);
+        cmd.Parameters.AddWithValue("$critical", bucket.CriticalCount);
         cmd.ExecuteNonQuery();
     }
 
@@ -526,7 +579,8 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             cmd.CommandText =
                 """
                 SELECT sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
-                       sample_count, average, minimum, maximum, last_value, unit, message
+                       sample_count, average, minimum, maximum, last_value, unit, message,
+                       low_percentile, high_percentile, healthy_count, warning_count, critical_count
                 FROM sensor_statistics
                 WHERE sensor_id = $sensor
                 ORDER BY bucket_start ASC;
@@ -544,7 +598,8 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             cmd.CommandText =
                 """
                 SELECT sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
-                       sample_count, average, minimum, maximum, last_value, unit, message
+                       sample_count, average, minimum, maximum, last_value, unit, message,
+                       low_percentile, high_percentile, healthy_count, warning_count, critical_count
                 FROM sensor_statistics
                 ORDER BY sensor_id ASC, bucket_start ASC;
                 """;
@@ -780,7 +835,12 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             Maximum = reader.IsDBNull(8) ? null : reader.GetDouble(8),
             LastValue = reader.IsDBNull(9) ? null : reader.GetDouble(9),
             Unit = reader.IsDBNull(10) ? null : reader.GetString(10),
-            Message = reader.IsDBNull(11) ? null : reader.GetString(11)
+            Message = reader.IsDBNull(11) ? null : reader.GetString(11),
+            LowPercentile = reader.IsDBNull(12) ? null : reader.GetDouble(12),
+            HighPercentile = reader.IsDBNull(13) ? null : reader.GetDouble(13),
+            HealthyCount = reader.GetInt32(14),
+            WarningCount = reader.GetInt32(15),
+            CriticalCount = reader.GetInt32(16)
         };
     }
 

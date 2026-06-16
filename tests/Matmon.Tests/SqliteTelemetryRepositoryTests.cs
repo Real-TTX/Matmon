@@ -164,6 +164,40 @@ public sealed class SqliteTelemetryRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void Statistics_roundtrips_percentiles_and_state_distribution()
+    {
+        var bucket = new SensorStatisticsBucket
+        {
+            SensorId = SensorA,
+            BucketStartUtc = Base,
+            BucketMinutes = 60,
+            DefaultChannelKey = "latency",
+            Unit = "ms",
+            State = SensorState.Healthy,
+            SampleCount = 100,
+            Average = 12.5,
+            Minimum = 1,
+            Maximum = 100,
+            LowPercentile = 1.99,
+            HighPercentile = 99.01,
+            LastValue = 9,
+            HealthyCount = 95,
+            WarningCount = 3,
+            CriticalCount = 2
+        };
+        _repo.UpsertStatisticsBucket(bucket);
+
+        var stored = _repo.GetStatisticsBucket(SensorA, 60, Base);
+        Assert.NotNull(stored);
+        Assert.Equal(1.99, stored!.LowPercentile);
+        Assert.Equal(99.01, stored.HighPercentile);
+        Assert.Equal(95, stored.HealthyCount);
+        Assert.Equal(3, stored.WarningCount);
+        Assert.Equal(2, stored.CriticalCount);
+        Assert.Equal(98, stored.UptimePercent);
+    }
+
+    [Fact]
     public void GetCounts_reflects_stored_rows()
     {
         _repo.AppendObservation(Observation(SensorA, Base, SensorState.Healthy, 1));
