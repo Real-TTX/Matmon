@@ -7081,6 +7081,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .sensor-threshold-section,
 .sensor-snmp-section,
 .sensor-create-step,
+.sensor-telemetry-section,
 .template-impact-section,
 .workspace-retention-section {
   display: grid;
@@ -7089,6 +7090,43 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border-radius: 6px;
   background: var(--matmon-surface-soft);
   border: 1px solid var(--matmon-border);
+}
+
+.workspace-section-intro {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--matmon-muted);
+}
+
+.workspace-section-intro em {
+  color: var(--matmon-foreground);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.telemetry-profile-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--matmon-foreground);
+  background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 40%, transparent);
+}
+
+.telemetry-profile-pill svg {
+  flex: 0 0 auto;
+  color: var(--matmon-accent);
+}
+
+.workspace-field-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--matmon-muted);
 }
 
 .sensor-create-flow {

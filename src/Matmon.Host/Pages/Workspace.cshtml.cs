@@ -1722,6 +1722,9 @@ public sealed class WorkspaceModel : PageModel
             : BuildSensorAdvancedParametersText(localSettings.Parameters, sensorDefinition.Parameters.Select(parameter => parameter.Key));
         var credentialBundleState = BuildCredentialBundleEditorState(localSettings.Credentials);
         var scheduleState = BuildScheduleEditorState(localSettings, effectiveSettings);
+        var telemetryProfile = element is SensorElement sensorForProfile
+            ? Matmon.Core.Telemetry.SensorTelemetryProfiles.Resolve(sensorForProfile.SensorTypeKey)
+            : null;
 
         return new WorkspaceElementEditorInput
         {
@@ -1759,13 +1762,14 @@ public sealed class WorkspaceModel : PageModel
             RetryCount = localSettings.RetryCount,
             RetryCountPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.RetryCount),
             EventRetentionDays = localSettings.EventRetentionDays,
-            EventRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.EventRetentionDays),
+            EventRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.EventRetentionDays ?? telemetryProfile?.EventRetentionDays),
             ObservationRetentionDays = localSettings.ObservationRetentionDays,
-            ObservationRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.ObservationRetentionDays),
+            ObservationRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.ObservationRetentionDays ?? telemetryProfile?.RawObservationDays),
             StatisticsRetentionDays = localSettings.StatisticsRetentionDays,
-            StatisticsRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.StatisticsRetentionDays),
+            StatisticsRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.StatisticsRetentionDays ?? telemetryProfile?.StatisticsRetentionDays),
             StatisticsBucketMinutes = localSettings.StatisticsBucketMinutes,
-            StatisticsBucketMinutesPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.StatisticsBucketMinutes),
+            StatisticsBucketMinutesPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.StatisticsBucketMinutes ?? telemetryProfile?.StatisticsBucketMinutes),
+            TelemetryProfileSummary = BuildTelemetryProfileSummary(telemetryProfile),
             ParametersText = ToLines(localSettings.Parameters),
             ParametersTextPlaceholder = !string.IsNullOrWhiteSpace(ToLines(effectiveSettings.Parameters))
                 ? ToLines(effectiveSettings.Parameters)
@@ -5062,6 +5066,31 @@ public sealed class WorkspaceModel : PageModel
         return value?.ToString(CultureInfo.InvariantCulture);
     }
 
+    private static string? BuildTelemetryProfileSummary(Matmon.Core.Telemetry.SensorTelemetryProfile? profile)
+    {
+        if (profile is null)
+        {
+            return null;
+        }
+
+        return $"Type defaults ({profile.Name}): keep raw samples {profile.RawObservationDays} d, " +
+               $"summarise {DescribeBucketGranularity(profile.StatisticsBucketMinutes)}, " +
+               $"keep summaries {profile.StatisticsRetentionDays} d, event log {profile.EventRetentionDays} d.";
+    }
+
+    public static string DescribeBucketGranularity(int minutes) => minutes switch
+    {
+        <= 0 => "no",
+        60 => "hourly",
+        360 => "every 6 h",
+        720 => "every 12 h",
+        1440 => "daily",
+        < 60 => $"every {minutes} min",
+        _ when minutes % 1440 == 0 => $"every {minutes / 1440} d",
+        _ when minutes % 60 == 0 => $"every {minutes / 60} h",
+        _ => $"every {minutes} min"
+    };
+
     private static string FormatSensorStateLabel(SensorState state)
     {
         return state switch
@@ -6496,6 +6525,9 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor
     public int? StatisticsBucketMinutes { get; set; }
 
     public string? StatisticsBucketMinutesPlaceholder { get; set; }
+
+    /// <summary>Human-readable per-sensor-type telemetry defaults (null for non-sensors).</summary>
+    public string? TelemetryProfileSummary { get; set; }
 
     public string ParametersText { get; set; } = string.Empty;
 
