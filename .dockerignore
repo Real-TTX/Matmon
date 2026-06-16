@@ -5,3 +5,15 @@
 .vscode/
 .idea/
 data/
+tmp/
+
+# Not needed to build the runtime image — excluding them keeps the COPY layer
+# stable so only real source changes trigger an image rebuild.
+tests/
+scripts/
+.github/
+*.md
+LICENSE
+.dockerignore
+docker-compose*.yml
+.env*

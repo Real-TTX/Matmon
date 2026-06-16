@@ -1,12 +1,12 @@
 services:
-  master:
+  primary:
     build:
       context: .
       dockerfile: src/Matmon.Host/Dockerfile
     extra_hosts:
       - "pc-terminal:host-gateway"
     environment:
-      Matmon__Mode: Master
+      Matmon__Mode: Primary
       Matmon__HeartbeatIntervalSeconds: 30
       Matmon__WorkspacePath: data/workspace.json
       Matmon__Auth__Username: admin
@@ -24,13 +24,13 @@ services:
       context: .
       dockerfile: src/Matmon.Host/Dockerfile
     environment:
-      Matmon__Mode: Slave
+      Matmon__Mode: Secondary
       Matmon__ProbeId: probe-01
       Matmon__ProbeName: Remote Probe 01
       Matmon__ProbeToken: probe-01-token
-      Matmon__MasterUrl: http://master:8099
+      Matmon__PrimaryUrl: http://primary:8099
       Matmon__HeartbeatIntervalSeconds: 30
     ports:
       - "8100:8099"
     depends_on:
-      - master
+      - primary
