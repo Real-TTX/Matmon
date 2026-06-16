@@ -59,7 +59,7 @@ All under the `Matmon__` prefix (see `appsettings.json` + README). Common: `Matm
 
 ## Docker
 
-`Dockerfile` at `src/Matmon.Host/Dockerfile` (SDK build → aspnet runtime; installs PowerShell + ssh + NTLM for sensors; binds `:8099`). Compose files: `docker-compose.yml` (local primary + sample probe), `docker-compose.master*.yml` (portable primary, GHCR pull / host-network / local build). CI: `.github/workflows/docker-image.yml` builds on PR, publishes to GHCR on push.
+`Dockerfile` at `src/Matmon.Host/Dockerfile` (SDK build → aspnet runtime; installs PowerShell + ssh + NTLM for sensors; binds `:8099`). Compose files: `docker-compose.yml` (local primary + sample probe), `docker-compose.master*.yml` (portable primary, GHCR pull / host-network / local build). The portable primary compose includes a label-scoped **Watchtower** sidecar that auto-updates the Matmon container from GHCR (`MATMON_UPDATE_INTERVAL_SECONDS`, default 300s). CI: `.github/workflows/docker-image.yml` builds on PR, publishes to GHCR on push to `main`.
 
 ## Conventions
 

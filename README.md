@@ -156,6 +156,10 @@ http://<docker-host-ip>:8099
 
 The portable compose uses `ghcr.io/real-ttx/matmon:latest`, binds the web UI to `0.0.0.0:8099` by default, stores runtime data in the Docker volume `matmon-data`, and maps `host.docker.internal` to the Docker host gateway. In normal bridge mode, the container can reach the LAN through the Docker host, which is the most portable setup across Linux, Windows and macOS Docker hosts.
 
+### Automatic updates
+
+The portable compose includes a [Watchtower](https://containrrr.dev/watchtower/) sidecar that keeps Matmon on the latest published image by itself: it polls GHCR every `MATMON_UPDATE_INTERVAL_SECONDS` (default `300`) and recreates the Matmon container when `ghcr.io/real-ttx/matmon:latest` changes. It is scoped with a label so it only updates the Matmon container and never touches other containers on the host, removes old images (`--cleanup`), and the persistent volumes (`matmon-data`, `matmon-backups`, `matmon-keys`) survive every update. To turn auto-updates off, delete the `watchtower` service from `docker-compose.master.yml`.
+
 The portable primary compose sets all sample/demo flags to `false`, so pulling a newer image does not create demo sensors. To reset an existing installation, stop the container and remove the named Docker volume:
 
 ```bash

@@ -15,6 +15,9 @@ services:
     pull_policy: ${MATMON_PULL_POLICY:-always}
     container_name: ${MATMON_CONTAINER_NAME:-matmon-primary}
     restart: unless-stopped
+    labels:
+      # Opt this container in to automatic image updates by Watchtower (below).
+      - "com.centurylinklabs.watchtower.enable=true"
     environment:
       ASPNETCORE_URLS: http://+:8099
       Matmon__Mode: Primary
@@ -39,6 +42,19 @@ services:
       # Lets sensors reach services on the Docker host through host.docker.internal.
       # Works on Docker Desktop and modern Linux Docker engines.
       - "host.docker.internal:host-gateway"
+    networks:
+      - matmon
+
+  # Keeps the Matmon container on the latest published image automatically:
+  # polls GHCR on an interval and recreates the container when :latest changes.
+  # Scoped via --label-enable so it only touches the labelled Matmon container.
+  watchtower:
+    image: containrrr/watchtower
+    container_name: ${MATMON_WATCHTOWER_NAME:-matmon-watchtower}
+    restart: unless-stopped
+    command: --cleanup --label-enable --interval ${MATMON_UPDATE_INTERVAL_SECONDS:-300}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - matmon
 
