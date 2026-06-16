@@ -6255,7 +6255,22 @@ public sealed class CreateHostInput
     public Guid? ParentId { get; set; }
 }
 
-public sealed class CreateSensorInput
+/// <summary>
+/// Shared shape consumed by the reusable sensor-editor partials (Shared/_Sensor*.cshtml)
+/// so the create, element-edit and template-edit pages render the same markup from one
+/// source. Implemented by CreateSensorInput, WorkspaceElementEditorInput and
+/// WorkspaceTemplateEditorInput.
+/// </summary>
+public interface ISensorThresholdEditor
+{
+    SensorChannelMode SensorChannelMode { get; }
+
+    int SensorChannelThresholdVisibleCount { get; }
+
+    List<WorkspaceSensorChannelThresholdFieldInput> SensorChannelThresholdFields { get; }
+}
+
+public sealed class CreateSensorInput : ISensorThresholdEditor
 {
     public string Name { get; set; } = string.Empty;
 
@@ -6408,7 +6423,7 @@ public sealed class WorkspaceNotificationReceiverEditorInput : CreateNotificatio
     public Guid Id { get; set; }
 }
 
-public sealed class WorkspaceElementEditorInput
+public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor
 {
     public Guid Id { get; set; }
 
@@ -6614,7 +6629,7 @@ internal sealed record SensorThresholdEditorState(
     List<WorkspaceSensorChannelThresholdFieldInput> Fields,
     int VisibleCount);
 
-public sealed class WorkspaceTemplateEditorInput
+public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor
 {
     public Guid Id { get; set; }
 
