@@ -10,7 +10,7 @@ A lightweight, self-hosted network monitoring platform (a compact PRTG-style alt
 
 - **Requirements:** .NET 10 SDK (developed against `10.0.203`), Docker Desktop or compatible runtime.
 - **Build:** `dotnet build Matmon.slnx` (note: `.slnx`, not a classic `.sln`).
-- **Run locally (dev):** `dotnet run --project src/Matmon.Host` → http://localhost:5084 (`ASPNETCORE_ENVIRONMENT=Development`). Default login `admin` / `admin`.
+- **Run locally (dev):** `dotnet run --project src/Matmon.Host` → http://localhost:5084 (`ASPNETCORE_ENVIRONMENT=Development`). Default login `admin` / `admin`. For a live loop use `./scripts/dev.ps1` (`dotnet watch run`) — rebuilds/reloads on every change so the browser always shows current code.
 - **Run via Docker:** `docker compose up --build` → primary on http://localhost:8099, sample secondary probe on http://localhost:8100.
 - **Health check:** `GET /healthz` and `GET /api/mode` (both anonymous).
 - **Tests:** `dotnet test tests/Matmon.Tests/Matmon.Tests.csproj` (xunit). Baseline covers the pure core logic (threshold parsing/evaluation, channel-threshold escalation, schedule calculator, settings inheritance). Coverage grows with each refactor.
@@ -59,7 +59,7 @@ All under the `Matmon__` prefix (see `appsettings.json` + README). Common: `Matm
 
 ## Docker
 
-`Dockerfile` at `src/Matmon.Host/Dockerfile` (SDK build → aspnet runtime; installs PowerShell + ssh + NTLM for sensors; binds `:8099`). Compose files: `docker-compose.yml` (local primary + sample probe), `docker-compose.master*.yml` (portable primary, GHCR pull / host-network / local build). The portable primary compose includes a label-scoped **Watchtower** sidecar that auto-updates the Matmon container from GHCR (`MATMON_UPDATE_INTERVAL_SECONDS`, default 300s). CI: `.github/workflows/docker-image.yml` builds on PR, publishes to GHCR on push to `main`.
+`Dockerfile` at `src/Matmon.Host/Dockerfile` (SDK build → aspnet runtime; installs PowerShell + ssh + NTLM for sensors; binds `:8099`). Compose files: `docker-compose.yml` (local primary + sample probe), `docker-compose.master*.yml` (portable primary, GHCR pull / host-network / local build). CI: `.github/workflows/docker-image.yml` builds on PR, publishes to GHCR on push.
 
 ## Conventions
 
