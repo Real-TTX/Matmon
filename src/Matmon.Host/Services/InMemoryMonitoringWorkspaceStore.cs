@@ -503,6 +503,25 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 QueueSave(SavePriority.Configuration);
             }
 
+            // If the condition already recovered, acknowledging it now finishes the
+            // job and closes the alert (Alerta-style "work it off").
+            if (alert.RecoveredUtc is not null && alert.ResolvedUtc is null)
+            {
+                alert.ResolvedUtc = DateTimeOffset.UtcNow;
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = alert.ResolvedUtc.Value,
+                    Kind = MonitoringEventKind.AlertResolved,
+                    ElementId = alert.ElementId,
+                    ElementKind = alert.ElementKind,
+                    ElementName = alert.ElementName,
+                    ElementPath = alert.ElementPath,
+                    State = alert.State,
+                    Message = alert.Message
+                });
+                QueueSave(SavePriority.Configuration);
+            }
+
             return true;
         }
     }
@@ -1026,6 +1045,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     changed = true;
                 }
 
+                if (existing.RecoveredUtc is not null)
+                {
+                    existing.RecoveredUtc = null; // alarming again before it was worked off
+                    changed = true;
+                }
+
                 existing.LastSeenUtc = now;
             }
 
@@ -1036,19 +1061,30 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     continue;
                 }
 
-                alert.ResolvedUtc = now;
-                AddEvent(new MonitoringEvent
+                // Alerta-style: only an acknowledged alert is auto-resolved on recovery.
+                // An unacknowledged one is flagged recovered but stays open until worked off.
+                if (alert.IsAcknowledged)
                 {
-                    TimestampUtc = now,
-                    Kind = MonitoringEventKind.AlertResolved,
-                    ElementId = alert.ElementId,
-                    ElementKind = alert.ElementKind,
-                    ElementName = alert.ElementName,
-                    ElementPath = alert.ElementPath,
-                    State = alert.State,
-                    Message = alert.Message
-                });
-                changed = true;
+                    alert.RecoveredUtc ??= now;
+                    alert.ResolvedUtc = now;
+                    AddEvent(new MonitoringEvent
+                    {
+                        TimestampUtc = now,
+                        Kind = MonitoringEventKind.AlertResolved,
+                        ElementId = alert.ElementId,
+                        ElementKind = alert.ElementKind,
+                        ElementName = alert.ElementName,
+                        ElementPath = alert.ElementPath,
+                        State = alert.State,
+                        Message = alert.Message
+                    });
+                    changed = true;
+                }
+                else if (alert.RecoveredUtc is null)
+                {
+                    alert.RecoveredUtc = now;
+                    changed = true;
+                }
             }
 
             if (changed)
@@ -2831,6 +2867,40 @@ try {
         }
     }
 
+    /// <summary>
+    /// Alerta-style recovery: when a sensor returns to a healthy state, an alert that
+    /// the operator already acknowledged is resolved (worked off + condition cleared),
+    /// but an unacknowledged alert is only flagged recovered and stays active so it
+    /// remains visible until someone acknowledges it.
+    /// </summary>
+    private void MarkAlertsRecoveredForElement(Guid elementId, DateTimeOffset recoveredAt)
+    {
+        foreach (var alert in _document.Alerts.Where(alert => alert.IsActive && alert.ElementId == elementId))
+        {
+            if (alert.IsAcknowledged)
+            {
+                alert.RecoveredUtc ??= recoveredAt;
+                alert.ResolvedUtc = recoveredAt;
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = recoveredAt,
+                    Kind = MonitoringEventKind.AlertResolved,
+                    ElementId = alert.ElementId,
+                    ElementKind = alert.ElementKind,
+                    ElementName = alert.ElementName,
+                    ElementPath = alert.ElementPath,
+                    State = alert.State,
+                    Message = alert.Message
+                });
+            }
+            else if (alert.RecoveredUtc is null)
+            {
+                // Condition cleared but nobody has acknowledged it yet — keep it open.
+                alert.RecoveredUtc = recoveredAt;
+            }
+        }
+    }
+
     private void SyncSensorAlertFromObservation(
         Guid sensorId,
         SensorExecutionResult result,
@@ -2838,7 +2908,7 @@ try {
     {
         if (result.State is not (SensorState.Warning or SensorState.Critical))
         {
-            ResolveAlertsForElement(sensorId, timestampUtc, string.Empty);
+            MarkAlertsRecoveredForElement(sensorId, timestampUtc);
             return;
         }
 
@@ -2887,6 +2957,7 @@ try {
         existing.State = result.State;
         existing.Message = message;
         existing.LastSeenUtc = timestampUtc;
+        existing.RecoveredUtc = null; // re-alarmed before it was worked off
     }
 
     private static JsonSerializerOptions CreateSerializerOptions()

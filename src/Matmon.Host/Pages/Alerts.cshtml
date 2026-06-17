@@ -160,12 +160,20 @@
                                 </div>
                                 <div class="event-row-side">
                                     <span class="state-pill" data-state="@alert.StateKey">@alert.StateLabel</span>
+                                    @if (alert.IsRecovered)
+                                    {
+                                        <span class="state-pill" data-state="ok">Recovered</span>
+                                    }
                                     <span class="event-row-time">@alert.LastSeen</span>
                                     <span class="event-row-chevron">@MatmonIcons.Render("arrow-right")</span>
                                 </div>
                             </summary>
 
                             <div class="event-row-body">
+                                @if (alert.IsRecovered)
+                                {
+                                    <div class="workspace-inline-note">@MatmonIcons.Render("check") The condition has cleared, but the alert stays here until you acknowledge it. Acknowledging now closes it.</div>
+                                }
                                 <div class="event-row-body-grid">
                                     <div class="event-row-field">
                                         <span class="workspace-label">Message</span>
@@ -180,8 +188,8 @@
                                         <div>@alert.FirstSeen</div>
                                     </div>
                                     <div class="event-row-field">
-                                        <span class="workspace-label">Last seen</span>
-                                        <div>@alert.LastSeen</div>
+                                        <span class="workspace-label">@(alert.IsRecovered ? "Recovered" : "Last seen")</span>
+                                        <div>@(alert.IsRecovered ? alert.RecoveredAt : alert.LastSeen)</div>
                                     </div>
                                 </div>
 

@@ -4574,8 +4574,10 @@ public sealed class WorkspaceModel : PageModel
                 alert.LastSeenUtc.ToLocalTime().ToString("g"),
                 alert.IsActive,
                 alert.IsAcknowledged,
+                alert.IsRecovered,
                 alert.AcknowledgedUtc?.ToLocalTime().ToString("g"),
                 alert.AcknowledgedBy,
+                alert.RecoveredUtc?.ToLocalTime().ToString("g"),
                 alert.ResolvedUtc?.ToLocalTime().ToString("g")))
             .ToArray();
     }
@@ -6244,8 +6246,10 @@ public sealed record WorkspaceAlertRow(
     string LastSeen,
     bool IsActive,
     bool IsAcknowledged,
+    bool IsRecovered,
     string? AcknowledgedAt,
     string? AcknowledgedBy,
+    string? RecoveredAt,
     string? ResolvedAt);
 
 public sealed record WorkspaceProbeRow(
