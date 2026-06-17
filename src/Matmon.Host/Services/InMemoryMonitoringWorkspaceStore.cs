@@ -80,6 +80,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             EnsureDefaultProxmoxSensor();
         }
 
+        if (!string.IsNullOrWhiteSpace(_runtimeOptions.UnifiCloudApiKey))
+        {
+            EnsureUnifiCloudSensor();
+        }
+
         EnsureDefaultNotificationConfiguration();
         EnsureDefaultUsers();
         EnsureDefaultMaps(_runtimeOptions.CreateStarterMap);
@@ -2496,6 +2501,36 @@ try {
         }
 
         sensor.Settings.Highlight = true;
+    }
+
+    private void EnsureUnifiCloudSensor()
+    {
+        var apiKey = _runtimeOptions.UnifiCloudApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return;
+        }
+
+        const string sensorName = "UniFi Cloud";
+
+        var sensor = EnumerateElements(_document.RootProbe)
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.SensorTypeKey, UnifiHealthSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement(sensorName, UnifiHealthSensorExecutor.Definition.Key, string.Empty)
+            {
+                Description = "UniFi Site Manager cloud health (auto-provisioned from Matmon__UnifiCloudApiKey)"
+            };
+            AddChild(_document.RootProbe, sensor);
+        }
+
+        sensor.ParentId = _document.RootProbe.Id;
+        sensor.Settings.Parameters["unifi.mode"] = "cloud";
+        sensor.Settings.Parameters["unifi.apiKey"] = apiKey;
     }
 
     private void EnsureDefaultProxmoxSensor()

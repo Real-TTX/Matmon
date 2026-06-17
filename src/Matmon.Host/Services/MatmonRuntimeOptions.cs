@@ -40,4 +40,11 @@ public sealed class MatmonRuntimeOptions
     public bool AutoCreateProbeSystemSensors { get; set; }
 
     public bool CreateStarterMap { get; set; }
+
+    /// <summary>
+    /// When set (e.g. via <c>Matmon__UnifiCloudApiKey</c>), the primary auto-provisions a
+    /// "UniFi Cloud" health sensor on startup using this Site Manager API key. The key is
+    /// only read from configuration/env — never committed.
+    /// </summary>
+    public string? UnifiCloudApiKey { get; set; }
 }

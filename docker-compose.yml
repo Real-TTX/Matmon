@@ -14,6 +14,8 @@ services:
       Matmon__ProvisionLocalDockerProbe: true
       Matmon__AutoCreateProbeSystemSensors: true
       Matmon__CreateStarterMap: true
+      # Auto-provision a "UniFi Cloud" sensor when a key is supplied (via .env, gitignored).
+      Matmon__UnifiCloudApiKey: ${UNIFI_CLOUD_API_KEY:-}
     ports:
       - "8099:8099"
     volumes:
