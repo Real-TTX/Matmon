@@ -20,6 +20,34 @@ public sealed class MonitoringMap
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Legacy single-board tiles. Authoritative only when <see cref="Slides"/> is empty (pre-multi-slide maps).</summary>
+    public List<MonitoringMapTile> Tiles { get; set; } = [];
+
+    /// <summary>Ordered slides for the carousel. When non-empty this is authoritative and <see cref="Tiles"/> mirrors slide 1.</summary>
+    public List<MonitoringMapSlide> Slides { get; set; } = [];
+
+    /// <summary>
+    /// The slides to render: <see cref="Slides"/> when present, otherwise a single
+    /// synthetic slide wrapping the legacy <see cref="Tiles"/>. Always returns at
+    /// least one slide so consumers can iterate uniformly.
+    /// </summary>
+    public IReadOnlyList<MonitoringMapSlide> EffectiveSlides()
+    {
+        if (Slides.Count > 0)
+        {
+            return Slides;
+        }
+
+        return [new MonitoringMapSlide { Name = "Slide 1", Tiles = Tiles }];
+    }
+}
+
+public sealed class MonitoringMapSlide
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public string Name { get; set; } = "Slide";
+
     public List<MonitoringMapTile> Tiles { get; set; } = [];
 }
 

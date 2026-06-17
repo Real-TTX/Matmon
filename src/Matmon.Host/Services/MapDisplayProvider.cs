@@ -20,18 +20,22 @@ public sealed class MapDisplayProvider
         var elements = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         var latest = _workspaceStore.GetLatestSensorObservations();
 
-        var tiles = map.Tiles
+        MapDisplayTileViewModel[] BuildTiles(IEnumerable<MonitoringMapTile> source) => source
             .OrderBy(tile => tile.Y)
             .ThenBy(tile => tile.X)
             .Select(tile =>
             {
                 elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
-                var tileState = ResolveTileState(tile, element, latest);
-                return tileState;
+                return ResolveTileState(tile, element, latest);
             })
             .ToArray();
 
-        return new MapDisplayViewModel(map, tiles);
+        var slides = map.EffectiveSlides()
+            .Select(slide => new MapDisplaySlideViewModel(slide.Id, slide.Name, BuildTiles(slide.Tiles)))
+            .ToArray();
+
+        var firstTiles = slides.Length > 0 ? slides[0].Tiles : Array.Empty<MapDisplayTileViewModel>();
+        return new MapDisplayViewModel(map, firstTiles, slides);
     }
 
     private MapDisplayTileViewModel ResolveTileState(
@@ -360,6 +364,12 @@ public sealed class MapDisplayProvider
 
 public sealed record MapDisplayViewModel(
     MonitoringMap Map,
+    IReadOnlyList<MapDisplayTileViewModel> Tiles,
+    IReadOnlyList<MapDisplaySlideViewModel> Slides);
+
+public sealed record MapDisplaySlideViewModel(
+    Guid Id,
+    string Name,
     IReadOnlyList<MapDisplayTileViewModel> Tiles);
 
 public sealed record MapDisplayTileViewModel(

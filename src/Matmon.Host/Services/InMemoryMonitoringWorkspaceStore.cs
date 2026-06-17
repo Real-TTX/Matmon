@@ -3016,6 +3016,30 @@ try {
         };
     }
 
+    private static MonitoringMapTile CloneMapTile(MonitoringMapTile tile)
+    {
+        return new MonitoringMapTile
+        {
+            Id = tile.Id,
+            Kind = tile.Kind,
+            Title = tile.Title,
+            ElementId = tile.ElementId,
+            Text = tile.Text,
+            X = tile.X,
+            Y = tile.Y,
+            Width = tile.Width,
+            Height = tile.Height,
+            BackgroundColor = tile.BackgroundColor,
+            AccentColor = tile.AccentColor,
+            TextColor = tile.TextColor,
+            GraphType = tile.GraphType,
+            VisualType = tile.VisualType,
+            ShowTitle = tile.ShowTitle,
+            ShowStateBadge = tile.ShowStateBadge,
+            ShowElementName = tile.ShowElementName
+        };
+    }
+
     private static MonitoringMap CloneMap(MonitoringMap source)
     {
         return new MonitoringMap
@@ -3029,25 +3053,12 @@ try {
             DisplayPreset = source.DisplayPreset,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc,
-            Tiles = source.Tiles.Select(tile => new MonitoringMapTile
+            Tiles = source.Tiles.Select(CloneMapTile).ToList(),
+            Slides = source.Slides.Select(slide => new MonitoringMapSlide
             {
-                Id = tile.Id,
-                Kind = tile.Kind,
-                Title = tile.Title,
-                ElementId = tile.ElementId,
-                Text = tile.Text,
-                X = tile.X,
-                Y = tile.Y,
-                Width = tile.Width,
-                Height = tile.Height,
-                BackgroundColor = tile.BackgroundColor,
-                AccentColor = tile.AccentColor,
-                TextColor = tile.TextColor,
-                GraphType = tile.GraphType,
-                VisualType = tile.VisualType,
-                ShowTitle = tile.ShowTitle,
-                ShowStateBadge = tile.ShowStateBadge,
-                ShowElementName = tile.ShowElementName
+                Id = slide.Id,
+                Name = slide.Name,
+                Tiles = slide.Tiles.Select(CloneMapTile).ToList()
             }).ToList()
         };
     }

@@ -26,8 +26,12 @@
             <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
         </header>
 
-        <section class="map-canvas public-map-canvas" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows; --map-display-width: @preset.Width; --map-display-height: @preset.Height;">
-            @foreach (var tile in display.Tiles)
+        <div class="map-carousel public-map-carousel" data-map-carousel data-map-carousel-autoplay>
+            @for (var slideIndex = 0; slideIndex < display.Slides.Count; slideIndex++)
+            {
+                var slide = display.Slides[slideIndex];
+                <section class="map-canvas public-map-canvas map-carousel-slide" data-map-slide data-slide-index="@slideIndex" hidden="@(slideIndex == 0 ? null : "hidden")" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows; --map-display-width: @preset.Width; --map-display-height: @preset.Height;">
+            @foreach (var tile in slide.Tiles)
             {
                 <article class="map-tile map-tile-display" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
                     @if (tile.Tile.ShowTitle || tile.Tile.ShowStateBadge)
@@ -106,7 +110,22 @@
                     </small>
                 </article>
             }
-        </section>
+                </section>
+            }
+        </div>
+        @if (display.Slides.Count > 1)
+        {
+            <div class="map-carousel-nav public-map-carousel-nav" data-map-carousel-nav>
+                <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
+                <div class="map-carousel-dots">
+                    @for (var dot = 0; dot < display.Slides.Count; dot++)
+                    {
+                        <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@display.Slides[dot].Name</button>
+                    }
+                </div>
+                <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
+            </div>
+        }
     </main>
 </body>
 </html>

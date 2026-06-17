@@ -33,7 +33,59 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeDiscoveryJobList();
   initializeDiscoveryScanForm();
   initializeMapDesigner();
+  initializeMapCarousel();
 });
+
+function initializeMapCarousel() {
+  document.querySelectorAll("[data-map-carousel]").forEach((carousel) => {
+    const slides = Array.from(carousel.querySelectorAll("[data-map-slide]"));
+    if (slides.length <= 1) {
+      return;
+    }
+
+    const scope = carousel.parentElement || carousel;
+    const dots = Array.from(scope.querySelectorAll("[data-map-carousel-dot]"));
+    const prev = scope.querySelector("[data-map-carousel-prev]");
+    const next = scope.querySelector("[data-map-carousel-next]");
+    const intervalMs = 12000;
+    let active = 0;
+    let timer = null;
+
+    const show = (index) => {
+      active = (index + slides.length) % slides.length;
+      slides.forEach((slide, i) => {
+        slide.hidden = i !== active;
+      });
+      dots.forEach((dot, i) => dot.classList.toggle("is-active", i === active));
+    };
+
+    const stop = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const start = () => {
+      stop();
+      timer = setInterval(() => show(active + 1), intervalMs);
+    };
+
+    if (prev) {
+      prev.addEventListener("click", () => { show(active - 1); start(); });
+    }
+    if (next) {
+      next.addEventListener("click", () => { show(active + 1); start(); });
+    }
+    dots.forEach((dot, index) => dot.addEventListener("click", () => { show(index); start(); }));
+
+    carousel.addEventListener("mouseenter", stop);
+    carousel.addEventListener("mouseleave", start);
+
+    show(0);
+    start();
+  });
+}
 
 function initializeDiscoveryScanForm() {
   const form = document.querySelector("[data-discovery-scan-form]");

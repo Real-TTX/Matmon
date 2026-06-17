@@ -7626,6 +7626,80 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   aspect-ratio: auto;
 }
 
+/* --- Map carousel (multi-slide) --- */
+.map-carousel {
+  display: block;
+  width: 100%;
+}
+
+.public-map-carousel {
+  flex: 1;
+  min-height: 0;
+}
+
+/* A hidden slide must stay hidden despite .map-canvas using display:grid. */
+.map-carousel-slide[hidden] {
+  display: none !important;
+}
+
+.map-carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.public-map-carousel-nav {
+  margin-top: 0.4rem;
+}
+
+.map-carousel-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-foreground);
+  cursor: pointer;
+}
+
+.map-carousel-arrow:hover {
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+  color: var(--matmon-accent);
+}
+
+.map-carousel-dots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-carousel-dot {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.map-carousel-dot:hover {
+  color: var(--matmon-foreground);
+}
+
+.map-carousel-dot.is-active {
+  background: color-mix(in srgb, var(--matmon-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+  color: var(--matmon-foreground);
+}
+
 .system-user-table {
   gap: 0;
 }
