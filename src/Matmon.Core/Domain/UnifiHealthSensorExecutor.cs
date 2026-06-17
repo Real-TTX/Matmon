@@ -46,8 +46,23 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
                 Key = "unifi.apiKey",
                 Label = "API key",
                 Kind = SensorParameterKind.Secret,
-                Description = "Cloud: Site Manager API key (unifi.ui.com). Local: a Network app API key.",
-                Required = true,
+                Description = "Cloud: Site Manager API key (required). Local: a Network app API key (or use username + password below).",
+                CredentialKind = MonitoringCredentialKind.Unifi
+            },
+            new SensorParameterDefinition
+            {
+                Key = "unifi.username",
+                Label = "Username (local login)",
+                Kind = SensorParameterKind.Text,
+                Description = "Local only: controller admin username, if not using a local API key.",
+                CredentialKind = MonitoringCredentialKind.Unifi
+            },
+            new SensorParameterDefinition
+            {
+                Key = "unifi.password",
+                Label = "Password (local login)",
+                Kind = SensorParameterKind.Secret,
+                Description = "Local only: controller admin password (used with the username above). 2FA must be off.",
                 CredentialKind = MonitoringCredentialKind.Unifi
             },
             new SensorParameterDefinition
@@ -83,25 +98,39 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         SensorExecutionContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!MonitoringSettings.TryReadParameter(context.Settings, "unifi.apiKey", out var apiKey) ||
-            string.IsNullOrWhiteSpace(apiKey))
-        {
-            return SensorExecutionResult.Critical(TimeSpan.Zero, "UniFi API key is required");
-        }
-
         var mode = ResolveMode(context.Settings);
         var verifySsl = MonitoringSettings.TryReadParameterBool(context.Settings, "unifi.verifySsl", out var configuredVerify) && configuredVerify;
-        var watch = Stopwatch.StartNew();
+        MonitoringSettings.TryReadParameter(context.Settings, "unifi.apiKey", out var apiKey);
+        MonitoringSettings.TryReadParameter(context.Settings, "unifi.username", out var username);
+        MonitoringSettings.TryReadParameter(context.Settings, "unifi.password", out var password);
 
+        var watch = Stopwatch.StartNew();
         try
         {
-            using var client = CreateHttpClient(verifySsl);
-            client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-KEY", apiKey.Trim());
-            client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+            if (mode == "cloud")
+            {
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    return SensorExecutionResult.Critical(TimeSpan.Zero, "Cloud mode requires the Site Manager API key");
+                }
 
-            return mode == "local"
-                ? await ExecuteLocalAsync(client, context, watch, cancellationToken)
-                : await ExecuteCloudAsync(client, context, watch, cancellationToken);
+                using var cloudClient = CreateApiKeyClient(apiKey, verifySsl);
+                return await ExecuteCloudAsync(cloudClient, context, watch, cancellationToken);
+            }
+
+            // Local mode: prefer a local API key (integration API), else username + password (controller login).
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                using var localClient = CreateApiKeyClient(apiKey, verifySsl);
+                return await ExecuteLocalAsync(localClient, context, watch, cancellationToken);
+            }
+
+            if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))
+            {
+                return await ExecuteLocalLoginAsync(context, username.Trim(), password, verifySsl, watch, cancellationToken);
+            }
+
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "Local mode needs an API key, or a username and password");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -115,13 +144,21 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         }
     }
 
+    private static HttpClient CreateApiKeyClient(string apiKey, bool verifySsl)
+    {
+        var client = CreateHttpClient(verifySsl);
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-KEY", apiKey.Trim());
+        client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        return client;
+    }
+
     private static async ValueTask<SensorExecutionResult> ExecuteCloudAsync(
         HttpClient client,
         SensorExecutionContext context,
         Stopwatch watch,
         CancellationToken cancellationToken)
     {
-        var baseUri = ResolveBaseUri(context, CloudBaseUrl);
+        var baseUri = ResolveBaseUri(context, CloudBaseUrl) ?? new Uri(CloudBaseUrl);
         var hosts = await ReadArrayAsync(client, new Uri(baseUri, "v1/hosts"), "UniFi cloud", cancellationToken);
         var (total, online) = CountOnline(hosts);
         watch.Stop();
@@ -156,6 +193,70 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         watch.Stop();
 
         return BuildResult(context.Settings, watch, "device", "device", total, online, "UniFi controller reachable");
+    }
+
+    private static async ValueTask<SensorExecutionResult> ExecuteLocalLoginAsync(
+        SensorExecutionContext context,
+        string username,
+        string password,
+        bool verifySsl,
+        Stopwatch watch,
+        CancellationToken cancellationToken)
+    {
+        var baseUri = ResolveBaseUri(context, null);
+        if (baseUri is null)
+        {
+            watch.Stop();
+            return SensorExecutionResult.Critical(watch.Elapsed, "local mode needs a controller base URL or host target");
+        }
+
+        using var client = CreateHttpClient(verifySsl);
+        client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+        // UniFi OS login — the auth cookie is stored by the handler's cookie container
+        // and replayed on the device request; the CSRF token is echoed back as a header.
+        var loginPayload = JsonSerializer.Serialize(new { username, password });
+        using var loginContent = new StringContent(loginPayload, System.Text.Encoding.UTF8, "application/json");
+        using var loginResponse = await client.PostAsync(new Uri(baseUri, "api/auth/login"), loginContent, cancellationToken);
+        if (!loginResponse.IsSuccessStatusCode)
+        {
+            watch.Stop();
+            return SensorExecutionResult.Critical(watch.Elapsed, $"UniFi login failed ({(int)loginResponse.StatusCode}). Check the username/password and that 2FA is disabled for this account.");
+        }
+
+        var csrf = loginResponse.Headers.TryGetValues("x-csrf-token", out var csrfValues) ? csrfValues.FirstOrDefault() : null;
+        var site = ResolveSiteName(context.Settings);
+
+        using var deviceRequest = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, $"proxy/network/api/s/{Uri.EscapeDataString(site)}/stat/device"));
+        if (!string.IsNullOrWhiteSpace(csrf))
+        {
+            deviceRequest.Headers.TryAddWithoutValidation("X-CSRF-Token", csrf);
+        }
+
+        using var deviceResponse = await client.SendAsync(deviceRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var body = await deviceResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!deviceResponse.IsSuccessStatusCode)
+        {
+            watch.Stop();
+            return SensorExecutionResult.Critical(watch.Elapsed, $"UniFi device query failed ({(int)deviceResponse.StatusCode}) for site '{site}'");
+        }
+
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        var devices = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array
+            ? data
+            : root;
+        var (total, online) = CountOnline(devices);
+        watch.Stop();
+
+        return BuildResult(context.Settings, watch, "device", "device", total, online, "UniFi controller reachable");
+    }
+
+    private static string ResolveSiteName(MonitoringSettings settings)
+    {
+        return MonitoringSettings.TryReadParameter(settings, "unifi.site", out var site) && !string.IsNullOrWhiteSpace(site)
+            ? site.Trim()
+            : "default";
     }
 
     private static SensorExecutionResult BuildResult(
