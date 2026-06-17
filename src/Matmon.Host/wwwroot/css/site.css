@@ -7679,6 +7679,101 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border: 1px solid var(--matmon-border);
 }
 
+/* --- Schedule editor (smart) --- */
+.schedule-editor-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.schedule-mode-field {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 22rem;
+}
+
+.schedule-every-fields {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.schedule-interval {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
+  max-width: 22rem;
+}
+
+.schedule-interval label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.schedule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.schedule-chip {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.schedule-chip:hover {
+  color: var(--matmon-foreground);
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
+}
+
+.schedule-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px dashed var(--matmon-border);
+  background: color-mix(in srgb, var(--matmon-accent) 7%, transparent);
+}
+
+.schedule-preview-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--matmon-muted);
+}
+
+.schedule-preview-label svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.schedule-preview-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.schedule-preview-time {
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background: var(--matmon-surface-strong);
+  border: 1px solid var(--matmon-border);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .workspace-section-intro {
   margin: 0;
   font-size: 0.82rem;

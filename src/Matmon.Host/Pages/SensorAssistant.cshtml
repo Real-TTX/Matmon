@@ -394,49 +394,7 @@
                 }
             </div>
 
-            <div class="sensor-schedule-section workspace-span-2" data-schedule-editor>
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Schedule</span></h2>
-                    <span class="panel-hint">how often it runs</span>
-                </div>
-                <div class="workspace-form-grid">
-                    <label class="workspace-span-2">
-                        <span>Run</span>
-                        <select asp-for="NewSensor.SchedulePreset" class="form-select workspace-select" data-schedule-preset>
-                            <option value="inherit">inherit (@Model.NewSensor.ScheduleInheritedLabel)</option>
-                            <option value="every-30s">Every 30 seconds</option>
-                            <option value="every-5m">Every 5 minutes</option>
-                            <option value="hourly">Hourly</option>
-                            <option value="every-2h">Every 2 hours</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                            <option value="custom">Custom seconds</option>
-                        </select>
-                    </label>
-                    <label data-schedule-custom>
-                        <span>Every seconds</span>
-                        <input asp-for="NewSensor.ScheduleEverySeconds" type="number" min="1" class="form-control workspace-input" placeholder="300" />
-                    </label>
-                    <label data-schedule-time>
-                        <span>Time</span>
-                        <input asp-for="NewSensor.ScheduleTime" type="time" class="form-control workspace-input" />
-                    </label>
-                    <label data-schedule-weekday>
-                        <span>Weekday</span>
-                        <select asp-for="NewSensor.ScheduleDayOfWeek" class="form-select workspace-select">
-                            @foreach (var day in Enum.GetValues<DayOfWeek>())
-                            {
-                                <option value="@day">@day</option>
-                            }
-                        </select>
-                    </label>
-                    <label data-schedule-monthday>
-                        <span>Day of month</span>
-                        <input asp-for="NewSensor.ScheduleDayOfMonth" type="number" min="1" max="31" class="form-control workspace-input" />
-                    </label>
-                </div>
-            </div>
+            @await Html.PartialAsync("_SensorSchedule", Model.NewSensor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "NewSensor" } })
 
             <details class="workspace-details workspace-span-2">
                 <summary>

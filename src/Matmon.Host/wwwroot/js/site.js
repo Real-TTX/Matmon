@@ -998,35 +998,156 @@ function initializeTemplateScopeEditors() {
 }
 
 function initializeScheduleEditors() {
+  const unitSeconds = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
+  const dowIndex = (name) => {
+    const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const i = days.indexOf(String(name || "").toLowerCase());
+    return i < 0 ? 1 : i;
+  };
+  const formatRun = (d) =>
+    d.toLocaleString(undefined, { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
   document.querySelectorAll("[data-schedule-editor]").forEach((editor) => {
-    const presetSelect = editor.querySelector("[data-schedule-preset]");
-    if (!presetSelect) {
+    const modeSelect = editor.querySelector("[data-schedule-mode]");
+    if (!modeSelect) {
       return;
     }
 
-    const refreshFields = () => {
-      const preset = String(presetSelect.value || "inherit").toLowerCase();
-      const usesTime = preset === "daily" || preset === "weekly" || preset === "monthly";
+    const everyGroup = editor.querySelector("[data-schedule-every]");
+    const timeField = editor.querySelector("[data-schedule-time]");
+    const weekdayField = editor.querySelector("[data-schedule-weekday]");
+    const monthdayField = editor.querySelector("[data-schedule-monthday]");
+    const valueInput = editor.querySelector("[data-schedule-every-value]");
+    const unitInput = editor.querySelector("[data-schedule-every-unit]");
+    const timeInput = editor.querySelector("[data-schedule-time-input]");
+    const weekdayInput = editor.querySelector("[data-schedule-weekday-input]");
+    const monthdayInput = editor.querySelector("[data-schedule-monthday-input]");
+    const preview = editor.querySelector("[data-schedule-preview]");
+    const previewTimes = editor.querySelector("[data-schedule-preview-times]");
 
-      editor.querySelectorAll("[data-schedule-custom]").forEach((field) => {
-        field.hidden = preset !== "custom";
-      });
-
-      editor.querySelectorAll("[data-schedule-time]").forEach((field) => {
-        field.hidden = !usesTime;
-      });
-
-      editor.querySelectorAll("[data-schedule-weekday]").forEach((field) => {
-        field.hidden = preset !== "weekly";
-      });
-
-      editor.querySelectorAll("[data-schedule-monthday]").forEach((field) => {
-        field.hidden = preset !== "monthly";
-      });
+    const setHidden = (el, hidden) => {
+      if (el) {
+        el.hidden = hidden;
+      }
     };
 
-    presetSelect.addEventListener("change", refreshFields);
-    refreshFields();
+    const parseTime = () => {
+      const raw = (timeInput && timeInput.value) || "00:00";
+      const parts = raw.split(":");
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      return { h: isNaN(h) ? 0 : h, m: isNaN(m) ? 0 : m };
+    };
+
+    const buildMonthly = (year, month, dom, h, m) => {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      return new Date(year, month, Math.min(dom, daysInMonth), h, m, 0, 0);
+    };
+
+    const computeNextRuns = (mode) => {
+      const now = new Date();
+      const runs = [];
+
+      if (mode === "every") {
+        const value = Math.max(parseInt((valueInput && valueInput.value) || "0", 10) || 0, 1);
+        const unit = (unitInput && unitInput.value) || "minutes";
+        const stepMs = Math.max(value * (unitSeconds[unit] || 60), 5) * 1000;
+        for (let i = 1; i <= 3; i++) {
+          runs.push(new Date(now.getTime() + stepMs * i));
+        }
+        return runs;
+      }
+
+      const { h, m } = parseTime();
+
+      if (mode === "daily") {
+        const next = new Date(now);
+        next.setHours(h, m, 0, 0);
+        if (next <= now) {
+          next.setDate(next.getDate() + 1);
+        }
+        for (let i = 0; i < 3; i++) {
+          runs.push(new Date(next));
+          next.setDate(next.getDate() + 1);
+        }
+      } else if (mode === "weekly") {
+        const target = dowIndex(weekdayInput && weekdayInput.value);
+        const d = new Date(now);
+        d.setHours(h, m, 0, 0);
+        d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7));
+        if (d <= now) {
+          d.setDate(d.getDate() + 7);
+        }
+        for (let i = 0; i < 3; i++) {
+          runs.push(new Date(d));
+          d.setDate(d.getDate() + 7);
+        }
+      } else if (mode === "monthly") {
+        const dom = Math.min(Math.max(parseInt((monthdayInput && monthdayInput.value) || "1", 10) || 1, 1), 31);
+        let cur = buildMonthly(now.getFullYear(), now.getMonth(), dom, h, m);
+        if (cur <= now) {
+          cur = buildMonthly(now.getFullYear(), now.getMonth() + 1, dom, h, m);
+        }
+        for (let i = 0; i < 3; i++) {
+          runs.push(new Date(cur));
+          cur = buildMonthly(cur.getFullYear(), cur.getMonth() + 1, dom, h, m);
+        }
+      }
+
+      return runs;
+    };
+
+    const refresh = () => {
+      const mode = String(modeSelect.value || "inherit").toLowerCase();
+      const usesTime = mode === "daily" || mode === "weekly" || mode === "monthly";
+
+      setHidden(everyGroup, mode !== "every");
+      setHidden(timeField, !usesTime);
+      setHidden(weekdayField, mode !== "weekly");
+      setHidden(monthdayField, mode !== "monthly");
+
+      if (mode === "inherit") {
+        setHidden(preview, true);
+        return;
+      }
+
+      const runs = computeNextRuns(mode);
+      if (previewTimes) {
+        previewTimes.innerHTML = "";
+        runs.forEach((run) => {
+          const span = document.createElement("span");
+          span.className = "schedule-preview-time";
+          span.textContent = formatRun(run);
+          previewTimes.appendChild(span);
+        });
+      }
+      setHidden(preview, runs.length === 0);
+    };
+
+    modeSelect.addEventListener("change", refresh);
+    [valueInput, unitInput, timeInput, weekdayInput, monthdayInput].forEach((el) => {
+      if (el) {
+        el.addEventListener("change", refresh);
+        el.addEventListener("input", refresh);
+      }
+    });
+
+    editor.querySelectorAll("[data-chip-value]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        if (valueInput) {
+          valueInput.value = chip.dataset.chipValue;
+        }
+        if (unitInput) {
+          unitInput.value = chip.dataset.chipUnit;
+        }
+        if (modeSelect.value !== "every") {
+          modeSelect.value = "every";
+        }
+        refresh();
+      });
+    });
+
+    refresh();
   });
 }
 

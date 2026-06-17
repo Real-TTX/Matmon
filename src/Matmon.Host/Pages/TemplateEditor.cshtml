@@ -197,49 +197,7 @@
                             <option value="disabled">disabled</option>
                         </select>
                     </label>
-                    <div class="workspace-span-2 sensor-schedule-section" data-schedule-editor>
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("clock")<span>Schedule</span></h2>
-                            <span class="panel-hint">inherit: @Model.TemplateEditor.ScheduleInheritedLabel</span>
-                        </div>
-                        <div class="workspace-form-grid">
-                            <label class="workspace-span-2">
-                                <span>Run</span>
-                                <select asp-for="TemplateEditor.SchedulePreset" class="form-select workspace-select" data-schedule-preset>
-                                    <option value="inherit">inherit (@Model.TemplateEditor.ScheduleInheritedLabel)</option>
-                                    <option value="every-30s">Every 30 seconds</option>
-                                    <option value="every-5m">Every 5 minutes</option>
-                                    <option value="hourly">Hourly</option>
-                                    <option value="every-2h">Every 2 hours</option>
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="monthly">Monthly</option>
-                                    <option value="custom">Custom seconds</option>
-                                </select>
-                            </label>
-                            <label data-schedule-custom>
-                                <span>Every seconds</span>
-                                <input asp-for="TemplateEditor.ScheduleEverySeconds" type="number" min="1" class="form-control workspace-input" placeholder="300" />
-                            </label>
-                            <label data-schedule-time>
-                                <span>Time</span>
-                                <input asp-for="TemplateEditor.ScheduleTime" type="time" class="form-control workspace-input" />
-                            </label>
-                            <label data-schedule-weekday>
-                                <span>Weekday</span>
-                                <select asp-for="TemplateEditor.ScheduleDayOfWeek" class="form-select workspace-select">
-                                    @foreach (var day in Enum.GetValues<DayOfWeek>())
-                                    {
-                                        <option value="@day">@day</option>
-                                    }
-                                </select>
-                            </label>
-                            <label data-schedule-monthday>
-                                <span>Day of month</span>
-                                <input asp-for="TemplateEditor.ScheduleDayOfMonth" type="number" min="1" max="31" class="form-control workspace-input" />
-                            </label>
-                        </div>
-                    </div>
+                    @await Html.PartialAsync("_SensorSchedule", Model.TemplateEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "TemplateEditor" } })
                     <label>
                         <span>Timeout</span>
                         <input asp-for="TemplateEditor.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.TimeoutSecondsPlaceholder" />

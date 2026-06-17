@@ -1743,7 +1743,8 @@ public sealed class WorkspaceModel : PageModel
             HighlightInheritedLabel = FormatInheritedBooleanLabel(effectiveSettings.Highlight),
             IsPaused = (element as SensorElement)?.IsPaused ?? false,
             SchedulePreset = scheduleState.Preset,
-            ScheduleEverySeconds = scheduleState.EverySeconds,
+            ScheduleEveryValue = scheduleState.EveryValue,
+            ScheduleEveryUnit = scheduleState.EveryUnit,
             ScheduleDayOfWeek = scheduleState.DayOfWeek,
             ScheduleDayOfMonth = scheduleState.DayOfMonth,
             ScheduleTime = scheduleState.Time,
@@ -1832,7 +1833,8 @@ public sealed class WorkspaceModel : PageModel
             Highlight = localSettings.Highlight,
             HighlightInheritedLabel = FormatInheritedBooleanLabel(effectiveSettings.Highlight),
             SchedulePreset = scheduleState.Preset,
-            ScheduleEverySeconds = scheduleState.EverySeconds,
+            ScheduleEveryValue = scheduleState.EveryValue,
+            ScheduleEveryUnit = scheduleState.EveryUnit,
             ScheduleDayOfWeek = scheduleState.DayOfWeek,
             ScheduleDayOfMonth = scheduleState.DayOfMonth,
             ScheduleTime = scheduleState.Time,
@@ -3526,7 +3528,8 @@ public sealed class WorkspaceModel : PageModel
         ApplyScheduleSettings(
             element.Settings,
             editor.SchedulePreset,
-            editor.ScheduleEverySeconds,
+            editor.ScheduleEveryValue,
+            editor.ScheduleEveryUnit,
             editor.ScheduleDayOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
@@ -3592,7 +3595,8 @@ public sealed class WorkspaceModel : PageModel
         ApplyScheduleSettings(
             template.Settings,
             editor.SchedulePreset,
-            editor.ScheduleEverySeconds,
+            editor.ScheduleEveryValue,
+            editor.ScheduleEveryUnit,
             editor.ScheduleDayOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
@@ -3703,8 +3707,9 @@ public sealed class WorkspaceModel : PageModel
 
     private static void ApplyScheduleSettings(
         MonitoringSettings settings,
-        string? schedulePreset,
-        int? scheduleEverySeconds,
+        string? scheduleMode,
+        int? scheduleEveryValue,
+        string? scheduleEveryUnit,
         DayOfWeek? scheduleDayOfWeek,
         int? scheduleDayOfMonth,
         string? scheduleTime)
@@ -3712,22 +3717,23 @@ public sealed class WorkspaceModel : PageModel
         settings.PollingInterval = null;
         settings.PollingSchedule = null;
 
-        var preset = string.IsNullOrWhiteSpace(schedulePreset)
+        var mode = string.IsNullOrWhiteSpace(scheduleMode)
             ? "inherit"
-            : schedulePreset.Trim().ToLowerInvariant();
+            : scheduleMode.Trim().ToLowerInvariant();
 
-        if (preset == "inherit")
+        if (mode == "inherit")
         {
             return;
         }
 
         var timeOfDay = ParseScheduleTime(scheduleTime);
-        settings.PollingSchedule = preset switch
+        settings.PollingSchedule = mode switch
         {
-            "every-30s" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 30 },
-            "every-5m" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 300 },
-            "hourly" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 3600 },
-            "every-2h" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 7200 },
+            "every" or "custom" => new MonitoringSchedule
+            {
+                Mode = MonitoringScheduleMode.Every,
+                EverySeconds = ResolveEverySeconds(scheduleEveryValue, scheduleEveryUnit)
+            },
             "daily" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Daily, TimeOfDay = timeOfDay },
             "weekly" => new MonitoringSchedule
             {
@@ -3741,13 +3747,28 @@ public sealed class WorkspaceModel : PageModel
                 DayOfMonth = Math.Clamp(scheduleDayOfMonth ?? 1, 1, 31),
                 TimeOfDay = timeOfDay
             },
-            "custom" => new MonitoringSchedule
-            {
-                Mode = MonitoringScheduleMode.Every,
-                EverySeconds = Math.Max(scheduleEverySeconds ?? 300, 1)
-            },
+            // Backward-compat with older fixed presets that may still be posted.
+            "every-30s" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 30 },
+            "every-5m" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 300 },
+            "hourly" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 3600 },
+            "every-2h" => new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 7200 },
             _ => null
         };
+    }
+
+    private static int ResolveEverySeconds(int? value, string? unit)
+    {
+        var safeValue = Math.Max(value ?? 1, 1);
+        var factor = (unit?.Trim().ToLowerInvariant()) switch
+        {
+            "second" or "seconds" or "s" => 1,
+            "hour" or "hours" or "h" => 3600,
+            "day" or "days" or "d" => 86400,
+            _ => 60 // minutes
+        };
+
+        // Enforce a sane minimum so a misconfigured value cannot hammer a target.
+        return Math.Max(safeValue * factor, 5);
     }
 
     private static TimeSpan ParseScheduleTime(string? scheduleTime)
@@ -4364,7 +4385,8 @@ public sealed class WorkspaceModel : PageModel
         ApplyScheduleSettings(
             settings,
             editor.SchedulePreset,
-            editor.ScheduleEverySeconds,
+            editor.ScheduleEveryValue,
+            editor.ScheduleEveryUnit,
             editor.ScheduleDayOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
@@ -4389,7 +4411,8 @@ public sealed class WorkspaceModel : PageModel
         ApplyScheduleSettings(
             settings,
             editor.SchedulePreset,
-            editor.ScheduleEverySeconds,
+            editor.ScheduleEveryValue,
+            editor.ScheduleEveryUnit,
             editor.ScheduleDayOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
@@ -4979,19 +5002,20 @@ public sealed class WorkspaceModel : PageModel
 
     private static ScheduleEditorState BuildScheduleEditorState(MonitoringSettings localSettings, MonitoringSettings effectiveSettings)
     {
-        var (preset, everySeconds, dayOfWeek, dayOfMonth, time) =
+        var (mode, everyValue, everyUnit, dayOfWeek, dayOfMonth, time) =
             ReadScheduleInput(localSettings.PollingSchedule, localSettings.PollingInterval);
 
         return new ScheduleEditorState(
-            preset,
-            everySeconds,
+            mode,
+            everyValue,
+            everyUnit,
             dayOfWeek,
             dayOfMonth,
             time,
             FormatScheduleSummary(effectiveSettings));
     }
 
-    private static (string Preset, int? EverySeconds, DayOfWeek? DayOfWeek, int? DayOfMonth, string? Time)
+    private static (string Mode, int? EveryValue, string EveryUnit, DayOfWeek? DayOfWeek, int? DayOfMonth, string? Time)
         ReadScheduleInput(MonitoringSchedule? schedule, TimeSpan? legacyInterval)
     {
         if (schedule is not null)
@@ -5001,18 +5025,21 @@ public sealed class WorkspaceModel : PageModel
                 MonitoringScheduleMode.Daily => (
                     "daily",
                     null,
+                    "minutes",
                     DayOfWeek.Monday,
                     1,
                     FormatScheduleTime(schedule.TimeOfDay)),
                 MonitoringScheduleMode.Weekly => (
                     "weekly",
                     null,
+                    "minutes",
                     schedule.DayOfWeek ?? DayOfWeek.Monday,
                     1,
                     FormatScheduleTime(schedule.TimeOfDay)),
                 MonitoringScheduleMode.Monthly => (
                     "monthly",
                     null,
+                    "minutes",
                     DayOfWeek.Monday,
                     Math.Clamp(schedule.DayOfMonth ?? 1, 1, 31),
                     FormatScheduleTime(schedule.TimeOfDay)),
@@ -5025,21 +5052,31 @@ public sealed class WorkspaceModel : PageModel
             return BuildEveryScheduleInput((int)Math.Round(interval.TotalSeconds));
         }
 
-        return ("inherit", null, DayOfWeek.Monday, 1, "00:00");
+        return ("inherit", null, "minutes", DayOfWeek.Monday, 1, "00:00");
     }
 
-    private static (string Preset, int? EverySeconds, DayOfWeek? DayOfWeek, int? DayOfMonth, string? Time)
+    private static (string Mode, int? EveryValue, string EveryUnit, DayOfWeek? DayOfWeek, int? DayOfMonth, string? Time)
         BuildEveryScheduleInput(int seconds)
     {
         var safeSeconds = Math.Max(seconds, 1);
-        return safeSeconds switch
+
+        // Express the interval in the largest whole unit so the editor shows a clean value.
+        if (safeSeconds % 86400 == 0)
         {
-            30 => ("every-30s", null, DayOfWeek.Monday, 1, "00:00"),
-            300 => ("every-5m", null, DayOfWeek.Monday, 1, "00:00"),
-            3600 => ("hourly", null, DayOfWeek.Monday, 1, "00:00"),
-            7200 => ("every-2h", null, DayOfWeek.Monday, 1, "00:00"),
-            _ => ("custom", safeSeconds, DayOfWeek.Monday, 1, "00:00")
-        };
+            return ("every", safeSeconds / 86400, "days", DayOfWeek.Monday, 1, "00:00");
+        }
+
+        if (safeSeconds % 3600 == 0)
+        {
+            return ("every", safeSeconds / 3600, "hours", DayOfWeek.Monday, 1, "00:00");
+        }
+
+        if (safeSeconds % 60 == 0)
+        {
+            return ("every", safeSeconds / 60, "minutes", DayOfWeek.Monday, 1, "00:00");
+        }
+
+        return ("every", safeSeconds, "seconds", DayOfWeek.Monday, 1, "00:00");
     }
 
     private static string FormatScheduleSummary(MonitoringSettings settings)
@@ -6307,7 +6344,28 @@ public interface ISensorThresholdEditor
     List<WorkspaceSensorChannelThresholdFieldInput> SensorChannelThresholdFields { get; }
 }
 
-public sealed class CreateSensorInput : ISensorThresholdEditor
+/// <summary>Shared binding surface for the reusable <c>_SensorSchedule</c> editor partial.</summary>
+public interface ISensorScheduleEditor
+{
+    /// <summary>Schedule mode: inherit | every | daily | weekly | monthly.</summary>
+    string SchedulePreset { get; set; }
+
+    /// <summary>For "every": the interval value expressed in <see cref="ScheduleEveryUnit"/>.</summary>
+    int? ScheduleEveryValue { get; set; }
+
+    /// <summary>For "every": seconds | minutes | hours | days.</summary>
+    string ScheduleEveryUnit { get; set; }
+
+    DayOfWeek? ScheduleDayOfWeek { get; set; }
+
+    int? ScheduleDayOfMonth { get; set; }
+
+    string? ScheduleTime { get; set; }
+
+    string? ScheduleInheritedLabel { get; set; }
+}
+
+public sealed class CreateSensorInput : ISensorThresholdEditor, ISensorScheduleEditor
 {
     public string Name { get; set; } = string.Empty;
 
@@ -6333,7 +6391,9 @@ public sealed class CreateSensorInput : ISensorThresholdEditor
 
     public string SchedulePreset { get; set; } = "inherit";
 
-    public int? ScheduleEverySeconds { get; set; }
+    public int? ScheduleEveryValue { get; set; }
+
+    public string ScheduleEveryUnit { get; set; } = "minutes";
 
     public DayOfWeek? ScheduleDayOfWeek { get; set; } = DayOfWeek.Monday;
 
@@ -6460,7 +6520,7 @@ public sealed class WorkspaceNotificationReceiverEditorInput : CreateNotificatio
     public Guid Id { get; set; }
 }
 
-public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor
+public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISensorScheduleEditor
 {
     public Guid Id { get; set; }
 
@@ -6492,7 +6552,9 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor
 
     public string SchedulePreset { get; set; } = "inherit";
 
-    public int? ScheduleEverySeconds { get; set; }
+    public int? ScheduleEveryValue { get; set; }
+
+    public string ScheduleEveryUnit { get; set; } = "minutes";
 
     public DayOfWeek? ScheduleDayOfWeek { get; set; } = DayOfWeek.Monday;
 
@@ -6660,7 +6722,8 @@ public sealed class WorkspaceSnmpWalkItemInput
 
 internal sealed record ScheduleEditorState(
     string Preset,
-    int? EverySeconds,
+    int? EveryValue,
+    string EveryUnit,
     DayOfWeek? DayOfWeek,
     int? DayOfMonth,
     string? Time,
@@ -6674,7 +6737,7 @@ internal sealed record SensorThresholdEditorState(
     List<WorkspaceSensorChannelThresholdFieldInput> Fields,
     int VisibleCount);
 
-public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor
+public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISensorScheduleEditor
 {
     public Guid Id { get; set; }
 
@@ -6712,7 +6775,9 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor
 
     public string SchedulePreset { get; set; } = "inherit";
 
-    public int? ScheduleEverySeconds { get; set; }
+    public int? ScheduleEveryValue { get; set; }
+
+    public string ScheduleEveryUnit { get; set; } = "minutes";
 
     public DayOfWeek? ScheduleDayOfWeek { get; set; } = DayOfWeek.Monday;
 

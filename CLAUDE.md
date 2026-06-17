@@ -71,7 +71,7 @@ All under the `Matmon__` prefix (see `appsettings.json` + README). Common: `Matm
 ## Conventions
 
 - C# nullable + implicit usings on; modern C# (collection expressions `[]`, records, pattern matching). Keep new code matching the surrounding style.
-- Razor Pages, one page = `Xxx.cshtml` + `Xxx.cshtml.cs`. Create/Edit dialogs are the `*Create` / `*Edit` / `*Editor` pages.
+- Razor Pages, one page = `Xxx.cshtml` + `Xxx.cshtml.cs`. Create/Edit dialogs are the `*Create` / `*Edit` / `*Editor` pages. The sensor editors (SensorCreate, SensorAssistant, ElementEditor, TemplateEditor) share two partials to avoid duplication: `Pages/Shared/_SensorThresholds.cshtml` (`@model ISensorThresholdEditor`) and `_SensorSchedule.cshtml` (`@model ISensorScheduleEditor`). Each input model in `Workspace.cshtml.cs` implements those interfaces; render with `Html.PartialAsync(..., new ViewDataDictionary(ViewData){ TemplateInfo = { HtmlFieldPrefix = "<Prefix>" } })`. The schedule editor is mode-based (inherit/every/daily/weekly/monthly) with value+unit intervals and a JS live "next runs" preview (`initializeScheduleEditors` in site.js).
 - All workspace mutations go through `IMonitoringWorkspaceStore` and must run under its `_gate`; they call `QueueSave(SavePriority.*)`.
 - `DashboardSnapshotProvider.CreateSnapshot()` is **heavy** — it clones the workspace twice, builds a telemetry series (graph points) for every sensor and calls `SyncAlerts` (a GET-time mutation). Use it only on the dashboard (`/Index`) and `/api/dashboard`. The shared `_Layout` summary strip uses the cheap `GetWorkspaceSummary()` (topology counts only); never put `CreateSnapshot()` on a path that runs for every page.
 - Keep the build green (`dotnet build Matmon.slnx`) after each change.

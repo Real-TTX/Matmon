@@ -1,0 +1,75 @@
+@model ISensorScheduleEditor
+@{
+    var inheritedLabel = string.IsNullOrWhiteSpace(Model.ScheduleInheritedLabel) ? "default" : Model.ScheduleInheritedLabel;
+}
+<div class="sensor-schedule-section workspace-span-2" data-schedule-editor data-sensor-tab="schedule">
+    <div class="panel-header">
+        <h2 class="section-title">@MatmonIcons.Render("clock")<span>Schedule</span></h2>
+        <span class="panel-hint" data-schedule-inherited="@inheritedLabel">inherit: @inheritedLabel</span>
+    </div>
+
+    <div class="schedule-editor-grid">
+        <label class="schedule-mode-field">
+            <span>Run</span>
+            <select asp-for="SchedulePreset" class="form-select workspace-select" data-schedule-mode>
+                <option value="inherit">Inherit (@inheritedLabel)</option>
+                <option value="every">Every interval</option>
+                <option value="daily">Daily at time</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+            </select>
+        </label>
+
+        <div class="schedule-every-fields" data-schedule-every hidden>
+            <div class="schedule-interval">
+                <label>
+                    <span>Every</span>
+                    <input asp-for="ScheduleEveryValue" type="number" min="1" class="form-control workspace-input" placeholder="5" data-schedule-every-value />
+                </label>
+                <label>
+                    <span>Unit</span>
+                    <select asp-for="ScheduleEveryUnit" class="form-select workspace-select" data-schedule-every-unit>
+                        <option value="seconds">seconds</option>
+                        <option value="minutes">minutes</option>
+                        <option value="hours">hours</option>
+                        <option value="days">days</option>
+                    </select>
+                </label>
+            </div>
+            <div class="schedule-chips" data-schedule-chips>
+                <button type="button" class="schedule-chip" data-chip-value="30" data-chip-unit="seconds">30s</button>
+                <button type="button" class="schedule-chip" data-chip-value="1" data-chip-unit="minutes">1m</button>
+                <button type="button" class="schedule-chip" data-chip-value="5" data-chip-unit="minutes">5m</button>
+                <button type="button" class="schedule-chip" data-chip-value="15" data-chip-unit="minutes">15m</button>
+                <button type="button" class="schedule-chip" data-chip-value="1" data-chip-unit="hours">1h</button>
+                <button type="button" class="schedule-chip" data-chip-value="6" data-chip-unit="hours">6h</button>
+                <button type="button" class="schedule-chip" data-chip-value="1" data-chip-unit="days">1d</button>
+            </div>
+        </div>
+
+        <label data-schedule-time hidden>
+            <span>Time of day</span>
+            <input asp-for="ScheduleTime" type="time" class="form-control workspace-input" data-schedule-time-input />
+        </label>
+
+        <label data-schedule-weekday hidden>
+            <span>Weekday</span>
+            <select asp-for="ScheduleDayOfWeek" class="form-select workspace-select" data-schedule-weekday-input>
+                @foreach (var day in Enum.GetValues<DayOfWeek>())
+                {
+                    <option value="@day">@day</option>
+                }
+            </select>
+        </label>
+
+        <label data-schedule-monthday hidden>
+            <span>Day of month</span>
+            <input asp-for="ScheduleDayOfMonth" type="number" min="1" max="31" class="form-control workspace-input" data-schedule-monthday-input />
+        </label>
+    </div>
+
+    <div class="schedule-preview" data-schedule-preview hidden>
+        <span class="schedule-preview-label">@MatmonIcons.Render("clock")<span>Next runs</span></span>
+        <div class="schedule-preview-times" data-schedule-preview-times></div>
+    </div>
+</div>
