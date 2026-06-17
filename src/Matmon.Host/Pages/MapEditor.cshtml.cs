@@ -63,6 +63,7 @@ public sealed class MapEditorModel : PageModel
         Input.Tiles.Add(new MapTileInput
         {
             Id = Guid.NewGuid(),
+            SlideId = Input.Slides.FirstOrDefault()?.Id ?? Guid.Empty,
             Kind = MonitoringMapTileKind.Element,
             Title = $"Tile {Input.Tiles.Count + 1}",
             X = 1,
@@ -79,39 +80,17 @@ public sealed class MapEditorModel : PageModel
     {
         try
         {
-            var tiles = Input.Tiles
-                .Where(tile => !tile.IsDeleted)
-                .Select(tile => new MonitoringMapTile
-                {
-                    Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
-                    Kind = tile.Kind,
-                    Title = tile.Title,
-                    ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
-                    Text = tile.Text,
-                    X = tile.X,
-                    Y = tile.Y,
-                    Width = tile.Width,
-                    Height = tile.Height,
-                    BackgroundColor = tile.BackgroundColor,
-                    AccentColor = tile.AccentColor,
-                    TextColor = tile.TextColor,
-                    GraphType = tile.GraphType,
-                    VisualType = tile.VisualType,
-                    ShowTitle = tile.ShowTitle,
-                    ShowStateBadge = tile.ShowStateBadge,
-                    ShowElementName = tile.ShowElementName
-                })
-                .ToArray();
+            var slides = BuildSlidesFromInput();
 
             var mapId = Input.Id ?? Guid.Empty;
             MonitoringMap map;
             if (mapId == Guid.Empty)
             {
-                map = _workspaceStore.CreateMap(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, tiles);
+                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, slides);
             }
             else
             {
-                if (!_workspaceStore.UpdateMap(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, tiles))
+                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, slides))
                 {
                     return NotFound();
                 }
@@ -129,6 +108,57 @@ public sealed class MapEditorModel : PageModel
         }
     }
 
+    private IReadOnlyList<MonitoringMapSlide> BuildSlidesFromInput()
+    {
+        var slideDefs = Input.Slides
+            .Where(slide => slide.Id != Guid.Empty)
+            .GroupBy(slide => slide.Id)
+            .Select(group => group.First())
+            .ToList();
+
+        if (slideDefs.Count == 0)
+        {
+            slideDefs.Add(new MapSlideInput { Id = Guid.NewGuid(), Name = "Slide 1" });
+        }
+
+        var validIds = slideDefs.Select(slide => slide.Id).ToHashSet();
+        var firstId = slideDefs[0].Id;
+
+        return slideDefs
+            .Select(def => new MonitoringMapSlide
+            {
+                Id = def.Id,
+                Name = def.Name,
+                Tiles = Input.Tiles
+                    .Where(tile => !tile.IsDeleted)
+                    .Where(tile => (validIds.Contains(tile.SlideId) ? tile.SlideId : firstId) == def.Id)
+                    .Select(ToTile)
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    private static MonitoringMapTile ToTile(MapTileInput tile) => new()
+    {
+        Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
+        Kind = tile.Kind,
+        Title = tile.Title,
+        ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
+        Text = tile.Text,
+        X = tile.X,
+        Y = tile.Y,
+        Width = tile.Width,
+        Height = tile.Height,
+        BackgroundColor = tile.BackgroundColor,
+        AccentColor = tile.AccentColor,
+        TextColor = tile.TextColor,
+        GraphType = tile.GraphType,
+        VisualType = tile.VisualType,
+        ShowTitle = tile.ShowTitle,
+        ShowStateBadge = tile.ShowStateBadge,
+        ShowElementName = tile.ShowElementName
+    };
+
     public IActionResult OnPostDelete()
     {
         if (Input.Id is not Guid mapId || mapId == Guid.Empty)
@@ -144,6 +174,7 @@ public sealed class MapEditorModel : PageModel
     {
         if (mapId is Guid id && _workspaceStore.FindMap(id) is { } map)
         {
+            var slides = map.EffectiveSlides();
             Input = new MapEditorInput
             {
                 Id = map.Id,
@@ -152,9 +183,11 @@ public sealed class MapEditorModel : PageModel
                 Columns = map.Columns,
                 Rows = map.Rows,
                 DisplayPreset = map.DisplayPreset,
-                Tiles = map.Tiles.Select(tile => new MapTileInput
+                Slides = slides.Select(slide => new MapSlideInput { Id = slide.Id, Name = slide.Name }).ToList(),
+                Tiles = slides.SelectMany(slide => slide.Tiles.Select(tile => new MapTileInput
                 {
                     Id = tile.Id,
+                    SlideId = slide.Id,
                     Kind = tile.Kind,
                     Title = tile.Title,
                     ElementId = tile.ElementId,
@@ -171,11 +204,12 @@ public sealed class MapEditorModel : PageModel
                     ShowTitle = tile.ShowTitle,
                     ShowStateBadge = tile.ShowStateBadge,
                     ShowElementName = tile.ShowElementName
-                }).ToList()
+                })).ToList()
             };
         }
         else
         {
+            var defaultSlideId = Guid.NewGuid();
             Input = new MapEditorInput
             {
                 Id = null,
@@ -184,11 +218,13 @@ public sealed class MapEditorModel : PageModel
                 Columns = 12,
                 Rows = 8,
                 DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
+                Slides = [new MapSlideInput { Id = defaultSlideId, Name = "Slide 1" }],
                 Tiles =
                 [
                     new MapTileInput
                     {
                         Id = Guid.NewGuid(),
+                        SlideId = defaultSlideId,
                         Kind = MonitoringMapTileKind.Status,
                         Title = "Status",
                         X = 1,
@@ -250,11 +286,22 @@ public sealed class MapEditorInput
     public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
 
     public List<MapTileInput> Tiles { get; set; } = [];
+
+    public List<MapSlideInput> Slides { get; set; } = [];
+}
+
+public sealed class MapSlideInput
+{
+    public Guid Id { get; set; }
+
+    public string Name { get; set; } = "Slide";
 }
 
 public sealed class MapTileInput
 {
     public Guid Id { get; set; }
+
+    public Guid SlideId { get; set; }
 
     public MonitoringMapTileKind Kind { get; set; } = MonitoringMapTileKind.Element;
 

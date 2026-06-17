@@ -1980,6 +1980,14 @@ function initializeMapDesigner() {
   const propertyHost = form?.querySelector("[data-map-property-host]");
   const propertyEmpty = form?.querySelector("[data-map-property-empty]");
   const template = form?.querySelector("template[data-map-tile-template]");
+  const slideStrip = form?.querySelector("[data-map-slide-strip]");
+  const slideTabsHost = slideStrip?.querySelector("[data-map-slide-tabs]");
+  const slideInputsHost = slideStrip?.querySelector("[data-map-slide-inputs]");
+  const slideAddButton = slideStrip?.querySelector("[data-map-slide-add]");
+  const slideRenameButton = slideStrip?.querySelector("[data-map-slide-rename]");
+  const slideDeleteButton = slideStrip?.querySelector("[data-map-slide-delete]");
+  let slides = [];
+  let activeSlideId = "";
   const numericKindMap = {
     "0": "Text",
     "1": "Element",
@@ -2438,6 +2446,7 @@ function initializeMapDesigner() {
     const html = template.innerHTML
       .replaceAll("__index__", String(index))
       .replaceAll("__id__", createId())
+      .replaceAll("__slideId__", activeSlideId || "")
       .replaceAll("__kind__", kind)
       .replaceAll("__kindLabel__", getKindLabel(kind))
       .replaceAll("__title__", title)
@@ -2473,7 +2482,124 @@ function initializeMapDesigner() {
   rowInput?.addEventListener("input", () => syncGrid());
   rowInput?.addEventListener("change", () => syncGrid(true));
 
+  const renderSlideInputs = () => {
+    if (!slideInputsHost) {
+      return;
+    }
+    slideInputsHost.replaceChildren();
+    slides.forEach((slide, index) => {
+      const idInput = document.createElement("input");
+      idInput.type = "hidden";
+      idInput.name = `Input.Slides[${index}].Id`;
+      idInput.value = slide.id;
+      const nameInput = document.createElement("input");
+      nameInput.type = "hidden";
+      nameInput.name = `Input.Slides[${index}].Name`;
+      nameInput.value = slide.name;
+      slideInputsHost.append(idInput, nameInput);
+    });
+  };
+
+  const renderSlideTabs = () => {
+    if (!slideTabsHost) {
+      return;
+    }
+    slideTabsHost.replaceChildren();
+    slides.forEach((slide) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "map-slide-tab" + (slide.id === activeSlideId ? " is-active" : "");
+      tab.dataset.slideId = slide.id;
+      tab.setAttribute("data-map-slide-tab", "");
+      tab.textContent = slide.name;
+      tab.addEventListener("click", () => setActiveSlide(slide.id));
+      slideTabsHost.appendChild(tab);
+    });
+  };
+
+  const applySlideFilter = () => {
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      const deleted = tile.querySelector("[data-map-tile-deleted]")?.value === "true";
+      const onActiveSlide = (tile.dataset.slideId || "") === activeSlideId;
+      tile.hidden = deleted || !onActiveSlide;
+    });
+  };
+
+  const setActiveSlide = (id) => {
+    if (!id) {
+      return;
+    }
+    activeSlideId = id;
+    slideTabsHost?.querySelectorAll("[data-map-slide-tab]").forEach((tab) => {
+      tab.classList.toggle("is-active", tab.dataset.slideId === activeSlideId);
+    });
+    applySlideFilter();
+    selectMap();
+  };
+
+  const addSlide = () => {
+    const id = createId();
+    slides.push({ id, name: `Slide ${slides.length + 1}` });
+    renderSlideInputs();
+    renderSlideTabs();
+    setActiveSlide(id);
+  };
+
+  const renameSlide = () => {
+    const slide = slides.find((candidate) => candidate.id === activeSlideId);
+    if (!slide) {
+      return;
+    }
+    const name = window.prompt("Slide name", slide.name);
+    if (name === null) {
+      return;
+    }
+    slide.name = name.trim() || slide.name;
+    renderSlideInputs();
+    renderSlideTabs();
+  };
+
+  const deleteSlide = () => {
+    if (slides.length <= 1) {
+      window.alert("A map needs at least one slide.");
+      return;
+    }
+    if (!window.confirm("Delete this slide and all its tiles?")) {
+      return;
+    }
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      if ((tile.dataset.slideId || "") === activeSlideId) {
+        const deleted = tile.querySelector("[data-map-tile-deleted]");
+        if (deleted) {
+          deleted.value = "true";
+        }
+        tile.hidden = true;
+      }
+    });
+    slides = slides.filter((candidate) => candidate.id !== activeSlideId);
+    renderSlideInputs();
+    renderSlideTabs();
+    setActiveSlide(slides[0].id);
+  };
+
+  slides = slideTabsHost
+    ? Array.from(slideTabsHost.querySelectorAll("[data-map-slide-tab]")).map((tab) => ({
+        id: tab.dataset.slideId,
+        name: tab.textContent.trim()
+      }))
+    : [];
+  if (slides.length === 0) {
+    slides = [{ id: createId(), name: "Slide 1" }];
+  }
+  activeSlideId = slides[0].id;
+  renderSlideInputs();
+  renderSlideTabs();
+  slideAddButton?.addEventListener("click", addSlide);
+  slideRenameButton?.addEventListener("click", renameSlide);
+  slideDeleteButton?.addEventListener("click", deleteSlide);
+
   canvas.querySelectorAll("[data-map-tile]").forEach(setupTile);
+  applySlideFilter();
   syncGrid(true);
 
   document.querySelectorAll("[data-map-tool-kind]").forEach((tool) => {

@@ -366,6 +366,97 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public MonitoringMap CreateMapWithSlides(
+        string name,
+        string? description,
+        int columns,
+        int rows,
+        MonitoringMapDisplayPreset displayPreset,
+        IReadOnlyList<MonitoringMapSlide> slides)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var now = DateTimeOffset.UtcNow;
+            var normalizedColumns = Math.Clamp(columns, 4, 24);
+            var normalizedRows = Math.Clamp(rows, 3, 16);
+            var normalizedSlides = NormalizeMapSlides(slides, normalizedColumns, normalizedRows);
+            var map = new MonitoringMap
+            {
+                Name = NormalizeMapName(name),
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+                Columns = normalizedColumns,
+                Rows = normalizedRows,
+                DisplayPreset = displayPreset,
+                PublicToken = CreateToken(),
+                CreatedUtc = now,
+                UpdatedUtc = now,
+                Slides = normalizedSlides,
+                Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList()
+            };
+
+            _document.Maps.Add(map);
+            QueueSave(SavePriority.Configuration);
+            return CloneMap(map);
+        }
+    }
+
+    public bool UpdateMapWithSlides(
+        Guid mapId,
+        string name,
+        string? description,
+        int columns,
+        int rows,
+        MonitoringMapDisplayPreset displayPreset,
+        IReadOnlyList<MonitoringMapSlide> slides)
+    {
+        lock (_gate)
+        {
+            EnsureDefaultMaps();
+            var map = _document.Maps.FirstOrDefault(candidate => candidate.Id == mapId);
+            if (map is null)
+            {
+                return false;
+            }
+
+            var normalizedColumns = Math.Clamp(columns, 4, 24);
+            var normalizedRows = Math.Clamp(rows, 3, 16);
+            var normalizedSlides = NormalizeMapSlides(slides, normalizedColumns, normalizedRows);
+            map.Name = NormalizeMapName(name);
+            map.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            map.Columns = normalizedColumns;
+            map.Rows = normalizedRows;
+            map.DisplayPreset = displayPreset;
+            map.Slides = normalizedSlides;
+            map.Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList();
+            map.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    private static List<MonitoringMapSlide> NormalizeMapSlides(
+        IReadOnlyList<MonitoringMapSlide> slides,
+        int columns,
+        int rows)
+    {
+        var result = (slides ?? [])
+            .Select((slide, index) => new MonitoringMapSlide
+            {
+                Id = slide.Id == Guid.Empty ? Guid.NewGuid() : slide.Id,
+                Name = string.IsNullOrWhiteSpace(slide.Name) ? $"Slide {index + 1}" : slide.Name.Trim(),
+                Tiles = NormalizeMapTiles(slide.Tiles ?? [], columns, rows).ToList()
+            })
+            .ToList();
+
+        if (result.Count == 0)
+        {
+            result.Add(new MonitoringMapSlide { Name = "Slide 1" });
+        }
+
+        return result;
+    }
+
     public string RotateMapPublicToken(Guid mapId)
     {
         lock (_gate)

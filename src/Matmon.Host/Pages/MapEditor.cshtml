@@ -71,6 +71,29 @@
                         </span>
                         <em data-map-grid-preview>@MapPresetText(Model.Input.DisplayPreset) · @Model.Input.Columns x @Model.Input.Rows grid</em>
                     </button>
+
+                    <div class="map-slide-strip" data-map-slide-strip>
+                        <div class="map-slide-tabs" data-map-slide-tabs>
+                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                            {
+                                var slide = Model.Input.Slides[slideIndex];
+                                <button type="button" class="map-slide-tab @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id">@slide.Name</button>
+                            }
+                        </div>
+                        <div class="map-slide-actions">
+                            <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
+                            <button type="button" class="map-slide-action" data-map-slide-rename title="Rename current slide">@MatmonIcons.Render("pencil")</button>
+                            <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
+                        </div>
+                        <div data-map-slide-inputs hidden>
+                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                            {
+                                <input type="hidden" name="Input.Slides[@slideIndex].Id" value="@Model.Input.Slides[slideIndex].Id" />
+                                <input type="hidden" name="Input.Slides[@slideIndex].Name" value="@Model.Input.Slides[slideIndex].Name" />
+                            }
+                        </div>
+                    </div>
+
                     <div class="map-editor-canvas"
                          data-map-designer
                          data-next-tile-index="@Model.Input.Tiles.Count"
@@ -81,11 +104,13 @@
                             <article class="map-tile map-tile-editor"
                                      data-map-tile
                                      data-tile-index="@index"
+                                     data-slide-id="@tile.SlideId"
                                      data-state="ok"
                                      data-kind="@tile.Kind"
                                      style="--tile-x: @tile.X; --tile-y: @tile.Y; --tile-w: @tile.Width; --tile-h: @tile.Height; @TileStyle(tile)"
                                      hidden="@(tile.IsDeleted ? "hidden" : null)">
                                 <input type="hidden" asp-for="Input.Tiles[index].Id" />
+                                <input type="hidden" asp-for="Input.Tiles[index].SlideId" data-map-tile-slide-id />
                                 <input type="hidden" asp-for="Input.Tiles[index].IsDeleted" data-map-tile-deleted />
                                 <input type="hidden" asp-for="Input.Tiles[index].X" data-map-tile-x />
                                 <input type="hidden" asp-for="Input.Tiles[index].Y" data-map-tile-y />
@@ -209,10 +234,12 @@
                 <article class="map-tile map-tile-editor"
                          data-map-tile
                          data-tile-index="__index__"
+                         data-slide-id="__slideId__"
                          data-state="ok"
                          data-kind="__kind__"
                          style="--tile-x: __x__; --tile-y: __y__; --tile-w: __w__; --tile-h: __h__;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
+                    <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
                     <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
                     <input type="hidden" name="Input.Tiles[__index__].X" value="__x__" data-map-tile-x />
                     <input type="hidden" name="Input.Tiles[__index__].Y" value="__y__" data-map-tile-y />

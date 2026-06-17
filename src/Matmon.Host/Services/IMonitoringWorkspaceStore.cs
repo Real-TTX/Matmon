@@ -33,6 +33,10 @@ public interface IMonitoringWorkspaceStore
 
     bool UpdateMap(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapTile> tiles);
 
+    MonitoringMap CreateMapWithSlides(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapSlide> slides);
+
+    bool UpdateMapWithSlides(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapSlide> slides);
+
     string RotateMapPublicToken(Guid mapId);
 
     bool DeleteMap(Guid mapId);

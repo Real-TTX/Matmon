@@ -7700,6 +7700,67 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   color: var(--matmon-foreground);
 }
 
+/* --- Map editor slide strip --- */
+.map-slide-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.map-slide-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.map-slide-tab {
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.map-slide-tab.is-active {
+  background: color-mix(in srgb, var(--matmon-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+  color: var(--matmon-foreground);
+}
+
+.map-slide-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.map-slide-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-foreground);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.map-slide-action:hover {
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+}
+
+.map-slide-action-danger:hover {
+  border-color: color-mix(in srgb, var(--matmon-danger) 55%, transparent);
+  color: var(--matmon-danger);
+}
+
 .system-user-table {
   gap: 0;
 }
