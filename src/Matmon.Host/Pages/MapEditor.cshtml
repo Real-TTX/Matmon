@@ -164,6 +164,16 @@
                                 <input asp-for="Input.Rows" type="number" min="3" max="16" class="form-control workspace-input" data-map-rows />
                             </label>
                         </div>
+                        <div class="map-property-section">
+                            <span class="workspace-label">Wallboard</span>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Auto-rotate (seconds per slide)</span>
+                                <input asp-for="Input.AutoRotateSeconds" type="number" min="3" max="600" class="form-control workspace-input" />
+                            </label>
+                            <div class="map-property-hint">
+                                Used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
+                            </div>
+                        </div>
                         <div class="map-property-hint">
                             This edits the map itself. Click a tile to switch the property editor to that control.
                         </div>

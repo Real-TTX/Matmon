@@ -26,7 +26,7 @@
             <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
         </header>
 
-        <div class="map-carousel public-map-carousel" data-map-carousel data-map-carousel-autoplay>
+        <div class="map-carousel public-map-carousel" data-map-carousel data-map-carousel-autoplay data-map-carousel-interval="@display.Map.AutoRotateSeconds">
             @for (var slideIndex = 0; slideIndex < display.Slides.Count; slideIndex++)
             {
                 var slide = display.Slides[slideIndex];

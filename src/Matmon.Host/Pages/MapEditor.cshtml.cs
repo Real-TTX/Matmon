@@ -86,11 +86,11 @@ public sealed class MapEditorModel : PageModel
             MonitoringMap map;
             if (mapId == Guid.Empty)
             {
-                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, slides);
+                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, slides);
             }
             else
             {
-                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, slides))
+                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, slides))
                 {
                     return NotFound();
                 }
@@ -183,6 +183,7 @@ public sealed class MapEditorModel : PageModel
                 Columns = map.Columns,
                 Rows = map.Rows,
                 DisplayPreset = map.DisplayPreset,
+                AutoRotateSeconds = map.AutoRotateSeconds,
                 Slides = slides.Select(slide => new MapSlideInput { Id = slide.Id, Name = slide.Name }).ToList(),
                 Tiles = slides.SelectMany(slide => slide.Tiles.Select(tile => new MapTileInput
                 {
@@ -218,6 +219,7 @@ public sealed class MapEditorModel : PageModel
                 Columns = 12,
                 Rows = 8,
                 DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
+                AutoRotateSeconds = 12,
                 Slides = [new MapSlideInput { Id = defaultSlideId, Name = "Slide 1" }],
                 Tiles =
                 [
@@ -284,6 +286,8 @@ public sealed class MapEditorInput
     public int Rows { get; set; } = 8;
 
     public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
+
+    public int AutoRotateSeconds { get; set; } = 12;
 
     public List<MapTileInput> Tiles { get; set; } = [];
 

@@ -16,6 +16,9 @@ public sealed class MonitoringMap
 
     public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
 
+    /// <summary>Seconds each slide is shown before the public wallboard auto-advances to the next slide.</summary>
+    public int AutoRotateSeconds { get; set; } = 12;
+
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;

@@ -47,7 +47,9 @@ function initializeMapCarousel() {
     const dots = Array.from(scope.querySelectorAll("[data-map-carousel-dot]"));
     const prev = scope.querySelector("[data-map-carousel-prev]");
     const next = scope.querySelector("[data-map-carousel-next]");
-    const intervalMs = 12000;
+    const autoplay = carousel.hasAttribute("data-map-carousel-autoplay");
+    const intervalSeconds = parseInt(carousel.dataset.mapCarouselInterval || "", 10);
+    const intervalMs = Math.max(3, Number.isFinite(intervalSeconds) ? intervalSeconds : 12) * 1000;
     let active = 0;
     let timer = null;
 
@@ -67,6 +69,9 @@ function initializeMapCarousel() {
     };
 
     const start = () => {
+      if (!autoplay) {
+        return;
+      }
       stop();
       timer = setInterval(() => show(active + 1), intervalMs);
     };
@@ -79,8 +84,10 @@ function initializeMapCarousel() {
     }
     dots.forEach((dot, index) => dot.addEventListener("click", () => { show(index); start(); }));
 
-    carousel.addEventListener("mouseenter", stop);
-    carousel.addEventListener("mouseleave", start);
+    if (autoplay) {
+      carousel.addEventListener("mouseenter", stop);
+      carousel.addEventListener("mouseleave", start);
+    }
 
     show(0);
     start();

@@ -372,6 +372,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         int columns,
         int rows,
         MonitoringMapDisplayPreset displayPreset,
+        int autoRotateSeconds,
         IReadOnlyList<MonitoringMapSlide> slides)
     {
         lock (_gate)
@@ -388,6 +389,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 Columns = normalizedColumns,
                 Rows = normalizedRows,
                 DisplayPreset = displayPreset,
+                AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds),
                 PublicToken = CreateToken(),
                 CreatedUtc = now,
                 UpdatedUtc = now,
@@ -408,6 +410,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         int columns,
         int rows,
         MonitoringMapDisplayPreset displayPreset,
+        int autoRotateSeconds,
         IReadOnlyList<MonitoringMapSlide> slides)
     {
         lock (_gate)
@@ -427,6 +430,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             map.Columns = normalizedColumns;
             map.Rows = normalizedRows;
             map.DisplayPreset = displayPreset;
+            map.AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds);
             map.Slides = normalizedSlides;
             map.Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList();
             map.UpdatedUtc = DateTimeOffset.UtcNow;
@@ -434,6 +438,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             return true;
         }
     }
+
+    private static int NormalizeAutoRotateSeconds(int seconds) => Math.Clamp(seconds, 3, 600);
 
     private static List<MonitoringMapSlide> NormalizeMapSlides(
         IReadOnlyList<MonitoringMapSlide> slides,
@@ -3142,6 +3148,7 @@ try {
             Columns = source.Columns,
             Rows = source.Rows,
             DisplayPreset = source.DisplayPreset,
+            AutoRotateSeconds = source.AutoRotateSeconds,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc,
             Tiles = source.Tiles.Select(CloneMapTile).ToList(),
