@@ -5777,6 +5777,189 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   text-transform: uppercase;
 }
 
+/* --- Storage tab (redesigned) --- */
+.storage-layout {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.storage-hero {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.storage-hero-total {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.storage-hero-total strong {
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.storage-hero-total span {
+  color: var(--matmon-muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.storage-stack {
+  display: flex;
+  height: 0.95rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--matmon-surface-strong);
+  border: 1px solid var(--matmon-border);
+}
+
+.storage-stack-seg {
+  height: 100%;
+  min-width: 0;
+  transition: width 0.3s ease;
+}
+
+.storage-stack-seg[data-kind="telemetry"] { background: var(--matmon-accent); }
+.storage-stack-seg[data-kind="workspace"] { background: #78d5c8; }
+.storage-stack-seg[data-kind="backup"] { background: #f3b36b; }
+.storage-stack-seg[data-kind="other"] { background: color-mix(in srgb, var(--matmon-muted) 55%, transparent); }
+
+.storage-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  gap: 0.5rem 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.storage-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.storage-legend-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.storage-legend li[data-kind="telemetry"] .storage-legend-dot { background: var(--matmon-accent); }
+.storage-legend li[data-kind="workspace"] .storage-legend-dot { background: #78d5c8; }
+.storage-legend li[data-kind="backup"] .storage-legend-dot { background: #f3b36b; }
+.storage-legend li[data-kind="other"] .storage-legend-dot { background: color-mix(in srgb, var(--matmon-muted) 55%, transparent); }
+
+.storage-legend-label {
+  color: var(--matmon-muted);
+}
+
+.storage-legend li strong {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.storage-card {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.storage-gauge-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.storage-gauge-value strong {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.storage-gauge-value span {
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+}
+
+.storage-db-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.storage-db-counts div {
+  min-width: 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--matmon-surface-soft);
+  border: 1px solid var(--matmon-border);
+}
+
+.storage-db-counts strong {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-db-counts span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--matmon-muted);
+}
+
+.storage-paths dd {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+.config-about-link {
+  text-decoration: none;
+  color: var(--matmon-accent);
+}
+
+.config-about-link:hover {
+  text-decoration: underline;
+}
+
+.config-channel-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--matmon-border);
+  color: var(--matmon-muted);
+}
+
+.config-channel-tag[data-channel="release"] {
+  color: #78d5c8;
+  border-color: color-mix(in srgb, #78d5c8 50%, transparent);
+}
+
+.config-channel-tag[data-channel="nightly"] {
+  color: var(--matmon-accent);
+  border-color: color-mix(in srgb, var(--matmon-accent) 50%, transparent);
+}
+
+.config-reference {
+  margin-top: 0.55rem;
+}
+
 .storage-cleanup-form {
   align-items: end;
 }

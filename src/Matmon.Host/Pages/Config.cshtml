@@ -20,7 +20,7 @@
     </div>
 
     <div class="workspace-tabs system-tabs" role="tablist" aria-label="System sections">
-        <a class="workspace-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">General</a>
+        <a class="workspace-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">Overview</a>
         <a class="workspace-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
         <a class="workspace-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
         @if (canManageSystem)
@@ -49,10 +49,14 @@
             <section class="panel config-block">
                 <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("gear")<span>Runtime</span></h2>
-                    <span class="panel-hint">current values</span>
+                    <a class="panel-hint config-about-link" asp-page="/About">About →</a>
                 </div>
 
                 <dl class="config-list">
+                    <div class="config-row">
+                        <dt>Version</dt>
+                        <dd>@Matmon.Host.Services.MatmonVersion.Current <span class="config-channel-tag" data-channel="@Matmon.Host.Services.MatmonVersion.Channel.ToLowerInvariant()">@Matmon.Host.Services.MatmonVersion.Channel</span></dd>
+                    </div>
                     <div class="config-row">
                         <dt>Mode</dt>
                         <dd>@Model.Overview.Mode</dd>
@@ -78,7 +82,7 @@
                         <dd>@Model.Overview.WorkspacePath</dd>
                     </div>
                     <div class="config-row">
-                        <dt>Login</dt>
+                        <dt>Seed login</dt>
                         <dd>@Model.Overview.AuthUsername / @Model.Overview.AuthPassword</dd>
                     </div>
                 </dl>
@@ -86,24 +90,47 @@
 
             <section class="panel config-block">
                 <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("arrow-right")<span>Docker env</span></h2>
-                    <span class="panel-hint">primary / secondary</span>
+                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Endpoints</span></h2>
+                    <span class="panel-hint">anonymous health</span>
                 </div>
 
-                <pre class="config-code">@Model.Overview.DockerMasterSnippet</pre>
-                <div class="mt-3"></div>
-                <pre class="config-code">@Model.Overview.DockerSlaveSnippet</pre>
+                <dl class="config-list">
+                    <div class="config-row"><dt>Health</dt><dd><a href="/healthz" target="_blank" rel="noopener">/healthz</a></dd></div>
+                    <div class="config-row"><dt>Mode API</dt><dd><a href="/api/mode" target="_blank" rel="noopener">/api/mode</a></dd></div>
+                    <div class="config-row"><dt>About</dt><dd><a asp-page="/About">/About</a></dd></div>
+                </dl>
+
+                <p class="workspace-inline-note">Configuration changes are made on the topology and editor pages; the snippets below are reference only.</p>
             </section>
         </div>
 
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("spark")<span>Local appsettings</span></h2>
-                <span class="panel-hint">src/Matmon.Host/appsettings.json</span>
-            </div>
+        <details class="workspace-details config-reference">
+            <summary>
+                @MatmonIcons.Render("settings")
+                <span>Deployment reference (Docker env &amp; appsettings)</span>
+            </summary>
+            <div class="workspace-details-body">
+                <div class="config-grid">
+                    <section class="panel config-block">
+                        <div class="panel-header">
+                            <h2 class="section-title">@MatmonIcons.Render("arrow-right")<span>Docker env</span></h2>
+                            <span class="panel-hint">primary / secondary</span>
+                        </div>
+                        <pre class="config-code">@Model.Overview.DockerMasterSnippet</pre>
+                        <div class="mt-3"></div>
+                        <pre class="config-code">@Model.Overview.DockerSlaveSnippet</pre>
+                    </section>
 
-            <pre class="config-code">@Model.Overview.AppSettingsSnippet</pre>
-        </section>
+                    <section class="panel config-block">
+                        <div class="panel-header">
+                            <h2 class="section-title">@MatmonIcons.Render("spark")<span>Local appsettings</span></h2>
+                            <span class="panel-hint">src/Matmon.Host/appsettings.json</span>
+                        </div>
+                        <pre class="config-code">@Model.Overview.AppSettingsSnippet</pre>
+                    </section>
+                </div>
+            </div>
+        </details>
     }
     else if (Model.IsActiveTab("probes"))
     {
@@ -212,130 +239,102 @@
     }
     else if (Model.IsActiveTab("storage"))
     {
-        <div class="system-storage-grid">
-            <section class="panel config-block system-storage-summary">
+        var workspaceBytes = storage.WorkspaceFileBytes ?? 0;
+        var telemetryBytes = storage.TelemetryFileBytes ?? 0;
+        var backupBytes = storage.BackupFileBytes ?? 0;
+        var totalDataBytes = storage.DataDirectoryBytes;
+        var otherBytes = Math.Max(0, totalDataBytes - workspaceBytes - telemetryBytes - backupBytes);
+        string SegWidth(long part) => (totalDataBytes > 0 ? Math.Round((double)part / totalDataBytes * 100, 3) : 0)
+            .ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+        <div class="storage-layout">
+            <section class="panel config-block storage-hero">
                 <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Storage usage</span></h2>
-                    <span class="panel-hint">@storage.DriveName</span>
-                </div>
-
-                <div class="storage-number">
-                    <strong>@storage.FormatBytes(storage.DataDirectoryBytes)</strong>
-                    <span>Matmon data</span>
-                </div>
-
-                <div class="storage-meter" aria-label="Disk usage">
-                    <span style="width: @usedPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span>
-                </div>
-
-                <dl class="config-list compact-config-list">
-                    <div class="config-row">
-                        <dt>Drive free</dt>
-                        <dd>@ConfigModel.FormatPercent(storage.DriveFreePercent)</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Drive available</dt>
-                        <dd>@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : "-")</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Drive total</dt>
-                        <dd>@(storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveTotalGigabytes.Value:0.##} GB" : "-")</dd>
-                    </div>
-                </dl>
-            </section>
-
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Telemetry database</span></h2>
-                    <span class="panel-hint">SQLite · WAL</span>
-                </div>
-
-                <div class="storage-number">
-                    <strong>@storage.FormatBytes(storage.TelemetryFileBytes)</strong>
-                    <span>@(storage.TelemetryFileExists ? "telemetry.db (incl. WAL)" : "not created yet")</span>
-                </div>
-
-                <div class="storage-cleanup-metrics" aria-label="Stored telemetry rows">
-                    <div>
-                        <strong>@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</strong>
-                        <span>Observations</span>
-                    </div>
-                    <div>
-                        <strong>@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</strong>
-                        <span>Statistics</span>
-                    </div>
-                    <div>
-                        <strong>@ConfigModel.FormatCount(telemetry.EventCount)</strong>
-                        <span>Events</span>
-                    </div>
-                </div>
-
-                <dl class="config-list compact-config-list">
-                    <div class="config-row">
-                        <dt>Path</dt>
-                        <dd>@storage.TelemetryPath</dd>
-                    </div>
-                </dl>
-            </section>
-
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("list")<span>Files</span></h2>
+                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Storage breakdown</span></h2>
                     <span class="panel-hint">@storage.DataFileCount files</span>
                 </div>
 
-                <dl class="config-list">
-                    <div class="config-row">
-                        <dt>Data path</dt>
-                        <dd>@storage.DataPath</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Data directory</dt>
-                        <dd>@(storage.DataDirectoryExists ? "available" : "missing")</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Workspace file</dt>
-                        <dd>@storage.FormatBytes(storage.WorkspaceFileBytes)</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Backup path</dt>
-                        <dd>@storage.BackupPath</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Backups</dt>
-                        <dd>@storage.FormatBytes(storage.BackupFileBytes)</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Workspace path</dt>
-                        <dd>@storage.WorkspacePath</dd>
-                    </div>
-                </dl>
+                <div class="storage-hero-total">
+                    <strong>@storage.FormatBytes(totalDataBytes)</strong>
+                    <span>total Matmon data in @storage.DataPath</span>
+                </div>
+
+                <div class="storage-stack" role="img" aria-label="Storage breakdown by area">
+                    <span class="storage-stack-seg" data-kind="telemetry" style="width:@SegWidth(telemetryBytes)%" title="Telemetry DB"></span>
+                    <span class="storage-stack-seg" data-kind="workspace" style="width:@SegWidth(workspaceBytes)%" title="Workspace"></span>
+                    <span class="storage-stack-seg" data-kind="backup" style="width:@SegWidth(backupBytes)%" title="Backups"></span>
+                    <span class="storage-stack-seg" data-kind="other" style="width:@SegWidth(otherBytes)%" title="Other"></span>
+                </div>
+
+                <ul class="storage-legend">
+                    <li data-kind="telemetry"><span class="storage-legend-dot"></span><span class="storage-legend-label">Telemetry DB</span><strong>@storage.FormatBytes(telemetryBytes)</strong></li>
+                    <li data-kind="workspace"><span class="storage-legend-dot"></span><span class="storage-legend-label">Workspace</span><strong>@storage.FormatBytes(workspaceBytes)</strong></li>
+                    <li data-kind="backup"><span class="storage-legend-dot"></span><span class="storage-legend-label">Backups</span><strong>@storage.FormatBytes(backupBytes)</strong></li>
+                    <li data-kind="other"><span class="storage-legend-dot"></span><span class="storage-legend-label">Other</span><strong>@storage.FormatBytes(otherBytes)</strong></li>
+                </ul>
             </section>
+
+            <div class="storage-cards">
+                <section class="panel config-block storage-card">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("signal")<span>Disk capacity</span></h2>
+                        <span class="panel-hint">@storage.DriveName</span>
+                    </div>
+
+                    <div class="storage-gauge-value">
+                        <strong>@ConfigModel.FormatPercent(storage.DriveFreePercent)</strong>
+                        <span>free</span>
+                    </div>
+                    <div class="storage-meter" aria-label="Host disk usage">
+                        <span style="width: @usedPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                    </div>
+                    <dl class="config-list compact-config-list">
+                        <div class="config-row">
+                            <dt>Available</dt>
+                            <dd>@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : "-")</dd>
+                        </div>
+                        <div class="config-row">
+                            <dt>Total</dt>
+                            <dd>@(storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveTotalGigabytes.Value:0.##} GB" : "-")</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="panel config-block storage-card">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("chart")<span>Telemetry database</span></h2>
+                        <span class="panel-hint">SQLite · WAL</span>
+                    </div>
+
+                    <div class="storage-gauge-value">
+                        <strong>@storage.FormatBytes(storage.TelemetryFileBytes)</strong>
+                        <span>@(storage.TelemetryFileExists ? "telemetry.db incl. WAL" : "not created yet")</span>
+                    </div>
+                    <div class="storage-db-counts">
+                        <div><strong>@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</strong><span>Observations</span></div>
+                        <div><strong>@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</strong><span>Statistics</span></div>
+                        <div><strong>@ConfigModel.FormatCount(telemetry.EventCount)</strong><span>Events</span></div>
+                    </div>
+                </section>
+
+                <section class="panel config-block storage-card">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("folder")<span>Locations</span></h2>
+                        <span class="panel-hint">@(storage.DataDirectoryExists ? "data dir ready" : "data dir missing")</span>
+                    </div>
+                    <dl class="config-list storage-paths">
+                        <div class="config-row"><dt>Workspace</dt><dd title="@storage.WorkspacePath">@storage.WorkspacePath</dd></div>
+                        <div class="config-row"><dt>Telemetry</dt><dd title="@storage.TelemetryPath">@storage.TelemetryPath</dd></div>
+                        <div class="config-row"><dt>Backups</dt><dd title="@storage.BackupPath">@storage.BackupPath</dd></div>
+                    </dl>
+                </section>
+            </div>
         </div>
 
         <section class="panel config-block system-cleanup-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("trash")<span>Cleanup</span></h2>
                 <span class="panel-hint">Remove old telemetry without touching the structure</span>
-            </div>
-
-            <div class="storage-cleanup-metrics" aria-label="Stored telemetry entries">
-                <div>
-                    <strong>@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</strong>
-                    <span>History</span>
-                </div>
-                <div>
-                    <strong>@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</strong>
-                    <span>Statistics</span>
-                </div>
-                <div>
-                    <strong>@ConfigModel.FormatCount(telemetry.EventCount)</strong>
-                    <span>Events</span>
-                </div>
-                <div>
-                    <strong>@ConfigModel.FormatCount(telemetry.TotalEntryCount)</strong>
-                    <span>Total</span>
-                </div>
             </div>
 
             @if (canManageSystem)
