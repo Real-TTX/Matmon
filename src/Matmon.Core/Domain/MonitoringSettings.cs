@@ -46,6 +46,12 @@ public sealed class MonitoringSettings
 
     public string? DefaultChannelKey { get; set; }
 
+    /// <summary>Optional fixed lower bound for the graph y-axis (in the channel's native unit). Null = auto-scale from data.</summary>
+    public double? GraphMinValue { get; set; }
+
+    /// <summary>Optional fixed upper bound for the graph y-axis (in the channel's native unit). Null = auto-scale from data.</summary>
+    public double? GraphMaxValue { get; set; }
+
     public Guid? SelectedCredentialId { get; set; }
 
     public List<MonitoringCredentialBundle> Credentials { get; set; } = [];
@@ -89,6 +95,8 @@ public sealed class MonitoringSettings
         }
 
         DefaultChannelKey = source.DefaultChannelKey ?? DefaultChannelKey;
+        GraphMinValue = source.GraphMinValue ?? GraphMinValue;
+        GraphMaxValue = source.GraphMaxValue ?? GraphMaxValue;
 
         foreach (var credential in source.Credentials)
         {
@@ -170,6 +178,16 @@ public sealed class MonitoringSettings
         if (string.Equals(target.DefaultChannelKey, inherited.DefaultChannelKey, StringComparison.OrdinalIgnoreCase))
         {
             target.DefaultChannelKey = null;
+        }
+
+        if (target.GraphMinValue == inherited.GraphMinValue)
+        {
+            target.GraphMinValue = null;
+        }
+
+        if (target.GraphMaxValue == inherited.GraphMaxValue)
+        {
+            target.GraphMaxValue = null;
         }
 
         var inheritedParameters = inherited.Parameters;

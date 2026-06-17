@@ -150,7 +150,9 @@ public sealed class SensorDetailsModel : PageModel
         var currentMessage = sensor.IsPaused
             ? "sensor paused"
             : latestObservation?.Message ?? BuildDefaultMessage(sensor.SensorTypeKey, currentValue, currentState, displayScale);
-        var windows = BuildWindows(history, currentStateColor, defaultChannelKey, displayScale).ToArray();
+        var axisMin = effectiveSettings.GraphMinValue.HasValue ? displayScale.Convert(effectiveSettings.GraphMinValue.Value) : (double?)null;
+        var axisMax = effectiveSettings.GraphMaxValue.HasValue ? displayScale.Convert(effectiveSettings.GraphMaxValue.Value) : (double?)null;
+        var windows = BuildWindows(history, currentStateColor, defaultChannelKey, displayScale, axisMin, axisMax).ToArray();
         var selectedWindow = windows.FirstOrDefault(window => string.Equals(window.Key, Window, StringComparison.OrdinalIgnoreCase))
             ?? windows.FirstOrDefault(window => string.Equals(window.Key, "1d", StringComparison.OrdinalIgnoreCase))
             ?? windows[0];
@@ -285,12 +287,14 @@ public sealed class SensorDetailsModel : PageModel
         IReadOnlyList<SensorObservation> observations,
         string lineColor,
         string? defaultChannelKey,
-        SensorUnitScale? scale = null)
+        SensorUnitScale? scale = null,
+        double? axisMin = null,
+        double? axisMax = null)
     {
         var now = DateTimeOffset.UtcNow;
-        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1h", "1h", TimeSpan.FromHours(1), now, lineColor, defaultChannelKey, scale);
-        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1d", "1D", TimeSpan.FromDays(1), now, lineColor, defaultChannelKey, scale);
-        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1w", "1W", TimeSpan.FromDays(7), now, lineColor, defaultChannelKey, scale);
+        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1h", "1h", TimeSpan.FromHours(1), now, lineColor, defaultChannelKey, scale, axisMin: axisMin, axisMax: axisMax);
+        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1d", "1D", TimeSpan.FromDays(1), now, lineColor, defaultChannelKey, scale, axisMin: axisMin, axisMax: axisMax);
+        yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1w", "1W", TimeSpan.FromDays(7), now, lineColor, defaultChannelKey, scale, axisMin: axisMin, axisMax: axisMax);
     }
 
     private static IReadOnlyList<SensorChannelRow> BuildChannelRows(SensorObservation? latestObservation, string fallbackUnit, string? defaultChannelKey)

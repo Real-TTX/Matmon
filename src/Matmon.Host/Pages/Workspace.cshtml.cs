@@ -1769,6 +1769,8 @@ public sealed class WorkspaceModel : PageModel
             StatisticsRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.StatisticsRetentionDays ?? telemetryProfile?.StatisticsRetentionDays),
             StatisticsBucketMinutes = localSettings.StatisticsBucketMinutes,
             StatisticsBucketMinutesPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.StatisticsBucketMinutes ?? telemetryProfile?.StatisticsBucketMinutes),
+            GraphMinValue = localSettings.GraphMinValue,
+            GraphMaxValue = localSettings.GraphMaxValue,
             TelemetryProfileSummary = BuildTelemetryProfileSummary(telemetryProfile),
             ParametersText = ToLines(localSettings.Parameters),
             ParametersTextPlaceholder = !string.IsNullOrWhiteSpace(ToLines(effectiveSettings.Parameters))
@@ -3535,6 +3537,12 @@ public sealed class WorkspaceModel : PageModel
             editor.ObservationRetentionDays,
             editor.StatisticsRetentionDays,
             editor.StatisticsBucketMinutes);
+
+        if (element is SensorElement)
+        {
+            element.Settings.GraphMinValue = editor.GraphMinValue;
+            element.Settings.GraphMaxValue = editor.GraphMaxValue;
+        }
 
         element.Settings.SelectedCredentialId = editor.SelectedCredentialId;
 
@@ -6525,6 +6533,11 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor
     public int? StatisticsBucketMinutes { get; set; }
 
     public string? StatisticsBucketMinutesPlaceholder { get; set; }
+
+    /// <summary>Optional fixed graph y-axis bounds (sensor native unit); null = auto-scale.</summary>
+    public double? GraphMinValue { get; set; }
+
+    public double? GraphMaxValue { get; set; }
 
     /// <summary>Human-readable per-sensor-type telemetry defaults (null for non-sensors).</summary>
     public string? TelemetryProfileSummary { get; set; }

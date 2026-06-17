@@ -458,6 +458,21 @@
                             <option value="720">Every 12 hours</option>
                             <option value="1440">Daily</option>
                         </datalist>
+
+                        @if (Model.ElementEditor.Kind == "Sensor")
+                        {
+                            <div class="workspace-inline-note workspace-subnote">@MatmonIcons.Render("chart") Graph axis — fix the y-axis for comparable graphs. Leave empty to auto-scale from data (in the channel's native unit).</div>
+                            <div class="workspace-form-grid">
+                                <label>
+                                    <span>Y-axis min</span>
+                                    <input asp-for="ElementEditor.GraphMinValue" type="number" step="any" class="form-control workspace-input" placeholder="auto" />
+                                </label>
+                                <label>
+                                    <span>Y-axis max</span>
+                                    <input asp-for="ElementEditor.GraphMaxValue" type="number" step="any" class="form-control workspace-input" placeholder="auto" />
+                                </label>
+                            </div>
+                        }
                     </div>
 
                     <details class="workspace-details workspace-span-2">

@@ -70,7 +70,9 @@ public static class SensorHistoryAnalytics
         string lineColor,
         string? defaultChannelKeyOverride = null,
         SensorUnitScale? scale = null,
-        int maxGraphPoints = 240)
+        int maxGraphPoints = 240,
+        double? axisMin = null,
+        double? axisMax = null)
     {
         var fromUtc = now - window;
         var windowObservations = observations
@@ -92,7 +94,7 @@ public static class SensorHistoryAnalytics
         var latestObservation = windowObservations.LastOrDefault();
         var latestValue = ApplyScale(GetDefaultValue(latestObservation, defaultChannelKeyOverride), scale);
         var latestState = latestObservation?.State ?? SensorState.Unknown;
-        var (linePath, areaPath) = BuildPaths(points, fromUtc, now);
+        var (linePath, areaPath) = BuildPaths(points, fromUtc, now, axisMin, axisMax);
 
         return new SensorWindowStatistics(
             key,
@@ -145,7 +147,9 @@ public static class SensorHistoryAnalytics
     private static (string LinePath, string AreaPath) BuildPaths(
         IReadOnlyList<TelemetrySamplePoint> points,
         DateTimeOffset fromUtc,
-        DateTimeOffset toUtc)
+        DateTimeOffset toUtc,
+        double? axisMin = null,
+        double? axisMax = null)
     {
         if (points.Count == 0)
         {
@@ -165,8 +169,15 @@ public static class SensorHistoryAnalytics
             scaleValues = points.Select(point => point.Value).ToArray();
         }
 
-        var min = scaleValues.Min();
-        var max = scaleValues.Max();
+        // Fixed axis bounds (when configured on the sensor) override the data-derived
+        // min/max so graphs stay comparable across time; otherwise auto-scale.
+        var min = axisMin ?? scaleValues.Min();
+        var max = axisMax ?? scaleValues.Max();
+        if (max < min)
+        {
+            (min, max) = (max, min);
+        }
+
         var range = max - min;
         if (Math.Abs(range) < 0.000001d)
         {
