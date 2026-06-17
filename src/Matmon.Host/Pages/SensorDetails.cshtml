@@ -97,7 +97,82 @@
         </div>
     </div>
 
-    <div class="sensor-stats-grid">
+    <nav class="workspace-tabs sensor-detail-tabs" data-sensor-tabs role="tablist" aria-label="Sensor sections">
+        <button type="button" class="workspace-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("dashboard")<span>General</span></button>
+        <button type="button" class="workspace-tab" data-sensor-tab-target="statistics" role="tab">@MatmonIcons.Render("chart")<span>Statistics</span></button>
+        <button type="button" class="workspace-tab" data-sensor-tab-target="history" role="tab">@MatmonIcons.Render("clock")<span>History</span></button>
+    </nav>
+
+    <div data-sensor-tab="general">
+        <section class="panel panel-stack sensor-channels-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels</span></h2>
+                <span class="panel-hint">@Model.View.Channels.Count</span>
+            </div>
+
+            @if (Model.View.Channels.Count == 0)
+            {
+                <div class="empty-state">No channels yet.</div>
+            }
+            else
+            {
+                <div class="sensor-channel-list sensor-channel-grid">
+                    @foreach (var channel in Model.View.Channels)
+                    {
+                        <article class="sensor-channel-row" data-state="@channel.StateKey" data-default="@(channel.IsDefault ? "true" : "false")">
+                            <div class="sensor-channel-main">
+                                <div class="sensor-channel-name">
+                                    <span>@channel.Label</span>
+                                    @if (channel.IsDefault)
+                                    {
+                                        <span class="state-pill" data-state="ok">Graph</span>
+                                    }
+                                </div>
+                                <div class="sensor-channel-meta">
+                                    @channel.Key
+                                    @if (!string.IsNullOrWhiteSpace(channel.Message))
+                                    {
+                                        <text>| @channel.Message</text>
+                                    }
+                                </div>
+                            </div>
+                            <div class="sensor-channel-side">
+                                <div class="sensor-channel-value">@channel.ValueText @channel.Unit</div>
+                                @if (channel.VisualKey == "progress" && channel.FillPercent.HasValue)
+                                {
+                                    <div class="sensor-channel-meter" data-state="@channel.StateKey" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
+                                        <span style="width:@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                                    </div>
+                                }
+                                else if (channel.VisualKey == "gauge" && channel.FillPercent.HasValue)
+                                {
+                                    var gaugeDash = (channel.FillPercent.Value / 100d * 125.6d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+                                    <svg class="sensor-channel-gauge" viewBox="0 0 100 56" data-state="@channel.StateKey" aria-hidden="true" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
+                                        <path class="sensor-channel-gauge-track" d="M10 50 A40 40 0 0 1 90 50" />
+                                        <path class="sensor-channel-gauge-fill" d="M10 50 A40 40 0 0 1 90 50" style="stroke-dasharray:@gaugeDash 200" />
+                                    </svg>
+                                }
+                                <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
+                                <div class="sensor-channel-actions">
+                                    <form method="post"
+                                          asp-page-handler="SetDefaultChannel"
+                                          asp-route-sensorId="@Model.View.SensorId"
+                                          asp-route-window="@Model.Window"
+                                          asp-route-channelKey="@channel.Key">
+                                        <button type="submit" class="workspace-secondary-submit sensor-channel-default-button @(channel.IsDefault ? "is-active" : string.Empty)">
+                                            @MatmonIcons.Render(channel.IsDefault ? "chart" : "spark")
+                                            <span>@(channel.IsDefault ? "Graph" : "Set graph")</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <div class="sensor-stats-grid">
         @foreach (var window in Model.View.Windows)
         {
             <article class="panel sensor-window-card @(window.Key == Model.View.SelectedWindow.Key ? "is-selected" : string.Empty)" data-state="@window.StateKey">
@@ -123,65 +198,8 @@
                 </div>
             </article>
         }
-    </div>
+        </div>
 
-    @if (Model.View.Statistics is { } stats && stats.Rows.Count > 0)
-    {
-        <section class="panel panel-stack sensor-statistics-panel" data-statistics-section>
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("chart")<span>Long-term statistics</span></h2>
-                <div class="sensor-statistics-controls">
-                    <span class="panel-hint" data-statistics-count>@stats.GranularityLabel summaries · @stats.BucketCount kept</span>
-                    <label class="sensor-statistics-filter">
-                        <span class="workspace-sr-only">Time range</span>
-                        <select class="form-select workspace-select" data-statistics-filter>
-                            <option value="0" selected>All time</option>
-                            <option value="1">Last 24 hours</option>
-                            <option value="7">Last 7 days</option>
-                            <option value="30">Last 30 days</option>
-                            <option value="90">Last 90 days</option>
-                            <option value="365">Last year</option>
-                        </select>
-                    </label>
-                </div>
-            </div>
-            <p class="panel-hint sensor-statistics-intro">Downsampled from raw samples — average, range and the 1 % / 99 % bands per @stats.GranularityLabel.ToLowerInvariant() period, plus uptime.</p>
-            <div class="sensor-statistics-scroll">
-                <table class="sensor-statistics-table">
-                    <thead>
-                        <tr>
-                            <th>Period</th>
-                            <th>Avg@(stats.Unit is null ? string.Empty : $" ({stats.Unit})")</th>
-                            <th>Min</th>
-                            <th>Max</th>
-                            <th title="bottom 1 %">1 %</th>
-                            <th title="top 1 %">99 %</th>
-                            <th>Uptime</th>
-                            <th>Samples</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in stats.Rows)
-                        {
-                            <tr data-state="@row.StateKey" data-period-ms="@row.PeriodEpochMs">
-                                <td>@row.PeriodText</td>
-                                <td class="is-strong">@row.AverageText</td>
-                                <td>@row.MinimumText</td>
-                                <td>@row.MaximumText</td>
-                                <td>@row.LowPercentileText</td>
-                                <td>@row.HighPercentileText</td>
-                                <td>@(row.UptimeText ?? "—")</td>
-                                <td>@row.SampleCount</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-                <div class="empty-state sensor-statistics-empty" data-statistics-empty hidden>No statistics in this range.</div>
-            </div>
-        </section>
-    }
-
-    <div class="sensor-detail-grid">
         <section class="panel panel-stack sensor-chart-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("chart")<span>@Model.View.SelectedWindow.Label</span></h2>
@@ -226,115 +244,110 @@
             }
         </section>
 
-        <aside class="sensor-side-stack">
-            <section class="panel panel-stack sensor-side-panel">
+    </div>
+
+    <div data-sensor-tab="statistics">
+        @if (Model.View.Statistics is { } stats && stats.Rows.Count > 0)
+        {
+            <section class="panel panel-stack sensor-statistics-panel" data-statistics-section>
                 <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels</span></h2>
-                    <span class="panel-hint">@Model.View.Channels.Count</span>
-                </div>
-
-                @if (Model.View.Channels.Count == 0)
-                {
-                    <div class="empty-state">No channels yet.</div>
-                }
-                else
-                {
-                    <div class="sensor-channel-list">
-                        @foreach (var channel in Model.View.Channels)
-                        {
-                            <article class="sensor-channel-row" data-state="@channel.StateKey" data-default="@(channel.IsDefault ? "true" : "false")">
-                                <div class="sensor-channel-main">
-                                    <div class="sensor-channel-name">
-                                        <span>@channel.Label</span>
-                                        @if (channel.IsDefault)
-                                        {
-                                            <span class="state-pill" data-state="ok">Graph</span>
-                                        }
-                                    </div>
-                                    <div class="sensor-channel-meta">
-                                        @channel.Key
-                                        @if (!string.IsNullOrWhiteSpace(channel.Message))
-                                        {
-                                            <text>| @channel.Message</text>
-                                        }
-                                    </div>
-                                </div>
-                                <div class="sensor-channel-side">
-                                    <div class="sensor-channel-value">@channel.ValueText @channel.Unit</div>
-                                    @if (channel.VisualKey == "progress" && channel.FillPercent.HasValue)
-                                    {
-                                        <div class="sensor-channel-meter" data-state="@channel.StateKey" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
-                                            <span style="width:@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span>
-                                        </div>
-                                    }
-                                    else if (channel.VisualKey == "gauge" && channel.FillPercent.HasValue)
-                                    {
-                                        var gaugeDash = (channel.FillPercent.Value / 100d * 125.6d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
-                                        <svg class="sensor-channel-gauge" viewBox="0 0 100 56" data-state="@channel.StateKey" aria-hidden="true" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
-                                            <path class="sensor-channel-gauge-track" d="M10 50 A40 40 0 0 1 90 50" />
-                                            <path class="sensor-channel-gauge-fill" d="M10 50 A40 40 0 0 1 90 50" style="stroke-dasharray:@gaugeDash 200" />
-                                        </svg>
-                                    }
-                                    <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
-                                    <div class="sensor-channel-actions">
-                                        <form method="post"
-                                              asp-page-handler="SetDefaultChannel"
-                                              asp-route-sensorId="@Model.View.SensorId"
-                                              asp-route-window="@Model.Window"
-                                              asp-route-channelKey="@channel.Key">
-                                            <button type="submit" class="workspace-secondary-submit sensor-channel-default-button @(channel.IsDefault ? "is-active" : string.Empty)">
-                                                @MatmonIcons.Render(channel.IsDefault ? "chart" : "spark")
-                                                <span>@(channel.IsDefault ? "Graph" : "Set graph")</span>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </article>
-                        }
+                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Long-term statistics</span></h2>
+                    <div class="sensor-statistics-controls">
+                        <span class="panel-hint" data-statistics-count>@stats.GranularityLabel summaries · @stats.BucketCount kept</span>
+                        <label class="sensor-statistics-filter">
+                            <span class="workspace-sr-only">Time range</span>
+                            <select class="form-select workspace-select" data-statistics-filter>
+                                <option value="0" selected>All time</option>
+                                <option value="1">Last 24 hours</option>
+                                <option value="7">Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                                <option value="365">Last year</option>
+                            </select>
+                        </label>
                     </div>
-                }
-            </section>
-
-            <section class="panel panel-stack sensor-side-panel">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Recent</span></h2>
-                    <span class="panel-hint">@Model.View.RecentObservations.Count</span>
                 </div>
-
-                @if (Model.View.RecentObservations.Count == 0)
-                {
-                    <div class="empty-state">No measurements yet.</div>
-                }
-                else
-                {
-                    <div class="sensor-observation-list">
-                        @foreach (var observation in Model.View.RecentObservations)
-                        {
-                            <article class="sensor-observation-row" data-state="@observation.StateKey">
-                                <div class="sensor-observation-main">
-                                    <div class="sensor-observation-name">
-                                        <span>@observation.TimestampText</span>
-                                        @if (observation.ChannelCount > 1)
-                                        {
-                                            <span class="state-pill" data-state="paused">@observation.ChannelCount channels</span>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(observation.ExecutionProbe))
-                                        {
-                                            <span class="state-pill" data-state="ok">@observation.ExecutionProbe</span>
-                                        }
-                                    </div>
-                                    <div class="sensor-observation-meta">@observation.Message</div>
-                                </div>
-                                <div class="sensor-observation-side">
-                                    <div class="sensor-channel-value">@observation.ValueText @observation.Unit</div>
-                                    <span class="state-pill" data-state="@observation.StateKey">@observation.StateLabel</span>
-                                    <span class="sensor-observation-meta">duration @observation.DurationText</span>
-                                </div>
-                            </article>
-                        }
-                    </div>
-                }
+                <p class="panel-hint sensor-statistics-intro">Downsampled from raw samples — average, range and the 1 % / 99 % bands per @stats.GranularityLabel.ToLowerInvariant() period, plus uptime.</p>
+                <div class="sensor-statistics-scroll">
+                    <table class="sensor-statistics-table">
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th>Avg@(stats.Unit is null ? string.Empty : $" ({stats.Unit})")</th>
+                                <th>Min</th>
+                                <th>Max</th>
+                                <th title="bottom 1 %">1 %</th>
+                                <th title="top 1 %">99 %</th>
+                                <th>Uptime</th>
+                                <th>Samples</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in stats.Rows)
+                            {
+                                <tr data-state="@row.StateKey" data-period-ms="@row.PeriodEpochMs">
+                                    <td>@row.PeriodText</td>
+                                    <td class="is-strong">@row.AverageText</td>
+                                    <td>@row.MinimumText</td>
+                                    <td>@row.MaximumText</td>
+                                    <td>@row.LowPercentileText</td>
+                                    <td>@row.HighPercentileText</td>
+                                    <td>@(row.UptimeText ?? "—")</td>
+                                    <td>@row.SampleCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    <div class="empty-state sensor-statistics-empty" data-statistics-empty hidden>No statistics in this range.</div>
+                </div>
             </section>
-        </aside>
+        }
+        else
+        {
+            <div class="panel empty-state">No long-term statistics collected yet.</div>
+        }
+    </div>
+
+    <div data-sensor-tab="history">
+        <section class="panel panel-stack">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Last results</span></h2>
+                <span class="panel-hint">@Model.View.RecentObservations.Count</span>
+            </div>
+
+            @if (Model.View.RecentObservations.Count == 0)
+            {
+                <div class="empty-state">No measurements yet.</div>
+            }
+            else
+            {
+                <div class="sensor-observation-list">
+                    @foreach (var observation in Model.View.RecentObservations)
+                    {
+                        <article class="sensor-observation-row" data-state="@observation.StateKey">
+                            <div class="sensor-observation-main">
+                                <div class="sensor-observation-name">
+                                    <span>@observation.TimestampText</span>
+                                    @if (observation.ChannelCount > 1)
+                                    {
+                                        <span class="state-pill" data-state="paused">@observation.ChannelCount channels</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(observation.ExecutionProbe))
+                                    {
+                                        <span class="state-pill" data-state="ok">@observation.ExecutionProbe</span>
+                                    }
+                                </div>
+                                <div class="sensor-observation-meta">@observation.Message</div>
+                            </div>
+                            <div class="sensor-observation-side">
+                                <div class="sensor-channel-value">@observation.ValueText @observation.Unit</div>
+                                <span class="state-pill" data-state="@observation.StateKey">@observation.StateLabel</span>
+                                <span class="sensor-observation-meta">duration @observation.DurationText</span>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
     </div>
 </section>

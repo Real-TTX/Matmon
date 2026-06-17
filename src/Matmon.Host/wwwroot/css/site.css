@@ -4900,6 +4900,25 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   gap: 0.42rem;
 }
 
+/* Sensor detail tabs */
+.sensor-detail-tabs {
+  margin-bottom: 0.7rem;
+}
+
+/* General tab: channels are the prominent "IST" state, shown as a multi-column grid. */
+.sensor-channels-panel {
+  margin-bottom: 0.6rem;
+}
+
+.sensor-channel-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
+}
+
+.sensor-channel-grid .sensor-channel-row {
+  background: var(--matmon-surface);
+  border: 1px solid var(--matmon-border);
+}
+
 .sensor-channel-row,
 .sensor-observation-row {
   display: grid;
