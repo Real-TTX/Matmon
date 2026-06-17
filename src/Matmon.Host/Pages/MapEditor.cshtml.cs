@@ -42,6 +42,7 @@ public sealed class MapEditorModel : PageModel
 
     public IReadOnlyList<SelectListItem> VisualTypeOptions { get; } =
     [
+        new("Auto (from sensor)", MonitoringMapTileVisualType.Auto.ToString()),
         new("Card", MonitoringMapTileVisualType.Card.ToString()),
         new("Progress bar", MonitoringMapTileVisualType.ProgressBar.ToString()),
         new("Gauge", MonitoringMapTileVisualType.Gauge.ToString())

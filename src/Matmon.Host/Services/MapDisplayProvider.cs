@@ -95,7 +95,49 @@ public sealed class MapDisplayProvider
             graph.BarPath,
             MonitoringStatePresentation.Color(observation.State),
             progressPercent,
-            progressLabel);
+            progressLabel,
+            ResolveEffectiveVisual(tile, sensor, channel));
+    }
+
+    private static MonitoringMapTileVisualType ResolveEffectiveVisual(
+        MonitoringMapTile tile,
+        SensorElement? sensor,
+        SensorChannelValue? channel)
+    {
+        if (tile.VisualType != MonitoringMapTileVisualType.Auto)
+        {
+            return tile.VisualType;
+        }
+
+        // Auto: prefer the channel's configured visual (#31), else derive from its kind.
+        var configured = sensor is not null && channel is not null
+            ? MonitoringSettings.GetChannelVisual(sensor.Settings, channel.Key)
+            : "auto";
+
+        if (configured == "gauge")
+        {
+            return MonitoringMapTileVisualType.Gauge;
+        }
+
+        if (configured == "progress")
+        {
+            return MonitoringMapTileVisualType.ProgressBar;
+        }
+
+        if (configured is "value" or "graph")
+        {
+            return MonitoringMapTileVisualType.Card;
+        }
+
+        var kind = channel?.MeasurementKind ?? SensorMeasurementKind.Unknown;
+        if (kind == SensorMeasurementKind.Unknown && channel is not null)
+        {
+            kind = SensorUnitConverter.GuessMeasurementKind(channel.Unit);
+        }
+
+        return kind == SensorMeasurementKind.Percent
+            ? MonitoringMapTileVisualType.ProgressBar
+            : MonitoringMapTileVisualType.Card;
     }
 
     private MapDisplayTileViewModel BuildAggregateTile(
@@ -143,7 +185,8 @@ public sealed class MapDisplayProvider
             null,
             MonitoringStatePresentation.Color(severity),
             progressPercent,
-            progressLabel);
+            progressLabel,
+            tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.ProgressBar : tile.VisualType);
     }
 
     private Sparkline BuildSparkline(Guid sensorId)
@@ -203,7 +246,8 @@ public sealed class MapDisplayProvider
             null,
             "#7c8eab",
             null,
-            string.Empty);
+            string.Empty,
+            tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType);
     }
 
     private static double? ResolveSensorProgressPercent(SensorObservation observation, SensorChannelValue? channel)
@@ -332,4 +376,5 @@ public sealed record MapDisplayTileViewModel(
     string? GraphBarPath,
     string GraphColor,
     double? ProgressPercent,
-    string ProgressLabel);
+    string ProgressLabel,
+    MonitoringMapTileVisualType EffectiveVisualType);

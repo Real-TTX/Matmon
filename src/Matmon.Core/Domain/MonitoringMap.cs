@@ -81,5 +81,8 @@ public enum MonitoringMapTileVisualType
 {
     Card = 0,
     ProgressBar = 1,
-    Gauge = 2
+    Gauge = 2,
+
+    /// <summary>Derive the visual from the sensor's configured channel visual (see ChannelVisuals), or its measurement kind.</summary>
+    Auto = 3
 }

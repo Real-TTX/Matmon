@@ -72,7 +72,7 @@
                         </div>
                     }
 
-                    @if (tile.ProgressPercent.HasValue && tile.Tile.VisualType == MonitoringMapTileVisualType.Gauge)
+                    @if (tile.ProgressPercent.HasValue && tile.EffectiveVisualType == MonitoringMapTileVisualType.Gauge)
                     {
                         <div class="map-tile-gauge" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
                             <span>
@@ -81,7 +81,7 @@
                             </span>
                         </div>
                     }
-                    else if (tile.ProgressPercent.HasValue && tile.Tile.VisualType == MonitoringMapTileVisualType.ProgressBar)
+                    else if (tile.ProgressPercent.HasValue && tile.EffectiveVisualType == MonitoringMapTileVisualType.ProgressBar)
                     {
                         <div class="map-tile-progress-wrap">
                             <div class="map-tile-progress" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
@@ -91,7 +91,7 @@
                         </div>
                     }
 
-                    @if (!string.IsNullOrWhiteSpace(tile.Value) && tile.Tile.VisualType != MonitoringMapTileVisualType.Gauge)
+                    @if (!string.IsNullOrWhiteSpace(tile.Value) && tile.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
                     {
                         <div class="map-tile-value">@tile.Value</div>
                     }
