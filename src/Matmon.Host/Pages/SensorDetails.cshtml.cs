@@ -208,9 +208,10 @@ public sealed class SensorDetailsModel : PageModel
         var bucketMinutes = buckets[^1].BucketMinutes;
         var rows = buckets
             .OrderByDescending(bucket => bucket.BucketStartUtc)
-            .Take(16)
+            .Take(500)
             .Select(bucket => new SensorStatisticsRow(
                 FormatBucketPeriod(bucket.BucketStartUtc, bucketMinutes),
+                bucket.BucketStartUtc.ToUnixTimeMilliseconds(),
                 FormatStat(bucket.Average, scale, kind),
                 FormatStat(bucket.Minimum, scale, kind),
                 FormatStat(bucket.Maximum, scale, kind),
@@ -613,6 +614,7 @@ public sealed record SensorStatisticsSummary(
 
 public sealed record SensorStatisticsRow(
     string PeriodText,
+    long PeriodEpochMs,
     string AverageText,
     string MinimumText,
     string MaximumText,

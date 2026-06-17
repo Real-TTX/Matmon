@@ -4547,8 +4547,35 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   margin: 0;
 }
 
+.sensor-statistics-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.sensor-statistics-filter select {
+  min-height: 30px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+
 .sensor-statistics-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 22rem;
+  border: 1px solid color-mix(in srgb, var(--matmon-border) 60%, transparent);
+  border-radius: 6px;
+}
+
+.sensor-statistics-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--matmon-surface-strong);
+}
+
+.sensor-statistics-empty {
+  margin: 0.4rem;
 }
 
 .sensor-statistics-table {

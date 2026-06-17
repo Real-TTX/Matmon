@@ -127,10 +127,23 @@
 
     @if (Model.View.Statistics is { } stats && stats.Rows.Count > 0)
     {
-        <section class="panel panel-stack sensor-statistics-panel">
+        <section class="panel panel-stack sensor-statistics-panel" data-statistics-section>
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("chart")<span>Long-term statistics</span></h2>
-                <span class="panel-hint">@stats.GranularityLabel summaries · @stats.BucketCount kept</span>
+                <div class="sensor-statistics-controls">
+                    <span class="panel-hint" data-statistics-count>@stats.GranularityLabel summaries · @stats.BucketCount kept</span>
+                    <label class="sensor-statistics-filter">
+                        <span class="workspace-sr-only">Time range</span>
+                        <select class="form-select workspace-select" data-statistics-filter>
+                            <option value="0" selected>All time</option>
+                            <option value="1">Last 24 hours</option>
+                            <option value="7">Last 7 days</option>
+                            <option value="30">Last 30 days</option>
+                            <option value="90">Last 90 days</option>
+                            <option value="365">Last year</option>
+                        </select>
+                    </label>
+                </div>
             </div>
             <p class="panel-hint sensor-statistics-intro">Downsampled from raw samples — average, range and the 1 % / 99 % bands per @stats.GranularityLabel.ToLowerInvariant() period, plus uptime.</p>
             <div class="sensor-statistics-scroll">
@@ -150,7 +163,7 @@
                     <tbody>
                         @foreach (var row in stats.Rows)
                         {
-                            <tr data-state="@row.StateKey">
+                            <tr data-state="@row.StateKey" data-period-ms="@row.PeriodEpochMs">
                                 <td>@row.PeriodText</td>
                                 <td class="is-strong">@row.AverageText</td>
                                 <td>@row.MinimumText</td>
@@ -163,6 +176,7 @@
                         }
                     </tbody>
                 </table>
+                <div class="empty-state sensor-statistics-empty" data-statistics-empty hidden>No statistics in this range.</div>
             </div>
         </section>
     }
