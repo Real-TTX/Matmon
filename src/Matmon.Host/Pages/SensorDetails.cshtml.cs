@@ -187,7 +187,7 @@ public sealed class SensorDetailsModel : PageModel
             latestObservation is null ? null : FormatDuration(latestObservation.Duration),
             windows,
             selectedWindow,
-            BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey),
+            BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey, effectiveSettings),
             BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey, displayScale),
             statisticsSummary,
             unitConversion);
@@ -298,7 +298,7 @@ public sealed class SensorDetailsModel : PageModel
         yield return SensorHistoryAnalytics.BuildWindowStatistics(observations, "1w", "1W", TimeSpan.FromDays(7), now, lineColor, defaultChannelKey, scale, axisMin: axisMin, axisMax: axisMax);
     }
 
-    private static IReadOnlyList<SensorChannelRow> BuildChannelRows(SensorObservation? latestObservation, string fallbackUnit, string? defaultChannelKey)
+    private static IReadOnlyList<SensorChannelRow> BuildChannelRows(SensorObservation? latestObservation, string fallbackUnit, string? defaultChannelKey, MonitoringSettings settings)
     {
         if (latestObservation is null)
         {
@@ -314,7 +314,7 @@ public sealed class SensorDetailsModel : PageModel
             }
 
             var state = latestObservation.State;
-            var (visualKey, fillPercent) = ResolveChannelVisual(latestObservation.Value, fallbackUnit, SensorMeasurementKind.Unknown);
+            var (visualKey, fillPercent) = ResolveChannelVisual(latestObservation.Value, fallbackUnit, SensorMeasurementKind.Unknown, MonitoringSettings.GetChannelVisual(settings, "default"));
             return
             [
                 new SensorChannelRow(
@@ -338,7 +338,7 @@ public sealed class SensorDetailsModel : PageModel
                 var isDefault = defaultChannel is not null
                     ? string.Equals(channel.Key, defaultChannel.Key, StringComparison.OrdinalIgnoreCase)
                     : channel.IsDefault;
-                var (visualKey, fillPercent) = ResolveChannelVisual(channel.Value, channel.Unit, channel.MeasurementKind);
+                var (visualKey, fillPercent) = ResolveChannelVisual(channel.Value, channel.Unit, channel.MeasurementKind, MonitoringSettings.GetChannelVisual(settings, channel.Key));
 
                 return new SensorChannelRow(
                     channel.Key,
@@ -363,16 +363,38 @@ public sealed class SensorDetailsModel : PageModel
     private static (string VisualKey, double? FillPercent) ResolveChannelVisual(
         double? value,
         string? unit,
-        SensorMeasurementKind kind)
+        SensorMeasurementKind kind,
+        string? configuredVisual = null)
     {
         var resolved = kind != SensorMeasurementKind.Unknown
             ? kind
             : SensorUnitConverter.GuessMeasurementKind(unit);
 
-        return resolved switch
+        var configured = string.IsNullOrWhiteSpace(configuredVisual) ? "auto" : configuredVisual.Trim().ToLowerInvariant();
+
+        // "auto" derives the visual from the measurement kind (as before).
+        if (configured == "auto")
         {
-            SensorMeasurementKind.Percent when value.HasValue => ("progress", Math.Clamp(value.Value, 0d, 100d)),
-            SensorMeasurementKind.Boolean when value.HasValue => ("boolean", value.Value >= 0.5d ? 100d : 0d),
+            return resolved switch
+            {
+                SensorMeasurementKind.Percent when value.HasValue => ("progress", Math.Clamp(value.Value, 0d, 100d)),
+                SensorMeasurementKind.Boolean when value.HasValue => ("boolean", value.Value >= 0.5d ? 100d : 0d),
+                _ => ("value", null)
+            };
+        }
+
+        // Explicit override. Progress/Gauge need a 0–100 fill, which we only know for
+        // percentages; otherwise fall back to a plain value. "graph" stays in the main
+        // chart, so a per-channel row shows the value.
+        var percentFill = resolved == SensorMeasurementKind.Percent && value.HasValue
+            ? Math.Clamp(value.Value, 0d, 100d)
+            : (double?)null;
+
+        return configured switch
+        {
+            "progress" when percentFill.HasValue => ("progress", percentFill),
+            "gauge" when percentFill.HasValue => ("gauge", percentFill),
+            "boolean" when value.HasValue => ("boolean", value.Value >= 0.5d ? 100d : 0d),
             _ => ("value", null)
         };
     }

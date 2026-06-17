@@ -4998,6 +4998,38 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 .sensor-channel-meter[data-state="error"] span,
 .sensor-channel-meter[data-state="critical"] span { background: var(--matmon-danger); }
 
+.sensor-channel-gauge {
+  width: 4.2rem;
+  height: 2.35rem;
+}
+
+.sensor-channel-gauge-track {
+  fill: none;
+  stroke: var(--matmon-surface-strong);
+  stroke-width: 9;
+}
+
+.sensor-channel-gauge-fill {
+  fill: none;
+  stroke: var(--matmon-accent);
+  stroke-width: 9;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.3s ease;
+}
+
+.sensor-channel-gauge[data-state="ok"] .sensor-channel-gauge-fill,
+.sensor-channel-gauge[data-state="healthy"] .sensor-channel-gauge-fill { stroke: #5fcf9e; }
+.sensor-channel-gauge[data-state="warning"] .sensor-channel-gauge-fill { stroke: var(--matmon-warning); }
+.sensor-channel-gauge[data-state="error"] .sensor-channel-gauge-fill,
+.sensor-channel-gauge[data-state="critical"] .sensor-channel-gauge-fill { stroke: var(--matmon-danger); }
+
+.sensor-threshold-visual {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+  max-width: 14rem;
+}
+
 .sensor-channel-actions {
   display: flex;
   justify-content: flex-end;

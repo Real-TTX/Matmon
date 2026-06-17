@@ -267,6 +267,14 @@
                                             <span style="width:@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span>
                                         </div>
                                     }
+                                    else if (channel.VisualKey == "gauge" && channel.FillPercent.HasValue)
+                                    {
+                                        var gaugeDash = (channel.FillPercent.Value / 100d * 125.6d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+                                        <svg class="sensor-channel-gauge" viewBox="0 0 100 56" data-state="@channel.StateKey" aria-hidden="true" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
+                                            <path class="sensor-channel-gauge-track" d="M10 50 A40 40 0 0 1 90 50" />
+                                            <path class="sensor-channel-gauge-fill" d="M10 50 A40 40 0 0 1 90 50" style="stroke-dasharray:@gaugeDash 200" />
+                                        </svg>
+                                    }
                                     <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
                                     <div class="sensor-channel-actions">
                                         <form method="post"

@@ -44,6 +44,9 @@ public sealed class MonitoringSettings
 
     public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Per-channel display visual override (channel key → auto|value|progress|gauge|graph). Empty = auto-derive from the measurement kind.</summary>
+    public Dictionary<string, string> ChannelVisuals { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string? DefaultChannelKey { get; set; }
 
     /// <summary>Optional fixed lower bound for the graph y-axis (in the channel's native unit). Null = auto-scale from data.</summary>
@@ -92,6 +95,11 @@ public sealed class MonitoringSettings
         foreach (var parameter in source.Parameters)
         {
             Parameters[parameter.Key] = parameter.Value;
+        }
+
+        foreach (var visual in source.ChannelVisuals)
+        {
+            ChannelVisuals[visual.Key] = visual.Value;
         }
 
         DefaultChannelKey = source.DefaultChannelKey ?? DefaultChannelKey;
@@ -207,6 +215,16 @@ public sealed class MonitoringSettings
                 string.Equals(target.Thresholds[key], inheritedValue, StringComparison.Ordinal))
             {
                 target.Thresholds.Remove(key);
+            }
+        }
+
+        var inheritedVisuals = inherited.ChannelVisuals;
+        foreach (var key in target.ChannelVisuals.Keys.ToList())
+        {
+            if (inheritedVisuals.TryGetValue(key, out var inheritedValue) &&
+                string.Equals(target.ChannelVisuals[key], inheritedValue, StringComparison.Ordinal))
+            {
+                target.ChannelVisuals.Remove(key);
             }
         }
 
@@ -358,6 +376,38 @@ public sealed class MonitoringSettings
         ThresholdRule rule)
     {
         settings.Thresholds[BuildChannelThresholdKey(channelKey, severity)] = FormatThresholdRule(rule);
+    }
+
+    /// <summary>Valid per-channel visual values (UI dropdown). "auto" derives from the measurement kind.</summary>
+    public static readonly IReadOnlyList<string> ChannelVisualOptions = ["auto", "value", "progress", "gauge", "graph"];
+
+    public static string GetChannelVisual(MonitoringSettings settings, string channelKey)
+    {
+        if (!string.IsNullOrWhiteSpace(channelKey) &&
+            settings.ChannelVisuals.TryGetValue(channelKey.Trim(), out var visual) &&
+            !string.IsNullOrWhiteSpace(visual))
+        {
+            return visual.Trim().ToLowerInvariant();
+        }
+
+        return "auto";
+    }
+
+    public static void SetChannelVisual(MonitoringSettings settings, string channelKey, string? visual)
+    {
+        if (string.IsNullOrWhiteSpace(channelKey))
+        {
+            return;
+        }
+
+        var normalized = visual?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized == "auto" || !ChannelVisualOptions.Contains(normalized))
+        {
+            settings.ChannelVisuals.Remove(channelKey.Trim());
+            return;
+        }
+
+        settings.ChannelVisuals[channelKey.Trim()] = normalized;
     }
 
     public static bool TryParseThresholdRule(string? raw, out ThresholdRule rule)

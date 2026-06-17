@@ -3012,6 +3012,11 @@ public sealed class WorkspaceModel : PageModel
             }
         }
 
+        foreach (var row in rows.Values)
+        {
+            row.Visual = MonitoringSettings.GetChannelVisual(settings, row.ChannelKey);
+        }
+
         return rows.Values
             .OrderBy(row => row.IsDefault ? 0 : 1)
             .ThenBy(row => row.ChannelKey, StringComparer.OrdinalIgnoreCase)
@@ -3146,6 +3151,8 @@ public sealed class WorkspaceModel : PageModel
             settings.Thresholds[threshold.Key] = threshold.Value;
         }
 
+        settings.ChannelVisuals.Clear();
+
         foreach (var field in fields)
         {
             if (field.IsDeleted || string.IsNullOrWhiteSpace(field.ChannelKey))
@@ -3163,6 +3170,8 @@ public sealed class WorkspaceModel : PageModel
             {
                 MonitoringSettings.SetChannelThreshold(settings, channelKey, "critical", criticalRule);
             }
+
+            MonitoringSettings.SetChannelVisual(settings, channelKey, field.Visual);
         }
 
         var activeChannelKeys = fields
@@ -6707,6 +6716,8 @@ public sealed class WorkspaceSensorChannelThresholdFieldInput
     public string CriticalValue { get; set; } = string.Empty;
 
     public string? CriticalValuePlaceholder { get; set; }
+
+    public string Visual { get; set; } = "auto";
 
     public bool IsDeleted { get; set; }
 }
