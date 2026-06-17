@@ -32,6 +32,7 @@ public static class SensorScheduleDefaults
         // Authenticated/remote health — moderate cadence.
         ["mssql"] = TimeSpan.FromMinutes(2),
         ["proxmox"] = TimeSpan.FromMinutes(2),
+        ["unifi-health"] = TimeSpan.FromMinutes(2),
         ["synology"] = TimeSpan.FromMinutes(5),
         ["synology-health"] = TimeSpan.FromMinutes(5),
         ["docker-container"] = TimeSpan.FromMinutes(1),

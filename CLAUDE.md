@@ -38,7 +38,7 @@ Mode is set via `Matmon__Mode=Primary|Secondary` (default Primary).
 
 Tree of `MonitoringElement`s: `ProbeElement` → `FolderElement` → `HostElement` → `SensorElement` (see `Matmon.Core/Domain`). Settings, credentials and templates are **inheritable** from parents; a sensor overrides only the fields that differ (`MonitoringInheritanceResolver`). Templates: `MonitoringTemplate` (+ `TemplateEditor` page). Thresholds per channel: `SensorThresholdEvaluator`. Scheduling: `MonitoringSchedule` / `MonitoringScheduleCalculator`.
 
-**Sensors** are `ISensorExecutor` implementations registered in `RegisterSensorExecutors` (`Program.cs`): Ping, HTTP (+ HttpAdvanced), SNMP (+ interface/UPS), Synology NAS/Health, Proxmox PVE, PowerShell/Windows Health, Windows Service/Process, Linux SSH Health, SSL Certificate (+ chain), MSSQL Query, TCP Port, DNS, NTP, Docker Container, Backup Job, Disk SMART, Probe Heartbeat, Probe Health. Adding a sensor type = new `ISensorExecutor` + registration + parameter definitions (`SensorParameterDefinition`).
+**Sensors** are `ISensorExecutor` implementations registered in `RegisterSensorExecutors` (`Program.cs`): Ping, HTTP (+ HttpAdvanced), SNMP (+ interface/UPS), Synology NAS/Health, Proxmox PVE, UniFi Health (cloud api.ui.com / local controller, X-API-KEY — availability, not SMART), PowerShell/Windows Health, Windows Service/Process, Linux SSH Health, SSL Certificate (+ chain), MSSQL Query, TCP Port, DNS, NTP, Docker Container, Backup Job, Disk SMART, Probe Heartbeat, Probe Health. Adding a sensor type = new `ISensorExecutor` + registration + parameter definitions (`SensorParameterDefinition`).
 
 ## Persistence (important — and the current bottleneck)
 

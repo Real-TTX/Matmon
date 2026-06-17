@@ -60,6 +60,7 @@ public static class SensorTelemetryProfiles
         ["linux-ssh-health"] = Availability,
         ["powershell"] = Availability,
         ["backup-job"] = Availability,
+        ["unifi-health"] = Availability,
 
         // Probe infrastructure.
         ["probe-heartbeat"] = Infrastructure,

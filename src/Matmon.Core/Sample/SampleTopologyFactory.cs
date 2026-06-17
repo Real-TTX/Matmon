@@ -221,6 +221,7 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
             SnmpInterfaceSensorExecutor.Definition,
             UpsSnmpSensorExecutor.Definition,
             ProxmoxPveSensorExecutor.Definition,
+            UnifiHealthSensorExecutor.Definition,
             PowerShellRemoteSensorExecutor.Definition,
             WindowsServiceSensorExecutor.Definition,
             WindowsProcessSensorExecutor.Definition,
