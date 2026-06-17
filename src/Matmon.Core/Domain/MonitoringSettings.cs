@@ -374,6 +374,46 @@ public sealed class MonitoringSettings
             return true;
         }
 
+        // Backward-compat: older workspaces stored rules as "above:60" / "below:5"
+        // before the editor switched to symbol operators. Keep parsing them so
+        // existing thresholds (e.g. probe-heartbeat age) still evaluate.
+        if (TryParseLegacyThresholdValue(trimmed, out rule))
+        {
+            return true;
+        }
+
+        rule = default;
+        return false;
+    }
+
+    private static bool TryParseLegacyThresholdValue(string raw, out ThresholdRule rule)
+    {
+        var separator = raw.IndexOf(':');
+        if (separator > 0)
+        {
+            var name = raw[..separator].Trim().ToLowerInvariant();
+            var valueText = raw[(separator + 1)..].Trim();
+            if (double.TryParse(valueText, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
+            {
+                ThresholdDirection? direction = name switch
+                {
+                    "above" or "gt" => ThresholdDirection.Above,
+                    "aboveorequal" or "atleast" or "gte" => ThresholdDirection.AboveOrEqual,
+                    "below" or "lt" => ThresholdDirection.Below,
+                    "beloworequal" or "atmost" or "lte" => ThresholdDirection.BelowOrEqual,
+                    "equal" or "equals" or "eq" => ThresholdDirection.Equal,
+                    "notequal" or "neq" => ThresholdDirection.NotEqual,
+                    _ => null
+                };
+
+                if (direction is ThresholdDirection resolved)
+                {
+                    rule = new ThresholdRule(resolved, value);
+                    return true;
+                }
+            }
+        }
+
         rule = default;
         return false;
     }

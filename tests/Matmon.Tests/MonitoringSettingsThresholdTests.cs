@@ -21,11 +21,26 @@ public class MonitoringSettingsThresholdTests
     }
 
     [Theory]
+    [InlineData("above:60", ThresholdDirection.Above, 60d)]
+    [InlineData("below:5", ThresholdDirection.Below, 5d)]
+    [InlineData("aboveOrEqual:90", ThresholdDirection.AboveOrEqual, 90d)]
+    [InlineData("belowOrEqual:10", ThresholdDirection.BelowOrEqual, 10d)]
+    [InlineData("equal:42", ThresholdDirection.Equal, 42d)]
+    [InlineData("notEqual:7", ThresholdDirection.NotEqual, 7d)]
+    public void TryParseThresholdRule_parses_legacy_named_format(string raw, ThresholdDirection direction, double value)
+    {
+        Assert.True(MonitoringSettings.TryParseThresholdRule(raw, out var rule));
+        Assert.Equal(direction, rule.Direction);
+        Assert.Equal(value, rule.Value);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("notathreshold")]
     [InlineData(">= abc")]
+    [InlineData("above:abc")]
     public void TryParseThresholdRule_rejects_invalid(string? raw)
     {
         Assert.False(MonitoringSettings.TryParseThresholdRule(raw, out _));
