@@ -247,6 +247,12 @@
                                 </div>
                                 <div class="sensor-channel-side">
                                     <div class="sensor-channel-value">@channel.ValueText @channel.Unit</div>
+                                    @if (channel.VisualKey == "progress" && channel.FillPercent.HasValue)
+                                    {
+                                        <div class="sensor-channel-meter" data-state="@channel.StateKey" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
+                                            <span style="width:@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                                        </div>
+                                    }
                                     <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
                                     <div class="sensor-channel-actions">
                                         <form method="post"

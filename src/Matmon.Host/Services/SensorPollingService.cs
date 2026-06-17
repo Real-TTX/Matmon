@@ -93,7 +93,8 @@ public sealed class SensorPollingService : BackgroundService
             var latestRunUtc = latestBySensor.TryGetValue(sensor.Id, out var latest)
                 ? latest.TimestampUtc
                 : (DateTimeOffset?)null;
-            if (!MonitoringScheduleCalculator.IsDue(effectiveSettings, latestRunUtc, now, TimeSpan.FromSeconds(15)))
+            var fallbackInterval = SensorScheduleDefaults.Resolve(sensor.SensorTypeKey);
+            if (!MonitoringScheduleCalculator.IsDue(effectiveSettings, latestRunUtc, now, fallbackInterval))
             {
                 continue;
             }

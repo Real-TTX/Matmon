@@ -309,6 +309,7 @@ public sealed class SensorDetailsModel : PageModel
             }
 
             var state = latestObservation.State;
+            var (visualKey, fillPercent) = ResolveChannelVisual(latestObservation.Value, fallbackUnit, SensorMeasurementKind.Unknown);
             return
             [
                 new SensorChannelRow(
@@ -319,7 +320,9 @@ public sealed class SensorDetailsModel : PageModel
                     MonitoringStatePresentation.Key(state),
                     MonitoringStatePresentation.Label(state),
                     latestObservation.Message,
-                    true)
+                    true,
+                    visualKey,
+                    fillPercent)
             ];
         }
 
@@ -330,6 +333,7 @@ public sealed class SensorDetailsModel : PageModel
                 var isDefault = defaultChannel is not null
                     ? string.Equals(channel.Key, defaultChannel.Key, StringComparison.OrdinalIgnoreCase)
                     : channel.IsDefault;
+                var (visualKey, fillPercent) = ResolveChannelVisual(channel.Value, channel.Unit, channel.MeasurementKind);
 
                 return new SensorChannelRow(
                     channel.Key,
@@ -339,9 +343,33 @@ public sealed class SensorDetailsModel : PageModel
                     MonitoringStatePresentation.Key(state),
                     MonitoringStatePresentation.Label(state),
                     channel.Message ?? latestObservation.Message,
-                    isDefault);
+                    isDefault,
+                    visualKey,
+                    fillPercent);
             })
             .ToArray();
+    }
+
+    /// <summary>
+    /// Picks a per-channel visual from the measurement kind: percentages render as
+    /// a progress meter (0–100), booleans as an on/off badge, everything else as a
+    /// plain value. The fill percent is only meaningful for the progress visual.
+    /// </summary>
+    private static (string VisualKey, double? FillPercent) ResolveChannelVisual(
+        double? value,
+        string? unit,
+        SensorMeasurementKind kind)
+    {
+        var resolved = kind != SensorMeasurementKind.Unknown
+            ? kind
+            : SensorUnitConverter.GuessMeasurementKind(unit);
+
+        return resolved switch
+        {
+            SensorMeasurementKind.Percent when value.HasValue => ("progress", Math.Clamp(value.Value, 0d, 100d)),
+            SensorMeasurementKind.Boolean when value.HasValue => ("boolean", value.Value >= 0.5d ? 100d : 0d),
+            _ => ("value", null)
+        };
     }
 
     private static IReadOnlyList<SensorObservationRow> BuildRecentObservationRows(
@@ -603,7 +631,9 @@ public sealed record SensorChannelRow(
     string StateKey,
     string StateLabel,
     string? Message,
-    bool IsDefault);
+    bool IsDefault,
+    string VisualKey = "value",
+    double? FillPercent = null);
 
 public sealed record SensorObservationRow(
     string TimestampText,

@@ -4948,6 +4948,29 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   font-weight: 700;
 }
 
+.sensor-channel-meter {
+  width: clamp(5rem, 9vw, 8rem);
+  height: 0.4rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--matmon-surface-strong);
+  border: 1px solid var(--matmon-border);
+}
+
+.sensor-channel-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--matmon-accent);
+  transition: width 0.3s ease;
+}
+
+.sensor-channel-meter[data-state="ok"] span,
+.sensor-channel-meter[data-state="healthy"] span { background: #5fcf9e; }
+.sensor-channel-meter[data-state="warning"] span { background: var(--matmon-warning); }
+.sensor-channel-meter[data-state="error"] span,
+.sensor-channel-meter[data-state="critical"] span { background: var(--matmon-danger); }
+
 .sensor-channel-actions {
   display: flex;
   justify-content: flex-end;
