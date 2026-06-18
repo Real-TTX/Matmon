@@ -48,6 +48,19 @@
                         <span role="cell">
                             <strong>@probe.Name</strong>
                             <small>@probe.ProbeId</small>
+                            @if (!string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-")
+                            {
+                                <small class="system-probe-os">@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")</small>
+                            }
+                            @if (probe.Networks is { Count: > 0 })
+                            {
+                                <span class="system-probe-subnets">
+                                    @foreach (var net in probe.Networks)
+                                    {
+                                        <span class="sensor-chip">@net</span>
+                                    }
+                                </span>
+                            }
                         </span>
                         <span role="cell">@probe.Role</span>
                         <span role="cell">
