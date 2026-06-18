@@ -127,7 +127,9 @@
                         {
                             <label>
                                 <span>Type</span>
-                                <select asp-for="ElementEditor.SensorTypeKey" class="form-select workspace-select" asp-items="Model.ElementEditor.SensorTypeOptions" data-sensor-type-select></select>
+                                <select class="form-select workspace-select" asp-items="Model.ElementEditor.SensorTypeOptions" disabled aria-disabled="true" title="The sensor type is fixed after creation"></select>
+                                <input type="hidden" asp-for="ElementEditor.SensorTypeKey" />
+                                <small class="workspace-field-hint">Fixed after creation — history, channels &amp; statistics all depend on it. Create a new sensor to use a different type.</small>
                             </label>
                             @if (string.Equals(Model.ElementEditor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                             {

@@ -3504,6 +3504,16 @@ public sealed class WorkspaceModel : PageModel
         if (element is SensorElement sensorElement)
         {
             var sensorTypeKey = string.IsNullOrWhiteSpace(editor.SensorTypeKey) ? sensorElement.SensorTypeKey : editor.SensorTypeKey.Trim();
+
+            // The sensor type is immutable after creation: history, statistics and the
+            // channel set are all keyed to it, so switching it would orphan that data.
+            // The UI disables the field; this guards against a tampered / stale post.
+            if (!string.Equals(sensorTypeKey, sensorElement.SensorTypeKey, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The sensor type cannot be changed after creation — its history, channels and statistics depend on it. Create a new sensor to use a different type.");
+            }
+
             sensorDefinition = RequireSensorDefinition(sensorTypeKey);
             var existingSensorValues = ResolveElementEffectiveSettings(sensorElement).Parameters;
             sensorParameters = BuildSensorParameterValues(

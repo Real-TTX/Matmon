@@ -6218,6 +6218,16 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+.workspace-input:disabled,
+.workspace-select:disabled,
+.workspace-textarea:disabled {
+  background-color: var(--matmon-surface) !important;
+  color: var(--matmon-muted) !important;
+  border-style: dashed;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
 .workspace-input::placeholder,
 .workspace-textarea::placeholder {
   color: var(--matmon-muted);
