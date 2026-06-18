@@ -632,6 +632,26 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    public IReadOnlyDictionary<Guid, int> GetObservationCountsBySensor()
+    {
+        var counts = new Dictionary<Guid, int>();
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT sensor_id, COUNT(*) FROM observation GROUP BY sensor_id;";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                if (Guid.TryParse(reader.GetString(0), out var sensorId))
+                {
+                    counts[sensorId] = Convert.ToInt32(reader.GetInt64(1));
+                }
+            }
+        }
+
+        return counts;
+    }
+
     public int DeleteObservations(DateTimeOffset? olderThanUtc)
     {
         var removed = DeleteByTimestamp("observation", "ts", olderThanUtc);

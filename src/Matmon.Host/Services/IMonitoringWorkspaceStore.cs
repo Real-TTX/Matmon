@@ -69,6 +69,9 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyDictionary<Guid, SensorObservation> GetLatestSensorObservations();
 
+    /// <summary>Actual stored raw-observation count per sensor (the "log length").</summary>
+    IReadOnlyDictionary<Guid, int> GetSensorObservationCounts();
+
     IReadOnlyDictionary<Guid, SensorObservation[]> GetRecentSensorHistoryBySensor(TimeSpan window, int maxPerSensor);
 
     IReadOnlyList<MonitoringEvent> GetEvents(int take = 500);

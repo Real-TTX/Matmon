@@ -96,6 +96,7 @@
                     <option value="type" selected="@(Model.View.SortBy == "type" ? "selected" : null)">Type</option>
                     <option value="state" selected="@(Model.View.SortBy == "state" ? "selected" : null)">State</option>
                     <option value="bytes" selected="@(Model.View.SortBy == "bytes" ? "selected" : null)">Bytes</option>
+                    <option value="log" selected="@(Model.View.SortBy == "log" ? "selected" : null)">Log entries</option>
                 </select>
             </label>
 
@@ -170,6 +171,33 @@
             }
         </div>
     </section>
+
+    @if (Model.View.TopLogSensors.Count > 0)
+    {
+        <section class="panel panel-stack probe-usage-logs-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Largest logs</span></h2>
+                <span class="panel-hint">stored entries per sensor · @Model.View.TotalStoredObservationCountText total</span>
+            </div>
+            <div class="probe-usage-log-hint">Sensors with the most stored history. An outlier here usually means an over-fast poll interval or too-long retention — a good place to spot misconfigured sensors.</div>
+            <div class="probe-usage-log-list">
+                @foreach (var logSensor in Model.View.TopLogSensors)
+                {
+                    <a class="probe-usage-log-row" data-level="@logSensor.UsageLevelKey"
+                       asp-page="/SensorDetails" asp-route-sensorId="@logSensor.SensorId" title="@logSensor.Path">
+                        <div class="probe-usage-log-main">
+                            <span class="probe-usage-log-name">@logSensor.Name</span>
+                            <span class="probe-usage-log-meta">@logSensor.SensorTypeLabel · @logSensor.ScheduleSummary</span>
+                        </div>
+                        <div class="probe-usage-log-bar" aria-hidden="true">
+                            <span style="width:@logSensor.RelativeLogPercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                        </div>
+                        <span class="probe-usage-log-count">@logSensor.StoredObservationCountText</span>
+                    </a>
+                }
+            </div>
+        </section>
+    }
 
     <section class="panel panel-stack">
         <div class="panel-header">

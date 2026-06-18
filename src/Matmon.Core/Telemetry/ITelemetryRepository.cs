@@ -23,6 +23,12 @@ public interface ITelemetryRepository
     SensorObservation? GetLatestObservation(Guid sensorId);
 
     /// <summary>
+    /// Actual stored raw-observation count per sensor (the "log length"). A cheap GROUP BY over the
+    /// sensor index — used to spot sensors with disproportionately long logs (e.g. over-fast polling).
+    /// </summary>
+    IReadOnlyDictionary<Guid, int> GetObservationCountsBySensor();
+
+    /// <summary>
     /// Observations for one sensor at or after <paramref name="fromUtc"/>,
     /// ordered ascending, optionally limited to the last <paramref name="maxCount"/>.
     /// </summary>

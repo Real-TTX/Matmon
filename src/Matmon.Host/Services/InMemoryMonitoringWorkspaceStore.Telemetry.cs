@@ -94,6 +94,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return _telemetry.GetLatestObservations();
     }
 
+    public IReadOnlyDictionary<Guid, int> GetSensorObservationCounts()
+    {
+        return _telemetry.GetObservationCountsBySensor();
+    }
+
     public IReadOnlyDictionary<Guid, SensorObservation[]> GetRecentSensorHistoryBySensor(TimeSpan window, int maxPerSensor)
     {
         var cutoffUtc = window > TimeSpan.Zero

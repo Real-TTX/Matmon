@@ -89,6 +89,7 @@ public sealed class ProbeUsageModel : PageModel
         var templateMap = workspace.Templates.ToDictionary(template => template.Id);
         var sensorDefinitions = workspace.SensorDefinitions.ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
         var latestObservations = _workspaceStore.GetLatestSensorObservations();
+        var observationCounts = _workspaceStore.GetSensorObservationCounts();
         var recentHistory = _workspaceStore.GetRecentSensorHistoryBySensor(TimeSpan.FromHours(1), maxPerSensor: 240);
         var probeStatuses = _probeRegistry.GetAll().ToDictionary(snapshot => snapshot.ProbeId, StringComparer.OrdinalIgnoreCase);
         var now = DateTimeOffset.UtcNow;
@@ -137,6 +138,7 @@ public sealed class ProbeUsageModel : PageModel
                 ? history.Average(entry => entry.Duration.TotalMilliseconds)
                 : latestObservation?.Duration.TotalMilliseconds;
             var loadScore = EstimateLoadScore(usageLevel, estimatedRunsPerDay, averageDuration, state);
+            var storedObservationCount = observationCounts.TryGetValue(sensor.Id, out var storedCount) ? storedCount : 0;
             var target = SensorTargetResolver.Resolve(sensor, sensorLineage);
             var metaSummaryParts = new List<string>
             {
@@ -185,7 +187,9 @@ public sealed class ProbeUsageModel : PageModel
                 storage.FormatBytes((long)Math.Round(estimatedBytesPerDay)),
                 0d,
                 loadScore,
-                searchText));
+                searchText,
+                storedObservationCount,
+                storedObservationCount.ToString("N0", CultureInfo.InvariantCulture)));
         }
 
         var normalizedViewMode = NormalizeViewMode(ViewMode);
@@ -215,12 +219,27 @@ public sealed class ProbeUsageModel : PageModel
         var visibleMaxLoad = filteredSensorRows.Count == 0
             ? 1d
             : Math.Max(filteredSensorRows.Max(row => row.LoadScore), 0.0001d);
+        var maxStoredObservationCount = filteredSensorRows.Count == 0
+            ? 0
+            : filteredSensorRows.Max(row => row.StoredObservationCount);
         var filteredSensorRowsWithPercent = filteredSensorRows
             .Select(row => row with
             {
-                RelativeLoadPercent = row.LoadScore / visibleMaxLoad * 100d
+                RelativeLoadPercent = row.LoadScore / visibleMaxLoad * 100d,
+                RelativeLogPercent = maxStoredObservationCount <= 0
+                    ? 0d
+                    : row.StoredObservationCount / (double)maxStoredObservationCount * 100d
             })
             .ToArray();
+
+        // "Largest logs": the sensors with the most actually-stored observations — a fast,
+        // retrospective way to spot mis-scheduled (over-polling) sensors.
+        var topLogSensors = filteredSensorRowsWithPercent
+            .Where(row => row.StoredObservationCount > 0)
+            .OrderByDescending(row => row.StoredObservationCount)
+            .Take(8)
+            .ToArray();
+        var totalStoredObservationCount = filteredSensorRowsWithPercent.Sum(row => (long)row.StoredObservationCount);
 
         var groups = BuildUsageGroups(filteredSensorRowsWithPercent, visibleLoadScore, storage);
         var distributionSegments = BuildDistributionSegments(normalizedViewMode, groups, filteredSensorRowsWithPercent);
@@ -269,7 +288,9 @@ public sealed class ProbeUsageModel : PageModel
             BuildDistributionLabel(normalizedViewMode),
             distributionSegments,
             groups,
-            filteredSensorRowsWithPercent);
+            filteredSensorRowsWithPercent,
+            topLogSensors,
+            totalStoredObservationCount.ToString("N0", CultureInfo.InvariantCulture));
 
         return true;
     }
@@ -476,6 +497,7 @@ public sealed class ProbeUsageModel : PageModel
             "type" => "type",
             "state" => "state",
             "bytes" => "bytes",
+            "log" => "log",
             _ => "load"
         };
     }
@@ -533,6 +555,11 @@ public sealed class ProbeUsageModel : PageModel
                 .ToList(),
             "bytes" => rows
                 .OrderByDescending(row => row.EstimatedBytesPerDayValue)
+                .ThenByDescending(row => row.LoadScore)
+                .ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            "log" => rows
+                .OrderByDescending(row => row.StoredObservationCount)
                 .ThenByDescending(row => row.LoadScore)
                 .ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
@@ -748,7 +775,9 @@ public sealed record ProbeUsageViewModel(
     string DistributionLabel,
     IReadOnlyList<ProbeUsageDistributionSegmentRow> DistributionSegments,
     IReadOnlyList<ProbeUsageGroupRow> Groups,
-    IReadOnlyList<ProbeUsageSensorRow> Sensors);
+    IReadOnlyList<ProbeUsageSensorRow> Sensors,
+    IReadOnlyList<ProbeUsageSensorRow> TopLogSensors,
+    string TotalStoredObservationCountText);
 
 public sealed record ProbeUsageStatus(
     string StateKey,
@@ -794,7 +823,10 @@ public sealed record ProbeUsageSensorRow(
     string EstimatedBytesPerDayText,
     double RelativeLoadPercent,
     double LoadScore,
-    string SearchText)
+    string SearchText,
+    int StoredObservationCount,
+    string StoredObservationCountText,
+    double RelativeLogPercent = 0d)
 {
     public int SamplesPerHourValue => int.TryParse(SamplesPerHourText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
         ? value
