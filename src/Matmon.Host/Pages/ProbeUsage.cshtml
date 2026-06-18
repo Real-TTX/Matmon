@@ -195,7 +195,7 @@
                                     <span class="probe-usage-group-count">@group.SensorCount sensors</span>
                                 </div>
                                 <div class="probe-usage-group-meta">
-                                    <span>@group.SamplesPerHour samples/h</span>
+                                    <span>@group.SamplesPerHour checks/h</span>
                                     <span>@group.EstimatedBytesPerHourText / h</span>
                                     <span>@group.EstimatedBytesPerDayText / d</span>
                                 </div>
@@ -273,7 +273,7 @@
                                                 <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-load">
                                                     <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
                                                     <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
-                                                    <small>@sensor.SamplesPerHourText samples/h</small>
+                                                    <small>@sensor.SamplesPerHourText checks/h</small>
                                                     <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
                                                     <small>@sensor.AverageDurationText avg</small>
                                                 </div>
@@ -375,7 +375,7 @@
                                     <div class="probe-usage-cell-inline-line probe-usage-cell-inline-line-load">
                                         <strong>@sensor.RelativeLoadPercent.ToString("0.#", CultureInfo.InvariantCulture)%</strong>
                                         <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
-                                        <small>@sensor.SamplesPerHourText samples/h</small>
+                                        <small>@sensor.SamplesPerHourText checks/h</small>
                                         <span class="probe-usage-cell-dot">@Html.Raw("&middot;")</span>
                                         <small>@sensor.AverageDurationText avg</small>
                                     </div>

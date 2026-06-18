@@ -5253,7 +5253,7 @@ public sealed class WorkspaceModel : PageModel
             return null;
         }
 
-        return $"Type defaults ({profile.Name}): keep raw samples {profile.RawObservationDays} d, " +
+        return $"Type defaults ({profile.Name}): keep raw checks {profile.RawObservationDays} d, " +
                $"summarise {DescribeBucketGranularity(profile.StatisticsBucketMinutes)}, " +
                $"keep summaries {profile.StatisticsRetentionDays} d, event log {profile.EventRetentionDays} d.";
     }

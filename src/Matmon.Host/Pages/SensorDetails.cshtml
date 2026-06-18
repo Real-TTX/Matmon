@@ -198,7 +198,7 @@
                     <span>MAX @(window.Maximum?.ToString("0.###") ?? "-")</span>
                 </div>
                 <div class="sensor-window-mini">
-                    <span>Samples @window.SampleCount</span>
+                    <span>Checks @window.SampleCount</span>
                     <span>Latest @(window.LatestValue?.ToString("0.###") ?? "-")</span>
                 </div>
             </article>
@@ -231,7 +231,7 @@
                     <span>AVG @(Model.View.SelectedWindow.Average?.ToString("0.###") ?? "-")@(string.IsNullOrWhiteSpace(Model.View.Unit) ? string.Empty : $" {Model.View.Unit}")</span>
                     <span>MIN @(Model.View.SelectedWindow.Minimum?.ToString("0.###") ?? "-")</span>
                     <span>MAX @(Model.View.SelectedWindow.Maximum?.ToString("0.###") ?? "-")</span>
-                    <span>@Model.View.SelectedWindow.SampleCount samples</span>
+                    <span>@Model.View.SelectedWindow.SampleCount checks</span>
                 </div>
                 <div class="sensor-chart-legend">
                     <span class="sensor-chart-legend-line" style="--series-color:@Model.View.SelectedWindow.LineColor"></span>
@@ -335,7 +335,7 @@
                                 var barHeight = Math.Max((cr.AverageValue.Value - chartMin) / chartRange * 40d, 0.6d);
                                 var barX = (i * slot) + ((slot - barWidth) / 2d);
                                 var barY = 42d - barHeight;
-                                var barTip = $"{cr.PeriodText} · avg {cr.AverageText}{unitSuffix} · min {cr.MinimumText} · max {cr.MaximumText}" + (cr.UptimeText is null ? string.Empty : $" · uptime {cr.UptimeText}") + $" · {cr.SampleCount} samples";
+                                var barTip = $"{cr.PeriodText} · avg {cr.AverageText}{unitSuffix} · min {cr.MinimumText} · max {cr.MaximumText}" + (cr.UptimeText is null ? string.Empty : $" · uptime {cr.UptimeText}") + $" · {cr.SampleCount} checks";
                                 <rect class="sensor-statistics-bar" data-state="@cr.StateKey" data-bar-tip="@barTip" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"></rect>
                             }
                         </svg>
@@ -357,7 +357,7 @@
                                 <th title="bottom 1 %">1 %</th>
                                 <th title="top 1 %">99 %</th>
                                 <th>Uptime</th>
-                                <th>Samples</th>
+                                <th>Checks</th>
                             </tr>
                         </thead>
                         <tbody>
