@@ -4,7 +4,7 @@
     ViewData["Title"] = "Template";
     var isCreateMode = Model.SelectedTemplateId is null || Model.TemplateEditor.Id == Guid.Empty;
     var backUrl = Model.GetSafeReturnUrl("/Templates");
-    var hasFixedChannels = Model.TemplateEditor.SensorChannelMode == SensorChannelMode.Fixed;
+    var isSensorScope = Model.TemplateEditor.TargetKind == MonitoringTemplateScope.Sensor;
     var selectedParentLabel = Model.TemplateEditor.ParentOptions.FirstOrDefault(option => option.Selected)?.Text ?? "No parent";
     var templateParameterCount = string.IsNullOrWhiteSpace(Model.TemplateEditor.ParametersText)
         ? 0
@@ -31,7 +31,7 @@
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
 
-    <section class="panel panel-stack workspace-panel workspace-assistant-panel template-editor-guide">
+    <section class="panel panel-stack workspace-assistant-panel template-editor-guide">
         <div class="assistant-steps" aria-label="Template assistant steps">
             <span class="assistant-step is-active">Scope</span>
             <span class="assistant-step is-active">Inheritance</span>
@@ -45,7 +45,7 @@
         </div>
     </section>
 
-    <section class="panel panel-stack workspace-editor-panel">
+    <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("template")<span>@(isCreateMode ? "Create" : "Edit")</span></h2>
             <span class="panel-hint">@Model.View.SelectedTemplateKind</span>
@@ -128,7 +128,7 @@
                 <article class="template-summary-card">
                     <span>@MatmonIcons.Render("template")<span>Scope</span></span>
                     <strong>@Model.TemplateEditor.TargetKind</strong>
-                    @if (Model.TemplateEditor.TargetKind == MonitoringTemplateScope.Sensor)
+                    @if (isSensorScope)
                     {
                         <small>@Model.TemplateEditor.SensorTypeKey</small>
                     }
@@ -154,375 +154,327 @@
                 <input type="hidden" asp-for="TemplateEditor.Id" />
                 <input type="hidden" asp-for="ReturnUrl" />
 
-                <div class="workspace-form-grid">
-                    <label>
-                        <span>Name</span>
-                        <input asp-for="TemplateEditor.Name" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Scope</span>
-                        <select asp-for="TemplateEditor.TargetKind" class="form-select workspace-select" data-template-scope-select>
-                            @foreach (var scope in Enum.GetValues<MonitoringTemplateScope>())
-                            {
-                                <option value="@((int)scope)">@scope</option>
-                            }
-                        </select>
-                    </label>
-                    <label data-template-sensor-only>
-                        <span>Sensor type</span>
-                        <select asp-for="TemplateEditor.SensorTypeKey" class="form-select workspace-select" asp-items="Model.View.SensorTypeOptions"></select>
-                    </label>
-                    @if (Model.TemplateEditor.TargetKind == MonitoringTemplateScope.Sensor)
-                    {
+                <div class="sensor-tabs" data-sensor-tabs role="tablist">
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("template")<span>General</span></button>
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="parameters" role="tab">@MatmonIcons.Render("settings")<span>Parameters</span></button>
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="thresholds" role="tab">@MatmonIcons.Render("signal")<span>Thresholds</span></button>
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="schedule" role="tab">@MatmonIcons.Render("clock")<span>Schedule</span></button>
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="telemetry" role="tab">@MatmonIcons.Render("chart")<span>Telemetry</span></button>
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="impact" role="tab">@MatmonIcons.Render("signal")<span>Impact</span></button>
+                </div>
+
+                @* ---------- GENERAL ---------- *@
+                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="general">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("template")<span>Scope &amp; inheritance</span></h2>
+                        <span class="panel-hint">name, parent &amp; defaults</span>
+                    </div>
+                    <div class="workspace-form-grid">
                         <label>
-                            <span>Highlight</span>
-                            <select asp-for="TemplateEditor.Highlight" class="form-select workspace-select">
-                                <option value="">@(string.IsNullOrWhiteSpace(Model.TemplateEditor.HighlightInheritedLabel) || string.Equals(Model.TemplateEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.TemplateEditor.HighlightInheritedLabel})")</option>
-                                <option value="true">on</option>
-                                <option value="false">off</option>
+                            <span>Name</span>
+                            <input asp-for="TemplateEditor.Name" class="form-control workspace-input" />
+                        </label>
+                        <label>
+                            <span>Scope</span>
+                            <select asp-for="TemplateEditor.TargetKind" class="form-select workspace-select" data-template-scope-select>
+                                @foreach (var scope in Enum.GetValues<MonitoringTemplateScope>())
+                                {
+                                    <option value="@((int)scope)">@scope</option>
+                                }
                             </select>
                         </label>
-                    }
-                    <label class="workspace-span-2">
-                        <span>Parent</span>
-                        <select asp-for="TemplateEditor.ParentTemplateId" class="form-select workspace-select" asp-items="Model.TemplateEditor.ParentOptions">
-                            <option value="">No parent</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Enabled</span>
-                        <select asp-for="TemplateEditor.EnabledMode" class="form-select workspace-select">
-                            <option value="inherit">@(string.IsNullOrWhiteSpace(Model.TemplateEditor.EnabledInheritedLabel) || string.Equals(Model.TemplateEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.TemplateEditor.EnabledInheritedLabel})")</option>
-                            <option value="enabled">enabled</option>
-                            <option value="disabled">disabled</option>
-                        </select>
-                    </label>
-                    @await Html.PartialAsync("_SensorSchedule", Model.TemplateEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "TemplateEditor" } })
-                    <label>
-                        <span>Timeout</span>
-                        <input asp-for="TemplateEditor.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.TimeoutSecondsPlaceholder" />
-                    </label>
-                    <label>
-                        <span>Retries</span>
-                        <input asp-for="TemplateEditor.RetryCount" type="number" min="0" class="form-control workspace-input" placeholder="@Model.TemplateEditor.RetryCountPlaceholder" />
-                    </label>
-                    <div class="workspace-span-2 workspace-retention-section">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("clock")<span>Retention</span></h2>
-                            <span class="panel-hint">events, history, statistics</span>
-                        </div>
-                        <div class="workspace-inline-note">Leave empty to inherit. Placeholders show the inherited value.</div>
-                        <div class="workspace-form-grid">
-                            <label>
-                                <span>Event logs</span>
-                                <input asp-for="TemplateEditor.EventRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.EventRetentionDaysPlaceholder" />
-                            </label>
-                            <label>
-                                <span>History</span>
-                                <input asp-for="TemplateEditor.ObservationRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.ObservationRetentionDaysPlaceholder" />
-                            </label>
-                            <label>
-                                <span>Statistics</span>
-                                <input asp-for="TemplateEditor.StatisticsRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.StatisticsRetentionDaysPlaceholder" />
-                            </label>
-                            <label>
-                                <span>Bucket minutes</span>
-                                <input asp-for="TemplateEditor.StatisticsBucketMinutes" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.StatisticsBucketMinutesPlaceholder" />
-                            </label>
-                            </div>
-                        </div>
-
-                        <div class="workspace-span-2 workspace-credential-section">
-                            <div class="panel-header">
-                                <h2 class="section-title">@MatmonIcons.Render("key")<span>Credentials</span></h2>
-                                <span class="panel-hint">inherited access</span>
-                            </div>
-                            <div class="workspace-inline-note">Define reusable credentials here. Sensors automatically pick the first inherited bundle with the matching credential type. Sensor templates may optionally select a specific bundle.</div>
-
-                            @if (Model.TemplateEditor.TargetKind == MonitoringTemplateScope.Sensor)
-                            {
-                                <label class="workspace-span-2">
-                                    <span>Credential selection</span>
-                                    <select asp-for="TemplateEditor.SelectedCredentialId" class="form-select workspace-select" asp-items="Model.TemplateEditor.CredentialOptions"></select>
-                                </label>
-                            }
-
-                            @if (Model.TemplateEditor.CredentialBundles.Count == 0)
-                            {
-                                <div class="empty-state">No credentials yet.</div>
-                            }
-                            else
-                            {
-                                <div class="sensor-parameter-list" data-credential-section>
-                                    @for (var i = 0; i < Model.TemplateEditor.CredentialBundles.Count; i++)
-                                    {
-                                        var credential = Model.TemplateEditor.CredentialBundles[i];
-                                        var isHidden = i >= Model.TemplateEditor.CredentialBundleVisibleCount || credential.IsDeleted;
-                                        <div class="sensor-parameter-card" data-credential-row data-credential-deleted="@(credential.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
-                                            <input type="hidden" asp-for="TemplateEditor.CredentialBundles[i].Id" />
-                                            <input type="hidden" asp-for="TemplateEditor.CredentialBundles[i].IsDeleted" />
-                                            <div class="sensor-parameter-head">
-                                                <div>
-                                                    <div class="sensor-parameter-name">Credential</div>
-                                                    <div class="sensor-parameter-help">Reusable access bundle for one sensor family</div>
-                                                </div>
-                                                <div class="sensor-threshold-head-actions">
-                                                    <button type="button"
-                                                            class="workspace-danger-submit sensor-threshold-delete"
-                                                            data-credential-delete
-                                                            aria-label="Delete credential"
-                                                            title="Delete credential">
-                                                        @MatmonIcons.Render("trash")
-                                                        <span class="workspace-sr-only">Delete credential</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div class="sensor-threshold-grid">
-                                                <label>
-                                                    <span>Name</span>
-                                                    <input asp-for="TemplateEditor.CredentialBundles[i].Name" class="form-control workspace-input" placeholder="Windows admin" />
-                                                </label>
-                                                <label>
-                                                    <span>Kind</span>
-                                                    <select asp-for="TemplateEditor.CredentialBundles[i].Kind" class="form-select workspace-select" data-credential-kind-select>
-                                                        @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>())
-                                                        {
-                                                            <option value="@kind">@kind</option>
-                                                        }
-                                                    </select>
-                                                </label>
-                                                <label class="workspace-span-2">
-                                                    <span>Description</span>
-                                                    <input asp-for="TemplateEditor.CredentialBundles[i].Description" class="form-control workspace-input" placeholder="Optional note" />
-                                                </label>
-
-                                                <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="windows" hidden="@(credential.Kind == MonitoringCredentialKind.Windows ? null : "hidden")">
-                                                    <div class="workspace-inline-note">Windows / WinRM credentials</div>
-                                                    <div class="sensor-threshold-grid">
-                                                        <label>
-                                                            <span>Username</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].WinrmUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                        </label>
-                                                        <label>
-                                                            <span>Password</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].WinrmPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="ssh" hidden="@((credential.Kind == MonitoringCredentialKind.Linux || credential.Kind == MonitoringCredentialKind.Ssh) ? null : "hidden")">
-                                                    <div class="workspace-inline-note">SSH / Linux credentials</div>
-                                                    <div class="sensor-threshold-grid">
-                                                        <label>
-                                                            <span>Username</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SshUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                        </label>
-                                                        <label>
-                                                            <span>Password</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SshPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                        </label>
-                                                        <label class="workspace-span-2">
-                                                            <span>Private key path</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SshPrivateKeyPath" class="form-control workspace-input" placeholder="C:\\Users\\monitor\\.ssh\\id_ed25519" />
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
-                                                    <div class="workspace-inline-note">Proxmox API token credentials</div>
-                                                    <div class="sensor-threshold-grid">
-                                                        <label>
-                                                            <span>API user</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].PveUser" class="form-control workspace-input" placeholder="root@pam" />
-                                                        </label>
-                                                        <label>
-                                                            <span>Token ID</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].PveTokenId" class="form-control workspace-input" placeholder="monitoring" />
-                                                        </label>
-                                                        <label class="workspace-span-2">
-                                                            <span>Token secret</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].PveTokenSecret" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="sqlserver" hidden="@(credential.Kind == MonitoringCredentialKind.SqlServer ? null : "hidden")">
-                                                    <div class="workspace-inline-note">SQL Server credentials</div>
-                                                    <div class="sensor-threshold-grid">
-                                                        <label>
-                                                            <span>Username</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].MssqlUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                        </label>
-                                                        <label>
-                                                            <span>Password</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].MssqlPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="snmp" hidden="@(credential.Kind == MonitoringCredentialKind.Snmp ? null : "hidden")">
-                                                    <div class="workspace-inline-note">SNMP credentials</div>
-                                                    <div class="sensor-threshold-grid">
-                                                        <label>
-                                                            <span>Community</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpCommunity" class="form-control workspace-input" placeholder="public" />
-                                                        </label>
-                                                        <label>
-                                                            <span>v3 username</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3Username" class="form-control workspace-input" placeholder="snmp-user" />
-                                                        </label>
-                                                        <label>
-                                                            <span>v3 auth protocol</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3AuthProtocol" class="form-control workspace-input" placeholder="sha1" />
-                                                        </label>
-                                                        <label>
-                                                            <span>v3 auth password</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3AuthPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                        </label>
-                                                        <label>
-                                                            <span>v3 privacy protocol</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3PrivacyProtocol" class="form-control workspace-input" placeholder="aes128" />
-                                                        </label>
-                                                        <label>
-                                                            <span>v3 privacy password</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3PrivacyPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                        </label>
-                                                        <label class="workspace-span-2">
-                                                            <span>v3 context</span>
-                                                            <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3ContextName" class="form-control workspace-input" placeholder="optional" />
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <details class="workspace-details workspace-details-nested workspace-span-2">
-                                                    <summary>@MatmonIcons.Render("spark")<span>Advanced values</span></summary>
-                                                    <div class="workspace-details-body">
-                                                        <div class="workspace-inline-note">Use this for any extra key=value pairs that are not covered above.</div>
-                                                        <label>
-                                                            <span>Values</span>
-                                                            <textarea asp-for="TemplateEditor.CredentialBundles[i].ValuesText" rows="4" class="form-control workspace-textarea" placeholder="key=value per line"></textarea>
-                                                        </label>
-                                                    </div>
-                                                </details>
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-
-                                @if (Model.TemplateEditor.CredentialBundles.Count > Model.TemplateEditor.CredentialBundleVisibleCount)
-                                {
-                                    <div class="sensor-threshold-actions">
-                                        <button type="button" class="workspace-secondary-submit" data-credential-add>@MatmonIcons.Render("plus")<span>Add credential</span></button>
-                                    </div>
-                                }
-                            }
-                        </div>
-
-                        <label class="workspace-span-2">
-                            <span>Parameters</span>
-                            <textarea asp-for="TemplateEditor.ParametersText" rows="4" class="form-control workspace-textarea" placeholder="@Model.TemplateEditor.ParametersTextPlaceholder"></textarea>
+                        <label data-template-sensor-only>
+                            <span>Sensor type</span>
+                            <select asp-for="TemplateEditor.SensorTypeKey" class="form-select workspace-select" asp-items="Model.View.SensorTypeOptions"></select>
                         </label>
-                    @if (Model.TemplateEditor.TargetKind == MonitoringTemplateScope.Sensor)
+                        @if (isSensorScope)
+                        {
+                            <label>
+                                <span>Highlight</span>
+                                <select asp-for="TemplateEditor.Highlight" class="form-select workspace-select">
+                                    <option value="">@(string.IsNullOrWhiteSpace(Model.TemplateEditor.HighlightInheritedLabel) || string.Equals(Model.TemplateEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.TemplateEditor.HighlightInheritedLabel})")</option>
+                                    <option value="true">on</option>
+                                    <option value="false">off</option>
+                                </select>
+                            </label>
+                        }
+                        <label class="workspace-span-2">
+                            <span>Parent</span>
+                            <select asp-for="TemplateEditor.ParentTemplateId" class="form-select workspace-select" asp-items="Model.TemplateEditor.ParentOptions">
+                                <option value="">No parent</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Enabled</span>
+                            <select asp-for="TemplateEditor.EnabledMode" class="form-select workspace-select">
+                                <option value="inherit">@(string.IsNullOrWhiteSpace(Model.TemplateEditor.EnabledInheritedLabel) || string.Equals(Model.TemplateEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.TemplateEditor.EnabledInheritedLabel})")</option>
+                                <option value="enabled">enabled</option>
+                                <option value="disabled">disabled</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Timeout</span>
+                            <input asp-for="TemplateEditor.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.TimeoutSecondsPlaceholder" />
+                        </label>
+                        <label>
+                            <span>Retries</span>
+                            <input asp-for="TemplateEditor.RetryCount" type="number" min="0" class="form-control workspace-input" placeholder="@Model.TemplateEditor.RetryCountPlaceholder" />
+                        </label>
+                    </div>
+                    <div class="workspace-inline-note">Parent templates are living defaults. Empty fields keep inheriting from the parent or from higher elements.</div>
+                </div>
+
+                @* ---------- PARAMETERS ---------- *@
+                <div class="workspace-span-2 workspace-credential-section" data-sensor-tab="parameters">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("key")<span>Credentials</span></h2>
+                        <span class="panel-hint">inherited access</span>
+                    </div>
+                    <div class="workspace-inline-note">Define reusable credentials here. Sensors automatically pick the first inherited bundle with the matching credential type. Sensor templates may optionally select a specific bundle.</div>
+
+                    @if (isSensorScope)
                     {
-                        <div class="workspace-span-2 sensor-threshold-section" data-threshold-section data-template-sensor-only>
-                            <div class="panel-header">
-                                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels & thresholds</span></h2>
-                                <span class="channel-mode-pill" data-mode="@(hasFixedChannels ? "fixed" : "dynamic")">@(hasFixedChannels ? "FIXED" : "DYNAMIC")</span>
-                            </div>
-                            <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
+                        <label class="workspace-span-2">
+                            <span>Credential selection</span>
+                            <select asp-for="TemplateEditor.SelectedCredentialId" class="form-select workspace-select" asp-items="Model.TemplateEditor.CredentialOptions"></select>
+                        </label>
+                    }
 
-                            @if (Model.TemplateEditor.SensorChannelThresholdFields.Count == 0)
-                            {
-                                <div class="empty-state">No channels yet.</div>
-                            }
-                            else
-                            {
-                                <div class="sensor-threshold-list" data-threshold-list>
-                                    @for (var i = 0; i < Model.TemplateEditor.SensorChannelThresholdFields.Count; i++)
-                                    {
-                                        var field = Model.TemplateEditor.SensorChannelThresholdFields[i];
-                                        var isHidden = i >= Model.TemplateEditor.SensorChannelThresholdVisibleCount || field.IsDeleted;
-                                        <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
-                                            <input type="hidden" asp-for="TemplateEditor.SensorChannelThresholdFields[i].IsDefault" />
-                                            <input type="hidden" asp-for="TemplateEditor.SensorChannelThresholdFields[i].IsDeleted" />
-                                            <div class="sensor-threshold-head">
-                                                <div>
-                                                    <div class="sensor-threshold-name">@(!string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel")</div>
-                                                    <div class="sensor-threshold-help">
-                                                        @(!string.IsNullOrWhiteSpace(field.ChannelKey) ? field.ChannelKey : "channel key")
-                                                        @if (!string.IsNullOrWhiteSpace(field.Unit))
-                                                        {
-                                                            <text> / @field.Unit</text>
-                                                        }
-                                                    </div>
-                                                </div>
-                                                <div class="sensor-threshold-head-actions">
-                                                    <button type="button"
-                                                            class="workspace-secondary-submit sensor-threshold-default @(field.IsDefault ? "is-active" : string.Empty)"
-                                                            data-threshold-default
-                                                            aria-pressed="@(field.IsDefault ? "true" : "false")"
-                                                            title="Set as graph channel">
-                                                        @MatmonIcons.Render("chart")
-                                                        <span data-threshold-default-label>@(field.IsDefault ? "Graph" : "Set graph")</span>
-                                                    </button>
-                                                    @if (!hasFixedChannels)
-                                                    {
-                                                        <button type="button"
-                                                                class="workspace-danger-submit sensor-threshold-delete"
-                                                                data-threshold-delete
-                                                                aria-label="Delete channel"
-                                                                title="Delete channel">
-                                                            @MatmonIcons.Render("trash")
-                                                            <span class="workspace-sr-only">Delete channel</span>
-                                                        </button>
-                                                    }
-                                                </div>
-                                            </div>
-
-                                            <div class="sensor-threshold-grid">
-                                                <label>
-                                                    <span>Channel</span>
-                                                    <input asp-for="TemplateEditor.SensorChannelThresholdFields[i].ChannelKey" class="form-control workspace-input" placeholder="latency" readonly="@(hasFixedChannels ? "readonly" : null)" />
-                                                </label>
-                                                <label>
-                                                    <span>Warning</span>
-                                                    <div class="sensor-threshold-rule">
-                                                        <select asp-for="TemplateEditor.SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                                        <input asp-for="TemplateEditor.SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
-                                                    </div>
-                                                </label>
-                                                <label>
-                                                    <span>Critical</span>
-                                                    <div class="sensor-threshold-rule">
-                                                        <select asp-for="TemplateEditor.SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                                        <input asp-for="TemplateEditor.SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
-                                                    </div>
-                                                </label>
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-
-                                @if (!hasFixedChannels && Model.TemplateEditor.SensorChannelThresholdFields.Count > Model.TemplateEditor.SensorChannelThresholdVisibleCount)
-                                {
-                                    <div class="sensor-threshold-actions">
-                                        <button type="button" class="workspace-secondary-submit" data-threshold-add>@MatmonIcons.Render("plus")<span>Add channel</span></button>
-                                    </div>
-                                }
-                            }
-                        </div>
+                    @if (Model.TemplateEditor.CredentialBundles.Count == 0)
+                    {
+                        <div class="empty-state">No credentials yet.</div>
                     }
                     else
                     {
-                        <label class="workspace-span-2" data-template-nonsensor-only>
-                            <span>Thresholds</span>
-                            <textarea asp-for="TemplateEditor.ThresholdsText" rows="4" class="form-control workspace-textarea" placeholder="@Model.TemplateEditor.ThresholdsTextPlaceholder"></textarea>
-                        </label>
+                        <div class="sensor-parameter-list" data-credential-section>
+                            @for (var i = 0; i < Model.TemplateEditor.CredentialBundles.Count; i++)
+                            {
+                                var credential = Model.TemplateEditor.CredentialBundles[i];
+                                var isHidden = i >= Model.TemplateEditor.CredentialBundleVisibleCount || credential.IsDeleted;
+                                <div class="sensor-parameter-card" data-credential-row data-credential-deleted="@(credential.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
+                                    <input type="hidden" asp-for="TemplateEditor.CredentialBundles[i].Id" />
+                                    <input type="hidden" asp-for="TemplateEditor.CredentialBundles[i].IsDeleted" />
+                                    <div class="sensor-parameter-head">
+                                        <div>
+                                            <div class="sensor-parameter-name">Credential</div>
+                                            <div class="sensor-parameter-help">Reusable access bundle for one sensor family</div>
+                                        </div>
+                                        <div class="sensor-threshold-head-actions">
+                                            <button type="button"
+                                                    class="workspace-danger-submit sensor-threshold-delete"
+                                                    data-credential-delete
+                                                    aria-label="Delete credential"
+                                                    title="Delete credential">
+                                                @MatmonIcons.Render("trash")
+                                                <span class="workspace-sr-only">Delete credential</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="sensor-threshold-grid">
+                                        <label>
+                                            <span>Name</span>
+                                            <input asp-for="TemplateEditor.CredentialBundles[i].Name" class="form-control workspace-input" placeholder="Windows admin" />
+                                        </label>
+                                        <label>
+                                            <span>Kind</span>
+                                            <select asp-for="TemplateEditor.CredentialBundles[i].Kind" class="form-select workspace-select" data-credential-kind-select>
+                                                @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>())
+                                                {
+                                                    <option value="@kind">@kind</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <label class="workspace-span-2">
+                                            <span>Description</span>
+                                            <input asp-for="TemplateEditor.CredentialBundles[i].Description" class="form-control workspace-input" placeholder="Optional note" />
+                                        </label>
+
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="windows" hidden="@(credential.Kind == MonitoringCredentialKind.Windows ? null : "hidden")">
+                                            <div class="workspace-inline-note">Windows / WinRM credentials</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label>
+                                                    <span>Username</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].WinrmUsername" class="form-control workspace-input" placeholder="monitor" />
+                                                </label>
+                                                <label>
+                                                    <span>Password</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].WinrmPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="ssh" hidden="@((credential.Kind == MonitoringCredentialKind.Linux || credential.Kind == MonitoringCredentialKind.Ssh) ? null : "hidden")">
+                                            <div class="workspace-inline-note">SSH / Linux credentials</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label>
+                                                    <span>Username</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SshUsername" class="form-control workspace-input" placeholder="monitor" />
+                                                </label>
+                                                <label>
+                                                    <span>Password</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SshPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                                <label class="workspace-span-2">
+                                                    <span>Private key path</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SshPrivateKeyPath" class="form-control workspace-input" placeholder="C:\\Users\\monitor\\.ssh\\id_ed25519" />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
+                                            <div class="workspace-inline-note">Proxmox API token credentials</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label>
+                                                    <span>API user</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].PveUser" class="form-control workspace-input" placeholder="root@pam" />
+                                                </label>
+                                                <label>
+                                                    <span>Token ID</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].PveTokenId" class="form-control workspace-input" placeholder="monitoring" />
+                                                </label>
+                                                <label class="workspace-span-2">
+                                                    <span>Token secret</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].PveTokenSecret" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="sqlserver" hidden="@(credential.Kind == MonitoringCredentialKind.SqlServer ? null : "hidden")">
+                                            <div class="workspace-inline-note">SQL Server credentials</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label>
+                                                    <span>Username</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].MssqlUsername" class="form-control workspace-input" placeholder="monitor" />
+                                                </label>
+                                                <label>
+                                                    <span>Password</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].MssqlPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="snmp" hidden="@(credential.Kind == MonitoringCredentialKind.Snmp ? null : "hidden")">
+                                            <div class="workspace-inline-note">SNMP credentials</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label>
+                                                    <span>Community</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpCommunity" class="form-control workspace-input" placeholder="public" />
+                                                </label>
+                                                <label>
+                                                    <span>v3 username</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3Username" class="form-control workspace-input" placeholder="snmp-user" />
+                                                </label>
+                                                <label>
+                                                    <span>v3 auth protocol</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3AuthProtocol" class="form-control workspace-input" placeholder="sha1" />
+                                                </label>
+                                                <label>
+                                                    <span>v3 auth password</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3AuthPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                                <label>
+                                                    <span>v3 privacy protocol</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3PrivacyProtocol" class="form-control workspace-input" placeholder="aes128" />
+                                                </label>
+                                                <label>
+                                                    <span>v3 privacy password</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3PrivacyPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                                <label class="workspace-span-2">
+                                                    <span>v3 context</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3ContextName" class="form-control workspace-input" placeholder="optional" />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <details class="workspace-details workspace-details-nested workspace-span-2">
+                                            <summary>@MatmonIcons.Render("spark")<span>Advanced values</span></summary>
+                                            <div class="workspace-details-body">
+                                                <div class="workspace-inline-note">Use this for any extra key=value pairs that are not covered above.</div>
+                                                <label>
+                                                    <span>Values</span>
+                                                    <textarea asp-for="TemplateEditor.CredentialBundles[i].ValuesText" rows="4" class="form-control workspace-textarea" placeholder="key=value per line"></textarea>
+                                                </label>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @if (Model.TemplateEditor.CredentialBundles.Count > Model.TemplateEditor.CredentialBundleVisibleCount)
+                        {
+                            <div class="sensor-threshold-actions">
+                                <button type="button" class="workspace-secondary-submit" data-credential-add>@MatmonIcons.Render("plus")<span>Add credential</span></button>
+                            </div>
+                        }
                     }
                 </div>
 
-                <div class="workspace-span-2 template-impact-section">
+                <div class="sensor-parameter-section" data-sensor-tab="parameters">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Parameters</span></h2>
+                        <span class="panel-hint">key=value per line</span>
+                    </div>
+                    <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
+                    <label class="workspace-span-2">
+                        <span>Parameters</span>
+                        <textarea asp-for="TemplateEditor.ParametersText" rows="4" class="form-control workspace-textarea" placeholder="@Model.TemplateEditor.ParametersTextPlaceholder"></textarea>
+                    </label>
+                </div>
+
+                @* ---------- THRESHOLDS ---------- *@
+                @if (isSensorScope)
+                {
+                    @await Html.PartialAsync("_SensorThresholds", Model.TemplateEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "TemplateEditor" } })
+                }
+                else
+                {
+                    <div class="sensor-parameter-section" data-sensor-tab="thresholds" data-template-nonsensor-only>
+                        <div class="panel-header">
+                            <h2 class="section-title">@MatmonIcons.Render("signal")<span>Thresholds</span></h2>
+                            <span class="panel-hint">key=value per line</span>
+                        </div>
+                        <label class="workspace-span-2">
+                            <span>Thresholds</span>
+                            <textarea asp-for="TemplateEditor.ThresholdsText" rows="4" class="form-control workspace-textarea" placeholder="@Model.TemplateEditor.ThresholdsTextPlaceholder"></textarea>
+                        </label>
+                    </div>
+                }
+
+                @* ---------- SCHEDULE ---------- *@
+                @await Html.PartialAsync("_SensorSchedule", Model.TemplateEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "TemplateEditor" } })
+
+                @* ---------- TELEMETRY ---------- *@
+                <div class="workspace-span-2 workspace-retention-section" data-sensor-tab="telemetry">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("clock")<span>Retention</span></h2>
+                        <span class="panel-hint">events, history, statistics</span>
+                    </div>
+                    <div class="workspace-inline-note">Leave empty to inherit. Placeholders show the inherited value.</div>
+                    <div class="workspace-form-grid">
+                        <label>
+                            <span>Event logs</span>
+                            <input asp-for="TemplateEditor.EventRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.EventRetentionDaysPlaceholder" />
+                        </label>
+                        <label>
+                            <span>History</span>
+                            <input asp-for="TemplateEditor.ObservationRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.ObservationRetentionDaysPlaceholder" />
+                        </label>
+                        <label>
+                            <span>Statistics</span>
+                            <input asp-for="TemplateEditor.StatisticsRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.StatisticsRetentionDaysPlaceholder" />
+                        </label>
+                        <label>
+                            <span>Bucket minutes</span>
+                            <input asp-for="TemplateEditor.StatisticsBucketMinutes" type="number" min="1" class="form-control workspace-input" placeholder="@Model.TemplateEditor.StatisticsBucketMinutesPlaceholder" />
+                        </label>
+                    </div>
+                </div>
+
+                @* ---------- IMPACT ---------- *@
+                <div class="workspace-span-2 template-impact-section" data-sensor-tab="impact">
                     <div class="panel-header">
                         <h2 class="section-title">@MatmonIcons.Render("signal")<span>Impact</span></h2>
                         <span class="panel-hint">@Model.TemplateEditor.ImpactRows.Count sensor@(Model.TemplateEditor.ImpactRows.Count == 1 ? string.Empty : "s")</span>
