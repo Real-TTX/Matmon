@@ -235,12 +235,19 @@ public sealed class WorkspaceModel : PageModel
             LoadViewState(populateEditorValues: false);
             StatusMessage = null;
             ErrorMessage = null;
+            // The form is redisplayed with values the server just recomputed (suggested
+            // name, applied template defaults, rebuilt channel/parameter fields). Tag
+            // helpers prefer the posted ModelState over the model on redisplay, which
+            // would mask those changes (e.g. the name would stay "Ping 3" after switching
+            // the type to HTTP), so drop ModelState and render straight from the model.
+            ModelState.Clear();
             return Page();
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
             LoadViewState(populateEditorValues: false);
+            ModelState.Clear();
             return Page();
         }
     }
@@ -285,12 +292,16 @@ public sealed class WorkspaceModel : PageModel
                 : $"Discovered {discovered.Count} OIDs.";
 
             LoadViewState(populateEditorValues: false);
+            // Render the rebuilt walk items / applied parameters from the model, not the
+            // stale posted ModelState (see OnPostPreviewSensorFields).
+            ModelState.Clear();
             return Page();
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
             LoadViewState(populateEditorValues: false);
+            ModelState.Clear();
             return Page();
         }
     }
