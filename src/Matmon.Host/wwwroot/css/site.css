@@ -7974,6 +7974,46 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   color: var(--matmon-muted);
 }
 
+.public-map-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.public-map-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.public-map-meta span {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.public-map-meta .public-map-meta-brand {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.public-map-meta-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--matmon-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.public-map-meta-time .ui-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
 /* Public wallboard fills the row the shell grid hands it (1fr) exactly, so the
    board scales to the screen instead of overflowing into a scrollbar. */
 .public-map-canvas {
@@ -8010,6 +8050,41 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .public-map-carousel-nav {
   margin-top: 0.4rem;
+}
+
+/* Stage wraps the board + its page indicator so an overlay indicator can float over it. */
+.public-map-stage {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.public-map-carousel-nav.is-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 0.9rem;
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 5;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--matmon-surface) 86%, transparent);
+  border: 1px solid var(--matmon-border);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.public-map-carousel-nav.is-auto-hide {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.public-map-stage.is-active .public-map-carousel-nav.is-auto-hide {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .map-carousel-arrow {
@@ -8059,6 +8134,44 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 /* --- Map editor slide strip --- */
+.map-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--matmon-border);
+}
+
+.map-editor-toolbar .map-slide-strip {
+  margin-bottom: 0;
+}
+
+.map-editor-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.map-editor-scale .workspace-label {
+  margin: 0;
+}
+
+.map-scale-range {
+  width: 8rem;
+  accent-color: var(--matmon-accent);
+}
+
+.map-scale-output {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--matmon-muted);
+}
+
 .map-slide-strip {
   display: flex;
   align-items: center;

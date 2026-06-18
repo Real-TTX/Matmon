@@ -34,6 +34,36 @@
                 <span class="panel-hint">Drag from the toolbox, select map title or tile, edit properties</span>
             </div>
 
+            <div class="map-editor-toolbar">
+                <div class="map-slide-strip" data-map-slide-strip>
+                    <div class="map-slide-tabs" data-map-slide-tabs>
+                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                        {
+                            var slide = Model.Input.Slides[slideIndex];
+                            <button type="button" class="map-slide-tab @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id">@slide.Name</button>
+                        }
+                    </div>
+                    <div class="map-slide-actions">
+                        <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
+                        <button type="button" class="map-slide-action" data-map-slide-rename title="Rename current slide">@MatmonIcons.Render("pencil")</button>
+                        <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
+                    </div>
+                    <div data-map-slide-inputs hidden>
+                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                        {
+                            <input type="hidden" name="Input.Slides[@slideIndex].Id" value="@Model.Input.Slides[slideIndex].Id" />
+                            <input type="hidden" name="Input.Slides[@slideIndex].Name" value="@Model.Input.Slides[slideIndex].Name" />
+                        }
+                    </div>
+                </div>
+
+                <label class="map-editor-scale" title="Zoom the design canvas">
+                    <span class="workspace-label">Zoom</span>
+                    <input type="range" min="1" max="3" step="0.25" value="1" class="map-scale-range" data-map-scale />
+                    <span class="map-scale-output" data-map-scale-output>100%</span>
+                </label>
+            </div>
+
             <div class="map-designer-shell">
                 <aside class="map-toolbox" aria-label="Map toolbox">
                     <div class="map-designer-side-title">
@@ -79,28 +109,6 @@
                         </span>
                         <em data-map-grid-preview>@MapPresetText(Model.Input.DisplayPreset) · @Model.Input.Columns x @Model.Input.Rows grid</em>
                     </button>
-
-                    <div class="map-slide-strip" data-map-slide-strip>
-                        <div class="map-slide-tabs" data-map-slide-tabs>
-                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                            {
-                                var slide = Model.Input.Slides[slideIndex];
-                                <button type="button" class="map-slide-tab @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id">@slide.Name</button>
-                            }
-                        </div>
-                        <div class="map-slide-actions">
-                            <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
-                            <button type="button" class="map-slide-action" data-map-slide-rename title="Rename current slide">@MatmonIcons.Render("pencil")</button>
-                            <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
-                        </div>
-                        <div data-map-slide-inputs hidden>
-                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                            {
-                                <input type="hidden" name="Input.Slides[@slideIndex].Id" value="@Model.Input.Slides[slideIndex].Id" />
-                                <input type="hidden" name="Input.Slides[@slideIndex].Name" value="@Model.Input.Slides[slideIndex].Name" />
-                            }
-                        </div>
-                    </div>
 
                     <div class="map-editor-canvas"
                          data-map-designer
@@ -178,8 +186,17 @@
                                 <span class="workspace-label">Auto-rotate (seconds per slide)</span>
                                 <input asp-for="Input.AutoRotateSeconds" type="number" min="3" max="600" class="form-control workspace-input" />
                             </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Page indicator</span>
+                                <select asp-for="Input.PaginationMode" class="form-select workspace-select">
+                                    <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
+                                    <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay — always visible</option>
+                                    <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay — on mouse-move / change</option>
+                                    <option value="@MonitoringMapPaginationMode.Hidden">Hidden (auto-rotate only)</option>
+                                </select>
+                            </label>
                             <div class="map-property-hint">
-                                Used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
+                                Auto-rotate &amp; the page indicator are used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
                             </div>
                         </div>
                         <div class="map-property-hint">

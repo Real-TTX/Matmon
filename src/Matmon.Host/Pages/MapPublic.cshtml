@@ -5,6 +5,14 @@
     var display = Model.Display!;
     ViewData["Title"] = display.Map.Name;
     var preset = MonitoringMapDisplayPresetCatalog.Resolve(display.Map.DisplayPreset);
+    var paginationMode = display.Map.PaginationMode;
+    var showPagination = display.Slides.Count > 1 && paginationMode != MonitoringMapPaginationMode.Hidden;
+    var navModeClass = paginationMode switch
+    {
+        MonitoringMapPaginationMode.OverlayAlways => "is-overlay",
+        MonitoringMapPaginationMode.OverlayOnActivity => "is-overlay is-auto-hide",
+        _ => string.Empty
+    };
 }
 
 <!doctype html>
@@ -19,13 +27,19 @@
 <body class="public-map-body">
     <main class="public-map-shell">
         <header class="public-map-header">
-            <div>
-                <span>Matmon Map</span>
+            <div class="public-map-headline">
+                <span class="public-map-brand">Matmon Map</span>
                 <h1>@display.Map.Name</h1>
+                <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
             </div>
-            <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
+            <div class="public-map-meta" title="Page reloads every 30 s — the time shows the data is current">
+                <span class="public-map-meta-brand">Matmon</span>
+                <span>@Matmon.Host.Services.MatmonVersion.Current</span>
+                <span class="public-map-meta-time">@MatmonIcons.Render("clock")<span>@DateTimeOffset.Now.ToString("dd.MM.yyyy HH:mm:ss")</span></span>
+            </div>
         </header>
 
+        <div class="public-map-stage" data-map-pagination="@paginationMode.ToString().ToLowerInvariant()">
         <div class="map-carousel public-map-carousel" data-map-carousel data-map-carousel-autoplay data-map-carousel-interval="@display.Map.AutoRotateSeconds">
             @for (var slideIndex = 0; slideIndex < display.Slides.Count; slideIndex++)
             {
@@ -113,9 +127,9 @@
                 </section>
             }
         </div>
-        @if (display.Slides.Count > 1)
+        @if (showPagination)
         {
-            <div class="map-carousel-nav public-map-carousel-nav" data-map-carousel-nav>
+            <div class="map-carousel-nav public-map-carousel-nav @navModeClass" data-map-carousel-nav>
                 <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
                 <div class="map-carousel-dots">
                     @for (var dot = 0; dot < display.Slides.Count; dot++)
@@ -126,6 +140,7 @@
                 <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
             </div>
         }
+        </div>
     </main>
 </body>
 </html>

@@ -54,12 +54,28 @@ function initializeMapCarousel() {
     let active = 0;
     let timer = null;
 
+    // "Overlay — on mouse-move / change": reveal the page indicator on activity, then fade it.
+    const stage = carousel.closest("[data-map-pagination]");
+    const autoHideNav = stage?.dataset.mapPagination === "overlayonactivity";
+    let activityTimer = null;
+    const pingActivity = () => {
+      if (!autoHideNav || !stage) {
+        return;
+      }
+      stage.classList.add("is-active");
+      if (activityTimer) {
+        clearTimeout(activityTimer);
+      }
+      activityTimer = setTimeout(() => stage.classList.remove("is-active"), 2600);
+    };
+
     const show = (index) => {
       active = (index + slides.length) % slides.length;
       slides.forEach((slide, i) => {
         slide.hidden = i !== active;
       });
       dots.forEach((dot, i) => dot.classList.toggle("is-active", i === active));
+      pingActivity();
     };
 
     const stop = () => {
@@ -88,6 +104,10 @@ function initializeMapCarousel() {
     if (autoplay) {
       carousel.addEventListener("mouseenter", stop);
       carousel.addEventListener("mouseleave", start);
+    }
+
+    if (autoHideNav && stage) {
+      stage.addEventListener("pointermove", pingActivity);
     }
 
     show(0);
@@ -2102,6 +2122,12 @@ function initializeMapDesigner() {
   const form = document.querySelector("[data-map-designer-form]");
   const columnInput = form?.querySelector("[data-map-columns]");
   const rowInput = form?.querySelector("[data-map-rows]");
+  const scaleInput = form?.querySelector("[data-map-scale]");
+  const scaleOutput = form?.querySelector("[data-map-scale-output]");
+  const readScale = () => {
+    const value = parseFloat(scaleInput?.value || "1");
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  };
   const mapNameInput = form?.querySelector("[data-map-name]");
   const mapDescriptionInput = form?.querySelector("[data-map-description]");
   const displayPresetInput = form?.querySelector("[data-map-display-preset]");
@@ -2223,9 +2249,13 @@ function initializeMapDesigner() {
     canvas.style.setProperty("--map-display-height", String(preset.height));
     canvas.style.width = `min(100%, ${preset.width}px)`;
     canvas.style.aspectRatio = `${preset.width} / ${preset.height}`;
-    const canvasWidth = Math.max(720, grid.columns * 72);
+    const scale = readScale();
+    const canvasWidth = Math.max(720, grid.columns * 72) * scale;
     canvas.style.minWidth = `${canvasWidth}px`;
-    canvas.style.minHeight = `${Math.max(560, grid.rows * 72)}px`;
+    canvas.style.minHeight = `${Math.max(560, grid.rows * 72) * scale}px`;
+    if (scaleOutput) {
+      scaleOutput.textContent = `${Math.round(scale * 100)}%`;
+    }
     if (mapSelectButton) {
       mapSelectButton.style.minWidth = `${canvasWidth}px`;
     }
@@ -2618,6 +2648,7 @@ function initializeMapDesigner() {
   columnInput?.addEventListener("change", () => syncGrid(true));
   rowInput?.addEventListener("input", () => syncGrid());
   rowInput?.addEventListener("change", () => syncGrid(true));
+  scaleInput?.addEventListener("input", () => syncGrid());
 
   const renderSlideInputs = () => {
     if (!slideInputsHost) {

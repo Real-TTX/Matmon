@@ -379,6 +379,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         int rows,
         MonitoringMapDisplayPreset displayPreset,
         int autoRotateSeconds,
+        MonitoringMapPaginationMode paginationMode,
         IReadOnlyList<MonitoringMapSlide> slides)
     {
         lock (_gate)
@@ -396,6 +397,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 Rows = normalizedRows,
                 DisplayPreset = displayPreset,
                 AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds),
+                PaginationMode = paginationMode,
                 PublicToken = CreateToken(),
                 CreatedUtc = now,
                 UpdatedUtc = now,
@@ -417,6 +419,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         int rows,
         MonitoringMapDisplayPreset displayPreset,
         int autoRotateSeconds,
+        MonitoringMapPaginationMode paginationMode,
         IReadOnlyList<MonitoringMapSlide> slides)
     {
         lock (_gate)
@@ -437,6 +440,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             map.Rows = normalizedRows;
             map.DisplayPreset = displayPreset;
             map.AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds);
+            map.PaginationMode = paginationMode;
             map.Slides = normalizedSlides;
             map.Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList();
             map.UpdatedUtc = DateTimeOffset.UtcNow;

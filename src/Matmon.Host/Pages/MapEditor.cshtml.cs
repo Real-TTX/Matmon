@@ -86,11 +86,11 @@ public sealed class MapEditorModel : PageModel
             MonitoringMap map;
             if (mapId == Guid.Empty)
             {
-                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, slides);
+                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, Input.PaginationMode, slides);
             }
             else
             {
-                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, slides))
+                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, Input.PaginationMode, slides))
                 {
                     return NotFound();
                 }
@@ -184,6 +184,7 @@ public sealed class MapEditorModel : PageModel
                 Rows = map.Rows,
                 DisplayPreset = map.DisplayPreset,
                 AutoRotateSeconds = map.AutoRotateSeconds,
+                PaginationMode = map.PaginationMode,
                 Slides = slides.Select(slide => new MapSlideInput { Id = slide.Id, Name = slide.Name }).ToList(),
                 Tiles = slides.SelectMany(slide => slide.Tiles.Select(tile => new MapTileInput
                 {
@@ -220,6 +221,7 @@ public sealed class MapEditorModel : PageModel
                 Rows = 8,
                 DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
                 AutoRotateSeconds = 12,
+                PaginationMode = MonitoringMapPaginationMode.Below,
                 Slides = [new MapSlideInput { Id = defaultSlideId, Name = "Slide 1" }],
                 Tiles =
                 [
@@ -288,6 +290,8 @@ public sealed class MapEditorInput
     public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
 
     public int AutoRotateSeconds { get; set; } = 12;
+
+    public MonitoringMapPaginationMode PaginationMode { get; set; } = MonitoringMapPaginationMode.Below;
 
     public List<MapTileInput> Tiles { get; set; } = [];
 

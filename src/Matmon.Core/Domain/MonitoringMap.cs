@@ -19,6 +19,9 @@ public sealed class MonitoringMap
     /// <summary>Seconds each slide is shown before the public wallboard auto-advances to the next slide.</summary>
     public int AutoRotateSeconds { get; set; } = 12;
 
+    /// <summary>How the public wallboard shows the slide pagination / page indicator.</summary>
+    public MonitoringMapPaginationMode PaginationMode { get; set; } = MonitoringMapPaginationMode.Below;
+
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
@@ -106,6 +109,21 @@ public enum MonitoringMapTileGraphType
     Area = 1,
     Bars = 2,
     Smooth = 3
+}
+
+public enum MonitoringMapPaginationMode
+{
+    /// <summary>Page controls sit under the board (default).</summary>
+    Below = 0,
+
+    /// <summary>Page controls overlay the board and stay visible.</summary>
+    OverlayAlways = 1,
+
+    /// <summary>Page controls overlay the board, appear on mouse-move / slide change, then fade out.</summary>
+    OverlayOnActivity = 2,
+
+    /// <summary>No page controls — the board just auto-rotates.</summary>
+    Hidden = 3
 }
 
 public enum MonitoringMapTileVisualType
