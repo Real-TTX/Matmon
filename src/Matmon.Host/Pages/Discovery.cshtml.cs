@@ -410,14 +410,21 @@ public sealed class DiscoveryModel : PageModel
 
     private IReadOnlyList<string> ResolveProbeReportedNetworks(ProbeElement? probe)
     {
-        if (probe is null || string.IsNullOrWhiteSpace(probe.ProbeId))
+        if (probe is null)
         {
             return [];
         }
 
-        var snapshot = _probeRegistry.GetAll()
-            .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probe.ProbeId, StringComparison.OrdinalIgnoreCase));
-        return snapshot?.Networks ?? [];
+        var snapshot = string.IsNullOrWhiteSpace(probe.ProbeId)
+            ? null
+            : _probeRegistry.GetAll()
+                .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probe.ProbeId, StringComparison.OrdinalIgnoreCase));
+
+        // Admin-configured scan subnets first, then the auto-detected ones the probe reported.
+        return probe.Subnets
+            .Concat(snapshot?.Networks ?? [])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static IReadOnlyList<string> BuildSubnetSuggestions(

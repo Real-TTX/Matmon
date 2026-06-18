@@ -109,6 +109,11 @@
                                 <span>Token</span>
                                 <input asp-for="ElementEditor.EnrollmentToken" class="form-control workspace-input" />
                             </label>
+                            <label class="workspace-span-2">
+                                <span>Scan networks (subnets)</span>
+                                <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="form-control workspace-textarea" placeholder="10.10.0.0/16&#10;192.168.1.0/24"></textarea>
+                                <small class="workspace-field-hint">One CIDR per line. Networks this probe should scan — useful for routed networks it can reach but doesn't auto-detect. Shown on the Probes page and offered as Discovery suggestions.</small>
+                            </label>
                             <div class="workspace-span-2">
                                 <span class="workspace-label">Snippet</span>
                                 <pre class="workspace-code">@Model.ElementEditor.BootstrapSnippet</pre>

@@ -1832,6 +1832,7 @@ public sealed class WorkspaceModel : PageModel
             ParentId = element.ParentId,
             ProbeId = probeElement?.ProbeId,
             EnrollmentToken = probeElement?.EnrollmentToken,
+            ProbeSubnetsText = probeElement is null ? null : string.Join("\n", probeElement.Subnets),
             Address = (element as HostElement)?.Address,
             SensorTypeKey = (element as SensorElement)?.SensorTypeKey,
             Target = (element as SensorElement)?.Target,
@@ -3575,6 +3576,10 @@ public sealed class WorkspaceModel : PageModel
         {
             probe.ProbeId = string.IsNullOrWhiteSpace(editor.ProbeId) ? probe.ProbeId : editor.ProbeId.Trim();
             probe.EnrollmentToken = string.IsNullOrWhiteSpace(editor.EnrollmentToken) ? probe.EnrollmentToken : editor.EnrollmentToken.Trim();
+            probe.Subnets = (editor.ProbeSubnetsText ?? string.Empty)
+                .Split(['\n', '\r', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         if (element is HostElement host)
@@ -6666,6 +6671,8 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
     public string? ProbeId { get; set; }
 
     public string? EnrollmentToken { get; set; }
+
+    public string? ProbeSubnetsText { get; set; }
 
     public string? Address { get; set; }
 

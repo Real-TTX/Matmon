@@ -82,6 +82,13 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                             liveProbe.Networks ?? Array.Empty<string>())
                         : new ProbeSystemInfo("-", "-", Array.Empty<string>());
 
+                // Admin-configured subnets first (what you want this probe to scan), then the
+                // auto-detected interfaces it reported.
+                var networks = probe.Subnets
+                    .Concat(system.Networks)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
                 return new SystemProbeOverview(
                     probe.Id,
                     string.IsNullOrWhiteSpace(probe.ProbeId) ? "-" : probe.ProbeId,
@@ -94,7 +101,7 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                     CountSensors(probe),
                     system.OperatingSystem,
                     system.Host,
-                    system.Networks);
+                    networks);
             })
             .ToArray();
     }
