@@ -964,10 +964,14 @@ function initializeSensorTabs() {
       return;
     }
 
+    const names = buttons.map((button) => button.dataset.sensorTabTarget);
+    const useHash = tabBar.dataset.tabHash === "true";
+
     const activate = (name) => {
       buttons.forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.sensorTabTarget === name);
-        button.setAttribute("aria-selected", button.dataset.sensorTabTarget === name ? "true" : "false");
+        const isActive = button.dataset.sensorTabTarget === name;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
       });
       panels.forEach((panel) => {
         panel.hidden = panel.dataset.sensorTab !== name;
@@ -975,10 +979,27 @@ function initializeSensorTabs() {
     };
 
     buttons.forEach((button) => {
-      button.addEventListener("click", () => activate(button.dataset.sensorTabTarget));
+      button.addEventListener("click", () => {
+        const name = button.dataset.sensorTabTarget;
+        activate(name);
+        if (useHash) {
+          try {
+            history.replaceState(null, "", `#${name}`);
+          } catch (error) {
+            /* history may be unavailable; tab still switches */
+          }
+        }
+      });
     });
 
-    activate(buttons[0].dataset.sensorTabTarget);
+    // Pick the initial tab: server intent (data-active-tab) wins, then the URL hash
+    // (so a full-page reload — e.g. the statistics filter — keeps you on the right tab),
+    // otherwise the first tab.
+    const hashName = useHash ? (location.hash || "").replace(/^#/, "") : "";
+    const initial = (names.includes(tabBar.dataset.activeTab) ? tabBar.dataset.activeTab : null)
+      || (names.includes(hashName) ? hashName : null)
+      || names[0];
+    activate(initial);
   });
 }
 
