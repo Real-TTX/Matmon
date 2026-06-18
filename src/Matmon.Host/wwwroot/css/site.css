@@ -4540,7 +4540,14 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .sensor-statistics-panel {
-  gap: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* The flex gap already spaces the header from the toolbar below it. */
+.sensor-statistics-panel .panel-header {
+  margin-bottom: 0;
 }
 
 .sensor-statistics-controls {
