@@ -37,6 +37,9 @@ public sealed class SensorDetailsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? StatsGroup { get; set; }
 
+    [BindProperty(SupportsGet = true)]
+    public string? StatsRange { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -170,7 +173,7 @@ public sealed class SensorDetailsModel : PageModel
             : string.IsNullOrWhiteSpace(defaultChannel.Label) ? defaultChannel.Key : defaultChannel.Label;
         var executionProbe = FormatExecutionProbe(latestObservation);
         var statisticsBuckets = _workspaceStore.GetSensorStatistics(sensor.Id);
-        var statisticsSummary = BuildStatisticsSummary(statisticsBuckets, displayScale, measurementKind, StatsGroup, StatsFrom, StatsTo);
+        var statisticsSummary = BuildStatisticsSummary(statisticsBuckets, displayScale, measurementKind, StatsGroup, StatsRange, StatsFrom, StatsTo);
         var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
 
         View = new SensorDetailsViewModel(
@@ -205,6 +208,8 @@ public sealed class SensorDetailsModel : PageModel
     }
 
     private static readonly string[] StatisticsGroups = ["native", "day", "month", "year"];
+    private static readonly string[] StatisticsRanges = ["24h", "7d", "30d", "90d", "all"];
+    private const string DefaultStatisticsRange = "7d";
 
     private static string NormalizeStatisticsGroup(string? group)
     {
@@ -212,11 +217,36 @@ public sealed class SensorDetailsModel : PageModel
         return StatisticsGroups.Contains(value) ? value! : "native";
     }
 
+    private static string NormalizeStatisticsRange(string? range)
+    {
+        var value = range?.Trim().ToLowerInvariant();
+        return StatisticsRanges.Contains(value) ? value! : DefaultStatisticsRange;
+    }
+
+    private static (DateTime? From, DateTime? To) ResolveRelativeRange(string range, DateTime now) => range switch
+    {
+        "24h" => (now.AddHours(-24), now),
+        "7d" => (now.AddDays(-7), now),
+        "30d" => (now.AddDays(-30), now),
+        "90d" => (now.AddDays(-90), now),
+        _ => (null, null) // all time
+    };
+
+    // A coarser default grain per range keeps the bar count sane (24h → raw buckets,
+    // a week/month → daily, a quarter → monthly). An explicit group always wins.
+    private static string DefaultGroupForRange(string range) => range switch
+    {
+        "7d" or "30d" => "day",
+        "90d" => "month",
+        _ => "native"
+    };
+
     private static SensorStatisticsSummary? BuildStatisticsSummary(
         IReadOnlyList<SensorStatisticsBucket> buckets,
         SensorUnitScale scale,
         SensorMeasurementKind kind,
         string? group,
+        string? range,
         string? fromText,
         string? toText)
     {
@@ -225,12 +255,32 @@ public sealed class SensorDetailsModel : PageModel
             return null;
         }
 
-        var selectedGroup = NormalizeStatisticsGroup(group);
         var bucketMinutes = buckets[^1].BucketMinutes;
 
-        // Custom date range (local calendar days, inclusive). Empty = unbounded.
-        DateTime? fromLocal = TryParseLocalDate(fromText, endOfDay: false);
-        DateTime? toLocal = TryParseLocalDate(toText, endOfDay: true);
+        // An explicit From/To is a custom range and wins; otherwise a relative range
+        // (default: last 7 days) is resolved from "now".
+        var explicitFrom = TryParseLocalDate(fromText, endOfDay: false);
+        var explicitTo = TryParseLocalDate(toText, endOfDay: true);
+        var isCustom = explicitFrom is not null || explicitTo is not null;
+
+        string selectedRange;
+        DateTime? fromLocal;
+        DateTime? toLocal;
+        if (isCustom)
+        {
+            selectedRange = "custom";
+            fromLocal = explicitFrom;
+            toLocal = explicitTo;
+        }
+        else
+        {
+            selectedRange = NormalizeStatisticsRange(range);
+            (fromLocal, toLocal) = ResolveRelativeRange(selectedRange, DateTime.Now);
+        }
+
+        var selectedGroup = !string.IsNullOrWhiteSpace(group)
+            ? NormalizeStatisticsGroup(group)
+            : (isCustom ? "native" : DefaultGroupForRange(selectedRange));
 
         var filtered = buckets
             .Where(bucket =>
@@ -275,8 +325,11 @@ public sealed class SensorDetailsModel : PageModel
             unit,
             grouped,
             selectedGroup,
-            fromLocal?.ToString("yyyy-MM-dd"),
-            toLocal?.ToString("yyyy-MM-dd"));
+            selectedRange,
+            // Only echo dates into the custom From/To pickers for a custom range; relative
+            // ranges leave them empty so the active range chip stays the source of truth.
+            isCustom ? fromLocal?.ToString("yyyy-MM-dd") : null,
+            isCustom ? toLocal?.ToString("yyyy-MM-dd") : null);
     }
 
     private static DateTime? TryParseLocalDate(string? text, bool endOfDay)
@@ -814,6 +867,7 @@ public sealed record SensorStatisticsSummary(
     string? Unit,
     IReadOnlyList<SensorStatisticsRow> Rows,
     string SelectedGroup,
+    string SelectedRange,
     string? FromText,
     string? ToText);
 

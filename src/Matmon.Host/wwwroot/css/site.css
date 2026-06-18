@@ -4578,6 +4578,39 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   align-items: center;
 }
 
+.sensor-range-chips {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.sensor-range-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.sensor-range-chip:hover {
+  color: var(--matmon-foreground);
+  border-color: var(--matmon-accent);
+}
+
+.sensor-range-chip.is-active {
+  background: color-mix(in srgb, var(--matmon-accent) 18%, transparent);
+  border-color: var(--matmon-accent);
+  color: var(--matmon-foreground);
+}
+
 .sensor-statistics-chart {
   border: 1px solid color-mix(in srgb, var(--matmon-border) 60%, transparent);
   border-radius: 6px;
@@ -4932,6 +4965,12 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .sensor-chart-wrap {
+  position: relative;
+}
+
+/* Holds the plot area (svg + overlaid y-axis) so axis labels never spill onto
+   the x-axis labels rendered as a sibling below. */
+.sensor-chart-plot {
   position: relative;
 }
 

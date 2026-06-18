@@ -99,6 +99,7 @@
 
     @{
         var statsTabActive = !string.IsNullOrWhiteSpace(Model.StatsGroup)
+            || !string.IsNullOrWhiteSpace(Model.StatsRange)
             || !string.IsNullOrWhiteSpace(Model.StatsFrom)
             || !string.IsNullOrWhiteSpace(Model.StatsTo);
     }
@@ -279,6 +280,17 @@
 
                 <form method="get" asp-page="/SensorDetails" asp-route-sensorId="@Model.View.SensorId" class="sensor-statistics-controls">
                     <input type="hidden" name="window" value="@Model.Window" />
+                    <input type="hidden" name="StatsRange" value="@(stats.SelectedRange == "custom" ? string.Empty : stats.SelectedRange)" />
+                    <div class="sensor-statistics-field">
+                        <span>Range</span>
+                        <div class="sensor-range-chips">
+                            @foreach (var rangeOption in new[] { ("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("90d", "90d"), ("all", "All") })
+                            {
+                                <a class="sensor-range-chip @(stats.SelectedRange == rangeOption.Item1 ? "is-active" : string.Empty)"
+                                   href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsRange={rangeOption.Item1}")">@rangeOption.Item2</a>
+                            }
+                        </div>
+                    </div>
                     <label class="sensor-statistics-field">
                         <span>From</span>
                         <input type="date" name="StatsFrom" value="@stats.FromText" class="form-control workspace-input" />
@@ -298,7 +310,7 @@
                     </label>
                     <div class="sensor-statistics-actions">
                         <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("search")<span>Apply</span></button>
-                        @if (!string.IsNullOrWhiteSpace(stats.FromText) || !string.IsNullOrWhiteSpace(stats.ToText) || stats.SelectedGroup != "native")
+                        @if (stats.SelectedRange != "7d" || stats.SelectedGroup != "day")
                         {
                             <a class="workspace-secondary-submit" href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}")">@MatmonIcons.Render("close")<span>Reset</span></a>
                         }
@@ -320,6 +332,7 @@
                     var barWidth = Math.Min(Math.Max(slot * 0.68d, 0.6d), 12d);
                     var unitSuffix = string.IsNullOrWhiteSpace(stats.Unit) ? string.Empty : $" {stats.Unit}";
                     <div class="sensor-statistics-chart sensor-chart-wrap" data-chart="bars">
+                        <div class="sensor-chart-plot">
                         <div class="sensor-chart-axis-y" aria-hidden="true">
                             <span>@chartMax.ToString("0.##", inv)</span>
                             <span>@chartMin.ToString("0.##", inv)</span>
@@ -339,6 +352,7 @@
                                 <rect class="sensor-statistics-bar" data-state="@cr.StateKey" data-bar-tip="@barTip" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"></rect>
                             }
                         </svg>
+                        </div>
                         <div class="sensor-statistics-chart-axis">
                             <span>@chartRows.First().PeriodText</span>
                             <span>@chartRows.Last().PeriodText</span>
