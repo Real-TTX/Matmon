@@ -4578,11 +4578,64 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   align-items: center;
 }
 
+.sensor-statistics-chart {
+  border: 1px solid color-mix(in srgb, var(--matmon-border) 60%, transparent);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem 0.35rem;
+  background: var(--matmon-surface-strong);
+}
+
+.sensor-statistics-chart svg {
+  display: block;
+  width: 100%;
+  height: 7.5rem;
+}
+
+.sensor-statistics-bar {
+  fill: var(--matmon-accent);
+}
+
+.sensor-statistics-bar[data-state="ok"],
+.sensor-statistics-bar[data-state="healthy"] {
+  fill: #5fcf9e;
+}
+
+.sensor-statistics-bar[data-state="warning"] {
+  fill: var(--matmon-warning);
+}
+
+.sensor-statistics-bar[data-state="error"],
+.sensor-statistics-bar[data-state="critical"] {
+  fill: var(--matmon-danger);
+}
+
+.sensor-statistics-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--matmon-muted);
+}
+
 .sensor-statistics-scroll {
   overflow: auto;
   max-height: 22rem;
   border: 1px solid color-mix(in srgb, var(--matmon-border) 60%, transparent);
   border-radius: 6px;
+}
+
+.sensor-statistics-table tr.is-clickable {
+  cursor: pointer;
+}
+
+.sensor-statistics-table tr.is-clickable:hover td {
+  background: color-mix(in srgb, var(--matmon-accent) 12%, transparent);
+}
+
+.sensor-statistics-drill {
+  margin-left: 0.35rem;
+  color: var(--matmon-muted);
+  font-weight: 700;
 }
 
 .sensor-statistics-table thead th {

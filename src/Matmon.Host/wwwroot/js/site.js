@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeSensorParameterVisibility();
   initializeTemplateScopeEditors();
   initializeScheduleEditors();
+  initializeRowLinks();
   initializeThresholdEditors();
   initializeCredentialEditors();
   initializeNotificationKindEditors();
@@ -1207,6 +1208,20 @@ function initializeScheduleEditors() {
     });
 
     refresh();
+  });
+}
+
+function initializeRowLinks() {
+  document.querySelectorAll("tr[data-href]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("a, button, input, select, textarea")) {
+        return;
+      }
+      const href = row.dataset.href;
+      if (href) {
+        window.location.href = href;
+      }
+    });
   });
 }
 

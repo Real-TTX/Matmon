@@ -364,6 +364,31 @@ public sealed class SensorDetailsModel : PageModel
                     ? SensorState.Healthy
                     : members[0].State;
 
+        // Clicking a row drills one calendar grain finer, scoped to that period.
+        string? drillFrom = null, drillTo = null, drillGroup = null;
+        var day = periodStart.Date;
+        switch (group)
+        {
+            case "year":
+                drillFrom = new DateTime(day.Year, 1, 1).ToString("yyyy-MM-dd");
+                drillTo = new DateTime(day.Year, 12, 31).ToString("yyyy-MM-dd");
+                drillGroup = "month";
+                break;
+            case "month":
+                var first = new DateTime(day.Year, day.Month, 1);
+                drillFrom = first.ToString("yyyy-MM-dd");
+                drillTo = first.AddMonths(1).AddDays(-1).ToString("yyyy-MM-dd");
+                drillGroup = "day";
+                break;
+            case "day":
+                drillFrom = day.ToString("yyyy-MM-dd");
+                drillTo = drillFrom;
+                drillGroup = "native";
+                break;
+        }
+
+        var averageValue = average.HasValue ? scale.Convert(average.Value) : (double?)null;
+
         return new SensorStatisticsRow(
             label,
             periodStart.ToUnixTimeMilliseconds(),
@@ -374,7 +399,11 @@ public sealed class SensorDetailsModel : PageModel
             FormatStat(highPercentile, scale, kind),
             sampleCount,
             uptimeText,
-            MonitoringStatePresentation.Key(state));
+            MonitoringStatePresentation.Key(state),
+            averageValue,
+            drillFrom,
+            drillTo,
+            drillGroup);
     }
 
     private static SensorUnitConversion? BuildUnitConversion(
@@ -798,7 +827,11 @@ public sealed record SensorStatisticsRow(
     string HighPercentileText,
     int SampleCount,
     string? UptimeText,
-    string StateKey);
+    string StateKey,
+    double? AverageValue = null,
+    string? DrillFrom = null,
+    string? DrillTo = null,
+    string? DrillGroup = null);
 
 public sealed record SensorUnitConversion(
     string RawUnit,

@@ -283,6 +283,41 @@
                     </div>
                 </form>
 
+                @{
+                    var chartRows = stats.Rows.Reverse().ToList();
+                    var chartValues = chartRows.Where(r => r.AverageValue.HasValue).Select(r => r.AverageValue!.Value).ToList();
+                }
+                @if (chartValues.Count > 0)
+                {
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    var chartMax = chartValues.Max();
+                    var chartMin = Math.Min(0d, chartValues.Min());
+                    var chartRange = chartMax - chartMin;
+                    if (chartRange <= 0d) { chartRange = 1d; }
+                    var slot = 100d / chartRows.Count;
+                    var barWidth = Math.Min(Math.Max(slot * 0.68d, 0.6d), 12d);
+                    <div class="sensor-statistics-chart">
+                        <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="img" aria-label="Average per @stats.GranularityLabel.ToLowerInvariant() period">
+                            @for (var i = 0; i < chartRows.Count; i++)
+                            {
+                                var cr = chartRows[i];
+                                if (!cr.AverageValue.HasValue)
+                                {
+                                    continue;
+                                }
+                                var barHeight = Math.Max((cr.AverageValue.Value - chartMin) / chartRange * 40d, 0.6d);
+                                var barX = (i * slot) + ((slot - barWidth) / 2d);
+                                var barY = 42d - barHeight;
+                                <rect class="sensor-statistics-bar" data-state="@cr.StateKey" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"><title>@cr.PeriodText — @cr.AverageText</title></rect>
+                            }
+                        </svg>
+                        <div class="sensor-statistics-chart-axis">
+                            <span>@chartRows.First().PeriodText</span>
+                            <span>@chartRows.Last().PeriodText</span>
+                        </div>
+                    </div>
+                }
+
                 <div class="sensor-statistics-scroll">
                     <table class="sensor-statistics-table">
                         <thead>
@@ -300,8 +335,11 @@
                         <tbody>
                             @foreach (var row in stats.Rows)
                             {
-                                <tr data-state="@row.StateKey">
-                                    <td>@row.PeriodText</td>
+                                var drillHref = row.DrillGroup is null
+                                    ? null
+                                    : $"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsFrom={row.DrillFrom}&StatsTo={row.DrillTo}&StatsGroup={row.DrillGroup}";
+                                <tr data-state="@row.StateKey" class="@(drillHref is null ? null : "is-clickable")" data-href="@drillHref" title="@(drillHref is null ? null : $"Drill into {row.PeriodText}")">
+                                    <td>@row.PeriodText@if (drillHref is not null) {<span class="sensor-statistics-drill">›</span>}</td>
                                     <td class="is-strong">@row.AverageText</td>
                                     <td>@row.MinimumText</td>
                                     <td>@row.MaximumText</td>
