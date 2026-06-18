@@ -35,45 +35,6 @@
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
 
-    @if (Model.TemplateApply.TemplateId != Guid.Empty)
-    {
-        var applyTemplate = templates.FirstOrDefault(template => template.Id == Model.TemplateApply.TemplateId);
-
-        <section class="panel panel-stack workspace-editor-panel template-apply-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("spark")<span>Apply Template</span></h2>
-                <a class="workspace-action-link" asp-page="/Templates">@MatmonIcons.Render("x")<span>Close</span></a>
-            </div>
-
-            @if (applyTemplate is null)
-            {
-                <div class="empty-state">Template not found.</div>
-            }
-            else
-            {
-                <div class="template-apply-summary">
-                    <span class="template-scope-badge" data-scope="@applyTemplate.ScopeKey">@applyTemplate.Scope</span>
-                    <strong>@applyTemplate.Name</strong>
-                    <span>@applyTemplate.Summary</span>
-                </div>
-
-                <form method="post" asp-page-handler="ApplyTemplate" class="workspace-form">
-                    <input type="hidden" asp-for="TemplateApply.TemplateId" />
-                    <div class="workspace-form-grid">
-                        <label class="workspace-span-2">
-                            <span>Target element</span>
-                            <select asp-for="TemplateApply.TargetElementId" class="form-select workspace-select" asp-items="Model.TemplateApply.TargetOptions">
-                                <option value="">Select target</option>
-                            </select>
-                        </label>
-                    </div>
-                    <div class="workspace-form-actions">
-                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
-                    </div>
-                </form>
-            }
-        </section>
-    }
 
     <div class="page-header has-summary">
         <div class="page-title">
@@ -166,20 +127,13 @@
                                             }
                                         </div>
 
-                                        <details class="workspace-action-menu">
-                                            <summary class="workspace-action-link" aria-label="Template actions">
-                                                @MatmonIcons.Render("more")
-                                                <span>Actions</span>
-                                            </summary>
-                                            <div class="workspace-action-menu-panel">
-                                                @if (template.IsSensorTemplate && !string.IsNullOrWhiteSpace(template.SensorTypeKey))
-                                                {
-                                                    <a class="workspace-action-menu-link" asp-page="/SensorCreate" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("spark")<span>Create sensor</span></a>
-                                                }
-                                                <a class="workspace-action-menu-link" asp-page="/Templates" asp-route-applyTemplateId="@template.Id">@MatmonIcons.Render("check")<span>Apply</span></a>
-                                                <a class="workspace-action-menu-link" asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                            </div>
-                                        </details>
+                                        <div class="template-card-actions">
+                                            @if (template.IsSensorTemplate && !string.IsNullOrWhiteSpace(template.SensorTypeKey))
+                                            {
+                                                <a class="workspace-secondary-submit" asp-page="/SensorCreate" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>New sensor</span></a>
+                                            }
+                                            <a class="workspace-action-link" asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                        </div>
                                     </div>
                                 </article>
                             }

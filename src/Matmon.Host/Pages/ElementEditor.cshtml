@@ -442,23 +442,7 @@
                         }
                         else
                         {
-                            <div class="workspace-inline-note">No template origin. You can copy a template's values into this element below.</div>
-                        }
-
-                        @if (Model.ElementEditor.TemplateOptions.Count > 0)
-                        {
-                            <div class="workspace-form-grid">
-                                <label class="workspace-span-2">
-                                    <span>@(Model.ElementEditor.TemplateOriginId is null ? "Apply template" : "Switch template")</span>
-                                    <select name="templateId" class="form-select workspace-select" asp-items="Model.ElementEditor.TemplateOptions">
-                                        <option value="">— choose —</option>
-                                    </select>
-                                    <small class="workspace-field-hint">Copies the template's values into this element (template wins) and remembers it as the origin.</small>
-                                </label>
-                            </div>
-                            <div class="workspace-form-actions">
-                                <button type="submit" asp-page-handler="ApplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("plus")<span>Apply (copy values)</span></button>
-                            </div>
+                            <div class="workspace-inline-note">Not created from a template. Templates are chosen when you create a sensor — start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</div>
                         }
                     </div>
 

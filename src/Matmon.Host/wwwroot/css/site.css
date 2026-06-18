@@ -8743,6 +8743,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   text-align: right;
 }
 
+.template-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
 .template-impact-mini strong {
   color: var(--matmon-foreground);
   font-size: 1.05rem;
