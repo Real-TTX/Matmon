@@ -247,27 +247,42 @@
     </div>
 
     <div class="sensor-detail-tabpanel" data-sensor-tab="statistics">
-        @if (Model.View.Statistics is { } stats && stats.Rows.Count > 0)
+        @if (Model.View.Statistics is { } stats)
         {
-            <section class="panel panel-stack sensor-statistics-panel" data-statistics-section>
+            <section class="panel panel-stack sensor-statistics-panel">
                 <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("chart")<span>Long-term statistics</span></h2>
-                    <div class="sensor-statistics-controls">
-                        <span class="panel-hint" data-statistics-count>@stats.GranularityLabel summaries · @stats.BucketCount kept</span>
-                        <label class="sensor-statistics-filter">
-                            <span class="workspace-sr-only">Time range</span>
-                            <select class="form-select workspace-select" data-statistics-filter>
-                                <option value="0" selected>All time</option>
-                                <option value="1">Last 24 hours</option>
-                                <option value="7">Last 7 days</option>
-                                <option value="30">Last 30 days</option>
-                                <option value="90">Last 90 days</option>
-                                <option value="365">Last year</option>
-                            </select>
-                        </label>
-                    </div>
+                    <span class="panel-hint">@stats.Rows.Count @stats.GranularityLabel.ToLowerInvariant() period@(stats.Rows.Count == 1 ? string.Empty : "s") · @stats.BucketCount buckets</span>
                 </div>
-                <p class="panel-hint sensor-statistics-intro">Downsampled from raw samples — average, range and the 1 % / 99 % bands per @stats.GranularityLabel.ToLowerInvariant() period, plus uptime.</p>
+
+                <form method="get" asp-page="/SensorDetails" asp-route-sensorId="@Model.View.SensorId" class="sensor-statistics-controls">
+                    <input type="hidden" name="window" value="@Model.Window" />
+                    <label class="sensor-statistics-field">
+                        <span>From</span>
+                        <input type="date" name="StatsFrom" value="@stats.FromText" class="form-control workspace-input" />
+                    </label>
+                    <label class="sensor-statistics-field">
+                        <span>To</span>
+                        <input type="date" name="StatsTo" value="@stats.ToText" class="form-control workspace-input" />
+                    </label>
+                    <label class="sensor-statistics-field">
+                        <span>Group by</span>
+                        <select name="StatsGroup" class="form-select workspace-select">
+                            <option value="native" selected="@(stats.SelectedGroup == "native")">Native</option>
+                            <option value="day" selected="@(stats.SelectedGroup == "day")">Day</option>
+                            <option value="month" selected="@(stats.SelectedGroup == "month")">Month</option>
+                            <option value="year" selected="@(stats.SelectedGroup == "year")">Year</option>
+                        </select>
+                    </label>
+                    <div class="sensor-statistics-actions">
+                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("search")<span>Apply</span></button>
+                        @if (!string.IsNullOrWhiteSpace(stats.FromText) || !string.IsNullOrWhiteSpace(stats.ToText) || stats.SelectedGroup != "native")
+                        {
+                            <a class="workspace-secondary-submit" href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}")">@MatmonIcons.Render("close")<span>Reset</span></a>
+                        }
+                    </div>
+                </form>
+
                 <div class="sensor-statistics-scroll">
                     <table class="sensor-statistics-table">
                         <thead>
@@ -285,7 +300,7 @@
                         <tbody>
                             @foreach (var row in stats.Rows)
                             {
-                                <tr data-state="@row.StateKey" data-period-ms="@row.PeriodEpochMs">
+                                <tr data-state="@row.StateKey">
                                     <td>@row.PeriodText</td>
                                     <td class="is-strong">@row.AverageText</td>
                                     <td>@row.MinimumText</td>
@@ -298,7 +313,10 @@
                             }
                         </tbody>
                     </table>
-                    <div class="empty-state sensor-statistics-empty" data-statistics-empty hidden>No statistics in this range.</div>
+                    @if (stats.Rows.Count == 0)
+                    {
+                        <div class="empty-state">No statistics in this range.</div>
+                    }
                 </div>
             </section>
         }

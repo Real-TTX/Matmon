@@ -28,6 +28,15 @@ public sealed class SensorDetailsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Window { get; set; }
 
+    [BindProperty(SupportsGet = true)]
+    public string? StatsFrom { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? StatsTo { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? StatsGroup { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -161,7 +170,7 @@ public sealed class SensorDetailsModel : PageModel
             : string.IsNullOrWhiteSpace(defaultChannel.Label) ? defaultChannel.Key : defaultChannel.Label;
         var executionProbe = FormatExecutionProbe(latestObservation);
         var statisticsBuckets = _workspaceStore.GetSensorStatistics(sensor.Id);
-        var statisticsSummary = BuildStatisticsSummary(statisticsBuckets, displayScale, measurementKind);
+        var statisticsSummary = BuildStatisticsSummary(statisticsBuckets, displayScale, measurementKind, StatsGroup, StatsFrom, StatsTo);
         var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
 
         View = new SensorDetailsViewModel(
@@ -195,35 +204,177 @@ public sealed class SensorDetailsModel : PageModel
         return true;
     }
 
+    private static readonly string[] StatisticsGroups = ["native", "day", "month", "year"];
+
+    private static string NormalizeStatisticsGroup(string? group)
+    {
+        var value = group?.Trim().ToLowerInvariant();
+        return StatisticsGroups.Contains(value) ? value! : "native";
+    }
+
     private static SensorStatisticsSummary? BuildStatisticsSummary(
         IReadOnlyList<SensorStatisticsBucket> buckets,
         SensorUnitScale scale,
-        SensorMeasurementKind kind)
+        SensorMeasurementKind kind,
+        string? group,
+        string? fromText,
+        string? toText)
     {
         if (buckets.Count == 0)
         {
             return null;
         }
 
+        var selectedGroup = NormalizeStatisticsGroup(group);
         var bucketMinutes = buckets[^1].BucketMinutes;
-        var rows = buckets
-            .OrderByDescending(bucket => bucket.BucketStartUtc)
+
+        // Custom date range (local calendar days, inclusive). Empty = unbounded.
+        DateTime? fromLocal = TryParseLocalDate(fromText, endOfDay: false);
+        DateTime? toLocal = TryParseLocalDate(toText, endOfDay: true);
+
+        var filtered = buckets
+            .Where(bucket =>
+            {
+                var local = bucket.BucketStartUtc.ToLocalTime().DateTime;
+                if (fromLocal is { } f && local < f)
+                {
+                    return false;
+                }
+
+                if (toLocal is { } t && local > t)
+                {
+                    return false;
+                }
+
+                return true;
+            })
+            .ToList();
+
+        var matchedBuckets = filtered.Count;
+
+        // Re-group the stored buckets into the chosen calendar grain and aggregate.
+        var grouped = filtered
+            .GroupBy(bucket => StatisticsPeriodStart(bucket.BucketStartUtc, selectedGroup, bucketMinutes))
+            .Select(grp => AggregateStatisticsGroup(grp.Key, grp.ToList(), selectedGroup, bucketMinutes, scale, kind))
+            .OrderByDescending(row => row.PeriodEpochMs)
             .Take(500)
-            .Select(bucket => new SensorStatisticsRow(
-                FormatBucketPeriod(bucket.BucketStartUtc, bucketMinutes),
-                bucket.BucketStartUtc.ToUnixTimeMilliseconds(),
-                FormatStat(bucket.Average, scale, kind),
-                FormatStat(bucket.Minimum, scale, kind),
-                FormatStat(bucket.Maximum, scale, kind),
-                FormatStat(bucket.LowPercentile, scale, kind),
-                FormatStat(bucket.HighPercentile, scale, kind),
-                bucket.SampleCount,
-                bucket.UptimePercent is double uptime ? $"{uptime.ToString("0.#", CultureInfo.InvariantCulture)} %" : null,
-                MonitoringStatePresentation.Key(bucket.State)))
             .ToArray();
 
         var unit = string.IsNullOrWhiteSpace(scale.Unit) ? null : scale.Unit;
-        return new SensorStatisticsSummary(DescribeGranularity(bucketMinutes), buckets.Count, unit, rows);
+        var granularityLabel = selectedGroup switch
+        {
+            "day" => "Daily",
+            "month" => "Monthly",
+            "year" => "Yearly",
+            _ => DescribeGranularity(bucketMinutes)
+        };
+
+        return new SensorStatisticsSummary(
+            granularityLabel,
+            matchedBuckets,
+            unit,
+            grouped,
+            selectedGroup,
+            fromLocal?.ToString("yyyy-MM-dd"),
+            toLocal?.ToString("yyyy-MM-dd"));
+    }
+
+    private static DateTime? TryParseLocalDate(string? text, bool endOfDay)
+    {
+        if (string.IsNullOrWhiteSpace(text)
+            || !DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+        {
+            return null;
+        }
+
+        var date = parsed.Date;
+        return endOfDay ? date.AddDays(1).AddTicks(-1) : date;
+    }
+
+    private static DateTimeOffset StatisticsPeriodStart(DateTimeOffset bucketStartUtc, string group, int bucketMinutes)
+    {
+        var local = bucketStartUtc.ToLocalTime();
+        var date = local.DateTime;
+        var start = group switch
+        {
+            "day" => new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified),
+            "month" => new DateTime(date.Year, date.Month, 1, 0, 0, 0, DateTimeKind.Unspecified),
+            "year" => new DateTime(date.Year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified),
+            _ => date // native: each bucket keeps its own start
+        };
+
+        return new DateTimeOffset(start, local.Offset);
+    }
+
+    private static SensorStatisticsRow AggregateStatisticsGroup(
+        DateTimeOffset periodStart,
+        IReadOnlyList<SensorStatisticsBucket> members,
+        string group,
+        int bucketMinutes,
+        SensorUnitScale scale,
+        SensorMeasurementKind kind)
+    {
+        var label = group switch
+        {
+            "day" => periodStart.ToString("ddd dd.MM.yyyy", CultureInfo.InvariantCulture),
+            "month" => periodStart.ToString("MMMM yyyy", CultureInfo.InvariantCulture),
+            "year" => periodStart.ToString("yyyy", CultureInfo.InvariantCulture),
+            _ => FormatBucketPeriod(periodStart, bucketMinutes)
+        };
+
+        var sampleCount = members.Sum(m => m.SampleCount);
+        var weight = members.Where(m => m.SampleCount > 0).Sum(m => m.SampleCount);
+
+        double? WeightedAverage(Func<SensorStatisticsBucket, double?> selector)
+        {
+            var contributing = members.Where(m => selector(m).HasValue && m.SampleCount > 0).ToList();
+            if (contributing.Count == 0)
+            {
+                var anyValue = members.Select(selector).FirstOrDefault(v => v.HasValue);
+                return anyValue;
+            }
+
+            var totalWeight = contributing.Sum(m => m.SampleCount);
+            return totalWeight == 0
+                ? contributing.Average(m => selector(m)!.Value)
+                : contributing.Sum(m => selector(m)!.Value * m.SampleCount) / totalWeight;
+        }
+
+        var average = WeightedAverage(m => m.Average);
+        var minimum = members.Where(m => m.Minimum.HasValue).Select(m => m.Minimum!.Value).DefaultIfEmpty().Min();
+        var hasMin = members.Any(m => m.Minimum.HasValue);
+        var maximum = members.Where(m => m.Maximum.HasValue).Select(m => m.Maximum!.Value).DefaultIfEmpty().Max();
+        var hasMax = members.Any(m => m.Maximum.HasValue);
+        var lowPercentile = WeightedAverage(m => m.LowPercentile);
+        var highPercentile = WeightedAverage(m => m.HighPercentile);
+
+        var healthy = members.Sum(m => m.HealthyCount);
+        var warning = members.Sum(m => m.WarningCount);
+        var critical = members.Sum(m => m.CriticalCount);
+        var stateSamples = healthy + warning + critical;
+        string? uptimeText = stateSamples > 0
+            ? $"{(healthy / (double)stateSamples * 100d).ToString("0.#", CultureInfo.InvariantCulture)} %"
+            : null;
+
+        var state = critical > 0
+            ? SensorState.Critical
+            : warning > 0
+                ? SensorState.Warning
+                : healthy > 0
+                    ? SensorState.Healthy
+                    : members[0].State;
+
+        return new SensorStatisticsRow(
+            label,
+            periodStart.ToUnixTimeMilliseconds(),
+            FormatStat(average, scale, kind),
+            FormatStat(hasMin ? minimum : null, scale, kind),
+            FormatStat(hasMax ? maximum : null, scale, kind),
+            FormatStat(lowPercentile, scale, kind),
+            FormatStat(highPercentile, scale, kind),
+            sampleCount,
+            uptimeText,
+            MonitoringStatePresentation.Key(state));
     }
 
     private static SensorUnitConversion? BuildUnitConversion(
@@ -632,7 +783,10 @@ public sealed record SensorStatisticsSummary(
     string GranularityLabel,
     int BucketCount,
     string? Unit,
-    IReadOnlyList<SensorStatisticsRow> Rows);
+    IReadOnlyList<SensorStatisticsRow> Rows,
+    string SelectedGroup,
+    string? FromText,
+    string? ToText);
 
 public sealed record SensorStatisticsRow(
     string PeriodText,

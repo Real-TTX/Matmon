@@ -24,7 +24,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeSensorParameterVisibility();
   initializeTemplateScopeEditors();
   initializeScheduleEditors();
-  initializeStatisticsFilters();
   initializeThresholdEditors();
   initializeCredentialEditors();
   initializeNotificationKindEditors();
@@ -1208,44 +1207,6 @@ function initializeScheduleEditors() {
     });
 
     refresh();
-  });
-}
-
-function initializeStatisticsFilters() {
-  document.querySelectorAll("[data-statistics-section]").forEach((section) => {
-    const filter = section.querySelector("[data-statistics-filter]");
-    const rows = Array.from(section.querySelectorAll("tbody tr[data-period-ms]"));
-    const empty = section.querySelector("[data-statistics-empty]");
-    const count = section.querySelector("[data-statistics-count]");
-    if (!filter || rows.length === 0) {
-      return;
-    }
-
-    const baseCountText = count ? count.textContent : "";
-
-    const apply = () => {
-      const days = parseInt(filter.value, 10) || 0;
-      const cutoff = days > 0 ? Date.now() - days * 86400000 : 0;
-      let visible = 0;
-      rows.forEach((row) => {
-        const ts = parseInt(row.dataset.periodMs, 10) || 0;
-        const show = days === 0 || ts >= cutoff;
-        row.hidden = !show;
-        if (show) {
-          visible += 1;
-        }
-      });
-
-      if (empty) {
-        empty.hidden = visible > 0;
-      }
-      if (count) {
-        count.textContent = days === 0 ? baseCountText : `${visible} period${visible === 1 ? "" : "s"} shown`;
-      }
-    };
-
-    filter.addEventListener("change", apply);
-    apply();
   });
 }
 
