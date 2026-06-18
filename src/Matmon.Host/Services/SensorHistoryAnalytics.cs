@@ -94,7 +94,7 @@ public static class SensorHistoryAnalytics
         var latestObservation = windowObservations.LastOrDefault();
         var latestValue = ApplyScale(GetDefaultValue(latestObservation, defaultChannelKeyOverride), scale);
         var latestState = latestObservation?.State ?? SensorState.Unknown;
-        var (linePath, areaPath) = BuildPaths(points, fromUtc, now, axisMin, axisMax);
+        var (linePath, areaPath, graphMin, graphMax) = BuildPaths(points, fromUtc, now, axisMin, axisMax);
 
         return new SensorWindowStatistics(
             key,
@@ -113,7 +113,9 @@ public static class SensorHistoryAnalytics
             linePath,
             areaPath,
             points,
-            lineColor);
+            lineColor,
+            graphMin,
+            graphMax);
     }
 
     public static TelemetrySamplePoint? BuildGraphPoint(
@@ -144,7 +146,7 @@ public static class SensorHistoryAnalytics
             : value;
     }
 
-    private static (string LinePath, string AreaPath) BuildPaths(
+    private static (string LinePath, string AreaPath, double Min, double Max) BuildPaths(
         IReadOnlyList<TelemetrySamplePoint> points,
         DateTimeOffset fromUtc,
         DateTimeOffset toUtc,
@@ -153,7 +155,7 @@ public static class SensorHistoryAnalytics
     {
         if (points.Count == 0)
         {
-            return (string.Empty, string.Empty);
+            return (string.Empty, string.Empty, axisMin ?? 0d, axisMax ?? 1d);
         }
 
         const double width = 100d;
@@ -216,7 +218,7 @@ public static class SensorHistoryAnalytics
         areaSegments.Add("Z");
         var area = string.Join(" ", areaSegments);
 
-        return (line, area);
+        return (line, area, min, max);
     }
 
     private static IReadOnlyList<TelemetrySamplePoint> DownsampleGraphPoints(
@@ -288,4 +290,6 @@ public sealed record SensorWindowStatistics(
     string LinePath,
     string AreaPath,
     IReadOnlyList<TelemetrySamplePoint> Points,
-    string LineColor);
+    string LineColor,
+    double GraphMin,
+    double GraphMax);

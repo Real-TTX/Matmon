@@ -4931,6 +4931,86 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   height: 180px;
 }
 
+.sensor-chart-wrap {
+  position: relative;
+}
+
+.sensor-chart-axis-y {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.15rem 0.3rem;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--matmon-muted);
+  pointer-events: none;
+}
+
+.sensor-chart-axis-y span {
+  background: color-mix(in srgb, var(--matmon-surface-strong) 78%, transparent);
+  border-radius: 3px;
+  padding: 0 0.15rem;
+}
+
+.sensor-chart-crosshair {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--matmon-accent) 55%, transparent);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.sensor-chart-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--series-color, var(--matmon-accent));
+  border: 2px solid var(--matmon-surface);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.sensor-chart-tooltip {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--matmon-surface-strong);
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+.sensor-chart-tooltip span {
+  color: var(--matmon-muted);
+  font-size: 0.66rem;
+}
+
+.sensor-statistics-bar {
+  transition: filter 0.1s ease;
+}
+
+.sensor-statistics-bar.is-hover {
+  filter: brightness(1.18);
+}
+
 .sensor-window-summary {
   display: flex;
   justify-content: space-between;

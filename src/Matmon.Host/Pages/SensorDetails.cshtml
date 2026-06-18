@@ -238,13 +238,30 @@
                     <span>Graph: @Model.View.DefaultChannelLabel</span>
                     <span class="panel-hint">used for overview and chart</span>
                 </div>
-                <svg class="sparkline sensor-chart" viewBox="0 0 100 40" preserveAspectRatio="none" style="--series-color:@Model.View.SelectedWindow.LineColor">
-                    <path data-role="area" d="@Model.View.SelectedWindow.AreaPath"></path>
-                    <path data-role="line" d="@Model.View.SelectedWindow.LinePath"></path>
-                </svg>
+                var win = Model.View.SelectedWindow;
+                var chartInv = System.Globalization.CultureInfo.InvariantCulture;
+                var chartPointsJson = "[" + string.Join(",", win.Points.Select(p =>
+                    $"[{p.TimestampUtc.ToUnixTimeMilliseconds()},{p.Value.ToString("0.######", chartInv)}]")) + "]";
+                <div class="sensor-chart-wrap" data-chart="line"
+                     style="--series-color:@win.LineColor"
+                     data-chart-points="@chartPointsJson"
+                     data-chart-min="@win.GraphMin.ToString("0.######", chartInv)"
+                     data-chart-max="@win.GraphMax.ToString("0.######", chartInv)"
+                     data-chart-from="@win.FromUtc.ToUnixTimeMilliseconds()"
+                     data-chart-to="@win.ToUtc.ToUnixTimeMilliseconds()"
+                     data-chart-unit="@Model.View.Unit">
+                    <div class="sensor-chart-axis-y" aria-hidden="true">
+                        <span>@win.GraphMax.ToString("0.##", chartInv)</span>
+                        <span>@win.GraphMin.ToString("0.##", chartInv)</span>
+                    </div>
+                    <svg class="sparkline sensor-chart" viewBox="0 0 100 40" preserveAspectRatio="none" style="--series-color:@win.LineColor">
+                        <path data-role="area" d="@win.AreaPath"></path>
+                        <path data-role="line" d="@win.LinePath"></path>
+                    </svg>
+                </div>
                 <div class="graph-footer">
-                    <span>@Model.View.SelectedWindow.FromUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
-                    <span>@Model.View.SelectedWindow.ToUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
+                    <span>@win.FromUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
+                    <span>@win.ToUtc.ToLocalTime().ToString("dd.MM HH:mm")</span>
                 </div>
             }
         </section>
@@ -301,7 +318,12 @@
                     if (chartRange <= 0d) { chartRange = 1d; }
                     var slot = 100d / chartRows.Count;
                     var barWidth = Math.Min(Math.Max(slot * 0.68d, 0.6d), 12d);
-                    <div class="sensor-statistics-chart">
+                    var unitSuffix = string.IsNullOrWhiteSpace(stats.Unit) ? string.Empty : $" {stats.Unit}";
+                    <div class="sensor-statistics-chart sensor-chart-wrap" data-chart="bars">
+                        <div class="sensor-chart-axis-y" aria-hidden="true">
+                            <span>@chartMax.ToString("0.##", inv)</span>
+                            <span>@chartMin.ToString("0.##", inv)</span>
+                        </div>
                         <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="img" aria-label="Average per @stats.GranularityLabel.ToLowerInvariant() period">
                             @for (var i = 0; i < chartRows.Count; i++)
                             {
@@ -313,7 +335,8 @@
                                 var barHeight = Math.Max((cr.AverageValue.Value - chartMin) / chartRange * 40d, 0.6d);
                                 var barX = (i * slot) + ((slot - barWidth) / 2d);
                                 var barY = 42d - barHeight;
-                                <rect class="sensor-statistics-bar" data-state="@cr.StateKey" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"><title>@cr.PeriodText — @cr.AverageText</title></rect>
+                                var barTip = $"{cr.PeriodText} · avg {cr.AverageText}{unitSuffix} · min {cr.MinimumText} · max {cr.MaximumText}" + (cr.UptimeText is null ? string.Empty : $" · uptime {cr.UptimeText}") + $" · {cr.SampleCount} samples";
+                                <rect class="sensor-statistics-bar" data-state="@cr.StateKey" data-bar-tip="@barTip" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"></rect>
                             }
                         </svg>
                         <div class="sensor-statistics-chart-axis">
