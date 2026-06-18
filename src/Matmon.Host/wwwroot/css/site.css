@@ -4288,53 +4288,21 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   text-align: right;
 }
 
-.probe-usage-system-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin-bottom: 0.6rem;
-}
-
-.probe-usage-system-grid > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.probe-usage-system-grid strong {
-  font-size: 0.9rem;
+/* System details (OS / host / subnets) shown per probe in System -> Probes. */
+.system-probe-os {
+  color: var(--matmon-muted);
   word-break: break-word;
 }
 
-.probe-usage-subnets {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.probe-usage-subnet-list {
+.system-probe-subnets {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
 }
 
-.probe-usage-subnet-discover {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  border: 1px dashed var(--matmon-border);
-  color: var(--matmon-muted);
-  font-size: 0.78rem;
-  text-decoration: none;
-}
-
-.probe-usage-subnet-discover:hover {
-  color: var(--matmon-foreground);
-  border-color: var(--matmon-accent);
+.system-probe-subnets .sensor-chip {
+  font-size: 0.7rem;
 }
 
 .probe-usage-distribution-legend {

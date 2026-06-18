@@ -107,16 +107,6 @@ public sealed class ProbeUsageModel : PageModel
             ? MonitoringStatePresentation.Color(SensorState.Critical)
             : MonitoringStatePresentation.Color(SensorState.Healthy);
 
-        // System "full sync": the local primary reports itself; a secondary reports OS / host /
-        // reachable subnets through its heartbeat.
-        var probeSystem = isPrimary
-            ? ProbeSystemInfoProvider.Collect()
-            : liveStatus is not null
-                ? new ProbeSystemInfo(
-                    string.IsNullOrWhiteSpace(liveStatus.OperatingSystem) ? "-" : liveStatus.OperatingSystem!,
-                    string.IsNullOrWhiteSpace(liveStatus.Host) ? "-" : liveStatus.Host!,
-                    liveStatus.Networks ?? Array.Empty<string>())
-                : new ProbeSystemInfo("-", "-", Array.Empty<string>());
         var sensorRows = new List<ProbeUsageSensorRow>();
 
         foreach (var sensor in EnumerateDescendants(probe).OfType<SensorElement>())
@@ -301,10 +291,7 @@ public sealed class ProbeUsageModel : PageModel
             groups,
             filteredSensorRowsWithPercent,
             topLogSensors,
-            totalStoredObservationCount.ToString("N0", CultureInfo.InvariantCulture),
-            probeSystem.OperatingSystem,
-            probeSystem.Host,
-            probeSystem.Networks);
+            totalStoredObservationCount.ToString("N0", CultureInfo.InvariantCulture));
 
         return true;
     }
@@ -791,10 +778,7 @@ public sealed record ProbeUsageViewModel(
     IReadOnlyList<ProbeUsageGroupRow> Groups,
     IReadOnlyList<ProbeUsageSensorRow> Sensors,
     IReadOnlyList<ProbeUsageSensorRow> TopLogSensors,
-    string TotalStoredObservationCountText,
-    string OperatingSystem,
-    string Host,
-    IReadOnlyList<string> Networks);
+    string TotalStoredObservationCountText);
 
 public sealed record ProbeUsageStatus(
     string StateKey,

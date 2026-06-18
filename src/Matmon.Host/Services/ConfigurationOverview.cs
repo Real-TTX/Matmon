@@ -25,4 +25,7 @@ public sealed record SystemProbeOverview(
     string Message,
     DateTimeOffset? LastSeenUtc,
     string? EnrollmentToken,
-    int SensorCount);
+    int SensorCount,
+    string? OperatingSystem = null,
+    string? Host = null,
+    IReadOnlyList<string>? Networks = null);

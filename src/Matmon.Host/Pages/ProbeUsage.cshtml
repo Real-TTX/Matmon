@@ -37,34 +37,6 @@
         </div>
     </div>
 
-    <section class="panel panel-stack probe-usage-system-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("network")<span>System &amp; networks</span></h2>
-            <span class="panel-hint">@(Model.View.RoleLabel == "Primary" ? "local" : "reported by probe")</span>
-        </div>
-        <div class="probe-usage-system-grid">
-            <div><span class="metric-label">OS</span><strong>@Model.View.OperatingSystem</strong></div>
-            <div><span class="metric-label">Host</span><strong>@Model.View.Host</strong></div>
-        </div>
-        <div class="probe-usage-subnets">
-            <span class="metric-label">Subnets</span>
-            @if (Model.View.Networks.Count > 0)
-            {
-                <div class="probe-usage-subnet-list">
-                    @foreach (var net in Model.View.Networks)
-                    {
-                        <span class="sensor-chip">@net</span>
-                    }
-                    <a class="probe-usage-subnet-discover" asp-page="/Discovery">@MatmonIcons.Render("search")<span>Discover</span></a>
-                </div>
-            }
-            else
-            {
-                <span class="workspace-inline-note">No subnets reported yet — a secondary probe reports its subnets on the next heartbeat.</span>
-            }
-        </div>
-    </section>
-
     <section class="panel panel-stack probe-usage-toolbar-panel">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("filter")<span>Usage view</span></h2>

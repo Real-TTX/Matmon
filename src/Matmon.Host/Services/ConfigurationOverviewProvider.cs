@@ -71,6 +71,17 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                     ? "local primary probe"
                     : liveProbe?.Message ?? "waiting for probe heartbeat";
 
+                // System "full sync": the local primary reports itself; a secondary reports OS /
+                // host / subnets through its heartbeat snapshot.
+                var system = isRoot
+                    ? ProbeSystemInfoProvider.Collect()
+                    : liveProbe is not null
+                        ? new ProbeSystemInfo(
+                            string.IsNullOrWhiteSpace(liveProbe.OperatingSystem) ? "-" : liveProbe.OperatingSystem!,
+                            string.IsNullOrWhiteSpace(liveProbe.Host) ? "-" : liveProbe.Host!,
+                            liveProbe.Networks ?? Array.Empty<string>())
+                        : new ProbeSystemInfo("-", "-", Array.Empty<string>());
+
                 return new SystemProbeOverview(
                     probe.Id,
                     string.IsNullOrWhiteSpace(probe.ProbeId) ? "-" : probe.ProbeId,
@@ -80,7 +91,10 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                     message,
                     isRoot ? null : liveProbe?.LastSeenUtc,
                     isRoot ? null : probe.EnrollmentToken,
-                    CountSensors(probe));
+                    CountSensors(probe),
+                    system.OperatingSystem,
+                    system.Host,
+                    system.Networks);
             })
             .ToArray();
     }
