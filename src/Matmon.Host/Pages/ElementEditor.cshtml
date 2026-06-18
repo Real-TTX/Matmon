@@ -368,39 +368,27 @@
                 <div class="sensor-telemetry-section workspace-span-2" data-sensor-tab="telemetry">
                     <div class="panel-header">
                         <h2 class="section-title">@MatmonIcons.Render("chart")<span>Telemetry &amp; retention</span></h2>
-                        <span class="panel-hint">how long data is kept</span>
+                        @if (!string.IsNullOrWhiteSpace(Model.ElementEditor.TelemetryProfileSummary))
+                        {
+                            <span class="telemetry-profile-pill">@MatmonIcons.Render("spark")<span>@Model.ElementEditor.TelemetryProfileSummary</span></span>
+                        }
                     </div>
-                    <p class="workspace-section-intro">
-                        Every poll is kept as full-resolution detail for a short window, then continuously
-                        summarised into average / min / max plus the 1&nbsp;% and 99&nbsp;% bands and an uptime
-                        figure. Raw data answers <em>“what just happened”</em>; the summaries answer
-                        <em>“how has this trended”</em> over weeks without storing every sample forever.
-                    </p>
-                    @if (!string.IsNullOrWhiteSpace(Model.ElementEditor.TelemetryProfileSummary))
-                    {
-                        <div class="telemetry-profile-pill">@MatmonIcons.Render("spark")<span>@Model.ElementEditor.TelemetryProfileSummary</span></div>
-                    }
-                    <div class="workspace-inline-note">Leave a field empty to inherit — the placeholder shows the value in effect.</div>
                     <div class="workspace-form-grid">
                         <label>
                             <span>Raw history (days)</span>
                             <input asp-for="ElementEditor.ObservationRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.ObservationRetentionDaysPlaceholder" />
-                            <small class="workspace-field-hint">Full-resolution samples behind the live graph.</small>
                         </label>
                         <label>
                             <span>Summary granularity (min)</span>
                             <input asp-for="ElementEditor.StatisticsBucketMinutes" type="number" min="1" list="telemetry-bucket-presets" class="form-control workspace-input" placeholder="@Model.ElementEditor.StatisticsBucketMinutesPlaceholder" />
-                            <small class="workspace-field-hint">60 = hourly · 1440 = daily.</small>
                         </label>
                         <label>
                             <span>Summaries kept (days)</span>
                             <input asp-for="ElementEditor.StatisticsRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.StatisticsRetentionDaysPlaceholder" />
-                            <small class="workspace-field-hint">Long-term avg / min / max / 1 % / 99 %.</small>
                         </label>
                         <label>
                             <span>Event log (days)</span>
                             <input asp-for="ElementEditor.EventRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.EventRetentionDaysPlaceholder" />
-                            <small class="workspace-field-hint">State changes &amp; alerts.</small>
                         </label>
                     </div>
                     <datalist id="telemetry-bucket-presets">
@@ -412,7 +400,6 @@
 
                     @if (isSensor)
                     {
-                        <div class="workspace-inline-note workspace-subnote">@MatmonIcons.Render("chart") Graph axis — fix the y-axis for comparable graphs. Leave empty to auto-scale from data (in the channel's native unit).</div>
                         <div class="workspace-form-grid">
                             <label>
                                 <span>Y-axis min</span>
@@ -424,6 +411,7 @@
                             </label>
                         </div>
                     }
+                    <div class="workspace-inline-note">Empty = inherit; the placeholder shows the active value.</div>
                 </div>
 
                 @* ---------- ADVANCED ---------- *@
@@ -435,33 +423,11 @@
 
                     <div class="workspace-form-grid">
                         <label class="workspace-span-2">
-                            <span>Templates</span>
+                            <span>Applied templates</span>
                             <select asp-for="ElementEditor.AppliedTemplateIds" class="form-select workspace-select" asp-items="Model.ElementEditor.TemplateOptions" multiple size="6"></select>
+                            <small class="workspace-field-hint">Templates supply inheritable defaults (credentials, parameters, thresholds, schedule, retention). This element uses them unless a field here overrides it.</small>
                         </label>
                     </div>
-
-                    @if (isSensor)
-                    {
-                        <details class="workspace-details workspace-details-nested">
-                            <summary>
-                                @MatmonIcons.Render("settings")
-                                <span>Raw values</span>
-                            </summary>
-                            <div class="workspace-details-body">
-                                <div class="workspace-inline-note">Use this only if you need manual overrides. Blank values keep inheritance intact.</div>
-                                <div class="workspace-form-grid">
-                                    <label class="workspace-span-2">
-                                        <span>Parameters</span>
-                                        <textarea asp-for="ElementEditor.ParametersText" rows="4" class="form-control workspace-textarea" placeholder="@Model.ElementEditor.ParametersTextPlaceholder"></textarea>
-                                    </label>
-                                    <label class="workspace-span-2">
-                                        <span>Thresholds</span>
-                                        <textarea asp-for="ElementEditor.ThresholdsText" rows="4" class="form-control workspace-textarea" placeholder="@Model.ElementEditor.ThresholdsTextPlaceholder"></textarea>
-                                    </label>
-                                </div>
-                            </div>
-                        </details>
-                    }
 
                     @if (!isSensor)
                     {

@@ -4902,14 +4902,18 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 
 /* Sensor detail tabs */
 .sensor-detail-tabs {
-  margin-bottom: 0.7rem;
+  margin-bottom: 0;
+}
+
+/* Each detail tab stacks its sections with the same rhythm as the page shell,
+   so the gap between e.g. the stats cards and the graph matches everywhere. */
+.sensor-detail-tabpanel {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
 }
 
 /* General tab: channels are the prominent "IST" state, shown as a multi-column grid. */
-.sensor-channels-panel {
-  margin-bottom: 0.6rem;
-}
-
 .sensor-channel-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
 }

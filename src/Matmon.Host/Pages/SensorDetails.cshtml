@@ -103,7 +103,7 @@
         <button type="button" class="sensor-tab" data-sensor-tab-target="history" role="tab">@MatmonIcons.Render("clock")<span>History</span></button>
     </nav>
 
-    <div data-sensor-tab="general">
+    <div class="sensor-detail-tabpanel" data-sensor-tab="general">
         <section class="panel panel-stack sensor-channels-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels</span></h2>
@@ -246,7 +246,7 @@
 
     </div>
 
-    <div data-sensor-tab="statistics">
+    <div class="sensor-detail-tabpanel" data-sensor-tab="statistics">
         @if (Model.View.Statistics is { } stats && stats.Rows.Count > 0)
         {
             <section class="panel panel-stack sensor-statistics-panel" data-statistics-section>
@@ -308,7 +308,7 @@
         }
     </div>
 
-    <div data-sensor-tab="history">
+    <div class="sensor-detail-tabpanel" data-sensor-tab="history">
         <section class="panel panel-stack">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("clock")<span>Last results</span></h2>
