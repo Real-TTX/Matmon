@@ -85,10 +85,10 @@
         </section>
     }
 
-    <div class="workspace-tabs discovery-tabs" role="tablist" aria-label="Discovery sections">
-        <a class="workspace-tab @(Model.IsActiveTab("scan") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="scan" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("search")<span>Scan</span></a>
-        <a class="workspace-tab @(Model.IsActiveTab("running") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="running" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>Running</span><span class="workspace-tab-count">@runningJobs.Count</span></a>
-        <a class="workspace-tab @(Model.IsActiveTab("history") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="history" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>History</span><span class="workspace-tab-count">@historyJobs.Count</span></a>
+    <div class="sensor-tabs discovery-tabs" role="tablist" aria-label="Discovery sections">
+        <a class="sensor-tab @(Model.IsActiveTab("scan") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="scan" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("search")<span>Scan</span></a>
+        <a class="sensor-tab @(Model.IsActiveTab("running") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="running" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>Running</span><span class="workspace-tab-count">@runningJobs.Count</span></a>
+        <a class="sensor-tab @(Model.IsActiveTab("history") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="history" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>History</span><span class="workspace-tab-count">@historyJobs.Count</span></a>
     </div>
 
     @if (Model.IsActiveTab("scan"))
