@@ -211,9 +211,11 @@ public sealed class WorkspaceModel : PageModel
                 NewSensor.Description,
                 createSettings);
 
-            if (selectedTemplate is not null && !sensor.AppliedTemplateIds.Contains(selectedTemplate.Id))
+            if (selectedTemplate is not null)
             {
-                sensor.AppliedTemplateIds.Add(selectedTemplate.Id);
+                // Copy the template's values into the new sensor (the form values the user saw/edited
+                // win) and remember the origin so it can be restored later — no live link.
+                ApplyTemplateCopy(sensor, selectedTemplate, elementWins: true);
                 _workspaceStore.Save();
             }
 
@@ -621,11 +623,9 @@ public sealed class WorkspaceModel : PageModel
                 throw new InvalidOperationException($"Template '{template.Name}' cannot be applied to {target.Kind}.");
             }
 
-            if (!target.AppliedTemplateIds.Contains(template.Id))
-            {
-                target.AppliedTemplateIds.Add(template.Id);
-                _workspaceStore.Save();
-            }
+            // Copy the template's values into the element (template wins) and record the origin.
+            ApplyTemplateCopy(target, template, elementWins: false);
+            _workspaceStore.Save();
 
             StatusMessage = $"Template '{template.Name}' applied to '{target.Name}'.";
             return RedirectToPage(new { applyTemplateId = template.Id });
@@ -689,6 +689,92 @@ public sealed class WorkspaceModel : PageModel
             StatusMessage = credentialIssueCount == 0
                 ? $"{element.Kind} '{element.Name}' gespeichert."
                 : $"{element.Kind} '{element.Name}' gespeichert. {credentialIssueCount} credential issue{(credentialIssueCount == 1 ? string.Empty : "s")} found.";
+            return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostReapplyElementTemplate()
+    {
+        try
+        {
+            var element = _workspaceStore.FindElement(ElementEditor.Id)
+                ?? throw new InvalidOperationException("Element nicht gefunden.");
+
+            if (element.TemplateOriginId is not Guid originId)
+            {
+                throw new InvalidOperationException("Dieses Element hat kein Herkunfts-Template.");
+            }
+
+            var template = _workspaceStore.FindTemplate(originId)
+                ?? throw new InvalidOperationException("Das Herkunfts-Template existiert nicht mehr.");
+
+            ApplyTemplateCopy(element, template, elementWins: false);
+            _workspaceStore.Save();
+            StatusMessage = $"'{element.Name}' aus Template '{template.Name}' wiederhergestellt.";
+            return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostApplyElementTemplate(Guid templateId)
+    {
+        try
+        {
+            var element = _workspaceStore.FindElement(ElementEditor.Id)
+                ?? throw new InvalidOperationException("Element nicht gefunden.");
+
+            if (templateId == Guid.Empty)
+            {
+                throw new InvalidOperationException("Bitte ein Template auswählen.");
+            }
+
+            var template = _workspaceStore.FindTemplate(templateId)
+                ?? throw new InvalidOperationException("Template nicht gefunden.");
+
+            if (!IsTemplateApplicableToElement(template.TargetKind, element.Kind))
+            {
+                throw new InvalidOperationException($"Template '{template.Name}' kann nicht auf {element.Kind} angewendet werden.");
+            }
+
+            if (element is SensorElement sensorTarget && !SensorTemplateMatchesType(template, sensorTarget.SensorTypeKey))
+            {
+                throw new InvalidOperationException("Der Template-Typ passt nicht zum Sensortyp.");
+            }
+
+            ApplyTemplateCopy(element, template, elementWins: false);
+            _workspaceStore.Save();
+            StatusMessage = $"Template '{template.Name}' auf '{element.Name}' angewendet.";
+            return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostDetachElementTemplate()
+    {
+        try
+        {
+            var element = _workspaceStore.FindElement(ElementEditor.Id)
+                ?? throw new InvalidOperationException("Element nicht gefunden.");
+
+            element.TemplateOriginId = null;
+            _workspaceStore.Save();
+            StatusMessage = $"Template-Herkunft von '{element.Name}' gelöst.";
             return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -1801,9 +1887,16 @@ public sealed class WorkspaceModel : PageModel
             CredentialBundles = credentialBundleState.Bundles,
             CredentialBundleVisibleCount = credentialBundleState.VisibleCount,
             AppliedTemplateIds = appliedTemplateIds,
+            TemplateOriginId = element.TemplateOriginId,
+            TemplateOriginName = element.TemplateOriginId is Guid originId && templateMap.TryGetValue(originId, out var originTemplate)
+                ? originTemplate.Name
+                : null,
             ParentOptions = parentOptions,
             TemplateOptions = availableTemplates
-                .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), appliedTemplateIds.Contains(template.Id)))
+                .Where(template => IsTemplateApplicableToElement(template.TargetKind, element.Kind))
+                .Where(template => element is not SensorElement templateSensor || SensorTemplateMatchesType(template, templateSensor.SensorTypeKey))
+                .OrderBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), element.TemplateOriginId == template.Id))
                 .ToList(),
             SensorTypeOptions = _workspaceStore.Workspace.SensorDefinitions
                 .Select(definition => new SelectListItem(definition.DisplayName, definition.Key, string.Equals(definition.Key, (element as SensorElement)?.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
@@ -3595,7 +3688,6 @@ public sealed class WorkspaceModel : PageModel
 
             ApplySensorChannelThresholds(sensorForParameters.Settings, editor.SensorChannelThresholdFields);
         }
-        ApplyTemplates(element.AppliedTemplateIds, editor.AppliedTemplateIds);
 
         var inheritedSettings = ResolveElementInheritedSettings(element);
         MonitoringSettings.StripInheritedValues(element.Settings, inheritedSettings);
@@ -4257,6 +4349,31 @@ public sealed class WorkspaceModel : PageModel
         return inherited;
     }
 
+    /// <summary>
+    /// Applies a template to an element as a one-shot copy: the template's resolved settings are
+    /// baked into the element and <see cref="MonitoringElement.TemplateOriginId"/> records the origin.
+    /// When <paramref name="elementWins"/> is true (sensor creation) the element's own values win over
+    /// the template; otherwise (re-apply / restore) the template overwrites its own fields.
+    /// </summary>
+    private void ApplyTemplateCopy(MonitoringElement element, MonitoringTemplate template, bool elementWins)
+    {
+        var templates = _workspaceStore.Workspace.Templates.ToDictionary(candidate => candidate.Id);
+        var resolved = _resolver.ResolveTemplate(template, templates);
+
+        if (elementWins)
+        {
+            resolved.ApplyFrom(element.Settings);
+            element.Settings = resolved;
+        }
+        else
+        {
+            element.Settings.ApplyFrom(resolved);
+        }
+
+        element.TemplateOriginId = template.Id;
+        element.AppliedTemplateIds.Clear();
+    }
+
     private MonitoringSettings BuildSensorInheritedSettings(CreateSensorInput editor, MonitoringTemplate? template)
     {
         var sensor = new SensorElement(
@@ -4467,21 +4584,6 @@ public sealed class WorkspaceModel : PageModel
             existingSensorValues);
         ApplySensorChannelThresholds(settings, editor.SensorChannelThresholdFields);
         return settings;
-    }
-
-    private static void ApplyTemplates(List<Guid> appliedTemplateIds, IEnumerable<Guid> selectedTemplateIds)
-    {
-        var selectedIds = selectedTemplateIds.Distinct().ToArray();
-        if (selectedIds.Length == 0)
-        {
-            return;
-        }
-
-        appliedTemplateIds.Clear();
-        foreach (var templateId in selectedIds)
-        {
-            appliedTemplateIds.Add(templateId);
-        }
     }
 
     private static List<SelectListItem> BuildNotificationTargetOptions(
@@ -5795,24 +5897,12 @@ public sealed class WorkspaceModel : PageModel
 
     private static string BuildTemplateSummary(MonitoringElement element, IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap)
     {
-        if (element.AppliedTemplateIds.Count == 0)
+        if (element.TemplateOriginId is Guid originId && templateMap.TryGetValue(originId, out var origin))
         {
-            return "no templates";
+            return $"from {origin.Name}";
         }
 
-        var names = new List<string>();
-        foreach (var templateId in element.AppliedTemplateIds)
-        {
-            foreach (var template in ResolveTemplateChain(templateId, templateMap))
-            {
-                if (!names.Any(existing => string.Equals(existing, template.Name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    names.Add(template.Name);
-                }
-            }
-        }
-
-        return names.Count == 0 ? "no templates" : string.Join(" -> ", names);
+        return "no template";
     }
 
     private static IReadOnlyList<TemplateImpactRow> BuildTemplateImpactRows(
@@ -5831,14 +5921,20 @@ public sealed class WorkspaceModel : PageModel
             var path = string.IsNullOrWhiteSpace(parentPath)
                 ? element.Name
                 : $"{parentPath} / {element.Name}";
-            var matchesDirectly = element.AppliedTemplateIds.Contains(template.Id);
+            // Copy model: a sensor is impacted only by the template it was created from / last
+            // restored from (its origin), directly or via that origin's parent chain. No propagation
+            // to children (templates are no longer live-inherited down the tree).
+            _ = inheritedSource;
+            var originId = (element as SensorElement)?.TemplateOriginId;
+            var matchesDirectly = originId == template.Id;
             var matchesThroughTemplateChain = !matchesDirectly &&
-                TemplateChainContains(element.AppliedTemplateIds, template.Id, templateMap);
+                originId is Guid chainOrigin &&
+                TemplateChainContains([chainOrigin], template.Id, templateMap);
             var source = matchesDirectly
                 ? new TemplateImpactSource(element.Id, element.Kind, element.Name, path, "direct")
                 : matchesThroughTemplateChain
                     ? new TemplateImpactSource(element.Id, element.Kind, element.Name, path, "template")
-                : inheritedSource;
+                    : null;
 
             if (element is SensorElement sensor && source is not null)
             {
@@ -6656,6 +6752,10 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
     public SensorChannelMode SensorChannelMode { get; set; } = SensorChannelMode.Dynamic;
 
     public List<Guid> AppliedTemplateIds { get; set; } = [];
+
+    public Guid? TemplateOriginId { get; set; }
+
+    public string? TemplateOriginName { get; set; }
 
     public List<SelectListItem> ParentOptions { get; set; } = [];
 

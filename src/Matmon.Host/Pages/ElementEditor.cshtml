@@ -421,12 +421,45 @@
                         <span class="panel-hint">templates &amp; raw overrides</span>
                     </div>
 
-                    <div class="workspace-form-grid">
-                        <label class="workspace-span-2">
-                            <span>Applied templates</span>
-                            <select asp-for="ElementEditor.AppliedTemplateIds" class="form-select workspace-select" asp-items="Model.ElementEditor.TemplateOptions" multiple size="6"></select>
-                            <small class="workspace-field-hint">Templates supply inheritable defaults (credentials, parameters, thresholds, schedule, retention). This element uses them unless a field here overrides it.</small>
-                        </label>
+                    <div class="workspace-span-2 workspace-template-origin">
+                        <div class="panel-header">
+                            <h2 class="section-title">@MatmonIcons.Render("template")<span>Template</span></h2>
+                            @if (Model.ElementEditor.TemplateOriginId is not null)
+                            {
+                                <span class="panel-hint">@(Model.ElementEditor.TemplateOriginName ?? "origin")</span>
+                            }
+                        </div>
+
+                        @if (Model.ElementEditor.TemplateOriginId is not null)
+                        {
+                            <div class="workspace-inline-note">
+                                Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "—")</strong>. Its values were copied in — later template edits don't change this element until you restore.
+                            </div>
+                            <div class="workspace-form-actions">
+                                <button type="submit" asp-page-handler="ReapplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Restore from template</span></button>
+                                <button type="submit" asp-page-handler="DetachElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("close")<span>Detach origin</span></button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="workspace-inline-note">No template origin. You can copy a template's values into this element below.</div>
+                        }
+
+                        @if (Model.ElementEditor.TemplateOptions.Count > 0)
+                        {
+                            <div class="workspace-form-grid">
+                                <label class="workspace-span-2">
+                                    <span>@(Model.ElementEditor.TemplateOriginId is null ? "Apply template" : "Switch template")</span>
+                                    <select name="templateId" class="form-select workspace-select" asp-items="Model.ElementEditor.TemplateOptions">
+                                        <option value="">— choose —</option>
+                                    </select>
+                                    <small class="workspace-field-hint">Copies the template's values into this element (template wins) and remembers it as the origin.</small>
+                                </label>
+                            </div>
+                            <div class="workspace-form-actions">
+                                <button type="submit" asp-page-handler="ApplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("plus")<span>Apply (copy values)</span></button>
+                            </div>
+                        }
                     </div>
 
                     @if (!isSensor)

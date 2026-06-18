@@ -68,6 +68,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         MigrateDocumentTelemetryIntoRepository();
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
+        MigrateAppliedTemplatesToCopies();
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
         if (_runtimeOptions.ProvisionLocalDockerProbe)
         {
@@ -2817,6 +2818,48 @@ try {
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// One-time migration from the old live template-inheritance model to copy + origin: bake each
+    /// element's applied templates' values into its own settings (the element's own values win),
+    /// record the last applied template as the origin, and clear the legacy link list.
+    /// </summary>
+    private void MigrateAppliedTemplatesToCopies()
+    {
+        var elements = EnumerateElements(_document.RootProbe)
+            .Where(element => element.AppliedTemplateIds.Count > 0)
+            .ToList();
+
+        if (elements.Count == 0)
+        {
+            return;
+        }
+
+        var templateMap = _document.Templates.ToDictionary(template => template.Id);
+        var resolver = new MonitoringInheritanceResolver();
+
+        foreach (var element in elements)
+        {
+            var baked = new MonitoringSettings();
+            var origin = element.TemplateOriginId;
+
+            foreach (var templateId in element.AppliedTemplateIds)
+            {
+                if (templateMap.TryGetValue(templateId, out var template))
+                {
+                    baked.ApplyFrom(resolver.ResolveTemplate(template, templateMap));
+                    origin = templateId;
+                }
+            }
+
+            baked.ApplyFrom(element.Settings);
+            element.Settings = baked;
+            element.TemplateOriginId = origin;
+            element.AppliedTemplateIds.Clear();
+        }
+
+        QueueSave(SavePriority.Configuration);
     }
 
     private static IEnumerable<MonitoringElement> EnumerateElements(MonitoringElement element)

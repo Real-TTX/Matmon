@@ -24,6 +24,18 @@ public abstract class MonitoringElement
 
     public MonitoringSettings Settings { get; set; } = new();
 
+    /// <summary>
+    /// Templates are applied as a one-shot copy: their resolved values are baked into
+    /// <see cref="Settings"/> when applied. <see cref="TemplateOriginId"/> records which template the
+    /// element was created from / last restored from, so it can be re-applied ("restore") later.
+    /// </summary>
+    public Guid? TemplateOriginId { get; set; }
+
+    /// <summary>
+    /// Legacy live-inheritance links. No longer populated — templates are copied now. Kept so old
+    /// workspaces still deserialize; <c>MigrateAppliedTemplatesToCopies</c> bakes any remaining links
+    /// into <see cref="Settings"/> on load and clears this list.
+    /// </summary>
     public List<Guid> AppliedTemplateIds { get; set; } = [];
 
     public abstract MonitoringElementKind Kind { get; }
