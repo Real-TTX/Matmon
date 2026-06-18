@@ -8050,6 +8050,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+  text-decoration: none;
   transition: color 0.12s ease, border-color 0.12s ease;
 }
 

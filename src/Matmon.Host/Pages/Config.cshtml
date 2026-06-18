@@ -19,17 +19,17 @@
         </div>
     </div>
 
-    <div class="workspace-tabs system-tabs" role="tablist" aria-label="System sections">
-        <a class="workspace-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">Overview</a>
-        <a class="workspace-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
-        <a class="workspace-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+    <div class="sensor-tabs system-tabs" role="tablist" aria-label="System sections">
+        <a class="sensor-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">Overview</a>
+        <a class="sensor-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
+        <a class="sensor-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
         @if (canManageSystem)
         {
-            <a class="workspace-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
+            <a class="sensor-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
         }
         @if (canManageUsers)
         {
-            <a class="workspace-tab @(Model.IsActiveTab("users") ? "is-active" : "")" asp-page="/Config" asp-route-tab="users">Users</a>
+            <a class="sensor-tab @(Model.IsActiveTab("users") ? "is-active" : "")" asp-page="/Config" asp-route-tab="users">Users</a>
         }
     </div>
 
