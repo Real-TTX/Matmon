@@ -5,4 +5,7 @@ public sealed record ProbeHeartbeatRequest(
     string ProbeName,
     string? ProbeToken = null,
     string? Message = null,
-    string? AgentVersion = null);
+    string? AgentVersion = null,
+    string? OperatingSystem = null,
+    string? Host = null,
+    IReadOnlyList<string>? Networks = null);

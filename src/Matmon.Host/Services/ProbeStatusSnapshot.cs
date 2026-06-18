@@ -5,4 +5,7 @@ public sealed record ProbeStatusSnapshot(
     string ProbeName,
     DateTimeOffset LastSeenUtc,
     string State,
-    string? Message = null);
+    string? Message = null,
+    string? OperatingSystem = null,
+    string? Host = null,
+    IReadOnlyList<string>? Networks = null);

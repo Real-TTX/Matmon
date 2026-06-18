@@ -14,7 +14,10 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             request.ProbeName,
             receivedAtUtc,
             "Online",
-            request.Message);
+            request.Message,
+            request.OperatingSystem,
+            request.Host,
+            request.Networks);
 
         _probes[request.ProbeId] = snapshot;
         return snapshot;

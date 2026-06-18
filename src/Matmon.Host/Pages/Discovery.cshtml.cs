@@ -20,16 +20,19 @@ public sealed class DiscoveryModel : PageModel
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly DiscoveryJobStore _discoveryJobs;
+    private readonly IProbeRegistry _probeRegistry;
     private readonly MonitoringInheritanceResolver _resolver = new();
 
     public DiscoveryModel(
         IMonitoringWorkspaceStore workspaceStore,
         NetworkDiscoveryService discoveryService,
-        DiscoveryJobStore discoveryJobs)
+        DiscoveryJobStore discoveryJobs,
+        IProbeRegistry probeRegistry)
     {
         _workspaceStore = workspaceStore;
         _discoveryService = discoveryService;
         _discoveryJobs = discoveryJobs;
+        _probeRegistry = probeRegistry;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -253,7 +256,8 @@ public sealed class DiscoveryModel : PageModel
             ?? probes.FirstOrDefault(probe => probe.ParentId is null)
             ?? probes.FirstOrDefault();
         var knownHostAddresses = scopeProbe is null ? [] : GetKnownHostAddresses(scopeProbe);
-        var subnetSuggestions = BuildSubnetSuggestions(knownHostAddresses, includeLocal: scopeProbe?.ParentId is null);
+        var probeReportedNetworks = ResolveProbeReportedNetworks(scopeProbe);
+        var subnetSuggestions = BuildSubnetSuggestions(knownHostAddresses, probeReportedNetworks, includeLocal: scopeProbe?.ParentId is null);
 
         View = new DiscoveryPageViewModel(
             probes.Select(probe => new SelectListItem(
@@ -404,7 +408,22 @@ public sealed class DiscoveryModel : PageModel
             .ToArray();
     }
 
-    private static IReadOnlyList<string> BuildSubnetSuggestions(IReadOnlyList<string> knownAddresses, bool includeLocal)
+    private IReadOnlyList<string> ResolveProbeReportedNetworks(ProbeElement? probe)
+    {
+        if (probe is null || string.IsNullOrWhiteSpace(probe.ProbeId))
+        {
+            return [];
+        }
+
+        var snapshot = _probeRegistry.GetAll()
+            .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probe.ProbeId, StringComparison.OrdinalIgnoreCase));
+        return snapshot?.Networks ?? [];
+    }
+
+    private static IReadOnlyList<string> BuildSubnetSuggestions(
+        IReadOnlyList<string> knownAddresses,
+        IReadOnlyList<string> probeReportedNetworks,
+        bool includeLocal)
     {
         var subnets = new List<string>();
 
@@ -414,6 +433,12 @@ public sealed class DiscoveryModel : PageModel
             {
                 subnets.Add(candidate);
             }
+        }
+
+        // The subnets the (remote) probe actually reported are the most relevant — list them first.
+        foreach (var cidr in probeReportedNetworks)
+        {
+            Add(cidr);
         }
 
         foreach (var address in knownAddresses)
@@ -432,7 +457,7 @@ public sealed class DiscoveryModel : PageModel
             }
         }
 
-        return subnets.Take(6).ToArray();
+        return subnets.Take(8).ToArray();
     }
 
     private static bool TryDeriveSlash24(string address, out string cidr)

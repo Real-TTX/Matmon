@@ -79,12 +79,16 @@ public sealed class SlaveHeartbeatService : BackgroundService
 
     private async Task SendHeartbeatAsync(HttpClient client, string probeId, string probeName, string? probeToken, CancellationToken stoppingToken)
     {
+        var system = ProbeSystemInfoProvider.Collect();
         var request = new ProbeHeartbeatRequest(
             probeId,
             probeName,
             probeToken,
             "secondary heartbeat",
-            Environment.Version.ToString());
+            Environment.Version.ToString(),
+            system.OperatingSystem,
+            system.Host,
+            system.Networks);
 
         try
         {
