@@ -69,6 +69,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
             {
                 Key = "unifi.baseUrl",
                 Label = "Base URL",
+                Group = "Connection",
                 Kind = SensorParameterKind.Text,
                 Description = "Cloud: leave empty for https://api.ui.com. Local: your controller, e.g. https://192.168.1.1 (or use the host target).",
                 Placeholder = "https://192.168.1.1"
@@ -77,6 +78,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
             {
                 Key = "unifi.site",
                 Label = "Site (local)",
+                Group = "Connection",
                 Kind = SensorParameterKind.Text,
                 Description = "Local only: the site id/name to read devices from. Empty = first site.",
                 Placeholder = "default"
@@ -85,6 +87,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
             {
                 Key = "unifi.verifySsl",
                 Label = "Verify SSL (local)",
+                Group = "Connection",
                 Kind = SensorParameterKind.Boolean,
                 Description = "Validate the controller certificate (usually off for a local self-signed UCG).",
                 DefaultValue = "false"

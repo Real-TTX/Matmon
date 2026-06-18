@@ -8430,6 +8430,19 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: 0.45rem;
 }
 
+.sensor-parameter-group-title {
+  margin: 0.6rem 0 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--matmon-muted);
+}
+
+.sensor-parameter-group-title:first-child {
+  margin-top: 0;
+}
+
 .sensor-threshold-list {
   display: grid;
   gap: 0.45rem;

@@ -6,6 +6,9 @@ public sealed record SensorParameterDefinition
 
     public string Label { get; init; } = string.Empty;
 
+    /// <summary>Optional group name. Parameters sharing a group are rendered together under that heading/tab in the editors.</summary>
+    public string? Group { get; init; }
+
     public SensorParameterKind Kind { get; init; } = SensorParameterKind.Text;
 
     public string? Description { get; init; }

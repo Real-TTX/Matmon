@@ -2333,6 +2333,7 @@ public sealed class WorkspaceModel : PageModel
                 {
                     Key = parameter.Key,
                     Label = parameter.Label,
+                    Group = parameter.Group,
                     Kind = parameter.Kind,
                     Description = parameter.Description,
                     Required = parameter.Required,
@@ -6659,6 +6660,8 @@ public sealed class WorkspaceSensorParameterFieldInput
     public string Key { get; set; } = string.Empty;
 
     public string Label { get; set; } = string.Empty;
+
+    public string? Group { get; set; }
 
     public SensorParameterKind Kind { get; set; } = SensorParameterKind.Text;
 
