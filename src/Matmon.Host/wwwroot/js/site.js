@@ -2475,6 +2475,10 @@ function initializeMapDesigner() {
     if (kindSelect) {
       kindSelect.value = kind;
     }
+    const visualSelect = panel.querySelector("[data-map-property-visual-type]");
+    if (visualSelect && tool.visual) {
+      visualSelect.value = tool.visual;
+    }
     setupTile(tile);
     selectTile(index);
   };
@@ -2614,7 +2618,8 @@ function initializeMapDesigner() {
       kind: tool.getAttribute("data-map-tool-kind"),
       title: tool.getAttribute("data-map-tool-title"),
       width: tool.getAttribute("data-map-tool-width"),
-      height: tool.getAttribute("data-map-tool-height")
+      height: tool.getAttribute("data-map-tool-height"),
+      visual: tool.getAttribute("data-map-tool-visual")
     };
 
     tool.addEventListener("click", () => addTile(payload));

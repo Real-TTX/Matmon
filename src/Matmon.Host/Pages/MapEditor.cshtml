@@ -56,6 +56,14 @@
                         @MatmonIcons.Render("dashboard")
                         <span><strong>Summary</strong><small>Aggregated health below a target</small></span>
                     </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Gauge" data-map-tool-visual="@MonitoringMapTileVisualType.Gauge" data-map-tool-width="3" data-map-tool-height="3">
+                        @MatmonIcons.Render("chart")
+                        <span><strong>Gauge</strong><small>Radial gauge of a percent channel</small></span>
+                    </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Progress" data-map-tool-visual="@MonitoringMapTileVisualType.ProgressBar" data-map-tool-width="4" data-map-tool-height="2">
+                        @MatmonIcons.Render("signal")
+                        <span><strong>Progress</strong><small>Progress bar of a percent channel</small></span>
+                    </button>
                     <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Text" data-map-tool-title="Text" data-map-tool-width="4" data-map-tool-height="2">
                         @MatmonIcons.Render("list")
                         <span><strong>Text</strong><small>Label, notes or instructions</small></span>
