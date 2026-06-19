@@ -441,31 +441,36 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             {
                 Key = "systemStatusOk",
                 Label = "System partition",
-                Value = ToBinaryValue(system.SystemStatusOk)
+                Value = ToBinaryValue(system.SystemStatusOk),
+                LogByDefault = false
             },
             new()
             {
                 Key = "powerStatusOk",
                 Label = "Power supply",
-                Value = ToBinaryValue(system.PowerStatusOk)
+                Value = ToBinaryValue(system.PowerStatusOk),
+                LogByDefault = false
             },
             new()
             {
                 Key = "systemFanStatusOk",
                 Label = "System fan",
-                Value = ToBinaryValue(system.SystemFanStatusOk)
+                Value = ToBinaryValue(system.SystemFanStatusOk),
+                LogByDefault = false
             },
             new()
             {
                 Key = "cpuFanStatusOk",
                 Label = "CPU fan",
-                Value = ToBinaryValue(system.CpuFanStatusOk)
+                Value = ToBinaryValue(system.CpuFanStatusOk),
+                LogByDefault = false
             },
             new()
             {
                 Key = "thermalStatusOk",
                 Label = "Thermal",
-                Value = ToBinaryValue(system.ThermalStatusOk)
+                Value = ToBinaryValue(system.ThermalStatusOk),
+                LogByDefault = false
             },
             new()
             {

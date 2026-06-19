@@ -134,7 +134,8 @@ public sealed class DockerContainerSensorExecutor : ISensorExecutor
                 {
                     Key = "healthOk",
                     Label = "Health OK",
-                    Value = healthOk
+                    Value = healthOk,
+                    LogByDefault = false
                 }
             };
 

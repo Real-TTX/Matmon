@@ -135,7 +135,8 @@ public sealed class NtpSensorExecutor : ISensorExecutor
                 {
                     Key = "reachable",
                     Label = "Reachable",
-                    Value = 1
+                    Value = 1,
+                    LogByDefault = false
                 }
             };
 

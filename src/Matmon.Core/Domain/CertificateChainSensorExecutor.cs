@@ -170,7 +170,8 @@ public sealed class CertificateChainSensorExecutor : ISensorExecutor
                 {
                     Key = "hostnameMatch",
                     Label = "Hostname match",
-                    Value = hostnameMatch
+                    Value = hostnameMatch,
+                    LogByDefault = false
                 }
             };
 
