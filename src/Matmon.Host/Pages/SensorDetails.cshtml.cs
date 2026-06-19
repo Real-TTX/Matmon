@@ -86,7 +86,7 @@ public sealed class SensorDetailsModel : PageModel
             sensor.Settings.DefaultChannelKey = channelKey.Trim();
             _workspaceStore.Save();
 
-            StatusMessage = $"Graph channel set to '{channelKey.Trim()}'.";
+            StatusMessage = $"Primary channel set to '{channelKey.Trim()}'.";
             return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window) });
         }
         catch (Exception ex)

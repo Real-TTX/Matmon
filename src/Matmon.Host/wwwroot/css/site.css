@@ -4675,6 +4675,13 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   color: var(--matmon-foreground);
 }
 
+/* selects need extra right padding so their arrow never sits over the text */
+.sensor-statistics-field select {
+  min-width: 9rem;
+  padding-right: 1.9rem;
+  background-position: right 0.6rem center;
+}
+
 .sensor-statistics-actions {
   display: flex;
   gap: 0.4rem;

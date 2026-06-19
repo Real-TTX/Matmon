@@ -27,7 +27,7 @@
                 <span class="sensor-chip">@Model.View.SensorTypeLabel</span>
                 <span class="usage-level-pill" data-level="@Model.View.UsageLevelKey">@Model.View.UsageLevelLabel</span>
                 <span class="sensor-chip">@Model.View.Target</span>
-                <span class="sensor-chip">graph: @Model.View.DefaultChannelLabel</span>
+                <span class="sensor-chip">primary: @Model.View.DefaultChannelLabel</span>
                 @if (!string.IsNullOrWhiteSpace(Model.View.ExecutionProbe))
                 {
                     <span class="sensor-chip">probe: @Model.View.ExecutionProbe</span>
@@ -131,7 +131,7 @@
                                     <span>@channel.Label</span>
                                     @if (channel.IsDefault)
                                     {
-                                        <span class="state-pill" data-state="ok">Graph</span>
+                                        <span class="state-pill" data-state="ok">Primary</span>
                                     }
                                 </div>
                                 <div class="sensor-channel-meta">
@@ -167,7 +167,7 @@
                                           asp-route-channelKey="@channel.Key">
                                         <button type="submit" class="workspace-secondary-submit sensor-channel-default-button @(channel.IsDefault ? "is-active" : string.Empty)">
                                             @MatmonIcons.Render(channel.IsDefault ? "chart" : "spark")
-                                            <span>@(channel.IsDefault ? "Graph" : "Set graph")</span>
+                                            <span>@(channel.IsDefault ? "Primary" : "Set primary")</span>
                                         </button>
                                     </form>
                                 </div>
@@ -236,8 +236,8 @@
                 </div>
                 <div class="sensor-chart-legend">
                     <span class="sensor-chart-legend-line" style="--series-color:@Model.View.SelectedWindow.LineColor"></span>
-                    <span>Graph: @Model.View.DefaultChannelLabel</span>
-                    <span class="panel-hint">used for overview and chart</span>
+                    <span>Primary: @Model.View.DefaultChannelLabel</span>
+                    <span class="panel-hint">used for overview, chart &amp; statistics</span>
                 </div>
                 var win = Model.View.SelectedWindow;
                 var chartInv = System.Globalization.CultureInfo.InvariantCulture;
