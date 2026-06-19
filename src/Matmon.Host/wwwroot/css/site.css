@@ -3835,6 +3835,37 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   color: var(--matmon-muted);
 }
 
+.tree-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.tree-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.08rem 0.42rem 0.08rem 0.32rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 32%, transparent);
+  color: var(--matmon-muted);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.tree-tag .ui-icon {
+  width: 0.68rem;
+  height: 0.68rem;
+  opacity: 0.8;
+}
+
+.tree-tag.is-mini {
+  padding: 0.02rem 0.36rem;
+  font-size: 0.62rem;
+}
+
 .usage-level-pill {
   display: inline-flex;
   align-items: center;

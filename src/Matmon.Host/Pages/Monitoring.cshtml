@@ -265,6 +265,15 @@
                                 }
                             </div>
                             <div class="monitoring-list-path">@node.Path</div>
+                            @if (node.OwnTags.Count > 0)
+                            {
+                                <div class="tree-tags">
+                                    @foreach (var tag in node.OwnTags)
+                                    {
+                                        <span class="tree-tag">@MatmonIcons.Render("tag")<span>@tag</span></span>
+                                    }
+                                </div>
+                            }
                         </div>
 
                         <div class="monitoring-list-endpoint">

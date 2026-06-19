@@ -56,6 +56,10 @@
                         {
                             <span>@Model.LastCheck</span>
                         }
+                        @foreach (var tag in Model.Tags)
+                        {
+                            <span class="tree-tag is-mini">@tag</span>
+                        }
                     </span>
                     <svg class="sparkline monitoring-sensor-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
                         <path data-role="area"></path>
@@ -131,6 +135,15 @@
             @if (!string.IsNullOrWhiteSpace(Model.Details))
             {
                 <div class="monitoring-tree-details">@Model.Details</div>
+            }
+            @if (Model.Tags.Count > 0)
+            {
+                <div class="tree-tags">
+                    @foreach (var tag in Model.Tags)
+                    {
+                        <span class="tree-tag">@MatmonIcons.Render("tag")<span>@tag</span></span>
+                    }
+                </div>
             }
 
             <div class="monitoring-tree-meta">

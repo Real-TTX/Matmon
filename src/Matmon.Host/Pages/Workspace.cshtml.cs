@@ -5435,7 +5435,7 @@ public sealed class WorkspaceModel : PageModel
         IReadOnlyDictionary<Guid, TelemetrySeriesSnapshot> telemetrySeriesMap)
     {
         var rows = new List<WorkspaceNodeRow>();
-        BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, depth: 0, parentPath: string.Empty);
+        BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, depth: 0, parentPath: string.Empty, inheritedTags: []);
         return rows;
     }
 
@@ -5445,9 +5445,12 @@ public sealed class WorkspaceModel : PageModel
         IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap,
         IReadOnlyDictionary<Guid, TelemetrySeriesSnapshot> telemetrySeriesMap,
         int depth,
-        string parentPath)
+        string parentPath,
+        IReadOnlyList<string> inheritedTags)
     {
         var path = string.IsNullOrWhiteSpace(parentPath) ? element.Name : $"{parentPath} / {element.Name}";
+        var ownTags = MonitoringTagResolver.Normalize(element.Tags);
+        var effectiveTags = MonitoringTagResolver.Normalize(inheritedTags.Concat(element.Tags));
         var effectiveSettings = ResolveElementEffectiveSettings(element);
         var settingsSummary = effectiveSettings.Summary();
         var templateSummary = BuildTemplateSummary(element, templateMap);
@@ -5485,13 +5488,15 @@ public sealed class WorkspaceModel : PageModel
             isPausedSensor,
             stateKey,
             stateLabel,
-            stateMessage));
+            stateMessage,
+            effectiveTags,
+            ownTags));
 
         if (element is MonitoringContainerElement container)
         {
             foreach (var child in container.Children)
             {
-                BuildNodeRows(child, rows, templateMap, telemetrySeriesMap, depth + 1, path);
+                BuildNodeRows(child, rows, templateMap, telemetrySeriesMap, depth + 1, path, effectiveTags);
             }
         }
     }
@@ -5652,7 +5657,8 @@ public sealed class WorkspaceModel : PageModel
                 || ContainsText(node.SettingsSummary, searchText)
                 || ContainsText(node.TemplateSummary, searchText)
                 || ContainsText(node.StateLabel, searchText)
-                || ContainsText(node.StateMessage, searchText);
+                || ContainsText(node.StateMessage, searchText)
+                || node.Tags.Any(tag => ContainsText(tag, searchText));
         };
     }
 
@@ -5845,6 +5851,7 @@ public sealed class WorkspaceModel : PageModel
                 SeriesLineColor = _series?.LineColor,
                 SeriesPointCount = _series?.Points.Count ?? 0,
                 SensorTypeLabel = _series?.SensorTypeLabel,
+                Tags = _node.OwnTags,
                 Children = DisplayChildren.Select(child => child.ToViewModel()).ToArray()
             };
         }
@@ -6328,7 +6335,9 @@ public sealed record WorkspaceNodeRow(
     bool IsPaused,
     string? StateKey,
     string? StateLabel,
-    string? StateMessage);
+    string? StateMessage,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> OwnTags);
 
 public sealed class WorkspaceMonitoringTreeNode
 {
@@ -6393,6 +6402,8 @@ public sealed class WorkspaceMonitoringTreeNode
     public int SeriesPointCount { get; init; }
 
     public string? SensorTypeLabel { get; init; }
+
+    public IReadOnlyList<string> Tags { get; init; } = [];
 
     public IReadOnlyList<WorkspaceMonitoringTreeNode> Children { get; init; } = [];
 }
