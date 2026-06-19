@@ -1427,7 +1427,7 @@ function initializeThresholdEditors() {
           defaultButton.setAttribute("aria-pressed", String(isDefault));
           const label = defaultButton.querySelector("[data-threshold-default-label]");
           if (label) {
-            label.textContent = isDefault ? "Graph" : "Set graph";
+            label.textContent = isDefault ? "Primary" : "Set primary";
           }
         }
       });

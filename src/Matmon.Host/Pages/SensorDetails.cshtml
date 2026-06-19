@@ -160,18 +160,6 @@
                                     </svg>
                                 }
                                 <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
-                                <div class="sensor-channel-actions">
-                                    <form method="post"
-                                          asp-page-handler="SetDefaultChannel"
-                                          asp-route-sensorId="@Model.View.SensorId"
-                                          asp-route-window="@Model.Window"
-                                          asp-route-channelKey="@channel.Key">
-                                        <button type="submit" class="workspace-secondary-submit sensor-channel-default-button @(channel.IsDefault ? "is-active" : string.Empty)">
-                                            @MatmonIcons.Render(channel.IsDefault ? "chart" : "spark")
-                                            <span>@(channel.IsDefault ? "Primary" : "Set primary")</span>
-                                        </button>
-                                    </form>
-                                </div>
                             </div>
                         </article>
                     }

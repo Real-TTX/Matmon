@@ -38,9 +38,9 @@
                                     class="workspace-secondary-submit sensor-threshold-default @(field.IsDefault ? "is-active" : string.Empty)"
                                     data-threshold-default
                                     aria-pressed="@(field.IsDefault ? "true" : "false")"
-                                    title="Set as graph channel">
+                                    title="Set as primary channel (used for the overview, graph &amp; statistics)">
                                 @MatmonIcons.Render("chart")
-                                <span data-threshold-default-label>@(field.IsDefault ? "Graph" : "Set graph")</span>
+                                <span data-threshold-default-label>@(field.IsDefault ? "Primary" : "Set primary")</span>
                             </button>
                             @if (!hasFixedChannels)
                             {

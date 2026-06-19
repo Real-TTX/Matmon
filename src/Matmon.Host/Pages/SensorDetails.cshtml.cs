@@ -74,31 +74,6 @@ public sealed class SensorDetailsModel : PageModel
         }
     }
 
-    public IActionResult OnPostSetDefaultChannel(string channelKey)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(channelKey))
-            {
-                throw new InvalidOperationException("Channel key is required.");
-            }
-
-            var sensor = _workspaceStore.FindElement(SensorId) as SensorElement
-                ?? throw new InvalidOperationException("Selected element is not a sensor.");
-
-            sensor.Settings.DefaultChannelKey = channelKey.Trim();
-            _workspaceStore.Save();
-
-            StatusMessage = $"Primary channel set to '{channelKey.Trim()}'.";
-            return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window) });
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            return LoadView() ? Page() : NotFound();
-        }
-    }
-
     public IActionResult OnPostToggleSensorPause()
     {
         try

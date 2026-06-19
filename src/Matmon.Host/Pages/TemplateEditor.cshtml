@@ -31,20 +31,6 @@
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
 
-    <section class="panel panel-stack workspace-assistant-panel template-editor-guide">
-        <div class="assistant-steps" aria-label="Template assistant steps">
-            <span class="assistant-step is-active">Scope</span>
-            <span class="assistant-step is-active">Inheritance</span>
-            <span class="assistant-step @(isCreateMode ? string.Empty : "is-active")">Defaults</span>
-            <span class="assistant-step @(isCreateMode ? string.Empty : "is-active")">Impact</span>
-        </div>
-        <div class="template-guide-copy">
-            @(isCreateMode
-                ? "Create the template shell first. After that, Matmon opens the detail assistant where you define credentials, parameters, channels and thresholds."
-                : "Only fill fields that this template should own. Empty fields continue to inherit from the parent template or from higher elements.")
-        </div>
-    </section>
-
     <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("template")<span>@(isCreateMode ? "Create" : "Edit")</span></h2>
