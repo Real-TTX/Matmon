@@ -34,31 +34,49 @@ public sealed class SslCertificateSensorExecutor : ISensorExecutor
                 Kind = SensorParameterKind.Text,
                 Description = "Optional SNI/certificate name. Empty uses the target host.",
                 Placeholder = "www.example.com"
-            },
-            new SensorParameterDefinition
-            {
-                Key = "ssl.warningDays",
-                Label = "Warning days",
-                Kind = SensorParameterKind.Integer,
-                Description = "Warning when the certificate expires within this many days.",
-                DefaultValue = "30",
-                Min = 1,
-                Max = 3650,
-                Step = "1"
-            },
-            new SensorParameterDefinition
-            {
-                Key = "ssl.criticalDays",
-                Label = "Critical days",
-                Kind = SensorParameterKind.Integer,
-                Description = "Critical when the certificate expires within this many days.",
-                DefaultValue = "7",
-                Min = 0,
-                Max = 3650,
-                Step = "1"
             }
         ]
     };
+
+    // Remaining-lifetime warning/critical is expressed as normal channel thresholds on the
+    // "remainingDays" channel (edited in the Thresholds tab), not bespoke parameters.
+    public const string RemainingDaysChannelKey = "remainingDays";
+    public const int DefaultWarningDays = 30;
+    public const int DefaultCriticalDays = 7;
+
+    /// <summary>
+    /// Seeds the default expiry thresholds (&lt;= 30 warning, &lt;= 7 critical) on the remainingDays
+    /// channel when none are set yet, and removes the legacy ssl.warningDays / ssl.criticalDays
+    /// parameters (carrying their values over when present). Used on create and as a load migration.
+    /// </summary>
+    public static void EnsureDefaultThresholds(MonitoringSettings settings)
+    {
+        if (settings is null)
+        {
+            return;
+        }
+
+        if (!MonitoringSettings.TryReadChannelThreshold(settings, RemainingDaysChannelKey, "warning", out _))
+        {
+            var warningDays = MonitoringSettings.TryReadParameterInt(settings, "ssl.warningDays", out var configuredWarning)
+                ? configuredWarning
+                : DefaultWarningDays;
+            MonitoringSettings.SetChannelThreshold(settings, RemainingDaysChannelKey, "warning",
+                new ThresholdRule(ThresholdDirection.BelowOrEqual, warningDays));
+        }
+
+        if (!MonitoringSettings.TryReadChannelThreshold(settings, RemainingDaysChannelKey, "critical", out _))
+        {
+            var criticalDays = MonitoringSettings.TryReadParameterInt(settings, "ssl.criticalDays", out var configuredCritical)
+                ? configuredCritical
+                : DefaultCriticalDays;
+            MonitoringSettings.SetChannelThreshold(settings, RemainingDaysChannelKey, "critical",
+                new ThresholdRule(ThresholdDirection.BelowOrEqual, criticalDays));
+        }
+
+        settings.Parameters.Remove("ssl.warningDays");
+        settings.Parameters.Remove("ssl.criticalDays");
+    }
 
     public string SensorTypeKey => Definition.Key;
 
@@ -81,8 +99,7 @@ public sealed class SslCertificateSensorExecutor : ISensorExecutor
             {
                 var settings = new MonitoringSettings();
                 settings.Parameters["ssl.port"] = port.ToString(CultureInfo.InvariantCulture);
-                settings.Parameters["ssl.warningDays"] = "30";
-                settings.Parameters["ssl.criticalDays"] = "7";
+                EnsureDefaultThresholds(settings);
 
                 return new SensorDiscoverySuggestion(
                     Definition.Key,
@@ -119,12 +136,6 @@ public sealed class SslCertificateSensorExecutor : ISensorExecutor
             !string.IsNullOrWhiteSpace(configuredServerName)
             ? configuredServerName.Trim()
             : host;
-        var warningDays = MonitoringSettings.TryReadParameterInt(context.Settings, "ssl.warningDays", out var configuredWarningDays)
-            ? configuredWarningDays
-            : 30;
-        var criticalDays = MonitoringSettings.TryReadParameterInt(context.Settings, "ssl.criticalDays", out var configuredCriticalDays)
-            ? configuredCriticalDays
-            : 7;
         var timeout = context.Settings.Timeout ?? TimeSpan.FromSeconds(5);
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
@@ -185,28 +196,16 @@ public sealed class SslCertificateSensorExecutor : ISensorExecutor
                 : certificate.GetNameInfo(X509NameType.SimpleName, false);
             var message = $"expires {notAfter:yyyy-MM-dd} ({remainingDays:0.#}d) - {subject}";
 
-            SensorExecutionResult result;
-            if (!isValid)
-            {
-                result = SensorExecutionResult.Critical(
+            // Warning/critical on remaining lifetime is driven by the remainingDays channel
+            // thresholds (seeded with <= 30 / <= 7 defaults), applied below.
+            var result = isValid
+                ? SensorExecutionResult.Healthy(watch.Elapsed, message, remainingDays, "remainingDays", channels)
+                : SensorExecutionResult.Critical(
                     watch.Elapsed,
                     policyErrors == SslPolicyErrors.None ? message : $"{message}; {policyErrors}",
                     remainingDays,
                     "remainingDays",
                     channels);
-            }
-            else if (remainingDays <= criticalDays)
-            {
-                result = SensorExecutionResult.Critical(watch.Elapsed, message, remainingDays, "remainingDays", channels);
-            }
-            else if (remainingDays <= warningDays)
-            {
-                result = SensorExecutionResult.Warning(watch.Elapsed, message, remainingDays, "remainingDays", channels);
-            }
-            else
-            {
-                result = SensorExecutionResult.Healthy(watch.Elapsed, message, remainingDays, "remainingDays", channels);
-            }
 
             return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
         }

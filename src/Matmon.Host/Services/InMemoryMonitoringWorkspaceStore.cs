@@ -69,6 +69,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
         MigrateAppliedTemplatesToCopies();
+        MigrateSslCertificateThresholds();
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
         if (_runtimeOptions.ProvisionLocalDockerProbe)
         {
@@ -741,6 +742,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             if (settings is not null)
             {
                 sensor.Settings.ApplyFrom(settings);
+            }
+
+            // SSL expiry warning/critical lives on the remainingDays channel thresholds — seed the
+            // defaults so a new certificate sensor warns out of the box.
+            if (string.Equals(sensorTypeKey, SslCertificateSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                SslCertificateSensorExecutor.EnsureDefaultThresholds(sensor.Settings);
             }
 
             AddChild(parent, sensor);
@@ -2864,6 +2872,45 @@ try {
         }
 
         QueueSave(SavePriority.Configuration);
+    }
+
+    /// <summary>
+    /// One-time migration of SSL certificate sensors from the legacy ssl.warningDays /
+    /// ssl.criticalDays parameters to real remainingDays channel thresholds (carrying any custom
+    /// values over), so expiry warning/critical is configured like every other sensor's thresholds.
+    /// </summary>
+    private void MigrateSslCertificateThresholds()
+    {
+        var sslSensors = EnumerateElements(_document.RootProbe)
+            .OfType<SensorElement>()
+            .Where(sensor => string.Equals(sensor.SensorTypeKey, SslCertificateSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (sslSensors.Count == 0)
+        {
+            return;
+        }
+
+        var changed = false;
+        foreach (var sensor in sslSensors)
+        {
+            var hadParams = sensor.Settings.Parameters.ContainsKey("ssl.warningDays")
+                || sensor.Settings.Parameters.ContainsKey("ssl.criticalDays");
+            var hadWarning = MonitoringSettings.TryReadChannelThreshold(
+                sensor.Settings, SslCertificateSensorExecutor.RemainingDaysChannelKey, "warning", out _);
+
+            SslCertificateSensorExecutor.EnsureDefaultThresholds(sensor.Settings);
+
+            if (hadParams || !hadWarning)
+            {
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            QueueSave(SavePriority.Configuration);
+        }
     }
 
     private static IEnumerable<MonitoringElement> EnumerateElements(MonitoringElement element)

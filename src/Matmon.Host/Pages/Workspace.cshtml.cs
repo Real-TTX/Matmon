@@ -3207,6 +3207,17 @@ public sealed class WorkspaceModel : PageModel
             return true;
         }
 
+        if (string.Equals(sensorTypeKey, SslCertificateSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(channelKey, SslCertificateSensorExecutor.RemainingDaysChannelKey, StringComparison.OrdinalIgnoreCase))
+        {
+            rule = new ThresholdRule(
+                ThresholdDirection.BelowOrEqual,
+                string.Equals(severity, "critical", StringComparison.OrdinalIgnoreCase)
+                    ? SslCertificateSensorExecutor.DefaultCriticalDays
+                    : SslCertificateSensorExecutor.DefaultWarningDays);
+            return true;
+        }
+
         rule = default;
         return false;
     }
