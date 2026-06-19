@@ -311,6 +311,10 @@
                                         {
                                             <span>@sensor.LastCheck</span>
                                         }
+                                        @foreach (var tag in sensor.Tags)
+                                        {
+                                            <span class="tree-tag is-mini">@tag</span>
+                                        }
                                     </span>
                                     <svg class="sparkline monitoring-sensor-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
                                         <path data-role="area"></path>
