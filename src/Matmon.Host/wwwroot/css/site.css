@@ -1573,9 +1573,15 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .workspace-summary-strip {
-  display: flex;
+  display: none;
   justify-content: flex-end;
   margin: 0.3rem 0 0.6rem;
+}
+
+/* Revealed by initializeWorkspaceSummaryPlacement once it's in its final spot, so
+   it doesn't visibly jump from the sidebar into the page header on every load. */
+.workspace-summary-strip.is-placed {
+  display: flex;
 }
 
 .page-header .workspace-summary-strip {

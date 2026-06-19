@@ -30,6 +30,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
         var probeCount = 0;
         var sensorCount = 0;
+        var pausedSensorCount = 0;
+        var pausedSensorIds = new HashSet<Guid>();
         foreach (var element in elements)
         {
             switch (element.Kind)
@@ -39,11 +41,49 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                     break;
                 case MonitoringElementKind.Sensor:
                     sensorCount++;
+                    if (element is SensorElement sensor && sensor.IsPaused)
+                    {
+                        pausedSensorCount++;
+                        pausedSensorIds.Add(sensor.Id);
+                    }
                     break;
             }
         }
 
-        return new WorkspaceSummary(workspaceName, probeCount, sensorCount);
+        // Error/warning sensor counts from the cached latest-observation states (cheap —
+        // no telemetry scan), so the sidebar alert badge renders real numbers on first
+        // paint instead of flashing 0 → N once the client refresh lands.
+        var errorSensorCount = 0;
+        var warningSensorCount = 0;
+        foreach (var (sensorId, observation) in _workspaceStore.GetLatestSensorObservations())
+        {
+            if (pausedSensorIds.Contains(sensorId))
+            {
+                continue;
+            }
+
+            switch (observation.State)
+            {
+                case SensorState.Critical:
+                    errorSensorCount++;
+                    break;
+                case SensorState.Warning:
+                    warningSensorCount++;
+                    break;
+            }
+        }
+
+        var (openAlerts, acknowledgedAlerts) = _workspaceStore.GetActiveAlertCounts();
+
+        return new WorkspaceSummary(
+            workspaceName,
+            probeCount,
+            sensorCount,
+            openAlerts,
+            acknowledgedAlerts,
+            errorSensorCount,
+            warningSensorCount,
+            pausedSensorCount);
     }
 
     public DashboardSnapshot CreateSnapshot()

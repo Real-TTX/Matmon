@@ -263,6 +263,8 @@ function initializeWorkspaceSummaryPlacement() {
 
   const targetHeader = document.querySelector("main .page-header");
   if (!targetHeader) {
+    // No header to host it — reveal it where it already is (the sidebar).
+    summaryStrip.classList.add("is-placed");
     return;
   }
 
@@ -273,11 +275,14 @@ function initializeWorkspaceSummaryPlacement() {
   );
 
   if (shouldSkipMove) {
+    // Left where it was rendered (in the sidebar) — just reveal it in place.
+    summaryStrip.classList.add("is-placed");
     return;
   }
 
   targetHeader.classList.add("has-summary");
   targetHeader.appendChild(summaryStrip);
+  summaryStrip.classList.add("is-placed");
 }
 
 function initializeThemeToggle() {

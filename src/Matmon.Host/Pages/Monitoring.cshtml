@@ -385,6 +385,24 @@
                     <partial name="_MonitoringTreeNode" model="root" />
                 }
             </div>
+            @* Apply the saved collapse state synchronously, before first paint, so the
+               tree doesn't render fully expanded and then visibly collapse (site.js
+               re-applies the same state on load — a no-op visually). *@
+            <script>
+                (function () {
+                    try {
+                        var ids = JSON.parse(localStorage.getItem("matmon-monitoring-tree-collapsed") || "[]");
+                        if (Array.isArray(ids) && ids.length) {
+                            var collapsed = new Set(ids);
+                            document.querySelectorAll("[data-tree-node]").forEach(function (node) {
+                                if (collapsed.has(node.dataset.treeNodeId)) {
+                                    node.classList.add("is-collapsed");
+                                }
+                            });
+                        }
+                    } catch (e) { /* collapse state is best-effort */ }
+                })();
+            </script>
         }
     </section>
 </section>

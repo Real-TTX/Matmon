@@ -565,6 +565,33 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public (int Open, int Acknowledged) GetActiveAlertCounts()
+    {
+        lock (_gate)
+        {
+            var open = 0;
+            var acknowledged = 0;
+            foreach (var alert in _document.Alerts)
+            {
+                if (!alert.IsActive)
+                {
+                    continue;
+                }
+
+                if (alert.IsAcknowledged)
+                {
+                    acknowledged++;
+                }
+                else
+                {
+                    open++;
+                }
+            }
+
+            return (open, acknowledged);
+        }
+    }
+
     public bool AcknowledgeAlert(Guid alertId, string? acknowledgedBy = null)
     {
         lock (_gate)

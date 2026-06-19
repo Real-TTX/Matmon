@@ -211,13 +211,17 @@ public sealed class WorkspaceModel : PageModel
                 NewSensor.Description,
                 createSettings);
 
+            sensor.Tags = MonitoringTagResolver.Parse(NewSensor.TagsText);
+
             if (selectedTemplate is not null)
             {
                 // Copy the template's values into the new sensor (the form values the user saw/edited
-                // win) and remember the origin so it can be restored later — no live link.
+                // win) and remember the origin so it can be restored later — no live link. Template
+                // tags merge into the user's tags inside ApplyTemplateCopy.
                 ApplyTemplateCopy(sensor, selectedTemplate, elementWins: true);
-                _workspaceStore.Save();
             }
+
+            _workspaceStore.Save();
 
             StatusMessage = $"Sensor '{sensor.Name}' angelegt.";
             return RedirectAfterAction(ReturnUrl, "/Monitoring");
@@ -6615,6 +6619,8 @@ public sealed class CreateSensorInput : ISensorThresholdEditor, ISensorScheduleE
     public string? TargetPlaceholder { get; set; }
 
     public string? Description { get; set; }
+
+    public string? TagsText { get; set; }
 
     public Guid? ParentId { get; set; }
 

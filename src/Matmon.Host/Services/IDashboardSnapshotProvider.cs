@@ -12,4 +12,12 @@ public interface IDashboardSnapshotProvider
     WorkspaceSummary GetWorkspaceSummary();
 }
 
-public sealed record WorkspaceSummary(string WorkspaceName, int ConfiguredProbeCount, int SensorCount);
+public sealed record WorkspaceSummary(
+    string WorkspaceName,
+    int ConfiguredProbeCount,
+    int SensorCount,
+    int OpenAlertCount = 0,
+    int AcknowledgedAlertCount = 0,
+    int ErrorSensorCount = 0,
+    int WarningSensorCount = 0,
+    int PausedSensorCount = 0);

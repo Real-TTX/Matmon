@@ -48,6 +48,26 @@
         }
 
         ViewData["WorkspaceSummary"] = workspaceSummary;
+
+        // Server-render the sidebar alert badge from the cheap summary so it shows real
+        // numbers on first paint (the client refresh then keeps it live). Mirrors the
+        // tone/state/hint logic in site.js so the JS update is visually a no-op.
+        var openAlerts = workspaceSummary?.OpenAlertCount ?? 0;
+        var ackAlerts = workspaceSummary?.AcknowledgedAlertCount ?? 0;
+        var errorSensors = workspaceSummary?.ErrorSensorCount ?? 0;
+        var warningSensors = workspaceSummary?.WarningSensorCount ?? 0;
+        var pausedSensors = workspaceSummary?.PausedSensorCount ?? 0;
+        var hasErrors = openAlerts > 0 || errorSensors > 0;
+        var hasWarnings = warningSensors > 0 || ackAlerts > 0 || pausedSensors > 0;
+        var alertTone = hasErrors ? "error" : (hasWarnings ? "warning" : "ok");
+        var alertState = hasErrors ? "Error" : (warningSensors > 0 ? "Warning" : (ackAlerts > 0 ? "Ack" : (pausedSensors > 0 ? "Paused" : "OK")));
+        var hintParts = new List<string>();
+        if (openAlerts > 0) { hintParts.Add($"{openAlerts} open"); }
+        if (errorSensors > 0) { hintParts.Add($"{errorSensors} error"); }
+        if (warningSensors > 0) { hintParts.Add($"{warningSensors} warning"); }
+        if (ackAlerts > 0) { hintParts.Add($"{ackAlerts} ack"); }
+        if (pausedSensors > 0) { hintParts.Add($"{pausedSensors} paused"); }
+        var alertHint = hintParts.Count > 0 ? string.Join(" / ", hintParts) : "All clear";
     }
     <div class="app-shell">
         <div class="mobile-nav-bar">
@@ -77,20 +97,20 @@
 
                 @if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
                 {
-                    <div class="sidebar-alert-status @NavClass("/Alerts")" data-nav-alert-status>
+                    <div class="sidebar-alert-status @NavClass("/Alerts")" data-nav-alert-status data-tone="@alertTone">
                         <a class="sidebar-alert-status-main" asp-area="" asp-page="/Alerts" asp-route-alertFilter="open">
                             <span class="sidebar-alert-status-label">Alerts</span>
                             <span class="sidebar-alert-status-value">
-                                <span class="sidebar-alert-status-count" data-nav-alert-count>0</span>
-                                <span class="sidebar-alert-status-state" data-nav-alert-state>OK</span>
+                                <span class="sidebar-alert-status-count" data-nav-alert-count>@openAlerts</span>
+                                <span class="sidebar-alert-status-state" data-nav-alert-state>@alertState</span>
                             </span>
-                            <span class="sidebar-alert-status-hint" data-nav-alert-hint>All clear</span>
+                            <span class="sidebar-alert-status-hint" data-nav-alert-hint>@alertHint</span>
                         </a>
                         <span class="sidebar-alert-status-meta" aria-label="Alert summary">
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><strong data-nav-error-count>0</strong><small>Err</small></a>
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><strong data-nav-warning-count>0</strong><small>Warn</small></a>
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><strong data-nav-ack-count>0</strong><small>Ack</small></a>
-                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="paused" data-tone="paused"><strong data-nav-paused-inline-count>0</strong><small>Pause</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><strong data-nav-error-count>@errorSensors</strong><small>Err</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><strong data-nav-warning-count>@warningSensors</strong><small>Warn</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><strong data-nav-ack-count>@ackAlerts</strong><small>Ack</small></a>
+                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="paused" data-tone="paused"><strong data-nav-paused-inline-count>@pausedSensors</strong><small>Pause</small></a>
                         </span>
                     </div>
                 }

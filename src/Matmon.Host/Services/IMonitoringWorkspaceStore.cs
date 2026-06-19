@@ -55,6 +55,9 @@ public interface IMonitoringWorkspaceStore
 
     bool AcknowledgeAlert(Guid alertId, string? acknowledgedBy = null);
 
+    /// <summary>Cheap counts of the persisted active alerts (open vs. acknowledged) — no snapshot clone.</summary>
+    (int Open, int Acknowledged) GetActiveAlertCounts();
+
     void RecordSensorObservation(
         Guid sensorId,
         SensorExecutionResult result,
