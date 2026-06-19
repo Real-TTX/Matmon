@@ -15,4 +15,7 @@ public sealed class MonitoringTemplate
     public Guid? ParentTemplateId { get; set; }
 
     public MonitoringSettings Settings { get; set; } = new();
+
+    /// <summary>Tags merged into an element's own tags when this template is applied (copy + origin).</summary>
+    public List<string> Tags { get; set; } = [];
 }

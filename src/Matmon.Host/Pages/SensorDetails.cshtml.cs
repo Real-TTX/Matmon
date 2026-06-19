@@ -146,6 +146,10 @@ public sealed class SensorDetailsModel : PageModel
         var selectedWindow = windows.FirstOrDefault(window => string.Equals(window.Key, Window, StringComparison.OrdinalIgnoreCase))
             ?? windows.FirstOrDefault(window => string.Equals(window.Key, "1d", StringComparison.OrdinalIgnoreCase))
             ?? windows[0];
+        var ownTags = MonitoringTagResolver.Normalize(sensor.Tags);
+        var tagChips = MonitoringTagResolver.ResolveEffective(lineage)
+            .Select(tag => new SensorTagChip(tag, !MonitoringTagResolver.HasTag(ownTags, tag)))
+            .ToArray();
         var defaultChannelLabel = defaultChannel is null
             ? (string.IsNullOrWhiteSpace(defaultChannelKey) ? "Default" : HumanizeChannelKey(defaultChannelKey))
             : string.IsNullOrWhiteSpace(defaultChannel.Label) ? defaultChannel.Key : defaultChannel.Label;
@@ -181,7 +185,8 @@ public sealed class SensorDetailsModel : PageModel
             BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey, effectiveSettings),
             BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey, displayScale),
             statisticsSummary,
-            unitConversion);
+            unitConversion,
+            tagChips);
 
         return true;
     }
@@ -923,7 +928,10 @@ public sealed record SensorDetailsViewModel(
     IReadOnlyList<SensorChannelRow> Channels,
     IReadOnlyList<SensorObservationRow> RecentObservations,
     SensorStatisticsSummary? Statistics,
-    SensorUnitConversion? UnitConversion);
+    SensorUnitConversion? UnitConversion,
+    IReadOnlyList<SensorTagChip> Tags);
+
+public sealed record SensorTagChip(string Text, bool Inherited);
 
 public sealed record SensorStatisticsSummary(
     string GranularityLabel,

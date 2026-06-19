@@ -198,6 +198,10 @@ public static class MatmonIcons
             <path d="M8 6.1v2.7" />
             <path d="M8 10.5h.01" />
             """,
+        ["tag"] = """
+            <path d="M8.4 2.5H13V7.1l-5.6 5.6a1.2 1.2 0 0 1-1.7 0L2.8 9.3a1.2 1.2 0 0 1 0-1.7z" />
+            <circle cx="10.4" cy="5.1" r="0.95" />
+            """,
         ["sun"] = """
             <circle cx="8" cy="8" r="2.6" />
             <path d="M8 1.7v1.4" />

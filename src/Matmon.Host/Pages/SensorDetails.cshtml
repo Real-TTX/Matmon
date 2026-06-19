@@ -34,6 +34,15 @@
                 }
                 <span class="sensor-chip">@Model.View.SettingsSummary</span>
             </div>
+            @if (Model.View.Tags.Count > 0)
+            {
+                <div class="sensor-tag-row">
+                    @foreach (var tag in Model.View.Tags)
+                    {
+                        <span class="sensor-tag @(tag.Inherited ? "is-inherited" : null)" title="@(tag.Inherited ? "inherited from a parent" : "tag")">@MatmonIcons.Render("tag")<span>@tag.Text</span></span>
+                    }
+                </div>
+            }
             @if (!string.IsNullOrWhiteSpace(Model.View.StateMessage))
             {
                 <div class="sensor-state-message">@Model.View.StateMessage</div>

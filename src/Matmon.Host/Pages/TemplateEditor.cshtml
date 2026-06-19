@@ -160,6 +160,11 @@
                             <span>Name</span>
                             <input asp-for="TemplateEditor.Name" class="form-control workspace-input" />
                         </label>
+                        <label class="workspace-span-2">
+                            <span>Tags</span>
+                            <input asp-for="TemplateEditor.TagsText" class="form-control workspace-input" placeholder="prod, network" />
+                            <small class="workspace-field-hint">Comma-separated. Merged into an element's tags when this template is applied.</small>
+                        </label>
                         <label>
                             <span>Scope</span>
                             <select asp-for="TemplateEditor.TargetKind" class="form-select workspace-select" data-template-scope-select>

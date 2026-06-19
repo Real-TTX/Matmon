@@ -1829,6 +1829,7 @@ public sealed class WorkspaceModel : PageModel
             Kind = element.Kind.ToString(),
             Name = element.Name,
             Description = element.Description,
+            TagsText = string.Join(", ", element.Tags),
             ParentId = element.ParentId,
             ProbeId = probeElement?.ProbeId,
             EnrollmentToken = probeElement?.EnrollmentToken,
@@ -1930,6 +1931,7 @@ public sealed class WorkspaceModel : PageModel
         {
             Id = template.Id,
             Name = template.Name,
+            TagsText = string.Join(", ", template.Tags),
             TargetKind = template.TargetKind,
             SensorTypeKey = string.IsNullOrWhiteSpace(template.SensorTypeKey)
                 ? PingSensorExecutor.Definition.Key
@@ -3591,6 +3593,7 @@ public sealed class WorkspaceModel : PageModel
     {
         element.Name = editor.Name.Trim();
         element.Description = string.IsNullOrWhiteSpace(editor.Description) ? null : editor.Description.Trim();
+        element.Tags = MonitoringTagResolver.Parse(editor.TagsText);
         var parentChanged = false;
 
         SensorDefinition? sensorDefinition = null;
@@ -3727,6 +3730,7 @@ public sealed class WorkspaceModel : PageModel
     private void ApplyTemplateEditor(MonitoringTemplate template, WorkspaceTemplateEditorInput editor)
     {
         template.Name = editor.Name.Trim();
+        template.Tags = MonitoringTagResolver.Parse(editor.TagsText);
         template.TargetKind = editor.TargetKind;
         template.SensorTypeKey = editor.TargetKind == MonitoringTemplateScope.Sensor
             ? RequireSensorDefinition(editor.SensorTypeKey).Key
@@ -4396,6 +4400,12 @@ public sealed class WorkspaceModel : PageModel
         else
         {
             element.Settings.ApplyFrom(resolved);
+        }
+
+        // Tags from the template merge into the element's own tags (copy semantics).
+        if (template.Tags.Count > 0)
+        {
+            element.Tags = MonitoringTagResolver.Normalize(element.Tags.Concat(template.Tags));
         }
 
         element.TemplateOriginId = template.Id;
@@ -6689,6 +6699,8 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
 
     public string? Description { get; set; }
 
+    public string? TagsText { get; set; }
+
     public Guid? ParentId { get; set; }
 
     public string? ProbeId { get; set; }
@@ -6917,6 +6929,8 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISens
     public Guid Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+
+    public string? TagsText { get; set; }
 
     public MonitoringTemplateScope TargetKind { get; set; } = MonitoringTemplateScope.Any;
 

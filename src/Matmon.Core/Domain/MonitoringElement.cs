@@ -20,6 +20,13 @@ public abstract class MonitoringElement
 
     public string? Description { get; set; }
 
+    /// <summary>
+    /// Free-form labels for grouping/filtering. Tags cascade: a sensor's effective
+    /// tags are its own plus every ancestor's (see <c>MonitoringTagResolver</c>).
+    /// Template tags are merged in when a template is applied (copy + origin).
+    /// </summary>
+    public List<string> Tags { get; set; } = [];
+
     public Guid? ParentId { get; set; }
 
     public MonitoringSettings Settings { get; set; } = new();

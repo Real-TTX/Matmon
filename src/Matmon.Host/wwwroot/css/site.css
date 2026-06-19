@@ -3803,6 +3803,38 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   line-height: 1;
 }
 
+.sensor-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.sensor-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.16rem 0.5rem 0.16rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--matmon-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 38%, transparent);
+  color: var(--matmon-foreground);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.sensor-tag .ui-icon {
+  width: 0.78rem;
+  height: 0.78rem;
+  opacity: 0.85;
+}
+
+.sensor-tag.is-inherited {
+  background: rgba(124, 142, 171, 0.12);
+  border-color: color-mix(in srgb, var(--matmon-border) 70%, transparent);
+  color: var(--matmon-muted);
+}
+
 .usage-level-pill {
   display: inline-flex;
   align-items: center;
