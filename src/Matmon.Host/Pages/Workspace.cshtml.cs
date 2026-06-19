@@ -603,45 +603,6 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
-    public IActionResult OnPostApplyTemplate()
-    {
-        try
-        {
-            if (TemplateApply.TemplateId == Guid.Empty)
-            {
-                throw new InvalidOperationException("Template is required.");
-            }
-
-            if (TemplateApply.TargetElementId is not Guid targetId)
-            {
-                throw new InvalidOperationException("Target element is required.");
-            }
-
-            var template = _workspaceStore.FindTemplate(TemplateApply.TemplateId)
-                ?? throw new InvalidOperationException("Template not found.");
-            var target = _workspaceStore.FindElement(targetId)
-                ?? throw new InvalidOperationException("Target element not found.");
-
-            if (!IsTemplateApplicableToElement(template.TargetKind, target.Kind))
-            {
-                throw new InvalidOperationException($"Template '{template.Name}' cannot be applied to {target.Kind}.");
-            }
-
-            // Copy the template's values into the element (template wins) and record the origin.
-            ApplyTemplateCopy(target, template, elementWins: false);
-            _workspaceStore.Save();
-
-            StatusMessage = $"Template '{template.Name}' applied to '{target.Name}'.";
-            return RedirectToPage(new { applyTemplateId = template.Id });
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            LoadViewState(populateEditorValues: false);
-            return Page();
-        }
-    }
-
     public IActionResult OnPostCreateNotificationRule()
     {
         NotificationRule? createdRule = null;
@@ -721,44 +682,6 @@ public sealed class WorkspaceModel : PageModel
             ApplyTemplateCopy(element, template, elementWins: false);
             _workspaceStore.Save();
             StatusMessage = $"'{element.Name}' aus Template '{template.Name}' wiederhergestellt.";
-            return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            LoadViewState(populateEditorValues: false);
-            return Page();
-        }
-    }
-
-    public IActionResult OnPostApplyElementTemplate(Guid templateId)
-    {
-        try
-        {
-            var element = _workspaceStore.FindElement(ElementEditor.Id)
-                ?? throw new InvalidOperationException("Element nicht gefunden.");
-
-            if (templateId == Guid.Empty)
-            {
-                throw new InvalidOperationException("Bitte ein Template auswählen.");
-            }
-
-            var template = _workspaceStore.FindTemplate(templateId)
-                ?? throw new InvalidOperationException("Template nicht gefunden.");
-
-            if (!IsTemplateApplicableToElement(template.TargetKind, element.Kind))
-            {
-                throw new InvalidOperationException($"Template '{template.Name}' kann nicht auf {element.Kind} angewendet werden.");
-            }
-
-            if (element is SensorElement sensorTarget && !SensorTemplateMatchesType(template, sensorTarget.SensorTypeKey))
-            {
-                throw new InvalidOperationException("Der Template-Typ passt nicht zum Sensortyp.");
-            }
-
-            ApplyTemplateCopy(element, template, elementWins: false);
-            _workspaceStore.Save();
-            StatusMessage = $"Template '{template.Name}' auf '{element.Name}' angewendet.";
             return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -1231,7 +1154,11 @@ public sealed class WorkspaceModel : PageModel
             MonitoringListNodes = monitoringListNodes,
             MonitoringVisibleNodes = monitoringVisibleNodes,
             MonitoringVisibleCount = monitoringVisibleNodes.Length,
-            TelemetrySeries = dashboardSnapshot.TelemetrySeries
+            TelemetrySeries = dashboardSnapshot.TelemetrySeries,
+            AllTags = MonitoringTagResolver
+                .Normalize(nodes.SelectMany(node => node.Tags).Concat(snapshot.Templates.SelectMany(template => template.Tags)))
+                .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
         };
 
         EnsureCreateDefaults(snapshot, nodes, populateEditorValues);
@@ -6266,6 +6193,9 @@ public sealed record WorkspacePageViewModel
     public MonitoringWorkspaceSnapshot Snapshot { get; init; } = default!;
 
     public IReadOnlyList<WorkspaceNodeRow> Nodes { get; init; } = [];
+
+    /// <summary>All distinct tags in use (elements + templates), for tag-input autocomplete.</summary>
+    public IReadOnlyList<string> AllTags { get; init; } = [];
 
     public IReadOnlyList<WorkspaceAlertRow> Alerts { get; init; } = [];
 

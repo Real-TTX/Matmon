@@ -410,6 +410,7 @@
                         <label class="workspace-span-2">
                             <span>Tags</span>
                             <input asp-for="NewSensor.TagsText" class="form-control workspace-input" placeholder="prod, network" data-tag-input />
+                            <partial name="_TagSuggestions" model="Model.View.AllTags" />
                         </label>
                         <label>
                             <span>Highlight</span>

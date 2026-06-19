@@ -1,0 +1,8 @@
+@model IReadOnlyList<string>
+@* Autocomplete source for the tag chip inputs (initializeTagInputs links the field to this). *@
+<datalist id="matmon-tag-suggestions">
+    @foreach (var tag in Model)
+    {
+        <option value="@tag"></option>
+    }
+</datalist>

@@ -139,6 +139,8 @@
             <form method="post" asp-page-handler="SaveTemplate" class="workspace-form template-editor-form" data-template-scope-form>
                 <input type="hidden" asp-for="TemplateEditor.Id" />
                 <input type="hidden" asp-for="ReturnUrl" />
+                @* Rebuilds the parameter/threshold fields server-side when the sensor type changes. *@
+                <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate class="d-none" data-sensor-preview-submit>Preview</button>
 
                 <div class="sensor-tabs" data-sensor-tabs role="tablist">
                     <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("template")<span>General</span></button>
@@ -163,6 +165,7 @@
                         <label class="workspace-span-2">
                             <span>Tags</span>
                             <input asp-for="TemplateEditor.TagsText" class="form-control workspace-input" placeholder="prod, network" data-tag-input />
+                            <partial name="_TagSuggestions" model="Model.View.AllTags" />
                             <small class="workspace-field-hint">Comma-separated. Merged into an element's tags when this template is applied.</small>
                         </label>
                         <label>
@@ -176,7 +179,7 @@
                         </label>
                         <label data-template-sensor-only>
                             <span>Sensor type</span>
-                            <select asp-for="TemplateEditor.SensorTypeKey" class="form-select workspace-select" asp-items="Model.View.SensorTypeOptions"></select>
+                            <select asp-for="TemplateEditor.SensorTypeKey" class="form-select workspace-select" asp-items="Model.View.SensorTypeOptions" data-sensor-type-select></select>
                         </label>
                         @if (isSensorScope)
                         {

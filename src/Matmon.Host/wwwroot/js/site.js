@@ -62,6 +62,10 @@ function initializeTagInputs() {
     field.type = "text";
     field.className = "tag-input-field";
     field.autocomplete = "off";
+    // Suggest existing tags (datalist rendered by _TagSuggestions) when available.
+    if (document.getElementById("matmon-tag-suggestions")) {
+      field.setAttribute("list", "matmon-tag-suggestions");
+    }
     field.placeholder = tags.length ? "Add tag…" : (input.getAttribute("placeholder") || "Add tag…");
     wrap.appendChild(chipList);
     wrap.appendChild(field);
