@@ -187,7 +187,8 @@ public sealed class SslCertificateSensorExecutor : ISensorExecutor
                     Key = "valid",
                     Label = "Valid",
                     Value = isValid ? 1 : 0,
-                    State = isValid ? SensorState.Healthy : SensorState.Critical
+                    State = isValid ? SensorState.Healthy : SensorState.Critical,
+                    LogByDefault = false
                 }
             };
 

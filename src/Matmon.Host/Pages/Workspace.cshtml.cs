@@ -2784,7 +2784,7 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, hint.Key, hint.Label, hint.Unit, hint.IsDefault, currentFieldMap));
+            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, hint.Key, hint.Label, hint.Unit, hint.IsDefault, hint.LogByDefault, currentFieldMap));
         }
 
         foreach (var channelKey in EnumerateManagedThresholdChannelKeys(settings))
@@ -2794,7 +2794,7 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, channelKey, null, null, false, currentFieldMap));
+            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, channelKey, null, null, false, true, currentFieldMap));
         }
 
         foreach (var field in currentFields)
@@ -2804,7 +2804,7 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, field.ChannelKey.Trim(), field.ChannelLabel, field.Unit, field.IsDefault, currentFieldMap));
+            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, field.ChannelKey.Trim(), field.ChannelLabel, field.Unit, field.IsDefault, field.LogByDefault, currentFieldMap));
         }
 
         var configuredCount = rows.Count(row => HasThresholdValues(row));
@@ -2908,7 +2908,8 @@ public sealed class WorkspaceModel : PageModel
                 new SensorChannelValue
                 {
                     Key = "valid",
-                    Label = "Valid"
+                    Label = "Valid",
+                    LogByDefault = false
                 }
             ];
         }
@@ -2926,7 +2927,8 @@ public sealed class WorkspaceModel : PageModel
                 new SensorChannelValue
                 {
                     Key = "open",
-                    Label = "Open"
+                    Label = "Open",
+                    LogByDefault = false
                 }
             ];
         }
@@ -3001,6 +3003,7 @@ public sealed class WorkspaceModel : PageModel
         string? channelLabel,
         string? unit,
         bool isDefault,
+        bool logByDefault,
         IReadOnlyDictionary<string, WorkspaceSensorChannelThresholdFieldInput> currentFields)
     {
         currentFields.TryGetValue(channelKey, out var currentField);
@@ -3013,6 +3016,8 @@ public sealed class WorkspaceModel : PageModel
                 ?? (((!string.IsNullOrWhiteSpace(settings.DefaultChannelKey) &&
                     string.Equals(channelKey, settings.DefaultChannelKey, StringComparison.OrdinalIgnoreCase))
                 || isDefault)),
+            LogByDefault = logByDefault,
+            Logged = MonitoringSettings.GetChannelLogged(settings, channelKey) ?? logByDefault,
             IsDeleted = currentField?.IsDeleted ?? false
         };
 
@@ -3269,6 +3274,7 @@ public sealed class WorkspaceModel : PageModel
         }
 
         settings.ChannelVisuals.Clear();
+        settings.ChannelLogging.Clear();
 
         foreach (var field in fields)
         {
@@ -3289,6 +3295,12 @@ public sealed class WorkspaceModel : PageModel
             }
 
             MonitoringSettings.SetChannelVisual(settings, channelKey, field.Visual);
+
+            // Only persist a logging override when it differs from the channel's default.
+            MonitoringSettings.SetChannelLogged(
+                settings,
+                channelKey,
+                field.Logged == field.LogByDefault ? null : field.Logged);
         }
 
         var activeChannelKeys = fields
@@ -6860,6 +6872,12 @@ public sealed class WorkspaceSensorChannelThresholdFieldInput
     public string? CriticalValuePlaceholder { get; set; }
 
     public string Visual { get; set; } = "auto";
+
+    /// <summary>Whether this channel is recorded into long-term statistics.</summary>
+    public bool Logged { get; set; } = true;
+
+    /// <summary>The channel's own default logging state (posted hidden), so the save only stores an override when it differs.</summary>
+    public bool LogByDefault { get; set; } = true;
 
     public bool IsDeleted { get; set; }
 }

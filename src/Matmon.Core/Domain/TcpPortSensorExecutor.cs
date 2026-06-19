@@ -147,7 +147,8 @@ public sealed class TcpPortSensorExecutor : ISensorExecutor
                 Key = "open",
                 Label = "Open",
                 Value = open ? 1 : 0,
-                State = open ? SensorState.Healthy : SensorState.Critical
+                State = open ? SensorState.Healthy : SensorState.Critical,
+                LogByDefault = false
             }
         ];
     }

@@ -77,16 +77,23 @@
                         </label>
                     </div>
 
-                    <label class="sensor-threshold-visual">
-                        <span>Display</span>
-                        <select asp-for="SensorChannelThresholdFields[i].Visual" class="form-select workspace-select">
-                            <option value="auto">Auto (by unit)</option>
-                            <option value="value">Value</option>
-                            <option value="progress">Progress bar</option>
-                            <option value="gauge">Gauge</option>
-                            <option value="graph">Graph</option>
-                        </select>
-                    </label>
+                    <div class="sensor-threshold-options">
+                        <label class="sensor-threshold-visual">
+                            <span>Display</span>
+                            <select asp-for="SensorChannelThresholdFields[i].Visual" class="form-select workspace-select">
+                                <option value="auto">Auto (by unit)</option>
+                                <option value="value">Value</option>
+                                <option value="progress">Progress bar</option>
+                                <option value="gauge">Gauge</option>
+                                <option value="graph">Graph</option>
+                            </select>
+                        </label>
+                        <input type="hidden" asp-for="SensorChannelThresholdFields[i].LogByDefault" />
+                        <label class="sensor-threshold-log workspace-check-field" title="Record this channel into long-term statistics">
+                            <input type="checkbox" asp-for="SensorChannelThresholdFields[i].Logged" />
+                            <span>Log to statistics@(field.LogByDefault ? null : " (off by default)")</span>
+                        </label>
+                    </div>
                 </div>
             }
         </div>

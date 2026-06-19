@@ -47,6 +47,9 @@ public sealed class MonitoringSettings
     /// <summary>Per-channel display visual override (channel key → auto|value|progress|gauge|graph). Empty = auto-derive from the measurement kind.</summary>
     public Dictionary<string, string> ChannelVisuals { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Per-channel "record into long-term statistics" override (channel key → "true"/"false"). Absent = use the channel's own LogByDefault.</summary>
+    public Dictionary<string, string> ChannelLogging { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string? DefaultChannelKey { get; set; }
 
     /// <summary>Optional fixed lower bound for the graph y-axis (in the channel's native unit). Null = auto-scale from data.</summary>
@@ -100,6 +103,11 @@ public sealed class MonitoringSettings
         foreach (var visual in source.ChannelVisuals)
         {
             ChannelVisuals[visual.Key] = visual.Value;
+        }
+
+        foreach (var logging in source.ChannelLogging)
+        {
+            ChannelLogging[logging.Key] = logging.Value;
         }
 
         DefaultChannelKey = source.DefaultChannelKey ?? DefaultChannelKey;
@@ -225,6 +233,16 @@ public sealed class MonitoringSettings
                 string.Equals(target.ChannelVisuals[key], inheritedValue, StringComparison.Ordinal))
             {
                 target.ChannelVisuals.Remove(key);
+            }
+        }
+
+        var inheritedLogging = inherited.ChannelLogging;
+        foreach (var key in target.ChannelLogging.Keys.ToList())
+        {
+            if (inheritedLogging.TryGetValue(key, out var inheritedValue) &&
+                string.Equals(target.ChannelLogging[key], inheritedValue, StringComparison.Ordinal))
+            {
+                target.ChannelLogging.Remove(key);
             }
         }
 
@@ -408,6 +426,60 @@ public sealed class MonitoringSettings
         }
 
         settings.ChannelVisuals[channelKey.Trim()] = normalized;
+    }
+
+    /// <summary>
+    /// Explicit per-channel "record into statistics" override, or null when the
+    /// channel follows its own <see cref="SensorChannelValue.LogByDefault"/>.
+    /// </summary>
+    public static bool? GetChannelLogged(MonitoringSettings settings, string channelKey)
+    {
+        if (settings is not null &&
+            !string.IsNullOrWhiteSpace(channelKey) &&
+            settings.ChannelLogging.TryGetValue(channelKey.Trim(), out var raw) &&
+            bool.TryParse(raw, out var logged))
+        {
+            return logged;
+        }
+
+        return null;
+    }
+
+    /// <summary>Sets (or, when <paramref name="logged"/> is null, clears) the per-channel logging override.</summary>
+    public static void SetChannelLogged(MonitoringSettings settings, string channelKey, bool? logged)
+    {
+        if (settings is null || string.IsNullOrWhiteSpace(channelKey))
+        {
+            return;
+        }
+
+        if (logged is null)
+        {
+            settings.ChannelLogging.Remove(channelKey.Trim());
+            return;
+        }
+
+        settings.ChannelLogging[channelKey.Trim()] = logged.Value ? "true" : "false";
+    }
+
+    /// <summary>All explicit per-channel logging overrides (channel key → bool), for the rollup.</summary>
+    public static IReadOnlyDictionary<string, bool> GetChannelLogOverrides(MonitoringSettings settings)
+    {
+        var overrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        if (settings is null)
+        {
+            return overrides;
+        }
+
+        foreach (var (key, raw) in settings.ChannelLogging)
+        {
+            if (bool.TryParse(raw, out var logged))
+            {
+                overrides[key] = logged;
+            }
+        }
+
+        return overrides;
     }
 
     public static bool TryParseThresholdRule(string? raw, out ThresholdRule rule)

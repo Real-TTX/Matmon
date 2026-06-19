@@ -118,6 +118,7 @@ public static class TelemetryRollup
         IReadOnlyList<SensorObservation> observations,
         DateTimeOffset bucketStartUtc,
         int bucketMinutes,
+        IReadOnlyDictionary<string, bool>? channelLogOverrides = null,
         double lowPercentile = DefaultLowPercentile,
         double highPercentile = DefaultHighPercentile)
     {
@@ -130,7 +131,7 @@ public static class TelemetryRollup
         var accumulators = new Dictionary<string, ChannelAccumulator>(StringComparer.OrdinalIgnoreCase);
         foreach (var observation in observations)
         {
-            foreach (var sample in EnumerateChannelSamples(observation))
+            foreach (var sample in EnumerateChannelSamples(observation, channelLogOverrides))
             {
                 if (!accumulators.TryGetValue(sample.Key, out var accumulator))
                 {
@@ -156,10 +157,13 @@ public static class TelemetryRollup
         return buckets;
     }
 
-    // Yields every numeric, non-virtual channel sample of an observation. Falls
-    // back to the bare observation value (keyed by the default channel) when the
-    // observation carries no channels — mirroring TryResolveSample.
-    private static IEnumerable<(string Key, double Value, string? Unit, SensorState State)> EnumerateChannelSamples(SensorObservation observation)
+    // Yields every numeric, non-virtual channel sample of an observation that
+    // should be logged (explicit per-channel override, else the channel's own
+    // LogByDefault). Falls back to the bare observation value (keyed by the
+    // default channel) when the observation carries no channels.
+    private static IEnumerable<(string Key, double Value, string? Unit, SensorState State)> EnumerateChannelSamples(
+        SensorObservation observation,
+        IReadOnlyDictionary<string, bool>? channelLogOverrides)
     {
         var yielded = false;
         foreach (var channel in observation.Channels)
@@ -170,6 +174,11 @@ public static class TelemetryRollup
             }
 
             var key = string.IsNullOrWhiteSpace(channel.Key) ? "default" : channel.Key;
+            if (!ShouldLog(key, channel.LogByDefault, channelLogOverrides))
+            {
+                continue;
+            }
+
             yielded = true;
             yield return (key, value, channel.Unit, channel.State ?? observation.State);
         }
@@ -177,9 +186,15 @@ public static class TelemetryRollup
         if (!yielded && observation.Value is double bareValue)
         {
             var key = string.IsNullOrWhiteSpace(observation.DefaultChannelKey) ? "default" : observation.DefaultChannelKey;
-            yield return (key, bareValue, null, observation.State);
+            if (ShouldLog(key, logByDefault: true, channelLogOverrides))
+            {
+                yield return (key, bareValue, null, observation.State);
+            }
         }
     }
+
+    private static bool ShouldLog(string channelKey, bool logByDefault, IReadOnlyDictionary<string, bool>? overrides)
+        => overrides is not null && overrides.TryGetValue(channelKey, out var logged) ? logged : logByDefault;
 
     // Accumulates one channel's samples within a bucket window.
     private sealed class ChannelAccumulator(string channelKey)

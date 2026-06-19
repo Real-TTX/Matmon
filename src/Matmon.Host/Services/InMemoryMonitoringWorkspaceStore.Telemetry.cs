@@ -204,7 +204,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 var profile = SensorTelemetryProfiles.Resolve(sensor.SensorTypeKey);
 
                 var bucketMinutes = ResolveRetentionDays(settings.StatisticsBucketMinutes, profile.StatisticsBucketMinutes);
-                bucketsWritten += RecomputeRecentBuckets(sensor.Id, nowUtc, bucketMinutes);
+                var channelLogOverrides = MonitoringSettings.GetChannelLogOverrides(settings);
+                bucketsWritten += RecomputeRecentBuckets(sensor.Id, nowUtc, bucketMinutes, channelLogOverrides);
 
                 var rawDays = ResolveRetentionDays(settings.ObservationRetentionDays, profile.RawObservationDays);
                 if (rawDays > 0)
@@ -230,7 +231,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
     // Recomputes the current open bucket and the previous one (to absorb late,
     // out-of-order observations from secondary probes) from raw observations.
-    private int RecomputeRecentBuckets(Guid sensorId, DateTimeOffset nowUtc, int bucketMinutes)
+    private int RecomputeRecentBuckets(
+        Guid sensorId,
+        DateTimeOffset nowUtc,
+        int bucketMinutes,
+        IReadOnlyDictionary<string, bool> channelLogOverrides)
     {
         if (bucketMinutes <= 0)
         {

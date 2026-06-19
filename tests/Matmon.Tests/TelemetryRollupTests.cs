@@ -147,6 +147,57 @@ public sealed class TelemetryRollupTests
         Assert.Equal(70, mem.Maximum);
     }
 
+    private static SensorObservation WithFlagChannel(int minuteOffset, double cpu, double flag, bool flagLoggedByDefault)
+        => new()
+        {
+            SensorId = Sensor,
+            TimestampUtc = BucketStart.AddMinutes(minuteOffset),
+            State = SensorState.Healthy,
+            DefaultChannelKey = "cpu",
+            Channels =
+            [
+                new() { Key = "cpu", Label = "CPU", Value = cpu, Unit = "%", IsDefault = true },
+                new() { Key = "valid", Label = "Valid", Value = flag, LogByDefault = flagLoggedByDefault }
+            ]
+        };
+
+    [Fact]
+    public void AggregatePerChannel_skips_channels_not_logged_by_default()
+    {
+        var observations = new List<SensorObservation>
+        {
+            WithFlagChannel(0, 10, 1, flagLoggedByDefault: false),
+            WithFlagChannel(1, 30, 1, flagLoggedByDefault: false),
+        };
+
+        var buckets = TelemetryRollup.AggregatePerChannel(Sensor, observations, BucketStart, 60);
+
+        Assert.Single(buckets);
+        Assert.Equal("cpu", buckets[0].DefaultChannelKey);
+    }
+
+    [Fact]
+    public void AggregatePerChannel_honours_explicit_log_overrides()
+    {
+        var observations = new List<SensorObservation>
+        {
+            WithFlagChannel(0, 10, 1, flagLoggedByDefault: false),
+            WithFlagChannel(1, 30, 1, flagLoggedByDefault: false),
+        };
+
+        // Force-log the flag, and force-skip cpu.
+        var overrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["valid"] = true,
+            ["cpu"] = false,
+        };
+
+        var buckets = TelemetryRollup.AggregatePerChannel(Sensor, observations, BucketStart, 60, overrides);
+
+        Assert.Single(buckets);
+        Assert.Equal("valid", buckets[0].DefaultChannelKey);
+    }
+
     [Fact]
     public void AggregatePerChannel_folds_bare_value_into_default_channel()
     {

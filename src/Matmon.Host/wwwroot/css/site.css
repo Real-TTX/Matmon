@@ -5346,11 +5346,26 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 .sensor-channel-gauge[data-state="error"] .sensor-channel-gauge-fill,
 .sensor-channel-gauge[data-state="critical"] .sensor-channel-gauge-fill { stroke: var(--matmon-danger); }
 
+.sensor-threshold-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem 1.1rem;
+  margin-top: 0.4rem;
+}
+
 .sensor-threshold-visual {
   display: grid;
   gap: 0.25rem;
-  margin-top: 0.4rem;
   max-width: 14rem;
+}
+
+.sensor-threshold-log {
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--matmon-foreground);
+  min-height: auto;
+  padding-bottom: 0.35rem;
 }
 
 .sensor-channel-actions {
