@@ -6515,6 +6515,15 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+/* form-select draws its arrow at the right edge and normally reserves padding
+   for it; the shared rule above resets padding, so restore room for the arrow
+   (otherwise long option text slides underneath it). */
+.workspace-select {
+  width: 100%;
+  padding-right: 2rem;
+  background-position: right 0.7rem center;
+}
+
 .workspace-input:disabled,
 .workspace-select:disabled,
 .workspace-textarea:disabled {
