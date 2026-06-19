@@ -12,6 +12,30 @@
         : monitoringSize;
 }
 
+@* Apply the stored view/size preference before the page paints. Without this the
+   server renders its default (e.g. tree "M") first and site.js only redirects to the
+   stored preference (e.g. "S") on DOMContentLoaded — a visible M→S double render.
+   Running synchronously here redirects before any content is painted. *@
+<script>
+    (function () {
+        try {
+            var url = new URL(window.location.href);
+            if (url.searchParams.has("monitoringView") && url.searchParams.has("monitoringSize")) {
+                return;
+            }
+            var get = function (key) { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
+            var view = String(get("matmon-monitoring-view")).trim().toLowerCase() === "list" ? "list" : "tree";
+            var raw = String(get(view === "list" ? "matmon-monitoring-list-size" : "matmon-monitoring-tree-size")).trim().toLowerCase();
+            var size = view === "list"
+                ? (raw === "s" ? "s" : "l")
+                : (raw === "s" ? "s" : (raw === "l" ? "l" : "m"));
+            url.searchParams.set("monitoringView", view);
+            url.searchParams.set("monitoringSize", size);
+            window.location.replace(url.toString());
+        } catch (e) { /* preference redirect is best-effort */ }
+    })();
+</script>
+
 <section class="dashboard-shell">
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
