@@ -5,7 +5,6 @@
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");
     var isSensor = Model.ElementEditor.Kind == "Sensor";
     var sensorCredentialFields = Model.ElementEditor.SensorParameterFields.Where(field => field.IsCredential).ToList();
-    var sensorGeneralFields = Model.ElementEditor.SensorParameterFields.Where(field => !field.IsCredential).ToList();
 }
 
 <section class="dashboard-shell">
@@ -273,100 +272,7 @@
                     </div>
                     }
 
-                    <div class="sensor-parameter-section" data-sensor-tab="parameters">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Parameters</span></h2>
-                            <span class="panel-hint">@Model.ElementEditor.SensorTypeKey</span>
-                        </div>
-                        <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
-
-                        @if (sensorGeneralFields.Count == 0)
-                        {
-                            <div class="empty-state">No fields defined.</div>
-                        }
-                        else
-                        {
-                            var generalGroups = sensorGeneralFields
-                                .Select(f => string.IsNullOrWhiteSpace(f.Group) ? string.Empty : f.Group!.Trim())
-                                .Distinct()
-                                .ToList();
-                            var showGroupTitles = generalGroups.Count > 1 || generalGroups.Any(g => g.Length > 0);
-
-                            foreach (var group in generalGroups)
-                            {
-                                if (showGroupTitles)
-                                {
-                                    <div class="sensor-parameter-group-title">@(group.Length == 0 ? "General" : group)</div>
-                                }
-                                <div class="sensor-parameter-list">
-                                    @for (var i = 0; i < Model.ElementEditor.SensorParameterFields.Count; i++)
-                                    {
-                                        var field = Model.ElementEditor.SensorParameterFields[i];
-                                        if (field.IsCredential)
-                                        {
-                                            continue;
-                                        }
-                                        var fieldGroup = string.IsNullOrWhiteSpace(field.Group) ? string.Empty : field.Group!.Trim();
-                                        if (!string.Equals(fieldGroup, group, StringComparison.Ordinal))
-                                        {
-                                            continue;
-                                        }
-
-                                        <div class="sensor-parameter-card"
-                                             data-sensor-parameter-field
-                                             data-parameter-key="@field.Key"
-                                             data-visible-when-key="@field.VisibleWhenParameterKey"
-                                             data-visible-when-values="@field.VisibleWhenValuesText"
-                                             data-inherited-value="@field.InheritedValue"
-                                             data-effective-value="@field.EffectiveValue"
-                                             hidden="@(!field.IsVisible ? "hidden" : null)">
-                                            <input type="hidden" asp-for="ElementEditor.SensorParameterFields[i].Key" />
-                                            <div class="sensor-parameter-head">
-                                                <div>
-                                                    <div class="sensor-parameter-name">@field.Label</div>
-                                                    @if (!string.IsNullOrWhiteSpace(field.Description))
-                                                    {
-                                                        <div class="sensor-parameter-help">@field.Description</div>
-                                                    }
-                                                </div>
-                                                @if (field.Required)
-                                                {
-                                                    <span class="sensor-required">required</span>
-                                                }
-                                            </div>
-
-                                            @switch (field.Kind)
-                                            {
-                                                case SensorParameterKind.ValueList:
-                                                    <select asp-for="ElementEditor.SensorParameterFields[i].Value" class="form-select workspace-select" asp-items="field.Options"></select>
-                                                    break;
-                                                case SensorParameterKind.Boolean:
-                                                    <select asp-for="ElementEditor.SensorParameterFields[i].Value" class="form-select workspace-select" asp-items="field.Options"></select>
-                                                    break;
-                                                case SensorParameterKind.Integer:
-                                                    <input asp-for="ElementEditor.SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "1")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                                    break;
-                                                case SensorParameterKind.Decimal:
-                                                    <input asp-for="ElementEditor.SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "any")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                                    break;
-                                                case SensorParameterKind.Multiline:
-                                                    <textarea asp-for="ElementEditor.SensorParameterFields[i].Value" rows="4" class="form-control workspace-textarea" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
-                                                    break;
-                                                case SensorParameterKind.Secret:
-                                                    <input asp-for="ElementEditor.SensorParameterFields[i].Value" type="password" autocomplete="off" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                                    break;
-                                                default:
-                                                    <input asp-for="ElementEditor.SensorParameterFields[i].Value" type="text" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                                    break;
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        }
-
-                        <input type="hidden" asp-for="ElementEditor.SensorAdvancedParametersText" />
-                    </div>
+                    @await Html.PartialAsync("_SensorParameters", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
 
                     @* ---------- THRESHOLDS ---------- *@
                     @await Html.PartialAsync("_SensorThresholds", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })

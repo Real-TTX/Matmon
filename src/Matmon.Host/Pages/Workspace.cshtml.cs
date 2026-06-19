@@ -1583,6 +1583,7 @@ public sealed class WorkspaceModel : PageModel
             selectedTemplateSettings.Credentials,
             templateCredentialKinds,
             templateEditor.SelectedCredentialId);
+        PopulateTemplateParameterEditor(templateEditor, snapshot);
         PopulateTemplateThresholdEditor(templateEditor, snapshot);
 
         var notificationRule = GetSelectedNotificationRule(snapshot);
@@ -1924,6 +1925,15 @@ public sealed class WorkspaceModel : PageModel
         var parameterPlaceholder = !string.IsNullOrWhiteSpace(ToLines(effectiveSettings.Parameters))
             ? ToLines(effectiveSettings.Parameters)
             : "key=value per line";
+        var templateDefinition = template.TargetKind == MonitoringTemplateScope.Sensor
+            ? FindSensorDefinition(_workspaceStore.Workspace.SensorDefinitions, template.SensorTypeKey)
+            : null;
+        var templateParameterFields = templateDefinition is null
+            ? new List<WorkspaceSensorParameterFieldInput>()
+            : BuildSensorParameterFields(templateDefinition, localSettings.Parameters, effectiveSettings.Parameters);
+        var templateAdvancedParametersText = templateDefinition is null
+            ? BuildSensorAdvancedParametersText(localSettings.Parameters, [])
+            : BuildSensorAdvancedParametersText(localSettings.Parameters, templateDefinition.Parameters.Select(parameter => parameter.Key));
         var credentialBundleState = BuildCredentialBundleEditorState(localSettings.Credentials);
         var scheduleState = BuildScheduleEditorState(localSettings, effectiveSettings);
 
@@ -1976,6 +1986,8 @@ public sealed class WorkspaceModel : PageModel
             SensorChannelThresholdFields = thresholdState.Fields,
             SensorChannelThresholdVisibleCount = thresholdState.VisibleCount,
             SensorChannelMode = FindSensorDefinition(_workspaceStore.Workspace.SensorDefinitions, template.SensorTypeKey)?.ChannelMode ?? SensorChannelMode.Dynamic,
+            SensorParameterFields = templateParameterFields,
+            SensorAdvancedParametersText = templateAdvancedParametersText,
             SelectedCredentialId = localSettings.SelectedCredentialId,
             CredentialBundles = credentialBundleState.Bundles,
             CredentialBundleVisibleCount = credentialBundleState.VisibleCount
@@ -2358,6 +2370,29 @@ public sealed class WorkspaceModel : PageModel
 
         editor.SensorChannelThresholdFields = state.Fields;
         editor.SensorChannelThresholdVisibleCount = state.VisibleCount;
+    }
+
+    private void PopulateTemplateParameterEditor(
+        WorkspaceTemplateEditorInput editor,
+        MonitoringWorkspaceSnapshot snapshot)
+    {
+        if (editor.TargetKind != MonitoringTemplateScope.Sensor)
+        {
+            editor.SensorParameterFields = [];
+            editor.SensorAdvancedParametersText = string.Empty;
+            return;
+        }
+
+        var template = _workspaceStore.FindTemplate(editor.Id);
+        var inheritedValues = template is null ? null : ResolveTemplateEffectiveSettings(template).Parameters;
+        var state = BuildSensorParameterEditorState(
+            editor.SensorTypeKey,
+            editor.SensorParameterFields,
+            editor.SensorAdvancedParametersText,
+            snapshot.SensorDefinitions,
+            inheritedValues);
+        editor.SensorParameterFields = state.Fields;
+        editor.SensorAdvancedParametersText = state.AdvancedText;
     }
 
     private void PopulateTemplateThresholdEditor(
@@ -3739,7 +3774,15 @@ public sealed class WorkspaceModel : PageModel
 
         if (editor.TargetKind == MonitoringTemplateScope.Sensor)
         {
-            ApplySettings(template.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, editor.Highlight, editor.ParametersText, null);
+            // Parameters come from the structured per-field inputs (same as the sensor
+            // editor), so don't let the raw ParametersText clear them here.
+            var existingParameters = new Dictionary<string, string>(template.Settings.Parameters, StringComparer.OrdinalIgnoreCase);
+            ApplySettings(template.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, editor.Highlight, parametersText: null, thresholdsText: null);
+            var definition = FindSensorDefinition(_workspaceStore.Workspace.SensorDefinitions, editor.SensorTypeKey);
+            if (definition is not null)
+            {
+                ApplySensorParameters(template.Settings, definition, editor.SensorParameterFields, editor.SensorAdvancedParametersText, existingParameters);
+            }
             ApplySensorChannelThresholds(template.Settings, editor.SensorChannelThresholdFields);
         }
         else
@@ -6524,6 +6567,16 @@ public interface ISensorThresholdEditor
     List<WorkspaceSensorChannelThresholdFieldInput> SensorChannelThresholdFields { get; }
 }
 
+/// <summary>Shared binding surface for the reusable <c>_SensorParameters</c> editor partial.</summary>
+public interface ISensorParameterEditor
+{
+    string? SensorTypeKey { get; }
+
+    List<WorkspaceSensorParameterFieldInput> SensorParameterFields { get; set; }
+
+    string SensorAdvancedParametersText { get; set; }
+}
+
 /// <summary>Shared binding surface for the reusable <c>_SensorSchedule</c> editor partial.</summary>
 public interface ISensorScheduleEditor
 {
@@ -6700,7 +6753,7 @@ public sealed class WorkspaceNotificationReceiverEditorInput : CreateNotificatio
     public Guid Id { get; set; }
 }
 
-public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISensorScheduleEditor
+public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISensorScheduleEditor, ISensorParameterEditor
 {
     public Guid Id { get; set; }
 
@@ -6935,7 +6988,7 @@ internal sealed record SensorThresholdEditorState(
     List<WorkspaceSensorChannelThresholdFieldInput> Fields,
     int VisibleCount);
 
-public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISensorScheduleEditor
+public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISensorScheduleEditor, ISensorParameterEditor
 {
     public Guid Id { get; set; }
 
@@ -6946,6 +6999,10 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISens
     public MonitoringTemplateScope TargetKind { get; set; } = MonitoringTemplateScope.Any;
 
     public string SensorTypeKey { get; set; } = PingSensorExecutor.Definition.Key;
+
+    public List<WorkspaceSensorParameterFieldInput> SensorParameterFields { get; set; } = [];
+
+    public string SensorAdvancedParametersText { get; set; } = string.Empty;
 
     public Guid? ParentTemplateId { get; set; }
 

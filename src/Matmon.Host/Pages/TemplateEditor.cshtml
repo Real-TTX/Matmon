@@ -403,17 +403,24 @@
                     }
                 </div>
 
-                <div class="sensor-parameter-section" data-sensor-tab="parameters">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Parameters</span></h2>
-                        <span class="panel-hint">key=value per line</span>
+                @if (isSensorScope)
+                {
+                    @await Html.PartialAsync("_SensorParameters", Model.TemplateEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "TemplateEditor" } })
+                }
+                else
+                {
+                    <div class="sensor-parameter-section" data-sensor-tab="parameters">
+                        <div class="panel-header">
+                            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Parameters</span></h2>
+                            <span class="panel-hint">key=value per line</span>
+                        </div>
+                        <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
+                        <label class="workspace-span-2">
+                            <span>Parameters</span>
+                            <textarea asp-for="TemplateEditor.ParametersText" rows="4" class="form-control workspace-textarea" placeholder="@Model.TemplateEditor.ParametersTextPlaceholder"></textarea>
+                        </label>
                     </div>
-                    <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
-                    <label class="workspace-span-2">
-                        <span>Parameters</span>
-                        <textarea asp-for="TemplateEditor.ParametersText" rows="4" class="form-control workspace-textarea" placeholder="@Model.TemplateEditor.ParametersTextPlaceholder"></textarea>
-                    </label>
-                </div>
+                }
 
                 @* ---------- THRESHOLDS ---------- *@
                 @if (isSensorScope)
