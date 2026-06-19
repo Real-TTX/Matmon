@@ -101,7 +101,8 @@
         var statsTabActive = !string.IsNullOrWhiteSpace(Model.StatsGroup)
             || !string.IsNullOrWhiteSpace(Model.StatsRange)
             || !string.IsNullOrWhiteSpace(Model.StatsFrom)
-            || !string.IsNullOrWhiteSpace(Model.StatsTo);
+            || !string.IsNullOrWhiteSpace(Model.StatsTo)
+            || !string.IsNullOrWhiteSpace(Model.StatsChannel);
     }
     <nav class="sensor-tabs sensor-detail-tabs" data-sensor-tabs data-tab-hash="true" data-active-tab="@(statsTabActive ? "statistics" : null)" role="tablist" aria-label="Sensor sections">
         <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("dashboard")<span>General</span></button>
@@ -281,13 +282,29 @@
                 <form method="get" asp-page="/SensorDetails" asp-route-sensorId="@Model.View.SensorId" class="sensor-statistics-controls">
                     <input type="hidden" name="window" value="@Model.Window" />
                     <input type="hidden" name="StatsRange" value="@(stats.SelectedRange == "custom" ? string.Empty : stats.SelectedRange)" />
+                    @if (stats.Channels.Count > 1)
+                    {
+                        <label class="sensor-statistics-field">
+                            <span>Channel</span>
+                            <select name="StatsChannel" class="form-select workspace-select" onchange="this.form.submit()">
+                                @foreach (var channelOption in stats.Channels)
+                                {
+                                    <option value="@channelOption.Key" selected="@channelOption.IsSelected">@channelOption.Label</option>
+                                }
+                            </select>
+                        </label>
+                    }
+                    else
+                    {
+                        <input type="hidden" name="StatsChannel" value="@stats.SelectedChannelKey" />
+                    }
                     <div class="sensor-statistics-field">
                         <span>Range</span>
                         <div class="sensor-range-chips">
                             @foreach (var rangeOption in new[] { ("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("90d", "90d"), ("all", "All") })
                             {
                                 <a class="sensor-range-chip @(stats.SelectedRange == rangeOption.Item1 ? "is-active" : string.Empty)"
-                                   href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsRange={rangeOption.Item1}")">@rangeOption.Item2</a>
+                                   href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsRange={rangeOption.Item1}&StatsChannel={stats.SelectedChannelKey}")">@rangeOption.Item2</a>
                             }
                         </div>
                     </div>
@@ -312,7 +329,7 @@
                         <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("search")<span>Apply</span></button>
                         @if (stats.SelectedRange != "7d" || stats.SelectedGroup != "day")
                         {
-                            <a class="workspace-secondary-submit" href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}")">@MatmonIcons.Render("close")<span>Reset</span></a>
+                            <a class="workspace-secondary-submit" href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsChannel={stats.SelectedChannelKey}")">@MatmonIcons.Render("close")<span>Reset</span></a>
                         }
                     </div>
                 </form>
@@ -379,7 +396,7 @@
                             {
                                 var drillHref = row.DrillGroup is null
                                     ? null
-                                    : $"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsFrom={row.DrillFrom}&StatsTo={row.DrillTo}&StatsGroup={row.DrillGroup}";
+                                    : $"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsFrom={row.DrillFrom}&StatsTo={row.DrillTo}&StatsGroup={row.DrillGroup}&StatsChannel={stats.SelectedChannelKey}";
                                 <tr data-state="@row.StateKey" class="@(drillHref is null ? null : "is-clickable")" data-href="@drillHref" title="@(drillHref is null ? null : $"Drill into {row.PeriodText}")">
                                     <td>@row.PeriodText@if (drillHref is not null) {<span class="sensor-statistics-drill">›</span>}</td>
                                     <td class="is-strong">@row.AverageText</td>

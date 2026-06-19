@@ -112,11 +112,12 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 healthy_count       INTEGER NOT NULL DEFAULT 0,
                 warning_count       INTEGER NOT NULL DEFAULT 0,
                 critical_count      INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (sensor_id, bucket_minutes, bucket_start)
+                PRIMARY KEY (sensor_id, bucket_minutes, bucket_start, default_channel_key)
             );
             """);
 
         EnsureStatisticsColumns();
+        MigrateStatisticsToPerChannelKey();
     }
 
     // Adds the richer-statistics columns to a sensor_statistics table created by
@@ -150,6 +151,75 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 ExecuteLocked($"ALTER TABLE sensor_statistics ADD COLUMN {column} {definition};");
             }
         }
+    }
+
+    // Statistics used to be stored per sensor (one bucket per window, the primary
+    // channel only). They are now stored per channel, which needs default_channel_key
+    // in the primary key. SQLite can't ALTER a primary key, so a table created by an
+    // older build is rebuilt once. Existing rows keep their channel key, so prior
+    // history stays intact (as the sensor's then-primary channel).
+    private void MigrateStatisticsToPerChannelKey()
+    {
+        var channelInPrimaryKey = false;
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(sensor_statistics);";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                // columns: cid, name, type, notnull, dflt_value, pk
+                if (string.Equals(reader.GetString(1), "default_channel_key", StringComparison.OrdinalIgnoreCase) &&
+                    reader.GetInt32(5) > 0)
+                {
+                    channelInPrimaryKey = true;
+                }
+            }
+        }
+
+        if (channelInPrimaryKey)
+        {
+            return;
+        }
+
+        using var transaction = _connection.BeginTransaction();
+        ExecuteLocked("ALTER TABLE sensor_statistics RENAME TO sensor_statistics_legacy;");
+        ExecuteLocked(
+            """
+            CREATE TABLE sensor_statistics (
+                sensor_id           TEXT    NOT NULL,
+                bucket_minutes      INTEGER NOT NULL,
+                bucket_start        INTEGER NOT NULL,
+                default_channel_key TEXT    NOT NULL,
+                state               INTEGER NOT NULL,
+                sample_count        INTEGER NOT NULL,
+                average             REAL    NULL,
+                minimum             REAL    NULL,
+                maximum             REAL    NULL,
+                last_value          REAL    NULL,
+                unit                TEXT    NULL,
+                message             TEXT    NULL,
+                low_percentile      REAL    NULL,
+                high_percentile     REAL    NULL,
+                healthy_count       INTEGER NOT NULL DEFAULT 0,
+                warning_count       INTEGER NOT NULL DEFAULT 0,
+                critical_count      INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (sensor_id, bucket_minutes, bucket_start, default_channel_key)
+            );
+            """);
+        ExecuteLocked(
+            """
+            INSERT INTO sensor_statistics
+                (sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
+                 sample_count, average, minimum, maximum, last_value, unit, message,
+                 low_percentile, high_percentile, healthy_count, warning_count, critical_count)
+            SELECT
+                sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
+                sample_count, average, minimum, maximum, last_value, unit, message,
+                low_percentile, high_percentile, healthy_count, warning_count, critical_count
+            FROM sensor_statistics_legacy;
+            """);
+        ExecuteLocked("DROP TABLE sensor_statistics_legacy;");
+        transaction.Commit();
     }
 
     // --- Observations --------------------------------------------------------
@@ -535,8 +605,7 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 ($sensor, $minutes, $start, $channelKey, $state,
                  $count, $average, $minimum, $maximum, $lastValue, $unit, $message,
                  $lowPct, $highPct, $healthy, $warning, $critical)
-            ON CONFLICT (sensor_id, bucket_minutes, bucket_start) DO UPDATE SET
-                default_channel_key = excluded.default_channel_key,
+            ON CONFLICT (sensor_id, bucket_minutes, bucket_start, default_channel_key) DO UPDATE SET
                 state               = excluded.state,
                 sample_count        = excluded.sample_count,
                 average             = excluded.average,

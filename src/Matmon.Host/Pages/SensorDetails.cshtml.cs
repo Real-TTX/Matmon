@@ -40,6 +40,9 @@ public sealed class SensorDetailsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? StatsRange { get; set; }
 
+    [BindProperty(SupportsGet = true)]
+    public string? StatsChannel { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -173,7 +176,8 @@ public sealed class SensorDetailsModel : PageModel
             : string.IsNullOrWhiteSpace(defaultChannel.Label) ? defaultChannel.Key : defaultChannel.Label;
         var executionProbe = FormatExecutionProbe(latestObservation);
         var statisticsBuckets = _workspaceStore.GetSensorStatistics(sensor.Id);
-        var statisticsSummary = BuildStatisticsSummary(statisticsBuckets, displayScale, measurementKind, StatsGroup, StatsRange, StatsFrom, StatsTo);
+        var statisticsSummary = BuildChannelStatistics(
+            statisticsBuckets, latestObservation, defaultChannelKey, defaultChannelLabel, displayScale, measurementKind);
         var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
 
         View = new SensorDetailsViewModel(
@@ -241,6 +245,87 @@ public sealed class SensorDetailsModel : PageModel
         _ => "native"
     };
 
+    private static string NormalizeChannelKey(string? key)
+        => string.IsNullOrWhiteSpace(key) ? "default" : key.Trim();
+
+    // Statistics are stored per channel. Picks the channel to show (the requested
+    // one, else the primary, else the channel with the most history), derives that
+    // channel's unit scale, and lists the available channels for the selector.
+    private SensorStatisticsSummary? BuildChannelStatistics(
+        IReadOnlyList<SensorStatisticsBucket> buckets,
+        SensorObservation? latestObservation,
+        string? primaryChannelKey,
+        string defaultChannelLabel,
+        SensorUnitScale primaryScale,
+        SensorMeasurementKind primaryKind)
+    {
+        if (buckets.Count == 0)
+        {
+            return null;
+        }
+
+        var labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (latestObservation is not null)
+        {
+            foreach (var channel in latestObservation.Channels)
+            {
+                labels[NormalizeChannelKey(channel.Key)] = string.IsNullOrWhiteSpace(channel.Label) ? channel.Key : channel.Label;
+            }
+        }
+
+        // Channels that actually carry statistics, busiest first (the primary
+        // channel has the longest history, so it naturally leads).
+        var channelKeys = buckets
+            .GroupBy(bucket => NormalizeChannelKey(bucket.DefaultChannelKey))
+            .OrderByDescending(group => group.Count())
+            .Select(group => group.Key)
+            .ToList();
+
+        var primaryKey = NormalizeChannelKey(primaryChannelKey);
+        var requestedKey = string.IsNullOrWhiteSpace(StatsChannel) ? null : NormalizeChannelKey(StatsChannel);
+
+        var selectedKey = channelKeys.FirstOrDefault(key =>
+                requestedKey is not null && string.Equals(key, requestedKey, StringComparison.OrdinalIgnoreCase))
+            ?? channelKeys.FirstOrDefault(key => string.Equals(key, primaryKey, StringComparison.OrdinalIgnoreCase))
+            ?? channelKeys[0];
+
+        var channelBuckets = buckets
+            .Where(bucket => string.Equals(NormalizeChannelKey(bucket.DefaultChannelKey), selectedKey, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        SensorUnitScale scale;
+        SensorMeasurementKind kind;
+        if (string.Equals(selectedKey, primaryKey, StringComparison.OrdinalIgnoreCase))
+        {
+            // The primary channel keeps the same scale as the overview/graph.
+            scale = primaryScale;
+            kind = primaryKind;
+        }
+        else
+        {
+            var unit = channelBuckets.Select(bucket => bucket.Unit).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+            kind = SensorUnitConverter.GuessMeasurementKind(unit);
+            var reference = channelBuckets
+                .Select(bucket => bucket.Maximum ?? bucket.Average)
+                .Where(value => value.HasValue)
+                .Select(value => Math.Abs(value!.Value))
+                .DefaultIfEmpty(0d)
+                .Max();
+            scale = SensorUnitConverter.CreateScale(reference, unit, kind);
+        }
+
+        string LabelFor(string key) =>
+            string.Equals(key, primaryKey, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(defaultChannelLabel)
+                ? defaultChannelLabel
+                : labels.TryGetValue(key, out var label) ? label : HumanizeChannelKey(key);
+
+        var channelOptions = channelKeys
+            .Select(key => new SensorStatisticsChannelOption(key, LabelFor(key), string.Equals(key, selectedKey, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        return BuildStatisticsSummary(channelBuckets, scale, kind, StatsGroup, StatsRange, StatsFrom, StatsTo, channelOptions, selectedKey);
+    }
+
     private static SensorStatisticsSummary? BuildStatisticsSummary(
         IReadOnlyList<SensorStatisticsBucket> buckets,
         SensorUnitScale scale,
@@ -248,7 +333,9 @@ public sealed class SensorDetailsModel : PageModel
         string? group,
         string? range,
         string? fromText,
-        string? toText)
+        string? toText,
+        IReadOnlyList<SensorStatisticsChannelOption> channels,
+        string selectedChannelKey)
     {
         if (buckets.Count == 0)
         {
@@ -329,7 +416,9 @@ public sealed class SensorDetailsModel : PageModel
             // Only echo dates into the custom From/To pickers for a custom range; relative
             // ranges leave them empty so the active range chip stays the source of truth.
             isCustom ? fromLocal?.ToString("yyyy-MM-dd") : null,
-            isCustom ? toLocal?.ToString("yyyy-MM-dd") : null);
+            isCustom ? toLocal?.ToString("yyyy-MM-dd") : null,
+            channels,
+            selectedChannelKey);
     }
 
     private static DateTime? TryParseLocalDate(string? text, bool endOfDay)
@@ -869,7 +958,14 @@ public sealed record SensorStatisticsSummary(
     string SelectedGroup,
     string SelectedRange,
     string? FromText,
-    string? ToText);
+    string? ToText,
+    IReadOnlyList<SensorStatisticsChannelOption> Channels,
+    string SelectedChannelKey);
+
+public sealed record SensorStatisticsChannelOption(
+    string Key,
+    string Label,
+    bool IsSelected);
 
 public sealed record SensorStatisticsRow(
     string PeriodText,

@@ -248,8 +248,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         var written = 0;
         foreach (var group in observations.GroupBy(observation => FloorToBucket(observation.TimestampUtc, bucketMinutes)))
         {
-            var bucket = TelemetryRollup.Aggregate(sensorId, group.ToList(), group.Key, bucketMinutes);
-            if (bucket is not null)
+            foreach (var bucket in TelemetryRollup.AggregatePerChannel(sensorId, group.ToList(), group.Key, bucketMinutes))
             {
                 _telemetry.UpsertStatisticsBucket(bucket);
                 written++;

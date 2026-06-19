@@ -3,11 +3,13 @@ using System.Text.Json.Serialization;
 namespace Matmon.Core.Domain;
 
 /// <summary>
-/// A downsampled summary of one sensor's default channel over a fixed time
-/// window (<see cref="BucketMinutes"/>). Buckets are recomputed accurately from
-/// the raw observations that fall inside the window — see
-/// <c>Matmon.Core.Telemetry.TelemetryRollup</c> — so percentiles and the state
-/// distribution reflect the real samples rather than a lossy running average.
+/// A downsampled summary of one sensor channel over a fixed time window
+/// (<see cref="BucketMinutes"/>). Statistics are stored per channel: one bucket
+/// per (sensor, channel, window) — <see cref="DefaultChannelKey"/> carries the
+/// channel identity. Buckets are recomputed accurately from the raw observations
+/// that fall inside the window — see <c>Matmon.Core.Telemetry.TelemetryRollup</c>
+/// — so percentiles and the state distribution reflect the real samples rather
+/// than a lossy running average.
 /// </summary>
 public sealed class SensorStatisticsBucket
 {
@@ -17,6 +19,10 @@ public sealed class SensorStatisticsBucket
 
     public int BucketMinutes { get; set; }
 
+    /// <summary>
+    /// The channel this bucket aggregates (part of the persisted primary key).
+    /// Named "default" for legacy single-value sensors that carry no channels.
+    /// </summary>
     public string DefaultChannelKey { get; set; } = string.Empty;
 
     public SensorState State { get; set; } = SensorState.Unknown;

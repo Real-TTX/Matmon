@@ -106,6 +106,66 @@ public sealed class TelemetryRollupTests
         Assert.Null(bucket.LastValue);
     }
 
+    private static SensorObservation MultiChannel(int minuteOffset, SensorState state, double cpu, double mem)
+        => new()
+        {
+            SensorId = Sensor,
+            TimestampUtc = BucketStart.AddMinutes(minuteOffset),
+            State = state,
+            DefaultChannelKey = "cpu",
+            Channels =
+            [
+                new() { Key = "cpu", Label = "CPU", Value = cpu, Unit = "%", IsDefault = true },
+                new() { Key = "mem", Label = "Memory", Value = mem, Unit = "%" }
+            ]
+        };
+
+    [Fact]
+    public void AggregatePerChannel_emits_one_bucket_per_numeric_channel()
+    {
+        var observations = new List<SensorObservation>
+        {
+            MultiChannel(0, SensorState.Healthy, 10, 50),
+            MultiChannel(1, SensorState.Healthy, 30, 70),
+        };
+
+        var buckets = TelemetryRollup.AggregatePerChannel(Sensor, observations, BucketStart, 60);
+
+        Assert.Equal(2, buckets.Count);
+
+        var cpu = buckets.Single(bucket => bucket.DefaultChannelKey == "cpu");
+        Assert.Equal(2, cpu.SampleCount);
+        Assert.Equal(20, cpu.Average);
+        Assert.Equal(10, cpu.Minimum);
+        Assert.Equal(30, cpu.Maximum);
+        Assert.Equal(30, cpu.LastValue);
+
+        var mem = buckets.Single(bucket => bucket.DefaultChannelKey == "mem");
+        Assert.Equal(2, mem.SampleCount);
+        Assert.Equal(60, mem.Average);
+        Assert.Equal(50, mem.Minimum);
+        Assert.Equal(70, mem.Maximum);
+    }
+
+    [Fact]
+    public void AggregatePerChannel_folds_bare_value_into_default_channel()
+    {
+        var observation = new SensorObservation
+        {
+            SensorId = Sensor,
+            TimestampUtc = BucketStart,
+            State = SensorState.Healthy,
+            Value = 5,
+            Channels = []
+        };
+
+        var buckets = TelemetryRollup.AggregatePerChannel(Sensor, [observation], BucketStart, 60);
+
+        var bucket = Assert.Single(buckets);
+        Assert.Equal("default", bucket.DefaultChannelKey);
+        Assert.Equal(5, bucket.Average);
+    }
+
     [Fact]
     public void Aggregate_is_order_independent()
     {
