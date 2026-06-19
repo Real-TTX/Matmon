@@ -1,9 +1,13 @@
 @page "/notifications/rule"
+@using Matmon.Host.Ui
 @model WorkspaceModel
 @{
     ViewData["Title"] = "Notification rule";
     var isCreateMode = Model.SelectedNotificationRuleId is null || Model.NotificationRuleEditor.Id == Guid.Empty;
     var backUrl = Model.GetSafeReturnUrl("/Notifications");
+    var targetPickerOptions = Model.View.Nodes
+        .Select(node => new ElementPickerOption(node.Id, node.Name, node.Path, node.Kind, node.Kind.ToString(), node.KindIconKey, node.Tags))
+        .ToList();
 }
 
 <section class="dashboard-shell">
@@ -55,7 +59,7 @@
                     </label>
                     <label>
                         <span>Target</span>
-                        <select asp-for="NewNotificationRule.TargetElementId" class="form-select workspace-select" asp-items="Model.NewNotificationRule.TargetOptions"></select>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewNotificationRule.TargetElementId", DomId = "picker-new-rule-target", SelectedId = Model.NewNotificationRule.TargetElementId, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
                     </label>
                     <label>
                         <span>Enabled</span>
@@ -166,7 +170,7 @@
                     </label>
                     <label>
                         <span>Target</span>
-                        <select asp-for="NotificationRuleEditor.TargetElementId" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.TargetOptions"></select>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NotificationRuleEditor.TargetElementId", DomId = "picker-edit-rule-target", SelectedId = Model.NotificationRuleEditor.TargetElementId, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
                     </label>
                     <label>
                         <span>Enabled</span>

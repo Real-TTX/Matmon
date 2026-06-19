@@ -1,0 +1,78 @@
+@model Matmon.Host.Ui.ElementPickerModel
+@{
+    var selected = Model.Selected;
+    var allTags = Model.Options
+        .SelectMany(option => option.Tags)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+<div class="element-picker" data-element-picker id="@Model.DomId">
+    <input type="hidden" name="@Model.FieldName" value="@(Model.SelectedId?.ToString())" data-picker-value />
+    <button type="button" class="form-control workspace-input element-picker-trigger @(selected is null ? "is-empty" : null)" data-picker-open aria-haspopup="dialog">
+        <span class="element-picker-trigger-label" data-picker-label>@(selected?.Name ?? Model.Placeholder)</span>
+        <span class="element-picker-trigger-path" data-picker-trigger-path>@(selected?.Path)</span>
+        @MatmonIcons.Render("search", "element-picker-trigger-icon")
+    </button>
+
+    <div class="element-picker-backdrop" data-picker-dialog hidden>
+        <div class="element-picker-panel" role="dialog" aria-modal="true" aria-label="Select element">
+            <div class="element-picker-head">
+                <div class="element-picker-search">
+                    @MatmonIcons.Render("search")
+                    <input type="text" class="form-control workspace-input" placeholder="Search name, path or tag…" data-picker-search autocomplete="off" />
+                </div>
+                @if (allTags.Length > 0)
+                {
+                    <select class="form-select workspace-select element-picker-tag" data-picker-tag>
+                        <option value="">All tags</option>
+                        @foreach (var tag in allTags)
+                        {
+                            <option value="@tag.ToLowerInvariant()">@tag</option>
+                        }
+                    </select>
+                }
+                <button type="button" class="workspace-secondary-submit element-picker-close" data-picker-close aria-label="Close">@MatmonIcons.Render("x")</button>
+            </div>
+
+            <ul class="element-picker-list" data-picker-list role="listbox">
+                @if (Model.AllowClear)
+                {
+                    <li class="element-picker-option element-picker-clear" data-picker-option data-id="" data-search="" data-tags="" role="option" tabindex="0">
+                        <span class="element-picker-option-name">— none —</span>
+                    </li>
+                }
+                @foreach (var option in Model.Options)
+                {
+                    var tagsLower = string.Join(" ", option.Tags.Select(tag => tag.ToLowerInvariant()));
+                    var search = $"{option.Name} {option.Path} {tagsLower}".ToLowerInvariant();
+                    <li class="element-picker-option @(option.Id == Model.SelectedId ? "is-selected" : null)"
+                        data-picker-option
+                        data-id="@option.Id"
+                        data-name="@option.Name"
+                        data-path="@option.Path"
+                        data-search="@search"
+                        data-tags="@tagsLower"
+                        role="option"
+                        tabindex="0">
+                        <span class="element-picker-option-kind" data-kind="@option.Kind.ToString().ToLowerInvariant()">@MatmonIcons.Render(option.KindIconKey)</span>
+                        <span class="element-picker-option-body">
+                            <span class="element-picker-option-name">@option.Name</span>
+                            <span class="element-picker-option-path">@option.Path</span>
+                        </span>
+                        @if (option.Tags.Count > 0)
+                        {
+                            <span class="element-picker-option-tags">
+                                @foreach (var tag in option.Tags)
+                                {
+                                    <span class="tree-tag is-mini">@tag</span>
+                                }
+                            </span>
+                        }
+                    </li>
+                }
+            </ul>
+            <div class="element-picker-empty" data-picker-empty hidden>No matches.</div>
+        </div>
+    </div>
+</div>

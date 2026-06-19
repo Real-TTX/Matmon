@@ -3866,6 +3866,202 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   font-size: 0.62rem;
 }
 
+/* ---- Element picker (input-looking trigger + searchable dialog) ---- */
+.element-picker {
+  position: relative;
+  width: 100%;
+}
+
+.element-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.element-picker-trigger-label {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.element-picker-trigger.is-empty .element-picker-trigger-label {
+  color: var(--matmon-muted);
+  font-weight: 400;
+}
+
+.element-picker-trigger-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--matmon-muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.element-picker-trigger-icon {
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  opacity: 0.7;
+}
+
+.element-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 1rem 1rem;
+  background: rgba(8, 12, 20, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.element-picker-panel {
+  width: min(40rem, 100%);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--matmon-surface);
+  border: 1px solid var(--matmon-border);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.element-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--matmon-border);
+}
+
+.element-picker-search {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
+.element-picker-search .ui-icon {
+  position: absolute;
+  left: 0.6rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.element-picker-search .workspace-input {
+  padding-left: 2rem;
+  width: 100%;
+}
+
+.element-picker-tag {
+  flex: 0 0 auto;
+  min-width: 8rem;
+}
+
+.element-picker-close {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.5rem;
+}
+
+.element-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  overflow-y: auto;
+}
+
+.element-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.element-picker-option:hover,
+.element-picker-option:focus-visible {
+  background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
+  outline: none;
+}
+
+.element-picker-option.is-selected {
+  background: color-mix(in srgb, var(--matmon-accent) 22%, transparent);
+}
+
+.element-picker-option-kind {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(124, 142, 171, 0.16);
+  color: var(--matmon-muted);
+}
+
+.element-picker-option-kind .ui-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.element-picker-option-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.element-picker-option-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.element-picker-option-path {
+  font-size: 0.72rem;
+  color: var(--matmon-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.element-picker-option-tags {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  justify-content: flex-end;
+  max-width: 12rem;
+}
+
+.element-picker-clear {
+  color: var(--matmon-muted);
+  font-size: 0.82rem;
+}
+
+.element-picker-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--matmon-muted);
+}
+
+body.element-picker-open {
+  overflow: hidden;
+}
+
 .usage-level-pill {
   display: inline-flex;
   align-items: center;

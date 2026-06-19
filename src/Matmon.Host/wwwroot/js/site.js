@@ -35,7 +35,110 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeDiscoveryScanForm();
   initializeMapDesigner();
   initializeMapCarousel();
+  initializeElementPickers();
 });
+
+function initializeElementPickers() {
+  document.querySelectorAll("[data-element-picker]").forEach((picker) => {
+    const valueInput = picker.querySelector("[data-picker-value]");
+    const trigger = picker.querySelector("[data-picker-open]");
+    const label = picker.querySelector("[data-picker-label]");
+    const triggerPath = picker.querySelector("[data-picker-trigger-path]");
+    const backdrop = picker.querySelector("[data-picker-dialog]");
+    const search = picker.querySelector("[data-picker-search]");
+    const tagFilter = picker.querySelector("[data-picker-tag]");
+    const list = picker.querySelector("[data-picker-list]");
+    const empty = picker.querySelector("[data-picker-empty]");
+    const closeButton = picker.querySelector("[data-picker-close]");
+    if (!valueInput || !trigger || !backdrop || !list) {
+      return;
+    }
+
+    const options = Array.from(list.querySelectorAll("[data-picker-option]"));
+
+    const applyFilter = () => {
+      const term = (search?.value || "").trim().toLowerCase();
+      const tag = (tagFilter?.value || "").trim().toLowerCase();
+      let visible = 0;
+      options.forEach((option) => {
+        const isClear = option.classList.contains("element-picker-clear");
+        const haystack = option.getAttribute("data-search") || "";
+        const tags = option.getAttribute("data-tags") || "";
+        const matchesText = term === "" || haystack.includes(term);
+        const matchesTag = tag === "" || tags.split(" ").includes(tag);
+        // The "none" row is hidden while filtering so it doesn't masquerade as a result.
+        const show = isClear ? term === "" && tag === "" : matchesText && matchesTag;
+        option.hidden = !show;
+        if (show && !isClear) {
+          visible += 1;
+        }
+      });
+      if (empty) {
+        empty.hidden = visible > 0;
+      }
+    };
+
+    const open = () => {
+      backdrop.hidden = false;
+      document.body.classList.add("element-picker-open");
+      if (search) {
+        search.value = "";
+      }
+      if (tagFilter) {
+        tagFilter.value = "";
+      }
+      applyFilter();
+      window.setTimeout(() => search?.focus(), 0);
+    };
+
+    const close = () => {
+      backdrop.hidden = true;
+      document.body.classList.remove("element-picker-open");
+    };
+
+    const choose = (option) => {
+      const id = option.getAttribute("data-id") || "";
+      const name = option.getAttribute("data-name") || "";
+      const path = option.getAttribute("data-path") || "";
+      valueInput.value = id;
+      if (label) {
+        label.textContent = id ? name : (trigger.getAttribute("data-placeholder") || label.textContent);
+      }
+      if (triggerPath) {
+        triggerPath.textContent = path;
+      }
+      trigger.classList.toggle("is-empty", !id);
+      options.forEach((candidate) => candidate.classList.toggle("is-selected", candidate === option && !!id));
+      valueInput.dispatchEvent(new Event("change", { bubbles: true }));
+      close();
+    };
+
+    trigger.setAttribute("data-placeholder", label ? label.textContent : "");
+    trigger.addEventListener("click", open);
+    closeButton?.addEventListener("click", close);
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) {
+        close();
+      }
+    });
+    search?.addEventListener("input", applyFilter);
+    tagFilter?.addEventListener("change", applyFilter);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !backdrop.hidden) {
+        close();
+      }
+    });
+    options.forEach((option) => {
+      option.addEventListener("click", () => choose(option));
+      option.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          choose(option);
+        }
+      });
+    });
+  });
+}
 
 function initializeMapCarousel() {
   document.querySelectorAll("[data-map-carousel]").forEach((carousel) => {
