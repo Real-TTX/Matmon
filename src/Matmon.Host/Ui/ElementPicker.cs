@@ -31,6 +31,12 @@ public sealed class ElementPickerModel
     /// <summary>Allow clearing the selection back to none.</summary>
     public bool AllowClear { get; init; } = true;
 
+    /// <summary>
+    /// Optional bare attribute rendered on the hidden value input (e.g.
+    /// "data-map-property-element") so host code can hook the picker's change event.
+    /// </summary>
+    public string? ValueAttribute { get; init; }
+
     public IReadOnlyList<ElementPickerOption> Options { get; init; } = [];
 
     public ElementPickerOption? Selected =>

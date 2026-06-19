@@ -225,7 +225,7 @@
                                 </label>
                                 <label class="workspace-field" data-map-property-target>
                                     <span class="workspace-label">Target</span>
-                                    <select asp-for="Input.Tiles[index].ElementId" asp-items="Model.ElementOptions" class="form-select workspace-select" data-map-property-element></select>
+                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].ElementId", DomId = $"picker-map-tile-{index}", SelectedId = Model.Input.Tiles[index].ElementId, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
                                 </label>
                                 <label class="workspace-field" data-map-property-text-only>
                                     <span class="workspace-label">Text</span>
@@ -314,12 +314,7 @@
                     </label>
                     <label class="workspace-field" data-map-property-target>
                         <span class="workspace-label">Target</span>
-                        <select name="Input.Tiles[__index__].ElementId" class="form-select workspace-select" data-map-property-element>
-                            @foreach (var option in Model.ElementOptions)
-                            {
-                                <option value="@option.Value">@option.Text</option>
-                            }
-                        </select>
+                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].ElementId", DomId = "picker-map-tile-__index__", SelectedId = null, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
                     </label>
                     <label class="workspace-field" data-map-property-text-only>
                         <span class="workspace-label">Text</span>

@@ -23,6 +23,8 @@ public sealed class MapEditorModel : PageModel
 
     public IReadOnlyList<SelectListItem> ElementOptions { get; private set; } = [];
 
+    public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> TilePickerOptions { get; private set; } = [];
+
     public IReadOnlyList<SelectListItem> TileKindOptions { get; } =
     [
         new("State", MonitoringMapTileKind.Element.ToString()),
@@ -252,6 +254,9 @@ public sealed class MapEditorModel : PageModel
                 element.Id.ToString()))
             .Prepend(new SelectListItem("No element", string.Empty))
             .ToArray();
+
+        var root = _workspaceStore.GetAllElements().FirstOrDefault(element => element.ParentId is null);
+        TilePickerOptions = Matmon.Host.Ui.ElementPickerOptions.Build(root);
     }
 
     private string BuildPath(MonitoringElement element)

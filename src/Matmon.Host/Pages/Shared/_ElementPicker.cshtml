@@ -8,7 +8,7 @@
         .ToArray();
 }
 <div class="element-picker" data-element-picker id="@Model.DomId">
-    <input type="hidden" name="@Model.FieldName" value="@(Model.SelectedId?.ToString())" data-picker-value />
+    <input type="hidden" name="@Model.FieldName" value="@(Model.SelectedId?.ToString())" data-picker-value data-selected-name="@(selected?.Name)" @Html.Raw(Model.ValueAttribute) />
     <button type="button" class="form-control workspace-input element-picker-trigger @(selected is null ? "is-empty" : null)" data-picker-open aria-haspopup="dialog">
         <span class="element-picker-trigger-label" data-picker-label>@(selected?.Name ?? Model.Placeholder)</span>
         <span class="element-picker-trigger-path" data-picker-trigger-path>@(selected?.Path)</span>

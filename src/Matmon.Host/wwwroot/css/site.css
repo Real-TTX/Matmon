@@ -3872,6 +3872,70 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   font-size: 0.62rem;
 }
 
+/* ---- Tag input (chips + free text, progressive enhancement of a text field) ---- */
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: text;
+  min-height: 2.3rem;
+  padding: 0.3rem 0.45rem;
+}
+
+.tag-input-chips {
+  display: contents;
+}
+
+.tag-input-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.25rem 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--matmon-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 38%, transparent);
+  color: var(--matmon-foreground);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.tag-input-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--matmon-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tag-input-remove:hover {
+  background: color-mix(in srgb, var(--matmon-accent) 30%, transparent);
+  color: var(--matmon-foreground);
+}
+
+.tag-input-field {
+  flex: 1 1 6rem;
+  min-width: 6rem;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--matmon-foreground);
+  font-size: 0.9rem;
+  padding: 0.15rem 0.1rem;
+}
+
+.tag-input-field::placeholder {
+  color: var(--matmon-muted);
+}
+
 /* ---- Element picker (input-looking trigger + searchable dialog) ---- */
 .element-picker {
   position: relative;

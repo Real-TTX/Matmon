@@ -36,10 +36,111 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMapDesigner();
   initializeMapCarousel();
   initializeElementPickers();
+  initializeTagInputs();
 });
+
+function initializeTagInputs() {
+  const splitTags = (value) => (value || "")
+    .split(/[,\n;]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  document.querySelectorAll("input[data-tag-input]").forEach((input) => {
+    if (input.dataset.tagInputReady === "1") {
+      return;
+    }
+    input.dataset.tagInputReady = "1";
+    input.type = "hidden";
+
+    let tags = splitTags(input.value);
+
+    const wrap = document.createElement("div");
+    wrap.className = "tag-input form-control workspace-input";
+    const chipList = document.createElement("div");
+    chipList.className = "tag-input-chips";
+    const field = document.createElement("input");
+    field.type = "text";
+    field.className = "tag-input-field";
+    field.autocomplete = "off";
+    field.placeholder = tags.length ? "Add tag…" : (input.getAttribute("placeholder") || "Add tag…");
+    wrap.appendChild(chipList);
+    wrap.appendChild(field);
+    input.parentNode.insertBefore(wrap, input.nextSibling);
+
+    const commit = () => {
+      input.value = tags.join(", ");
+      field.placeholder = tags.length ? "Add tag…" : (input.getAttribute("placeholder") || "Add tag…");
+    };
+
+    const render = () => {
+      chipList.replaceChildren();
+      tags.forEach((tag, index) => {
+        const chip = document.createElement("span");
+        chip.className = "tag-input-chip";
+        const label = document.createElement("span");
+        label.textContent = tag;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "tag-input-remove";
+        remove.setAttribute("aria-label", `Remove ${tag}`);
+        remove.textContent = "×";
+        remove.addEventListener("click", () => {
+          tags.splice(index, 1);
+          commit();
+          render();
+          field.focus();
+        });
+        chip.appendChild(label);
+        chip.appendChild(remove);
+        chipList.appendChild(chip);
+      });
+    };
+
+    const addFrom = (raw) => {
+      splitTags(raw).forEach((tag) => {
+        if (!tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+          tags.push(tag);
+        }
+      });
+      field.value = "";
+      commit();
+      render();
+    };
+
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === ",") {
+        event.preventDefault();
+        if (field.value.trim()) {
+          addFrom(field.value);
+        }
+      } else if (event.key === "Backspace" && field.value === "" && tags.length > 0) {
+        tags.pop();
+        commit();
+        render();
+      }
+    });
+    field.addEventListener("blur", () => {
+      if (field.value.trim()) {
+        addFrom(field.value);
+      }
+    });
+    wrap.addEventListener("click", (event) => {
+      if (event.target === wrap || event.target === chipList) {
+        field.focus();
+      }
+    });
+
+    commit();
+    render();
+  });
+}
 
 function initializeElementPickers() {
   document.querySelectorAll("[data-element-picker]").forEach((picker) => {
+    if (picker.dataset.pickerReady === "1") {
+      return;
+    }
+    picker.dataset.pickerReady = "1";
     const valueInput = picker.querySelector("[data-picker-value]");
     const trigger = picker.querySelector("[data-picker-open]");
     const label = picker.querySelector("[data-picker-label]");
@@ -101,6 +202,7 @@ function initializeElementPickers() {
       const name = option.getAttribute("data-name") || "";
       const path = option.getAttribute("data-path") || "";
       valueInput.value = id;
+      valueInput.dataset.selectedName = id ? name : "";
       if (label) {
         label.textContent = id ? name : (trigger.getAttribute("data-placeholder") || label.textContent);
       }
@@ -2513,10 +2615,12 @@ function initializeMapDesigner() {
     tile.querySelector("[data-map-tile-kind-label]")?.replaceChildren(document.createTextNode(getKindLabel(kind)));
     if (preview) {
       const isText = kind === "Text";
-      const selectedText = elementSelect?.selectedOptions?.[0]?.textContent?.trim();
+      // The target is now an element picker: its name lives on the hidden value
+      // input's data-selected-name (set when chosen / server-rendered).
+      const selectedText = (elementSelect?.dataset.selectedName || "").trim();
       preview.textContent = isText
         ? (text.trim() || "Text tile")
-        : (selectedText && selectedText !== "No element" ? selectedText : "No target selected");
+        : (selectedText || "No target selected");
     }
 
     syncPanelVisibility(panel);
@@ -2744,6 +2848,9 @@ function initializeMapDesigner() {
       visualSelect.value = tool.visual;
     }
     setupTile(tile);
+    // Initialize the freshly cloned tile's element picker (guarded so existing
+    // pickers aren't re-wired).
+    initializeElementPickers();
     selectTile(index);
   };
 

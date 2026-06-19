@@ -407,6 +407,10 @@
                             <span>Description</span>
                             <input asp-for="NewSensor.Description" class="form-control workspace-input" placeholder="Description" />
                         </label>
+                        <label class="workspace-span-2">
+                            <span>Tags</span>
+                            <input asp-for="NewSensor.TagsText" class="form-control workspace-input" placeholder="prod, network" data-tag-input />
+                        </label>
                         <label>
                             <span>Highlight</span>
                             <select asp-for="NewSensor.Highlight" class="form-select workspace-select">
