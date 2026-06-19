@@ -83,14 +83,7 @@
                         {
                             <label class="workspace-span-2">
                                 <span>Parent</span>
-                                @if (isSensor)
-                                {
-                                    <select asp-for="ElementEditor.ParentId" class="form-select workspace-select" asp-items="Model.ElementEditor.ParentOptions" data-sensor-parent-select></select>
-                                }
-                                else
-                                {
-                                    <select asp-for="ElementEditor.ParentId" class="form-select workspace-select" asp-items="Model.ElementEditor.ParentOptions"></select>
-                                }
+                                <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "ElementEditor.ParentId", DomId = "picker-element-parent", SelectedId = Model.ElementEditor.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.ElementEditor.ParentOptions), ValueAttribute = isSensor ? "data-sensor-parent-select" : null })" />
                             </label>
                         }
                         else

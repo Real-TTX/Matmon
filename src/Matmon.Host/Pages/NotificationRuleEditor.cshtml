@@ -6,7 +6,7 @@
     var isCreateMode = Model.SelectedNotificationRuleId is null || Model.NotificationRuleEditor.Id == Guid.Empty;
     var backUrl = Model.GetSafeReturnUrl("/Notifications");
     var targetPickerOptions = Model.View.Nodes
-        .Select(node => new ElementPickerOption(node.Id, node.Name, node.Path, node.Kind, node.Kind.ToString(), node.KindIconKey, node.Tags))
+        .Select(node => new ElementPickerOption(node.Id, node.Name, node.Path, node.Kind, node.Kind.ToString(), node.KindIconKey, node.Tags, node.Depth))
         .ToList();
 }
 

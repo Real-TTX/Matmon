@@ -4055,8 +4055,19 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   align-items: center;
   gap: 0.6rem;
   padding: 0.45rem 0.55rem;
+  /* Tree indentation by depth (zeroed in flat/search mode). */
+  padding-left: calc(0.55rem + var(--picker-depth, 0) * 1.05rem);
   border-radius: 8px;
   cursor: pointer;
+}
+
+.element-picker-list.is-flat .element-picker-option {
+  padding-left: 0.55rem;
+}
+
+/* In tree mode the indentation conveys the hierarchy, so the full path is noise. */
+.element-picker-list:not(.is-flat) .element-picker-option-path {
+  display: none;
 }
 
 .element-picker-option:hover,

@@ -1158,7 +1158,8 @@ public sealed class WorkspaceModel : PageModel
             AllTags = MonitoringTagResolver
                 .Normalize(nodes.SelectMany(node => node.Tags).Concat(snapshot.Templates.SelectMany(template => template.Tags)))
                 .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
-                .ToArray()
+                .ToArray(),
+            PickerElements = Matmon.Host.Ui.ElementPickerOptions.Build(snapshot.RootProbe)
         };
 
         EnsureCreateDefaults(snapshot, nodes, populateEditorValues);
@@ -6154,6 +6155,21 @@ Matmon__WorkspacePath={_runtimeOptions.WorkspacePath}
             : fallbackPage;
     }
 
+    /// <summary>
+    /// The element-picker options restricted to the ids in <paramref name="validOptions"/>
+    /// (the legacy SelectListItem set), preserving tree order/depth. Lets the create/edit
+    /// pages swap a parent/target &lt;select&gt; for the searchable picker without re-deriving
+    /// the per-context valid set.
+    /// </summary>
+    public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> PickerOptionsFor(IEnumerable<SelectListItem> validOptions)
+    {
+        var ids = validOptions
+            .Select(option => option.Value)
+            .Where(value => Guid.TryParse(value, out _))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return View.PickerElements.Where(option => ids.Contains(option.Id.ToString())).ToList();
+    }
+
     private static Guid RequireParentId(Guid? parentId, string label)
     {
         return parentId ?? throw new InvalidOperationException($"{label} parent is required.");
@@ -6196,6 +6212,9 @@ public sealed record WorkspacePageViewModel
 
     /// <summary>All distinct tags in use (elements + templates), for tag-input autocomplete.</summary>
     public IReadOnlyList<string> AllTags { get; init; } = [];
+
+    /// <summary>The whole topology as element-picker options (tree order + depth), filtered per use.</summary>
+    public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> PickerElements { get; init; } = [];
 
     public IReadOnlyList<WorkspaceAlertRow> Alerts { get; init; } = [];
 

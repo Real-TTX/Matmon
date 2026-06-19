@@ -38,7 +38,7 @@
                 </label>
                 <label class="workspace-field">
                     <span class="workspace-label">Parent</span>
-                    <select asp-for="NewHost.ParentId" class="form-select workspace-select" asp-items="Model.View.HostParentOptions"></select>
+                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "NewHost.ParentId", DomId = "picker-host-parent", SelectedId = Model.NewHost.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.View.HostParentOptions) })" />
                 </label>
             </div>
             <label class="workspace-field">

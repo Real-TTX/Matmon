@@ -10,7 +10,8 @@ public sealed record ElementPickerOption(
     MonitoringElementKind Kind,
     string KindLabel,
     string KindIconKey,
-    IReadOnlyList<string> Tags);
+    IReadOnlyList<string> Tags,
+    int Depth);
 
 /// <summary>
 /// View model for the reusable searchable element picker (a field that looks like
@@ -65,7 +66,7 @@ public static class ElementPickerOptions
         var options = new List<ElementPickerOption>();
         if (root is not null)
         {
-            Walk(root, parentPath: string.Empty, inheritedTags: [], kinds, options);
+            Walk(root, parentPath: string.Empty, inheritedTags: [], kinds, options, depth: 0);
         }
 
         return options;
@@ -76,7 +77,8 @@ public static class ElementPickerOptions
         string parentPath,
         IReadOnlyList<string> inheritedTags,
         IReadOnlySet<MonitoringElementKind>? kinds,
-        List<ElementPickerOption> options)
+        List<ElementPickerOption> options,
+        int depth)
     {
         var path = string.IsNullOrWhiteSpace(parentPath) ? element.Name : $"{parentPath} / {element.Name}";
         var effectiveTags = MonitoringTagResolver.Normalize(inheritedTags.Concat(element.Tags));
@@ -90,14 +92,15 @@ public static class ElementPickerOptions
                 element.Kind,
                 element.Kind.ToString(),
                 IconKeys.GetValueOrDefault(element.Kind, "sensor"),
-                effectiveTags));
+                effectiveTags,
+                depth));
         }
 
         if (element is MonitoringContainerElement container)
         {
             foreach (var child in container.Children)
             {
-                Walk(child, path, effectiveTags, kinds, options);
+                Walk(child, path, effectiveTags, kinds, options, depth + 1);
             }
         }
     }

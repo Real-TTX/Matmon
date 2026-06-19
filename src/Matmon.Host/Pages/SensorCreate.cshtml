@@ -65,7 +65,7 @@
                     </label>
                     <label>
                         <span>Parent</span>
-                        <select asp-for="NewSensor.ParentId" class="form-select workspace-select" asp-items="Model.View.SensorParentOptions" data-sensor-parent-select></select>
+                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "NewSensor.ParentId", DomId = "picker-sensor-parent", SelectedId = Model.NewSensor.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.View.SensorParentOptions), ValueAttribute = "data-sensor-parent-select" })" />
                     </label>
                     @if (string.Equals(Model.NewSensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                     {

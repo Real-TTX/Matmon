@@ -164,6 +164,8 @@ function initializeElementPickers() {
     const applyFilter = () => {
       const term = (search?.value || "").trim().toLowerCase();
       const tag = (tagFilter?.value || "").trim().toLowerCase();
+      // Tree (indented) when browsing; flat list with paths when filtering.
+      list.classList.toggle("is-flat", term !== "" || tag !== "");
       let visible = 0;
       options.forEach((option) => {
         const isClear = option.classList.contains("element-picker-clear");

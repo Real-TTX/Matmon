@@ -32,7 +32,7 @@
             </label>
             <label class="workspace-field">
                 <span class="workspace-label">Parent</span>
-                <select asp-for="NewFolder.ParentId" class="form-select workspace-select" asp-items="Model.View.FolderParentOptions"></select>
+                <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "NewFolder.ParentId", DomId = "picker-folder-parent", SelectedId = Model.NewFolder.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.View.FolderParentOptions) })" />
             </label>
             <label class="workspace-field">
                 <span class="workspace-label">Description <em>optional</em></span>
