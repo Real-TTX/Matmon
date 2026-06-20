@@ -2452,16 +2452,30 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   align-items: center;
   min-height: 2.3rem;
   padding: 0.3rem 0.45rem;
-  border-radius: 6px;
-  background: transparent;
-  border: 0;
+  border-radius: 7px;
+  background: var(--matmon-surface);
+  border: 1px solid var(--matmon-border);
+  border-left: 3px solid var(--matmon-border);
   min-width: 0;
-  transition: background-color 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .monitoring-tree-row:hover,
 .monitoring-tree-row:focus-within {
-  background: color-mix(in srgb, var(--matmon-surface-soft) 78%, transparent);
+  background: var(--matmon-surface-strong);
+  border-color: rgba(95, 141, 255, 0.35);
+}
+
+.monitoring-tree-node[data-state="error"] > .monitoring-tree-row {
+  border-left-color: #ff6b76;
+}
+
+.monitoring-tree-node[data-state="warning"] > .monitoring-tree-row {
+  border-left-color: #f3b36b;
+}
+
+.monitoring-tree-node[data-state="ok"] > .monitoring-tree-row {
+  border-left-color: #a8c814;
 }
 
 .monitoring-tree-node[data-state="error"] > .monitoring-tree-row {
@@ -2705,15 +2719,15 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .monitoring-tree .monitoring-action-trigger {
-  width: 1.2rem;
-  min-width: 1.2rem;
-  min-height: 1.2rem;
+  width: 1.9rem;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
   padding: 0;
-  border-radius: 2px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--matmon-muted);
-  opacity: 0.72;
+  border-radius: 6px;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-foreground);
+  opacity: 1;
 }
 
 .monitoring-tree .monitoring-action-trigger span {
@@ -2721,8 +2735,8 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .monitoring-tree .monitoring-action-trigger .ui-icon {
-  width: 0.72rem;
-  height: 0.72rem;
+  width: 1rem;
+  height: 1rem;
 }
 
 .monitoring-tree-row:hover .monitoring-action-trigger,
@@ -2792,11 +2806,22 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .monitoring-tree .state-pill {
-  padding: 0;
-  font-size: 0.6rem;
-  border-radius: 2px;
-  border-color: transparent;
-  background: transparent;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.64rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.monitoring-tree .state-pill[data-state="error"] {
+  background: rgba(255, 107, 118, 0.22);
+  border-color: rgba(255, 107, 118, 0.6);
+  color: #ff8a93;
+}
+
+.monitoring-tree .state-pill[data-state="warning"] {
+  background: rgba(243, 179, 107, 0.22);
+  border-color: rgba(243, 179, 107, 0.55);
+  color: #f0b072;
 }
 
 .monitoring-tree-node:not([data-state="warning"]):not([data-state="error"]) > .monitoring-tree-row .state-pill {
