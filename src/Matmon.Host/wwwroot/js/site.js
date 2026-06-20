@@ -93,8 +93,35 @@ function initializeTreeContextMenu() {
           open.open = false;
         }
       });
+
+      const cursorX = event.clientX;
+      const cursorY = event.clientY;
+      const placeAtCursor = () => {
+        const panel = details.querySelector(":scope > .workspace-action-menu-panel");
+        if (!panel || !details.open) {
+          return;
+        }
+        const margin = 8;
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = document.documentElement.clientHeight;
+        details.classList.add("is-floating");
+        panel.style.position = "fixed";
+        panel.style.right = "auto";
+        panel.style.insetInlineEnd = "auto";
+        panel.style.zIndex = "10001";
+        const rect = panel.getBoundingClientRect();
+        const left = Math.max(margin, Math.min(cursorX, viewportWidth - rect.width - margin));
+        const top = Math.max(margin, Math.min(cursorY, viewportHeight - rect.height - margin));
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+      };
+
       details.open = true;
-      details.querySelector("summary")?.focus();
+      // Override the default (anchored to the ⋯ button) positioning so the menu
+      // opens under the cursor; re-apply after the toggle handler's reposition.
+      placeAtCursor();
+      window.requestAnimationFrame(placeAtCursor);
+      window.setTimeout(placeAtCursor, 0);
     });
   });
 }

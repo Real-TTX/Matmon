@@ -1986,6 +1986,47 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   padding-inline: 0.48rem;
 }
 
+/* The view/size/layout switches now live inside one "Display" dropdown. */
+.monitoring-display-menu > summary {
+  list-style: none;
+}
+
+.monitoring-display-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.monitoring-display-panel {
+  min-width: 13rem;
+  gap: 0.3rem;
+  padding: 0.6rem;
+}
+
+.monitoring-display-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--matmon-muted);
+  margin-top: 0.35rem;
+}
+
+.monitoring-display-label:first-child {
+  margin-top: 0;
+}
+
+.monitoring-display-panel .monitoring-view-switch,
+.monitoring-display-panel .monitoring-size-switch {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+}
+
+.monitoring-display-panel .workspace-action-link {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+}
+
 .monitoring-size-switch.is-list-view .workspace-action-link:disabled,
 .monitoring-size-switch.is-list-view .workspace-action-link.is-disabled {
   opacity: 0.46;
@@ -2135,8 +2176,12 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .tree-kind .ui-icon {
-  width: 0.78rem;
-  height: 0.78rem;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.monitoring-tree-main .tree-name {
+  font-size: 0.92rem;
 }
 
 .tree-kind[data-kind="probe"] {
@@ -2402,12 +2447,12 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 
 .monitoring-tree-row {
   display: grid;
-  grid-template-columns: 1rem 1rem minmax(0, 1fr) auto;
-  gap: 0.12rem;
+  grid-template-columns: 1.6rem 1.7rem minmax(0, 1fr) auto;
+  gap: 0.4rem;
   align-items: center;
-  min-height: 1.45rem;
-  padding: 0.02rem 0.1rem;
-  border-radius: 2px;
+  min-height: 2.3rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
   background: transparent;
   border: 0;
   min-width: 0;

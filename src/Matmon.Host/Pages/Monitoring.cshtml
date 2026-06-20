@@ -87,6 +87,12 @@
             <input type="hidden" name="monitoringView" value="@Model.View.MonitoringViewMode" />
             <input type="hidden" name="monitoringSize" value="@viewSize" />
 
+            <details class="workspace-action-menu monitoring-display-menu">
+                <summary class="workspace-secondary-submit monitoring-display-trigger" aria-label="Display options" title="Display options">
+                    @MatmonIcons.Render("dashboard")<span>Display</span>
+                </summary>
+                <div class="workspace-action-menu-panel monitoring-display-panel">
+            <span class="monitoring-display-label">View</span>
             <div class="monitoring-view-switch">
                 <a class="workspace-action-link @(isListView ? string.Empty : "is-active")"
                    asp-page="/Monitoring"
@@ -112,6 +118,7 @@
                 </a>
             </div>
 
+            <span class="monitoring-display-label">Size</span>
             <div class="monitoring-size-switch @(isListView ? "is-list-view" : "is-tree-view")" aria-label="Sensor tile size">
                 @if (isListView)
                 {
@@ -180,11 +187,14 @@
 
             @if (!isListView)
             {
+                <span class="monitoring-display-label">Layout</span>
                 <div class="monitoring-size-switch monitoring-layout-switch" aria-label="Tree layout" data-tree-layout-switch>
                     <button type="button" class="workspace-action-link" data-tree-layout-set="tiles" title="Tiles">@MatmonIcons.Render("dashboard")<span>Tiles</span></button>
                     <button type="button" class="workspace-action-link" data-tree-layout-set="rows" title="Rows">@MatmonIcons.Render("list")<span>Rows</span></button>
                 </div>
             }
+                </div>
+            </details>
 
             <label class="monitoring-filter-field">
                 <span>@MatmonIcons.Render("search")<small>Search</small></span>
