@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeAccountMenu();
   initializeWorkspaceActionMenus();
   initializeMonitoringTree();
+  initializeTreeContextMenu();
   initializeDashboardRefresh();
   initializeSensorTabs();
   initializeSensorNameSuggestion();
@@ -38,6 +39,35 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeElementPickers();
   initializeTagInputs();
 });
+
+// Right-click anywhere on a tree node opens that node's existing action menu
+// (the ⋯ button still works too). The deepest node under the cursor wins, so
+// right-clicking a child sensor opens the sensor's menu, not its container's.
+function initializeTreeContextMenu() {
+  document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
+    tree.addEventListener("contextmenu", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const node = target?.closest("[data-tree-node]");
+      if (!node) {
+        return;
+      }
+
+      const details = node.querySelector("details.workspace-action-menu");
+      if (!details) {
+        return;
+      }
+
+      event.preventDefault();
+      document.querySelectorAll("details.workspace-action-menu[open]").forEach((open) => {
+        if (open !== details) {
+          open.open = false;
+        }
+      });
+      details.open = true;
+      details.querySelector("summary")?.focus();
+    });
+  });
+}
 
 function initializeTagInputs() {
   const splitTags = (value) => (value || "")
