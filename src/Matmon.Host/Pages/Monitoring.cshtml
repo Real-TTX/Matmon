@@ -12,6 +12,14 @@
         : monitoringSize;
 }
 
+@* Tree row/tile layout (client-only preference) applied to <html> before paint. *@
+<script>
+    try {
+        document.documentElement.dataset.treeLayout =
+            localStorage.getItem("matmon-tree-layout") === "rows" ? "rows" : "tiles";
+    } catch (e) { /* layout preference is best-effort */ }
+</script>
+
 @* Apply the stored view/size preference before the page paints. Without this the
    server renders its default (e.g. tree "M") first and site.js only redirects to the
    stored preference (e.g. "S") on DOMContentLoaded — a visible M→S double render.
@@ -169,6 +177,14 @@
                     </a>
                 }
             </div>
+
+            @if (!isListView)
+            {
+                <div class="monitoring-size-switch monitoring-layout-switch" aria-label="Tree layout" data-tree-layout-switch>
+                    <button type="button" class="workspace-action-link" data-tree-layout-set="tiles" title="Tiles">@MatmonIcons.Render("dashboard")<span>Tiles</span></button>
+                    <button type="button" class="workspace-action-link" data-tree-layout-set="rows" title="Rows">@MatmonIcons.Render("list")<span>Rows</span></button>
+                </div>
+            }
 
             <label class="monitoring-filter-field">
                 <span>@MatmonIcons.Render("search")<small>Search</small></span>

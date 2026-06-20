@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeWorkspaceActionMenus();
   initializeMonitoringTree();
   initializeTreeContextMenu();
+  initializeTreeLayoutToggle();
   initializeDashboardRefresh();
   initializeSensorTabs();
   initializeSensorNameSuggestion();
@@ -39,6 +40,35 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeElementPickers();
   initializeTagInputs();
 });
+
+// Toggles the monitoring tree between "tiles" (default chip strip) and "rows"
+// (full-width rows). Client-only preference on <html> + localStorage; the Monitoring
+// page also applies it before paint so there's no flicker.
+function initializeTreeLayoutToggle() {
+  const switches = document.querySelectorAll("[data-tree-layout-switch]");
+  if (switches.length === 0) {
+    return;
+  }
+
+  const buttons = document.querySelectorAll("[data-tree-layout-set]");
+  const apply = (layout) => {
+    const normalized = layout === "rows" ? "rows" : "tiles";
+    document.documentElement.dataset.treeLayout = normalized;
+    try {
+      localStorage.setItem("matmon-tree-layout", normalized);
+    } catch (e) {
+      // Layout preference still works for this visit even if storage is unavailable.
+    }
+    buttons.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.treeLayoutSet === normalized);
+    });
+  };
+
+  apply(document.documentElement.dataset.treeLayout || "tiles");
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => apply(button.dataset.treeLayoutSet));
+  });
+}
 
 // Right-click anywhere on a tree node opens that node's existing action menu
 // (the ⋯ button still works too). The deepest node under the cursor wins, so
