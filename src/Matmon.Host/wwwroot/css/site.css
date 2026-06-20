@@ -2187,12 +2187,12 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .tree-kind .ui-icon {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .monitoring-tree-main .tree-name {
-  font-size: 0.92rem;
+  font-size: 0.98rem;
 }
 
 .tree-kind[data-kind="probe"] {
@@ -2544,8 +2544,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
   min-width: 0;
   max-width: 22rem;
   color: var(--matmon-muted);
-  font-size: 0.66rem;
-  line-height: 1;
+  font-size: 0.74rem;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2554,12 +2554,12 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
 .monitoring-tree-meta {
   display: flex;
   flex: 0 0 auto;
-  gap: 0.2rem;
+  gap: 0.3rem;
   flex-wrap: nowrap;
   align-items: center;
   margin-top: 0;
   color: var(--matmon-muted);
-  font-size: 0.62rem;
+  font-size: 0.74rem;
   overflow: hidden;
 }
 
@@ -2817,8 +2817,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
 }
 
 .monitoring-tree .tree-kind .ui-icon {
-  width: 0.76rem;
-  height: 0.76rem;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .monitoring-tree .tree-kind > span {
@@ -2835,8 +2835,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
 }
 
 .monitoring-tree .state-pill {
-  padding: 0.12rem 0.45rem;
-  font-size: 0.64rem;
+  padding: 0.14rem 0.5rem;
+  font-size: 0.72rem;
   border-radius: 999px;
   border: 1px solid transparent;
 }
@@ -2950,8 +2950,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
 }
 
 .monitoring-sensor-status .ui-icon {
-  width: 0.68rem;
-  height: 0.68rem;
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .monitoring-sensor-name {
@@ -2960,7 +2960,7 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.69rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
@@ -2973,7 +2973,7 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--matmon-foreground);
-  font-size: 0.68rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
@@ -2985,9 +2985,9 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
 .monitoring-sensor-meta {
   grid-area: meta;
   min-width: 0;
-  gap: 0.25rem;
+  gap: 0.3rem;
   color: var(--matmon-muted);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -3072,8 +3072,28 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 
 .monitoring-tree[data-tree-size="s"] .monitoring-sensor-chip,
 .monitoring-tree[data-tree-size="s"] .monitoring-add-sensor-chip {
-  min-width: 7.4rem;
-  max-width: 10.2rem;
+  min-width: 7rem;
+  max-width: 9.6rem;
+  min-height: 1.7rem;
+}
+
+/* Size S = genuinely compact: smaller fonts/icons + tighter chip. */
+.monitoring-tree[data-tree-size="s"] .monitoring-sensor-chip-main {
+  padding: 0.12rem 1.1rem 0.12rem 0.24rem;
+}
+
+.monitoring-tree[data-tree-size="s"] .monitoring-sensor-name,
+.monitoring-tree[data-tree-size="s"] .monitoring-sensor-value {
+  font-size: 0.68rem;
+}
+
+.monitoring-tree[data-tree-size="s"] .monitoring-sensor-meta {
+  font-size: 0.6rem;
+}
+
+.monitoring-tree[data-tree-size="s"] .monitoring-sensor-status .ui-icon {
+  width: 0.78rem;
+  height: 0.78rem;
 }
 
 .monitoring-tree[data-tree-size="m"] .monitoring-sensor-chip,
@@ -3112,15 +3132,21 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 }
 
 .monitoring-tree[data-tree-size="l"] .monitoring-sensor-name {
-  font-size: 0.74rem;
+  font-size: 0.95rem;
 }
 
 .monitoring-tree[data-tree-size="l"] .monitoring-sensor-value {
-  font-size: 0.74rem;
+  font-size: 0.95rem;
+}
+
+.monitoring-tree[data-tree-size="l"] .monitoring-sensor-status .ui-icon {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .monitoring-tree[data-tree-size="l"] .monitoring-sensor-meta {
   display: inline-flex;
+  font-size: 0.78rem;
 }
 
 .monitoring-tree[data-tree-size="l"] .monitoring-sensor-graph {
@@ -3130,8 +3156,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 .monitoring-sensor-actions {
   display: none;
   position: absolute;
-  top: 0.12rem;
-  inset-inline-end: 0.12rem;
+  top: 0.3rem;
+  inset-inline-end: 0.3rem;
   z-index: 8;
   align-items: center;
   gap: 0.12rem;
@@ -3156,12 +3182,17 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 }
 
 .monitoring-sensor-action-menu > summary {
-  width: 1.32rem;
-  min-width: 1.32rem;
-  min-height: 1.32rem;
+  width: 1.55rem;
+  min-width: 1.55rem;
+  min-height: 1.55rem;
   padding: 0;
   background: var(--matmon-surface);
-  border-color: rgba(124, 142, 171, 0.18);
+  border-color: var(--matmon-border);
+}
+
+.monitoring-sensor-action-menu > summary .ui-icon {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .monitoring-sensor-action-menu .workspace-action-menu-panel {
@@ -4031,12 +4062,12 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.08rem 0.42rem 0.08rem 0.32rem;
+  padding: 0.1rem 0.46rem 0.1rem 0.36rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--matmon-accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--matmon-accent) 32%, transparent);
   color: var(--matmon-muted);
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   line-height: 1.4;
 }
 
@@ -4047,8 +4078,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 }
 
 .tree-tag.is-mini {
-  padding: 0.02rem 0.36rem;
-  font-size: 0.62rem;
+  padding: 0.04rem 0.4rem;
+  font-size: 0.68rem;
 }
 
 /* ---- Tag input (chips + free text, progressive enhancement of a text field) ---- */
