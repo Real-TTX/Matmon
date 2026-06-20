@@ -96,8 +96,16 @@ function initializeTreeContextMenu() {
 
       const cursorX = event.clientX;
       const cursorY = event.clientY;
-      const placeAtCursor = () => {
-        const panel = details.querySelector(":scope > .workspace-action-menu-panel");
+      const panel = details.querySelector(":scope > .workspace-action-menu-panel");
+
+      details.open = true;
+      // Keep the panel invisible while the default (anchored-to-button) positioning
+      // runs, then place it under the cursor and reveal — so it doesn't visibly jump
+      // from the button to the cursor.
+      if (panel) {
+        panel.style.visibility = "hidden";
+      }
+      window.setTimeout(() => {
         if (!panel || !details.open) {
           return;
         }
@@ -110,18 +118,10 @@ function initializeTreeContextMenu() {
         panel.style.insetInlineEnd = "auto";
         panel.style.zIndex = "10001";
         const rect = panel.getBoundingClientRect();
-        const left = Math.max(margin, Math.min(cursorX, viewportWidth - rect.width - margin));
-        const top = Math.max(margin, Math.min(cursorY, viewportHeight - rect.height - margin));
-        panel.style.left = `${left}px`;
-        panel.style.top = `${top}px`;
-      };
-
-      details.open = true;
-      // Override the default (anchored to the ⋯ button) positioning so the menu
-      // opens under the cursor; re-apply after the toggle handler's reposition.
-      placeAtCursor();
-      window.requestAnimationFrame(placeAtCursor);
-      window.setTimeout(placeAtCursor, 0);
+        panel.style.left = `${Math.max(margin, Math.min(cursorX, viewportWidth - rect.width - margin))}px`;
+        panel.style.top = `${Math.max(margin, Math.min(cursorY, viewportHeight - rect.height - margin))}px`;
+        panel.style.visibility = "";
+      }, 0);
     });
   });
 }
