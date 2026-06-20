@@ -1002,7 +1002,12 @@ function initializeMonitoringTree() {
       tree.querySelectorAll("[data-tree-node]").forEach((node) => {
         const nodeId = node.dataset.treeNodeId;
         if (nodeId && getOwnTreeControl(node, "[data-tree-toggle]")) {
-          result.push({ node, nodeId, depth: Number(node.dataset.treeDepth || 0) });
+          result.push({
+            node,
+            nodeId,
+            depth: Number(node.dataset.treeDepth || 0),
+            kind: (node.dataset.treeKind || "").toLowerCase()
+          });
         }
       });
     });
@@ -1011,11 +1016,11 @@ function initializeMonitoringTree() {
 
   const applyBulkCollapse = (shouldCollapse) => {
     collapsedIds = new Set();
-    collapsibleNodes().forEach(({ node, nodeId, depth }) => {
-      const collapse = shouldCollapse(depth);
-      setNodeState(node, collapse);
+    collapsibleNodes().forEach((entry) => {
+      const collapse = shouldCollapse(entry);
+      setNodeState(entry.node, collapse);
       if (collapse) {
-        collapsedIds.add(nodeId);
+        collapsedIds.add(entry.nodeId);
       }
     });
     persistCollapsedIds();
@@ -1025,9 +1030,12 @@ function initializeMonitoringTree() {
     button.addEventListener("click", () => applyBulkCollapse(() => false)));
   document.querySelectorAll("[data-tree-collapse-all]").forEach((button) =>
     button.addEventListener("click", () => applyBulkCollapse(() => true)));
-  // "Top level": keep the root probes expanded, collapse everything deeper.
+  // "Probe level": keep every probe expanded (incl. secondary probes nested under
+  // the root probe), collapse folders/hosts — so you always see the probes plus
+  // their first level, nothing deeper. Depth can't be used because the secondary
+  // probes sit one level deeper than the root probe.
   document.querySelectorAll("[data-tree-collapse-level]").forEach((button) =>
-    button.addEventListener("click", () => applyBulkCollapse((depth) => depth >= 1)));
+    button.addEventListener("click", () => applyBulkCollapse((entry) => entry.kind !== "probe")));
 
   const persistMoveState = () => {
     try {
