@@ -2464,9 +2464,10 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   align-items: center;
   min-height: 2rem;
   padding: 0.22rem 0.45rem;
-  border-radius: 7px;
-  background: var(--matmon-surface);
-  border: 1px solid var(--matmon-border);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  /* Status accent only (not a full frame) in tiles; the full card frame is added in rows mode. */
   border-left: 3px solid var(--matmon-border);
   min-width: 0;
   transition: background-color 0.12s ease, border-color 0.12s ease;
@@ -2475,7 +2476,23 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 .monitoring-tree-row:hover,
 .monitoring-tree-row:focus-within {
   background: var(--matmon-surface-strong);
-  border-color: rgba(95, 141, 255, 0.35);
+}
+
+/* Rows layout: container elements become framed cards. Only the top/right/bottom
+   borders are added so the state-coloured left accent (set below) is preserved. */
+html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row {
+  border-top: 1px solid var(--matmon-border);
+  border-right: 1px solid var(--matmon-border);
+  border-bottom: 1px solid var(--matmon-border);
+  background: var(--matmon-surface);
+  border-radius: 7px;
+}
+
+html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:hover,
+html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within {
+  border-top-color: rgba(95, 141, 255, 0.35);
+  border-right-color: rgba(95, 141, 255, 0.35);
+  border-bottom-color: rgba(95, 141, 255, 0.35);
 }
 
 .monitoring-tree-node[data-state="error"] > .monitoring-tree-row {
