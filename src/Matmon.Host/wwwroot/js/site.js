@@ -994,6 +994,41 @@ function initializeMonitoringTree() {
     }
   };
 
+  // Bulk expand/collapse. A node is collapsible only when it has its own toggle
+  // (i.e. it has children); sensor leaves are ignored.
+  const collapsibleNodes = () => {
+    const result = [];
+    trees.forEach((tree) => {
+      tree.querySelectorAll("[data-tree-node]").forEach((node) => {
+        const nodeId = node.dataset.treeNodeId;
+        if (nodeId && getOwnTreeControl(node, "[data-tree-toggle]")) {
+          result.push({ node, nodeId, depth: Number(node.dataset.treeDepth || 0) });
+        }
+      });
+    });
+    return result;
+  };
+
+  const applyBulkCollapse = (shouldCollapse) => {
+    collapsedIds = new Set();
+    collapsibleNodes().forEach(({ node, nodeId, depth }) => {
+      const collapse = shouldCollapse(depth);
+      setNodeState(node, collapse);
+      if (collapse) {
+        collapsedIds.add(nodeId);
+      }
+    });
+    persistCollapsedIds();
+  };
+
+  document.querySelectorAll("[data-tree-expand-all]").forEach((button) =>
+    button.addEventListener("click", () => applyBulkCollapse(() => false)));
+  document.querySelectorAll("[data-tree-collapse-all]").forEach((button) =>
+    button.addEventListener("click", () => applyBulkCollapse(() => true)));
+  // "Top level": keep the root probes expanded, collapse everything deeper.
+  document.querySelectorAll("[data-tree-collapse-level]").forEach((button) =>
+    button.addEventListener("click", () => applyBulkCollapse((depth) => depth >= 1)));
+
   const persistMoveState = () => {
     try {
       if (moveState) {
