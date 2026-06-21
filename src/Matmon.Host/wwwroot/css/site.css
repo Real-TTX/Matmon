@@ -2171,16 +2171,15 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .tree-kind {
-  align-self: start;
+  align-self: center;
+  justify-self: center;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.24rem 0.45rem;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  text-transform: none;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border-radius: 6px;
   color: var(--matmon-foreground);
   background: rgba(95, 141, 255, 0.12);
   border: 1px solid rgba(95, 141, 255, 0.18);
@@ -2459,10 +2458,10 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 
 .monitoring-tree-row {
   display: grid;
-  grid-template-columns: 1.6rem 1.7rem minmax(0, 1fr) auto;
+  grid-template-columns: 1.5rem 2.1rem minmax(0, 1fr) auto;
   gap: 0.4rem;
   align-items: center;
-  min-height: 2rem;
+  min-height: 2.2rem;
   padding: 0.22rem 0.45rem;
   border-radius: 0;
   background: transparent;
@@ -2817,8 +2816,8 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
 }
 
 .monitoring-tree .tree-kind .ui-icon {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 .monitoring-tree .tree-kind > span {
