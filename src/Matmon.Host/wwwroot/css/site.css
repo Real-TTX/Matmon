@@ -2788,6 +2788,12 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 }
 
 .monitoring-tree .tree-kind {
+  /* In the tree the box is invisible (transparent) — size it to the icon instead of
+     the fixed 1.9rem square from the base rule, so the icon sits on the same optical
+     line as the name/toggle instead of floating in an oversized box. */
+  width: auto;
+  height: auto;
+  align-self: center;
   justify-content: center;
   padding: 0;
   font-size: 0.62rem;
