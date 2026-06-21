@@ -73,60 +73,12 @@ function initializeTreeLayoutToggle() {
 // Right-click anywhere on a tree node opens that node's existing action menu
 // (the ⋯ button still works too). The deepest node under the cursor wins, so
 // right-clicking a child sensor opens the sensor's menu, not its container's.
-// Tree action menus (the ⋯ button on sensor chips/rows, and right-click anywhere
-// on a node) open at the pointer position — not anchored to the button, which now
-// floats centred on the chip's hover overlay and would otherwise open "somewhere".
+// Right-click anywhere on a tree node opens that node's action menu. The menu uses
+// the shared (anchored-to-button) positioning — the ⋯ button lives in a small
+// cluster on the chip's hover overlay, so anchoring gives a clean dropdown. We focus
+// the summary so :focus-within keeps the cluster visible while the menu is open.
 function initializeTreeContextMenu() {
-  const trees = document.querySelectorAll("[data-monitoring-tree]");
-  if (trees.length === 0) {
-    return;
-  }
-
-  let pointer = { x: 0, y: 0 };
-  document.addEventListener("pointerdown", (event) => {
-    pointer = { x: event.clientX, y: event.clientY };
-  }, true);
-
-  // Position a menu's panel at the last pointer position. Kept invisible while the
-  // default (anchored-to-button) positioning runs, then placed and revealed — so it
-  // doesn't visibly jump.
-  const placeAtPointer = (details) => {
-    const panel = details.querySelector(":scope > .workspace-action-menu-panel");
-    if (!panel) {
-      return;
-    }
-    // Hide synchronously so the anchored positionMenu pass isn't seen, then place at
-    // the pointer. Use rAF (registered after positionMenu's rAF in the same toggle
-    // task, so it runs last and wins) — a setTimeout would race ahead of that rAF.
-    panel.style.visibility = "hidden";
-    window.requestAnimationFrame(() => {
-      if (!details.open) {
-        return;
-      }
-      const margin = 8;
-      const viewportWidth = document.documentElement.clientWidth;
-      const viewportHeight = document.documentElement.clientHeight;
-      details.classList.add("is-floating");
-      panel.style.position = "fixed";
-      panel.style.right = "auto";
-      panel.style.insetInlineEnd = "auto";
-      panel.style.zIndex = "10001";
-      const rect = panel.getBoundingClientRect();
-      panel.style.left = `${Math.max(margin, Math.min(pointer.x, viewportWidth - rect.width - margin))}px`;
-      panel.style.top = `${Math.max(margin, Math.min(pointer.y, viewportHeight - rect.height - margin))}px`;
-      panel.style.visibility = "";
-    });
-  };
-
-  trees.forEach((tree) => {
-    tree.querySelectorAll("details.workspace-action-menu").forEach((details) => {
-      details.addEventListener("toggle", () => {
-        if (details.open) {
-          placeAtPointer(details);
-        }
-      });
-    });
-
+  document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
     tree.addEventListener("contextmenu", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       const node = target?.closest("[data-tree-node]");
@@ -135,13 +87,13 @@ function initializeTreeContextMenu() {
         return;
       }
       event.preventDefault();
-      pointer = { x: event.clientX, y: event.clientY };
       document.querySelectorAll("details.workspace-action-menu[open]").forEach((open) => {
         if (open !== details) {
           open.open = false;
         }
       });
       details.open = true;
+      details.querySelector(":scope > summary")?.focus({ preventScroll: true });
     });
   });
 }

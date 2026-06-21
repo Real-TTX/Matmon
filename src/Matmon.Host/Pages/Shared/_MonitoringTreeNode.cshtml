@@ -66,7 +66,9 @@
                         <path data-role="line"></path>
                     </svg>
                 </a>
-                <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
+                <div class="monitoring-sensor-overlay-actions">
+                    <a class="monitoring-sensor-open" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" aria-label="Open sensor" title="Open sensor">@MatmonIcons.Render("eye")</a>
+                    <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
                     <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
                         @MatmonIcons.Render("more")
                         <span>Actions</span>
@@ -103,7 +105,8 @@
                             </form>
                         }
                     </div>
-                </details>
+                    </details>
+                </div>
             </article>
         </div>
     }
@@ -321,7 +324,9 @@
                                         <path data-role="line"></path>
                                     </svg>
                                 </a>
-                                <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
+                                <div class="monitoring-sensor-overlay-actions">
+                                    <a class="monitoring-sensor-open" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" aria-label="Open sensor" title="Open sensor">@MatmonIcons.Render("eye")</a>
+                                    <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
                                     <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
                                         @MatmonIcons.Render("more")
                                         <span>Actions</span>
@@ -380,7 +385,8 @@
                                             </button>
                                         </form>
                                     </div>
-                                </details>
+                                    </details>
+                                </div>
                             </article>
                         }
                     </div>

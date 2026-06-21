@@ -3170,60 +3170,71 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   opacity: 1;
 }
 
-/* Scoped with the chip so it beats the generic `.workspace-action-menu`
-   { position: relative } rule defined later in the file (equal specificity,
-   later wins) — otherwise the button drops into normal flow (bottom-left).
-   Centred on the dimmed chip. */
-.monitoring-sensor-chip .monitoring-sensor-actions {
+/* Hover action cluster: floats on the dimmed chip (vertically centred, right edge).
+   Shown while the chip is hovered/focused, and kept visible while its menu is open
+   (:has) so moving onto the dropdown doesn't hide it. */
+.monitoring-sensor-overlay-actions {
   display: none;
   position: absolute;
   top: 50%;
-  bottom: auto;
-  left: 50%;
-  inset-inline-end: auto;
-  transform: translate(-50%, -50%);
+  inset-inline-end: 0.35rem;
+  transform: translateY(-50%);
   z-index: 8;
   align-items: center;
-  gap: 0.12rem;
+  gap: 0.3rem;
+}
+
+.monitoring-sensor-chip:hover .monitoring-sensor-overlay-actions,
+.monitoring-sensor-chip:focus-within .monitoring-sensor-overlay-actions,
+.monitoring-sensor-chip:has(.monitoring-sensor-actions[open]) .monitoring-sensor-overlay-actions,
+.monitoring-tree.is-move-active .monitoring-sensor-overlay-actions {
+  display: inline-flex;
+}
+
+/* The <details> sits in normal flow inside the cluster, so its dropdown anchors to
+   the ⋯ button (a clean dropdown) instead of floating 'somewhere'. */
+.monitoring-sensor-overlay-actions .monitoring-sensor-actions {
+  position: static;
   margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
-.monitoring-sensor-actions[open] {
-  display: inline-flex;
-}
-
-.monitoring-sensor-chip:hover .monitoring-sensor-actions,
-.monitoring-sensor-chip:focus-within .monitoring-sensor-actions,
-.monitoring-tree.is-move-active .monitoring-sensor-actions {
-  display: inline-flex;
-}
-
 .monitoring-sensor-action-menu > summary span {
   display: none;
 }
 
+/* Eye (open) + ⋯ buttons, styled to read on the dark overlay. */
+.monitoring-sensor-open,
 .monitoring-sensor-chip .monitoring-sensor-action-menu > summary {
-  width: 1.6rem;
-  min-width: 1.6rem;
-  min-height: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  min-width: 1.7rem;
+  height: 1.7rem;
+  min-height: 1.7rem;
   padding: 0;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.32);
   color: #fff;
+  text-decoration: none;
+  cursor: pointer;
 }
 
+.monitoring-sensor-open:hover,
 .monitoring-sensor-chip .monitoring-sensor-action-menu > summary:hover {
   background: rgba(255, 255, 255, 0.26);
   border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
 }
 
+.monitoring-sensor-open .ui-icon,
 .monitoring-sensor-action-menu > summary .ui-icon {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .monitoring-sensor-action-menu .workspace-action-menu-panel {

@@ -219,6 +219,10 @@ public static class MatmonIcons
         ["square"] = """
             <rect x="3" y="3" width="10" height="10" />
             """,
+        ["eye"] = """
+            <path d="M1.6 8S3.9 3.8 8 3.8 14.4 8 14.4 8 12.1 12.2 8 12.2 1.6 8 1.6 8Z" />
+            <circle cx="8" cy="8" r="2.1" />
+            """,
     };
 
     public static IHtmlContent Render(string name, string? cssClass = null)
