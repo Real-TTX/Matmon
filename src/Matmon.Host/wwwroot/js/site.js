@@ -80,8 +80,11 @@ function initializeTreeContextMenu() {
   document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
     tree.addEventListener("contextmenu", (event) => {
       const target = event.target instanceof Element ? event.target : null;
-      const node = target?.closest("[data-tree-node]");
-      const details = node?.querySelector("details.workspace-action-menu");
+      // Only react when the cursor is actually over a sensor chip or a container row —
+      // not the gaps/padding around them. Otherwise closest("[data-tree-node]") would
+      // grab the nearest ancestor node and open a menu for an element you're not on.
+      const hit = target?.closest(".monitoring-sensor-chip, .monitoring-tree-row");
+      const details = hit?.querySelector("details.workspace-action-menu");
       if (!details) {
         return;
       }
@@ -692,20 +695,11 @@ function initializeWorkspaceActionMenus() {
 
   menus.forEach((menu) => {
     menu.addEventListener("toggle", () => {
-      const panel = menu.querySelector(":scope > .workspace-action-menu-panel");
       if (menu.open) {
         closeMenus(menu);
-        // Hide until positioned so the panel never flashes at its default spot and
-        // then visibly jumps to the anchored/cursor position.
-        if (panel) {
-          panel.style.visibility = "hidden";
-        }
-        window.requestAnimationFrame(() => {
-          positionMenu(menu);
-          if (panel) {
-            panel.style.visibility = "";
-          }
-        });
+        // The panel is kept hidden by CSS until .is-floating is added (below), so it
+        // doesn't flash at its default spot before we place/flip it.
+        window.requestAnimationFrame(() => positionMenu(menu));
       } else {
         resetMenuPosition(menu);
       }

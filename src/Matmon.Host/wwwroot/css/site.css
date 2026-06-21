@@ -9755,6 +9755,18 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: 0.25rem;
 }
 
+/* The panel is JS-positioned (fixed). Until positionMenu has placed it and added
+   .is-floating, keep it hidden synchronously — its default absolute spot (below the
+   button) would otherwise flash for a frame before being moved or flipped above.
+   visibility (not display) so it still has dimensions for the position math. */
+.workspace-action-menu[open] > .workspace-action-menu-panel {
+  visibility: hidden;
+}
+
+.workspace-action-menu.is-floating > .workspace-action-menu-panel {
+  visibility: visible;
+}
+
 .workspace-action-menu-separator {
   height: 1px;
   margin: 0.08rem 0;
