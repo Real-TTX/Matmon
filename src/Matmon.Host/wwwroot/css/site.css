@@ -3159,6 +3159,28 @@ html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-graph {
   color: #000;
 }
 
+/* Light mode: invert the effect — a milky overlay that washes the chip out, with
+   dark solid buttons that pop against it (a dark veil + white buttons read as too
+   heavy on the otherwise light UI). */
+html[data-theme="light"] .monitoring-sensor-chip::after {
+  background: rgba(244, 247, 252, 0.66);
+}
+
+html[data-theme="light"] .monitoring-sensor-open,
+html[data-theme="light"] .monitoring-sensor-chip .monitoring-sensor-action-menu > summary {
+  background: rgba(20, 28, 42, 0.94);
+  border-color: rgba(20, 28, 42, 0.94);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28);
+}
+
+html[data-theme="light"] .monitoring-sensor-open:hover,
+html[data-theme="light"] .monitoring-sensor-chip .monitoring-sensor-action-menu > summary:hover {
+  background: #0c1422;
+  border-color: #0c1422;
+  color: #fff;
+}
+
 .monitoring-sensor-open .ui-icon,
 .monitoring-sensor-action-menu > summary .ui-icon {
   width: 1.05rem;
