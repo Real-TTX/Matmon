@@ -283,8 +283,15 @@ function initializeElementPickers() {
       }
       trigger.classList.toggle("is-empty", !id);
       options.forEach((candidate) => candidate.classList.toggle("is-selected", candidate === option && !!id));
-      valueInput.dispatchEvent(new Event("change", { bubbles: true }));
+      // Close first, then notify listeners (e.g. the map designer's tile sync) — and
+      // guard the dispatch so a throwing change handler can never leave the dialog
+      // stuck open on selection.
       close();
+      try {
+        valueInput.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (error) {
+        console.error("element picker change handler failed", error);
+      }
     };
 
     trigger.setAttribute("data-placeholder", label ? label.textContent : "");
