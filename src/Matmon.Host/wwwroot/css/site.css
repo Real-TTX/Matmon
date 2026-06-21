@@ -4175,11 +4175,17 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   align-items: center;
   gap: 0.5rem;
   width: 100%;
+  /* Stay at the field width and truncate inside instead of growing with the content. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   text-align: left;
   cursor: pointer;
 }
 
 .element-picker-trigger-label {
+  flex: 0 1 auto;
+  min-width: 0;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -4199,6 +4205,10 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Truncate the FRONT of the path (ellipsis on the left) so the end — the element
+     and its nearest parents — is always visible. */
+  direction: rtl;
+  text-align: left;
 }
 
 .element-picker-trigger-icon {
