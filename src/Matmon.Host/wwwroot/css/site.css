@@ -3206,9 +3206,9 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 }
 
 .monitoring-sensor-chip .monitoring-sensor-action-menu > summary {
-  width: 2rem;
-  min-width: 2rem;
-  min-height: 2rem;
+  width: 1.6rem;
+  min-width: 1.6rem;
+  min-height: 1.6rem;
   padding: 0;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.16);

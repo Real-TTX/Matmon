@@ -95,9 +95,12 @@ function initializeTreeContextMenu() {
     if (!panel) {
       return;
     }
+    // Hide synchronously so the anchored positionMenu pass isn't seen, then place at
+    // the pointer. Use rAF (registered after positionMenu's rAF in the same toggle
+    // task, so it runs last and wins) — a setTimeout would race ahead of that rAF.
     panel.style.visibility = "hidden";
-    window.setTimeout(() => {
-      if (!panel || !details.open) {
+    window.requestAnimationFrame(() => {
+      if (!details.open) {
         return;
       }
       const margin = 8;
@@ -112,7 +115,7 @@ function initializeTreeContextMenu() {
       panel.style.left = `${Math.max(margin, Math.min(pointer.x, viewportWidth - rect.width - margin))}px`;
       panel.style.top = `${Math.max(margin, Math.min(pointer.y, viewportHeight - rect.height - margin))}px`;
       panel.style.visibility = "";
-    }, 0);
+    });
   };
 
   trees.forEach((tree) => {
