@@ -4220,6 +4220,14 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   backdrop-filter: blur(2px);
 }
 
+/* The `display: flex` above (and on options) is an author rule, so it overrides the
+   UA `[hidden] { display: none }`. Without these the dialog can never be hidden
+   (won't close, selecting doesn't dismiss it) and filtering can't hide options. */
+.element-picker-backdrop[hidden],
+.element-picker-option[hidden] {
+  display: none;
+}
+
 .element-picker-panel {
   width: min(40rem, 100%);
   max-height: 78vh;
