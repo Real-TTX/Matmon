@@ -3152,18 +3152,36 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   display: block;
 }
 
+/* Hover overlay: dim the chip and float the action button on top of it. */
+.monitoring-sensor-chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(8, 12, 20, 0.55);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.monitoring-sensor-chip:hover::after,
+.monitoring-sensor-chip:focus-within::after {
+  opacity: 1;
+}
+
 /* Scoped with the chip so it beats the generic `.workspace-action-menu`
-   { position: relative } rule that's defined later in the file (equal specificity,
-   later wins) — otherwise the button drops into normal flow (bottom-left). */
+   { position: relative } rule defined later in the file (equal specificity,
+   later wins) — otherwise the button drops into normal flow (bottom-left).
+   Centred on the dimmed chip. */
 .monitoring-sensor-chip .monitoring-sensor-actions {
   display: none;
   position: absolute;
-  /* Vertically centred on the right edge so it never overflows the top/bottom of
-     short chips (S) or sticks out of the chip box. */
   top: 50%;
   bottom: auto;
-  inset-inline-end: 0.28rem;
-  transform: translateY(-50%);
+  left: 50%;
+  inset-inline-end: auto;
+  transform: translate(-50%, -50%);
   z-index: 8;
   align-items: center;
   gap: 0.12rem;
@@ -3187,18 +3205,25 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   display: none;
 }
 
-.monitoring-sensor-action-menu > summary {
-  width: 1.4rem;
-  min-width: 1.4rem;
-  min-height: 1.4rem;
+.monitoring-sensor-chip .monitoring-sensor-action-menu > summary {
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
   padding: 0;
-  background: var(--matmon-surface);
-  border-color: var(--matmon-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #fff;
+}
+
+.monitoring-sensor-chip .monitoring-sensor-action-menu > summary:hover {
+  background: rgba(255, 255, 255, 0.26);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .monitoring-sensor-action-menu > summary .ui-icon {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .monitoring-sensor-action-menu .workspace-action-menu-panel {
