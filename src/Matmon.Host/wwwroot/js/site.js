@@ -253,6 +253,7 @@ function initializeElementPickers() {
 
     const open = () => {
       backdrop.hidden = false;
+      backdrop.style.display = "";
       document.body.classList.add("element-picker-open");
       if (search) {
         search.value = "";
@@ -266,6 +267,9 @@ function initializeElementPickers() {
 
     const close = () => {
       backdrop.hidden = true;
+      // Force-hide inline too, so closing never depends on the [hidden] CSS rule
+      // winning the cascade (belt-and-suspenders).
+      backdrop.style.display = "none";
       document.body.classList.remove("element-picker-open");
     };
 
