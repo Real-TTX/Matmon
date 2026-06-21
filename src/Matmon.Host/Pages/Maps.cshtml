@@ -129,7 +129,7 @@
                                 <span class="map-tile-icon">@MatmonIcons.Render(tile.IconKey)</span>
                                 @if (tile.Tile.ShowTitle)
                                 {
-                                    <strong>@tile.Tile.Title</strong>
+                                    <strong>@(string.IsNullOrWhiteSpace(tile.Tile.Title) ? (tile.Element?.Name ?? tile.KindLabel) : tile.Tile.Title)</strong>
                                 }
                                 @if (tile.Tile.ShowStateBadge)
                                 {
