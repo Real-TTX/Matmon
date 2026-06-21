@@ -3081,7 +3081,7 @@ html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-graph {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: rgba(8, 12, 20, 0.55);
+  background: rgba(6, 9, 16, 0.74);
   opacity: 0;
   transition: opacity 0.12s ease;
   pointer-events: none;
@@ -3144,18 +3144,19 @@ html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-graph {
   min-height: 1.7rem;
   padding: 0;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  color: #0c1422;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
   text-decoration: none;
   cursor: pointer;
 }
 
 .monitoring-sensor-open:hover,
 .monitoring-sensor-chip .monitoring-sensor-action-menu > summary:hover {
-  background: rgba(255, 255, 255, 0.26);
-  border-color: rgba(255, 255, 255, 0.5);
-  color: #fff;
+  background: #fff;
+  border-color: #fff;
+  color: #000;
 }
 
 .monitoring-sensor-open .ui-icon,
