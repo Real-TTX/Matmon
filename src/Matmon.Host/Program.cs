@@ -148,6 +148,29 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 
+// HTML (Razor page) responses must not be cached: assets are fingerprinted by
+// MapStaticAssets (e.g. site.<hash>.js) and stay immutable-cached, but if the browser
+// keeps serving a cached HTML page it references the OLD fingerprinted asset names and
+// you get stale CSS/JS even after a deploy. Force HTML to always revalidate so every
+// navigation picks up the current asset URLs.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        if (context.Response.ContentType is { } contentType &&
+            contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            context.Response.Headers.Pragma = "no-cache";
+            context.Response.Headers.Expires = "0";
+        }
+
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
+
 if (!app.Environment.IsDevelopment() && runtimeOptions.Mode == AppMode.Primary)
 {
     app.UseExceptionHandler("/Error");
