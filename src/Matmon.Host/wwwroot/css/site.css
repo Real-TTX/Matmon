@@ -3156,8 +3156,12 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 .monitoring-sensor-actions {
   display: none;
   position: absolute;
-  top: 0.3rem;
-  inset-inline-end: 0.3rem;
+  /* Vertically centred on the right edge so it never overflows the top/bottom of
+     short chips (S) or sticks out of the chip box. */
+  top: 50%;
+  bottom: auto;
+  inset-inline-end: 0.28rem;
+  transform: translateY(-50%);
   z-index: 8;
   align-items: center;
   gap: 0.12rem;
@@ -3182,9 +3186,9 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
 }
 
 .monitoring-sensor-action-menu > summary {
-  width: 1.55rem;
-  min-width: 1.55rem;
-  min-height: 1.55rem;
+  width: 1.4rem;
+  min-width: 1.4rem;
+  min-height: 1.4rem;
   padding: 0;
   background: var(--matmon-surface);
   border-color: var(--matmon-border);
