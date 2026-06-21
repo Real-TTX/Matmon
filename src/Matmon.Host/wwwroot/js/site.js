@@ -2507,22 +2507,26 @@ function initializeMapDesigner() {
     canvas.style.setProperty("--map-rows", String(grid.rows));
     canvas.style.setProperty("--map-display-width", String(preset.width));
     canvas.style.setProperty("--map-display-height", String(preset.height));
-    canvas.style.width = `min(100%, ${preset.width}px)`;
-    canvas.style.aspectRatio = `${preset.width} / ${preset.height}`;
     const scale = readScale();
-    // Real zoom: CSS `zoom` scales both the layout footprint and the visuals, so the
-    // workbench (overflow:auto) scrolls above 100% and the whole board shrinks to fit
-    // small screens below 100%. Drag/resize math is ratio-based (getBoundingClientRect
-    // already reports zoomed coords), so it stays correct.
-    const canvasWidth = Math.max(720, grid.columns * 72);
-    canvas.style.minWidth = `${canvasWidth}px`;
-    canvas.style.minHeight = `${Math.max(560, grid.rows * 72)}px`;
+    // Real zoom: give the board a FIXED pixel base width (fits the workbench at 100%)
+    // and scale it with the CSS `zoom` property. A percentage width (min(100%, …)) would
+    // re-fill the parent under zoom, so the board stayed the same size and only the inner
+    // content shrank — a fixed px width makes zoom scale the WHOLE board uniformly (the
+    // workbench scrolls above 100%, the board shrinks to fit below). getBoundingClientRect
+    // reports zoomed coords, so drag/resize stays correct.
+    const workbench = canvas.closest(".map-designer-workbench");
+    const available = workbench ? Math.max(320, workbench.clientWidth - 14) : preset.width;
+    const baseWidth = Math.min(available, preset.width);
+    canvas.style.width = `${baseWidth}px`;
+    canvas.style.minWidth = "";
+    canvas.style.minHeight = "";
+    canvas.style.aspectRatio = `${preset.width} / ${preset.height}`;
     canvas.style.zoom = String(scale);
     if (scaleOutput) {
       scaleOutput.textContent = `${Math.round(scale * 100)}%`;
     }
     if (mapSelectButton) {
-      mapSelectButton.style.minWidth = `${canvasWidth}px`;
+      mapSelectButton.style.minWidth = `${baseWidth}px`;
     }
     syncMapSummary(grid);
     canvas.querySelectorAll("[data-map-tile]").forEach((tile) => applyTilePosition(tile));
@@ -2919,6 +2923,8 @@ function initializeMapDesigner() {
   rowInput?.addEventListener("input", () => syncGrid());
   rowInput?.addEventListener("change", () => syncGrid(true));
   scaleInput?.addEventListener("input", () => syncGrid());
+  // Recompute the board's fit-to-workbench base width when the window resizes.
+  window.addEventListener("resize", () => syncGrid());
 
   const renderSlideInputs = () => {
     if (!slideInputsHost) {
