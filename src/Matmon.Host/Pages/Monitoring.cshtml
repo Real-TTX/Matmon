@@ -17,6 +17,26 @@
         var s = String(localStorage.getItem("matmon-monitoring-size") || "m").trim().toLowerCase();
         document.documentElement.dataset.monitoringSize = (s === "s" || s === "l") ? s : "m";
     } catch (e) { document.documentElement.dataset.monitoringSize = "m"; }
+
+    // Hide the saved-collapsed subtrees with an injected stylesheet BEFORE the tree is
+    // parsed, so the tree never renders expanded and then visibly collapses ("builds
+    // up"). site.js converts these into is-collapsed classes on load and removes this
+    // style, so expand/collapse keeps working afterwards.
+    try {
+        var collapsed = JSON.parse(localStorage.getItem("matmon-monitoring-tree-collapsed") || "[]");
+        if (Array.isArray(collapsed) && collapsed.length) {
+            var selector = collapsed
+                .filter(function (id) { return typeof id === "string"; })
+                .map(function (id) { return '.monitoring-tree-node[data-tree-node-id="' + id.replace(/[^a-zA-Z0-9-]/g, "") + '"] > .monitoring-tree-children'; })
+                .join(",");
+            if (selector) {
+                var preCollapse = document.createElement("style");
+                preCollapse.id = "matmon-precollapse";
+                preCollapse.textContent = selector + "{display:none!important}";
+                document.head.appendChild(preCollapse);
+            }
+        }
+    } catch (e) { /* collapse pre-paint is best-effort */ }
 </script>
 
 <section class="dashboard-shell">
@@ -348,24 +368,6 @@
                     <partial name="_MonitoringTreeNode" model="root" />
                 }
             </div>
-            @* Apply the saved collapse state synchronously, before first paint, so the
-               tree doesn't render fully expanded and then visibly collapse (site.js
-               re-applies the same state on load — a no-op visually). *@
-            <script>
-                (function () {
-                    try {
-                        var ids = JSON.parse(localStorage.getItem("matmon-monitoring-tree-collapsed") || "[]");
-                        if (Array.isArray(ids) && ids.length) {
-                            var collapsed = new Set(ids);
-                            document.querySelectorAll("[data-tree-node]").forEach(function (node) {
-                                if (collapsed.has(node.dataset.treeNodeId)) {
-                                    node.classList.add("is-collapsed");
-                                }
-                            });
-                        }
-                    } catch (e) { /* collapse state is best-effort */ }
-                })();
-            </script>
         }
     </section>
 </section>

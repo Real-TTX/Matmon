@@ -71,13 +71,12 @@ function initializeMonitoringSizeToggle() {
   });
 }
 
-// Right-click anywhere on a tree node opens that node's existing action menu
-// (the ⋯ button still works too). The deepest node under the cursor wins, so
-// right-clicking a child sensor opens the sensor's menu, not its container's.
-// Right-click anywhere on a tree node opens that node's action menu. The menu uses
-// the shared (anchored-to-button) positioning — the ⋯ button lives in a small
-// cluster on the chip's hover overlay, so anchoring gives a clean dropdown. We focus
-// the summary so :focus-within keeps the cluster visible while the menu is open.
+// Right-click anywhere on a tree node opens that node's action menu AT THE CURSOR
+// (the deepest node under the cursor wins, so right-clicking a child sensor opens the
+// sensor's menu). The shared menu code anchors the panel to the ⋯ button via a single
+// requestAnimationFrame; we override that to the cursor in a *double* rAF (one frame
+// later, so it runs last and wins) and keep the panel hidden until then so it never
+// flashes at the button first. The ⋯ button's own click still opens anchored to it.
 function initializeTreeContextMenu() {
   document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
     tree.addEventListener("contextmenu", (event) => {
@@ -88,13 +87,46 @@ function initializeTreeContextMenu() {
         return;
       }
       event.preventDefault();
+
+      const cursorX = event.clientX;
+      const cursorY = event.clientY;
+      const panel = details.querySelector(":scope > .workspace-action-menu-panel");
+
       document.querySelectorAll("details.workspace-action-menu[open]").forEach((open) => {
         if (open !== details) {
           open.open = false;
         }
       });
+
+      if (panel) {
+        panel.style.visibility = "hidden";
+      }
       details.open = true;
+      // Focus the summary so :focus-within keeps the chip's action cluster visible
+      // while the menu is open (otherwise moving onto the menu would hide it).
       details.querySelector(":scope > summary")?.focus({ preventScroll: true });
+
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        if (!panel) {
+          return;
+        }
+        if (details.open) {
+          const margin = 8;
+          const viewportWidth = document.documentElement.clientWidth;
+          const viewportHeight = document.documentElement.clientHeight;
+          details.classList.add("is-floating");
+          panel.style.position = "fixed";
+          panel.style.right = "auto";
+          panel.style.insetInlineEnd = "auto";
+          panel.style.zIndex = "10001";
+          const rect = panel.getBoundingClientRect();
+          panel.style.left = `${Math.max(margin, Math.min(cursorX, viewportWidth - rect.width - margin))}px`;
+          panel.style.top = `${Math.max(margin, Math.min(cursorY, viewportHeight - rect.height - margin))}px`;
+        }
+        // Always reveal — even if the menu was closed again before this ran — so the
+        // panel is never left stuck invisible for the next open.
+        panel.style.visibility = "";
+      }));
     });
   });
 }
@@ -1056,6 +1088,10 @@ function initializeMonitoringTree() {
 
       setNodeState(node, collapsedIds.has(nodeId));
     });
+
+    // The is-collapsed classes now drive collapsing; drop the pre-paint stylesheet
+    // (injected before the tree to avoid the expand→collapse flash) so toggling works.
+    document.getElementById("matmon-precollapse")?.remove();
 
     tree.querySelectorAll("[data-tree-toggle]").forEach((toggle) => {
       toggle.addEventListener("click", () => {
