@@ -363,9 +363,14 @@
         else
         {
             <div class="monitoring-tree" data-monitoring-tree>
-                @foreach (var root in treeRoots)
+                @for (var i = 0; i < treeRoots.Count; i++)
                 {
-                    <partial name="_MonitoringTreeNode" model="root" />
+                    var rootViewData = new ViewDataDictionary(ViewData)
+                    {
+                        ["PrevSiblingId"] = i > 0 ? treeRoots[i - 1].Id : (Guid?)null,
+                        ["NextSiblingId"] = i < treeRoots.Count - 1 ? treeRoots[i + 1].Id : (Guid?)null
+                    };
+                    <partial name="_MonitoringTreeNode" model="treeRoots[i]" view-data="rootViewData" />
                 }
             </div>
         }

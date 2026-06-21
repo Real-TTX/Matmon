@@ -223,6 +223,14 @@ public static class MatmonIcons
             <path d="M1.6 8S3.9 3.8 8 3.8 14.4 8 14.4 8 12.1 12.2 8 12.2 1.6 8 1.6 8Z" />
             <circle cx="8" cy="8" r="2.1" />
             """,
+        ["arrow-up"] = """
+            <path d="M8 13.2V2.8" />
+            <path d="M3.5 7.3 8 2.8l4.5 4.5" />
+            """,
+        ["arrow-down"] = """
+            <path d="M8 2.8v10.4" />
+            <path d="M3.5 8.7 8 13.2l4.5-4.5" />
+            """,
     };
 
     public static IHtmlContent Render(string name, string? cssClass = null)

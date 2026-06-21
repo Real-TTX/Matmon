@@ -14,6 +14,10 @@
     // Delete is available on every element (with confirmation) except the local root
     // probe, which the store refuses to delete anyway.
     var canDelete = !isRootMasterProbe;
+    // Sibling ids passed down by the parent so a node can reorder among its siblings
+    // (Move up/down). Null = no sibling on that side.
+    var prevSiblingId = ViewData["PrevSiblingId"] as Guid?;
+    var nextSiblingId = ViewData["NextSiblingId"] as Guid?;
     var statusIcon = Model.StateKey switch
     {
         "ok" => "check",
@@ -151,9 +155,9 @@
                 </div>
             }
 
-            <div class="monitoring-tree-meta">
-                @if (Model.Kind == MonitoringElementKind.Sensor)
-                {
+            @if (Model.Kind == MonitoringElementKind.Sensor)
+            {
+                <div class="monitoring-tree-meta">
                     <span class="monitoring-tree-value">
                         <span class="monitoring-tree-value-label">Value</span>
                         <span class="monitoring-tree-value-number">
@@ -168,26 +172,31 @@
                     {
                         <span class="monitoring-tree-lastcheck">Last @Model.LastCheck</span>
                     }
-                }
-                else
-                {
-                    <span class="monitoring-tree-count">Sensors @Model.SensorCount</span>
-                    @if (Model.WarningCount > 0)
-                    {
-                        <span class="monitoring-tree-count is-warning">@Model.WarningCount warning</span>
-                    }
-                    @if (Model.ErrorCount > 0)
-                    {
-                        <span class="monitoring-tree-count is-error">@Model.ErrorCount error</span>
-                    }
-                }
-            </div>
+                </div>
+            }
         </div>
 
         <div class="monitoring-tree-side">
-            @if (!string.IsNullOrWhiteSpace(Model.StateLabel))
+            @if (Model.Kind == MonitoringElementKind.Sensor)
             {
-                <span class="state-pill" data-state="@Model.StateKey">@Model.StateLabel</span>
+                @if (!string.IsNullOrWhiteSpace(Model.StateLabel))
+                {
+                    <span class="state-pill" data-state="@Model.StateKey">@Model.StateLabel</span>
+                }
+            }
+            else
+            {
+                @* Container summary as pills (replaces the redundant state pill — the
+                   left-edge accent already shows the rolled-up state). *@
+                <span class="monitoring-count-pill" data-count="total">@Model.SensorCount @(Model.SensorCount == 1 ? "Sensor" : "Sensors")</span>
+                @if (Model.WarningCount > 0)
+                {
+                    <span class="monitoring-count-pill" data-count="warning">@Model.WarningCount Warning</span>
+                }
+                @if (Model.ErrorCount > 0)
+                {
+                    <span class="monitoring-count-pill" data-count="error">@Model.ErrorCount Error</span>
+                }
             }
             @if (Model.IsHighlighted)
             {
@@ -226,6 +235,18 @@
                             @MatmonIcons.Render("move")
                             <span>Move</span>
                         </button>
+                        @if (prevSiblingId.HasValue)
+                        {
+                            <form method="post" asp-page-handler="MoveElementBefore" asp-route-elementId="@Model.Id" asp-route-siblingId="@prevSiblingId.Value" asp-route-returnUrl="@returnUrl">
+                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-up")<span>Move up</span></button>
+                            </form>
+                        }
+                        @if (nextSiblingId.HasValue)
+                        {
+                            <form method="post" asp-page-handler="MoveElementAfter" asp-route-elementId="@Model.Id" asp-route-siblingId="@nextSiblingId.Value" asp-route-returnUrl="@returnUrl">
+                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-down")<span>Move down</span></button>
+                            </form>
+                        }
                         @if (hasChildActions)
                         {
                             <div class="workspace-action-menu-separator" aria-hidden="true"></div>
@@ -394,9 +415,14 @@
                     </div>
                 }
 
-                @foreach (var child in branchChildren)
+                @for (var i = 0; i < branchChildren.Length; i++)
                 {
-                    <partial name="_MonitoringTreeNode" model="child" />
+                    var childViewData = new ViewDataDictionary(ViewData)
+                    {
+                        ["PrevSiblingId"] = i > 0 ? branchChildren[i - 1].Id : (Guid?)null,
+                        ["NextSiblingId"] = i < branchChildren.Length - 1 ? branchChildren[i + 1].Id : (Guid?)null
+                    };
+                    <partial name="_MonitoringTreeNode" model="branchChildren[i]" view-data="childViewData" />
                 }
             </div>
         }

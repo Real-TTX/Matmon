@@ -2859,6 +2859,32 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   display: none;
 }
 
+/* Container summary pills (sensor count + warning/error counts) shown at the row end
+   instead of a single state pill. Own class so the unknown-state hide above never
+   catches them. */
+.monitoring-count-pill {
+  padding: 0.14rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 142, 171, 0.4);
+  background: rgba(124, 142, 171, 0.16);
+  color: var(--matmon-muted);
+  white-space: nowrap;
+}
+
+.monitoring-count-pill[data-count="warning"] {
+  background: rgba(243, 179, 107, 0.22);
+  border-color: rgba(243, 179, 107, 0.55);
+  color: #f0b072;
+}
+
+.monitoring-count-pill[data-count="error"] {
+  background: rgba(255, 107, 118, 0.22);
+  border-color: rgba(255, 107, 118, 0.6);
+  color: #ff8a93;
+}
+
 .monitoring-sensor-strip {
   display: flex;
   align-items: stretch;
