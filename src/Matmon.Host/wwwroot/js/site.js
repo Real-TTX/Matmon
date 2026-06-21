@@ -73,10 +73,9 @@ function initializeMonitoringSizeToggle() {
 
 // Right-click anywhere on a tree node opens that node's action menu AT THE CURSOR
 // (the deepest node under the cursor wins, so right-clicking a child sensor opens the
-// sensor's menu). The shared menu code anchors the panel to the ⋯ button via a single
-// requestAnimationFrame; we override that to the cursor in a *double* rAF (one frame
-// later, so it runs last and wins) and keep the panel hidden until then so it never
-// flashes at the button first. The ⋯ button's own click still opens anchored to it.
+// sensor's menu). We just record the cursor on the menu and open it; the shared menu
+// code (positionMenu) reads _openAtPointer and places it there, hidden until ready —
+// the same path the ⋯ button uses (which anchors to itself, with no _openAtPointer).
 function initializeTreeContextMenu() {
   document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
     tree.addEventListener("contextmenu", (event) => {
@@ -88,45 +87,17 @@ function initializeTreeContextMenu() {
       }
       event.preventDefault();
 
-      const cursorX = event.clientX;
-      const cursorY = event.clientY;
-      const panel = details.querySelector(":scope > .workspace-action-menu-panel");
-
       document.querySelectorAll("details.workspace-action-menu[open]").forEach((open) => {
         if (open !== details) {
           open.open = false;
         }
       });
 
-      if (panel) {
-        panel.style.visibility = "hidden";
-      }
+      details._openAtPointer = { x: event.clientX, y: event.clientY };
       details.open = true;
       // Focus the summary so :focus-within keeps the chip's action cluster visible
       // while the menu is open (otherwise moving onto the menu would hide it).
       details.querySelector(":scope > summary")?.focus({ preventScroll: true });
-
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        if (!panel) {
-          return;
-        }
-        if (details.open) {
-          const margin = 8;
-          const viewportWidth = document.documentElement.clientWidth;
-          const viewportHeight = document.documentElement.clientHeight;
-          details.classList.add("is-floating");
-          panel.style.position = "fixed";
-          panel.style.right = "auto";
-          panel.style.insetInlineEnd = "auto";
-          panel.style.zIndex = "10001";
-          const rect = panel.getBoundingClientRect();
-          panel.style.left = `${Math.max(margin, Math.min(cursorX, viewportWidth - rect.width - margin))}px`;
-          panel.style.top = `${Math.max(margin, Math.min(cursorY, viewportHeight - rect.height - margin))}px`;
-        }
-        // Always reveal — even if the menu was closed again before this ran — so the
-        // panel is never left stuck invisible for the next open.
-        panel.style.visibility = "";
-      }));
     });
   });
 }
@@ -636,6 +607,7 @@ function initializeWorkspaceActionMenus() {
   }
 
   const resetMenuPosition = (menu) => {
+    menu._openAtPointer = null;
     const panel = menu.querySelector(":scope > .workspace-action-menu-panel");
     if (!panel) {
       return;
@@ -650,12 +622,13 @@ function initializeWorkspaceActionMenus() {
     panel.style.maxHeight = "";
     panel.style.overflowY = "";
     panel.style.zIndex = "";
+    panel.style.visibility = "";
   };
 
   const positionMenu = (menu) => {
     const summary = menu.querySelector(":scope > summary");
     const panel = menu.querySelector(":scope > .workspace-action-menu-panel");
-    if (!summary || !panel || !menu.open) {
+    if (!panel || !menu.open) {
       return;
     }
 
@@ -673,11 +646,23 @@ function initializeWorkspaceActionMenus() {
     panel.style.maxHeight = "";
     panel.style.overflowY = "";
 
-    const summaryRect = summary.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
     const panelWidth = Math.min(panelRect.width, viewportWidth - margin * 2);
     const panelHeight = Math.min(panelRect.height, viewportHeight - margin * 2);
 
+    // Right-click opens at the cursor; the ⋯ button anchors below itself.
+    const pointer = menu._openAtPointer;
+    if (pointer) {
+      panel.style.left = `${Math.max(margin, Math.min(pointer.x, viewportWidth - panelWidth - margin))}px`;
+      panel.style.top = `${Math.max(margin, Math.min(pointer.y, viewportHeight - panelHeight - margin))}px`;
+      return;
+    }
+
+    if (!summary) {
+      return;
+    }
+
+    const summaryRect = summary.getBoundingClientRect();
     let left = summaryRect.right - panelWidth;
     left = Math.max(margin, Math.min(left, viewportWidth - panelWidth - margin));
 
@@ -707,9 +692,20 @@ function initializeWorkspaceActionMenus() {
 
   menus.forEach((menu) => {
     menu.addEventListener("toggle", () => {
+      const panel = menu.querySelector(":scope > .workspace-action-menu-panel");
       if (menu.open) {
         closeMenus(menu);
-        window.requestAnimationFrame(() => positionMenu(menu));
+        // Hide until positioned so the panel never flashes at its default spot and
+        // then visibly jumps to the anchored/cursor position.
+        if (panel) {
+          panel.style.visibility = "hidden";
+        }
+        window.requestAnimationFrame(() => {
+          positionMenu(menu);
+          if (panel) {
+            panel.style.visibility = "";
+          }
+        });
       } else {
         resetMenuPosition(menu);
       }
