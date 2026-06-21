@@ -8046,11 +8046,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tone, var(--matmon-border)));
   grid-column: var(--tile-x, 1) / span var(--tile-w, 3);
   grid-row: var(--tile-y, 1) / span var(--tile-h, 2);
-  display: grid;
-  align-content: start;
-  gap: 0.45rem;
+  /* Flex column so the main visual (graph/gauge/value/progress) can grow and fill the
+     tile instead of the content packing at the top and leaving the cell half empty. */
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
   min-width: 0;
   min-height: 0;
+  container-type: size;
   padding: 0.7rem;
   border: 1px solid color-mix(in srgb, var(--map-tile-accent) 52%, var(--matmon-border));
   border-left: 4px solid var(--map-tile-accent);
@@ -8087,6 +8090,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .map-tile-head strong,
@@ -8117,7 +8121,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-value {
-  font-size: clamp(1.4rem, 3vw, 2.3rem);
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  font-size: clamp(1.6rem, 4.5cqw, 3rem);
   font-weight: 800;
   line-height: 1;
 }
@@ -8144,10 +8151,15 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-gauge {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   place-items: center;
-  justify-self: start;
-  width: min(7.6rem, 100%);
+  align-self: center;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
   aspect-ratio: 1;
   border-radius: 999px;
   background:
@@ -8175,6 +8187,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-tile p,
 .map-tile small {
+  flex: 0 0 auto;
   min-width: 0;
   margin: 0;
   color: var(--matmon-muted);
@@ -8183,9 +8196,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-graph-frame {
+  flex: 1 1 auto;
   display: grid;
-  align-items: center;
-  min-height: 4.6rem;
+  align-items: stretch;
+  min-height: 3rem;
   padding: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--map-tile-accent, var(--matmon-border)) 35%, transparent);
   border-radius: 8px;
