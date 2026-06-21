@@ -3152,7 +3152,10 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   display: block;
 }
 
-.monitoring-sensor-actions {
+/* Scoped with the chip so it beats the generic `.workspace-action-menu`
+   { position: relative } rule that's defined later in the file (equal specificity,
+   later wins) — otherwise the button drops into normal flow (bottom-left). */
+.monitoring-sensor-chip .monitoring-sensor-actions {
   display: none;
   position: absolute;
   /* Vertically centred on the right edge so it never overflows the top/bottom of
