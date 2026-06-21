@@ -3093,9 +3093,13 @@ html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-graph {
 .monitoring-sensor-overlay-actions {
   display: none;
   position: absolute;
-  top: 50%;
+  /* Span the full height and centre the buttons with flex instead of
+     `top:50% + translateY(-50%)`. A transform here would make this the containing
+     block for the menu panel's `position: fixed`, offsetting the dropdown down/right
+     (the bug that only hit sensor chips, not containers). */
+  top: 0;
+  bottom: 0;
   inset-inline-end: 0.35rem;
-  transform: translateY(-50%);
   z-index: 8;
   align-items: center;
   gap: 0.3rem;
