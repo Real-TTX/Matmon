@@ -11,7 +11,9 @@
     var sensorChildren = Model.Children.Where(child => child.Kind == MonitoringElementKind.Sensor).ToArray();
     var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
     var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
-    var canDelete = isSensorNode;
+    // Delete is available on every element (with confirmation) except the local root
+    // probe, which the store refuses to delete anyway.
+    var canDelete = !isRootMasterProbe;
     var statusIcon = Model.StateKey switch
     {
         "ok" => "check",
