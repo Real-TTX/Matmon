@@ -58,9 +58,19 @@ load1=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
 mem_used=$(awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{if(t>0) printf "%.2f", (t-a)*100/t; else print 0}' /proc/meminfo 2>/dev/null)
 root_used=$(df -P / 2>/dev/null | awk 'NR==2{gsub("%","",$5); print $5}')
 uptime_hours=$(awk '{printf "%.2f", $1/3600}' /proc/uptime 2>/dev/null)
+smart=-1; smart_ok=0; smart_bad=0
+if command -v smartctl >/dev/null 2>&1; then
+  for d in $(lsblk -dno NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}'); do
+    out=$(smartctl -H "/dev/$d" 2>/dev/null)
+    echo "$out" | grep -iqE 'PASSED|OK' && smart_ok=$((smart_ok+1))
+    echo "$out" | grep -iqE 'FAILED|FAILING' && smart_bad=$((smart_bad+1))
+  done
+  if [ "$smart_bad" -gt 0 ]; then smart=2; elif [ "$smart_ok" -gt 0 ]; then smart=0; fi
+fi
 printf 'load1=%s\n' "${load1:-0}"
 printf 'memoryUsedPercent=%s\n' "${mem_used:-0}"
 printf 'rootUsedPercent=%s\n' "${root_used:-0}"
+printf 'smartStatus=%s\n' "${smart:--1}"
 printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
 """;
 
@@ -229,12 +239,23 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
                 continue;
             }
 
+            var isSmart = string.Equals(key, "smartStatus", StringComparison.OrdinalIgnoreCase);
+            if (isSmart && value < 0)
+            {
+                // SMART unavailable (no smartctl, or disks not readable without root) —
+                // skip rather than show a confusing "-1" channel.
+                continue;
+            }
+
             channels.Add(new SensorChannelValue
             {
                 Key = key,
-                Label = Humanize(key),
+                Label = isSmart ? "SMART status" : Humanize(key),
                 Value = value,
-                Unit = key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase) ? "%" : null
+                Unit = key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase) ? "%" : null,
+                // SMART is a 0=healthy / 2=critical status summary — opt it out of
+                // statistics logging by default like other status flags.
+                LogByDefault = !isSmart
             });
         }
 

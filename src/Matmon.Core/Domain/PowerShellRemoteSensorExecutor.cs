@@ -133,10 +133,27 @@ $totalMemoryMb = [double]$os.TotalVisibleMemorySize / 1024
 $freeMemoryMb = [double]$os.FreePhysicalMemory / 1024
 $memoryUsedPercent = if ($totalMemoryMb -gt 0) { (($totalMemoryMb - $freeMemoryMb) / $totalMemoryMb) * 100 } else { 0 }
 
+$disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3'
+$diskTotal = [double](($disks | Measure-Object -Property Size -Sum).Sum)
+$diskFree = [double](($disks | Measure-Object -Property FreeSpace -Sum).Sum)
+$diskUsedPercent = if ($diskTotal -gt 0) { (($diskTotal - $diskFree) / $diskTotal) * 100 } else { 0 }
+
+$smartStatus = -1
+$physical = Get-PhysicalDisk
+if ($physical) {
+    $smartStatus = 0
+    foreach ($d in $physical) {
+        if ($d.HealthStatus -eq 'Unhealthy') { $smartStatus = 2 }
+        elseif ($d.HealthStatus -eq 'Warning' -and $smartStatus -lt 2) { $smartStatus = 1 }
+    }
+}
+
 [pscustomobject]@{
     cpuLoad = [math]::Round([double]$cpu, 2)
     memoryUsedPercent = [math]::Round([double]$memoryUsedPercent, 2)
     memoryFreeMb = [math]::Round([double]$freeMemoryMb, 2)
+    diskUsedPercent = [math]::Round([double]$diskUsedPercent, 2)
+    smartStatus = $smartStatus
 }
 """;
 
@@ -520,6 +537,26 @@ catch {
             "memoryUsedPercent",
             "critical",
             new ThresholdRule(ThresholdDirection.Above, 95));
+        MonitoringSettings.SetChannelThreshold(
+            settings,
+            "diskUsedPercent",
+            "warning",
+            new ThresholdRule(ThresholdDirection.Above, 85));
+        MonitoringSettings.SetChannelThreshold(
+            settings,
+            "diskUsedPercent",
+            "critical",
+            new ThresholdRule(ThresholdDirection.Above, 95));
+        MonitoringSettings.SetChannelThreshold(
+            settings,
+            "smartStatus",
+            "warning",
+            new ThresholdRule(ThresholdDirection.Above, 0));
+        MonitoringSettings.SetChannelThreshold(
+            settings,
+            "smartStatus",
+            "critical",
+            new ThresholdRule(ThresholdDirection.Above, 1));
 
         return new SensorDiscoverySuggestion(
             Definition.Key,

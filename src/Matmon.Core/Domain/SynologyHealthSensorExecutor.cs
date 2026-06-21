@@ -504,6 +504,20 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             },
             new()
             {
+                // Single 0=healthy / 1=warning / 2=critical SMART summary across all
+                // disks + RAIDs (same convention as the other Health sensors). Status
+                // flag — opt out of statistics logging by default.
+                Key = "smartStatus",
+                Label = "SMART status",
+                Value = (diskCritical + diskFailing + raidCrashed) > 0
+                    ? 2
+                    : (diskWarning + raidWarning + raidDegraded) > 0
+                        ? 1
+                        : 0,
+                LogByDefault = false
+            },
+            new()
+            {
                 Key = "raidCount",
                 Label = "RAIDs",
                 Value = raidTotal
