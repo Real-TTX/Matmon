@@ -941,8 +941,8 @@ body.is-sidebar-open {
     overflow-x: visible;
   }
 
-  .monitoring-list-shell[data-monitoring-list-size] .monitoring-list-head,
-  .monitoring-list-shell[data-monitoring-list-size] .monitoring-list-row {
+  .monitoring-list-shell .monitoring-list-head,
+  .monitoring-list-shell .monitoring-list-row {
     min-width: 0;
   }
 
@@ -1049,8 +1049,8 @@ body.is-sidebar-open {
     overflow-x: visible;
   }
 
-  .monitoring-tree[data-tree-size] .monitoring-sensor-chip,
-  .monitoring-tree[data-tree-size] .monitoring-add-sensor-chip,
+  .monitoring-tree .monitoring-sensor-chip,
+  .monitoring-tree .monitoring-add-sensor-chip,
   .tree-sensor-chip,
   .tree-add-sensor {
     width: 100%;
@@ -1058,7 +1058,7 @@ body.is-sidebar-open {
     min-width: 0;
   }
 
-  .monitoring-tree[data-tree-size] .monitoring-sensor-chip-main {
+  .monitoring-tree .monitoring-sensor-chip-main {
     grid-template-areas:
       "icon name"
       "icon value"
@@ -1066,8 +1066,8 @@ body.is-sidebar-open {
     padding: 0.18rem 1.35rem 0.18rem 0.28rem;
   }
 
-  .monitoring-tree[data-tree-size] .monitoring-sensor-meta,
-  .monitoring-tree[data-tree-size] .monitoring-sensor-graph {
+  .monitoring-tree .monitoring-sensor-meta,
+  .monitoring-tree .monitoring-sensor-graph {
     display: none;
   }
 
@@ -2477,23 +2477,6 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   background: var(--matmon-surface-strong);
 }
 
-/* Rows layout: container elements become framed cards. Only the top/right/bottom
-   borders are added so the state-coloured left accent (set below) is preserved. */
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row {
-  border-top: 1px solid var(--matmon-border);
-  border-right: 1px solid var(--matmon-border);
-  border-bottom: 1px solid var(--matmon-border);
-  background: var(--matmon-surface);
-  border-radius: 7px;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:hover,
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within {
-  border-top-color: rgba(95, 141, 255, 0.35);
-  border-right-color: rgba(95, 141, 255, 0.35);
-  border-bottom-color: rgba(95, 141, 255, 0.35);
-}
-
 .monitoring-tree-node[data-state="error"] > .monitoring-tree-row {
   border-left-color: #ff6b76;
 }
@@ -3003,105 +2986,39 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-tree-row:focus-within
   min-width: 0;
 }
 
-/* ---- Tree "rows" layout (toggled via html[data-tree-layout="rows"]) ----
-   Turns the horizontal chip strip into full-width rows: state · name · tags ·
-   sparkline · value. Scoped + high-specificity so it never affects tiles mode. */
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-strip {
-  flex-direction: column;
-  flex-wrap: nowrap;
-  overflow-x: visible;
-  gap: var(--tree-gap);
-  padding: 0;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-chip {
-  max-width: none;
-  min-width: 0;
-  width: 100%;
-  min-height: 2.5rem;
-  border-radius: 6px;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-chip-main {
-  grid-template-columns: auto minmax(5rem, 1fr) auto 5.5rem auto;
-  grid-template-areas: "icon name meta graph value";
-  align-items: center;
-  gap: 0 0.7rem;
-  padding: 0.4rem 1.7rem 0.4rem 0.6rem;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-status {
-  align-self: center;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-status .ui-icon {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-name {
-  font-size: 0.85rem;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-value {
-  grid-area: value;
-  justify-self: end;
-  align-self: center;
-  font-size: 0.9rem;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-meta {
-  grid-area: meta;
-  display: flex !important;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
-  gap: 0.3rem;
-  max-width: 24rem;
-  font-size: 0.66rem;
-}
-
-html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
-  grid-area: graph;
-  display: block !important;
-  height: 1.7rem;
-  width: 5.5rem;
-  align-self: center;
-}
-
-.monitoring-tree[data-tree-size="s"] .monitoring-sensor-chip,
-.monitoring-tree[data-tree-size="s"] .monitoring-add-sensor-chip {
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-sensor-chip,
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-add-sensor-chip {
   min-width: 7rem;
   max-width: 9.6rem;
   min-height: 1.7rem;
 }
 
 /* Size S = genuinely compact: smaller fonts/icons + tighter chip. */
-.monitoring-tree[data-tree-size="s"] .monitoring-sensor-chip-main {
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-sensor-chip-main {
   padding: 0.12rem 1.1rem 0.12rem 0.24rem;
 }
 
-.monitoring-tree[data-tree-size="s"] .monitoring-sensor-name,
-.monitoring-tree[data-tree-size="s"] .monitoring-sensor-value {
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-sensor-name,
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-sensor-value {
   font-size: 0.68rem;
 }
 
-.monitoring-tree[data-tree-size="s"] .monitoring-sensor-meta {
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-sensor-meta {
   font-size: 0.6rem;
 }
 
-.monitoring-tree[data-tree-size="s"] .monitoring-sensor-status .ui-icon {
+html[data-monitoring-size="s"] .monitoring-tree .monitoring-sensor-status .ui-icon {
   width: 0.78rem;
   height: 0.78rem;
 }
 
-.monitoring-tree[data-tree-size="m"] .monitoring-sensor-chip,
-.monitoring-tree[data-tree-size="m"] .monitoring-add-sensor-chip {
+html[data-monitoring-size="m"] .monitoring-tree .monitoring-sensor-chip,
+html[data-monitoring-size="m"] .monitoring-tree .monitoring-add-sensor-chip {
   min-width: 9.8rem;
   max-width: 13.4rem;
 }
 
-.monitoring-tree[data-tree-size="m"] .monitoring-sensor-chip-main {
+html[data-monitoring-size="m"] .monitoring-tree .monitoring-sensor-chip-main {
   grid-template-areas:
     "icon name"
     "icon value"
@@ -3109,18 +3026,18 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   padding: 0.2rem 1.35rem 0.2rem 0.32rem;
 }
 
-.monitoring-tree[data-tree-size="m"] .monitoring-sensor-meta {
+html[data-monitoring-size="m"] .monitoring-tree .monitoring-sensor-meta {
   display: inline-flex;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-chip,
-.monitoring-tree[data-tree-size="l"] .monitoring-add-sensor-chip {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-chip,
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-add-sensor-chip {
   min-width: 14rem;
   max-width: 18.5rem;
   min-height: 4.8rem;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-chip-main {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-chip-main {
   grid-template-areas:
     "icon name"
     "icon value"
@@ -3130,25 +3047,25 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   padding: 0.26rem 1.45rem 0.26rem 0.36rem;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-name {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-name {
   font-size: 0.95rem;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-value {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-value {
   font-size: 0.95rem;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-status .ui-icon {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-status .ui-icon {
   width: 1.1rem;
   height: 1.1rem;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-meta {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-meta {
   display: inline-flex;
   font-size: 0.78rem;
 }
 
-.monitoring-tree[data-tree-size="l"] .monitoring-sensor-graph {
+html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-graph {
   display: block;
 }
 
@@ -3385,14 +3302,14 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   min-width: 980px;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-head,
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-row {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-head,
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-row {
   grid-template-columns: minmax(7rem, 0.55fr) minmax(11rem, 1.05fr) minmax(8rem, 0.72fr) minmax(10rem, 0.9fr) minmax(4.5rem, auto);
   min-width: 860px;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-head,
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-row {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-head,
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-row {
   grid-template-columns: minmax(9rem, 0.7fr) minmax(16rem, 1.45fr) minmax(12rem, 0.9fr) minmax(18rem, 1.15fr) minmax(5.5rem, auto);
   min-width: 1080px;
 }
@@ -3572,65 +3489,65 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   text-align: right;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-row {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-row {
   gap: 0.45rem;
   padding: 0.3rem 0.42rem 0.3rem 0.58rem;
   border-radius: 5px;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-main {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-main {
   gap: 0.04rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-title-row {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-title-row {
   gap: 0.28rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-title {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-title {
   font-size: 0.82rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-path,
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-endpoint small,
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-info small {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-path,
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-endpoint small,
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-info small {
   display: none;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-endpoint strong,
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-info span {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-endpoint strong,
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-info span {
   font-size: 0.7rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="s"] .monitoring-list-icon-action {
+html[data-monitoring-size="s"] .monitoring-list-shell .monitoring-list-icon-action {
   width: 1.45rem;
   min-width: 1.45rem;
   min-height: 1.45rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-row {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-row {
   gap: 0.72rem;
   padding: 0.48rem 0.62rem 0.48rem 0.72rem;
   border-radius: 8px;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-main {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-main {
   gap: 0.12rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-title {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-title {
   font-size: 0.92rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-path {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-path {
   font-size: 0.72rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-endpoint strong,
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-info span {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-endpoint strong,
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-info span {
   font-size: 0.82rem;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-info span {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-info span {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -3638,11 +3555,11 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   white-space: normal;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-info small {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-info small {
   display: block;
 }
 
-.monitoring-list-shell[data-monitoring-list-size="l"] .monitoring-list-icon-action {
+html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shell .monitoring-list-icon-action {
   width: 1.85rem;
   min-width: 1.85rem;
   min-height: 1.85rem;
@@ -10444,8 +10361,8 @@ button.workspace-action-menu-link {
     overflow-x: visible;
   }
 
-  .monitoring-list-shell[data-monitoring-list-size] .monitoring-list-head,
-  .monitoring-list-shell[data-monitoring-list-size] .monitoring-list-row {
+  .monitoring-list-shell .monitoring-list-head,
+  .monitoring-list-shell .monitoring-list-row {
     min-width: 0;
   }
 
@@ -10606,8 +10523,8 @@ button.workspace-action-menu-link {
     overflow-x: visible;
   }
 
-  .monitoring-tree[data-tree-size] .monitoring-sensor-chip,
-  .monitoring-tree[data-tree-size] .monitoring-add-sensor-chip,
+  .monitoring-tree .monitoring-sensor-chip,
+  .monitoring-tree .monitoring-add-sensor-chip,
   .tree-sensor-chip,
   .tree-add-sensor {
     width: 100%;
@@ -10615,7 +10532,7 @@ button.workspace-action-menu-link {
     min-width: 0;
   }
 
-  .monitoring-tree[data-tree-size] .monitoring-sensor-chip-main {
+  .monitoring-tree .monitoring-sensor-chip-main {
     grid-template-areas:
       "icon name"
       "icon value"
@@ -10623,8 +10540,8 @@ button.workspace-action-menu-link {
     padding: 0.18rem 1.35rem 0.18rem 0.28rem;
   }
 
-  .monitoring-tree[data-tree-size] .monitoring-sensor-meta,
-  .monitoring-tree[data-tree-size] .monitoring-sensor-graph {
+  .monitoring-tree .monitoring-sensor-meta,
+  .monitoring-tree .monitoring-sensor-graph {
     display: none;
   }
 

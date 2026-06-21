@@ -2,23 +2,18 @@ const dashboardRefreshMs = 5000;
 const themeStorageKey = "matmon-theme";
 const monitoringTreeCollapsedStorageKey = "matmon-monitoring-tree-collapsed";
 const monitoringTreeMoveStorageKey = "matmon-monitoring-tree-move";
-const monitoringViewStorageKey = "matmon-monitoring-view";
-const monitoringTreeSizeStorageKey = "matmon-monitoring-tree-size";
-const monitoringListSizeStorageKey = "matmon-monitoring-list-size";
+const monitoringSizeStorageKey = "matmon-monitoring-size";
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeThemeToggle();
   initializeMobileSidebarMenu();
   initializeWorkspaceSummaryPlacement();
   initializeClipboardButtons();
-  if (initializeMonitoringPreferences()) {
-    return;
-  }
   initializeAccountMenu();
   initializeWorkspaceActionMenus();
   initializeMonitoringTree();
   initializeTreeContextMenu();
-  initializeTreeLayoutToggle();
+  initializeMonitoringSizeToggle();
   initializeDashboardRefresh();
   initializeSensorTabs();
   initializeSensorNameSuggestion();
@@ -41,32 +36,38 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeTagInputs();
 });
 
-// Toggles the monitoring tree between "tiles" (default chip strip) and "rows"
-// (full-width rows). Client-only preference on <html> + localStorage; the Monitoring
-// page also applies it before paint so there's no flicker.
-function initializeTreeLayoutToggle() {
-  const switches = document.querySelectorAll("[data-tree-layout-switch]");
-  if (switches.length === 0) {
+// Tile size (S/M/L) is a live, client-only preference on <html> + localStorage. The
+// Monitoring page also writes the attribute before first paint (inline script), so
+// there is no flash and — crucially — no URL round-trip/redirect to switch size.
+function initializeMonitoringSizeToggle() {
+  const buttons = document.querySelectorAll("[data-monitoring-size-set]");
+  if (buttons.length === 0) {
     return;
   }
 
-  const buttons = document.querySelectorAll("[data-tree-layout-set]");
-  const apply = (layout) => {
-    const normalized = layout === "rows" ? "rows" : "tiles";
-    document.documentElement.dataset.treeLayout = normalized;
-    try {
-      localStorage.setItem("matmon-tree-layout", normalized);
-    } catch (e) {
-      // Layout preference still works for this visit even if storage is unavailable.
+  const normalize = (value) => {
+    const v = String(value || "").trim().toLowerCase();
+    return v === "s" || v === "l" ? v : "m";
+  };
+
+  const apply = (size, persist) => {
+    const normalized = normalize(size);
+    document.documentElement.dataset.monitoringSize = normalized;
+    if (persist) {
+      try {
+        localStorage.setItem(monitoringSizeStorageKey, normalized);
+      } catch {
+        // Size preference still works for this visit even without storage.
+      }
     }
     buttons.forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.treeLayoutSet === normalized);
+      button.classList.toggle("is-active", button.dataset.monitoringSizeSet === normalized);
     });
   };
 
-  apply(document.documentElement.dataset.treeLayout || "tiles");
+  apply(document.documentElement.dataset.monitoringSize, false);
   buttons.forEach((button) => {
-    button.addEventListener("click", () => apply(button.dataset.treeLayoutSet));
+    button.addEventListener("click", () => apply(button.dataset.monitoringSizeSet, true));
   });
 }
 
@@ -558,91 +559,6 @@ function initializeMobileSidebarMenu() {
   }
 
   syncResponsiveState();
-}
-
-function initializeMonitoringPreferences() {
-  const shell = document.querySelector("[data-monitoring-shell]");
-  if (!shell) {
-    return false;
-  }
-
-  const normalizeView = (value) => String(value || "").trim().toLowerCase() === "list" ? "list" : "tree";
-  const normalizeTreeSize = (value) => {
-    switch (String(value || "").trim().toLowerCase()) {
-      case "s":
-        return "s";
-      case "l":
-        return "l";
-      default:
-        return "m";
-    }
-  };
-  const normalizeListSize = (value) => String(value || "").trim().toLowerCase() === "s" ? "s" : "l";
-
-  const readStorageValue = (key) => {
-    try {
-      return localStorage.getItem(key) || "";
-    } catch {
-      return "";
-    }
-  };
-
-  const writeStorageValue = (key, value) => {
-    try {
-      if (value) {
-        localStorage.setItem(key, value);
-      } else {
-        localStorage.removeItem(key);
-      }
-    } catch {
-      // The preference still works for the current visit even if persistence fails.
-    }
-  };
-
-  const currentView = normalizeView(shell.dataset.monitoringView);
-  const currentSize = currentView === "list" ? normalizeListSize(shell.dataset.monitoringSize) : normalizeTreeSize(shell.dataset.monitoringSize);
-  const storedView = normalizeView(readStorageValue(monitoringViewStorageKey) || currentView);
-  const storedTreeSize = normalizeTreeSize(readStorageValue(monitoringTreeSizeStorageKey));
-  const storedListSize = normalizeListSize(readStorageValue(monitoringListSizeStorageKey));
-
-  const url = new URL(window.location.href);
-  const hasMonitoringView = url.searchParams.has("monitoringView");
-  const hasMonitoringSize = url.searchParams.has("monitoringSize");
-  if (!hasMonitoringView || !hasMonitoringSize) {
-    const targetUrl = new URL(window.location.href);
-    const targetView = storedView;
-    const targetSize = targetView === "list" ? storedListSize : storedTreeSize;
-
-    targetUrl.searchParams.set("monitoringView", targetView);
-    targetUrl.searchParams.set("monitoringSize", targetSize);
-    window.location.replace(targetUrl.toString());
-    return true;
-  }
-
-  writeStorageValue(monitoringViewStorageKey, currentView);
-  writeStorageValue(currentView === "list" ? monitoringListSizeStorageKey : monitoringTreeSizeStorageKey, currentSize);
-
-  const buildUrl = (baseHref, view, size) => {
-    const url = new URL(baseHref || window.location.href, window.location.origin);
-    url.searchParams.set("monitoringView", view);
-    url.searchParams.set("monitoringSize", size);
-    return url;
-  };
-
-  shell.querySelectorAll("[data-monitoring-view-link]").forEach((link) => {
-    const targetView = normalizeView(link.dataset.monitoringViewLink);
-    const targetSize = targetView === "list" ? storedListSize : storedTreeSize;
-    link.href = buildUrl(link.getAttribute("href"), targetView, targetSize).toString();
-  });
-
-  shell.querySelectorAll("[data-monitoring-size-link]").forEach((link) => {
-    const targetSize = currentView === "list"
-      ? normalizeListSize(link.dataset.monitoringSizeLink)
-      : normalizeTreeSize(link.dataset.monitoringSizeLink);
-    link.href = buildUrl(link.getAttribute("href"), currentView, targetSize).toString();
-  });
-
-  return false;
 }
 
 function initializeAccountMenu() {

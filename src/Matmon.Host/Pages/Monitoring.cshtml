@@ -6,42 +6,17 @@
     var nodes = Model.View.MonitoringVisibleNodes;
     var treeRoots = Model.View.MonitoringTreeRoots;
     var returnUrl = Request.Path + Request.QueryString;
-    var monitoringSize = Model.View.MonitoringSize;
-    var viewSize = isListView
-        ? (string.Equals(monitoringSize, "s", StringComparison.OrdinalIgnoreCase) ? "s" : "l")
-        : monitoringSize;
 }
 
-@* Tree row/tile layout (client-only preference) applied to <html> before paint. *@
+@* Tile size is a client-only preference written to <html> BEFORE the first paint, so
+   navigating to the page never renders a default size and then jumps to the stored
+   one. There is no URL round-trip and no redirect (the old redirect was the main
+   cause of the M→S flash). site.js only toggles this attribute + localStorage live. *@
 <script>
     try {
-        document.documentElement.dataset.treeLayout =
-            localStorage.getItem("matmon-tree-layout") === "rows" ? "rows" : "tiles";
-    } catch (e) { /* layout preference is best-effort */ }
-</script>
-
-@* Apply the stored view/size preference before the page paints. Without this the
-   server renders its default (e.g. tree "M") first and site.js only redirects to the
-   stored preference (e.g. "S") on DOMContentLoaded — a visible M→S double render.
-   Running synchronously here redirects before any content is painted. *@
-<script>
-    (function () {
-        try {
-            var url = new URL(window.location.href);
-            if (url.searchParams.has("monitoringView") && url.searchParams.has("monitoringSize")) {
-                return;
-            }
-            var get = function (key) { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } };
-            var view = String(get("matmon-monitoring-view")).trim().toLowerCase() === "list" ? "list" : "tree";
-            var raw = String(get(view === "list" ? "matmon-monitoring-list-size" : "matmon-monitoring-tree-size")).trim().toLowerCase();
-            var size = view === "list"
-                ? (raw === "s" ? "s" : "l")
-                : (raw === "s" ? "s" : (raw === "l" ? "l" : "m"));
-            url.searchParams.set("monitoringView", view);
-            url.searchParams.set("monitoringSize", size);
-            window.location.replace(url.toString());
-        } catch (e) { /* preference redirect is best-effort */ }
-    })();
+        var s = String(localStorage.getItem("matmon-monitoring-size") || "m").trim().toLowerCase();
+        document.documentElement.dataset.monitoringSize = (s === "s" || s === "l") ? s : "m";
+    } catch (e) { document.documentElement.dataset.monitoringSize = "m"; }
 </script>
 
 <section class="dashboard-shell">
@@ -82,124 +57,55 @@
         <input type="hidden" name="returnUrl" value="@(Request.Path + Request.QueryString)" />
     </form>
 
-    <section class="panel panel-stack monitoring-controls" data-monitoring-shell data-monitoring-view="@Model.View.MonitoringViewMode" data-monitoring-size="@viewSize">
+    <section class="panel panel-stack monitoring-controls" data-monitoring-shell data-monitoring-view="@Model.View.MonitoringViewMode">
         <form method="get" class="monitoring-filter-bar">
             <input type="hidden" name="monitoringView" value="@Model.View.MonitoringViewMode" />
-            <input type="hidden" name="monitoringSize" value="@viewSize" />
 
             <details class="workspace-action-menu monitoring-display-menu">
                 <summary class="workspace-secondary-submit monitoring-display-trigger" aria-label="Display options" title="Display options">
                     @MatmonIcons.Render("dashboard")<span>Display</span>
                 </summary>
                 <div class="workspace-action-menu-panel monitoring-display-panel">
-            <span class="monitoring-display-label">View</span>
-            <div class="monitoring-view-switch">
-                <a class="workspace-action-link @(isListView ? string.Empty : "is-active")"
-                   asp-page="/Monitoring"
-                   asp-route-monitoringView="tree"
-                   asp-route-monitoringSize="@(isListView ? viewSize : viewSize)"
-                   asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                   asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                   data-monitoring-view-link="tree">
-                    @MatmonIcons.Render("monitoring")
-                    <span>Tree</span>
-                </a>
-                <a class="workspace-action-link @(isListView ? "is-active" : string.Empty)"
-                   asp-page="/Monitoring"
-                   asp-route-monitoringView="list"
-                   asp-route-monitoringSize="@(isListView ? viewSize : viewSize)"
-                   asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                   asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                   asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                   data-monitoring-view-link="list">
-                    @MatmonIcons.Render("list")
-                    <span>List</span>
-                </a>
-            </div>
+                    <span class="monitoring-display-label">View</span>
+                    <div class="monitoring-view-switch">
+                        <a class="workspace-action-link @(isListView ? string.Empty : "is-active")"
+                           asp-page="/Monitoring"
+                           asp-route-monitoringView="tree"
+                           asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                           asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                           asp-route-monitoringSearch="@Model.View.MonitoringSearch">
+                            @MatmonIcons.Render("monitoring")
+                            <span>Tree</span>
+                        </a>
+                        <a class="workspace-action-link @(isListView ? "is-active" : string.Empty)"
+                           asp-page="/Monitoring"
+                           asp-route-monitoringView="list"
+                           asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
+                           asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                           asp-route-monitoringSearch="@Model.View.MonitoringSearch">
+                            @MatmonIcons.Render("list")
+                            <span>List</span>
+                        </a>
+                    </div>
 
-            <span class="monitoring-display-label">Size</span>
-            <div class="monitoring-size-switch @(isListView ? "is-list-view" : "is-tree-view")" aria-label="Sensor tile size">
-                @if (isListView)
-                {
-                    <a class="workspace-action-link @(viewSize == "s" ? "is-active" : string.Empty)"
-                       asp-page="/Monitoring"
-                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                       asp-route-monitoringSize="s"
-                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                       data-monitoring-size-link="s">
-                        <span>S</span>
-                    </a>
-                    <button type="button"
-                            class="workspace-action-link is-disabled"
-                            disabled
-                            title="Deactivated"
-                            aria-disabled="true">
-                        <span>M</span>
-                    </button>
-                    <a class="workspace-action-link @(viewSize == "l" ? "is-active" : string.Empty)"
-                       asp-page="/Monitoring"
-                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                       asp-route-monitoringSize="l"
-                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                       data-monitoring-size-link="l">
-                        <span>L</span>
-                    </a>
-                }
-                else
-                {
-                    <a class="workspace-action-link @(viewSize == "s" ? "is-active" : string.Empty)"
-                       asp-page="/Monitoring"
-                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                       asp-route-monitoringSize="s"
-                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                       data-monitoring-size-link="s">
-                        <span>S</span>
-                    </a>
-                    <a class="workspace-action-link @(viewSize == "m" ? "is-active" : string.Empty)"
-                       asp-page="/Monitoring"
-                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                       asp-route-monitoringSize="m"
-                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                       data-monitoring-size-link="m">
-                        <span>M</span>
-                    </a>
-                    <a class="workspace-action-link @(viewSize == "l" ? "is-active" : string.Empty)"
-                       asp-page="/Monitoring"
-                       asp-route-monitoringView="@Model.View.MonitoringViewMode"
-                       asp-route-monitoringSize="l"
-                       asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                       asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                       asp-route-monitoringSearch="@Model.View.MonitoringSearch"
-                       data-monitoring-size-link="l">
-                        <span>L</span>
-                    </a>
-                }
-            </div>
+                    @* Size is a live, client-only preference (no reload) — see the pre-paint
+                       script at the top of the page. site.js marks the active button. *@
+                    <span class="monitoring-display-label">Size</span>
+                    <div class="monitoring-size-switch" aria-label="Tile size" data-monitoring-size-switch>
+                        <button type="button" class="workspace-action-link" data-monitoring-size-set="s"><span>S</span></button>
+                        <button type="button" class="workspace-action-link" data-monitoring-size-set="m"><span>M</span></button>
+                        <button type="button" class="workspace-action-link" data-monitoring-size-set="l"><span>L</span></button>
+                    </div>
 
-            @if (!isListView)
-            {
-                <span class="monitoring-display-label">Layout</span>
-                <div class="monitoring-size-switch monitoring-layout-switch" aria-label="Tree layout" data-tree-layout-switch>
-                    <button type="button" class="workspace-action-link" data-tree-layout-set="tiles" title="Tiles">@MatmonIcons.Render("dashboard")<span>Tiles</span></button>
-                    <button type="button" class="workspace-action-link" data-tree-layout-set="rows" title="Rows">@MatmonIcons.Render("list")<span>Rows</span></button>
-                </div>
-
-                <span class="monitoring-display-label">Expand</span>
-                <div class="monitoring-tree-bulk">
-                    <button type="button" class="workspace-action-link" data-tree-expand-all>@MatmonIcons.Render("plus")<span>Expand all</span></button>
-                    <button type="button" class="workspace-action-link" data-tree-collapse-all>@MatmonIcons.Render("x")<span>Collapse all</span></button>
-                    <button type="button" class="workspace-action-link" data-tree-collapse-level title="Show probes + their first level, collapse the rest">@MatmonIcons.Render("probe")<span>Probes + 1 level</span></button>
-                </div>
-            }
+                    @if (!isListView)
+                    {
+                        <span class="monitoring-display-label">Expand</span>
+                        <div class="monitoring-tree-bulk">
+                            <button type="button" class="workspace-action-link" data-tree-expand-all>@MatmonIcons.Render("plus")<span>Expand all</span></button>
+                            <button type="button" class="workspace-action-link" data-tree-collapse-all>@MatmonIcons.Render("x")<span>Collapse all</span></button>
+                            <button type="button" class="workspace-action-link" data-tree-collapse-level title="Show probes + their first level, collapse the rest">@MatmonIcons.Render("probe")<span>Probes + 1 level</span></button>
+                        </div>
+                    }
                 </div>
             </details>
 
@@ -239,7 +145,7 @@
 
     <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>@(isListView ? $"List {viewSize.ToUpperInvariant()}" : $"Tree {viewSize.ToUpperInvariant()}")</span></h2>
+            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>@(isListView ? "List" : "Tree")</span></h2>
             <span class="panel-hint">@Model.View.MonitoringVisibleCount shown</span>
         </div>
 
@@ -249,7 +155,7 @@
         }
         else if (isListView)
         {
-            <div class="monitoring-list-shell" data-monitoring-list-size="@viewSize">
+            <div class="monitoring-list-shell">
                 <div class="monitoring-list-head" role="row">
                     <span>Status</span>
                     <span>Object</span>
@@ -436,7 +342,7 @@
         }
         else
         {
-            <div class="monitoring-tree" data-monitoring-tree data-tree-size="@viewSize">
+            <div class="monitoring-tree" data-monitoring-tree>
                 @foreach (var root in treeRoots)
                 {
                     <partial name="_MonitoringTreeNode" model="root" />
