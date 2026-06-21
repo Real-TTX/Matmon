@@ -73,55 +73,72 @@ function initializeTreeLayoutToggle() {
 // Right-click anywhere on a tree node opens that node's existing action menu
 // (the ⋯ button still works too). The deepest node under the cursor wins, so
 // right-clicking a child sensor opens the sensor's menu, not its container's.
+// Tree action menus (the ⋯ button on sensor chips/rows, and right-click anywhere
+// on a node) open at the pointer position — not anchored to the button, which now
+// floats centred on the chip's hover overlay and would otherwise open "somewhere".
 function initializeTreeContextMenu() {
-  document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
+  const trees = document.querySelectorAll("[data-monitoring-tree]");
+  if (trees.length === 0) {
+    return;
+  }
+
+  let pointer = { x: 0, y: 0 };
+  document.addEventListener("pointerdown", (event) => {
+    pointer = { x: event.clientX, y: event.clientY };
+  }, true);
+
+  // Position a menu's panel at the last pointer position. Kept invisible while the
+  // default (anchored-to-button) positioning runs, then placed and revealed — so it
+  // doesn't visibly jump.
+  const placeAtPointer = (details) => {
+    const panel = details.querySelector(":scope > .workspace-action-menu-panel");
+    if (!panel) {
+      return;
+    }
+    panel.style.visibility = "hidden";
+    window.setTimeout(() => {
+      if (!panel || !details.open) {
+        return;
+      }
+      const margin = 8;
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
+      details.classList.add("is-floating");
+      panel.style.position = "fixed";
+      panel.style.right = "auto";
+      panel.style.insetInlineEnd = "auto";
+      panel.style.zIndex = "10001";
+      const rect = panel.getBoundingClientRect();
+      panel.style.left = `${Math.max(margin, Math.min(pointer.x, viewportWidth - rect.width - margin))}px`;
+      panel.style.top = `${Math.max(margin, Math.min(pointer.y, viewportHeight - rect.height - margin))}px`;
+      panel.style.visibility = "";
+    }, 0);
+  };
+
+  trees.forEach((tree) => {
+    tree.querySelectorAll("details.workspace-action-menu").forEach((details) => {
+      details.addEventListener("toggle", () => {
+        if (details.open) {
+          placeAtPointer(details);
+        }
+      });
+    });
+
     tree.addEventListener("contextmenu", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       const node = target?.closest("[data-tree-node]");
-      if (!node) {
-        return;
-      }
-
-      const details = node.querySelector("details.workspace-action-menu");
+      const details = node?.querySelector("details.workspace-action-menu");
       if (!details) {
         return;
       }
-
       event.preventDefault();
+      pointer = { x: event.clientX, y: event.clientY };
       document.querySelectorAll("details.workspace-action-menu[open]").forEach((open) => {
         if (open !== details) {
           open.open = false;
         }
       });
-
-      const cursorX = event.clientX;
-      const cursorY = event.clientY;
-      const panel = details.querySelector(":scope > .workspace-action-menu-panel");
-
       details.open = true;
-      // Keep the panel invisible while the default (anchored-to-button) positioning
-      // runs, then place it under the cursor and reveal — so it doesn't visibly jump
-      // from the button to the cursor.
-      if (panel) {
-        panel.style.visibility = "hidden";
-      }
-      window.setTimeout(() => {
-        if (!panel || !details.open) {
-          return;
-        }
-        const margin = 8;
-        const viewportWidth = document.documentElement.clientWidth;
-        const viewportHeight = document.documentElement.clientHeight;
-        details.classList.add("is-floating");
-        panel.style.position = "fixed";
-        panel.style.right = "auto";
-        panel.style.insetInlineEnd = "auto";
-        panel.style.zIndex = "10001";
-        const rect = panel.getBoundingClientRect();
-        panel.style.left = `${Math.max(margin, Math.min(cursorX, viewportWidth - rect.width - margin))}px`;
-        panel.style.top = `${Math.max(margin, Math.min(cursorY, viewportHeight - rect.height - margin))}px`;
-        panel.style.visibility = "";
-      }, 0);
     });
   });
 }

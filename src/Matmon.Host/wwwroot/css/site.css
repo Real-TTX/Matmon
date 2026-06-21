@@ -3210,7 +3210,7 @@ html[data-tree-layout="rows"] .monitoring-tree .monitoring-sensor-graph {
   min-width: 2rem;
   min-height: 2rem;
   padding: 0;
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.32);
   color: #fff;
