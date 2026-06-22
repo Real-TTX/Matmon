@@ -526,15 +526,10 @@
                 <div class="workspace-form-actions">
                     <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
                     <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save</span></button>
+                    <span class="workspace-form-actions-spacer"></span>
+                    <button type="submit" asp-page-handler="DeleteTemplate" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this template?');">@MatmonIcons.Render("trash")<span>Delete</span></button>
                 </div>
             </form>
-
-            <div class="workspace-inline-actions">
-                <form method="post" asp-page-handler="DeleteTemplate" onsubmit="return confirm('Delete this template?');">
-                    <input type="hidden" asp-for="TemplateEditor.Id" />
-                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
-                </form>
-            </div>
         }
     </section>
 </section>

@@ -7621,6 +7621,16 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   margin-top: 0.55rem;
 }
 
+/* One aligned action row: primary actions (Back/Save…) sit left, the spacer pushes the
+   trailing group (Delete and other standalone actions) to the right, all on one height. */
+.workspace-form-actions {
+  align-items: center;
+}
+
+.workspace-form-actions-spacer {
+  flex: 1 1 auto;
+}
+
 .workspace-inline-note {
   margin-top: 0.55rem;
   padding: 0.5rem 0.7rem;

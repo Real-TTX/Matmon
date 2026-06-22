@@ -345,7 +345,8 @@
                 <button type="submit" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save map</span></button>
                 @if (!Model.IsCreateMode)
                 {
-                    <button type="submit" asp-page-handler="Delete" formnovalidate class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete map</span></button>
+                    <span class="workspace-form-actions-spacer"></span>
+                    <button type="submit" asp-page-handler="Delete" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this map?');">@MatmonIcons.Render("trash")<span>Delete map</span></button>
                 }
             </div>
         </section>

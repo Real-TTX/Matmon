@@ -496,46 +496,29 @@
                     {
                         <button type="submit" asp-page-handler="RunSensorNow" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Test</span></button>
                     }
-                </div>
 
-                <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate class="d-none" data-sensor-preview-submit>Preview</button>
+                    <span class="workspace-form-actions-spacer"></span>
+
+                    @if (isSensor)
+                    {
+                        <button type="submit" asp-page-handler="ToggleSensorPause" asp-route-sensorId="@Model.ElementEditor.Id" asp-route-returnUrl="@(Request.Path + Request.QueryString)" formnovalidate class="workspace-secondary-submit">
+                            @MatmonIcons.Render(Model.ElementEditor.IsPaused ? "play" : "pause")<span>@(Model.ElementEditor.IsPaused ? "Resume" : "Pause")</span>
+                        </button>
+                    }
+                    @if (Model.ElementEditor.Kind == "Probe")
+                    {
+                        <button type="submit" asp-page-handler="RotateToken" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Rotate</span></button>
+                    }
+                    @if (!(isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <button type="submit" asp-page-handler="DeleteElement" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this element and all children?');">@MatmonIcons.Render("trash")<span>Delete</span></button>
+                    }
+
+                    <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate class="d-none" data-sensor-preview-submit>Preview</button>
+                </div>
             </form>
 
-            @if (isSensor)
-            {
-                <div class="workspace-inline-actions">
-                    <form method="post"
-                          asp-page-handler="ToggleSensorPause"
-                          asp-route-sensorId="@Model.ElementEditor.Id"
-                          asp-route-returnUrl="@(Request.Path + Request.QueryString)">
-                        <button type="submit" class="workspace-secondary-submit">
-                            @MatmonIcons.Render(Model.ElementEditor.IsPaused ? "play" : "pause")
-                            <span>@(Model.ElementEditor.IsPaused ? "Resume" : "Pause")</span>
-                        </button>
-                    </form>
-                </div>
-            }
-
-            @if (Model.ElementEditor.Kind == "Probe")
-            {
-                <div class="workspace-inline-actions">
-                    <form method="post" asp-page-handler="RotateToken">
-                        <input type="hidden" asp-for="ElementEditor.Id" />
-                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Rotate</span></button>
-                    </form>
-                </div>
-            }
-
-            @if (!(isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase)))
-            {
-                <div class="workspace-inline-actions">
-                    <form method="post" asp-page-handler="DeleteElement" onsubmit="return confirm('Delete this element and all children?');">
-                        <input type="hidden" asp-for="ElementEditor.Id" />
-                        <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
-                    </form>
-                </div>
-            }
-            else
+            @if (isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase))
             {
                 <div class="workspace-inline-note">System sensor. Managed by the probe.</div>
             }

@@ -121,15 +121,10 @@
                 <div class="workspace-form-actions">
                     <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
                     <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save receiver</span></button>
+                    <span class="workspace-form-actions-spacer"></span>
+                    <button type="submit" asp-page-handler="DeleteNotificationReceiver" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this notification receiver?');">@MatmonIcons.Render("trash")<span>Delete receiver</span></button>
                 </div>
             </form>
-
-            <div class="workspace-inline-actions">
-                <form method="post" asp-page-handler="DeleteNotificationReceiver" onsubmit="return confirm('Delete this notification receiver?');">
-                    <input type="hidden" asp-for="NotificationReceiverEditor.Id" />
-                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete receiver</span></button>
-                </form>
-            </div>
         }
     </section>
 </section>
