@@ -41,6 +41,7 @@ public static class SensorScheduleDefaults
         ["windows-health"] = TimeSpan.FromMinutes(2),
         ["linux-ssh-health"] = TimeSpan.FromMinutes(2),
         ["powershell"] = TimeSpan.FromMinutes(2),
+        ["local-script"] = TimeSpan.FromMinutes(1),
 
         // Slow / rarely-changing facts.
         ["disk-smart"] = TimeSpan.FromMinutes(15),

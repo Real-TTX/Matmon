@@ -103,34 +103,6 @@
                 <p class="workspace-inline-note">Configuration changes are made on the topology and editor pages; the snippets below are reference only.</p>
             </section>
         </div>
-
-        <details class="workspace-details config-reference">
-            <summary>
-                @MatmonIcons.Render("settings")
-                <span>Deployment reference (Docker env &amp; appsettings)</span>
-            </summary>
-            <div class="workspace-details-body">
-                <div class="config-grid">
-                    <section class="panel config-block">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("arrow-right")<span>Docker env</span></h2>
-                            <span class="panel-hint">primary / secondary</span>
-                        </div>
-                        <pre class="config-code">@Model.Overview.DockerMasterSnippet</pre>
-                        <div class="mt-3"></div>
-                        <pre class="config-code">@Model.Overview.DockerSlaveSnippet</pre>
-                    </section>
-
-                    <section class="panel config-block">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("spark")<span>Local appsettings</span></h2>
-                            <span class="panel-hint">src/Matmon.Host/appsettings.json</span>
-                        </div>
-                        <pre class="config-code">@Model.Overview.AppSettingsSnippet</pre>
-                    </section>
-                </div>
-            </div>
-        </details>
     }
     else if (Model.IsActiveTab("probes"))
     {

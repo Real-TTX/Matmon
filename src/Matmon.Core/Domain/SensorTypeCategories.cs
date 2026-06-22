@@ -59,6 +59,8 @@ public static class SensorTypeCategories
 
         ["mssql"] = "Databases",
 
+        ["local-script"] = Other,
+
         ["probe-heartbeat"] = "Probe",
         ["probe-health"] = "Probe",
     };

@@ -2321,6 +2321,19 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 .event-row-kind {
   align-self: center;
   justify-self: start;
+  /* This reuses .tree-kind for the chip colour, but .tree-kind is a fixed 1.9rem icon
+     square — here it holds the event-kind text ("State changed", …), so size it to fit
+     the label instead of cramming the text into a tiny box. */
+  width: auto;
+  height: auto;
+  min-width: 0;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .event-row-main {

@@ -758,7 +758,7 @@ catch {
         return result;
     }
 
-    private static ParsedPowerShellOutput ParseOutput(
+    internal static ParsedPowerShellOutput ParseOutput(
         string stdout,
         string outputFormat,
         string regexPattern,
@@ -1136,7 +1136,7 @@ catch {
         });
     }
 
-    private static List<SensorChannelValue> MarkDefault(
+    internal static List<SensorChannelValue> MarkDefault(
         IReadOnlyList<SensorChannelValue> channels,
         string defaultChannelKey)
     {
@@ -1152,7 +1152,7 @@ catch {
             .ToList();
     }
 
-    private static SensorChannelValue? SelectDefaultChannel(
+    internal static SensorChannelValue? SelectDefaultChannel(
         IReadOnlyList<SensorChannelValue> channels,
         string defaultChannelKey)
     {
@@ -1172,7 +1172,7 @@ catch {
             ?? channels.FirstOrDefault();
     }
 
-    private static SensorState ResolveState(
+    internal static SensorState ResolveState(
         int exitCode,
         bool failOnStderr,
         string stderr,
@@ -1191,7 +1191,7 @@ catch {
         return stateHint ?? SensorState.Healthy;
     }
 
-    private static string BuildMessage(
+    internal static string BuildMessage(
         SensorChannelValue defaultChannel,
         string? parsedMessage,
         string stderr,
@@ -1410,7 +1410,7 @@ catch {
         }
     }
 
-    private sealed record ParsedPowerShellOutput(
+    internal sealed record ParsedPowerShellOutput(
         IReadOnlyList<SensorChannelValue> Channels,
         SensorState? StateHint,
         string? Message);
