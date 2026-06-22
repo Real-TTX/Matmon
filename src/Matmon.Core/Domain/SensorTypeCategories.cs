@@ -16,6 +16,7 @@ public static class SensorTypeCategories
         "Certificates",
         "Windows",
         "Linux",
+        "Scripting",
         "Virtualization & NAS",
         "Storage",
         "Databases",
@@ -38,13 +39,15 @@ public static class SensorTypeCategories
         ["ssl-certificate"] = "Certificates",
         ["certificate-chain"] = "Certificates",
 
-        ["powershell"] = "Windows",
         ["windows-service"] = "Windows",
         ["windows-process"] = "Windows",
         ["windows-disk"] = "Windows",
 
         ["linux-ssh-health"] = "Linux",
         ["linux-disk"] = "Linux",
+
+        ["powershell"] = "Scripting",
+        ["local-script"] = "Scripting",
 
         ["proxmox"] = "Virtualization & NAS",
         ["proxmox-disk"] = "Virtualization & NAS",
@@ -58,8 +61,6 @@ public static class SensorTypeCategories
         ["backup-job"] = "Storage",
 
         ["mssql"] = "Databases",
-
-        ["local-script"] = Other,
 
         ["probe-heartbeat"] = "Probe",
         ["probe-health"] = "Probe",

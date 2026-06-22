@@ -41,7 +41,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
                 Key = "script",
                 Label = "Script",
                 Kind = SensorParameterKind.Multiline,
-                Description = "Script executed locally. For PowerShell, emit a value/object (it is converted to JSON); for shell, print JSON, key=value/regex-friendly text or a single number.",
+                Description = "Script executed locally. For PowerShell, emit a value/object (it is converted to JSON); for shell, print JSON, key=value/regex-friendly text or a single number. Variables: MATMON_HOST/MATMON_TARGET, and MATMON_USERNAME/MATMON_PASSWORD/MATMON_TOKEN + MATMON_CRED_<FIELD> from the selected credential (PowerShell: $env:MATMON_HOST, shell: $MATMON_HOST).",
                 Required = true,
                 Placeholder = """
 [pscustomobject]@{
@@ -138,7 +138,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
         Process? process = null;
         try
         {
-            process = StartProcess(shell, script, outputFormat, context.Target);
+            process = StartProcess(shell, script, outputFormat, context);
 
             var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
@@ -212,7 +212,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
         }
     }
 
-    private static Process StartProcess(string shell, string script, string outputFormat, string? target)
+    private static Process StartProcess(string shell, string script, string outputFormat, SensorExecutionContext context)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -221,7 +221,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        startInfo.Environment["MATMON_TARGET"] = target ?? string.Empty;
+        ApplyContextEnvironment(startInfo, context);
 
         if (shell is "bash" or "sh")
         {
@@ -246,6 +246,75 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
         }
 
         return Process.Start(startInfo) ?? throw new InvalidOperationException($"could not start '{shell}'.");
+    }
+
+    /// <summary>
+    /// Exposes the monitoring context to the script as environment variables: the host/target,
+    /// the sensor type, and — when a credential is selected — its fields. Credential values are
+    /// published both verbatim (<c>MATMON_CRED_&lt;FIELD&gt;</c>) and normalized
+    /// (<c>MATMON_USERNAME</c>/<c>MATMON_PASSWORD</c>/<c>MATMON_TOKEN</c>) so a script can stay
+    /// credential-kind-agnostic. In PowerShell read them via <c>$env:MATMON_HOST</c>; in shell via <c>$MATMON_HOST</c>.
+    /// </summary>
+    private static void ApplyContextEnvironment(ProcessStartInfo startInfo, SensorExecutionContext context)
+    {
+        var target = context.Target ?? string.Empty;
+        startInfo.Environment["MATMON_TARGET"] = target;
+        startInfo.Environment["MATMON_HOST"] = target;
+        startInfo.Environment["MATMON_SENSOR_TYPE"] = context.SensorTypeKey ?? string.Empty;
+
+        if (!MonitoringSettings.TryResolveCredentialBundle(context.Settings, Array.Empty<MonitoringCredentialKind>(), out var credential) ||
+            credential is null)
+        {
+            return;
+        }
+
+        startInfo.Environment["MATMON_CRED_KIND"] = credential.Kind.ToString();
+        startInfo.Environment["MATMON_CRED_NAME"] = credential.Name ?? string.Empty;
+        foreach (var pair in credential.Values)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrEmpty(pair.Value))
+            {
+                continue;
+            }
+
+            startInfo.Environment["MATMON_CRED_" + ToEnvKey(pair.Key)] = pair.Value;
+        }
+
+        SetNormalized(startInfo, "MATMON_USERNAME", credential.Values,
+            key => key.Contains("user", StringComparison.OrdinalIgnoreCase));
+        SetNormalized(startInfo, "MATMON_PASSWORD", credential.Values,
+            key => key.Contains("password", StringComparison.OrdinalIgnoreCase) || key.EndsWith("secret", StringComparison.OrdinalIgnoreCase));
+        SetNormalized(startInfo, "MATMON_TOKEN", credential.Values,
+            key => key.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+                   key.Contains("apikey", StringComparison.OrdinalIgnoreCase) ||
+                   key.Replace("-", string.Empty).Replace(".", string.Empty).Contains("apikey", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void SetNormalized(
+        ProcessStartInfo startInfo,
+        string envName,
+        IReadOnlyDictionary<string, string> values,
+        Func<string, bool> keyMatches)
+    {
+        foreach (var pair in values)
+        {
+            if (!string.IsNullOrWhiteSpace(pair.Value) && keyMatches(pair.Key))
+            {
+                startInfo.Environment[envName] = pair.Value;
+                return;
+            }
+        }
+    }
+
+    private static string ToEnvKey(string key)
+    {
+        var builder = new StringBuilder(key.Length);
+        foreach (var character in key)
+        {
+            builder.Append(char.IsLetterOrDigit(character) ? char.ToUpperInvariant(character) : '_');
+        }
+
+        return builder.ToString().Trim('_');
     }
 
     private const string LocalPowerShellWrapper = """
