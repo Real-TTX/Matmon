@@ -255,7 +255,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
     /// (<c>MATMON_USERNAME</c>/<c>MATMON_PASSWORD</c>/<c>MATMON_TOKEN</c>) so a script can stay
     /// credential-kind-agnostic. In PowerShell read them via <c>$env:MATMON_HOST</c>; in shell via <c>$MATMON_HOST</c>.
     /// </summary>
-    private static void ApplyContextEnvironment(ProcessStartInfo startInfo, SensorExecutionContext context)
+    internal static void ApplyContextEnvironment(ProcessStartInfo startInfo, SensorExecutionContext context)
     {
         var target = context.Target ?? string.Empty;
         startInfo.Environment["MATMON_TARGET"] = target;

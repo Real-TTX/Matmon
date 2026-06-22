@@ -48,6 +48,7 @@ public static class SensorTypeCategories
 
         ["powershell"] = "Scripting",
         ["local-script"] = "Scripting",
+        ["local-program"] = "Scripting",
 
         ["proxmox"] = "Virtualization & NAS",
         ["proxmox-disk"] = "Virtualization & NAS",

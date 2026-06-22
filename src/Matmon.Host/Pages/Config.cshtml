@@ -100,7 +100,31 @@
                     <div class="config-row"><dt>About</dt><dd><a asp-page="/About">/About</a></dd></div>
                 </dl>
 
-                <p class="workspace-inline-note">Configuration changes are made on the topology and editor pages; the snippets below are reference only.</p>
+                <p class="workspace-inline-note">Configuration changes are made on the topology and editor pages.</p>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Local program allow-list</span></h2>
+                    <span class="panel-hint">Local Program sensor</span>
+                </div>
+                @{
+                    var allowedPrograms = Matmon.Core.Domain.LocalProgramSensorExecutor.ReadAllowList();
+                }
+                @if (allowedPrograms.Count == 0)
+                {
+                    <p class="workspace-inline-note">No program paths are allowed yet. The <strong>Local Program</strong> sensor only runs executables listed here — set the <code>Matmon__AllowedProgramPaths</code> environment variable (semicolon-separated absolute paths or directories), then restart.</p>
+                }
+                else
+                {
+                    <dl class="config-list">
+                        @foreach (var allowed in allowedPrograms)
+                        {
+                            <div class="config-row"><dt>Allowed</dt><dd><code>@allowed</code></dd></div>
+                        }
+                    </dl>
+                    <p class="workspace-inline-note">Configured via <code>Matmon__AllowedProgramPaths</code>. Each entry is an exact executable path or a directory whose programs may run.</p>
+                }
             </section>
         </div>
     }
