@@ -19,12 +19,13 @@
             {
                 var field = Model.SensorChannelThresholdFields[i];
                 var isHidden = i >= Model.SensorChannelThresholdVisibleCount || field.IsDeleted;
-                <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
+                <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" data-threshold-virtual="@(field.IsVirtual ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
                     <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDefault" />
                     <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDeleted" />
+                    <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsVirtual" />
                     <div class="sensor-threshold-head">
                         <div>
-                            <div class="sensor-threshold-name">@(!string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel")</div>
+                            <div class="sensor-threshold-name">@(!string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel")@if (field.IsVirtual){<span class="tree-tag is-mini sensor-threshold-virtual-pill">virtual</span>}</div>
                             <div class="sensor-threshold-help">
                                 @(!string.IsNullOrWhiteSpace(field.ChannelKey) ? field.ChannelKey : "channel key")
                                 @if (!string.IsNullOrWhiteSpace(field.Unit))
@@ -42,7 +43,7 @@
                                 @MatmonIcons.Render("chart")
                                 <span data-threshold-default-label>@(field.IsDefault ? "Primary" : "Set primary")</span>
                             </button>
-                            @if (!hasFixedChannels)
+                            @if (!hasFixedChannels && !field.IsVirtual)
                             {
                                 <button type="button"
                                         class="workspace-danger-submit sensor-threshold-delete"
@@ -56,26 +57,34 @@
                         </div>
                     </div>
 
-                    <div class="sensor-threshold-grid">
-                        <label>
-                            <span>Channel</span>
-                            <input asp-for="SensorChannelThresholdFields[i].ChannelKey" class="form-control workspace-input" placeholder="latency" readonly="@(hasFixedChannels ? "readonly" : null)" />
-                        </label>
-                        <label>
-                            <span>Warning</span>
-                            <div class="sensor-threshold-rule">
-                                <select asp-for="SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                <input asp-for="SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
-                            </div>
-                        </label>
-                        <label>
-                            <span>Critical</span>
-                            <div class="sensor-threshold-rule">
-                                <select asp-for="SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                <input asp-for="SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
-                            </div>
-                        </label>
-                    </div>
+                    @if (field.IsVirtual)
+                    {
+                        <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
+                        <div class="sensor-threshold-virtual-note">Derived status channel (healthy = 1, problem = 0). It has no thresholds — its value is the sensor's overall state. Pick it as the primary channel to make that state the sensor's main value &amp; graph.</div>
+                    }
+                    else
+                    {
+                        <div class="sensor-threshold-grid">
+                            <label>
+                                <span>Channel</span>
+                                <input asp-for="SensorChannelThresholdFields[i].ChannelKey" class="form-control workspace-input" placeholder="latency" readonly="@(hasFixedChannels ? "readonly" : null)" />
+                            </label>
+                            <label>
+                                <span>Warning</span>
+                                <div class="sensor-threshold-rule">
+                                    <select asp-for="SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
+                                    <input asp-for="SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
+                                </div>
+                            </label>
+                            <label>
+                                <span>Critical</span>
+                                <div class="sensor-threshold-rule">
+                                    <select asp-for="SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
+                                    <input asp-for="SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
+                                </div>
+                            </label>
+                        </div>
+                    }
 
                     <div class="sensor-threshold-options">
                         <label class="sensor-threshold-visual">

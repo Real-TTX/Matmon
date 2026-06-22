@@ -10021,6 +10021,25 @@ body.credential-modal-open {
   font-size: 0.78rem;
 }
 
+.sensor-threshold-virtual-pill {
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+.sensor-threshold-virtual-note {
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px dashed var(--matmon-border);
+  background: var(--matmon-surface-soft);
+  color: var(--matmon-muted);
+  font-size: 0.8rem;
+}
+
+[data-threshold-virtual="true"] {
+  border-style: dashed;
+}
+
 .sensor-required {
   padding: 0.18rem 0.45rem;
   border-radius: 4px;

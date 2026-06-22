@@ -2715,7 +2715,7 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, hint.Key, hint.Label, hint.Unit, hint.IsDefault, hint.LogByDefault, currentFieldMap));
+            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, hint.Key, hint.Label, hint.Unit, hint.IsDefault, hint.LogByDefault, hint.IsVirtual, currentFieldMap));
         }
 
         foreach (var channelKey in EnumerateManagedThresholdChannelKeys(settings))
@@ -2725,7 +2725,7 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, channelKey, null, null, false, true, currentFieldMap));
+            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, channelKey, null, null, false, true, false, currentFieldMap));
         }
 
         foreach (var field in currentFields)
@@ -2735,7 +2735,7 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, field.ChannelKey.Trim(), field.ChannelLabel, field.Unit, field.IsDefault, field.LogByDefault, currentFieldMap));
+            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, field.ChannelKey.Trim(), field.ChannelLabel, field.Unit, field.IsDefault, field.LogByDefault, field.IsVirtual, currentFieldMap));
         }
 
         var configuredCount = rows.Count(row => HasThresholdValues(row));
@@ -2764,8 +2764,8 @@ public sealed class WorkspaceModel : PageModel
         if (observedChannels is { Count: > 0 })
         {
             var ordered = observedChannels
-                .Where(channel => !channel.IsVirtual)
-                .OrderByDescending(channel => !string.IsNullOrWhiteSpace(defaultChannelKey) &&
+                .OrderBy(channel => channel.IsVirtual) // real channels first, virtual (sensorState) last
+                .ThenByDescending(channel => !string.IsNullOrWhiteSpace(defaultChannelKey) &&
                     string.Equals(channel.Key, defaultChannelKey, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(channel => channel.IsDefault)
                 .ThenBy(channel => string.IsNullOrWhiteSpace(channel.Label) ? channel.Key : channel.Label, StringComparer.OrdinalIgnoreCase)
@@ -2935,6 +2935,7 @@ public sealed class WorkspaceModel : PageModel
         string? unit,
         bool isDefault,
         bool logByDefault,
+        bool isVirtual,
         IReadOnlyDictionary<string, WorkspaceSensorChannelThresholdFieldInput> currentFields)
     {
         currentFields.TryGetValue(channelKey, out var currentField);
@@ -2943,6 +2944,7 @@ public sealed class WorkspaceModel : PageModel
             ChannelKey = channelKey,
             ChannelLabel = string.IsNullOrWhiteSpace(channelLabel) ? HumanizeChannelKey(channelKey) : channelLabel,
             Unit = unit,
+            IsVirtual = isVirtual || (currentField?.IsVirtual ?? false),
             IsDefault = currentField?.IsDefault
                 ?? (((!string.IsNullOrWhiteSpace(settings.DefaultChannelKey) &&
                     string.Equals(channelKey, settings.DefaultChannelKey, StringComparison.OrdinalIgnoreCase))
@@ -6962,6 +6964,9 @@ public sealed class WorkspaceSensorChannelThresholdFieldInput
 
     /// <summary>The channel's own default logging state (posted hidden), so the save only stores an override when it differs.</summary>
     public bool LogByDefault { get; set; } = true;
+
+    /// <summary>A virtual/derived channel (e.g. <c>sensorState</c>): no user thresholds, but it can be picked as the default channel and given a visual.</summary>
+    public bool IsVirtual { get; set; }
 
     public bool IsDeleted { get; set; }
 }
