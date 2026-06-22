@@ -9736,6 +9736,87 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-size: 0.78rem;
 }
 
+/* "Available variables" reference card for the local script / program sensors. */
+.script-variables {
+  margin: 0.1rem 0 1.1rem;
+  padding: 0.85rem 1rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 28%, var(--matmon-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--matmon-accent) 6%, transparent);
+}
+
+.script-variables-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.script-variables-head .ui-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--matmon-accent);
+}
+
+.script-variables-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.script-variables-hint {
+  margin-left: auto;
+  color: var(--matmon-muted);
+  font-size: 0.76rem;
+}
+
+.script-variables-hint code {
+  font-family: var(--matmon-mono-font);
+  background: color-mix(in srgb, var(--matmon-foreground) 10%, transparent);
+  padding: 0.02rem 0.32rem;
+  border-radius: 4px;
+}
+
+.script-variables-group {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--matmon-muted);
+  font-weight: 700;
+  margin: 0.75rem 0 0.4rem;
+}
+
+.script-variables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+  gap: 0.4rem 1.25rem;
+}
+
+.script-variable {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.script-variable-name {
+  flex: 0 0 auto;
+  font-family: var(--matmon-mono-font);
+  font-size: 0.76rem;
+  color: var(--matmon-accent);
+  background: color-mix(in srgb, var(--matmon-accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--matmon-accent) 22%, transparent);
+  border-radius: 6px;
+  padding: 0.06rem 0.4rem;
+  white-space: nowrap;
+}
+
+.script-variable-desc {
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--matmon-foreground);
+  opacity: 0.86;
+}
+
 .sensor-threshold-help {
   margin-top: 0.15rem;
   color: var(--matmon-muted);

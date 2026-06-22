@@ -1,0 +1,28 @@
+@using Matmon.Core.Domain
+@model string
+@{
+    var scriptVariables = ScriptSensorVariables.For(Model);
+}
+@if (scriptVariables.Count > 0)
+{
+    <div class="script-variables">
+        <div class="script-variables-head">
+            @MatmonIcons.Render("spark")
+            <span class="script-variables-title">Available variables</span>
+            <span class="script-variables-hint">PowerShell <code>$env:NAME</code> &middot; shell <code>$NAME</code></span>
+        </div>
+        @foreach (var variableGroup in scriptVariables.GroupBy(variable => variable.Group))
+        {
+            <div class="script-variables-group">@variableGroup.Key</div>
+            <div class="script-variables-grid">
+                @foreach (var variable in variableGroup)
+                {
+                    <div class="script-variable">
+                        <code class="script-variable-name">@variable.Name</code>
+                        <span class="script-variable-desc">@variable.Description</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}

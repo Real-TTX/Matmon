@@ -188,6 +188,8 @@
                 </div>
                 <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
 
+                <partial name="_ScriptVariables" model="@Model.NewSensor.SensorTypeKey" />
+
                 @if (sensorGeneralFields.Count == 0)
                 {
                     <div class="empty-state">No fields defined.</div>
