@@ -3376,7 +3376,7 @@ try {
         int rows)
     {
         return tiles
-            .Where(tile => !string.IsNullOrWhiteSpace(tile.Title) || !string.IsNullOrWhiteSpace(tile.Text) || tile.ElementId.HasValue)
+            .Where(tile => !string.IsNullOrWhiteSpace(tile.Title) || !string.IsNullOrWhiteSpace(tile.Text) || tile.ElementId.HasValue || !string.IsNullOrWhiteSpace(tile.TargetTag))
             .Select(tile =>
             {
                 var sizeLimits = GetMapTileSizeLimits(tile.Kind, columns, rows);
@@ -3391,6 +3391,7 @@ try {
                     Kind = tile.Kind,
                     Title = string.IsNullOrWhiteSpace(tile.Title) ? "Tile" : tile.Title.Trim(),
                     ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
+                    TargetTag = string.IsNullOrWhiteSpace(tile.TargetTag) ? null : tile.TargetTag.Trim(),
                     Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim(),
                     X = x,
                     Y = y,
