@@ -4181,6 +4181,13 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   overflow: hidden;
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
+  line-height: 1.5;
+  /* Match the exact rendered height of a sibling workspace-input/-select: line box
+     (1.5em) + the workspace-input vertical padding (0.5rem × 2) + the 1px borders.
+     Bootstrap's .form-control min-height assumes its own .75rem padding, so without
+     this the button trigger ends up a couple px shorter than the inputs around it. */
+  min-height: calc(1.5em + 1rem + 2px);
 }
 
 .element-picker-trigger-label {
