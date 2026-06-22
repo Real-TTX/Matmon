@@ -256,9 +256,15 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         Stopwatch watch,
         CancellationToken cancellationToken)
     {
-        var resourceSnapshot = BuildResourceSnapshot(await ReadApiDataAsync(client, new Uri(apiBaseUri, "cluster/resources"), authHeader, apiUser, tokenId, cancellationToken), ResolveNodeName(target));
+        // An explicit node name (pve.node) wins; otherwise the target host name is used as the
+        // hint and, failing a match, the first visible node is picked.
+        var nodeHint = MonitoringSettings.TryReadParameter(settings, "pve.node", out var configuredNode) && !string.IsNullOrWhiteSpace(configuredNode)
+            ? configuredNode.Trim()
+            : target;
+
+        var resourceSnapshot = BuildResourceSnapshot(await ReadApiDataAsync(client, new Uri(apiBaseUri, "cluster/resources"), authHeader, apiUser, tokenId, cancellationToken), ResolveNodeName(nodeHint));
         var nodeOverview = await ReadApiDataAsync(client, new Uri(apiBaseUri, "nodes"), authHeader, apiUser, tokenId, cancellationToken);
-        var nodeName = ResolveNodeNameFromOverview(nodeOverview, target);
+        var nodeName = ResolveNodeNameFromOverview(nodeOverview, nodeHint);
 
         try
         {
@@ -664,71 +670,19 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
 
     private static void AppendResourceTypeChannels(List<SensorChannelValue> channels, ResourceSnapshot snapshot)
     {
-        if (snapshot.QemuCount > 0)
-        {
-            channels.Add(new SensorChannelValue
-            {
-                Key = "qemuTotal",
-                Label = "QEMU VMs",
-                Value = snapshot.QemuCount
-            });
-            channels.Add(new SensorChannelValue
-            {
-                Key = "qemuRunning",
-                Label = "QEMU running",
-                Value = snapshot.QemuRunningCount
-            });
-            channels.Add(new SensorChannelValue
-            {
-                Key = "qemuStopped",
-                Label = "QEMU stopped",
-                Value = snapshot.QemuStoppedCount
-            });
-        }
+        // VMs (QEMU) — always emitted so the counts are stable even at zero.
+        channels.Add(new SensorChannelValue { Key = "vmOnline", Label = "VMs online", Value = snapshot.QemuRunningCount });
+        channels.Add(new SensorChannelValue { Key = "vmOffline", Label = "VMs offline", Value = snapshot.QemuStoppedCount });
+        channels.Add(new SensorChannelValue { Key = "vmTotal", Label = "VMs total", Value = snapshot.QemuCount, LogByDefault = false });
 
-        if (snapshot.LxcCount > 0)
-        {
-            channels.Add(new SensorChannelValue
-            {
-                Key = "lxcTotal",
-                Label = "LXC containers",
-                Value = snapshot.LxcCount
-            });
-            channels.Add(new SensorChannelValue
-            {
-                Key = "lxcRunning",
-                Label = "LXC running",
-                Value = snapshot.LxcRunningCount
-            });
-            channels.Add(new SensorChannelValue
-            {
-                Key = "lxcStopped",
-                Label = "LXC stopped",
-                Value = snapshot.LxcStoppedCount
-            });
-        }
+        // Containers (LXC).
+        channels.Add(new SensorChannelValue { Key = "containerOnline", Label = "Containers online", Value = snapshot.LxcRunningCount });
+        channels.Add(new SensorChannelValue { Key = "containerOffline", Label = "Containers offline", Value = snapshot.LxcStoppedCount });
+        channels.Add(new SensorChannelValue { Key = "containerTotal", Label = "Containers total", Value = snapshot.LxcCount, LogByDefault = false });
 
-        if (snapshot.StorageCount > 0)
-        {
-            channels.Add(new SensorChannelValue
-            {
-                Key = "storageTotal",
-                Label = "Storages",
-                Value = snapshot.StorageCount
-            });
-            channels.Add(new SensorChannelValue
-            {
-                Key = "storageOnline",
-                Label = "Storages online",
-                Value = snapshot.StorageOnlineCount
-            });
-            channels.Add(new SensorChannelValue
-            {
-                Key = "storageOffline",
-                Label = "Storages offline",
-                Value = snapshot.StorageOfflineCount
-            });
-        }
+        // Storages.
+        channels.Add(new SensorChannelValue { Key = "storageOnline", Label = "Storages online", Value = snapshot.StorageOnlineCount });
+        channels.Add(new SensorChannelValue { Key = "storageOffline", Label = "Storages offline", Value = snapshot.StorageOfflineCount });
     }
 
     private static bool IsNodeOnline(string status)

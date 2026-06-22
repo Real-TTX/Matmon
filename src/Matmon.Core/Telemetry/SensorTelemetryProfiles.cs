@@ -45,6 +45,8 @@ public static class SensorTelemetryProfiles
         ["ups-snmp"] = Responsive,
         ["mssql"] = Responsive,
         ["proxmox"] = Responsive,
+        ["proxmox-health"] = Responsive,
+        ["proxmox-node-health"] = Responsive,
         ["synology"] = Responsive,
         ["synology-health"] = Responsive,
         ["synology-disk"] = Responsive,

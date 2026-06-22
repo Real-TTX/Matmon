@@ -52,6 +52,8 @@ public static class SensorTypeCategories
         ["local-program"] = "Scripting",
 
         ["proxmox"] = "Virtualization & NAS",
+        ["proxmox-health"] = "Virtualization & NAS",
+        ["proxmox-node-health"] = "Virtualization & NAS",
         ["proxmox-disk"] = "Virtualization & NAS",
         ["synology"] = "Virtualization & NAS",
         ["synology-health"] = "Virtualization & NAS",

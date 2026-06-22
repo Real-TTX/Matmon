@@ -1798,6 +1798,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 SnmpInterfaceSensorExecutor.Definition,
                 UpsSnmpSensorExecutor.Definition,
                 ProxmoxPveSensorExecutor.Definition,
+                ProxmoxHealthSensorExecutor.Definition,
+                ProxmoxNodeHealthSensorExecutor.Definition,
                 ProxmoxDiskSensorExecutor.Definition,
                 UnifiHealthSensorExecutor.Definition,
                 PowerShellRemoteSensorExecutor.Definition,
