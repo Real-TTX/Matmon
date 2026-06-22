@@ -219,21 +219,31 @@ function initializeElementPickers() {
     const search = picker.querySelector("[data-picker-search]");
     const tagFilter = picker.querySelector("[data-picker-tag]");
     const list = picker.querySelector("[data-picker-list]");
+    const tagList = backdrop.querySelector("[data-picker-tag-list]");
     const empty = picker.querySelector("[data-picker-empty]");
     const closeButton = picker.querySelector("[data-picker-close]");
+    const modeButtons = Array.from(picker.querySelectorAll("[data-picker-mode]"));
     if (!valueInput || !trigger || !backdrop || !list) {
       return;
     }
 
-    const options = Array.from(list.querySelectorAll("[data-picker-option]"));
+    // Options from BOTH the element tree list and (when tags are allowed) the tag list.
+    const options = Array.from(backdrop.querySelectorAll("[data-picker-option]"));
 
     const applyFilter = () => {
+      const tagMode = picker.classList.contains("is-tag-mode");
       const term = (search?.value || "").trim().toLowerCase();
       const tag = (tagFilter?.value || "").trim().toLowerCase();
       // Tree (indented) when browsing; flat list with paths when filtering.
       list.classList.toggle("is-flat", term !== "" || tag !== "");
       let visible = 0;
       options.forEach((option) => {
+        const inTagList = option.closest("[data-picker-tag-list]") !== null;
+        // Only the active mode's list participates (the other is hidden by .is-tag-mode).
+        if (tagMode !== inTagList) {
+          option.hidden = true;
+          return;
+        }
         const isClear = option.classList.contains("element-picker-clear");
         const haystack = option.getAttribute("data-search") || "";
         const tags = option.getAttribute("data-tags") || "";
@@ -250,6 +260,16 @@ function initializeElementPickers() {
         empty.hidden = visible > 0;
       }
     };
+
+    const setMode = (mode) => {
+      picker.classList.toggle("is-tag-mode", mode === "tag");
+      modeButtons.forEach((button) => button.classList.toggle("is-active", button.dataset.pickerMode === mode));
+      if (tagFilter) {
+        tagFilter.value = "";
+      }
+      applyFilter();
+    };
+    modeButtons.forEach((button) => button.addEventListener("click", () => setMode(button.dataset.pickerMode)));
 
     const open = () => {
       backdrop.hidden = false;
@@ -275,10 +295,11 @@ function initializeElementPickers() {
       const id = option.getAttribute("data-id") || "";
       const name = option.getAttribute("data-name") || "";
       const path = option.getAttribute("data-path") || "";
+      const isTag = id.startsWith("tag:");
       valueInput.value = id;
       valueInput.dataset.selectedName = id ? name : "";
       if (label) {
-        label.textContent = id ? name : (trigger.getAttribute("data-placeholder") || label.textContent);
+        label.textContent = id ? (isTag ? `# ${name}` : name) : (trigger.getAttribute("data-placeholder") || label.textContent);
       }
       if (triggerPath) {
         triggerPath.textContent = path;

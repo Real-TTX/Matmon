@@ -4281,6 +4281,59 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   width: 100%;
 }
 
+/* Element ⇆ Tag toggle (segmented control) + mode visibility. */
+.element-picker-mode {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--matmon-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.element-picker-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--matmon-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.element-picker-mode-btn.is-active {
+  background: rgba(95, 141, 255, 0.16);
+  color: var(--matmon-text);
+}
+
+.element-picker-mode-btn .ui-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.element-picker-tag-list {
+  display: none;
+}
+
+.element-picker.is-tag-mode [data-picker-list]:not(.element-picker-tag-list) {
+  display: none;
+}
+
+.element-picker.is-tag-mode .element-picker-tag-list {
+  display: block;
+}
+
+.element-picker.is-tag-mode .element-picker-tag {
+  display: none;
+}
+
+.element-picker-option-empty {
+  padding: 0.6rem 0.7rem;
+  color: var(--matmon-muted);
+  font-size: 0.8rem;
+}
+
 .element-picker-tag {
   /* Override .workspace-select's width:100% — otherwise the tag dropdown takes the
      whole head, collapsing the search box and pushing the close (X) off-screen. */

@@ -7,17 +7,24 @@
         .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 }
-<div class="element-picker" data-element-picker id="@Model.DomId">
-    <input type="hidden" name="@Model.FieldName" value="@(Model.SelectedId?.ToString())" data-picker-value data-selected-name="@(selected?.Name)" @Html.Raw(Model.ValueAttribute) />
-    <button type="button" class="form-control workspace-input element-picker-trigger @(selected is null ? "is-empty" : null)" data-picker-open aria-haspopup="dialog">
-        <span class="element-picker-trigger-label" data-picker-label>@(selected?.Name ?? Model.Placeholder)</span>
-        <span class="element-picker-trigger-path" data-picker-trigger-path>@(selected?.Path)</span>
+<div class="element-picker @(Model.SelectedTagName is not null ? "is-tag-mode" : null)" data-element-picker id="@Model.DomId">
+    <input type="hidden" name="@Model.FieldName" value="@Model.EffectiveValue" data-picker-value data-selected-name="@(Model.SelectedTagName ?? selected?.Name)" @Html.Raw(Model.ValueAttribute) />
+    <button type="button" class="form-control workspace-input element-picker-trigger @(string.IsNullOrEmpty(Model.EffectiveValue) ? "is-empty" : null)" data-picker-open aria-haspopup="dialog">
+        <span class="element-picker-trigger-label" data-picker-label>@(Model.SelectedTagName is { } tagName ? $"# {tagName}" : (selected?.Name ?? Model.Placeholder))</span>
+        <span class="element-picker-trigger-path" data-picker-trigger-path>@(Model.SelectedTagName is not null ? "Tag · all matching sensors" : selected?.Path)</span>
         @MatmonIcons.Render("search", "element-picker-trigger-icon")
     </button>
 
     <div class="element-picker-backdrop" data-picker-dialog hidden>
         <div class="element-picker-panel" role="dialog" aria-modal="true" aria-label="Select element">
             <div class="element-picker-head">
+                @if (Model.AllowTags)
+                {
+                    <div class="element-picker-mode" data-picker-mode-switch role="tablist">
+                        <button type="button" class="element-picker-mode-btn @(Model.SelectedTagName is null ? "is-active" : null)" data-picker-mode="element">@MatmonIcons.Render("monitoring")<span>Element</span></button>
+                        <button type="button" class="element-picker-mode-btn @(Model.SelectedTagName is not null ? "is-active" : null)" data-picker-mode="tag">@MatmonIcons.Render("tag")<span>Tag</span></button>
+                    </div>
+                }
                 <div class="element-picker-search">
                     @MatmonIcons.Render("search")
                     <input type="text" class="form-control workspace-input" placeholder="Search name, path or tag…" data-picker-search autocomplete="off" />
@@ -73,6 +80,33 @@
                     </li>
                 }
             </ul>
+            @if (Model.AllowTags)
+            {
+                <ul class="element-picker-list element-picker-tag-list" data-picker-tag-list role="listbox">
+                    @foreach (var tag in allTags)
+                    {
+                        <li class="element-picker-option @(string.Equals(Model.EffectiveValue, $"tag:{tag}", StringComparison.OrdinalIgnoreCase) ? "is-selected" : null)"
+                            data-picker-option
+                            data-id="tag:@tag"
+                            data-name="@tag"
+                            data-path="Tag · all matching sensors"
+                            data-search="@tag.ToLowerInvariant()"
+                            data-tags=""
+                            role="option"
+                            tabindex="0">
+                            <span class="element-picker-option-kind" data-kind="tag">@MatmonIcons.Render("tag")</span>
+                            <span class="element-picker-option-body">
+                                <span class="element-picker-option-name"># @tag</span>
+                                <span class="element-picker-option-path">All sensors with this tag</span>
+                            </span>
+                        </li>
+                    }
+                    @if (allTags.Length == 0)
+                    {
+                        <li class="element-picker-option-empty">No tags defined yet.</li>
+                    }
+                </ul>
+            }
             <div class="element-picker-empty" data-picker-empty hidden>No matches.</div>
         </div>
     </div>

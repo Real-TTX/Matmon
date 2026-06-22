@@ -27,6 +27,15 @@ public sealed class ElementPickerModel
 
     public Guid? SelectedId { get; init; }
 
+    /// <summary>
+    /// Raw target token to pre-select when it can be more than an element id: a GUID
+    /// string (element) or "tag:&lt;name&gt;" (tag). Falls back to <see cref="SelectedId"/>.
+    /// </summary>
+    public string? SelectedValue { get; init; }
+
+    /// <summary>Offer the Element ⇆ Tag toggle and a selectable tag list.</summary>
+    public bool AllowTags { get; init; }
+
     public string Placeholder { get; init; } = "Select…";
 
     /// <summary>Allow clearing the selection back to none.</summary>
@@ -40,8 +49,24 @@ public sealed class ElementPickerModel
 
     public IReadOnlyList<ElementPickerOption> Options { get; init; } = [];
 
+    /// <summary>The effective raw token written into the hidden input (token wins over id).</summary>
+    public string? EffectiveValue =>
+        !string.IsNullOrEmpty(SelectedValue) ? SelectedValue : SelectedId?.ToString();
+
+    /// <summary>Tag name when the current value is a "tag:&lt;name&gt;" target, else null.</summary>
+    public string? SelectedTagName => MonitoringTargetResolver.TagName(EffectiveValue);
+
     public ElementPickerOption? Selected =>
-        SelectedId is { } id ? Options.FirstOrDefault(option => option.Id == id) : null;
+        MonitoringTargetResolver.ElementId(EffectiveValue) is { } id
+            ? Options.FirstOrDefault(option => option.Id == id)
+            : null;
+
+    /// <summary>Distinct effective tags across all options, for the selectable tag list.</summary>
+    public IReadOnlyList<string> AvailableTags =>
+        Options.SelectMany(option => option.Tags)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 }
 
 public static class ElementPickerOptions
