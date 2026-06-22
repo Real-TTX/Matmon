@@ -72,7 +72,6 @@
                     }
                     <button type="button" class="sensor-tab" data-sensor-tab-target="schedule" role="tab">@MatmonIcons.Render("clock")<span>Schedule</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="telemetry" role="tab">@MatmonIcons.Render("chart")<span>Telemetry</span></button>
-                    <button type="button" class="sensor-tab" data-sensor-tab-target="advanced" role="tab">@MatmonIcons.Render("settings")<span>Advanced</span></button>
                 </div>
 
                 @* ---------- GENERAL ---------- *@
@@ -455,13 +454,8 @@
                     </div>
                     }
 
-                @* ---------- ADVANCED ---------- *@
-                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="advanced">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("settings")<span>Advanced</span></h2>
-                        <span class="panel-hint">templates &amp; raw overrides</span>
-                    </div>
-
+                @* ---------- TEMPLATE (shown under General) ---------- *@
+                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="general">
                     <div class="workspace-span-2 workspace-template-origin">
                         <div class="panel-header">
                             <h2 class="section-title">@MatmonIcons.Render("template")<span>Template</span></h2>
