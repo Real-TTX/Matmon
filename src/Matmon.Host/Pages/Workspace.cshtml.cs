@@ -3933,6 +3933,14 @@ public sealed class WorkspaceModel : PageModel
 
     private static void ApplyCredentialBundles(MonitoringSettings settings, IReadOnlyList<WorkspaceCredentialBundleInput> bundles)
     {
+        // Snapshot the existing decrypted values per bundle BEFORE clearing, so a Secret field
+        // the form rendered blank (password inputs never echo their value) preserves the stored
+        // secret instead of wiping it on an unrelated save.
+        var existingValuesById = settings.Credentials
+            .Where(credential => credential.Id != Guid.Empty)
+            .GroupBy(credential => credential.Id)
+            .ToDictionary(group => group.Key, group => group.First().Values, EqualityComparer<Guid>.Default);
+
         settings.Credentials.Clear();
 
         foreach (var bundle in bundles)
@@ -3942,35 +3950,36 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
+            existingValuesById.TryGetValue(bundle.Id, out var existing);
             var values = new Dictionary<string, string>(ParseKeyValueLines(bundle.ValuesText), StringComparer.OrdinalIgnoreCase);
             switch (bundle.Kind)
             {
                 case MonitoringCredentialKind.Windows:
                     ApplyCredentialBundleField(values, "winrm.username", bundle.WinrmUsername);
-                    ApplyCredentialBundleField(values, "winrm.password", bundle.WinrmPassword);
+                    ApplyCredentialSecretField(values, "winrm.password", bundle.WinrmPassword, existing);
                     break;
                 case MonitoringCredentialKind.Linux:
                 case MonitoringCredentialKind.Ssh:
                     ApplyCredentialBundleField(values, "ssh.username", bundle.SshUsername);
-                    ApplyCredentialBundleField(values, "ssh.password", bundle.SshPassword);
+                    ApplyCredentialSecretField(values, "ssh.password", bundle.SshPassword, existing);
                     ApplyCredentialBundleField(values, "ssh.privateKeyPath", bundle.SshPrivateKeyPath);
                     break;
                 case MonitoringCredentialKind.Proxmox:
                     ApplyCredentialBundleField(values, "pve.user", bundle.PveUser);
                     ApplyCredentialBundleField(values, "pve.tokenId", bundle.PveTokenId);
-                    ApplyCredentialBundleField(values, "pve.tokenSecret", bundle.PveTokenSecret);
+                    ApplyCredentialSecretField(values, "pve.tokenSecret", bundle.PveTokenSecret, existing);
                     break;
                 case MonitoringCredentialKind.SqlServer:
                     ApplyCredentialBundleField(values, "mssql.username", bundle.MssqlUsername);
-                    ApplyCredentialBundleField(values, "mssql.password", bundle.MssqlPassword);
+                    ApplyCredentialSecretField(values, "mssql.password", bundle.MssqlPassword, existing);
                     break;
                 case MonitoringCredentialKind.Snmp:
                     ApplyCredentialBundleField(values, "snmp.community", bundle.SnmpCommunity);
                     ApplyCredentialBundleField(values, "snmp.v3.username", bundle.SnmpV3Username);
                     ApplyCredentialBundleField(values, "snmp.v3.authProtocol", bundle.SnmpV3AuthProtocol);
-                    ApplyCredentialBundleField(values, "snmp.v3.authPassword", bundle.SnmpV3AuthPassword);
+                    ApplyCredentialSecretField(values, "snmp.v3.authPassword", bundle.SnmpV3AuthPassword, existing);
                     ApplyCredentialBundleField(values, "snmp.v3.privProtocol", bundle.SnmpV3PrivacyProtocol);
-                    ApplyCredentialBundleField(values, "snmp.v3.privPassword", bundle.SnmpV3PrivacyPassword);
+                    ApplyCredentialSecretField(values, "snmp.v3.privPassword", bundle.SnmpV3PrivacyPassword, existing);
                     ApplyCredentialBundleField(values, "snmp.v3.contextName", bundle.SnmpV3ContextName);
                     break;
             }
@@ -4002,6 +4011,32 @@ public sealed class WorkspaceModel : PageModel
         }
 
         values[key] = value.Trim();
+    }
+
+    /// <summary>
+    /// Like <see cref="ApplyCredentialBundleField"/> but for a Secret field: a password input
+    /// never echoes its value, so a blank posted value means "unchanged" — keep the existing
+    /// stored secret rather than wiping it. (Clearing a secret requires deleting the bundle.)
+    /// </summary>
+    private static void ApplyCredentialSecretField(
+        Dictionary<string, string> values,
+        string key,
+        string? value,
+        IReadOnlyDictionary<string, string>? existing)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value.Trim();
+            return;
+        }
+
+        if (existing is not null && existing.TryGetValue(key, out var existingValue) && !string.IsNullOrWhiteSpace(existingValue))
+        {
+            values[key] = existingValue;
+            return;
+        }
+
+        values.Remove(key);
     }
 
     private static List<SelectListItem> BuildCredentialKindOptions(MonitoringCredentialKind? selectedKind = null)
