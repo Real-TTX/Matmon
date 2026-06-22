@@ -25,12 +25,20 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
         [
             new SensorParameterDefinition
             {
-                Key = "program.path",
-                Label = "Program path",
-                Kind = SensorParameterKind.Text,
-                Description = "Absolute path to the executable. Must be allowed in Matmon__AllowedProgramPaths.",
+                Key = "program.base",
+                Label = "Program",
+                Kind = SensorParameterKind.ValueList,
+                Description = "Choose an allowed program or directory (from the Matmon__AllowedProgramPaths setting).",
                 Required = true,
-                Placeholder = "/usr/local/bin/check_thing"
+                Options = BuildBaseOptions()
+            },
+            new SensorParameterDefinition
+            {
+                Key = "program.relative",
+                Label = "Relative path",
+                Kind = SensorParameterKind.Text,
+                Description = "When the chosen entry is a directory, the executable relative to it (e.g. check_thing or sub/check). Leave empty for an exact-file entry. '..' cannot escape the directory.",
+                Placeholder = "check_thing"
             },
             new SensorParameterDefinition
             {
@@ -100,10 +108,10 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
         SensorExecutionContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!MonitoringSettings.TryReadParameter(context.Settings, "program.path", out var path) ||
-            string.IsNullOrWhiteSpace(path))
+        var path = ResolveProgramPath(context.Settings);
+        if (string.IsNullOrWhiteSpace(path))
         {
-            return SensorExecutionResult.Critical(TimeSpan.Zero, "program path is required");
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "select an allowed program");
         }
 
         path = path.Trim();
@@ -235,6 +243,49 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
             TryKill(process);
             process?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Dropdown options for the program base: one per allow-list entry (built once at startup
+    /// from <see cref="AllowListVariable"/>; a restart is required to pick up changes). Empty
+    /// allow-list yields a single disabled-looking hint option.
+    /// </summary>
+    private static IReadOnlyList<SensorParameterOption> BuildBaseOptions()
+    {
+        var allowList = ReadAllowList();
+        if (allowList.Count == 0)
+        {
+            return [new SensorParameterOption { Value = string.Empty, Label = "(no paths allowed — set Matmon__AllowedProgramPaths)" }];
+        }
+
+        return allowList
+            .Select(entry => new SensorParameterOption { Value = entry, Label = entry })
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Resolves the executable path from the chosen allow-list base + optional relative path
+    /// (falling back to the legacy free-text <c>program.path</c> for older sensors). The result
+    /// is still validated against the allow-list by the caller.
+    /// </summary>
+    private static string ResolveProgramPath(MonitoringSettings settings)
+    {
+        var basePath = MonitoringSettings.TryReadParameter(settings, "program.base", out var configuredBase)
+            ? configuredBase?.Trim()
+            : null;
+        var relative = MonitoringSettings.TryReadParameter(settings, "program.relative", out var configuredRelative)
+            ? configuredRelative?.Trim()
+            : null;
+
+        if (!string.IsNullOrWhiteSpace(basePath))
+        {
+            return string.IsNullOrWhiteSpace(relative) ? basePath : Path.Combine(basePath, relative);
+        }
+
+        // Legacy free-text path (sensors created before the dropdown).
+        return MonitoringSettings.TryReadParameter(settings, "program.path", out var legacy) && !string.IsNullOrWhiteSpace(legacy)
+            ? legacy.Trim()
+            : string.Empty;
     }
 
     /// <summary>The configured allow-list (exact files or directories), or empty.</summary>

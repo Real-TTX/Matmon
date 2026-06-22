@@ -16,6 +16,8 @@ services:
       Matmon__CreateStarterMap: true
       # Auto-provision a "UniFi Cloud" sensor when a key is supplied (via .env, gitignored).
       Matmon__UnifiCloudApiKey: ${UNIFI_CLOUD_API_KEY:-}
+      # Allow-list for the "Local Program" sensor (semicolon-separated files/dirs). Empty = none.
+      Matmon__AllowedProgramPaths: ${MATMON_ALLOWED_PROGRAM_PATHS:-}
     ports:
       - "8099:8099"
     volumes:
