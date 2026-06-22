@@ -145,6 +145,7 @@
                 <div class="sensor-tabs" data-sensor-tabs role="tablist">
                     <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("template")<span>General</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="parameters" role="tab">@MatmonIcons.Render("settings")<span>Parameters</span></button>
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="credentials" role="tab">@MatmonIcons.Render("key")<span>Credentials</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="thresholds" role="tab">@MatmonIcons.Render("signal")<span>Channels</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="schedule" role="tab">@MatmonIcons.Render("clock")<span>Schedule</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="telemetry" role="tab">@MatmonIcons.Render("chart")<span>Telemetry</span></button>
@@ -218,8 +219,8 @@
                     <div class="workspace-inline-note">Parent templates are living defaults. Empty fields keep inheriting from the parent or from higher elements.</div>
                 </div>
 
-                @* ---------- PARAMETERS ---------- *@
-                <div class="workspace-span-2 workspace-credential-section" data-sensor-tab="parameters">
+                @* ---------- CREDENTIALS ---------- *@
+                <div class="workspace-span-2 workspace-credential-section" data-sensor-tab="credentials">
                     <div class="panel-header">
                         <h2 class="section-title">@MatmonIcons.Render("key")<span>Credentials</span></h2>
                         <span class="panel-hint">inherited access</span>

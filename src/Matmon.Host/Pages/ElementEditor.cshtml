@@ -66,6 +66,10 @@
                         }
                         <button type="button" class="sensor-tab" data-sensor-tab-target="thresholds" role="tab">@MatmonIcons.Render("signal")<span>Channels</span></button>
                     }
+                    else
+                    {
+                        <button type="button" class="sensor-tab" data-sensor-tab-target="credentials" role="tab">@MatmonIcons.Render("key")<span>Credentials</span></button>
+                    }
                     <button type="button" class="sensor-tab" data-sensor-tab-target="schedule" role="tab">@MatmonIcons.Render("clock")<span>Schedule</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="telemetry" role="tab">@MatmonIcons.Render("chart")<span>Telemetry</span></button>
                     <button type="button" class="sensor-tab" data-sensor-tab-target="advanced" role="tab">@MatmonIcons.Render("settings")<span>Advanced</span></button>
@@ -252,41 +256,10 @@
                     <div class="workspace-inline-note">Empty = inherit; the placeholder shows the active value.</div>
                 </div>
 
-                @* ---------- ADVANCED ---------- *@
-                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="advanced">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("settings")<span>Advanced</span></h2>
-                        <span class="panel-hint">templates &amp; raw overrides</span>
-                    </div>
-
-                    <div class="workspace-span-2 workspace-template-origin">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("template")<span>Template</span></h2>
-                            @if (Model.ElementEditor.TemplateOriginId is not null)
-                            {
-                                <span class="panel-hint">@(Model.ElementEditor.TemplateOriginName ?? "origin")</span>
-                            }
-                        </div>
-
-                        @if (Model.ElementEditor.TemplateOriginId is not null)
-                        {
-                            <div class="workspace-inline-note">
-                                Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "—")</strong>. Its values were copied in — later template edits don't change this element until you restore.
-                            </div>
-                            <div class="workspace-form-actions">
-                                <button type="submit" asp-page-handler="ReapplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Restore from template</span></button>
-                                <button type="submit" asp-page-handler="DetachElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("close")<span>Detach origin</span></button>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="workspace-inline-note">Not created from a template. Templates are chosen when you create a sensor — start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</div>
-                        }
-                    </div>
-
+                @* ---------- CREDENTIALS (containers define bundles) ---------- *@
                     @if (!isSensor)
                     {
-                    <div class="workspace-span-2 workspace-credential-section">
+                    <div class="workspace-span-2 workspace-credential-section" data-sensor-tab="credentials">
                         <div class="panel-header">
                             <h2 class="section-title">@MatmonIcons.Render("key")<span>Credentials</span></h2>
                             <span class="panel-hint">inherited access</span>
@@ -465,6 +438,39 @@
                         }
                     </div>
                     }
+
+                @* ---------- ADVANCED ---------- *@
+                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="advanced">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("settings")<span>Advanced</span></h2>
+                        <span class="panel-hint">templates &amp; raw overrides</span>
+                    </div>
+
+                    <div class="workspace-span-2 workspace-template-origin">
+                        <div class="panel-header">
+                            <h2 class="section-title">@MatmonIcons.Render("template")<span>Template</span></h2>
+                            @if (Model.ElementEditor.TemplateOriginId is not null)
+                            {
+                                <span class="panel-hint">@(Model.ElementEditor.TemplateOriginName ?? "origin")</span>
+                            }
+                        </div>
+
+                        @if (Model.ElementEditor.TemplateOriginId is not null)
+                        {
+                            <div class="workspace-inline-note">
+                                Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "—")</strong>. Its values were copied in — later template edits don't change this element until you restore.
+                            </div>
+                            <div class="workspace-form-actions">
+                                <button type="submit" asp-page-handler="ReapplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Restore from template</span></button>
+                                <button type="submit" asp-page-handler="DetachElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("close")<span>Detach origin</span></button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="workspace-inline-note">Not created from a template. Templates are chosen when you create a sensor — start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</div>
+                        }
+                    </div>
+
                 </div>
 
                 <div class="workspace-form-actions">
