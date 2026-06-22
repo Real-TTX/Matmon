@@ -81,6 +81,9 @@
                             case SensorParameterKind.Decimal:
                                 <input asp-for="SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "any")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
                                 break;
+                            case SensorParameterKind.ScriptEditor:
+                                <textarea asp-for="SensorParameterFields[i].Value" rows="14" class="form-control workspace-textarea" data-script-editor spellcheck="false" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
+                                break;
                             case SensorParameterKind.Multiline:
                                 <textarea asp-for="SensorParameterFields[i].Value" rows="4" class="form-control workspace-textarea" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
                                 break;

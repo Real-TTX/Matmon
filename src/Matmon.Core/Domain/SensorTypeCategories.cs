@@ -39,6 +39,7 @@ public static class SensorTypeCategories
         ["ssl-certificate"] = "Certificates",
         ["certificate-chain"] = "Certificates",
 
+        ["windows-health"] = "Windows",
         ["windows-service"] = "Windows",
         ["windows-process"] = "Windows",
         ["windows-disk"] = "Windows",

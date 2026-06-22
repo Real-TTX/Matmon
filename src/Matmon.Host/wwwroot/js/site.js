@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeSensorNameSuggestion();
   initializeSensorTypePreview();
   initializeSensorParameterVisibility();
+  initializeScriptEditors();
   initializeTemplateScopeEditors();
   initializeScheduleEditors();
   initializeRowLinks();
@@ -1370,6 +1371,73 @@ function initializeSensorParameterVisibility() {
 
     refreshVisibility();
   });
+}
+
+// Progressively enhances a [data-script-editor] textarea into a code editor: a transparent
+// textarea over a syntax-highlighted <pre>, with tab insertion. Dependency-free.
+function initializeScriptEditors() {
+  document.querySelectorAll("textarea[data-script-editor]").forEach((textarea) => {
+    if (textarea.dataset.scriptEditorReady === "1") {
+      return;
+    }
+    textarea.dataset.scriptEditorReady = "1";
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-editor";
+    const pre = document.createElement("pre");
+    pre.className = "code-editor-highlight";
+    pre.setAttribute("aria-hidden", "true");
+    const code = document.createElement("code");
+    pre.appendChild(code);
+
+    textarea.parentNode.insertBefore(wrapper, textarea);
+    wrapper.appendChild(pre);
+    wrapper.appendChild(textarea);
+    textarea.classList.add("code-editor-input");
+    textarea.setAttribute("spellcheck", "false");
+    textarea.setAttribute("autocomplete", "off");
+    textarea.setAttribute("autocapitalize", "off");
+
+    const render = () => {
+      // Trailing newline keeps the last line scrollable into view.
+      code.innerHTML = highlightScript(textarea.value) + "\n";
+    };
+    const syncScroll = () => {
+      pre.scrollTop = textarea.scrollTop;
+      pre.scrollLeft = textarea.scrollLeft;
+    };
+
+    textarea.addEventListener("input", render);
+    textarea.addEventListener("scroll", syncScroll);
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = `${textarea.value.slice(0, start)}  ${textarea.value.slice(end)}`;
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+        render();
+      }
+    });
+
+    render();
+  });
+}
+
+// Tiny PowerShell/shell highlighter: comments, strings, $variables, numbers, keywords.
+function highlightScript(source) {
+  const token = /(#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\$\{?[A-Za-z_][\w:.]*\}?|\$[0-9]+|\$[@*?#!-])|(\b\d+(?:\.\d+)?\b)|(\b(?:if|else|elseif|then|fi|for|foreach|in|do|done|while|until|switch|function|return|param|begin|process|end|try|catch|finally|throw|break|continue|case|esac|echo|exit|local|export|set)\b)/g;
+  let result = "";
+  let last = 0;
+  source.replace(token, (match, comment, str, variable, number, keyword, offset) => {
+    result += escapeHtml(source.slice(last, offset));
+    const cls = comment ? "tok-comment" : str ? "tok-string" : variable ? "tok-var" : number ? "tok-number" : "tok-keyword";
+    result += `<span class="${cls}">${escapeHtml(match)}</span>`;
+    last = offset + match.length;
+    return match;
+  });
+  result += escapeHtml(source.slice(last));
+  return result;
 }
 
 function initializeTemplateScopeEditors() {

@@ -71,7 +71,7 @@ public sealed class PowerShellRemoteSensorExecutor : ISensorExecutor
             {
                 Key = "script",
                 Label = "Script",
-                Kind = SensorParameterKind.Multiline,
+                Kind = SensorParameterKind.ScriptEditor,
                 Description = "PowerShell script executed on the remote host. Emit JSON, XML, regex-friendly text or a single numeric value.",
                 Required = true,
                 Placeholder = """
@@ -125,7 +125,7 @@ Get-CimInstance Win32_OperatingSystem |
     };
 
     private const string DefaultOutputFormat = "auto";
-    private const string WindowsHealthDiscoveryScript = """
+    internal const string WindowsHealthDiscoveryScript = """
 $ErrorActionPreference = 'SilentlyContinue'
 $os = Get-CimInstance Win32_OperatingSystem
 $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
@@ -164,22 +164,11 @@ if ($physical) {
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
+        _ = context;
 
-        var suggestions = new List<SensorDiscoverySuggestion>();
-        if (context.OpenTcpPorts.Contains(5985))
-        {
-            suggestions.Add(BuildWindowsHealthSuggestion(port: 5985, useSsl: false));
-        }
-
-        if (context.OpenTcpPorts.Contains(5986))
-        {
-            suggestions.Add(BuildWindowsHealthSuggestion(port: 5986, useSsl: true));
-        }
-
-        return ValueTask.FromResult(
-            suggestions.Count == 0
-                ? SensorDiscoveryCheckResult.NotAvailable
-                : SensorDiscoveryCheckResult.Available([.. suggestions]));
+        // Auto-discovery of Windows health is owned by the dedicated WindowsHealthSensorExecutor
+        // now; this generic "run any PowerShell script" sensor stays manual-only.
+        return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
     }
 
     public async ValueTask<SensorExecutionResult> ExecuteAsync(

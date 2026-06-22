@@ -9817,6 +9817,68 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   opacity: 0.86;
 }
 
+/* Syntax-highlighting code editor (SensorParameterKind.ScriptEditor): a transparent
+   textarea layered over a highlighted <pre>. Both must share identical metrics so the
+   coloured text lines up exactly under the caret. */
+.code-editor {
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid var(--matmon-border);
+  background: #0d1117;
+  overflow: hidden;
+}
+
+.code-editor-highlight,
+.code-editor-input {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  font-family: var(--matmon-mono-font);
+  font-size: 0.83rem;
+  line-height: 1.55;
+  tab-size: 2;
+  -moz-tab-size: 2;
+  white-space: pre;
+  box-sizing: border-box;
+}
+
+.code-editor-highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: #c9d1d9;
+}
+
+.code-editor-highlight code {
+  font: inherit;
+  white-space: pre;
+}
+
+.code-editor-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 16rem;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: #e6edf3;
+  border: 0 !important;
+  border-radius: 0 !important;
+  resize: vertical;
+  outline: none;
+  overflow: auto;
+}
+
+.code-editor-input::selection {
+  background: rgba(120, 150, 255, 0.35);
+}
+
+.tok-comment { color: #8b949e; font-style: italic; }
+.tok-string  { color: #a5d6ff; }
+.tok-var     { color: #ffa657; }
+.tok-number  { color: #79c0ff; }
+.tok-keyword { color: #ff7b72; }
+
 .sensor-threshold-help {
   margin-top: 0.15rem;
   color: var(--matmon-muted);

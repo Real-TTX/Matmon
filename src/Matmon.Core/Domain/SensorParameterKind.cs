@@ -8,5 +8,8 @@ public enum SensorParameterKind
     Boolean = 3,
     ValueList = 4,
     Multiline = 5,
-    Secret = 6
+    Secret = 6,
+
+    /// <summary>Multiline code editor with syntax highlighting (for script bodies).</summary>
+    ScriptEditor = 7
 }

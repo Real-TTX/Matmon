@@ -390,6 +390,7 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, PowerShellRemoteSensorExecutor>();
     services.AddTransient<ISensorExecutor, LocalScriptSensorExecutor>();
     services.AddTransient<ISensorExecutor, LocalProgramSensorExecutor>();
+    services.AddTransient<ISensorExecutor, WindowsHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsDiskSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsServiceSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsProcessSensorExecutor>();

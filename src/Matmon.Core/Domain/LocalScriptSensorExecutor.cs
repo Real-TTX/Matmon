@@ -40,7 +40,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
             {
                 Key = "script",
                 Label = "Script",
-                Kind = SensorParameterKind.Multiline,
+                Kind = SensorParameterKind.ScriptEditor,
                 Description = "Script executed locally. For PowerShell, emit a value/object (it is converted to JSON); for shell, print JSON, key=value/regex-friendly text or a single number. Variables: MATMON_HOST/MATMON_TARGET, and MATMON_USERNAME/MATMON_PASSWORD/MATMON_TOKEN + MATMON_CRED_<FIELD> from the selected credential (PowerShell: $env:MATMON_HOST, shell: $MATMON_HOST).",
                 Required = true,
                 Placeholder = """
