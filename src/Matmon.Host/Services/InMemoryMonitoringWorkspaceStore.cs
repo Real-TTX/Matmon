@@ -3273,6 +3273,7 @@ try {
             {
                 Key = parameter.Key,
                 Label = parameter.Label,
+                Group = parameter.Group,
                 Kind = parameter.Kind,
                 Description = parameter.Description,
                 Required = parameter.Required,
@@ -3282,6 +3283,8 @@ try {
                 Max = parameter.Max,
                 Step = parameter.Step,
                 CredentialKind = parameter.CredentialKind,
+                VisibleWhenParameterKey = parameter.VisibleWhenParameterKey,
+                VisibleWhenValues = parameter.VisibleWhenValues.ToArray(),
                 Options = parameter.Options.Select(option => new SensorParameterOption
                 {
                     Value = option.Value,
