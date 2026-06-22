@@ -4160,13 +4160,12 @@ public sealed class WorkspaceModel : PageModel
     private static (List<WorkspaceCredentialBundleInput> Bundles, int VisibleCount) BuildCredentialBundleEditorState(
         IEnumerable<MonitoringCredentialBundle> credentials)
     {
-        const int minimumRows = 1;
         const int maximumRows = 8;
 
         var bundles = BuildCredentialBundleInputs(credentials).ToList();
-        var visibleCount = bundles.Count == 0
-            ? minimumRows
-            : Math.Min(maximumRows, Math.Max(minimumRows, bundles.Count + 1));
+        // Only the real bundles are shown as list rows; the remaining slots are hidden and
+        // revealed one at a time by the "Add credential" button (which opens its dialog).
+        var visibleCount = bundles.Count;
 
         while (bundles.Count < maximumRows)
         {

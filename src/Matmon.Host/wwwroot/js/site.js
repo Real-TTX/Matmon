@@ -1910,18 +1910,35 @@ function initializeCredentialEditors() {
         focusTarget.focus();
       }
     };
+    const updateEmptyState = () => {
+      const empty = section.querySelector("[data-credential-empty]");
+      if (!empty) {
+        return;
+      }
+      const anyVisible = !!section.querySelector(
+        "[data-credential-list] [data-credential-row]:not([hidden]):not([data-credential-deleted='true'])"
+      );
+      empty.hidden = anyVisible;
+    };
     const closeModal = (row) => {
       const modal = row.querySelector("[data-credential-modal]");
       if (modal) {
         modal.hidden = true;
       }
       syncSummary(row);
+      // A row with no name is treated as "no entry" — collapse it back out of the list.
+      const nameInput = row.querySelector("input[name$='.Name']");
+      if (nameInput && nameInput.value.trim() === "") {
+        row.hidden = true;
+      }
+      updateEmptyState();
       if (!section.querySelector("[data-credential-modal]:not([hidden])")) {
         document.body.classList.remove("credential-modal-open");
       }
     };
 
     section.querySelectorAll("[data-credential-row]").forEach((row) => updateCredentialPanels(row));
+    updateEmptyState();
 
     section.querySelectorAll("[data-credential-row][data-credential-deleted='true']").forEach((row) => {
       row.hidden = true;
@@ -1937,6 +1954,7 @@ function initializeCredentialEditors() {
         hiddenRow.hidden = false;
         updateCredentialPanels(hiddenRow);
         syncSummary(hiddenRow);
+        updateEmptyState();
         openModal(hiddenRow);
       });
     });
@@ -2004,6 +2022,7 @@ function initializeCredentialEditors() {
 
         row.dataset.credentialDeleted = "true";
         row.hidden = true;
+        updateEmptyState();
       });
     });
   });

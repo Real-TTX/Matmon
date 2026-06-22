@@ -235,13 +235,9 @@
                         </label>
                     }
 
-                    @if (Model.TemplateEditor.CredentialBundles.Count == 0)
-                    {
-                        <div class="empty-state">No credentials yet.</div>
-                    }
-                    else
-                    {
-                        <div class="sensor-parameter-list" data-credential-section>
+                    <div class="credential-bundles" data-credential-section>
+                        <div class="empty-state" data-credential-empty hidden="@(Model.TemplateEditor.CredentialBundleVisibleCount > 0 ? "hidden" : null)">No credentials yet.</div>
+                        <div class="credential-list" data-credential-list>
                             @for (var i = 0; i < Model.TemplateEditor.CredentialBundles.Count; i++)
                             {
                                 var credential = Model.TemplateEditor.CredentialBundles[i];
@@ -404,13 +400,10 @@
                             }
                         </div>
 
-                        @if (Model.TemplateEditor.CredentialBundles.Count > Model.TemplateEditor.CredentialBundleVisibleCount)
-                        {
-                            <div class="sensor-threshold-actions">
-                                <button type="button" class="workspace-secondary-submit" data-credential-add>@MatmonIcons.Render("plus")<span>Add credential</span></button>
-                            </div>
-                        }
-                    }
+                        <div class="sensor-threshold-actions">
+                            <button type="button" class="workspace-secondary-submit" data-credential-add>@MatmonIcons.Render("plus")<span>Add credential</span></button>
+                        </div>
+                    </div>
                 </div>
 
                 @if (isSensorScope)
