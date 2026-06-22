@@ -385,11 +385,14 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
     services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxPveSensorExecutor>();
+    services.AddTransient<ISensorExecutor, ProxmoxDiskSensorExecutor>();
     services.AddTransient<ISensorExecutor, UnifiHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, PowerShellRemoteSensorExecutor>();
+    services.AddTransient<ISensorExecutor, WindowsDiskSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsServiceSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsProcessSensorExecutor>();
     services.AddTransient<ISensorExecutor, LinuxSshHealthSensorExecutor>();
+    services.AddTransient<ISensorExecutor, LinuxDiskSensorExecutor>();
     services.AddTransient<ISensorExecutor, SslCertificateSensorExecutor>();
     services.AddTransient<ISensorExecutor, CertificateChainSensorExecutor>();
     services.AddTransient<ISensorExecutor, MssqlSensorExecutor>();

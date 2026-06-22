@@ -348,7 +348,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         }
     }
 
-    private static HttpClient CreateHttpClient(bool verifySsl)
+    internal static HttpClient CreateHttpClient(bool verifySsl)
     {
         var handler = new HttpClientHandler();
         if (!verifySsl)
@@ -362,7 +362,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         };
     }
 
-    private static Uri BuildApiBaseUri(string target, int port)
+    internal static Uri BuildApiBaseUri(string target, int port)
     {
         if (Uri.TryCreate(target, UriKind.Absolute, out var absoluteUri))
         {
@@ -764,7 +764,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         int StorageOnlineCount,
         int StorageOfflineCount);
 
-    private static string BuildAuthorizationHeader(string user, string tokenId, string tokenSecret)
+    internal static string BuildAuthorizationHeader(string user, string tokenId, string tokenSecret)
     {
         var resolvedTokenId = ResolveTokenId(user, tokenId);
         return $"PVEAPIToken={resolvedTokenId}={tokenSecret.Trim()}";
@@ -790,7 +790,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             : $"{normalizedUser}!{normalizedTokenId}";
     }
 
-    private static async Task<JsonElement> ReadApiDataAsync(
+    internal static async Task<JsonElement> ReadApiDataAsync(
         HttpClient client,
         Uri uri,
         string authorizationHeader,

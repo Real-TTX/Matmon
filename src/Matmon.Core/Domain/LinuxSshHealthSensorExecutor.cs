@@ -123,7 +123,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
 
         try
         {
-            using var process = StartSshProcess(context.Target.Trim(), username.Trim(), port, context.Settings, timeout);
+            using var process = StartSshProcess(context.Target.Trim(), username.Trim(), port, context.Settings, timeout, RemoteScript);
             using var registration = cancellationToken.Register(() =>
             {
                 try
@@ -184,12 +184,13 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         }
     }
 
-    private static Process StartSshProcess(
+    internal static Process StartSshProcess(
         string target,
         string username,
         int port,
         MonitoringSettings settings,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        string script)
     {
         var startInfo = new ProcessStartInfo("ssh")
         {
@@ -217,11 +218,11 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         startInfo.ArgumentList.Add($"{username}@{target}");
         startInfo.ArgumentList.Add("sh");
         startInfo.ArgumentList.Add("-lc");
-        startInfo.ArgumentList.Add(RemoteScript);
+        startInfo.ArgumentList.Add(script);
         return Process.Start(startInfo) ?? throw new InvalidOperationException("failed to start ssh");
     }
 
-    private static List<SensorChannelValue> ParseKeyValueChannels(string stdout)
+    internal static List<SensorChannelValue> ParseKeyValueChannels(string stdout)
     {
         var channels = new List<SensorChannelValue>();
         foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

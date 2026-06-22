@@ -45,6 +45,9 @@ public static class SensorScheduleDefaults
         // Slow / rarely-changing facts.
         ["disk-smart"] = TimeSpan.FromMinutes(15),
         ["synology-disk"] = TimeSpan.FromMinutes(15),
+        ["windows-disk"] = TimeSpan.FromMinutes(15),
+        ["linux-disk"] = TimeSpan.FromMinutes(15),
+        ["proxmox-disk"] = TimeSpan.FromMinutes(15),
         ["backup-job"] = TimeSpan.FromMinutes(30),
         ["ssl-certificate"] = TimeSpan.FromHours(6),
         ["certificate-chain"] = TimeSpan.FromHours(6),
