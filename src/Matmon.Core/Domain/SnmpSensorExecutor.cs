@@ -1163,12 +1163,21 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             VerifyV3Authentication(responseParts, responseSession);
         }
 
-        var scopedPduBytes = (responseParts.Header.Flags & 0x02) != 0
-            ? DecryptScopedPdu(responseParts.DataElement.Content, responseSession, responseParts.SecurityParameters.PrivParameters)
-            : responseParts.DataElement.Content;
+        // The scoped PDU is a SEQUENCE (0x30). With privacy on, msgData is an OCTET STRING that
+        // wraps the *encrypted* SEQUENCE — decrypt it, then read that SEQUENCE. With privacy off,
+        // msgData already IS the plaintext scoped-PDU SEQUENCE, so use it directly. (Reading its
+        // .Content here would start at the contextEngineID OCTET STRING and fail as tag 0x04.)
+        BerElement scopedElement;
+        if ((responseParts.Header.Flags & 0x02) != 0)
+        {
+            var decrypted = DecryptScopedPdu(responseParts.DataElement.Content, responseSession, responseParts.SecurityParameters.PrivParameters);
+            scopedElement = new BerReader(decrypted).ReadElement();
+        }
+        else
+        {
+            scopedElement = responseParts.DataElement;
+        }
 
-        var scopedReader = new BerReader(scopedPduBytes);
-        var scopedElement = scopedReader.ReadElement();
         EnsureTag(scopedElement.Tag, 0x30, "SNMP scoped PDU");
 
         var scopedPduReader = new BerReader(scopedElement.Content);
