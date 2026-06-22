@@ -267,8 +267,6 @@ function initializeElementPickers() {
 
     const close = () => {
       backdrop.hidden = true;
-      // Force-hide inline too, so closing never depends on the [hidden] CSS rule
-      // winning the cascade (belt-and-suspenders).
       backdrop.style.display = "none";
       document.body.classList.remove("element-picker-open");
     };
@@ -287,9 +285,6 @@ function initializeElementPickers() {
       }
       trigger.classList.toggle("is-empty", !id);
       options.forEach((candidate) => candidate.classList.toggle("is-selected", candidate === option && !!id));
-      // Close first, then notify listeners (e.g. the map designer's tile sync) — and
-      // guard the dispatch so a throwing change handler can never leave the dialog
-      // stuck open on selection.
       close();
       try {
         valueInput.dispatchEvent(new Event("change", { bubbles: true }));
@@ -301,6 +296,17 @@ function initializeElementPickers() {
     trigger.setAttribute("data-placeholder", label ? label.textContent : "");
     trigger.addEventListener("click", open);
     closeButton?.addEventListener("click", close);
+    // When the picker sits inside a <label> (e.g. the map tile "Target" field), the
+    // label forwards clicks on non-control descendants to its first labelable control —
+    // the trigger button — which instantly re-opens the dialog after a selection/close.
+    // Swallow the default action for clicks inside the dialog that aren't on a real
+    // control so the label can't re-trigger the button.
+    backdrop.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof Element && !target.closest("input, select, textarea, button, a")) {
+        event.preventDefault();
+      }
+    }, true);
     backdrop.addEventListener("click", (event) => {
       if (event.target === backdrop) {
         close();
