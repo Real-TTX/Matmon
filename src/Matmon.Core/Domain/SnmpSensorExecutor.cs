@@ -548,7 +548,11 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
 
         var pduReader = new BerReader(pduElement.Content);
         var responseRequestId = (int)DecodeInteger(pduReader.ReadElement(), 0x02, "SNMP request id");
-        if (responseRequestId != expectedRequestId)
+        // A Report PDU (0xA8) is an engine-discovery / time-sync notification — the useful data
+        // (engine id, boots, time) is in the message security parameters, and some agents (e.g.
+        // Synology) don't echo the request id on Reports. Only enforce the match for a real
+        // GET-RESPONSE (0xA2).
+        if (pduElement.Tag == 0xA2 && responseRequestId != expectedRequestId)
         {
             throw new InvalidOperationException("SNMP response request id did not match the request.");
         }
@@ -1564,7 +1568,27 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         aes.IV = iv;
 
         using var encryptor = aes.CreateEncryptor();
-        return encryptor.TransformFinalBlock(plaintext, 0, plaintext.Length);
+        return TransformAesCfb(encryptor, plaintext);
+    }
+
+    /// <summary>
+    /// SNMP AES (RFC 3826) uses 128-bit CFB as a stream cipher: the ciphertext length equals the
+    /// plaintext length and need not be block-aligned. .NET's CFB-128 with no padding requires
+    /// whole blocks, so pad to the next block boundary, transform, then truncate back.
+    /// </summary>
+    private static byte[] TransformAesCfb(ICryptoTransform transform, byte[] data)
+    {
+        const int blockSize = 16;
+        if (data.Length % blockSize == 0)
+        {
+            return transform.TransformFinalBlock(data, 0, data.Length);
+        }
+
+        var paddedLength = ((data.Length / blockSize) + 1) * blockSize;
+        var padded = new byte[paddedLength];
+        Buffer.BlockCopy(data, 0, padded, 0, data.Length);
+        var transformed = transform.TransformFinalBlock(padded, 0, paddedLength);
+        return transformed[..data.Length];
     }
 
     private static byte[] EncryptDes(byte[] plaintext, SnmpV3Session session, byte[] privParameters)
@@ -1618,7 +1642,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         aes.IV = iv;
 
         using var decryptor = aes.CreateDecryptor();
-        return decryptor.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+        return TransformAesCfb(decryptor, ciphertext);
     }
 
     private static byte[] DecryptDes(byte[] ciphertext, SnmpV3Session session, byte[] privParameters)
