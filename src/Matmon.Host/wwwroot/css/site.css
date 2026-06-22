@@ -8276,6 +8276,17 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   background: var(--matmon-surface-soft);
 }
 
+/* Bound the single content column to the (fixed-width) panel so a long picker/path
+   truncates instead of widening the column and forcing a horizontal scroll. */
+.map-property-editor {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.map-property-panel,
+.map-property-section {
+  min-width: 0;
+}
+
 .map-designer-side-title {
   display: flex;
   align-items: center;
