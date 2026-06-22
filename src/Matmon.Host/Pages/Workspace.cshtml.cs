@@ -2385,8 +2385,10 @@ public sealed class WorkspaceModel : PageModel
                 var inheritedValue = inheritedValues is not null && inheritedValues.TryGetValue(parameter.Key, out var fallbackValue)
                     ? fallbackValue
                     : parameter.DefaultValue;
+                // Never surface an inherited secret (password/token) as a visible placeholder —
+                // show a masked hint instead so it can't be read off the form.
                 var displayPlaceholder = !string.IsNullOrWhiteSpace(inheritedValue)
-                    ? inheritedValue
+                    ? (parameter.Kind == SensorParameterKind.Secret ? "••••••" : inheritedValue)
                     : parameter.Placeholder;
                 var effectiveValue = !string.IsNullOrWhiteSpace(currentValue)
                     ? currentValue
@@ -2509,6 +2511,15 @@ public sealed class WorkspaceModel : PageModel
                 if (parameter.Required)
                 {
                     if (!string.IsNullOrWhiteSpace(inheritedValue))
+                    {
+                        continue;
+                    }
+
+                    // Credential fields (username/password/token) are resolved at execution time
+                    // from the selected or inherited credential bundle — which is NOT reflected in
+                    // the posted/inherited param value here — so don't block the save on a blank
+                    // one. A genuinely missing credential surfaces as a runtime sensor error.
+                    if (parameter.IsCredential)
                     {
                         continue;
                     }
