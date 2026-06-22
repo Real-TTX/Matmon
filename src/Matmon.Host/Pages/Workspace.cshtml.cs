@@ -6562,6 +6562,16 @@ public interface ISensorParameterEditor
     string SensorAdvancedParametersText { get; set; }
 }
 
+/// <summary>Shared binding surface for the reusable <c>_SensorCredentials</c> editor partial.</summary>
+public interface ISensorCredentialEditor
+{
+    List<WorkspaceSensorParameterFieldInput> SensorParameterFields { get; set; }
+
+    List<SelectListItem> CredentialOptions { get; set; }
+
+    Guid? SelectedCredentialId { get; set; }
+}
+
 /// <summary>Shared binding surface for the reusable <c>_SensorSchedule</c> editor partial.</summary>
 public interface ISensorScheduleEditor
 {
@@ -6583,7 +6593,7 @@ public interface ISensorScheduleEditor
     string? ScheduleInheritedLabel { get; set; }
 }
 
-public sealed class CreateSensorInput : ISensorThresholdEditor, ISensorScheduleEditor
+public sealed class CreateSensorInput : ISensorThresholdEditor, ISensorScheduleEditor, ISensorParameterEditor, ISensorCredentialEditor
 {
     public string Name { get; set; } = string.Empty;
 
@@ -6740,7 +6750,7 @@ public sealed class WorkspaceNotificationReceiverEditorInput : CreateNotificatio
     public Guid Id { get; set; }
 }
 
-public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISensorScheduleEditor, ISensorParameterEditor
+public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISensorScheduleEditor, ISensorParameterEditor, ISensorCredentialEditor
 {
     public Guid Id { get; set; }
 
