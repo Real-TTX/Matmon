@@ -879,6 +879,35 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public IReadOnlyList<SensorElement> ResolveTargetSensors(string? targetToken)
+    {
+        lock (_gate)
+        {
+            if (MonitoringTargetResolver.TagName(targetToken) is { } tag)
+            {
+                var matches = new List<SensorElement>();
+                foreach (var sensor in EnumerateElements(_document.RootProbe).OfType<SensorElement>())
+                {
+                    var effective = MonitoringTagResolver.ResolveEffective(BuildLineage(sensor));
+                    if (MonitoringTagResolver.HasTag(effective, tag))
+                    {
+                        matches.Add(sensor);
+                    }
+                }
+
+                return matches;
+            }
+
+            if (MonitoringTargetResolver.ElementId(targetToken) is { } id &&
+                FindElementInternal(id) is { } element)
+            {
+                return EnumerateElements(element).OfType<SensorElement>().ToArray();
+            }
+
+            return [];
+        }
+    }
+
     public bool DeleteTemplate(Guid id)
     {
         lock (_gate)

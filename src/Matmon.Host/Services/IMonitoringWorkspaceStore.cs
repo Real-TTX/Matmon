@@ -45,6 +45,13 @@ public interface IMonitoringWorkspaceStore
 
     MonitoringElement? FindElement(Guid id);
 
+    /// <summary>
+    /// Resolves a target token (an element id, or a <c>tag:&lt;name&gt;</c> tag) to the set of
+    /// sensors it points at: the element's subtree sensors, or every sensor whose effective
+    /// tags include that tag. Empty for an empty/unknown token.
+    /// </summary>
+    IReadOnlyList<SensorElement> ResolveTargetSensors(string? targetToken);
+
     MonitoringTemplate? FindTemplate(Guid id);
 
     NotificationSender? FindNotificationSender(Guid id);
