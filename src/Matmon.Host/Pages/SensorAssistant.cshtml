@@ -4,8 +4,6 @@
     ViewData["Title"] = "Sensor Assistant";
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");
     var hasFixedChannels = Model.NewSensor.SensorChannelMode == SensorChannelMode.Fixed;
-    var sensorCredentialFields = Model.NewSensor.SensorParameterFields.Where(field => field.IsCredential).ToList();
-    var sensorGeneralFields = Model.NewSensor.SensorParameterFields.Where(field => !field.IsCredential).ToList();
     var matchingTemplateCount = Model.NewSensor.TemplateOptions.Count(option => !string.IsNullOrWhiteSpace(option.Value));
 }
 
@@ -104,87 +102,7 @@
 
             @await Html.PartialAsync("_SensorCredentials", Model.NewSensor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "NewSensor" } })
 
-            <div class="sensor-parameter-section">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Parameters</span></h2>
-                    <span class="panel-hint">@Model.NewSensor.SensorTypeKey</span>
-                </div>
-                <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
-
-                <partial name="_ScriptVariables" model="@Model.NewSensor.SensorTypeKey" />
-
-                @if (sensorGeneralFields.Count == 0)
-                {
-                    <div class="empty-state">No fields defined.</div>
-                }
-                else
-                {
-                    <div class="sensor-parameter-list">
-                        @for (var i = 0; i < Model.NewSensor.SensorParameterFields.Count; i++)
-                        {
-                            var field = Model.NewSensor.SensorParameterFields[i];
-                            if (field.IsCredential)
-                            {
-                                continue;
-                            }
-
-                            <div class="sensor-parameter-card"
-                                 data-sensor-parameter-field
-                                 data-parameter-key="@field.Key"
-                                 data-visible-when-key="@field.VisibleWhenParameterKey"
-                                 data-visible-when-values="@field.VisibleWhenValuesText"
-                                 data-inherited-value="@field.InheritedValue"
-                                 data-effective-value="@field.EffectiveValue"
-                                 hidden="@(!field.IsVisible ? "hidden" : null)">
-                                <input type="hidden" asp-for="NewSensor.SensorParameterFields[i].Key" />
-                                <div class="sensor-parameter-head">
-                                    <div>
-                                        <div class="sensor-parameter-name">@field.Label</div>
-                                        @if (!string.IsNullOrWhiteSpace(field.Description))
-                                        {
-                                            <div class="sensor-parameter-help">@field.Description</div>
-                                        }
-                                    </div>
-                                    @if (field.Required)
-                                    {
-                                        <span class="sensor-required">required</span>
-                                    }
-                                </div>
-
-                                @switch (field.Kind)
-                                {
-                                    case SensorParameterKind.ValueList:
-                                        <select asp-for="NewSensor.SensorParameterFields[i].Value" class="form-select workspace-select" asp-items="field.Options"></select>
-                                        break;
-                                    case SensorParameterKind.Boolean:
-                                        <select asp-for="NewSensor.SensorParameterFields[i].Value" class="form-select workspace-select" asp-items="field.Options"></select>
-                                        break;
-                                    case SensorParameterKind.Integer:
-                                        <input asp-for="NewSensor.SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "1")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                        break;
-                                    case SensorParameterKind.Decimal:
-                                        <input asp-for="NewSensor.SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "any")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                        break;
-                                    case SensorParameterKind.ScriptEditor:
-                                        <textarea asp-for="NewSensor.SensorParameterFields[i].Value" rows="14" class="form-control workspace-textarea" data-script-editor spellcheck="false" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
-                                        break;
-                                    case SensorParameterKind.Multiline:
-                                        <textarea asp-for="NewSensor.SensorParameterFields[i].Value" rows="4" class="form-control workspace-textarea" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
-                                        break;
-                                    case SensorParameterKind.Secret:
-                                        <input asp-for="NewSensor.SensorParameterFields[i].Value" type="password" autocomplete="off" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                        break;
-                                    default:
-                                        <input asp-for="NewSensor.SensorParameterFields[i].Value" type="text" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                        break;
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-
-                <input type="hidden" asp-for="NewSensor.SensorAdvancedParametersText" />
-            </div>
+            @await Html.PartialAsync("_SensorParameters", Model.NewSensor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "NewSensor" } })
 
             @if (string.Equals(Model.NewSensor.SensorTypeKey, SnmpSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(Model.NewSensor.SensorTypeKey, SynologyNasSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
