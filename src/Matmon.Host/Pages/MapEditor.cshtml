@@ -223,7 +223,7 @@
                                 </div>
                                 <label class="workspace-field" data-map-property-target>
                                     <span class="workspace-label">Target</span>
-                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].ElementId", DomId = $"picker-map-tile-{index}", SelectedId = Model.Input.Tiles[index].ElementId, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].TargetToken", DomId = $"picker-map-tile-{index}", SelectedValue = Model.Input.Tiles[index].TargetToken, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
                                 </label>
                                 <label class="workspace-field" data-map-property-text-only>
                                     <span class="workspace-label">Text</span>
@@ -299,7 +299,7 @@
                     </div>
                     <label class="workspace-field" data-map-property-target>
                         <span class="workspace-label">Target</span>
-                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].ElementId", DomId = "picker-map-tile-__index__", SelectedId = null, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].TargetToken", DomId = "picker-map-tile-__index__", SelectedValue = null, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
                     </label>
                     <label class="workspace-field" data-map-property-text-only>
                         <span class="workspace-label">Text</span>

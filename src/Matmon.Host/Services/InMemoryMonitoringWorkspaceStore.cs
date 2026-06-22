@@ -3307,6 +3307,7 @@ try {
             Kind = tile.Kind,
             Title = tile.Title,
             ElementId = tile.ElementId,
+            TargetTag = tile.TargetTag,
             Text = tile.Text,
             X = tile.X,
             Y = tile.Y,

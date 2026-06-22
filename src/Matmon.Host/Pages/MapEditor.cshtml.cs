@@ -145,7 +145,9 @@ public sealed class MapEditorModel : PageModel
         Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
         Kind = tile.Kind,
         Title = tile.Title,
-        ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
+        ElementId = MonitoringTargetResolver.ElementId(tile.TargetToken)
+            ?? (string.IsNullOrEmpty(tile.TargetToken) && tile.ElementId != Guid.Empty ? tile.ElementId : null),
+        TargetTag = MonitoringTargetResolver.TagName(tile.TargetToken),
         Text = tile.Text,
         X = tile.X,
         Y = tile.Y,
@@ -195,6 +197,9 @@ public sealed class MapEditorModel : PageModel
                     Kind = tile.Kind,
                     Title = tile.Title,
                     ElementId = tile.ElementId,
+                    TargetToken = tile.TargetTag is { } tag
+                        ? MonitoringTargetResolver.ForTag(tag)
+                        : tile.ElementId is { } eid ? MonitoringTargetResolver.ForElement(eid) : null,
                     Text = tile.Text,
                     X = tile.X,
                     Y = tile.Y,
@@ -321,6 +326,12 @@ public sealed class MapTileInput
     public string Title { get; set; } = "Tile";
 
     public Guid? ElementId { get; set; }
+
+    /// <summary>
+    /// The tile's target token from the picker: a GUID (element) or "tag:&lt;name&gt;" (tag).
+    /// Parsed into <see cref="MonitoringMapTile.ElementId"/> / <see cref="MonitoringMapTile.TargetTag"/>.
+    /// </summary>
+    public string? TargetToken { get; set; }
 
     public string? Text { get; set; }
 

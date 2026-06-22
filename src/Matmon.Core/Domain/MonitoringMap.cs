@@ -67,6 +67,13 @@ public sealed class MonitoringMapTile
 
     public Guid? ElementId { get; set; }
 
+    /// <summary>
+    /// When set, the tile targets a tag instead of a single element: it aggregates every
+    /// sensor whose effective tags include this tag (cross-tree). Mutually exclusive with
+    /// <see cref="ElementId"/>.
+    /// </summary>
+    public string? TargetTag { get; set; }
+
     public string? Text { get; set; }
 
     public int X { get; set; } = 1;

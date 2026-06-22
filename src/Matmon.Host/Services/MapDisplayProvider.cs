@@ -25,6 +25,11 @@ public sealed class MapDisplayProvider
             .ThenBy(tile => tile.X)
             .Select(tile =>
             {
+                if (!string.IsNullOrWhiteSpace(tile.TargetTag))
+                {
+                    return BuildTagAggregateTile(tile, latest);
+                }
+
                 elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
                 return ResolveTileState(tile, element, latest);
             })
@@ -149,13 +154,37 @@ public sealed class MapDisplayProvider
         MonitoringElement element,
         IReadOnlyDictionary<Guid, SensorObservation> latest)
     {
-        var sensorStates = Enumerate(element)
-            .OfType<SensorElement>()
+        var sensors = Enumerate(element).OfType<SensorElement>().ToArray();
+        return BuildAggregateFromSensors(tile, element, sensors, latest, IconForElement(element), element.Kind.ToString());
+    }
+
+    private MapDisplayTileViewModel BuildTagAggregateTile(
+        MonitoringMapTile tile,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        if (tile.Kind == MonitoringMapTileKind.Text)
+        {
+            return CreateTile(tile, null, "ok", "Info", tile.Text ?? string.Empty, string.Empty, "Text", "list");
+        }
+
+        var sensors = _workspaceStore.ResolveTargetSensors(MonitoringTargetResolver.TagPrefix + tile.TargetTag);
+        return BuildAggregateFromSensors(tile, element: null, sensors, latest, "tag", $"# {tile.TargetTag}");
+    }
+
+    private MapDisplayTileViewModel BuildAggregateFromSensors(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyList<SensorElement> sensors,
+        IReadOnlyDictionary<Guid, SensorObservation> latest,
+        string iconKey,
+        string emptySubtitle)
+    {
+        var sensorStates = sensors
             .Select(sensor => latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown)
             .ToArray();
         if (sensorStates.Length == 0)
         {
-            return CreateTile(tile, element, "unknown", "No sensors", element.Kind.ToString(), string.Empty, KindLabel(tile.Kind), IconForElement(element));
+            return CreateTile(tile, element, "unknown", "No sensors", emptySubtitle, string.Empty, KindLabel(tile.Kind), iconKey);
         }
 
         var severity = sensorStates
@@ -183,7 +212,7 @@ public sealed class MapDisplayProvider
             subtitle,
             value,
             KindLabel(tile.Kind),
-            IconForElement(element),
+            iconKey,
             null,
             null,
             null,
