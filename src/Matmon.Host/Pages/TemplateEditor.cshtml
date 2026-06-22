@@ -246,26 +246,26 @@
                             {
                                 var credential = Model.TemplateEditor.CredentialBundles[i];
                                 var isHidden = i >= Model.TemplateEditor.CredentialBundleVisibleCount || credential.IsDeleted;
-                                <div class="sensor-parameter-card" data-credential-row data-credential-deleted="@(credential.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
+                                <div class="credential-row" data-credential-row data-credential-deleted="@(credential.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
                                     <input type="hidden" asp-for="TemplateEditor.CredentialBundles[i].Id" />
                                     <input type="hidden" asp-for="TemplateEditor.CredentialBundles[i].IsDeleted" />
-                                    <div class="sensor-parameter-head">
-                                        <div>
-                                            <div class="sensor-parameter-name">Credential</div>
-                                            <div class="sensor-parameter-help">Reusable access bundle for one sensor family</div>
-                                        </div>
-                                        <div class="sensor-threshold-head-actions">
-                                            <button type="button"
-                                                    class="workspace-danger-submit sensor-threshold-delete"
-                                                    data-credential-delete
-                                                    aria-label="Delete credential"
-                                                    title="Delete credential">
-                                                @MatmonIcons.Render("trash")
-                                                <span class="workspace-sr-only">Delete credential</span>
-                                            </button>
+                                    <div class="credential-row-summary">
+                                        <span class="credential-row-icon">@MatmonIcons.Render("key")</span>
+                                        <span class="credential-row-name" data-credential-name-label>@(string.IsNullOrWhiteSpace(credential.Name) ? "New credential" : credential.Name)</span>
+                                        <span class="tree-tag is-mini credential-row-kind" data-credential-kind-label>@credential.Kind</span>
+                                        <div class="credential-row-actions">
+                                            <button type="button" class="workspace-secondary-submit" data-credential-edit>@MatmonIcons.Render("pencil")<span>Edit</span></button>
+                                            <button type="button" class="workspace-danger-submit credential-row-delete" data-credential-delete aria-label="Delete credential" title="Delete credential">@MatmonIcons.Render("trash")<span class="workspace-sr-only">Delete</span></button>
                                         </div>
                                     </div>
 
+                                    <div class="credential-modal-backdrop" data-credential-modal hidden>
+                                      <div class="credential-modal" role="dialog" aria-modal="true" aria-label="Edit credential">
+                                        <div class="credential-modal-head">
+                                            <h3 class="section-title">@MatmonIcons.Render("key")<span>Credential</span></h3>
+                                            <button type="button" class="workspace-secondary-submit credential-modal-x" data-credential-modal-close aria-label="Close">@MatmonIcons.Render("x")</button>
+                                        </div>
+                                        <div class="credential-modal-body">
                                     <div class="sensor-threshold-grid">
                                         <label>
                                             <span>Name</span>
@@ -393,6 +393,12 @@
                                                 </label>
                                             </div>
                                         </details>
+                                    </div>
+                                        </div>
+                                        <div class="credential-modal-foot">
+                                            <button type="button" class="workspace-submit" data-credential-modal-close>@MatmonIcons.Render("check")<span>Done</span></button>
+                                        </div>
+                                      </div>
                                     </div>
                                 </div>
                             }

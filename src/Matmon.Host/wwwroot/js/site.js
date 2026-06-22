@@ -1885,6 +1885,42 @@ function initializeCredentialEditors() {
       });
     };
 
+    // List + modal UI: the row shows a compact summary; editing happens in an overlay dialog.
+    const syncSummary = (row) => {
+      const nameInput = row.querySelector("input[name$='.Name']");
+      const nameLabel = row.querySelector("[data-credential-name-label]");
+      if (nameInput && nameLabel) {
+        nameLabel.textContent = nameInput.value.trim() || "New credential";
+      }
+      const kindSelect = row.querySelector("[data-credential-kind-select]");
+      const kindLabel = row.querySelector("[data-credential-kind-label]");
+      if (kindSelect && kindLabel) {
+        kindLabel.textContent = kindSelect.value;
+      }
+    };
+    const openModal = (row) => {
+      const modal = row.querySelector("[data-credential-modal]");
+      if (!modal) {
+        return;
+      }
+      modal.hidden = false;
+      document.body.classList.add("credential-modal-open");
+      const focusTarget = modal.querySelector("input:not([type='hidden']), select, textarea");
+      if (focusTarget && typeof focusTarget.focus === "function") {
+        focusTarget.focus();
+      }
+    };
+    const closeModal = (row) => {
+      const modal = row.querySelector("[data-credential-modal]");
+      if (modal) {
+        modal.hidden = true;
+      }
+      syncSummary(row);
+      if (!section.querySelector("[data-credential-modal]:not([hidden])")) {
+        document.body.classList.remove("credential-modal-open");
+      }
+    };
+
     section.querySelectorAll("[data-credential-row]").forEach((row) => updateCredentialPanels(row));
 
     section.querySelectorAll("[data-credential-row][data-credential-deleted='true']").forEach((row) => {
@@ -1900,10 +1936,8 @@ function initializeCredentialEditors() {
 
         hiddenRow.hidden = false;
         updateCredentialPanels(hiddenRow);
-        const focusTarget = hiddenRow.querySelector("input:not([type='hidden']), select, textarea");
-        if (focusTarget && typeof focusTarget.focus === "function") {
-          focusTarget.focus();
-        }
+        syncSummary(hiddenRow);
+        openModal(hiddenRow);
       });
     });
 
@@ -1915,7 +1949,45 @@ function initializeCredentialEditors() {
         }
 
         updateCredentialPanels(row);
+        syncSummary(row);
       });
+    });
+
+    section.querySelectorAll("[data-credential-edit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = button.closest("[data-credential-row]");
+        if (row) {
+          openModal(row);
+        }
+      });
+    });
+
+    section.querySelectorAll("[data-credential-modal-close]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = button.closest("[data-credential-row]");
+        if (row) {
+          closeModal(row);
+        }
+      });
+    });
+
+    section.querySelectorAll("[data-credential-modal]").forEach((modal) => {
+      modal.addEventListener("click", (event) => {
+        if (event.target !== modal) {
+          return;
+        }
+        const row = modal.closest("[data-credential-row]");
+        if (row) {
+          closeModal(row);
+        }
+      });
+    });
+
+    section.querySelectorAll("[data-credential-row]").forEach((row) => {
+      const nameInput = row.querySelector("input[name$='.Name']");
+      if (nameInput) {
+        nameInput.addEventListener("input", () => syncSummary(row));
+      }
     });
 
     section.querySelectorAll("[data-credential-delete]").forEach((button) => {

@@ -9817,6 +9817,117 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   opacity: 0.86;
 }
 
+/* Credentials: compact list rows + an edit dialog (modal) instead of big inline cards. */
+.credential-row {
+  border: 1px solid var(--matmon-border);
+  border-radius: 10px;
+  background: var(--matmon-surface);
+  margin-bottom: 0.5rem;
+}
+
+.credential-row-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  min-width: 0;
+}
+
+.credential-row-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--matmon-accent);
+}
+
+.credential-row-icon .ui-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.credential-row-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.credential-row-kind {
+  flex: 0 0 auto;
+}
+
+.credential-row-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.credential-row-delete {
+  padding-inline: 0.5rem;
+}
+
+.credential-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(8, 12, 24, 0.55);
+}
+
+.credential-modal-backdrop[hidden] {
+  display: none;
+}
+
+.credential-modal {
+  width: min(640px, 100%);
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  background: var(--matmon-surface-strong, var(--matmon-surface));
+  border: 1px solid var(--matmon-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.credential-modal-head,
+.credential-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+}
+
+.credential-modal-head {
+  border-bottom: 1px solid var(--matmon-border);
+}
+
+.credential-modal-head .section-title {
+  margin: 0;
+}
+
+.credential-modal-x {
+  margin-left: auto;
+}
+
+.credential-modal-foot {
+  border-top: 1px solid var(--matmon-border);
+  justify-content: flex-end;
+}
+
+.credential-modal-body {
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+body.credential-modal-open {
+  overflow: hidden;
+}
+
 /* Syntax-highlighting code editor (SensorParameterKind.ScriptEditor): a transparent
    textarea layered over a highlighted <pre>. Both must share identical metrics so the
    coloured text lines up exactly under the caret. */
