@@ -8071,9 +8071,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   grid-column: var(--tile-x, 1) / span var(--tile-w, 3);
   grid-row: var(--tile-y, 1) / span var(--tile-h, 2);
   /* Flex column so the main visual (graph/gauge/value/progress) can grow and fill the
-     tile instead of the content packing at the top and leaving the cell half empty. */
+     tile instead of the content packing at the top and leaving the cell half empty.
+     justify-content:center balances "flat" tiles (summary/state/text without a growing
+     visual) so they use the height too — tiles with a flex:1 visual are unaffected
+     because the visual already consumes the free space. */
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0.4rem;
   min-width: 0;
   min-height: 0;
@@ -8285,6 +8289,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-property-panel,
 .map-property-section {
   min-width: 0;
+}
+
+/* Read-only tile type (the kind is fixed when the tile is dragged in — delete + re-drag
+   to change it, no dropdown). */
+.map-property-readonly {
+  padding: 0.32rem 0.1rem;
+  font-weight: 600;
+  color: var(--matmon-text);
 }
 
 .map-designer-side-title {

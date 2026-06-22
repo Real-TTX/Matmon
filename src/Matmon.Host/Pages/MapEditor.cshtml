@@ -215,14 +215,12 @@
                                     <span class="workspace-label">Title</span>
                                     <input asp-for="Input.Tiles[index].Title" class="form-control workspace-input" data-map-property-title />
                                 </label>
-                                <label class="workspace-field">
+                                <div class="workspace-field">
                                     <span class="workspace-label">Tile type</span>
-                                    <select asp-for="Input.Tiles[index].Kind" asp-items="Model.TileKindOptions" class="form-select workspace-select" data-map-property-kind></select>
-                                </label>
-                                <label class="workspace-field" data-map-property-visual>
-                                    <span class="workspace-label">Display</span>
-                                    <select asp-for="Input.Tiles[index].VisualType" asp-items="Model.VisualTypeOptions" class="form-select workspace-select" data-map-property-visual-type></select>
-                                </label>
+                                    <input type="hidden" asp-for="Input.Tiles[index].Kind" data-map-property-kind />
+                                    <input type="hidden" asp-for="Input.Tiles[index].VisualType" data-map-property-visual-type />
+                                    <span class="map-property-readonly" data-map-property-kind-label>@KindLabel(tile.Kind)</span>
+                                </div>
                                 <label class="workspace-field" data-map-property-target>
                                     <span class="workspace-label">Target</span>
                                     <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].ElementId", DomId = $"picker-map-tile-{index}", SelectedId = Model.Input.Tiles[index].ElementId, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
@@ -293,25 +291,12 @@
                         <span class="workspace-label">Title</span>
                         <input name="Input.Tiles[__index__].Title" value="__title__" class="form-control workspace-input" data-map-property-title />
                     </label>
-                    <label class="workspace-field">
+                    <div class="workspace-field">
                         <span class="workspace-label">Tile type</span>
-                        <select name="Input.Tiles[__index__].Kind" class="form-select workspace-select" data-map-property-kind>
-                            <option value="@MonitoringMapTileKind.Element">State</option>
-                            <option value="@MonitoringMapTileKind.Value">Value</option>
-                            <option value="@MonitoringMapTileKind.Graph">Graph</option>
-                            <option value="@MonitoringMapTileKind.Status">Summary</option>
-                            <option value="@MonitoringMapTileKind.Text">Text</option>
-                        </select>
-                    </label>
-                    <label class="workspace-field" data-map-property-visual>
-                        <span class="workspace-label">Display</span>
-                        <select name="Input.Tiles[__index__].VisualType" class="form-select workspace-select" data-map-property-visual-type>
-                            <option value="@MonitoringMapTileVisualType.Auto">Auto (from sensor)</option>
-                            <option value="@MonitoringMapTileVisualType.Card">Card</option>
-                            <option value="@MonitoringMapTileVisualType.ProgressBar">Progress bar</option>
-                            <option value="@MonitoringMapTileVisualType.Gauge">Gauge</option>
-                        </select>
-                    </label>
+                        <input type="hidden" name="Input.Tiles[__index__].Kind" value="__kind__" data-map-property-kind />
+                        <input type="hidden" name="Input.Tiles[__index__].VisualType" value="" data-map-property-visual-type />
+                        <span class="map-property-readonly" data-map-property-kind-label>__kindLabel__</span>
+                    </div>
                     <label class="workspace-field" data-map-property-target>
                         <span class="workspace-label">Target</span>
                         <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].ElementId", DomId = "picker-map-tile-__index__", SelectedId = null, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
