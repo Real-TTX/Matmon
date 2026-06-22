@@ -107,14 +107,6 @@ Get-CimInstance Win32_OperatingSystem |
             },
             new SensorParameterDefinition
             {
-                Key = "defaultChannelKey",
-                Label = "Default channel key",
-                Kind = SensorParameterKind.Text,
-                Description = "Optional channel key to graph. If empty, the first numeric channel is used.",
-                Placeholder = "cpu.load"
-            },
-            new SensorParameterDefinition
-            {
                 Key = "failOnStderr",
                 Label = "Fail on stderr",
                 Kind = SensorParameterKind.Boolean,

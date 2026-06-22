@@ -84,14 +84,6 @@ public sealed class MssqlSensorExecutor : ISensorExecutor
                 Description = "Numeric columns become channels. Multiple rows can use columns channel,value,unit.",
                 Required = true,
                 Placeholder = "SELECT 1 AS value"
-            },
-            new SensorParameterDefinition
-            {
-                Key = "defaultChannelKey",
-                Label = "Default channel key",
-                Kind = SensorParameterKind.Text,
-                Description = "Optional channel key to graph. If empty, the first numeric channel is used.",
-                Placeholder = "value"
             }
         ]
     };

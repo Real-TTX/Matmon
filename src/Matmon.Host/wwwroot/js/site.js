@@ -1870,12 +1870,16 @@ function initializeCredentialEditors() {
       }
 
       const kind = (select.value || "").toLowerCase();
+      // Kinds with explicit field panels; everything else (generic, unifi) only gets the
+      // raw key=value "Advanced values" panel (data-credential-kind-group="other").
+      const kindsWithFields = ["windows", "ssh", "linux", "proxmox", "sqlserver", "snmp"];
       row.querySelectorAll("[data-credential-kind-group]").forEach((panel) => {
         const panelKind = (panel.dataset.credentialKindGroup || "").toLowerCase();
         const matches =
-          panelKind === kind ||
-          (panelKind === "ssh" && kind === "linux") ||
-          (panelKind === "ssh" && kind === "ssh");
+          panelKind === "other"
+            ? !kindsWithFields.includes(kind)
+            : panelKind === kind ||
+              (panelKind === "ssh" && (kind === "linux" || kind === "ssh"));
 
         panel.hidden = !matches;
       });

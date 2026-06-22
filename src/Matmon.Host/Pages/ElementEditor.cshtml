@@ -414,7 +414,7 @@
                                                 </div>
                                             </div>
 
-                                            <details class="workspace-details workspace-details-nested workspace-span-2">
+                                            <details class="workspace-details workspace-details-nested workspace-span-2 credential-kind-panel" data-credential-kind-group="other" hidden="@(credential.Kind is MonitoringCredentialKind.Generic or MonitoringCredentialKind.Unifi ? null : "hidden")">
                                                 <summary>@MatmonIcons.Render("spark")<span>Advanced values</span></summary>
                                                 <div class="workspace-details-body">
                                                     <div class="workspace-inline-note">Use this for any extra key=value pairs that are not covered above.</div>

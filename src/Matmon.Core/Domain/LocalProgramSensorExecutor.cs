@@ -76,14 +76,6 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
             },
             new SensorParameterDefinition
             {
-                Key = "defaultChannelKey",
-                Label = "Default channel key",
-                Kind = SensorParameterKind.Text,
-                Description = "Optional channel key to graph. If empty, the first numeric channel is used.",
-                Placeholder = "value"
-            },
-            new SensorParameterDefinition
-            {
                 Key = "failOnStderr",
                 Label = "Fail on stderr",
                 Kind = SensorParameterKind.Boolean,

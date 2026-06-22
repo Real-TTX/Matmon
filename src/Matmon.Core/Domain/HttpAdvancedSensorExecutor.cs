@@ -92,14 +92,6 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
                 Placeholder = "status/value|Value",
                 VisibleWhenParameterKey = "extractMode",
                 VisibleWhenValues = ["xml"]
-            },
-            new SensorParameterDefinition
-            {
-                Key = "defaultChannelKey",
-                Label = "Default channel key",
-                Kind = SensorParameterKind.Text,
-                Description = "Optional channel key to graph. Empty uses latency or the first extracted channel.",
-                Placeholder = "latency"
             }
         ]
     };
