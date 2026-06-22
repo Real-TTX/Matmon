@@ -9928,6 +9928,21 @@ body.credential-modal-open {
   overflow: hidden;
 }
 
+/* Separate the sensor's "Credential selection" dropdown from the field list below it. */
+.sensor-credential-select-field {
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid var(--matmon-border);
+}
+
+/* The container/host credential-definition section had no layout of its own — give it the
+   same grid spacing as the sensor credential section so the header/note/list don't crowd. */
+.workspace-credential-section {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
 /* Syntax-highlighting code editor (SensorParameterKind.ScriptEditor): a transparent
    textarea layered over a highlighted <pre>. Both must share identical metrics so the
    coloured text lines up exactly under the caret. */
