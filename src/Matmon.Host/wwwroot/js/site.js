@@ -1870,16 +1870,13 @@ function initializeCredentialEditors() {
       }
 
       const kind = (select.value || "").toLowerCase();
-      // Kinds with explicit field panels; everything else (generic, unifi) only gets the
-      // raw key=value "Advanced values" panel (data-credential-kind-group="other").
-      const kindsWithFields = ["windows", "ssh", "linux", "proxmox", "sqlserver", "snmp"];
+      // Every credential kind now has its own explicit field panel (the raw key=value
+      // "Advanced values" editor was removed app-wide).
       row.querySelectorAll("[data-credential-kind-group]").forEach((panel) => {
         const panelKind = (panel.dataset.credentialKindGroup || "").toLowerCase();
         const matches =
-          panelKind === "other"
-            ? !kindsWithFields.includes(kind)
-            : panelKind === kind ||
-              (panelKind === "ssh" && (kind === "linux" || kind === "ssh"));
+          panelKind === kind ||
+          (panelKind === "ssh" && (kind === "linux" || kind === "ssh"));
 
         panel.hidden = !matches;
       });

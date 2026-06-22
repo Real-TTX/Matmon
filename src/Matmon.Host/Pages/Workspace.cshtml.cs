@@ -3951,7 +3951,11 @@ public sealed class WorkspaceModel : PageModel
             }
 
             existingValuesById.TryGetValue(bundle.Id, out var existing);
-            var values = new Dictionary<string, string>(ParseKeyValueLines(bundle.ValuesText), StringComparer.OrdinalIgnoreCase);
+            // Preserve any already-stored values for this bundle (raw key=value editing was
+            // removed app-wide); the explicit per-kind fields below overlay them.
+            var values = existing is not null
+                ? new Dictionary<string, string>(existing, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             switch (bundle.Kind)
             {
                 case MonitoringCredentialKind.Windows:
@@ -3981,6 +3985,14 @@ public sealed class WorkspaceModel : PageModel
                     ApplyCredentialBundleField(values, "snmp.v3.privProtocol", bundle.SnmpV3PrivacyProtocol);
                     ApplyCredentialSecretField(values, "snmp.v3.privPassword", bundle.SnmpV3PrivacyPassword, existing);
                     ApplyCredentialBundleField(values, "snmp.v3.contextName", bundle.SnmpV3ContextName);
+                    break;
+                case MonitoringCredentialKind.Unifi:
+                    ApplyCredentialSecretField(values, "unifi.apiKey", bundle.UnifiApiKey, existing);
+                    break;
+                case MonitoringCredentialKind.Generic:
+                    ApplyCredentialBundleField(values, "generic.username", bundle.GenericUsername);
+                    ApplyCredentialSecretField(values, "generic.password", bundle.GenericPassword, existing);
+                    ApplyCredentialSecretField(values, "generic.token", bundle.GenericToken, existing);
                     break;
             }
 
@@ -4119,6 +4131,10 @@ public sealed class WorkspaceModel : PageModel
                 SnmpV3PrivacyProtocol = ReadCredentialField(credential.Values, "snmp.v3.privProtocol"),
                 SnmpV3PrivacyPassword = ReadCredentialField(credential.Values, "snmp.v3.privPassword"),
                 SnmpV3ContextName = ReadCredentialField(credential.Values, "snmp.v3.contextName"),
+                UnifiApiKey = ReadCredentialField(credential.Values, "unifi.apiKey"),
+                GenericUsername = ReadCredentialField(credential.Values, "generic.username"),
+                GenericPassword = ReadCredentialField(credential.Values, "generic.password"),
+                GenericToken = ReadCredentialField(credential.Values, "generic.token"),
                 ValuesText = string.Join(
                     Environment.NewLine,
                     credential.Values
@@ -4147,7 +4163,11 @@ public sealed class WorkspaceModel : PageModel
             || key.Equals("snmp.v3.authPassword", StringComparison.OrdinalIgnoreCase)
             || key.Equals("snmp.v3.privProtocol", StringComparison.OrdinalIgnoreCase)
             || key.Equals("snmp.v3.privPassword", StringComparison.OrdinalIgnoreCase)
-            || key.Equals("snmp.v3.contextName", StringComparison.OrdinalIgnoreCase);
+            || key.Equals("snmp.v3.contextName", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("unifi.apiKey", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("generic.username", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("generic.password", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("generic.token", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ReadCredentialField(IReadOnlyDictionary<string, string> values, string key)
@@ -7174,6 +7194,14 @@ public sealed class WorkspaceCredentialBundleInput
     public string? SnmpV3PrivacyPassword { get; set; }
 
     public string? SnmpV3ContextName { get; set; }
+
+    public string? UnifiApiKey { get; set; }
+
+    public string? GenericUsername { get; set; }
+
+    public string? GenericPassword { get; set; }
+
+    public string? GenericToken { get; set; }
 
     public string ValuesText { get; set; } = string.Empty;
 

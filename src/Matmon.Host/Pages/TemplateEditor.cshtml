@@ -229,7 +229,7 @@
 
                     @if (isSensorScope)
                     {
-                        <label class="workspace-span-2">
+                        <label class="workspace-span-2 sensor-credential-select-field">
                             <span>Credential selection</span>
                             <select asp-for="TemplateEditor.SelectedCredentialId" class="form-select workspace-select" asp-items="Model.TemplateEditor.CredentialOptions"></select>
                         </label>
@@ -379,16 +379,33 @@
                                             </div>
                                         </div>
 
-                                        <details class="workspace-details workspace-details-nested workspace-span-2 credential-kind-panel" data-credential-kind-group="other" hidden="@(credential.Kind is MonitoringCredentialKind.Generic or MonitoringCredentialKind.Unifi ? null : "hidden")">
-                                            <summary>@MatmonIcons.Render("spark")<span>Advanced values</span></summary>
-                                            <div class="workspace-details-body">
-                                                <div class="workspace-inline-note">Use this for any extra key=value pairs that are not covered above.</div>
-                                                <label>
-                                                    <span>Values</span>
-                                                    <textarea asp-for="TemplateEditor.CredentialBundles[i].ValuesText" rows="4" class="form-control workspace-textarea" placeholder="key=value per line"></textarea>
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="unifi" hidden="@(credential.Kind == MonitoringCredentialKind.Unifi ? null : "hidden")">
+                                            <div class="workspace-inline-note">UniFi API key (sent as X-API-KEY)</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label class="workspace-span-2">
+                                                    <span>API key</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].UnifiApiKey" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
                                                 </label>
                                             </div>
-                                        </details>
+                                        </div>
+
+                                        <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="generic" hidden="@(credential.Kind == MonitoringCredentialKind.Generic ? null : "hidden")">
+                                            <div class="workspace-inline-note">Generic credentials — exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</div>
+                                            <div class="sensor-threshold-grid">
+                                                <label>
+                                                    <span>Username</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].GenericUsername" class="form-control workspace-input" placeholder="monitor" />
+                                                </label>
+                                                <label>
+                                                    <span>Password</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].GenericPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                                <label class="workspace-span-2">
+                                                    <span>Token / API key</span>
+                                                    <input asp-for="TemplateEditor.CredentialBundles[i].GenericToken" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                         </div>
                                         <div class="credential-modal-foot">
