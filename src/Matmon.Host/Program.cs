@@ -381,6 +381,7 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, SnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, SynologyNasSensorExecutor>();
     services.AddTransient<ISensorExecutor, SynologyHealthSensorExecutor>();
+    services.AddTransient<ISensorExecutor, SynologyDiskSensorExecutor>();
     services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
     services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxPveSensorExecutor>();

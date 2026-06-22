@@ -1794,6 +1794,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 SnmpSensorExecutor.Definition,
                 SynologyNasSensorExecutor.Definition,
                 SynologyHealthSensorExecutor.Definition,
+                SynologyDiskSensorExecutor.Definition,
                 SnmpInterfaceSensorExecutor.Definition,
                 UpsSnmpSensorExecutor.Definition,
                 ProxmoxPveSensorExecutor.Definition,

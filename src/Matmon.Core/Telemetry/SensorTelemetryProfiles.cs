@@ -47,6 +47,7 @@ public static class SensorTelemetryProfiles
         ["proxmox"] = Responsive,
         ["synology"] = Responsive,
         ["synology-health"] = Responsive,
+        ["synology-disk"] = Responsive,
         ["disk-smart"] = Responsive,
 
         // Availability / up-down style.
