@@ -41,6 +41,10 @@
             <div class="sensor-tabs" data-sensor-tabs role="tablist">
                 <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("sensor")<span>General</span></button>
                 <button type="button" class="sensor-tab" data-sensor-tab-target="parameters" role="tab">@MatmonIcons.Render("settings")<span>Parameters</span></button>
+                @if (sensorCredentialFields.Count > 0)
+                {
+                    <button type="button" class="sensor-tab" data-sensor-tab-target="credentials" role="tab">@MatmonIcons.Render("key")<span>Credentials</span></button>
+                }
                 <button type="button" class="sensor-tab" data-sensor-tab-target="thresholds" role="tab">@MatmonIcons.Render("signal")<span>Channels</span></button>
                 <button type="button" class="sensor-tab" data-sensor-tab-target="schedule" role="tab">@MatmonIcons.Render("clock")<span>Schedule</span></button>
             </div>
@@ -94,7 +98,7 @@
 
             @if (sensorCredentialFields.Count > 0)
             {
-            <div class="workspace-span-2 sensor-credential-section" data-sensor-tab="parameters">
+            <div class="workspace-span-2 sensor-credential-section" data-sensor-tab="credentials">
                 <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("key")<span>Credentials</span></h2>
                     <span class="panel-hint">auto by type</span>
