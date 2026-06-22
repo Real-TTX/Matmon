@@ -64,9 +64,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 Kind = SensorParameterKind.Text,
                 Description = "Required for SNMPv3",
                 Placeholder = "snmp-user",
-                CredentialKind = MonitoringCredentialKind.Snmp,
-                VisibleWhenParameterKey = "snmp.version",
-                VisibleWhenValues = ["v3"]
+                CredentialKind = MonitoringCredentialKind.Snmp
             },
             new SensorParameterDefinition
             {
@@ -90,9 +88,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 Label = "SNMPv3 auth password",
                 Kind = SensorParameterKind.Secret,
                 Description = "Authentication password for SNMPv3",
-                CredentialKind = MonitoringCredentialKind.Snmp,
-                VisibleWhenParameterKey = "snmp.version",
-                VisibleWhenValues = ["v3"]
+                CredentialKind = MonitoringCredentialKind.Snmp
             },
             new SensorParameterDefinition
             {
@@ -116,9 +112,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 Label = "SNMPv3 privacy password",
                 Kind = SensorParameterKind.Secret,
                 Description = "Privacy password for SNMPv3",
-                CredentialKind = MonitoringCredentialKind.Snmp,
-                VisibleWhenParameterKey = "snmp.version",
-                VisibleWhenValues = ["v3"]
+                CredentialKind = MonitoringCredentialKind.Snmp
             },
             new SensorParameterDefinition
             {
