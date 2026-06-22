@@ -1438,9 +1438,7 @@ public sealed class WorkspaceModel : PageModel
             HostParentOptions = hostParents,
             SensorParentOptions = sensorParents,
             TemplateParentOptions = templateParents,
-            SensorTypeOptions = snapshot.SensorDefinitions
-                .Select(definition => new SelectListItem(definition.DisplayName, definition.Key, string.Equals(definition.Key, NewSensor.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
-                .ToList()
+            SensorTypeOptions = BuildSensorTypeOptions(snapshot.SensorDefinitions, NewSensor.SensorTypeKey)
         };
         NewSensor.TemplateOptions = sensorTemplateOptions;
 
@@ -1487,9 +1485,7 @@ public sealed class WorkspaceModel : PageModel
         elementEditor.TemplateOptions = snapshot.Templates
             .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), elementEditor.AppliedTemplateIds.Contains(template.Id)))
             .ToList();
-        elementEditor.SensorTypeOptions = snapshot.SensorDefinitions
-            .Select(definition => new SelectListItem(definition.DisplayName, definition.Key, string.Equals(definition.Key, elementEditor.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        elementEditor.SensorTypeOptions = BuildSensorTypeOptions(snapshot.SensorDefinitions, elementEditor.SensorTypeKey);
 
         var elementCredentialKinds = selectedElement is SensorElement sensorElementForCredentials
             ? FindSensorDefinition(snapshot.SensorDefinitions, sensorElementForCredentials.SensorTypeKey)?.CredentialKinds ?? []
@@ -1833,9 +1829,7 @@ public sealed class WorkspaceModel : PageModel
                 .OrderBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), element.TemplateOriginId == template.Id))
                 .ToList(),
-            SensorTypeOptions = _workspaceStore.Workspace.SensorDefinitions
-                .Select(definition => new SelectListItem(definition.DisplayName, definition.Key, string.Equals(definition.Key, (element as SensorElement)?.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
-                .ToList(),
+            SensorTypeOptions = BuildSensorTypeOptions(_workspaceStore.Workspace.SensorDefinitions, (element as SensorElement)?.SensorTypeKey),
             BootstrapSnippet = probeElement is null
                 ? null
                 : BuildProbeBootstrapSnippet(probeElement.ProbeId, probeElement.Name, probeElement.EnrollmentToken)
@@ -4726,6 +4720,33 @@ public sealed class WorkspaceModel : PageModel
                 alert.RecoveredUtc?.ToLocalTime().ToString("g"),
                 alert.ResolvedUtc?.ToLocalTime().ToString("g")))
             .ToArray();
+    }
+
+    /// <summary>
+    /// Builds the sensor-type dropdown options grouped into <c>&lt;optgroup&gt;</c>s by
+    /// <see cref="SensorTypeCategories"/> (Windows, Linux, Databases, …), ordered by category
+    /// then display name. One <see cref="SelectListGroup"/> instance per category so the
+    /// select tag helper merges the groups.
+    /// </summary>
+    private static List<SelectListItem> BuildSensorTypeOptions(
+        IEnumerable<SensorDefinition> definitions,
+        string? selectedKey)
+    {
+        var groups = SensorTypeCategories.Order
+            .ToDictionary(name => name, name => new SelectListGroup { Name = name }, StringComparer.OrdinalIgnoreCase);
+
+        return definitions
+            .Select(definition => (definition, category: SensorTypeCategories.Resolve(definition.Key)))
+            .OrderBy(item => SensorTypeCategories.OrderIndex(item.category))
+            .ThenBy(item => item.definition.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(item => new SelectListItem(
+                item.definition.DisplayName,
+                item.definition.Key,
+                string.Equals(item.definition.Key, selectedKey, StringComparison.OrdinalIgnoreCase))
+            {
+                Group = groups.TryGetValue(item.category, out var group) ? group : null
+            })
+            .ToList();
     }
 
     private static string BuildNotificationTargetSummary(NotificationRule rule, IReadOnlyList<WorkspaceNodeRow> nodes)
