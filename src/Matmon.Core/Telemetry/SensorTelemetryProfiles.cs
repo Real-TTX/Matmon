@@ -16,21 +16,25 @@ public sealed record SensorTelemetryProfile(
 
 public static class SensorTelemetryProfiles
 {
-    /// <summary>Catch-all default — mirrors Matmon's historical retention.</summary>
+    // Defaults are intentionally lean: ~3 days of full-resolution raw samples, then downsampled
+    // statistics for ~2 weeks. Plenty for a home / small-business monitor and keeps the telemetry
+    // DB small; bump the retention per-sensor when a longer history is wanted.
+
+    /// <summary>Catch-all default: 3 days raw, hourly buckets, 14 days of statistics.</summary>
     public static readonly SensorTelemetryProfile General =
-        new("General", RawObservationDays: 7, StatisticsBucketMinutes: 60, StatisticsRetentionDays: 90, EventRetentionDays: 30);
+        new("General", RawObservationDays: 3, StatisticsBucketMinutes: 60, StatisticsRetentionDays: 14, EventRetentionDays: 30);
 
-    /// <summary>Latency/throughput sensors: short raw window, hourly buckets, kept a year.</summary>
+    /// <summary>Latency/throughput sensors: 3 days raw, hourly buckets, 14 days of statistics.</summary>
     public static readonly SensorTelemetryProfile Responsive =
-        new("Responsive metrics", RawObservationDays: 3, StatisticsBucketMinutes: 60, StatisticsRetentionDays: 365, EventRetentionDays: 30);
+        new("Responsive metrics", RawObservationDays: 3, StatisticsBucketMinutes: 60, StatisticsRetentionDays: 14, EventRetentionDays: 30);
 
-    /// <summary>Up/down sensors: longer raw window, daily buckets, kept a year.</summary>
+    /// <summary>Up/down sensors: 3 days raw, daily buckets, 14 days of statistics, longer events.</summary>
     public static readonly SensorTelemetryProfile Availability =
-        new("Availability", RawObservationDays: 14, StatisticsBucketMinutes: 1440, StatisticsRetentionDays: 365, EventRetentionDays: 90);
+        new("Availability", RawObservationDays: 3, StatisticsBucketMinutes: 1440, StatisticsRetentionDays: 14, EventRetentionDays: 90);
 
-    /// <summary>Probe infrastructure sensors: minimal raw retention, hourly buckets.</summary>
+    /// <summary>Probe infrastructure sensors: 2 days raw, hourly buckets, 14 days of statistics.</summary>
     public static readonly SensorTelemetryProfile Infrastructure =
-        new("Probe infrastructure", RawObservationDays: 2, StatisticsBucketMinutes: 60, StatisticsRetentionDays: 180, EventRetentionDays: 30);
+        new("Probe infrastructure", RawObservationDays: 2, StatisticsBucketMinutes: 60, StatisticsRetentionDays: 14, EventRetentionDays: 30);
 
     private static readonly Dictionary<string, SensorTelemetryProfile> ByKey = new(StringComparer.OrdinalIgnoreCase)
     {

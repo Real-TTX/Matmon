@@ -29,22 +29,24 @@ public static class SensorScheduleDefaults
         ["snmp-interface"] = TimeSpan.FromSeconds(60),
         ["ups-snmp"] = TimeSpan.FromSeconds(60),
 
-        // Authenticated/remote health — moderate cadence.
-        ["mssql"] = TimeSpan.FromMinutes(2),
-        ["proxmox"] = TimeSpan.FromMinutes(2),
-        ["proxmox-health"] = TimeSpan.FromMinutes(2),
-        ["proxmox-node-health"] = TimeSpan.FromMinutes(2),
-        ["unifi-health"] = TimeSpan.FromMinutes(2),
+        // Authenticated/remote health checks that pull a lot of data or shell out over WinRM/SSH
+        // are comparatively expensive, so they default to a calmer cadence.
+        ["mssql"] = TimeSpan.FromMinutes(5),
+        ["proxmox"] = TimeSpan.FromMinutes(5),
+        ["proxmox-health"] = TimeSpan.FromMinutes(5),
+        ["proxmox-node-health"] = TimeSpan.FromMinutes(5),
+        ["unifi-health"] = TimeSpan.FromMinutes(5),
         ["synology"] = TimeSpan.FromMinutes(5),
         ["synology-health"] = TimeSpan.FromMinutes(5),
+        ["windows-health"] = TimeSpan.FromMinutes(5),
+        ["linux-ssh-health"] = TimeSpan.FromMinutes(5),
+        ["powershell"] = TimeSpan.FromMinutes(5),
+        // Lighter status checks stay snappier.
         ["docker-container"] = TimeSpan.FromMinutes(1),
         ["windows-service"] = TimeSpan.FromMinutes(1),
         ["windows-process"] = TimeSpan.FromMinutes(1),
-        ["windows-health"] = TimeSpan.FromMinutes(2),
-        ["linux-ssh-health"] = TimeSpan.FromMinutes(2),
-        ["powershell"] = TimeSpan.FromMinutes(2),
-        ["local-script"] = TimeSpan.FromMinutes(1),
-        ["local-program"] = TimeSpan.FromMinutes(1),
+        ["local-script"] = TimeSpan.FromMinutes(2),
+        ["local-program"] = TimeSpan.FromMinutes(2),
 
         // Slow / rarely-changing facts.
         ["disk-smart"] = TimeSpan.FromMinutes(15),

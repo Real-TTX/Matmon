@@ -8,6 +8,10 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
     private const string SystemMibRoot = "1.3.6.1.4.1.6574.1";
     private const string DiskTableRoot = "1.3.6.1.4.1.6574.2.1.1";
     private const string RaidTableRoot = "1.3.6.1.4.1.6574.3.1.1";
+    // CPU and memory load are not in the Synology MIB — they come from the standard UCD-SNMP-MIB
+    // that DSM's net-snmp exposes: ssCpu* under 2021.11, memory (KB) under 2021.4.
+    private const string CpuMibRoot = "1.3.6.1.4.1.2021.11";
+    private const string MemoryMibRoot = "1.3.6.1.4.1.2021.4";
 
     public static SensorDefinition Definition { get; } = new()
     {
@@ -100,13 +104,27 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
                 timeout,
                 cancellationToken);
 
+            var cpuItems = await SnmpSensorExecutor.DiscoverAsync(
+                context.Target,
+                context.Settings,
+                CpuMibRoot,
+                timeout,
+                cancellationToken);
+
+            var memoryItems = await SnmpSensorExecutor.DiscoverAsync(
+                context.Target,
+                context.Settings,
+                MemoryMibRoot,
+                timeout,
+                cancellationToken);
+
             if (systemItems.Count == 0 && diskItems.Count == 0 && raidItems.Count == 0)
             {
                 watch.Stop();
                 return SensorExecutionResult.Critical(watch.Elapsed, "Synology SNMP MIB returned no values");
             }
 
-            var system = ParseSystemSnapshot(systemItems);
+            var system = ParseSystemSnapshot(systemItems, cpuItems, memoryItems);
             var disks = ParseDiskSnapshots(diskItems);
             var raids = ParseRaidSnapshots(raidItems);
             var primaryRaid = SelectPrimaryRaid(raids);
@@ -195,12 +213,15 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         };
     }
 
-    private static SynologySystemSnapshot ParseSystemSnapshot(IReadOnlyList<SnmpDiscoveryItem> items)
+    private static SynologySystemSnapshot ParseSystemSnapshot(
+        IReadOnlyList<SnmpDiscoveryItem> items,
+        IReadOnlyList<SnmpDiscoveryItem> cpuItems,
+        IReadOnlyList<SnmpDiscoveryItem> memoryItems)
     {
         var values = BuildSuffixValueMap(items, SystemMibRoot);
         return new SynologySystemSnapshot(
-            ReadNumeric(values, "7.1"),
-            ReadNumeric(values, "7.2"),
+            ComputeCpuUtilization(BuildSuffixValueMap(cpuItems, CpuMibRoot)),
+            ComputeMemoryUtilization(BuildSuffixValueMap(memoryItems, MemoryMibRoot)),
             ReadNumeric(values, "2"),
             ReadStatusOk(values, "1", 1),
             ReadStatusOk(values, "3", 1),
@@ -209,6 +230,41 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             ReadStatusOk(values, "8", 1),
             ReadText(values, "5.1"),
             ReadText(values, "5.3"));
+    }
+
+    /// <summary>UCD-SNMP ssCpuIdle (2021.11.11.0) → 100 − idle; falls back to user+system.</summary>
+    private static double? ComputeCpuUtilization(Dictionary<string, SnmpDiscoveryItem> cpu)
+    {
+        var idle = ReadNumeric(cpu, "11.0");
+        if (idle.HasValue)
+        {
+            return Math.Clamp(100.0 - idle.Value, 0, 100);
+        }
+
+        var user = ReadNumeric(cpu, "9.0");
+        var system = ReadNumeric(cpu, "10.0");
+        if (user.HasValue || system.HasValue)
+        {
+            return Math.Clamp((user ?? 0) + (system ?? 0), 0, 100);
+        }
+
+        return null;
+    }
+
+    /// <summary>UCD-SNMP memory (KB): used = total − avail − buffers − cached, as a % of total.</summary>
+    private static double? ComputeMemoryUtilization(Dictionary<string, SnmpDiscoveryItem> memory)
+    {
+        var total = ReadNumeric(memory, "5.0");
+        var avail = ReadNumeric(memory, "6.0");
+        if (!total.HasValue || total.Value <= 0 || !avail.HasValue)
+        {
+            return null;
+        }
+
+        var buffer = ReadNumeric(memory, "14.0") ?? 0;
+        var cached = ReadNumeric(memory, "15.0") ?? 0;
+        var used = total.Value - avail.Value - buffer - cached;
+        return Math.Clamp(used / total.Value * 100.0, 0, 100);
     }
 
     private static IReadOnlyList<SynologyDiskSnapshot> ParseDiskSnapshots(IReadOnlyList<SnmpDiscoveryItem> items)
