@@ -114,6 +114,7 @@ RegisterSensorExecutors(builder.Services);
 builder.Services.AddScoped<ISensorExecutionService, SensorExecutionService>();
 builder.Services.AddRazorPages(options =>
 {
+    options.Conventions.AuthorizePage("/Wizard", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/MapEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ProbeCreate", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ProbeInstall", MatmonSecurity.AdminPolicy);

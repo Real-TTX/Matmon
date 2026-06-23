@@ -1405,6 +1405,147 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   background: rgba(95, 141, 255, 0.22);
 }
 
+.auth-intro {
+  color: var(--matmon-muted);
+  margin: 0 0 0.4rem;
+  line-height: 1.5;
+}
+
+/* ---- First-run setup wizard ---- */
+.setup-wizard {
+  max-width: 880px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.setup-wizard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.setup-wizard-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  counter-reset: wizard-step;
+}
+
+.setup-wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  color: var(--matmon-muted);
+  background: var(--matmon-surface-strong);
+  box-shadow: inset 0 0 0 1px var(--matmon-sidebar-item-border);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.setup-wizard-step.is-current {
+  color: var(--matmon-foreground);
+  box-shadow: inset 0 0 0 1px var(--matmon-accent);
+  background: linear-gradient(180deg, var(--matmon-surface-strong), var(--matmon-sidebar-bg));
+}
+
+.setup-wizard-step.is-done {
+  color: var(--matmon-accent);
+}
+
+.setup-wizard-step-mark {
+  display: inline-flex;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.setup-wizard-step-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.setup-wizard-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.setup-wizard-progress {
+  margin: 0;
+  color: var(--matmon-muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.setup-wizard-body {
+  display: grid;
+  gap: 0.75rem;
+  line-height: 1.55;
+}
+
+.setup-wizard-body p {
+  margin: 0;
+}
+
+.setup-wizard-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.setup-wizard-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.setup-wizard-list svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--matmon-accent);
+  flex: 0 0 auto;
+}
+
+.setup-wizard-chips {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.setup-wizard-muted {
+  color: var(--matmon-muted);
+  font-size: 0.88rem;
+}
+
+.setup-wizard-open {
+  justify-self: start;
+  min-width: 0;
+}
+
+.setup-wizard-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--matmon-sidebar-item-border);
+  padding-top: 0.9rem;
+}
+
+.setup-wizard-actions-spacer {
+  flex: 1 1 auto;
+}
+
 .dashboard-shell {
   display: grid;
   gap: 0.9rem;

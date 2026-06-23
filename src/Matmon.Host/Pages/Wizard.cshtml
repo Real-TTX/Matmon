@@ -1,0 +1,126 @@
+@page "/setup/wizard"
+@model WizardModel
+@{
+    ViewData["Title"] = "Set up Matmon";
+
+    var steps = new (string Key, string Icon, string Label)[]
+    {
+        ("welcome", "spark", "Welcome"),
+        ("networks", "network", "Networks"),
+        ("discovery", "search", "Discovery"),
+        ("probes", "probe", "Remote probes"),
+        ("notifications", "bell", "Notifications"),
+        ("done", "check", "Done"),
+    };
+
+    string StepUrl(string? key) => key is null ? "/" : $"/setup/wizard?step={key}";
+}
+
+<section class="dashboard-shell setup-wizard">
+    <div class="page-header setup-wizard-header">
+        <div class="page-title">
+            @MatmonIcons.Render("spark")
+            <h1>Set up Matmon</h1>
+        </div>
+        <a class="workspace-secondary-submit setup-wizard-skip" href="/">@MatmonIcons.Render("x")<span>Skip setup</span></a>
+    </div>
+
+    <ol class="setup-wizard-rail" aria-label="Setup progress">
+        @for (var i = 0; i < steps.Length; i++)
+        {
+            var s = steps[i];
+            var state = i < Model.StepIndex ? "is-done" : (i == Model.StepIndex ? "is-current" : string.Empty);
+            <li class="setup-wizard-step @state">
+                <span class="setup-wizard-step-mark">@(i < Model.StepIndex ? MatmonIcons.Render("check") : MatmonIcons.Render(s.Icon))</span>
+                <span class="setup-wizard-step-label">@s.Label</span>
+            </li>
+        }
+    </ol>
+
+    <div class="panel setup-wizard-panel">
+        @if (Model.Step != "welcome" && Model.Step != "done")
+        {
+            <p class="setup-wizard-progress">Step @Model.ActionStepNumber of @Model.ActionStepCount · optional</p>
+        }
+
+        <div class="setup-wizard-body">
+            @switch (Model.Step)
+            {
+                case "welcome":
+                    <h2 class="section-title">@MatmonIcons.Render("spark")<span>Your account is ready</span></h2>
+                    <p>Welcome to Matmon. Let's get it monitoring your network. The next steps are all <strong>optional</strong> — do them now or skip and come back later from the menu.</p>
+                    <ul class="setup-wizard-list">
+                        <li>@MatmonIcons.Render("search")<span>Discover devices on your network</span></li>
+                        <li>@MatmonIcons.Render("probe")<span>Add remote probes for other sites</span></li>
+                        <li>@MatmonIcons.Render("bell")<span>Set up alert notifications</span></li>
+                    </ul>
+                    break;
+
+                case "networks":
+                    <h2 class="section-title">@MatmonIcons.Render("network")<span>Your networks</span></h2>
+                    <p>Matmon detected these networks on this host. Discovery uses them to find devices to monitor.</p>
+                    @if (Model.DetectedNetworks.Count > 0)
+                    {
+                        <ul class="setup-wizard-chips">
+                            @foreach (var net in Model.DetectedNetworks)
+                            {
+                                <li class="tree-tag">@MatmonIcons.Render("network")<span>@net</span></li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="setup-wizard-muted">No local networks were detected automatically — you can still enter subnets to scan in the Discovery step.</p>
+                    }
+                    break;
+
+                case "discovery":
+                    <h2 class="section-title">@MatmonIcons.Render("search")<span>Discover your devices</span></h2>
+                    <p>Scan your subnets to find hosts and services, then turn the results into sensors in a couple of clicks.</p>
+                    <a class="workspace-submit setup-wizard-open" href="/Discovery" target="_blank" rel="noopener">@MatmonIcons.Render("search")<span>Open Discovery</span>@MatmonIcons.Render("arrow-right")</a>
+                    <p class="setup-wizard-muted">Opens in a new tab — come back here and continue when you're done.</p>
+                    break;
+
+                case "probes":
+                    <h2 class="section-title">@MatmonIcons.Render("probe")<span>Add remote probes</span></h2>
+                    <p>A remote probe monitors another site or devices behind NAT/firewalls — it connects <em>outbound</em> to this server, so no inbound ports are needed. You'll get a token and a ready-to-run Docker command.</p>
+                    <a class="workspace-submit setup-wizard-open" href="/system/probes/new" target="_blank" rel="noopener">@MatmonIcons.Render("plus")<span>Add a remote probe</span>@MatmonIcons.Render("arrow-right")</a>
+                    <p class="setup-wizard-muted">Opens in a new tab. Skip this if you only monitor from this server.</p>
+                    break;
+
+                case "notifications":
+                    <h2 class="section-title">@MatmonIcons.Render("bell")<span>Get notified</span></h2>
+                    <p>Alerts are most useful when they reach you. Set up an e-mail sender, a recipient and a rule so Matmon can tell you when something breaks.</p>
+                    <a class="workspace-submit setup-wizard-open" href="/notifications" target="_blank" rel="noopener">@MatmonIcons.Render("bell")<span>Set up notifications</span>@MatmonIcons.Render("arrow-right")</a>
+                    <p class="setup-wizard-muted">Opens in a new tab — configure a sender + receiver + rule.</p>
+                    break;
+
+                case "done":
+                    <h2 class="section-title">@MatmonIcons.Render("check")<span>You're all set</span></h2>
+                    <p>Matmon is ready to go. You can revisit Discovery, probes and notifications anytime from the menu. Head to the dashboard to see your monitoring come to life.</p>
+                    break;
+            }
+        </div>
+
+        <div class="setup-wizard-actions">
+            @if (Model.PrevStep is not null)
+            {
+                <a class="workspace-secondary-submit" href="@StepUrl(Model.PrevStep)">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+            }
+            <span class="setup-wizard-actions-spacer"></span>
+            @if (Model.Step == "welcome")
+            {
+                <a class="workspace-submit" href="@StepUrl(Model.NextStep)"><span>Get started</span>@MatmonIcons.Render("arrow-right")</a>
+            }
+            else if (Model.Step == "done")
+            {
+                <a class="workspace-submit" href="/"><span>Go to dashboard</span>@MatmonIcons.Render("arrow-right")</a>
+            }
+            else
+            {
+                <a class="workspace-secondary-submit" href="@StepUrl(Model.NextStep)"><span>Skip</span></a>
+                <a class="workspace-submit" href="@StepUrl(Model.NextStep)"><span>Continue</span>@MatmonIcons.Render("arrow-right")</a>
+            }
+        </div>
+    </div>
+</section>

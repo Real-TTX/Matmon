@@ -97,8 +97,7 @@ public class SetupModel : PageModel
                 ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
             });
 
-        // The optional setup wizard (networks / discovery / probes / notifications) lands here next;
-        // for now go straight to the dashboard.
-        return RedirectToPage("/Index");
+        // Hand off to the optional setup wizard (networks / discovery / probes / notifications).
+        return RedirectToPage("/Wizard");
     }
 }
