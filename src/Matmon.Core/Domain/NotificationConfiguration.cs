@@ -55,9 +55,9 @@ public sealed class EmailNotificationSettings
 {
     public string SenderName { get; set; } = "Matmon";
 
-    public string SenderEmail { get; set; } = "matmon@example.local";
+    public string SenderEmail { get; set; } = string.Empty;
 
-    public string SmtpHost { get; set; } = "smtp.example.local";
+    public string SmtpHost { get; set; } = string.Empty;
 
     public int? SmtpPort { get; set; } = 587;
 

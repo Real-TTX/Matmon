@@ -1567,14 +1567,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             _document.NotificationReceivers ??= [];
             _document.NotificationRules ??= [];
 
-            if (_document.NotificationSenders.Count == 0)
-            {
-                _document.NotificationSenders.Add(CreateDefaultEmailSender(_document.NotificationConfiguration.Email));
-                _document.NotificationSenders.Add(CreateDefaultWebhookSender(_document.NotificationConfiguration.Webhook));
-            }
-
-            EnsureDefaultReceivers();
-
+            // A clean install starts with no senders/receivers/rules — the user sets up
+            // notifications themselves (no example.local demo data). Existing rules are still
+            // fixed up below, and ResolveReceiverIdForRule creates a receiver on demand.
             foreach (var rule in _document.NotificationRules)
             {
                 if (rule.TriggerStates.Count == 0)
@@ -1743,71 +1738,6 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 map.UpdatedUtc = DateTimeOffset.UtcNow;
             }
         }
-    }
-
-    private NotificationSender CreateDefaultEmailSender(EmailNotificationSettings settings)
-    {
-        return new NotificationSender
-        {
-            Name = "Email sender",
-            Kind = NotificationEndpointKind.Email,
-            Email = new EmailNotificationSettings
-            {
-                SenderName = settings.SenderName,
-                SenderEmail = settings.SenderEmail,
-                SmtpHost = settings.SmtpHost,
-                SmtpPort = settings.SmtpPort,
-                UseSsl = settings.UseSsl,
-                Username = settings.Username,
-                Password = settings.Password
-            }
-        };
-    }
-
-    private static NotificationSender CreateDefaultWebhookSender(WebhookNotificationSettings settings)
-    {
-        return new NotificationSender
-        {
-            Name = "Webhook sender",
-            Kind = NotificationEndpointKind.Webhook,
-            Webhook = new WebhookNotificationSettings
-            {
-                EndpointUrl = settings.EndpointUrl,
-                Secret = settings.Secret,
-                TimeoutSeconds = settings.TimeoutSeconds
-            }
-        };
-    }
-
-    private void EnsureDefaultReceivers()
-    {
-        if (_document.NotificationReceivers.Count > 0)
-        {
-            return;
-        }
-
-        var emailTarget = _document.NotificationRules
-            .Where(rule => rule.ChannelKind == NotificationChannelKind.Email && !string.IsNullOrWhiteSpace(rule.Recipient))
-            .Select(rule => rule.Recipient.Trim())
-            .FirstOrDefault();
-        var webhookTarget = _document.NotificationRules
-            .Where(rule => rule.ChannelKind == NotificationChannelKind.Webhook && !string.IsNullOrWhiteSpace(rule.Recipient))
-            .Select(rule => rule.Recipient.Trim())
-            .FirstOrDefault();
-
-        _document.NotificationReceivers.Add(new NotificationReceiver
-        {
-            Name = string.IsNullOrWhiteSpace(emailTarget) ? "Email receiver" : $"Email receiver ({emailTarget})",
-            Kind = NotificationEndpointKind.Email,
-            Target = emailTarget ?? "ops@example.local"
-        });
-
-        _document.NotificationReceivers.Add(new NotificationReceiver
-        {
-            Name = string.IsNullOrWhiteSpace(webhookTarget) ? "Webhook receiver" : $"Webhook receiver ({webhookTarget})",
-            Kind = NotificationEndpointKind.Webhook,
-            Target = webhookTarget ?? "https://hooks.example.local/matmon"
-        });
     }
 
     private Guid? ResolveSenderIdForRule(NotificationChannelKind channelKind)
