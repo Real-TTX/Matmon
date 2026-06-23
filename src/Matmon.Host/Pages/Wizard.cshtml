@@ -8,6 +8,7 @@
     var steps = new (string Key, string Icon, string Label)[]
     {
         ("welcome", "spark", "Welcome"),
+        ("structure", "folder", "Structure"),
         ("networks", "network", "Networks"),
         ("discovery", "search", "Discovery"),
         ("probes", "probe", "Remote probes"),
@@ -62,9 +63,38 @@
                     </ul>
                     break;
 
+                case "structure":
+                    <h2 class="section-title">@MatmonIcons.Render("folder")<span>Organize your monitoring</span></h2>
+                    <p>Create a starter folder structure under your node so sensors stay tidy from day one. You can rename, add or remove folders anytime.</p>
+                    <ul class="setup-wizard-tree">
+                        @foreach (var (name, children) in WizardModel.StarterTree)
+                        {
+                            <li>
+                                <span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@name</span></span>
+                                @if (children.Length > 0)
+                                {
+                                    <ul>
+                                        @foreach (var child in children)
+                                        {
+                                            <li><span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@child</span></span></li>
+                                        }
+                                    </ul>
+                                }
+                            </li>
+                        }
+                    </ul>
+                    <form method="post" asp-page-handler="CreateStructure">
+                        <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("plus")<span>Create these folders</span></button>
+                    </form>
+                    @if (Model.ExistingFolders.Count > 0)
+                    {
+                        <p class="setup-wizard-muted">Already under your node: @string.Join(", ", Model.ExistingFolders)</p>
+                    }
+                    break;
+
                 case "networks":
-                    <h2 class="section-title">@MatmonIcons.Render("network")<span>Your networks</span></h2>
-                    <p>Add the subnets Matmon should scan during discovery. Add them now or later — it's optional.</p>
+                    <h2 class="section-title">@MatmonIcons.Render("network")<span>Your node's networks</span></h2>
+                    <p>Add the subnets this node should monitor. They're stored on the node and discovery uses them to find devices. Optional — add now or later.</p>
 
                     @if (Model.ConfiguredSubnets.Count > 0)
                     {
