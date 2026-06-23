@@ -57,6 +57,9 @@ public static class SensorScheduleDefaults
         ["linux-disk"] = TimeSpan.FromMinutes(15),
         ["proxmox-disk"] = TimeSpan.FromMinutes(15),
         ["backup-job"] = TimeSpan.FromMinutes(30),
+        ["windows-update"] = TimeSpan.FromHours(6),
+        ["linux-update"] = TimeSpan.FromHours(6),
+        ["synology-update"] = TimeSpan.FromHours(6),
         ["ssl-certificate"] = TimeSpan.FromHours(6),
         ["certificate-chain"] = TimeSpan.FromHours(6),
 

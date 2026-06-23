@@ -72,6 +72,9 @@ public static class SensorTelemetryProfiles
         ["linux-ssh-health"] = Availability,
         ["powershell"] = Availability,
         ["backup-job"] = Availability,
+        ["windows-update"] = Availability,
+        ["linux-update"] = Availability,
+        ["synology-update"] = Availability,
         ["unifi-health"] = Availability,
 
         // Probe infrastructure.

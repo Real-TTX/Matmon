@@ -43,9 +43,11 @@ public static class SensorTypeCategories
         ["windows-service"] = "Windows",
         ["windows-process"] = "Windows",
         ["windows-disk"] = "Windows",
+        ["windows-update"] = "Windows",
 
         ["linux-ssh-health"] = "Linux",
         ["linux-disk"] = "Linux",
+        ["linux-update"] = "Linux",
 
         ["powershell"] = "Scripting",
         ["local-script"] = "Scripting",
@@ -60,6 +62,7 @@ public static class SensorTypeCategories
         ["synology"] = "Virtualization & NAS",
         ["synology-health"] = "Virtualization & NAS",
         ["synology-disk"] = "Virtualization & NAS",
+        ["synology-update"] = "Virtualization & NAS",
         ["unifi-health"] = "Virtualization & NAS",
         ["docker-container"] = "Virtualization & NAS",
 

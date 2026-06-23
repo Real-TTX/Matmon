@@ -382,6 +382,7 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, SynologyNasSensorExecutor>();
     services.AddTransient<ISensorExecutor, SynologyHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, SynologyDiskSensorExecutor>();
+    services.AddTransient<ISensorExecutor, SynologyUpdateSensorExecutor>();
     services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
     services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxPveSensorExecutor>();
@@ -396,10 +397,12 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, LocalProgramSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsDiskSensorExecutor>();
+    services.AddTransient<ISensorExecutor, WindowsUpdateSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsServiceSensorExecutor>();
     services.AddTransient<ISensorExecutor, WindowsProcessSensorExecutor>();
     services.AddTransient<ISensorExecutor, LinuxSshHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, LinuxDiskSensorExecutor>();
+    services.AddTransient<ISensorExecutor, LinuxUpdateSensorExecutor>();
     services.AddTransient<ISensorExecutor, SslCertificateSensorExecutor>();
     services.AddTransient<ISensorExecutor, CertificateChainSensorExecutor>();
     services.AddTransient<ISensorExecutor, MssqlSensorExecutor>();
