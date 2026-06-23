@@ -30,9 +30,9 @@ public sealed class CertificateChainSensorExecutor : ISensorExecutor
             new SensorParameterDefinition
             {
                 Key = "cert.serverName",
-                Label = "Server name",
+                Label = "Server name (SNI)",
                 Kind = SensorParameterKind.Text,
-                Description = "Optional SNI and hostname. Empty uses the target host.",
+                Description = "Optional. SNI / hostname sent in the TLS handshake (also used for the hostname-match check) — only needed when the target is an IP or the host serves several certificates. Empty = the target host.",
                 Placeholder = "www.example.com"
             },
             new SensorParameterDefinition
