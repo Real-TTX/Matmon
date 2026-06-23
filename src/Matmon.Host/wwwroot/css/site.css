@@ -1413,9 +1413,11 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 
 /* ---- First-run setup wizard ---- */
 .setup-wizard {
-  max-width: 880px;
+  max-width: 760px;
   width: 100%;
-  margin: 0 auto;
+  margin: 1.5rem auto;
+  display: grid;
+  gap: 1rem;
 }
 
 .setup-wizard-header {
@@ -1472,7 +1474,8 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 
 .setup-wizard-panel {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
+  padding: 1.5rem 1.6rem;
 }
 
 .setup-wizard-progress {

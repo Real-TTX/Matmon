@@ -1,7 +1,9 @@
 @page "/setup/wizard"
 @model WizardModel
 @{
+    Layout = "_AnonymousLayout";
     ViewData["Title"] = "Set up Matmon";
+    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
 
     var steps = new (string Key, string Icon, string Label)[]
     {
