@@ -49,6 +49,15 @@ public interface IMonitoringWorkspaceStore
 
     ProbeElement? FindProbeByProbeId(string probeId);
 
+    /// <summary>The primary (root) probe's configured discovery subnets (CIDR strings).</summary>
+    IReadOnlyList<string> GetPrimaryProbeSubnets();
+
+    /// <summary>Adds a CIDR subnet to the primary probe (no-op if blank or already present).</summary>
+    void AddPrimaryProbeSubnet(string cidr);
+
+    /// <summary>Removes a CIDR subnet from the primary probe.</summary>
+    void RemovePrimaryProbeSubnet(string cidr);
+
     MonitoringElement? FindElement(Guid id);
 
     /// <summary>

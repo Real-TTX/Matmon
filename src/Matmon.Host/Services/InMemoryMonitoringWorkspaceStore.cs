@@ -527,6 +527,51 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public IReadOnlyList<string> GetPrimaryProbeSubnets()
+    {
+        lock (_gate)
+        {
+            return (_document.RootProbe.Subnets ??= []).ToArray();
+        }
+    }
+
+    public void AddPrimaryProbeSubnet(string cidr)
+    {
+        var normalized = (cidr ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _document.RootProbe.Subnets ??= [];
+            if (!_document.RootProbe.Subnets.Any(existing => string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)))
+            {
+                _document.RootProbe.Subnets.Add(normalized);
+                QueueSave(SavePriority.Configuration);
+            }
+        }
+    }
+
+    public void RemovePrimaryProbeSubnet(string cidr)
+    {
+        var normalized = (cidr ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _document.RootProbe.Subnets ??= [];
+            if (_document.RootProbe.Subnets.RemoveAll(existing => string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)) > 0)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+        }
+    }
+
     public MonitoringElement? FindElement(Guid id)
     {
         lock (_gate)

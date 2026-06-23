@@ -40,6 +40,10 @@
     </ol>
 
     <div class="panel setup-wizard-panel">
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+        }
         @if (Model.Step != "welcome" && Model.Step != "done")
         {
             <p class="setup-wizard-progress">Step @Model.ActionStepNumber of @Model.ActionStepCount · optional</p>
@@ -60,19 +64,45 @@
 
                 case "networks":
                     <h2 class="section-title">@MatmonIcons.Render("network")<span>Your networks</span></h2>
-                    <p>Matmon detected these networks on this host. Discovery uses them to find devices to monitor.</p>
-                    @if (Model.DetectedNetworks.Count > 0)
+                    <p>Add the subnets Matmon should scan during discovery. Add them now or later — it's optional.</p>
+
+                    @if (Model.ConfiguredSubnets.Count > 0)
                     {
                         <ul class="setup-wizard-chips">
-                            @foreach (var net in Model.DetectedNetworks)
+                            @foreach (var net in Model.ConfiguredSubnets)
                             {
-                                <li class="tree-tag">@MatmonIcons.Render("network")<span>@net</span></li>
+                                <li class="tree-tag setup-wizard-net">
+                                    @MatmonIcons.Render("network")<span>@net</span>
+                                    <form method="post" asp-page-handler="RemoveNetwork">
+                                        <input type="hidden" name="cidr" value="@net" />
+                                        <button type="submit" class="setup-wizard-net-remove" aria-label="Remove @net" title="Remove">@MatmonIcons.Render("x")</button>
+                                    </form>
+                                </li>
                             }
                         </ul>
                     }
                     else
                     {
-                        <p class="setup-wizard-muted">No local networks were detected automatically — you can still enter subnets to scan in the Discovery step.</p>
+                        <p class="setup-wizard-muted">No subnets configured yet.</p>
+                    }
+
+                    <form method="post" asp-page-handler="AddNetwork" class="setup-wizard-add">
+                        <input type="text" name="cidr" class="workspace-input" placeholder="e.g. 192.168.1.0/24" autocomplete="off" />
+                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Add</span></button>
+                    </form>
+
+                    @if (Model.SuggestedNetworks.Count > 0)
+                    {
+                        <p class="setup-wizard-muted">Detected on this host — click to add:</p>
+                        <div class="setup-wizard-suggestions">
+                            @foreach (var net in Model.SuggestedNetworks)
+                            {
+                                <form method="post" asp-page-handler="AddNetwork">
+                                    <input type="hidden" name="cidr" value="@net" />
+                                    <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("plus")<span>@net</span></button>
+                                </form>
+                            }
+                        </div>
                     }
                     break;
 

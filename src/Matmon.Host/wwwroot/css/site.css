@@ -1549,6 +1549,60 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   flex: 1 1 auto;
 }
 
+.setup-wizard-net {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.setup-wizard-net form {
+  display: inline-flex;
+  margin: 0;
+}
+
+.setup-wizard-net-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--matmon-muted);
+  cursor: pointer;
+  padding: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.setup-wizard-net-remove:hover {
+  color: #ff6b6b;
+}
+
+.setup-wizard-net-remove svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.setup-wizard-add {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.setup-wizard-add .workspace-input {
+  max-width: 280px;
+}
+
+.setup-wizard-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.setup-wizard-suggestions form {
+  margin: 0;
+}
+
 .dashboard-shell {
   display: grid;
   gap: 0.9rem;
