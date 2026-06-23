@@ -17,7 +17,6 @@
     <div class="panel auth-card">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("spark")<span>Access</span></h2>
-            <span class="panel-hint">default: admin / admin</span>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -29,7 +28,7 @@
             <input type="hidden" asp-for="ReturnUrl" />
 
             <label class="workspace-field">
-                <span>Username</span>
+                <span>E-mail or username</span>
                 <input asp-for="Username" class="workspace-input" autocomplete="username" />
             </label>
 
@@ -39,7 +38,7 @@
             </label>
 
             <div class="auth-actions">
-                <span class="auth-note">Default: admin / admin</span>
+                <span class="auth-note">Sign in with your e-mail or username</span>
                 <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
             </div>
         </form>

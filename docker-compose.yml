@@ -9,8 +9,8 @@ services:
       Matmon__Mode: Primary
       Matmon__HeartbeatIntervalSeconds: 30
       Matmon__WorkspacePath: data/workspace.json
-      Matmon__Auth__Username: admin
-      Matmon__Auth__Password: admin
+      # No Matmon__Auth__* → first launch shows the setup wizard (create the admin account).
+      # Set Matmon__Auth__Username/Password to pre-provision an admin headlessly and skip setup.
       Matmon__ProvisionLocalDockerProbe: true
       Matmon__AutoCreateProbeSystemSensors: true
       Matmon__CreateStarterMap: true

@@ -13,6 +13,13 @@ public sealed class MatmonUser
 
     public string Username { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional e-mail address. The first-run account (and future accounts) sign in with their
+    /// e-mail; <see cref="Username"/> is kept as the display/login fallback (older installs only
+    /// have a username). Login matches either field.
+    /// </summary>
+    public string Email { get; set; } = string.Empty;
+
     public string PasswordHash { get; set; } = string.Empty;
 
     public MatmonUserRole Role { get; set; } = MatmonUserRole.Viewer;

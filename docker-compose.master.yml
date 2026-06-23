@@ -22,8 +22,10 @@ services:
       Matmon__WorkspacePath: /app/data/workspace.json
       Matmon__BackupPath: /app/backups
       Matmon__DataProtectionPath: /app/keys
-      Matmon__Auth__Username: ${MATMON_ADMIN_USER:-admin}
-      Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-admin}
+      # Empty by default → first launch shows the setup wizard (create the admin account).
+      # Set MATMON_ADMIN_USER / MATMON_ADMIN_PASSWORD to pre-provision an admin and skip setup.
+      Matmon__Auth__Username: ${MATMON_ADMIN_USER:-}
+      Matmon__Auth__Password: ${MATMON_ADMIN_PASSWORD:-}
       Matmon__SeedSampleData: ${MATMON_SEED_SAMPLE_DATA:-false}
       Matmon__ProvisionLocalDockerProbe: ${MATMON_PROVISION_LOCAL_DOCKER_PROBE:-false}
       Matmon__ProvisionDemoSensors: ${MATMON_PROVISION_DEMO_SENSORS:-false}

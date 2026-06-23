@@ -17,9 +17,10 @@ var runtimeOptions = builder.Configuration.GetSection("Matmon").Get<MatmonRuntim
 runtimeOptions.ProbeId ??= Environment.MachineName;
 runtimeOptions.ProbeName ??= Environment.MachineName;
 
+// Auth credentials are intentionally left blank when not provided: a bare install (no
+// Matmon__Auth__* env and no appsettings override) has no pre-provisioned admin and falls through
+// to the first-run setup wizard. Setting both via env pre-provisions an admin and skips setup.
 var authOptions = builder.Configuration.GetSection("Matmon:Auth").Get<MatmonAuthOptions>() ?? new MatmonAuthOptions();
-authOptions.Username = string.IsNullOrWhiteSpace(authOptions.Username) ? "admin" : authOptions.Username;
-authOptions.Password = string.IsNullOrWhiteSpace(authOptions.Password) ? "admin" : authOptions.Password;
 
 var workspacePath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
     ? "data/workspace.json"
@@ -170,6 +171,37 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+if (runtimeOptions.Mode == AppMode.Primary)
+{
+    // First-run guard: until an admin account exists, funnel every page to the setup wizard.
+    // Runs before authentication so the setup redirect wins over the login challenge (there is no
+    // account to log in with yet). Static assets, health and APIs stay reachable.
+    app.Use(async (context, next) =>
+    {
+        var path = context.Request.Path.Value ?? "/";
+        var isExempt =
+            path.StartsWith("/setup", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/healthz", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/_", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains('.');
+        if (!isExempt)
+        {
+            var store = context.RequestServices.GetRequiredService<IMonitoringWorkspaceStore>();
+            if (store.IsSetupRequired())
+            {
+                context.Response.Redirect("/setup");
+                return;
+            }
+        }
+
+        await next();
+    });
+}
 
 if (!app.Environment.IsDevelopment() && runtimeOptions.Mode == AppMode.Primary)
 {

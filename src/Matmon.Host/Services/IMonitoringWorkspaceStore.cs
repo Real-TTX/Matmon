@@ -17,6 +17,12 @@ public interface IMonitoringWorkspaceStore
 
     MatmonUser? ValidateUser(string username, string password);
 
+    /// <summary>True when no account has been provisioned yet and the first-run setup must run.</summary>
+    bool IsSetupRequired();
+
+    /// <summary>Creates the first admin account (e-mail + password) and marks setup completed.</summary>
+    MatmonUser CompleteInitialSetup(string email, string password);
+
     MatmonUser CreateUser(string username, string password, MatmonUserRole role);
 
     bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password);

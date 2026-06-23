@@ -164,9 +164,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         lock (_gate)
         {
             EnsureDefaultUsers();
+            var identifier = username.Trim();
             var user = _document.Users.FirstOrDefault(candidate =>
                 candidate.IsEnabled &&
-                string.Equals(candidate.Username, username.Trim(), StringComparison.OrdinalIgnoreCase));
+                (string.Equals(candidate.Username, identifier, StringComparison.OrdinalIgnoreCase) ||
+                 (!string.IsNullOrWhiteSpace(candidate.Email) &&
+                  string.Equals(candidate.Email, identifier, StringComparison.OrdinalIgnoreCase))));
             if (user is null || !MatmonPasswordHasher.Verify(password, user.PasswordHash))
             {
                 return null;
@@ -1563,21 +1566,81 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 _document.Users[0].UpdatedUtc = DateTimeOffset.UtcNow;
             }
 
+            // An install that already has an account is past first-run setup — mark it so the setup
+            // wizard never hijacks a configured instance (migration for pre-setup workspaces).
+            _document.SetupCompletedUtc ??= DateTimeOffset.UtcNow;
             return;
         }
 
-        var username = string.IsNullOrWhiteSpace(_authOptions.Username) ? "admin" : _authOptions.Username.Trim();
-        var password = string.IsNullOrWhiteSpace(_authOptions.Password) ? "admin" : _authOptions.Password;
+        // No accounts yet. If an admin was provisioned via Matmon__Auth__* (headless/automated
+        // deploy), seed it and treat setup as done. Otherwise leave the workspace account-less so
+        // the first-run setup wizard forces account creation on first launch.
+        if (string.IsNullOrWhiteSpace(_authOptions.Username) || string.IsNullOrWhiteSpace(_authOptions.Password))
+        {
+            return;
+        }
+
         var now = DateTimeOffset.UtcNow;
+        var seededUsername = _authOptions.Username.Trim();
         _document.Users.Add(new MatmonUser
         {
-            Username = username,
-            PasswordHash = MatmonPasswordHasher.Hash(password),
+            Username = seededUsername,
+            Email = seededUsername.Contains('@') ? seededUsername : string.Empty,
+            PasswordHash = MatmonPasswordHasher.Hash(_authOptions.Password),
             Role = MatmonUserRole.Admin,
             IsEnabled = true,
             CreatedUtc = now,
             UpdatedUtc = now
         });
+        _document.SetupCompletedUtc = now;
+    }
+
+    public bool IsSetupRequired()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            return _document.SetupCompletedUtc is null;
+        }
+    }
+
+    public MatmonUser CompleteInitialSetup(string email, string password)
+    {
+        var normalizedEmail = (email ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedEmail) || !normalizedEmail.Contains('@'))
+        {
+            throw new InvalidOperationException("A valid e-mail address is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+        {
+            throw new InvalidOperationException("The password must be at least 8 characters.");
+        }
+
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            if (_document.SetupCompletedUtc is not null)
+            {
+                throw new InvalidOperationException("Setup has already been completed.");
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var admin = new MatmonUser
+            {
+                Username = normalizedEmail,
+                Email = normalizedEmail,
+                PasswordHash = MatmonPasswordHasher.Hash(password),
+                Role = MatmonUserRole.Admin,
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+            _document.Users.Add(admin);
+            _document.SetupCompletedUtc = now;
+            QueueSave(SavePriority.Configuration);
+            return CloneUser(admin);
+        }
     }
 
     private void EnsureDefaultMaps(bool createStarterMap = false)
@@ -3484,6 +3547,13 @@ try {
         public List<SensorDefinition> SensorDefinitions { get; set; } = [];
 
         public List<MatmonUser> Users { get; set; } = [];
+
+        /// <summary>
+        /// When the first-run setup (initial admin account) was completed. Null means the workspace
+        /// has no provisioned account yet and the setup wizard should run. Existing/seeded installs
+        /// are migrated to "completed" on load so the wizard never hijacks a configured instance.
+        /// </summary>
+        public DateTimeOffset? SetupCompletedUtc { get; set; }
 
         public List<MonitoringMap> Maps { get; set; } = [];
 

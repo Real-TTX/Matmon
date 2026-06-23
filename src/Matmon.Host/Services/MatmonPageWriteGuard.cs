@@ -30,6 +30,12 @@ public sealed class MatmonPageWriteGuard : IAsyncPageFilter
             return true;
         }
 
+        // First-run setup creates the very first admin while still anonymous — must be postable.
+        if (string.Equals(page, "/Setup", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         if (string.Equals(page, "/Logout", StringComparison.OrdinalIgnoreCase))
         {
             return true;

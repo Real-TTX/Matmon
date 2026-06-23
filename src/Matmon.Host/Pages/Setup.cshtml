@@ -1,0 +1,52 @@
+@page "/setup"
+@model SetupModel
+@{
+    Layout = "_AnonymousLayout";
+    ViewData["Title"] = "Setup";
+    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
+}
+
+<section class="dashboard-shell auth-shell auth-shell-login">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("spark")
+            <h1>Welcome to Matmon</h1>
+        </div>
+    </div>
+
+    <div class="panel auth-card">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("lock")<span>Create your admin account</span></h2>
+            <span class="panel-hint">First run</span>
+        </div>
+
+        <p class="auth-intro">This is the first time Matmon starts. Create the administrator account to continue — you'll be able to add networks, probes and run discovery afterwards.</p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" class="workspace-form auth-form">
+            <label class="workspace-field">
+                <span>E-mail</span>
+                <input asp-for="Email" class="workspace-input" type="email" autocomplete="username" autofocus />
+            </label>
+
+            <label class="workspace-field">
+                <span>Password</span>
+                <input asp-for="Password" class="workspace-input" type="password" autocomplete="new-password" />
+            </label>
+
+            <label class="workspace-field">
+                <span>Repeat password</span>
+                <input asp-for="ConfirmPassword" class="workspace-input" type="password" autocomplete="new-password" />
+            </label>
+
+            <div class="auth-actions">
+                <span class="auth-note">At least 8 characters</span>
+                <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Create account</span></button>
+            </div>
+        </form>
+    </div>
+</section>
