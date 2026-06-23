@@ -138,9 +138,25 @@
 
                 case "discovery":
                     <h2 class="section-title">@MatmonIcons.Render("search")<span>Discover your devices</span></h2>
-                    <p>Scan your subnets to find hosts and services, then turn the results into sensors in a couple of clicks.</p>
-                    <a class="workspace-submit setup-wizard-open" href="/Discovery" target="_blank" rel="noopener">@MatmonIcons.Render("search")<span>Open Discovery</span>@MatmonIcons.Render("arrow-right")</a>
-                    <p class="setup-wizard-muted">Opens in a new tab — come back here and continue when you're done.</p>
+                    <p>Scan your node's networks to find hosts and services. Start the scan right here — found devices are listed in Discovery, where you turn them into sensors.</p>
+                    @if (Model.ConfiguredSubnets.Count > 0)
+                    {
+                        <ul class="setup-wizard-chips">
+                            @foreach (var net in Model.ConfiguredSubnets)
+                            {
+                                <li class="tree-tag">@MatmonIcons.Render("network")<span>@net</span></li>
+                            }
+                        </ul>
+                        <form method="post" asp-page-handler="StartDiscovery">
+                            <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("search")<span>Start a scan</span></button>
+                        </form>
+                        <p class="setup-wizard-muted"><a href="/Discovery" target="_blank" rel="noopener">Open Discovery ↗</a> to watch progress and import what's found.</p>
+                    }
+                    else
+                    {
+                        <p class="setup-wizard-muted">No networks configured yet — add a subnet in the Networks step first.</p>
+                        <a class="workspace-secondary-submit setup-wizard-open" href="/setup/wizard?step=networks">@MatmonIcons.Render("arrow-left")<span>Back to Networks</span></a>
+                    }
                     break;
 
                 case "probes":

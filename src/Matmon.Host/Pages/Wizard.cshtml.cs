@@ -8,10 +8,17 @@ namespace Matmon.Host.Pages;
 public class WizardModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly DiscoveryJobStore _discoveryJobs;
+    private readonly NetworkDiscoveryService _discoveryService;
 
-    public WizardModel(IMonitoringWorkspaceStore workspaceStore)
+    public WizardModel(
+        IMonitoringWorkspaceStore workspaceStore,
+        DiscoveryJobStore discoveryJobs,
+        NetworkDiscoveryService discoveryService)
     {
         _workspaceStore = workspaceStore;
+        _discoveryJobs = discoveryJobs;
+        _discoveryService = discoveryService;
     }
 
     /// <summary>Ordered wizard steps. "welcome" and "done" bookend the optional action steps.</summary>
@@ -97,6 +104,69 @@ public class WizardModel : PageModel
         return RedirectToPage(new { step = "networks" });
     }
 
+    public IActionResult OnPostStartDiscovery()
+    {
+        var root = PrimaryNode();
+        var subnets = _workspaceStore.GetPrimaryProbeSubnets();
+        if (root is null || subnets.Count == 0)
+        {
+            StatusMessage = "Add at least one network first, then start a scan.";
+            return RedirectToPage(new { step = subnets.Count == 0 ? "networks" : "discovery" });
+        }
+
+        var request = new NetworkDiscoveryRequest(
+            Guid.NewGuid(),
+            string.Join(", ", subnets),
+            DiscoveryDefaults.Options,
+            ScopeElementId: root.Id,
+            ScopeKind: MonitoringElementKind.Probe);
+        var job = _discoveryJobs.Create(root.Id, root.ProbeId, root.Name, request);
+        StartScan(job);
+
+        StatusMessage = $"Scan started on {subnets.Count} network{(subnets.Count == 1 ? string.Empty : "s")}. Found devices appear in Discovery.";
+        return RedirectToPage(new { step = "discovery" });
+    }
+
+    // Mirrors DiscoveryModel.StartLocalDiscovery: run the scan on the primary off the request thread,
+    // streaming results/progress into the shared DiscoveryJobStore so Discovery shows them.
+    private void StartScan(DiscoveryJobSnapshot job)
+    {
+        _ = Task.Run(async () =>
+        {
+            var cancellationToken = _discoveryJobs.GetCancellationToken(job.JobId);
+            try
+            {
+                _discoveryJobs.Start(job.JobId, "Discovery is running on the primary probe.");
+                await _discoveryService.DiscoverAsync(
+                    job.Request,
+                    (result, _) =>
+                    {
+                        _discoveryJobs.AddResult(job.JobId, result);
+                        return ValueTask.CompletedTask;
+                    },
+                    cancellationToken,
+                    (progress, _) =>
+                    {
+                        _discoveryJobs.UpdateProgress(job.JobId, progress.ScannedHosts, progress.TotalHosts);
+                        return ValueTask.CompletedTask;
+                    });
+
+                if (!_discoveryJobs.IsCancelled(job.JobId))
+                {
+                    _discoveryJobs.Complete(job.JobId, [], null);
+                }
+            }
+            catch (OperationCanceledException) when (_discoveryJobs.IsCancelled(job.JobId))
+            {
+                // Cancelled from the UI.
+            }
+            catch (Exception ex)
+            {
+                _discoveryJobs.Complete(job.JobId, [], ex.Message);
+            }
+        });
+    }
+
     private void Load(string? step)
     {
         Step = (step ?? string.Empty).Trim().ToLowerInvariant();
@@ -117,10 +187,13 @@ public class WizardModel : PageModel
                     .ToArray();
         }
 
-        if (Step == "networks")
+        if (Step is "networks" or "discovery")
         {
             ConfiguredSubnets = _workspaceStore.GetPrimaryProbeSubnets();
+        }
 
+        if (Step == "networks")
+        {
             IReadOnlyList<string> detected;
             try
             {
