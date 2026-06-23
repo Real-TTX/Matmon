@@ -51,6 +51,8 @@ public static class SensorTelemetryProfiles
         ["proxmox"] = Responsive,
         ["proxmox-health"] = Responsive,
         ["proxmox-node-health"] = Responsive,
+        ["vmware-health"] = Responsive,
+        ["vmware-host-health"] = Responsive,
         ["synology"] = Responsive,
         ["synology-health"] = Responsive,
         ["synology-disk"] = Responsive,

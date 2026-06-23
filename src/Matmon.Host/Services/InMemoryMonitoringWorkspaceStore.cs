@@ -1801,6 +1801,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 ProxmoxHealthSensorExecutor.Definition,
                 ProxmoxNodeHealthSensorExecutor.Definition,
                 ProxmoxDiskSensorExecutor.Definition,
+                VMwareHealthSensorExecutor.Definition,
+                VMwareHostHealthSensorExecutor.Definition,
                 UnifiHealthSensorExecutor.Definition,
                 PowerShellRemoteSensorExecutor.Definition,
                 WindowsHealthSensorExecutor.Definition,

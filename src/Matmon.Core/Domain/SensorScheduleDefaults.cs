@@ -35,6 +35,8 @@ public static class SensorScheduleDefaults
         ["proxmox"] = TimeSpan.FromMinutes(5),
         ["proxmox-health"] = TimeSpan.FromMinutes(5),
         ["proxmox-node-health"] = TimeSpan.FromMinutes(5),
+        ["vmware-health"] = TimeSpan.FromMinutes(5),
+        ["vmware-host-health"] = TimeSpan.FromMinutes(5),
         ["unifi-health"] = TimeSpan.FromMinutes(5),
         ["synology"] = TimeSpan.FromMinutes(5),
         ["synology-health"] = TimeSpan.FromMinutes(5),

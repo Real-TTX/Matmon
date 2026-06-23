@@ -49,10 +49,11 @@ public sealed class SensorTelemetryProfilesTests
     }
 
     [Fact]
-    public void Responsive_keeps_hourly_buckets_for_a_year()
+    public void Responsive_keeps_hourly_buckets_for_two_weeks()
     {
         var profile = SensorTelemetryProfiles.Responsive;
+        Assert.Equal(3, profile.RawObservationDays);
         Assert.Equal(60, profile.StatisticsBucketMinutes);
-        Assert.Equal(365, profile.StatisticsRetentionDays);
+        Assert.Equal(14, profile.StatisticsRetentionDays);
     }
 }

@@ -388,6 +388,8 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, ProxmoxHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxNodeHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxDiskSensorExecutor>();
+    services.AddTransient<ISensorExecutor, VMwareHealthSensorExecutor>();
+    services.AddTransient<ISensorExecutor, VMwareHostHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, UnifiHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, PowerShellRemoteSensorExecutor>();
     services.AddTransient<ISensorExecutor, LocalScriptSensorExecutor>();
