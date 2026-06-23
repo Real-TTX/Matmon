@@ -9208,9 +9208,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: 0;
 }
 
-.system-user-row {
-  display: grid;
-  grid-template-columns: 1.3fr 0.7fr 0.55fr 1fr auto;
+/* Scope the column template to BOTH the header and the data rows so they line up — the base
+   .system-table-row is a 6-column grid (for the probe table); the user table has 5 columns. */
+.system-user-table .system-table-row {
+  grid-template-columns: minmax(13rem, 1.3fr) minmax(5rem, 0.7fr) minmax(7rem, 0.55fr) minmax(10rem, 1fr) minmax(9rem, auto);
   gap: 0.55rem;
   align-items: center;
 }

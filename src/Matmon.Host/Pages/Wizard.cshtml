@@ -45,27 +45,17 @@
         {
             <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
         }
-        @if (Model.Step != "welcome" && Model.Step != "done")
-        {
-            <p class="setup-wizard-progress">Step @Model.ActionStepNumber of @Model.ActionStepCount · optional</p>
-        }
-
         <div class="setup-wizard-body">
             @switch (Model.Step)
             {
                 case "welcome":
                     <h2 class="section-title">@MatmonIcons.Render("spark")<span>Your account is ready</span></h2>
-                    <p>Welcome to Matmon. Let's get it monitoring your network. The next steps are all <strong>optional</strong> — do them now or skip and come back later from the menu.</p>
-                    <ul class="setup-wizard-list">
-                        <li>@MatmonIcons.Render("search")<span>Discover devices on your network</span></li>
-                        <li>@MatmonIcons.Render("probe")<span>Add remote probes for other sites</span></li>
-                        <li>@MatmonIcons.Render("bell")<span>Set up alert notifications</span></li>
-                    </ul>
+                    <p>These steps are optional — set things up now, or skip and do it later.</p>
                     break;
 
                 case "structure":
                     <h2 class="section-title">@MatmonIcons.Render("folder")<span>Organize your monitoring</span></h2>
-                    <p>Create a starter folder structure under your node so sensors stay tidy from day one. You can rename, add or remove folders anytime.</p>
+                    <p>Create a starter folder structure on your node.</p>
                     <ul class="setup-wizard-tree">
                         @foreach (var (name, children) in WizardModel.StarterTree)
                         {
@@ -94,7 +84,7 @@
 
                 case "networks":
                     <h2 class="section-title">@MatmonIcons.Render("network")<span>Your node's networks</span></h2>
-                    <p>Add the subnets this node should monitor. They're stored on the node and discovery uses them to find devices. Optional — add now or later.</p>
+                    <p>Subnets this node monitors — used by discovery.</p>
 
                     @if (Model.ConfiguredSubnets.Count > 0)
                     {
@@ -123,7 +113,7 @@
 
                     @if (Model.SuggestedNetworks.Count > 0)
                     {
-                        <p class="setup-wizard-muted">Detected on this host — click to add:</p>
+                        <p class="setup-wizard-muted">Detected — click to add:</p>
                         <div class="setup-wizard-suggestions">
                             @foreach (var net in Model.SuggestedNetworks)
                             {
@@ -138,7 +128,7 @@
 
                 case "discovery":
                     <h2 class="section-title">@MatmonIcons.Render("search")<span>Discover your devices</span></h2>
-                    <p>Scan your node's networks to find hosts and services. Start the scan right here — found devices are listed in Discovery, where you turn them into sensors.</p>
+                    <p>Scan your node's networks for devices.</p>
                     @if (Model.ConfiguredSubnets.Count > 0)
                     {
                         <ul class="setup-wizard-chips">
@@ -150,7 +140,7 @@
                         <form method="post" asp-page-handler="StartDiscovery">
                             <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("search")<span>Start a scan</span></button>
                         </form>
-                        <p class="setup-wizard-muted"><a href="/Discovery" target="_blank" rel="noopener">Open Discovery ↗</a> to watch progress and import what's found.</p>
+                        <p class="setup-wizard-muted"><a href="/Discovery" target="_blank" rel="noopener">Open Discovery ↗</a> to import what's found.</p>
                     }
                     else
                     {
@@ -161,21 +151,19 @@
 
                 case "probes":
                     <h2 class="section-title">@MatmonIcons.Render("probe")<span>Add remote probes</span></h2>
-                    <p>A remote probe monitors another site or devices behind NAT/firewalls — it connects <em>outbound</em> to this server, so no inbound ports are needed. You'll get a token and a ready-to-run Docker command.</p>
-                    <a class="workspace-submit setup-wizard-open" href="/system/probes/new" target="_blank" rel="noopener">@MatmonIcons.Render("plus")<span>Add a remote probe</span>@MatmonIcons.Render("arrow-right")</a>
-                    <p class="setup-wizard-muted">Opens in a new tab. Skip this if you only monitor from this server.</p>
+                    <p>Monitor another site or devices behind NAT — connects outbound, you get a token + Docker command.</p>
+                    <a class="workspace-submit setup-wizard-open" href="/system/probes/new" target="_blank" rel="noopener">@MatmonIcons.Render("plus")<span>Add a remote probe ↗</span></a>
                     break;
 
                 case "notifications":
                     <h2 class="section-title">@MatmonIcons.Render("bell")<span>Get notified</span></h2>
-                    <p>Alerts are most useful when they reach you. Set up an e-mail sender, a recipient and a rule so Matmon can tell you when something breaks.</p>
-                    <a class="workspace-submit setup-wizard-open" href="/notifications" target="_blank" rel="noopener">@MatmonIcons.Render("bell")<span>Set up notifications</span>@MatmonIcons.Render("arrow-right")</a>
-                    <p class="setup-wizard-muted">Opens in a new tab — configure a sender + receiver + rule.</p>
+                    <p>Set up e-mail alerts so Matmon can reach you.</p>
+                    <a class="workspace-submit setup-wizard-open" href="/notifications" target="_blank" rel="noopener">@MatmonIcons.Render("bell")<span>Set up notifications ↗</span></a>
                     break;
 
                 case "done":
                     <h2 class="section-title">@MatmonIcons.Render("check")<span>You're all set</span></h2>
-                    <p>Matmon is ready to go. You can revisit Discovery, probes and notifications anytime from the menu. Head to the dashboard to see your monitoring come to life.</p>
+                    <p>Matmon is ready. Revisit any of these from the menu anytime.</p>
                     break;
             }
         </div>
