@@ -107,8 +107,8 @@
                             <span class="sidebar-alert-status-hint" data-nav-alert-hint>@alertHint</span>
                         </a>
                         <span class="sidebar-alert-status-meta" aria-label="Alert summary">
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><strong data-nav-error-count>@errorSensors</strong><small>Err</small></a>
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><strong data-nav-warning-count>@warningSensors</strong><small>Warn</small></a>
+                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="error" data-tone="error"><strong data-nav-error-count>@errorSensors</strong><small>Err</small></a>
+                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="warning" data-tone="warning"><strong data-nav-warning-count>@warningSensors</strong><small>Warn</small></a>
                             <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><strong data-nav-ack-count>@ackAlerts</strong><small>Ack</small></a>
                             <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="paused" data-tone="paused"><strong data-nav-paused-inline-count>@pausedSensors</strong><small>Pause</small></a>
                         </span>
