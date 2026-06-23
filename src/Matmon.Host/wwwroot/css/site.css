@@ -3012,17 +3012,23 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
 .monitoring-sensor-meta {
   grid-area: meta;
   min-width: 0;
-  gap: 0.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.3rem;
   color: var(--matmon-muted);
   font-size: 0.72rem;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
-.monitoring-sensor-meta span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Type + time stay whole on the first line; tag chips flow + wrap underneath instead of every
+   item fighting for space and getting ellipsised. */
+.monitoring-sensor-meta > span:not(.tree-tag) {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.monitoring-sensor-meta .tree-tag {
+  flex: 0 0 auto;
 }
 
 .monitoring-sensor-graph {
