@@ -1813,7 +1813,14 @@ public sealed class WorkspaceModel : PageModel
             : null;
         var templateParameterFields = templateDefinition is null
             ? new List<WorkspaceSensorParameterFieldInput>()
-            : BuildSensorParameterFields(templateDefinition, localSettings.Parameters, effectiveSettings.Parameters);
+            // Sensor-scope templates render only the general params (no per-field credential
+            // editor), so drop the credential params here. Otherwise they'd sit at indices 0..n
+            // unrendered and leave a gap — and ASP.NET's sequential collection binding stops at
+            // the first missing index, silently dropping every posted param (e.g. "Script is
+            // required" even though the script was typed).
+            : BuildSensorParameterFields(templateDefinition, localSettings.Parameters, effectiveSettings.Parameters)
+                .Where(field => !field.IsCredential)
+                .ToList();
         var templateAdvancedParametersText = templateDefinition is null
             ? BuildSensorAdvancedParametersText(localSettings.Parameters, [])
             : BuildSensorAdvancedParametersText(localSettings.Parameters, templateDefinition.Parameters.Select(parameter => parameter.Key));
@@ -2274,7 +2281,11 @@ public sealed class WorkspaceModel : PageModel
             editor.SensorAdvancedParametersText,
             snapshot.SensorDefinitions,
             inheritedValues);
-        editor.SensorParameterFields = state.Fields;
+        // Sensor-scope templates don't render the per-field credential editor; keeping the
+        // credential params here would leave index gaps (0,1) in the posted list and ASP.NET's
+        // sequential collection binding would then silently drop every param (e.g. "Script is
+        // required" even when set). Drop them so the rendered/posted indices stay contiguous.
+        editor.SensorParameterFields = state.Fields.Where(field => !field.IsCredential).ToList();
         editor.SensorAdvancedParametersText = state.AdvancedText;
     }
 
