@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Matmon.Core.Domain;
+using Matmon.Core.Telemetry;
 using Matmon.Host.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -108,6 +109,7 @@ public sealed class ProbeUsageModel : PageModel
             : MonitoringStatePresentation.Color(SensorState.Healthy);
 
         var sensorRows = new List<ProbeUsageSensorRow>();
+        var estimatedRetainedBytesTotal = 0d;
 
         foreach (var sensor in EnumerateDescendants(probe).OfType<SensorElement>())
         {
@@ -131,10 +133,14 @@ public sealed class ProbeUsageModel : PageModel
                 : latestObservation?.State ?? SensorState.Unknown;
 
             var scheduleSummary = FormatScheduleSummary(effectiveSettings);
-            var estimatedRunsPerDay = EstimateExecutionsPerDay(effectiveSettings);
+            var estimatedRunsPerDay = EstimateExecutionsPerDay(effectiveSettings, sensor.SensorTypeKey);
             var averageBytes = EstimateAverageObservationBytes(history, latestObservation);
             var estimatedBytesPerHour = averageBytes * estimatedRunsPerDay / 24d;
             var estimatedBytesPerDay = averageBytes * estimatedRunsPerDay;
+            var estimatedRetainedBytes = sensor.IsPaused
+                ? 0d
+                : EstimateRetainedBytes(effectiveSettings, sensor.SensorTypeKey, estimatedBytesPerDay, latestObservation);
+            estimatedRetainedBytesTotal += estimatedRetainedBytes;
             var averageDuration = history.Length > 0
                 ? history.Average(entry => entry.Duration.TotalMilliseconds)
                 : latestObservation?.Duration.TotalMilliseconds;
@@ -269,6 +275,7 @@ public sealed class ProbeUsageModel : PageModel
             storage.FormatBytes((long)Math.Round(estimatedBytesPerSecondTotal)),
             storage.FormatBytes((long)Math.Round(estimatedBytesPerHourTotal)),
             storage.FormatBytes((long)Math.Round(estimatedBytesPerDayTotal)),
+            storage.FormatBytes((long)Math.Round(estimatedRetainedBytesTotal)),
             statusColor,
             visibleSensorCount,
             visibleGroupCount,
@@ -342,7 +349,7 @@ public sealed class ProbeUsageModel : PageModel
         return weight * Math.Max(estimatedRunsPerDay, 0.1d) * durationWeight;
     }
 
-    private static double EstimateExecutionsPerDay(MonitoringSettings settings)
+    private static double EstimateExecutionsPerDay(MonitoringSettings settings, string? sensorTypeKey)
     {
         if (settings.PollingSchedule is { } schedule)
         {
@@ -352,16 +359,48 @@ public sealed class ProbeUsageModel : PageModel
                 MonitoringScheduleMode.Daily => 1d,
                 MonitoringScheduleMode.Weekly => 1d / 7d,
                 MonitoringScheduleMode.Monthly => 1d / 30.4375d,
-                _ => 96d
+                _ => RunsPerDayFromInterval(SensorScheduleDefaults.Resolve(sensorTypeKey))
             };
         }
 
         if (settings.PollingInterval is TimeSpan interval && interval > TimeSpan.Zero)
         {
-            return TimeSpan.FromDays(1).TotalSeconds / interval.TotalSeconds;
+            return RunsPerDayFromInterval(interval);
         }
 
-        return 96d;
+        // No explicit schedule: mirror the polling engine, which falls back to the per-type default.
+        return RunsPerDayFromInterval(SensorScheduleDefaults.Resolve(sensorTypeKey));
+    }
+
+    private static double RunsPerDayFromInterval(TimeSpan interval) =>
+        interval > TimeSpan.Zero ? TimeSpan.FromDays(1).TotalSeconds / interval.TotalSeconds : 96d;
+
+    /// <summary>Approximate bytes for one stored statistics bucket row (incl. SQLite + index overhead).</summary>
+    private const double StatisticsRowBytes = 120d;
+
+    /// <summary>
+    /// Steady-state on-disk footprint of a sensor once retention has caught up: raw samples kept
+    /// for the raw-retention window plus the downsampled per-channel statistics for their window.
+    /// </summary>
+    private static double EstimateRetainedBytes(
+        MonitoringSettings settings,
+        string? sensorTypeKey,
+        double estimatedBytesPerDay,
+        SensorObservation? latestObservation)
+    {
+        var profile = SensorTelemetryProfiles.Resolve(sensorTypeKey);
+        var rawDays = settings.ObservationRetentionDays ?? profile.RawObservationDays;
+        var statsDays = settings.StatisticsRetentionDays ?? profile.StatisticsRetentionDays;
+        var bucketMinutes = Math.Max(1, settings.StatisticsBucketMinutes ?? profile.StatisticsBucketMinutes);
+
+        var rawBytes = estimatedBytesPerDay * Math.Max(0, rawDays);
+
+        // One statistics row per logged (numeric, non-virtual) channel per bucket window.
+        var loggedChannels = Math.Max(1, latestObservation?.Channels.Count(channel => !channel.IsVirtual && channel.Value.HasValue) ?? 1);
+        var bucketsPerDay = 1440d / bucketMinutes;
+        var statsBytes = loggedChannels * bucketsPerDay * StatisticsRowBytes * Math.Max(0, statsDays);
+
+        return rawBytes + statsBytes;
     }
 
     private static double EstimateAverageObservationBytes(
@@ -756,6 +795,7 @@ public sealed record ProbeUsageViewModel(
     string EstimatedBytesPerSecondText,
     string EstimatedBytesPerHourText,
     string EstimatedBytesPerDayText,
+    string EstimatedProbeSizeText,
     string StatusColor,
     int SensorCount,
     int GroupCount,

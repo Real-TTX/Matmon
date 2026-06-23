@@ -129,6 +129,10 @@
                 <span>Estimated bytes per day</span>
                 <strong>@Model.View.EstimatedBytesPerDayText</strong>
             </div>
+            <div class="probe-usage-overview-card probe-usage-overview-card-accent" title="Steady-state on-disk footprint once retention has caught up: raw samples over the raw-retention window + downsampled per-channel statistics over their window. Covers the whole probe (ignores filters).">
+                <span>Estimated probe size <small>(at retention)</small></span>
+                <strong>@Model.View.EstimatedProbeSizeText</strong>
+            </div>
             <div class="probe-usage-overview-card">
                 <span>Storage used</span>
                 <strong>@Model.View.DataSizeText</strong>
@@ -138,6 +142,8 @@
                 <strong>@Model.View.StorageFreeText</strong>
             </div>
         </div>
+
+        <p class="probe-usage-overview-note">@MatmonIcons.Render("info")<span>Estimates = each sensor's poll rate × payload size × retention. Retention &amp; statistics roll-up run <strong>every 5 minutes</strong>, so disk space is reclaimed shortly after data ages out. The probe-size estimate covers all sensors (ignores the filters below).</span></p>
 
         <div class="probe-usage-distribution">
             <div class="probe-usage-distribution-header">
