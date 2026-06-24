@@ -1143,7 +1143,11 @@ public sealed class WorkspaceModel : PageModel
 
         var snapshot = _workspaceStore.Workspace;
         var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
-        var nodes = BuildNodeRows(snapshot.RootProbe, templateMap, telemetrySeriesMap).ToArray();
+        var acknowledgedElementIds = snapshot.Alerts
+            .Where(alert => alert.IsActive && alert.IsAcknowledged)
+            .Select(alert => alert.ElementId)
+            .ToHashSet();
+        var nodes = BuildNodeRows(snapshot.RootProbe, templateMap, telemetrySeriesMap, acknowledgedElementIds).ToArray();
         var notificationSenders = BuildNotificationSenderRows(snapshot).ToArray();
         var notificationReceivers = BuildNotificationReceiverRows(snapshot).ToArray();
         var notificationRules = BuildNotificationRuleRows(snapshot, nodes).ToArray();
@@ -5561,10 +5565,11 @@ public sealed class WorkspaceModel : PageModel
     private IReadOnlyList<WorkspaceNodeRow> BuildNodeRows(
         MonitoringElement root,
         IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap,
-        IReadOnlyDictionary<Guid, TelemetrySeriesSnapshot> telemetrySeriesMap)
+        IReadOnlyDictionary<Guid, TelemetrySeriesSnapshot> telemetrySeriesMap,
+        IReadOnlySet<Guid> acknowledgedElementIds)
     {
         var rows = new List<WorkspaceNodeRow>();
-        BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, depth: 0, parentPath: string.Empty, inheritedTags: []);
+        BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, depth: 0, parentPath: string.Empty, inheritedTags: []);
         return rows;
     }
 
@@ -5573,6 +5578,7 @@ public sealed class WorkspaceModel : PageModel
         List<WorkspaceNodeRow> rows,
         IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap,
         IReadOnlyDictionary<Guid, TelemetrySeriesSnapshot> telemetrySeriesMap,
+        IReadOnlySet<Guid> acknowledgedElementIds,
         int depth,
         string parentPath,
         IReadOnlyList<string> inheritedTags)
@@ -5619,13 +5625,14 @@ public sealed class WorkspaceModel : PageModel
             stateLabel,
             stateMessage,
             effectiveTags,
-            ownTags));
+            ownTags,
+            acknowledgedElementIds.Contains(element.Id)));
 
         if (element is MonitoringContainerElement container)
         {
             foreach (var child in container.Children)
             {
-                BuildNodeRows(child, rows, templateMap, telemetrySeriesMap, depth + 1, path, effectiveTags);
+                BuildNodeRows(child, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, depth + 1, path, effectiveTags);
             }
         }
     }
@@ -5974,6 +5981,7 @@ public sealed class WorkspaceModel : PageModel
                 Target = _node.Target,
                 IsHighlighted = _node.IsHighlighted || _series?.IsHighlighted == true,
                 IsPaused = _node.IsPaused,
+                IsAcknowledged = _node.IsAcknowledged,
                 StateKey = StateKey,
                 StateLabel = StateLabel,
                 StateColor = StateColor,
@@ -6498,7 +6506,8 @@ public sealed record WorkspaceNodeRow(
     string? StateLabel,
     string? StateMessage,
     IReadOnlyList<string> Tags,
-    IReadOnlyList<string> OwnTags);
+    IReadOnlyList<string> OwnTags,
+    bool IsAcknowledged);
 
 public sealed class WorkspaceMonitoringTreeNode
 {
@@ -6533,6 +6542,8 @@ public sealed class WorkspaceMonitoringTreeNode
     public bool IsHighlighted { get; init; }
 
     public bool IsPaused { get; init; }
+
+    public bool IsAcknowledged { get; init; }
 
     public string StateKey { get; init; } = string.Empty;
 

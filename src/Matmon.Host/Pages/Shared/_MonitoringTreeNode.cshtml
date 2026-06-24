@@ -39,6 +39,7 @@
          data-tree-depth="@Model.Depth"
          data-tree-path="@Model.Path"
          data-state="@Model.StateKey"
+         data-acknowledged="@(Model.IsAcknowledged ? "true" : null)"
          style="--tree-state-color:@Model.StateColor">
     @if (isSensorNode)
     {
@@ -51,6 +52,7 @@
                      data-tree-depth="@Model.Depth"
                      data-tree-path="@Model.Path"
                      data-state="@Model.StateKey"
+                     data-acknowledged="@(Model.IsAcknowledged ? "true" : null)"
                      style="--tree-state-color:@Model.StateColor;--series-color:@(Model.SeriesLineColor ?? Model.StateColor)">
                 <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" title="@Model.Path">
                     <span class="monitoring-sensor-status">@MatmonIcons.Render(statusIcon)</span>
@@ -192,7 +194,7 @@
             {
                 @if (!string.IsNullOrWhiteSpace(Model.StateLabel))
                 {
-                    <span class="state-pill" data-state="@Model.StateKey">@Model.StateLabel</span>
+                    <span class="state-pill" data-state="@Model.StateKey" data-acknowledged="@(Model.IsAcknowledged ? "true" : null)">@Model.StateLabel@(Model.IsAcknowledged ? " · Ack" : "")</span>
                 }
             }
             else

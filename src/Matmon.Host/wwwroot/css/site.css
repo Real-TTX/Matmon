@@ -12088,3 +12088,35 @@ button.workspace-action-menu-link {
   font-size: 0.8rem;
 }
 .alerts-pager-size select { width: auto; }
+
+/* Acknowledged element state --------------------------------------------------
+   An acknowledged alert is "handled", so its element shows two-tone — the severity colour
+   (yellow / red) split with ack-blue — instead of a loud, unhandled red/yellow. The split keeps
+   Warning-Ack visually distinct from Error-Ack. Driven by data-acknowledged next to data-state. */
+:root { --matmon-ack: #5f8dff; }
+
+.state-pill[data-acknowledged="true"] {
+  background: linear-gradient(110deg, rgba(124, 142, 171, 0.16) 0 50%, rgba(95, 141, 255, 0.34) 50% 100%);
+}
+.state-pill[data-acknowledged="true"][data-state="warning"] {
+  background: linear-gradient(110deg, rgba(243, 179, 107, 0.34) 0 50%, rgba(95, 141, 255, 0.34) 50% 100%);
+}
+.state-pill[data-acknowledged="true"][data-state="error"] {
+  background: linear-gradient(110deg, rgba(255, 127, 147, 0.34) 0 50%, rgba(95, 141, 255, 0.34) 50% 100%);
+}
+
+/* Tree node + sensor chip accent (driven by --tree-state-color): turn it ack-blue so the node no
+   longer reads as a loud alarm; the two-tone pill above still carries the original severity. */
+.monitoring-tree-node[data-acknowledged="true"],
+.monitoring-sensor-chip[data-acknowledged="true"] {
+  --tree-state-color: var(--matmon-ack) !important;
+}
+
+/* Monitoring list row: ack-blue left edge + a two-tone state dot (severity / ack-blue). */
+.monitoring-list-row[data-acknowledged="true"] { border-left-color: var(--matmon-ack); }
+.monitoring-list-row[data-acknowledged="true"][data-state="warning"] .monitoring-list-state-dot {
+  background: linear-gradient(135deg, var(--matmon-warning) 0 50%, var(--matmon-ack) 50% 100%);
+}
+.monitoring-list-row[data-acknowledged="true"][data-state="error"] .monitoring-list-state-dot {
+  background: linear-gradient(135deg, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
+}
