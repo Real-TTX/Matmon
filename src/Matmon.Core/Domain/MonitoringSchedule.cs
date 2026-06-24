@@ -48,7 +48,7 @@ public sealed class MonitoringSchedule
     {
         return Mode switch
         {
-            MonitoringScheduleMode.Every => $"every {FormatDuration(TimeSpan.FromSeconds(Math.Max(EverySeconds ?? 0, 1)))}",
+            MonitoringScheduleMode.Every => $"every {FormatDuration(TimeSpan.FromSeconds(Math.Max(EverySeconds ?? 0, (int)SensorScheduleDefaults.Minimum.TotalSeconds)))}",
             MonitoringScheduleMode.Daily => $"daily {FormatTime(TimeOfDay)}",
             MonitoringScheduleMode.Weekly => $"weekly {DayOfWeek ?? System.DayOfWeek.Monday} {FormatTime(TimeOfDay)}",
             MonitoringScheduleMode.Monthly => $"monthly day {Math.Clamp(DayOfMonth ?? 1, 1, 31)} {FormatTime(TimeOfDay)}",
@@ -84,6 +84,12 @@ public sealed class MonitoringSchedule
 
 public static class MonitoringScheduleCalculator
 {
+    // No sensor ever polls faster than this, whatever the schedule/interval says.
+    private static readonly int MinIntervalSeconds = (int)SensorScheduleDefaults.Minimum.TotalSeconds;
+
+    private static TimeSpan ClampToMinimum(TimeSpan interval) =>
+        interval < SensorScheduleDefaults.Minimum ? SensorScheduleDefaults.Minimum : interval;
+
     public static bool IsDue(
         MonitoringSettings settings,
         DateTimeOffset? lastRunUtc,
@@ -97,7 +103,7 @@ public static class MonitoringScheduleCalculator
             return IsScheduleDue(schedule, lastRunUtc, nowUtc);
         }
 
-        var interval = settings.PollingInterval ?? fallbackInterval;
+        var interval = ClampToMinimum(settings.PollingInterval ?? fallbackInterval);
         return lastRunUtc is not DateTimeOffset lastRun || nowUtc - lastRun >= interval;
     }
 
@@ -111,7 +117,7 @@ public static class MonitoringScheduleCalculator
 
         if (settings.PollingSchedule is not { } schedule)
         {
-            var interval = settings.PollingInterval ?? fallbackInterval;
+            var interval = ClampToMinimum(settings.PollingInterval ?? fallbackInterval);
             if (lastRunUtc is not DateTimeOffset lastRun)
             {
                 return nowUtc;
@@ -123,7 +129,7 @@ public static class MonitoringScheduleCalculator
 
         if (schedule.Mode == MonitoringScheduleMode.Every)
         {
-            var seconds = Math.Max(schedule.EverySeconds ?? 0, 1);
+            var seconds = Math.Max(schedule.EverySeconds ?? 0, MinIntervalSeconds);
             if (lastRunUtc is not DateTimeOffset lastRun)
             {
                 return nowUtc;
@@ -149,7 +155,7 @@ public static class MonitoringScheduleCalculator
     {
         if (schedule.Mode == MonitoringScheduleMode.Every)
         {
-            var seconds = Math.Max(schedule.EverySeconds ?? 0, 1);
+            var seconds = Math.Max(schedule.EverySeconds ?? 0, MinIntervalSeconds);
             return lastRunUtc is not DateTimeOffset lastRun || nowUtc - lastRun >= TimeSpan.FromSeconds(seconds);
         }
 

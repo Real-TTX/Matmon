@@ -74,4 +74,26 @@ public class MonitoringScheduleCalculatorTests
 
         Assert.Equal(Now, next);
     }
+
+    [Fact]
+    public void IsDue_every_schedule_never_polls_below_the_15s_minimum()
+    {
+        var settings = new MonitoringSettings
+        {
+            PollingSchedule = new MonitoringSchedule { Mode = MonitoringScheduleMode.Every, EverySeconds = 5 }
+        };
+
+        // 'every 5s' is clamped up to the 15s floor.
+        Assert.False(MonitoringScheduleCalculator.IsDue(settings, Now - TimeSpan.FromSeconds(10), Now, TimeSpan.Zero));
+        Assert.True(MonitoringScheduleCalculator.IsDue(settings, Now - TimeSpan.FromSeconds(20), Now, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void IsDue_clamps_a_sub_minimum_polling_interval()
+    {
+        var settings = new MonitoringSettings { PollingInterval = TimeSpan.FromSeconds(2) };
+
+        Assert.False(MonitoringScheduleCalculator.IsDue(settings, Now - TimeSpan.FromSeconds(10), Now, TimeSpan.Zero));
+        Assert.True(MonitoringScheduleCalculator.IsDue(settings, Now - TimeSpan.FromSeconds(20), Now, TimeSpan.Zero));
+    }
 }
