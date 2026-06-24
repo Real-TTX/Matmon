@@ -94,6 +94,7 @@
                            asp-route-monitoringView="tree"
                            asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
                            asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                           asp-route-monitoringTag="@Model.View.MonitoringTagFilter"
                            asp-route-monitoringSearch="@Model.View.MonitoringSearch">
                             @MatmonIcons.Render("monitoring")
                             <span>Tree</span>
@@ -103,6 +104,7 @@
                            asp-route-monitoringView="list"
                            asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
                            asp-route-monitoringState="@Model.View.MonitoringStateFilter"
+                           asp-route-monitoringTag="@Model.View.MonitoringTagFilter"
                            asp-route-monitoringSearch="@Model.View.MonitoringSearch">
                             @MatmonIcons.Render("list")
                             <span>List</span>
@@ -158,6 +160,20 @@
                     <option value="disabled" selected="@(Model.View.MonitoringStateFilter == "disabled" ? "selected" : null)">Disabled</option>
                 </select>
             </label>
+
+            @if (Model.View.AllTags.Count > 0)
+            {
+                <label class="monitoring-filter-field">
+                    <span>@MatmonIcons.Render("tag")<small>Tag</small></span>
+                    <select name="monitoringTag" class="form-select workspace-select">
+                        <option value="" selected="@(string.IsNullOrEmpty(Model.View.MonitoringTagFilter) ? "selected" : null)">All tags</option>
+                        @foreach (var tag in Model.View.AllTags)
+                        {
+                            <option value="@tag" selected="@(string.Equals(Model.View.MonitoringTagFilter, tag, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@tag</option>
+                        }
+                    </select>
+                </label>
+            }
 
             <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
             <a class="workspace-secondary-submit" asp-page="/Monitoring">@MatmonIcons.Render("arrow-left")<span>Reset</span></a>

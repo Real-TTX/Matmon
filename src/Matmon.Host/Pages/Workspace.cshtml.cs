@@ -81,6 +81,9 @@ public sealed class WorkspaceModel : PageModel
     public string? MonitoringSearch { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    public string? MonitoringTag { get; set; }
+
+    [BindProperty(SupportsGet = true)]
     public string? MonitoringSize { get; set; }
 
     [BindProperty(SupportsGet = true)]
@@ -790,6 +793,7 @@ public sealed class WorkspaceModel : PageModel
                     monitoringKind = MonitoringKind,
                     monitoringState = MonitoringState,
                     monitoringSearch = MonitoringSearch,
+                    monitoringTag = MonitoringTag,
                     monitoringSize = MonitoringSize
                 });
             }
@@ -1126,8 +1130,9 @@ public sealed class WorkspaceModel : PageModel
         var monitoringKindFilter = NormalizeMonitoringKindFilter(MonitoringKind);
         var monitoringStateFilter = NormalizeMonitoringStateFilter(MonitoringState);
         var monitoringSearchText = NormalizeMonitoringSearch(MonitoringSearch);
+        var monitoringTagFilter = (MonitoringTag ?? string.Empty).Trim();
         var monitoringSize = NormalizeMonitoringSize(MonitoringSize);
-        var monitoringFilterPredicate = BuildMonitoringFilterPredicate(monitoringKindFilter, monitoringStateFilter, monitoringSearchText);
+        var monitoringFilterPredicate = BuildMonitoringFilterPredicate(monitoringKindFilter, monitoringStateFilter, monitoringTagFilter, monitoringSearchText);
         var monitoringListNodes = nodes
             .Where(monitoringFilterPredicate)
             .OrderBy(node => node.Path, StringComparer.OrdinalIgnoreCase)
@@ -1169,6 +1174,7 @@ public sealed class WorkspaceModel : PageModel
             MonitoringKindFilter = monitoringKindFilter,
             MonitoringStateFilter = monitoringStateFilter,
             MonitoringSearch = monitoringSearchText,
+            MonitoringTagFilter = monitoringTagFilter,
             MonitoringSize = monitoringSize,
             MonitoringFilterSummary = BuildMonitoringFilterSummary(monitoringKindFilter, monitoringStateFilter, monitoringSearchText, monitoringVisibleNodes.Length, nodes.Length),
             MonitoringTreeNodes = monitoringTreeNodes,
@@ -5683,6 +5689,7 @@ public sealed class WorkspaceModel : PageModel
     private static Func<WorkspaceNodeRow, bool> BuildMonitoringFilterPredicate(
         string kindFilter,
         string stateFilter,
+        string tagFilter,
         string searchText)
     {
         return node =>
@@ -5695,6 +5702,14 @@ public sealed class WorkspaceModel : PageModel
 
             if (!string.Equals(stateFilter, "all", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(node.StateKey, stateFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // Tag filter matches effective tags (node.Tags = own + inherited), so a sensor under a
+            // tagged folder/host matches too.
+            if (!string.IsNullOrWhiteSpace(tagFilter) &&
+                !node.Tags.Any(tag => string.Equals(tag, tagFilter, StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
@@ -6331,6 +6346,8 @@ public sealed record WorkspacePageViewModel
     public string MonitoringStateFilter { get; init; } = "all";
 
     public string MonitoringSearch { get; init; } = string.Empty;
+
+    public string MonitoringTagFilter { get; init; } = string.Empty;
 
     public string MonitoringSize { get; init; } = "m";
 
