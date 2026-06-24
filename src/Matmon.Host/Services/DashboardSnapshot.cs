@@ -14,6 +14,8 @@ public sealed record DashboardSnapshot(
     int NotificationRuleCount,
     int ActiveAlertCount,
     int AcknowledgedAlertCount,
+    int ErrorAlertCount,
+    int WarningAlertCount,
     int PausedSensorCount,
     int HealthySensorCount,
     int WarningSensorCount,

@@ -3539,14 +3539,17 @@ function setDashboardStatusText(chart, role, value) {
 }
 
 function renderNavCounters(snapshot) {
+  // Everything here is alert-based so the sidebar badge agrees with the Alerts page. The big
+  // number is open (unacknowledged) alerts; the Err/Warn tiles are active alerts by severity
+  // (which can outlive sensor recovery, Alerta-style — that's why sensor states diverged before).
   const openAlerts = Number(snapshot.activeAlertCount ?? 0);
   const acknowledgedAlerts = Number(snapshot.acknowledgedAlertCount ?? 0);
+  const errorAlerts = Number(snapshot.errorAlertCount ?? 0);
+  const warningAlerts = Number(snapshot.warningAlertCount ?? 0);
   const pausedSensors = Number(snapshot.pausedSensorCount ?? 0);
-  const warningSensors = Number(snapshot.warningSensorCount ?? 0);
-  const errorSensors = Number(snapshot.errorSensorCount ?? 0);
   const alertStatus = document.querySelector("[data-nav-alert-status]");
-  const hasErrors = openAlerts > 0 || errorSensors > 0;
-  const hasWarnings = warningSensors > 0 || acknowledgedAlerts > 0 || pausedSensors > 0;
+  const hasErrors = errorAlerts > 0;
+  const hasWarnings = warningAlerts > 0 || acknowledgedAlerts > 0 || pausedSensors > 0;
 
   const alertTone = hasErrors
     ? "error"
@@ -3560,9 +3563,9 @@ function renderNavCounters(snapshot) {
     const stateElement = alertStatus.querySelector("[data-nav-alert-state]");
     if (stateElement) {
       let stateLabel = "OK";
-      if (hasErrors) {
+      if (errorAlerts > 0) {
         stateLabel = "Error";
-      } else if (warningSensors > 0) {
+      } else if (warningAlerts > 0) {
         stateLabel = "Warning";
       } else if (acknowledgedAlerts > 0) {
         stateLabel = "Ack";
@@ -3576,14 +3579,11 @@ function renderNavCounters(snapshot) {
     const hintElement = alertStatus.querySelector("[data-nav-alert-hint]");
     if (hintElement) {
       const parts = [];
-      if (openAlerts > 0) {
-        parts.push(`${openAlerts} open`);
+      if (errorAlerts > 0) {
+        parts.push(`${errorAlerts} error`);
       }
-      if (errorSensors > 0) {
-        parts.push(`${errorSensors} error`);
-      }
-      if (warningSensors > 0) {
-        parts.push(`${warningSensors} warning`);
+      if (warningAlerts > 0) {
+        parts.push(`${warningAlerts} warning`);
       }
       if (acknowledgedAlerts > 0) {
         parts.push(`${acknowledgedAlerts} ack`);
@@ -3597,8 +3597,8 @@ function renderNavCounters(snapshot) {
   }
 
   setNavBadge("[data-nav-alert-count]", openAlerts, alertTone, true);
-  setNavCounterText("[data-nav-error-count]", errorSensors);
-  setNavCounterText("[data-nav-warning-count]", warningSensors);
+  setNavCounterText("[data-nav-error-count]", errorAlerts);
+  setNavCounterText("[data-nav-warning-count]", warningAlerts);
   setNavCounterText("[data-nav-ack-count]", acknowledgedAlerts);
   setNavCounterText("[data-nav-paused-inline-count]", pausedSensors);
 }

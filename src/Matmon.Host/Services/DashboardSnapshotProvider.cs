@@ -73,7 +73,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             }
         }
 
-        var (openAlerts, acknowledgedAlerts) = _workspaceStore.GetActiveAlertCounts();
+        var (openAlerts, acknowledgedAlerts, errorAlerts, warningAlerts) = _workspaceStore.GetActiveAlertCounts();
 
         return new WorkspaceSummary(
             workspaceName,
@@ -81,6 +81,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             sensorCount,
             openAlerts,
             acknowledgedAlerts,
+            errorAlerts,
+            warningAlerts,
             errorSensorCount,
             warningSensorCount,
             pausedSensorCount);
@@ -136,6 +138,10 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
         var activeAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged);
         var acknowledgedAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.IsAcknowledged);
+        // Active alerts split by severity (mirrors the Alerts page StateKey buckets) so the sidebar
+        // tiles count real alerts, not sensor states (which diverge once an alert outlives recovery).
+        var errorAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.State != SensorState.Warning && alert.State != SensorState.Paused);
+        var warningAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.State == SensorState.Warning);
         var pausedSensorCount = EnumerateElements(workspace.RootProbe).OfType<SensorElement>().Count(sensor => sensor.IsPaused);
         var acknowledgedSensorIds = workspace.Alerts
             .Where(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementKind == MonitoringElementKind.Sensor)
@@ -163,6 +169,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             workspace.NotificationRules.Count,
             activeAlertCount,
             acknowledgedAlertCount,
+            errorAlertCount,
+            warningAlertCount,
             pausedSensorCount,
             healthySensorCount,
             warningSensorCount,

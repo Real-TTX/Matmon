@@ -613,12 +613,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    public (int Open, int Acknowledged) GetActiveAlertCounts()
+    public (int Open, int Acknowledged, int Error, int Warning) GetActiveAlertCounts()
     {
         lock (_gate)
         {
             var open = 0;
             var acknowledged = 0;
+            var error = 0;
+            var warning = 0;
             foreach (var alert in _document.Alerts)
             {
                 if (!alert.IsActive)
@@ -634,9 +636,21 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 {
                     open++;
                 }
+
+                // Severity split mirrors the Alerts page StateKey mapping (Warning -> warning,
+                // Paused -> its own bucket, everything else -> error) so the sidebar tiles and
+                // the Alerts page agree.
+                if (alert.State == SensorState.Warning)
+                {
+                    warning++;
+                }
+                else if (alert.State != SensorState.Paused)
+                {
+                    error++;
+                }
             }
 
-            return (open, acknowledged);
+            return (open, acknowledged, error, warning);
         }
     }
 

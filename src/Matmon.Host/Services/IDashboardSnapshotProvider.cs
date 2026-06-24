@@ -18,6 +18,8 @@ public sealed record WorkspaceSummary(
     int SensorCount,
     int OpenAlertCount = 0,
     int AcknowledgedAlertCount = 0,
+    int ErrorAlertCount = 0,
+    int WarningAlertCount = 0,
     int ErrorSensorCount = 0,
     int WarningSensorCount = 0,
     int PausedSensorCount = 0);

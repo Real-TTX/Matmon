@@ -53,19 +53,21 @@
         // Server-render the sidebar alert badge from the cheap summary so it shows real
         // numbers on first paint (the client refresh then keeps it live). Mirrors the
         // tone/state/hint logic in site.js so the JS update is visually a no-op.
+        // All alert-based so the badge agrees with the Alerts page. Big number = open
+        // (unacknowledged) alerts; Err/Warn tiles = active alerts by severity (these persist
+        // after the sensor recovers, Alerta-style — counting sensor states diverged from the page).
         var openAlerts = workspaceSummary?.OpenAlertCount ?? 0;
         var ackAlerts = workspaceSummary?.AcknowledgedAlertCount ?? 0;
-        var errorSensors = workspaceSummary?.ErrorSensorCount ?? 0;
-        var warningSensors = workspaceSummary?.WarningSensorCount ?? 0;
+        var errorAlerts = workspaceSummary?.ErrorAlertCount ?? 0;
+        var warningAlerts = workspaceSummary?.WarningAlertCount ?? 0;
         var pausedSensors = workspaceSummary?.PausedSensorCount ?? 0;
-        var hasErrors = openAlerts > 0 || errorSensors > 0;
-        var hasWarnings = warningSensors > 0 || ackAlerts > 0 || pausedSensors > 0;
+        var hasErrors = errorAlerts > 0;
+        var hasWarnings = warningAlerts > 0 || ackAlerts > 0 || pausedSensors > 0;
         var alertTone = hasErrors ? "error" : (hasWarnings ? "warning" : "ok");
-        var alertState = hasErrors ? "Error" : (warningSensors > 0 ? "Warning" : (ackAlerts > 0 ? "Ack" : (pausedSensors > 0 ? "Paused" : "OK")));
+        var alertState = errorAlerts > 0 ? "Error" : (warningAlerts > 0 ? "Warning" : (ackAlerts > 0 ? "Ack" : (pausedSensors > 0 ? "Paused" : "OK")));
         var hintParts = new List<string>();
-        if (openAlerts > 0) { hintParts.Add($"{openAlerts} open"); }
-        if (errorSensors > 0) { hintParts.Add($"{errorSensors} error"); }
-        if (warningSensors > 0) { hintParts.Add($"{warningSensors} warning"); }
+        if (errorAlerts > 0) { hintParts.Add($"{errorAlerts} error"); }
+        if (warningAlerts > 0) { hintParts.Add($"{warningAlerts} warning"); }
         if (ackAlerts > 0) { hintParts.Add($"{ackAlerts} ack"); }
         if (pausedSensors > 0) { hintParts.Add($"{pausedSensors} paused"); }
         var alertHint = hintParts.Count > 0 ? string.Join(" / ", hintParts) : "All clear";
@@ -108,8 +110,8 @@
                             <span class="sidebar-alert-status-hint" data-nav-alert-hint>@alertHint</span>
                         </a>
                         <span class="sidebar-alert-status-meta" aria-label="Alert summary">
-                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="error" data-tone="error"><strong data-nav-error-count>@errorSensors</strong><small>Err</small></a>
-                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="warning" data-tone="warning"><strong data-nav-warning-count>@warningSensors</strong><small>Warn</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><strong data-nav-error-count>@errorAlerts</strong><small>Err</small></a>
+                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><strong data-nav-warning-count>@warningAlerts</strong><small>Warn</small></a>
                             <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><strong data-nav-ack-count>@ackAlerts</strong><small>Ack</small></a>
                             <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="paused" data-tone="paused"><strong data-nav-paused-inline-count>@pausedSensors</strong><small>Pause</small></a>
                         </span>
