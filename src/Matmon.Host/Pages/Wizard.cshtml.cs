@@ -47,6 +47,17 @@ public class WizardModel : PageModel
     /// <summary>Auto-detected local networks not yet configured — offered as one-click suggestions.</summary>
     public IReadOnlyList<string> SuggestedNetworks { get; private set; } = [];
 
+    /// <summary>Remote (non-primary) probes, with the values needed for their deploy command.</summary>
+    public IReadOnlyList<WizardProbe> RemoteProbes { get; private set; } = [];
+
+    public sealed record WizardProbe(string Name, string ProbeId, string Token);
+
+    /// <summary>This server's base URL, used in the remote-probe deploy command.</summary>
+    public string PrimaryUrl { get; private set; } = string.Empty;
+
+    /// <summary>Whether e-mail notifications are already configured.</summary>
+    public bool EmailConfigured { get; private set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -62,6 +73,7 @@ public class WizardModel : PageModel
 
     public void OnGet(string? step)
     {
+        PrimaryUrl = $"{Request.Scheme}://{Request.Host}";
         Load(step);
     }
 
@@ -167,12 +179,55 @@ public class WizardModel : PageModel
         });
     }
 
+    public IActionResult OnPostCreateProbe(string? name)
+    {
+        var root = PrimaryNode();
+        if (root is null)
+        {
+            StatusMessage = "No primary node found.";
+            return RedirectToPage(new { step = "probes" });
+        }
+
+        var probe = _workspaceStore.CreateProbe(root.Id, string.IsNullOrWhiteSpace(name) ? "Remote probe" : name.Trim(), null);
+        StatusMessage = $"Created remote probe '{probe.Name}'. Deploy it with the command below.";
+        return RedirectToPage(new { step = "probes" });
+    }
+
+    public IActionResult OnPostConfigureNotifications(string? smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string? fromEmail, string? toEmail)
+    {
+        var from = (fromEmail ?? string.Empty).Trim();
+        var to = (toEmail ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(smtpHost) || !from.Contains('@') || !to.Contains('@'))
+        {
+            StatusMessage = "Enter an SMTP host and valid from/to e-mail addresses.";
+            return RedirectToPage(new { step = "notifications" });
+        }
+
+        _workspaceStore.ConfigureEmailNotifications(smtpHost!.Trim(), smtpPort, username, password, useSsl, from, to);
+        StatusMessage = $"E-mail alerts set up — {to} will be notified on Warning/Critical.";
+        return RedirectToPage(new { step = "notifications" });
+    }
+
     private void Load(string? step)
     {
         Step = (step ?? string.Empty).Trim().ToLowerInvariant();
         if (!StepOrder.Contains(Step))
         {
             Step = "welcome";
+        }
+
+        if (Step == "probes")
+        {
+            RemoteProbes = _workspaceStore.GetAllElements()
+                .OfType<ProbeElement>()
+                .Where(probe => probe.ParentId is not null)
+                .Select(probe => new WizardProbe(probe.Name, probe.ProbeId ?? string.Empty, probe.EnrollmentToken ?? string.Empty))
+                .ToArray();
+        }
+
+        if (Step == "notifications")
+        {
+            EmailConfigured = _workspaceStore.HasEmailNotifications();
         }
 
         if (Step == "structure")

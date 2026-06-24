@@ -155,6 +155,12 @@ public interface IMonitoringWorkspaceStore
 
     NotificationSender CreateNotificationSender(string name);
 
+    /// <summary>True when at least one e-mail notification sender is configured.</summary>
+    bool HasEmailNotifications();
+
+    /// <summary>Creates an e-mail sender + receiver + a Warning/Critical rule in one go (setup wizard).</summary>
+    void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail);
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

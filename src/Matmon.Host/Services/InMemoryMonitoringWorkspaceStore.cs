@@ -902,6 +902,58 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public bool HasEmailNotifications()
+    {
+        lock (_gate)
+        {
+            return _document.NotificationSenders.Any(sender => sender.Kind == NotificationEndpointKind.Email);
+        }
+    }
+
+    public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
+    {
+        lock (_gate)
+        {
+            var sender = new NotificationSender
+            {
+                Name = "Email",
+                Kind = NotificationEndpointKind.Email,
+                Email = new EmailNotificationSettings
+                {
+                    SenderName = "Matmon",
+                    SenderEmail = (fromEmail ?? string.Empty).Trim(),
+                    SmtpHost = (smtpHost ?? string.Empty).Trim(),
+                    SmtpPort = smtpPort ?? 587,
+                    UseSsl = useSsl,
+                    Username = string.IsNullOrWhiteSpace(username) ? null : username.Trim(),
+                    Password = string.IsNullOrWhiteSpace(password) ? null : password
+                }
+            };
+            _document.NotificationSenders.Add(sender);
+
+            var receiver = new NotificationReceiver
+            {
+                Name = $"Email ({(toEmail ?? string.Empty).Trim()})",
+                Kind = NotificationEndpointKind.Email,
+                Target = (toEmail ?? string.Empty).Trim()
+            };
+            _document.NotificationReceivers.Add(receiver);
+
+            var rule = new NotificationRule
+            {
+                Name = "Default alerts",
+                ChannelKind = NotificationChannelKind.Email,
+                SenderId = sender.Id,
+                ReceiverId = receiver.Id,
+                Recipient = receiver.Target,
+                TriggerStates = { SensorState.Warning, SensorState.Critical }
+            };
+            _document.NotificationRules.Add(rule);
+
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public bool DeleteElement(Guid id)
     {
         lock (_gate)

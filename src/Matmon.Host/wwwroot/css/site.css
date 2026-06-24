@@ -1632,6 +1632,46 @@ html[data-theme="light"] .theme-toggle-icon-light-target {
   color: var(--matmon-accent);
 }
 
+.setup-wizard-probe {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--matmon-sidebar-item-border);
+  border-radius: 8px;
+  background: var(--matmon-surface-soft);
+}
+
+.setup-wizard-code {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 6px;
+  background: var(--matmon-surface-strong);
+  color: var(--matmon-foreground);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.setup-wizard-form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.setup-wizard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.setup-wizard-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--matmon-muted);
+  font-size: 0.9rem;
+}
+
 .dashboard-shell {
   display: grid;
   gap: 0.9rem;
