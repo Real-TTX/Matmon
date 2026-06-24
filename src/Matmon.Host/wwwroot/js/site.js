@@ -48,8 +48,12 @@ function initializeAlertsTable() {
     return;
   }
 
-  const rows = Array.from(root.querySelectorAll("[data-alert-row]"));
+  let rows = Array.from(root.querySelectorAll("[data-alert-row]"));
+  const originalOrder = rows.slice();
+  const tbody = root.querySelector("[data-alerts-body]");
   const searchInput = root.querySelector("[data-alerts-search]");
+  const sortSelect = root.querySelector("[data-alerts-sort]");
+  const countEl = root.querySelector("[data-alerts-count]");
   const tabs = Array.from(root.querySelectorAll("[data-alert-filter]"));
   const selectAll = root.querySelector("[data-alerts-select-all]");
   const bulkbar = root.querySelector("[data-alerts-bulkbar]");
@@ -65,6 +69,31 @@ function initializeAlertsTable() {
   let query = "";
   let page = 1;
   let pageSize = pageSizeSelect ? Number(pageSizeSelect.value) || 50 : 50;
+  let sortMode = sortSelect ? sortSelect.value : "default";
+
+  // Sorting reorders the actual rows in the DOM (re-append) so the visible page shows them in order;
+  // "default" restores the server's order (active first, newest last-seen) — which is also what the
+  // server-rendered first page assumes, so the initial paint never reshuffles.
+  const severityRank = (row) => row.dataset.active !== "true" ? 0 : (row.dataset.state === "error" ? 3 : row.dataset.state === "warning" ? 2 : 1);
+  const comparatorFor = (mode) => {
+    const num = (row, key) => Number(row.dataset[key] || 0);
+    switch (mode) {
+      case "last-desc": return (a, b) => num(b, "last") - num(a, "last");
+      case "last-asc": return (a, b) => num(a, "last") - num(b, "last");
+      case "first-desc": return (a, b) => num(b, "first") - num(a, "first");
+      case "first-asc": return (a, b) => num(a, "first") - num(b, "first");
+      case "severity": return (a, b) => severityRank(b) - severityRank(a) || num(b, "last") - num(a, "last");
+      case "element": return (a, b) => (a.dataset.name || "").localeCompare(b.dataset.name || "");
+      default: return null;
+    }
+  };
+  const applySort = () => {
+    const comparator = comparatorFor(sortMode);
+    rows = comparator ? originalOrder.slice().sort(comparator) : originalOrder.slice();
+    if (tbody) {
+      rows.forEach((row) => tbody.appendChild(row));
+    }
+  };
 
   const matchesFilter = (row) => {
     const active = row.dataset.active === "true";
@@ -117,6 +146,9 @@ function initializeAlertsTable() {
 
     tabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.alertFilter === filter));
 
+    if (countEl) {
+      countEl.textContent = String(total);
+    }
     if (emptyEl) {
       emptyEl.hidden = total !== 0 || rows.length === 0;
     }
@@ -168,6 +200,15 @@ function initializeAlertsTable() {
     pageSizeSelect.addEventListener("change", () => {
       pageSize = Number(pageSizeSelect.value) || 50;
       page = 1;
+      apply();
+    });
+  }
+
+  if (sortSelect) {
+    sortSelect.addEventListener("change", () => {
+      sortMode = sortSelect.value;
+      page = 1;
+      applySort();
       apply();
     });
   }

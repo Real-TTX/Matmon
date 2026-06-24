@@ -42,6 +42,7 @@
     // before the JS filters and pages. The script then drives every later filter/search/page change.
     const int InitialPageSize = 50;
     var initialVisibleIds = allAlerts.Where(MatchesInitialFilter).Take(InitialPageSize).Select(a => a.Id).ToHashSet();
+    var initialMatchCount = allAlerts.Count(MatchesInitialFilter);
 }
 
 <section class="dashboard-shell alerts-page" data-alerts data-initial-filter="@alertFilter">
@@ -61,32 +62,52 @@
         </div>
     </div>
 
-    <nav class="page-actions alert-filter-bar" aria-label="Alert filters">
-        <a class="workspace-tab alert-filter-tab @TabClass("all")" data-alert-filter="all" asp-page="/Alerts"><span>All</span><strong>@activeAlertCount</strong></a>
-        <a class="workspace-tab alert-filter-tab @TabClass("open")" data-alert-filter="open" asp-page="/Alerts" asp-route-alertFilter="open"><span>Open</span><strong>@openAlertCount</strong></a>
-        <a class="workspace-tab alert-filter-tab @TabClass("error")" data-alert-filter="error" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><span>Error</span><strong>@errorAlertCount</strong></a>
-        <a class="workspace-tab alert-filter-tab @TabClass("warning")" data-alert-filter="warning" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><span>Warning</span><strong>@warningAlertCount</strong></a>
-        <a class="workspace-tab alert-filter-tab @TabClass("ack")" data-alert-filter="ack" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><span>Ack</span><strong>@acknowledgedAlertCount</strong></a>
-        <a class="workspace-tab alert-filter-tab @TabClass("history")" data-alert-filter="history" asp-page="/Alerts" asp-route-alertFilter="history"><span>History</span><strong>@resolvedAlertCount</strong></a>
-        @if (pausedAlertCount > 0 || alertFilter == "paused")
-        {
-            <a class="workspace-tab alert-filter-tab @TabClass("paused")" data-alert-filter="paused" asp-page="/Alerts" asp-route-alertFilter="paused" data-tone="paused"><span>Paused</span><strong>@pausedAlertCount</strong></a>
-        }
-    </nav>
+    <section class="panel panel-stack">
+        <nav class="alert-filter-bar" aria-label="Alert filters">
+            <a class="workspace-tab alert-filter-tab @TabClass("all")" data-alert-filter="all" asp-page="/Alerts"><span>All</span><strong>@activeAlertCount</strong></a>
+            <a class="workspace-tab alert-filter-tab @TabClass("open")" data-alert-filter="open" asp-page="/Alerts" asp-route-alertFilter="open"><span>Open</span><strong>@openAlertCount</strong></a>
+            <a class="workspace-tab alert-filter-tab @TabClass("error")" data-alert-filter="error" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><span>Error</span><strong>@errorAlertCount</strong></a>
+            <a class="workspace-tab alert-filter-tab @TabClass("warning")" data-alert-filter="warning" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><span>Warning</span><strong>@warningAlertCount</strong></a>
+            <a class="workspace-tab alert-filter-tab @TabClass("ack")" data-alert-filter="ack" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><span>Ack</span><strong>@acknowledgedAlertCount</strong></a>
+            <a class="workspace-tab alert-filter-tab @TabClass("history")" data-alert-filter="history" asp-page="/Alerts" asp-route-alertFilter="history"><span>History</span><strong>@resolvedAlertCount</strong></a>
+            @if (pausedAlertCount > 0 || alertFilter == "paused")
+            {
+                <a class="workspace-tab alert-filter-tab @TabClass("paused")" data-alert-filter="paused" asp-page="/Alerts" asp-route-alertFilter="paused" data-tone="paused"><span>Paused</span><strong>@pausedAlertCount</strong></a>
+            }
+        </nav>
 
-    <div class="monitoring-filter-bar alerts-toolbar">
-        <label class="monitoring-filter-field alerts-search-field">
-            <span>@MatmonIcons.Render("search")<small>Search</small></span>
-            <input type="search" class="form-control workspace-input" placeholder="Element, path or message" data-alerts-search autocomplete="off" aria-label="Search alerts" />
-        </label>
-        <div class="alerts-bulkbar" data-alerts-bulkbar hidden>
-            <span class="alerts-bulkbar-count"><strong data-alerts-selected>0</strong> selected</span>
-            <button type="submit" form="alerts-form" class="workspace-primary-submit" data-alerts-bulk-ack
-                    onclick="return confirm('Acknowledge the selected alerts?');">
-                @MatmonIcons.Render("check")<span>Acknowledge selected</span>
-            </button>
+        <div class="monitoring-filter-bar alerts-toolbar">
+            <label class="monitoring-filter-field alerts-search-field">
+                <span>@MatmonIcons.Render("search")<small>Search</small></span>
+                <input type="search" class="form-control workspace-input" placeholder="Element, path or message" data-alerts-search autocomplete="off" aria-label="Search alerts" />
+            </label>
+            <label class="monitoring-filter-field alerts-sort-field">
+                <span>@MatmonIcons.Render("clock")<small>Sort</small></span>
+                <select class="form-select workspace-select" data-alerts-sort aria-label="Sort alerts">
+                    <option value="default">Default (active first)</option>
+                    <option value="last-desc">Last seen — newest</option>
+                    <option value="last-asc">Last seen — oldest</option>
+                    <option value="first-desc">First seen — newest</option>
+                    <option value="first-asc">First seen — oldest</option>
+                    <option value="severity">Severity</option>
+                    <option value="element">Element name</option>
+                </select>
+            </label>
+            <div class="alerts-bulkbar" data-alerts-bulkbar hidden>
+                <span class="alerts-bulkbar-count"><strong data-alerts-selected>0</strong> selected</span>
+                <button type="submit" form="alerts-form" class="workspace-primary-submit" data-alerts-bulk-ack
+                        onclick="return confirm('Acknowledge the selected alerts?');">
+                    @MatmonIcons.Render("check")<span>Acknowledge selected</span>
+                </button>
+            </div>
         </div>
-    </div>
+    </section>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("warning")<span>Alerts</span></h2>
+            <span class="panel-hint"><strong data-alerts-count>@initialMatchCount</strong> shown</span>
+        </div>
 
     <form method="post" id="alerts-form" asp-page-handler="AcknowledgeAlerts">
         <input type="hidden" name="returnUrl" value="@returnUrl" />
@@ -113,7 +134,10 @@
                             data-active="@alert.IsActive.ToString().ToLowerInvariant()"
                             data-ack="@alert.IsAcknowledged.ToString().ToLowerInvariant()"
                             data-state="@alert.StateKey"
-                            data-search="@($"{alert.ElementName} {alert.ElementPath} {alert.Message}".ToLowerInvariant())">
+                            data-search="@($"{alert.ElementName} {alert.ElementPath} {alert.Message}".ToLowerInvariant())"
+                            data-first="@alert.FirstSeenSortKey"
+                            data-last="@alert.LastSeenSortKey"
+                            data-name="@alert.ElementName.ToLowerInvariant()">
                             <td class="alerts-col-check">
                                 @if (canAck)
                                 {
@@ -184,4 +208,5 @@
             </select>
         </label>
     </div>
+    </section>
 </section>

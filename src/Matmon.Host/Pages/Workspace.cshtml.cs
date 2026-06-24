@@ -4844,7 +4844,9 @@ public sealed class WorkspaceModel : PageModel
                 alert.AcknowledgedUtc?.ToLocalTime().ToString("g"),
                 alert.AcknowledgedBy,
                 alert.RecoveredUtc?.ToLocalTime().ToString("g"),
-                alert.ResolvedUtc?.ToLocalTime().ToString("g")))
+                alert.ResolvedUtc?.ToLocalTime().ToString("g"),
+                alert.FirstSeenUtc.ToUnixTimeMilliseconds(),
+                alert.LastSeenUtc.ToUnixTimeMilliseconds()))
             .ToArray();
     }
 
@@ -6585,7 +6587,9 @@ public sealed record WorkspaceAlertRow(
     string? AcknowledgedAt,
     string? AcknowledgedBy,
     string? RecoveredAt,
-    string? ResolvedAt);
+    string? ResolvedAt,
+    long FirstSeenSortKey,
+    long LastSeenSortKey);
 
 public sealed record WorkspaceProbeRow(
     Guid Id,

@@ -11957,6 +11957,11 @@ button.workspace-action-menu-link {
   max-width: 24rem;
 }
 
+.alerts-sort-field {
+  flex: 0 1 15rem;
+  max-width: 15rem;
+}
+
 .alerts-bulkbar {
   display: inline-flex;
   align-items: center;
