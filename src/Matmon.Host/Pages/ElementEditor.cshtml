@@ -345,15 +345,11 @@
                                             </div>
 
                                             <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
-                                                <div class="workspace-inline-note">Proxmox API token credentials</div>
+                                                <div class="workspace-inline-note">Proxmox API token — exactly as shown in the Proxmox UI (Token ID + secret).</div>
                                                 <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>API user</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveUser" class="form-control workspace-input" placeholder="root@pam" />
-                                                    </label>
-                                                    <label>
+                                                    <label class="workspace-span-2">
                                                         <span>Token ID</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveTokenId" class="form-control workspace-input" placeholder="monitoring" />
+                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveTokenId" class="form-control workspace-input" placeholder="root@pam!monitoring" />
                                                     </label>
                                                     <label class="workspace-span-2">
                                                         <span>Token secret</span>

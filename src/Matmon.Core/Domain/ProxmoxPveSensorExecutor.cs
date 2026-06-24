@@ -41,10 +41,10 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             new SensorParameterDefinition
             {
                 Key = "pve.user",
-                Label = "API user (realm)",
+                Label = "API user (optional)",
                 Kind = SensorParameterKind.Text,
-                Description = "Proxmox user including realm, for example root@pam",
-                Required = true,
+                Description = "Only needed if the Token ID is just the token name rather than the full user@realm!name.",
+                Required = false,
                 Placeholder = "root@pam",
                 CredentialKind = MonitoringCredentialKind.Proxmox
             },
@@ -53,9 +53,9 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                 Key = "pve.tokenId",
                 Label = "Token ID",
                 Kind = SensorParameterKind.Text,
-                Description = "Proxmox API token name, for example monitoring, or the full token ID like root@pam!monitoring.",
+                Description = "Full Proxmox API token ID, exactly as shown in the Proxmox UI, e.g. root@pam!monitoring.",
                 Required = true,
-                Placeholder = "monitoring",
+                Placeholder = "root@pam!monitoring",
                 CredentialKind = MonitoringCredentialKind.Proxmox
             },
             new SensorParameterDefinition
@@ -116,16 +116,20 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             return SensorExecutionResult.Critical(TimeSpan.Zero, "PVE host / API URL is required");
         }
 
-        if (!MonitoringSettings.TryReadParameter(context.Settings, "pve.user", out var user) ||
-            string.IsNullOrWhiteSpace(user))
-        {
-            return SensorExecutionResult.Critical(TimeSpan.Zero, "Proxmox API user is required");
-        }
+        MonitoringSettings.TryReadParameter(context.Settings, "pve.user", out var user);
+        user = (user ?? string.Empty).Trim();
 
         if (!MonitoringSettings.TryReadParameter(context.Settings, "pve.tokenId", out var tokenId) ||
             string.IsNullOrWhiteSpace(tokenId))
         {
-            return SensorExecutionResult.Critical(TimeSpan.Zero, "Proxmox token name is required");
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "Proxmox token ID is required");
+        }
+
+        // A full token ID already carries the user@realm (root@pam!name), exactly as the Proxmox UI
+        // shows it; the separate API user is only needed when the Token ID is just the bare name.
+        if (!tokenId.Contains('!') && string.IsNullOrWhiteSpace(user))
+        {
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "Enter the full Token ID (user@realm!name), or set the API user separately");
         }
 
         if (!MonitoringSettings.TryReadParameter(context.Settings, "pve.tokenSecret", out var tokenSecret) ||

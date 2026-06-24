@@ -3967,7 +3967,8 @@ public sealed class WorkspaceModel : PageModel
                     ApplyCredentialBundleField(values, "ssh.privateKeyPath", bundle.SshPrivateKeyPath);
                     break;
                 case MonitoringCredentialKind.Proxmox:
-                    ApplyCredentialBundleField(values, "pve.user", bundle.PveUser);
+                    // pve.user is no longer an editable field (the Token ID carries user@realm!name,
+                    // matching the Proxmox UI) — leave any stored value untouched for back-compat.
                     ApplyCredentialBundleField(values, "pve.tokenId", bundle.PveTokenId);
                     ApplyCredentialSecretField(values, "pve.tokenSecret", bundle.PveTokenSecret, existing);
                     break;
