@@ -630,16 +630,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
                 if (alert.IsAcknowledged)
                 {
+                    // An acknowledged alert is "handled" — it counts as Ack, never as an
+                    // Error/Warning in the status, even if its underlying state is critical.
                     acknowledged++;
-                }
-                else
-                {
-                    open++;
+                    continue;
                 }
 
-                // Severity split mirrors the Alerts page StateKey mapping (Warning -> warning,
-                // Paused -> its own bucket, everything else -> error) so the sidebar tiles and
-                // the Alerts page agree.
+                open++;
+
+                // Severity split over the UNACKNOWLEDGED alerts (mirrors the Alerts page StateKey
+                // mapping: Warning -> warning, Paused -> its own bucket, everything else -> error).
                 if (alert.State == SensorState.Warning)
                 {
                     warning++;

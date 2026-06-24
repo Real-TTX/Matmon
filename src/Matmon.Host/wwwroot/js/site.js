@@ -101,8 +101,8 @@ function initializeAlertsTable() {
     const state = row.dataset.state;
     switch (filter) {
       case "open": return active && !ack;
-      case "error": return active && state === "error";
-      case "warning": return active && state === "warning";
+      case "error": return active && !ack && state === "error";
+      case "warning": return active && !ack && state === "warning";
       case "ack": return active && ack;
       case "paused": return active && state === "paused";
       case "history": return !active;

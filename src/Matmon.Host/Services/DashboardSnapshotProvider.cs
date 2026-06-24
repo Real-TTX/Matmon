@@ -138,10 +138,10 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
         var activeAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged);
         var acknowledgedAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.IsAcknowledged);
-        // Active alerts split by severity (mirrors the Alerts page StateKey buckets) so the sidebar
-        // tiles count real alerts, not sensor states (which diverge once an alert outlives recovery).
-        var errorAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.State != SensorState.Warning && alert.State != SensorState.Paused);
-        var warningAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.State == SensorState.Warning);
+        // Open (unacknowledged) alerts split by severity — an acknowledged alert is "handled", so it
+        // counts as Ack, not as an Error/Warning in the status (mirrors the Alerts page buckets).
+        var errorAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged && alert.State != SensorState.Warning && alert.State != SensorState.Paused);
+        var warningAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged && alert.State == SensorState.Warning);
         var pausedSensorCount = EnumerateElements(workspace.RootProbe).OfType<SensorElement>().Count(sensor => sensor.IsPaused);
         var acknowledgedSensorIds = workspace.Alerts
             .Where(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementKind == MonitoringElementKind.Sensor)

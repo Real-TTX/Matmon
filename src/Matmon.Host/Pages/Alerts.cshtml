@@ -20,8 +20,8 @@
     string TabClass(string filter) => string.Equals(alertFilter, filter, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
 
     var openAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged);
-    var errorAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase));
-    var warningAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
+    var errorAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase));
+    var warningAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
     var acknowledgedAlertCount = allAlerts.Count(a => a.IsActive && a.IsAcknowledged);
     var pausedAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
     var activeAlertCount = allAlerts.Count(a => a.IsActive);
@@ -30,8 +30,8 @@
     bool MatchesInitialFilter(WorkspaceAlertRow a) => alertFilter switch
     {
         "open" => a.IsActive && !a.IsAcknowledged,
-        "error" => a.IsActive && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase),
-        "warning" => a.IsActive && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase),
+        "error" => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase),
+        "warning" => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase),
         "ack" => a.IsActive && a.IsAcknowledged,
         "paused" => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase),
         "history" => !a.IsActive,
