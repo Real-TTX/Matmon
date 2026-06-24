@@ -11946,36 +11946,15 @@ button.workspace-action-menu-link {
 }
 
 /* Alerts table ------------------------------------------------------------ */
+/* Reuses the shared .monitoring-filter-bar / .monitoring-filter-field toolbar so the search looks
+   identical to the other lists; just the spacing + a capped search width are alerts-specific. */
 .alerts-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
   margin: 0.75rem 0 0.6rem;
 }
 
-.alerts-search {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex: 1 1 16rem;
-  max-width: 30rem;
-  padding: 0 0.6rem;
-  border: 1px solid var(--matmon-border);
-  border-radius: var(--matmon-radius-medium);
-  background: var(--matmon-surface);
-  color: var(--matmon-muted);
-}
-.alerts-search svg { width: 1rem; height: 1rem; flex: none; }
-.alerts-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  color: var(--matmon-text);
-  padding: 0.5rem 0;
-  outline: none;
-  font-size: 0.85rem;
+.alerts-search-field {
+  flex: 0 1 24rem;
+  max-width: 24rem;
 }
 
 .alerts-bulkbar {

@@ -58,10 +58,10 @@
         }
     </nav>
 
-    <div class="alerts-toolbar">
-        <label class="alerts-search">
-            @MatmonIcons.Render("search")
-            <input type="search" placeholder="Search element, path or message…" data-alerts-search autocomplete="off" aria-label="Search alerts" />
+    <div class="monitoring-filter-bar alerts-toolbar">
+        <label class="monitoring-filter-field alerts-search-field">
+            <span>@MatmonIcons.Render("search")<small>Search</small></span>
+            <input type="search" class="form-control workspace-input" placeholder="Element, path or message" data-alerts-search autocomplete="off" aria-label="Search alerts" />
         </label>
         <div class="alerts-bulkbar" data-alerts-bulkbar hidden>
             <span class="alerts-bulkbar-count"><strong data-alerts-selected>0</strong> selected</span>
