@@ -1230,17 +1230,40 @@ public sealed class WorkspaceModel : PageModel
 
         var isGetRequest = string.Equals(Request?.Method, "GET", StringComparison.OrdinalIgnoreCase);
 
-        if (isGetRequest &&
-            IsSensorCreationPath() &&
-            SelectedId is Guid selectedParentId)
+        // On the initial GET the node the user clicked "Add …" on arrives as SelectedId — pre-select
+        // it as the parent, clamped to the kinds each create form allows. Previously only Sensor did
+        // this, so Folder/Host always fell back to the root probe (the wrong parent).
+        if (isGetRequest && SelectedId is Guid selectedParentId)
         {
-            var selectedParent = nodes.FirstOrDefault(node =>
-                node.Id == selectedParentId &&
-                node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host);
-
-            if (selectedParent is not null)
+            if (IsSensorCreationPath())
             {
-                NewSensor.ParentId = selectedParent.Id;
+                var selectedParent = nodes.FirstOrDefault(node =>
+                    node.Id == selectedParentId &&
+                    node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host);
+                if (selectedParent is not null)
+                {
+                    NewSensor.ParentId = selectedParent.Id;
+                }
+            }
+            else if (IsFolderCreationPath())
+            {
+                var selectedParent = nodes.FirstOrDefault(node =>
+                    node.Id == selectedParentId &&
+                    node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder);
+                if (selectedParent is not null)
+                {
+                    NewFolder.ParentId = selectedParent.Id;
+                }
+            }
+            else if (IsHostCreationPath())
+            {
+                var selectedParent = nodes.FirstOrDefault(node =>
+                    node.Id == selectedParentId &&
+                    node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder);
+                if (selectedParent is not null)
+                {
+                    NewHost.ParentId = selectedParent.Id;
+                }
             }
         }
 
@@ -1331,6 +1354,12 @@ public sealed class WorkspaceModel : PageModel
         return path.EndsWith("/monitoring/sensor/new", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith("/monitoring/sensor/assistant", StringComparison.OrdinalIgnoreCase);
     }
+
+    private bool IsFolderCreationPath() =>
+        (Request?.Path.Value ?? string.Empty).EndsWith("/monitoring/folder/new", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsHostCreationPath() =>
+        (Request?.Path.Value ?? string.Empty).EndsWith("/monitoring/host/new", StringComparison.OrdinalIgnoreCase);
 
     private void EnsureSuggestedSensorName(MonitoringWorkspaceSnapshot snapshot)
     {
