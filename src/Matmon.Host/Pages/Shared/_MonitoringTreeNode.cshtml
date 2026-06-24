@@ -1,10 +1,13 @@
 @model WorkspaceMonitoringTreeNode
 @{
     var returnUrl = Context.Request.Path + Context.Request.QueryString;
-    var canAddFolder = Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder;
-    var canAddHost = Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder;
-    var canAddSensor = Model.Kind != MonitoringElementKind.Sensor;
-    var canDiscover = Model.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
+    // Viewers are read-only: gate every mutating affordance behind admin (the write-guard enforces
+    // it server-side too — this just hides the controls).
+    var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
+    var canAddFolder = isAdmin && (Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder);
+    var canAddHost = isAdmin && (Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder);
+    var canAddSensor = isAdmin && Model.Kind != MonitoringElementKind.Sensor;
+    var canDiscover = isAdmin && Model.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
     var isRootMasterProbe = Model.Kind == MonitoringElementKind.Probe && Model.Depth == 0;
     var isProbeRoot = Model.Kind == MonitoringElementKind.Probe && Model.Depth > 0;
@@ -12,8 +15,8 @@
     var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
     var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
     // Delete is available on every element (with confirmation) except the local root
-    // probe, which the store refuses to delete anyway.
-    var canDelete = !isRootMasterProbe;
+    // probe, which the store refuses to delete anyway. Viewers can't delete.
+    var canDelete = isAdmin && !isRootMasterProbe;
     // Sibling ids passed down by the parent so a node can reorder among its siblings
     // (Move up/down). Null = no sibling on that side.
     var prevSiblingId = ViewData["PrevSiblingId"] as Guid?;
@@ -74,6 +77,8 @@
                 </a>
                 <div class="monitoring-sensor-overlay-actions">
                     <a class="monitoring-sensor-open" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" aria-label="Open sensor" title="Open sensor">@MatmonIcons.Render("eye")</a>
+                    @if (isAdmin)
+                    {
                     <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
                     <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
                         @MatmonIcons.Render("more")
@@ -112,6 +117,7 @@
                         }
                     </div>
                     </details>
+                    }
                 </div>
             </article>
         </div>
@@ -227,25 +233,28 @@
                                 <span>Usage</span>
                             </a>
                         }
-                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
-                            @MatmonIcons.Render("pencil")
-                            <span>Edit</span>
-                        </a>
-                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
-                            @MatmonIcons.Render("move")
-                            <span>Move</span>
-                        </button>
-                        @if (prevSiblingId.HasValue)
+                        @if (isAdmin)
                         {
-                            <form method="post" asp-page-handler="MoveElementBefore" asp-route-elementId="@Model.Id" asp-route-siblingId="@prevSiblingId.Value" asp-route-returnUrl="@returnUrl">
-                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-up")<span>Move up</span></button>
-                            </form>
-                        }
-                        @if (nextSiblingId.HasValue)
-                        {
-                            <form method="post" asp-page-handler="MoveElementAfter" asp-route-elementId="@Model.Id" asp-route-siblingId="@nextSiblingId.Value" asp-route-returnUrl="@returnUrl">
-                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-down")<span>Move down</span></button>
-                            </form>
+                            <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
+                                @MatmonIcons.Render("pencil")
+                                <span>Edit</span>
+                            </a>
+                            <button type="button" class="workspace-action-menu-link" data-tree-move-start>
+                                @MatmonIcons.Render("move")
+                                <span>Move</span>
+                            </button>
+                            @if (prevSiblingId.HasValue)
+                            {
+                                <form method="post" asp-page-handler="MoveElementBefore" asp-route-elementId="@Model.Id" asp-route-siblingId="@prevSiblingId.Value" asp-route-returnUrl="@returnUrl">
+                                    <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-up")<span>Move up</span></button>
+                                </form>
+                            }
+                            @if (nextSiblingId.HasValue)
+                            {
+                                <form method="post" asp-page-handler="MoveElementAfter" asp-route-elementId="@Model.Id" asp-route-siblingId="@nextSiblingId.Value" asp-route-returnUrl="@returnUrl">
+                                    <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-down")<span>Move down</span></button>
+                                </form>
+                            }
                         }
                         @if (hasChildActions)
                         {
@@ -349,6 +358,8 @@
                                 </a>
                                 <div class="monitoring-sensor-overlay-actions">
                                     <a class="monitoring-sensor-open" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" aria-label="Open sensor" title="Open sensor">@MatmonIcons.Render("eye")</a>
+                                    @if (isAdmin)
+                                    {
                                     <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
                                     <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
                                         @MatmonIcons.Render("more")
@@ -409,6 +420,7 @@
                                         </form>
                                     </div>
                                     </details>
+                                    }
                                 </div>
                             </article>
                         }

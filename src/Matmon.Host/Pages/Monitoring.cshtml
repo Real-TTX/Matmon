@@ -6,6 +6,7 @@
     var nodes = Model.View.MonitoringVisibleNodes;
     var treeRoots = Model.View.MonitoringTreeRoots;
     var returnUrl = Request.Path + Request.QueryString;
+    var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
 }
 
 @* Tile size is a client-only preference written to <html> BEFORE the first paint, so
@@ -185,12 +186,12 @@
                 </div>
                 @foreach (var node in nodes)
                 {
-                    var canAddFolder = node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder;
-                    var canAddHost = node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder;
-                    var canAddSensor = node.Kind != MonitoringElementKind.Sensor;
-                    var canDiscover = node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
+                    var canAddFolder = isAdmin && (node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder);
+                    var canAddHost = isAdmin && (node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder);
+                    var canAddSensor = isAdmin && node.Kind != MonitoringElementKind.Sensor;
+                    var canDiscover = isAdmin && node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
                     var hasChildActions = canAddFolder || canAddHost || canAddSensor;
-                    var canDelete = !(node.Kind == MonitoringElementKind.Probe && node.Depth == 0);
+                    var canDelete = isAdmin && !(node.Kind == MonitoringElementKind.Probe && node.Depth == 0);
                     var kindKey = node.Kind.ToString().ToLowerInvariant();
                     var rowState = string.IsNullOrWhiteSpace(node.StateKey) ? "neutral" : node.StateKey;
                     var hasState = !string.IsNullOrWhiteSpace(node.StateKey) && !string.IsNullOrWhiteSpace(node.StateLabel);
@@ -242,9 +243,13 @@
                                 {
                                     <a class="monitoring-list-title" asp-page="/SensorDetails" asp-route-sensorId="@node.Id">@node.Name</a>
                                 }
-                                else
+                                else if (isAdmin)
                                 {
                                     <a class="monitoring-list-title" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@node.Name</a>
+                                }
+                                else
+                                {
+                                    <span class="monitoring-list-title">@node.Name</span>
                                 }
                             </div>
                             <div class="monitoring-list-path">@node.Path</div>
@@ -279,6 +284,8 @@
                                     <a class="workspace-action-link monitoring-list-icon-action" asp-page="/SensorDetails" asp-route-sensorId="@node.Id" aria-label="Open sensor details" title="Open sensor details">@MatmonIcons.Render("chart")<span>Details</span></a>
                                 }
 
+                                @if (isAdmin)
+                                {
                                 <details class="workspace-action-menu">
                                     <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Element actions" title="Element actions">
                                         @MatmonIcons.Render("more")
@@ -296,10 +303,13 @@
                                                 </button>
                                             </form>
                                         }
-                                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
-                                            @MatmonIcons.Render("pencil")
-                                            <span>Edit</span>
-                                        </a>
+                                        @if (isAdmin)
+                                        {
+                                            <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
+                                                @MatmonIcons.Render("pencil")
+                                                <span>Edit</span>
+                                            </a>
+                                        }
                                         @if (hasChildActions)
                                         {
                                             <div class="workspace-action-menu-separator" aria-hidden="true"></div>
@@ -354,6 +364,7 @@
                                         }
                                     </div>
                                 </details>
+                                }
                             </div>
                         </div>
                     </article>

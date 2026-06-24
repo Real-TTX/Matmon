@@ -32,6 +32,7 @@
         var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
         string NavClass(string page) => string.Equals(currentPage, page, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
         var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
+        var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
         var suppressWorkspaceSummary = string.Equals(ViewData["WorkspaceSummarySuppress"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         Matmon.Host.Services.WorkspaceSummary? workspaceSummary = null;
 
@@ -132,7 +133,10 @@
                             <a asp-area="" asp-page="/Templates" class="topnav-link @NavClass("/Templates")">Templates</a>
                             <a asp-area="" asp-page="/Notifications" class="topnav-link @NavClass("/Notifications")">Notifications</a>
                             <a asp-area="" asp-page="/Events" class="topnav-link @NavClass("/Events")">Events</a>
-                            <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">System</a>
+                            @if (isAdmin)
+                            {
+                                <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">System</a>
+                            }
                         }
                     }
                 </nav>
