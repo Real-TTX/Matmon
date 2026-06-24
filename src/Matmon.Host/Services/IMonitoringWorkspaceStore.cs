@@ -183,6 +183,9 @@ public interface IMonitoringWorkspaceStore
 
     bool SetSensorPaused(Guid sensorId, bool paused);
 
+    /// <summary>Pauses/resumes an element and every sensor in its subtree; returns the number changed.</summary>
+    int SetElementPaused(Guid elementId, bool paused);
+
     void SyncAlerts(IEnumerable<MonitoringAlertCandidate> activeAlerts, DateTimeOffset now);
 
     string RotateProbeToken(Guid probeId);

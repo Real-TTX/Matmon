@@ -1185,6 +1185,60 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public int SetElementPaused(Guid elementId, bool paused)
+    {
+        lock (_gate)
+        {
+            var element = EnumerateElements(_document.RootProbe)
+                .FirstOrDefault(candidate => candidate.Id == elementId);
+            if (element is null)
+            {
+                return 0;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var changed = 0;
+
+            // Pausing/resuming a container cascades to every sensor in its subtree; for a sensor
+            // its subtree is just itself, so this also handles the single-sensor case.
+            foreach (var sensor in EnumerateElements(element).OfType<SensorElement>())
+            {
+                if (sensor.IsPaused == paused)
+                {
+                    continue;
+                }
+
+                sensor.IsPaused = paused;
+
+                if (paused)
+                {
+                    ResolveAlertsForElement(sensor.Id, now, "sensor paused");
+                }
+
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = now,
+                    Kind = paused ? MonitoringEventKind.Paused : MonitoringEventKind.Resumed,
+                    ElementId = sensor.Id,
+                    ElementKind = sensor.Kind,
+                    ElementName = sensor.Name,
+                    ElementPath = GetElementPath(sensor),
+                    State = paused ? SensorState.Paused : SensorState.Healthy,
+                    Message = paused ? "Sensor paused" : "Sensor resumed"
+                });
+
+                changed++;
+            }
+
+            if (changed > 0)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+
+            return changed;
+        }
+    }
+
     private bool MoveElementRelative(Guid elementId, Guid siblingId, bool before)
     {
         lock (_gate)

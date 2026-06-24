@@ -335,6 +335,20 @@
                                                 </a>
                                             }
                                         }
+                                        @if (node.Kind != MonitoringElementKind.Sensor)
+                                        {
+                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                                            <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
+                                                <input type="hidden" name="elementId" value="@node.Id" />
+                                                <input type="hidden" name="paused" value="true" />
+                                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("pause")<span>Pause all</span></button>
+                                            </form>
+                                            <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
+                                                <input type="hidden" name="elementId" value="@node.Id" />
+                                                <input type="hidden" name="paused" value="false" />
+                                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Resume all</span></button>
+                                            </form>
+                                        }
                                         @if (node.Kind == MonitoringElementKind.Sensor)
                                         {
                                             <div class="workspace-action-menu-separator" aria-hidden="true"></div>

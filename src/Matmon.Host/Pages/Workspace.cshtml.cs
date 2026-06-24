@@ -394,6 +394,28 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    public IActionResult OnPostPauseElement(Guid elementId, bool paused, string? returnUrl)
+    {
+        try
+        {
+            var element = _workspaceStore.FindElement(elementId)
+                ?? throw new InvalidOperationException("Element not found.");
+
+            var count = _workspaceStore.SetElementPaused(elementId, paused);
+            var noun = count == 1 ? "sensor" : "sensors";
+            StatusMessage = paused
+                ? $"Paused {count} {noun} under '{element.Name}'."
+                : $"Resumed {count} {noun} under '{element.Name}'.";
+            return RedirectAfterAction(returnUrl, "/ElementEditor", new { selectedId = elementId });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
     public IActionResult OnPostMoveElement(Guid elementId, Guid parentId, string? returnUrl)
     {
         try
