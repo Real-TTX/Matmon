@@ -5,85 +5,40 @@
     var returnUrl = Request.Path + Request.QueryString;
     var allAlerts = Model.View.Alerts;
 
-    string NormalizeAlertFilter(string? value)
+    string NormalizeAlertFilter(string? value) => value?.Trim().ToLowerInvariant() switch
     {
-        return value?.Trim().ToLowerInvariant() switch
-        {
-            "open" => "open",
-            "error" => "error",
-            "warning" => "warning",
-            "ack" or "acknowledged" => "ack",
-            "paused" => "paused",
-            "history" or "resolved" => "history",
-            _ => "all"
-        };
-    }
+        "open" => "open",
+        "error" => "error",
+        "warning" => "warning",
+        "ack" or "acknowledged" => "ack",
+        "paused" => "paused",
+        "history" or "resolved" => "history",
+        _ => "all"
+    };
 
     var alertFilter = NormalizeAlertFilter(Request.Query["alertFilter"].ToString());
+    string TabClass(string filter) => string.Equals(alertFilter, filter, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
 
-    bool AlertMatchesFilter(WorkspaceAlertRow alert, string filter)
-    {
-        return filter switch
-        {
-            "open" => alert.IsActive && !alert.IsAcknowledged,
-            "error" => alert.IsActive && string.Equals(alert.StateKey, "error", StringComparison.OrdinalIgnoreCase),
-            "warning" => alert.IsActive && string.Equals(alert.StateKey, "warning", StringComparison.OrdinalIgnoreCase),
-            "ack" => alert.IsActive && alert.IsAcknowledged,
-            "paused" => alert.IsActive && string.Equals(alert.StateKey, "paused", StringComparison.OrdinalIgnoreCase),
-            "history" => !alert.IsActive,
-            _ => alert.IsActive
-        };
-    }
-
-    string AlertFilterClass(string filter)
-    {
-        return string.Equals(alertFilter, filter, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
-    }
-
-    string AlertFilterLabel(string filter)
-    {
-        return filter switch
-        {
-            "open" => "open alerts",
-            "error" => "errors",
-            "warning" => "warnings",
-            "ack" => "acknowledged",
-            "paused" => "paused",
-            "history" => "history",
-            _ => "all active alerts"
-        };
-    }
-
-    var filteredAlerts = allAlerts.Where(alert => AlertMatchesFilter(alert, alertFilter)).ToArray();
-    var openAlerts = filteredAlerts.Where(alert => alert.IsActive && !alert.IsAcknowledged).ToArray();
-    var acknowledgedAlerts = filteredAlerts.Where(alert => alert.IsActive && alert.IsAcknowledged).ToArray();
-    var resolvedAlerts = filteredAlerts.Where(alert => !alert.IsActive).Take(50).ToArray();
-
-    var openAlertCount = allAlerts.Count(alert => alert.IsActive && !alert.IsAcknowledged);
-    var errorAlertCount = allAlerts.Count(alert => alert.IsActive && string.Equals(alert.StateKey, "error", StringComparison.OrdinalIgnoreCase));
-    var warningAlertCount = allAlerts.Count(alert => alert.IsActive && string.Equals(alert.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
-    var acknowledgedAlertCount = allAlerts.Count(alert => alert.IsActive && alert.IsAcknowledged);
-    var pausedAlertCount = allAlerts.Count(alert => alert.IsActive && string.Equals(alert.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
-    var activeAlertCount = allAlerts.Count(alert => alert.IsActive);
-    var resolvedAlertCount = allAlerts.Count(alert => !alert.IsActive);
-
-    var showOpenSection = alertFilter is "all" or "open" or "error" or "warning" or "paused";
-    var showAcknowledgedSection = alertFilter is "all" or "ack" or "error" or "warning" or "paused";
-    var showHistorySection = alertFilter is "history";
+    var openAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged);
+    var errorAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase));
+    var warningAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
+    var acknowledgedAlertCount = allAlerts.Count(a => a.IsActive && a.IsAcknowledged);
+    var pausedAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
+    var activeAlertCount = allAlerts.Count(a => a.IsActive);
+    var resolvedAlertCount = allAlerts.Count(a => !a.IsActive);
 }
 
-<section class="dashboard-shell">
+<section class="dashboard-shell alerts-page" data-alerts data-initial-filter="@alertFilter">
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
         <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
     }
-
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
 
-    <div class="page-header has-summary">
+    <div class="page-header">
         <div class="page-title">
             @MatmonIcons.Render("warning")
             <h1>Alerts</h1>
@@ -91,274 +46,125 @@
     </div>
 
     <nav class="page-actions alert-filter-bar" aria-label="Alert filters">
-        <a class="workspace-tab alert-filter-tab @AlertFilterClass("all")" asp-page="/Alerts">
-            <span>All</span>
-            <strong>@activeAlertCount</strong>
-        </a>
-        <a class="workspace-tab alert-filter-tab @AlertFilterClass("open")" asp-page="/Alerts" asp-route-alertFilter="open">
-            <span>Open</span>
-            <strong>@openAlertCount</strong>
-        </a>
-        <a class="workspace-tab alert-filter-tab @AlertFilterClass("error")" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error">
-            <span>Error</span>
-            <strong>@errorAlertCount</strong>
-        </a>
-        <a class="workspace-tab alert-filter-tab @AlertFilterClass("warning")" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning">
-            <span>Warning</span>
-            <strong>@warningAlertCount</strong>
-        </a>
-        <a class="workspace-tab alert-filter-tab @AlertFilterClass("ack")" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack">
-            <span>Ack</span>
-            <strong>@acknowledgedAlertCount</strong>
-        </a>
-        <a class="workspace-tab alert-filter-tab @AlertFilterClass("history")" asp-page="/Alerts" asp-route-alertFilter="history">
-            <span>History</span>
-            <strong>@resolvedAlertCount</strong>
-        </a>
+        <a class="workspace-tab alert-filter-tab @TabClass("all")" data-alert-filter="all" asp-page="/Alerts"><span>All</span><strong>@activeAlertCount</strong></a>
+        <a class="workspace-tab alert-filter-tab @TabClass("open")" data-alert-filter="open" asp-page="/Alerts" asp-route-alertFilter="open"><span>Open</span><strong>@openAlertCount</strong></a>
+        <a class="workspace-tab alert-filter-tab @TabClass("error")" data-alert-filter="error" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><span>Error</span><strong>@errorAlertCount</strong></a>
+        <a class="workspace-tab alert-filter-tab @TabClass("warning")" data-alert-filter="warning" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><span>Warning</span><strong>@warningAlertCount</strong></a>
+        <a class="workspace-tab alert-filter-tab @TabClass("ack")" data-alert-filter="ack" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><span>Ack</span><strong>@acknowledgedAlertCount</strong></a>
+        <a class="workspace-tab alert-filter-tab @TabClass("history")" data-alert-filter="history" asp-page="/Alerts" asp-route-alertFilter="history"><span>History</span><strong>@resolvedAlertCount</strong></a>
         @if (pausedAlertCount > 0 || alertFilter == "paused")
         {
-            <a class="workspace-tab alert-filter-tab @AlertFilterClass("paused")" asp-page="/Alerts" asp-route-alertFilter="paused" data-tone="paused">
-                <span>Paused</span>
-                <strong>@pausedAlertCount</strong>
-            </a>
+            <a class="workspace-tab alert-filter-tab @TabClass("paused")" data-alert-filter="paused" asp-page="/Alerts" asp-route-alertFilter="paused" data-tone="paused"><span>Paused</span><strong>@pausedAlertCount</strong></a>
         }
     </nav>
 
-    @if (alertFilter != "all")
-    {
-        <div class="workspace-filter-note">
-            Showing @AlertFilterLabel(alertFilter). <a asp-page="/Alerts">Clear filter</a>
+    <div class="alerts-toolbar">
+        <label class="alerts-search">
+            @MatmonIcons.Render("search")
+            <input type="search" placeholder="Search element, path or message…" data-alerts-search autocomplete="off" aria-label="Search alerts" />
+        </label>
+        <div class="alerts-bulkbar" data-alerts-bulkbar hidden>
+            <span class="alerts-bulkbar-count"><strong data-alerts-selected>0</strong> selected</span>
+            <button type="submit" form="alerts-form" class="workspace-primary-submit" data-alerts-bulk-ack
+                    onclick="return confirm('Acknowledge the selected alerts?');">
+                @MatmonIcons.Render("check")<span>Acknowledge selected</span>
+            </button>
         </div>
-    }
+    </div>
 
-    @if (showOpenSection)
-    {
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("warning")<span>Open</span></h2>
-                <span class="panel-hint">@openAlerts.Length</span>
-            </div>
-
-            @if (openAlerts.Length == 0)
-            {
-                <div class="empty-state">No open alerts match this filter.</div>
-            }
-            else
-            {
-                <div class="events-list alerts-list">
-                    @foreach (var alert in openAlerts)
+    <form method="post" id="alerts-form" asp-page-handler="AcknowledgeAlerts">
+        <input type="hidden" name="returnUrl" value="@returnUrl" />
+        <div class="alerts-table-wrap">
+            <table class="alerts-table">
+                <thead>
+                    <tr>
+                        <th class="alerts-col-check"><input type="checkbox" data-alerts-select-all aria-label="Select all on this page" /></th>
+                        <th class="alerts-col-state">Severity</th>
+                        <th class="alerts-col-element">Element</th>
+                        <th class="alerts-col-message">Message</th>
+                        <th class="alerts-col-time">First seen</th>
+                        <th class="alerts-col-time">Last seen</th>
+                        <th class="alerts-col-status">Status</th>
+                        <th class="alerts-col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody data-alerts-body>
+                    @foreach (var alert in allAlerts)
                     {
-                        <details class="event-row alert-row" data-state="@alert.StateKey">
-                            <summary class="event-row-summary">
-                                <span class="tree-kind event-row-kind" data-kind="@alert.ElementKind.ToString().ToLowerInvariant()">@alert.ElementKind</span>
-                                <div class="event-row-main">
-                                    <span class="event-row-name">@alert.ElementName</span>
-                                    <span class="event-row-separator">&middot;</span>
-                                    <span class="event-row-path">@alert.ElementPath</span>
-                                    <span class="event-row-separator">&middot;</span>
-                                    <span class="event-row-message">@alert.Message</span>
-                                </div>
-                                <div class="event-row-side">
-                                    <span class="state-pill" data-state="@alert.StateKey">@alert.StateLabel</span>
-                                    @if (alert.IsRecovered)
-                                    {
-                                        <span class="state-pill" data-state="ok">Recovered</span>
-                                    }
-                                    <span class="event-row-time">@alert.LastSeen</span>
-                                    <span class="event-row-chevron">@MatmonIcons.Render("arrow-right")</span>
-                                </div>
-                            </summary>
-
-                            <div class="event-row-body">
-                                @if (alert.IsRecovered)
+                        var canAck = alert.IsActive && !alert.IsAcknowledged;
+                        <tr class="alerts-row" data-alert-row
+                            data-active="@alert.IsActive.ToString().ToLowerInvariant()"
+                            data-ack="@alert.IsAcknowledged.ToString().ToLowerInvariant()"
+                            data-state="@alert.StateKey"
+                            data-search="@($"{alert.ElementName} {alert.ElementPath} {alert.Message}".ToLowerInvariant())">
+                            <td class="alerts-col-check">
+                                @if (canAck)
                                 {
-                                    <div class="workspace-inline-note">@MatmonIcons.Render("check") The condition has cleared, but the alert stays here until you acknowledge it. Acknowledging now closes it.</div>
+                                    <input type="checkbox" name="alertIds" value="@alert.Id" data-alerts-check aria-label="Select this alert" />
                                 }
-                                <div class="event-row-body-grid">
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Message</span>
-                                        <div>@alert.Message</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Path</span>
-                                        <div>@alert.ElementPath</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">First seen</span>
-                                        <div>@alert.FirstSeen</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">@(alert.IsRecovered ? "Recovered" : "Last seen")</span>
-                                        <div>@(alert.IsRecovered ? alert.RecoveredAt : alert.LastSeen)</div>
-                                    </div>
-                                </div>
-
-                                <div class="workspace-row-actions event-row-actions">
-                                    @if (alert.ElementKind == MonitoringElementKind.Sensor)
-                                    {
-                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                    }
-                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                    <form method="post"
-                                          asp-page-handler="AcknowledgeAlert"
-                                          asp-route-alertId="@alert.Id"
-                                          asp-route-returnUrl="@returnUrl"
-                                          onsubmit="return confirm('Acknowledge this alert?');">
-                                        <button type="submit" class="workspace-secondary-submit">
-                                            @MatmonIcons.Render("check")
-                                            <span>Acknowledge</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </details>
-                    }
-                </div>
-            }
-        </section>
-    }
-
-    @if (showAcknowledgedSection && (acknowledgedAlerts.Length > 0 || alertFilter == "ack"))
-    {
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("check")<span>Acknowledged</span></h2>
-                <span class="panel-hint">@acknowledgedAlerts.Length active</span>
-            </div>
-
-            @if (acknowledgedAlerts.Length == 0)
-            {
-                <div class="empty-state">No acknowledged alerts match this filter.</div>
-            }
-            else
-            {
-                <div class="events-list alerts-list">
-                    @foreach (var alert in acknowledgedAlerts)
-                    {
-                        <details class="event-row alert-row" data-state="@alert.StateKey">
-                            <summary class="event-row-summary">
-                                <span class="tree-kind event-row-kind" data-kind="@alert.ElementKind.ToString().ToLowerInvariant()">@alert.ElementKind</span>
-                                <div class="event-row-main">
-                                    <span class="event-row-name">@alert.ElementName</span>
-                                    <span class="event-row-separator">&middot;</span>
-                                    <span class="event-row-path">@alert.ElementPath</span>
-                                    <span class="event-row-separator">&middot;</span>
-                                    <span class="event-row-message">@alert.Message</span>
-                                </div>
-                                <div class="event-row-side">
-                                    <span class="state-pill" data-state="@alert.StateKey">@alert.StateLabel</span>
-                                    <span class="state-pill" data-state="paused">Ack</span>
-                                    <span class="event-row-time">@alert.LastSeen</span>
-                                    <span class="event-row-chevron">@MatmonIcons.Render("arrow-right")</span>
-                                </div>
-                            </summary>
-
-                            <div class="event-row-body">
-                                <div class="event-row-body-grid">
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Message</span>
-                                        <div>@alert.Message</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Path</span>
-                                        <div>@alert.ElementPath</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">First / last</span>
-                                        <div>@alert.FirstSeen / @alert.LastSeen</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Acknowledged</span>
-                                        <div>@alert.AcknowledgedAt @if (!string.IsNullOrWhiteSpace(alert.AcknowledgedBy)) { <text>by @alert.AcknowledgedBy</text> }</div>
-                                    </div>
-                                </div>
-
-                                <div class="workspace-row-actions event-row-actions">
-                                    @if (alert.ElementKind == MonitoringElementKind.Sensor)
-                                    {
-                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                    }
-                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                </div>
-                            </div>
-                        </details>
-                    }
-                </div>
-            }
-        </section>
-    }
-
-    @if (showHistorySection)
-    {
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>History</span></h2>
-                <span class="panel-hint">@resolvedAlerts.Length recent</span>
-            </div>
-
-            @if (resolvedAlerts.Length == 0)
-            {
-                <div class="empty-state">No resolved alerts match this filter.</div>
-            }
-            else
-            {
-                <div class="events-list alerts-list">
-                    @foreach (var alert in resolvedAlerts)
-                    {
-                        <details class="event-row alert-row" data-state="@alert.StateKey">
-                            <summary class="event-row-summary">
-                                <span class="tree-kind event-row-kind" data-kind="@alert.ElementKind.ToString().ToLowerInvariant()">@alert.ElementKind</span>
-                                <div class="event-row-main">
-                                    <span class="event-row-name">@alert.ElementName</span>
-                                    <span class="event-row-separator">&middot;</span>
-                                    <span class="event-row-path">@alert.ElementPath</span>
-                                    <span class="event-row-separator">&middot;</span>
-                                    <span class="event-row-message">@alert.Message</span>
-                                </div>
-                                <div class="event-row-side">
-                                    <span class="state-pill" data-state="@alert.StateKey">@alert.StateLabel</span>
+                            </td>
+                            <td class="alerts-col-state"><span class="state-pill" data-state="@alert.StateKey">@alert.StateLabel</span></td>
+                            <td class="alerts-col-element">
+                                <span class="tree-kind" data-kind="@alert.ElementKind.ToString().ToLowerInvariant()">@alert.ElementKind</span>
+                                <span class="alerts-element-text">
+                                    <span class="alerts-element-name">@alert.ElementName</span>
+                                    <span class="alerts-element-path">@alert.ElementPath</span>
+                                </span>
+                            </td>
+                            <td class="alerts-col-message"><span title="@alert.Message">@alert.Message</span></td>
+                            <td class="alerts-col-time">@alert.FirstSeen</td>
+                            <td class="alerts-col-time">@(alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt))</td>
+                            <td class="alerts-col-status">
+                                @if (!alert.IsActive)
+                                {
                                     <span class="state-pill" data-state="ok">Resolved</span>
-                                    @if (alert.IsAcknowledged)
-                                    {
-                                        <span class="state-pill" data-state="paused">Ack</span>
-                                    }
-                                    <span class="event-row-time">@alert.ResolvedAt</span>
-                                    <span class="event-row-chevron">@MatmonIcons.Render("arrow-right")</span>
-                                </div>
-                            </summary>
-
-                            <div class="event-row-body">
-                                <div class="event-row-body-grid">
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Last problem</span>
-                                        <div>@alert.Message</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Path</span>
-                                        <div>@alert.ElementPath</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">First / last seen</span>
-                                        <div>@alert.FirstSeen / @alert.LastSeen</div>
-                                    </div>
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Resolved</span>
-                                        <div>@alert.ResolvedAt</div>
-                                    </div>
-                                </div>
-
-                                <div class="workspace-row-actions event-row-actions">
-                                    @if (alert.ElementKind == MonitoringElementKind.Sensor)
-                                    {
-                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                    }
-                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                </div>
-                            </div>
-                        </details>
+                                }
+                                else if (alert.IsRecovered)
+                                {
+                                    <span class="state-pill" data-state="ok">Recovered</span>
+                                }
+                                @if (alert.IsAcknowledged)
+                                {
+                                    <span class="state-pill" data-state="paused">Ack</span>
+                                }
+                            </td>
+                            <td class="alerts-col-actions">
+                                @if (alert.ElementKind == MonitoringElementKind.Sensor)
+                                {
+                                    <a class="alerts-action" title="Details" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId">@MatmonIcons.Render("chart")</a>
+                                }
+                                <a class="alerts-action" title="Edit" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")</a>
+                                @if (canAck)
+                                {
+                                    <button type="submit" class="alerts-action alerts-action-ack" title="Acknowledge"
+                                            name="alertId" value="@alert.Id"
+                                            formaction="@Url.Page("/Alerts", "AcknowledgeAlert")"
+                                            onclick="return confirm('Acknowledge this alert?');">@MatmonIcons.Render("check")</button>
+                                }
+                            </td>
+                        </tr>
                     }
-                </div>
-            }
-        </section>
-    }
+                </tbody>
+            </table>
+        </div>
+        @if (allAlerts.Count == 0)
+        {
+            <div class="empty-state">No alerts yet. Everything is healthy.</div>
+        }
+        <div class="empty-state" data-alerts-empty hidden>No alerts match this filter.</div>
+    </form>
+
+    <div class="alerts-pager" data-alerts-pager hidden>
+        <button type="button" class="alerts-pager-btn" data-alerts-prev>@MatmonIcons.Render("arrow-left")<span>Prev</span></button>
+        <span class="alerts-pager-info" data-alerts-pager-info></span>
+        <button type="button" class="alerts-pager-btn" data-alerts-next><span>Next</span>@MatmonIcons.Render("arrow-right")</button>
+        <label class="alerts-pager-size">
+            <span>Per page</span>
+            <select class="workspace-select" data-alerts-page-size>
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+            </select>
+        </label>
+    </div>
 </section>

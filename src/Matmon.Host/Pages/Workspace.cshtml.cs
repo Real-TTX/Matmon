@@ -940,6 +940,31 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    public IActionResult OnPostAcknowledgeAlerts(Guid[] alertIds, string? returnUrl)
+    {
+        try
+        {
+            var ids = (alertIds ?? []).Distinct().ToArray();
+            if (ids.Length == 0)
+            {
+                throw new InvalidOperationException("No alerts selected.");
+            }
+
+            var acknowledged = ids.Count(id => _workspaceStore.AcknowledgeAlert(id, User.Identity?.Name));
+
+            StatusMessage = acknowledged == 1
+                ? "Alert confirmed."
+                : $"{acknowledged} alerts confirmed.";
+            return RedirectAfterAction(returnUrl, "/Alerts");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
     public IActionResult OnPostCreateNotificationSender()
     {
         NotificationSender? createdSender = null;

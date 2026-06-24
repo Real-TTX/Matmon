@@ -36,7 +36,164 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeElementPickers();
   initializeTagInputs();
   initializeTagOverflow();
+  initializeAlertsTable();
 });
+
+// Alerts table: client-side filter tabs + search + paging + row selection, all over the full set
+// of rows the server rendered (active + resolved history). Keeps it instant regardless of count;
+// the only round-trips are acknowledging (single row button or "Acknowledge selected").
+function initializeAlertsTable() {
+  const root = document.querySelector("[data-alerts]");
+  if (!root) {
+    return;
+  }
+
+  const rows = Array.from(root.querySelectorAll("[data-alert-row]"));
+  const searchInput = root.querySelector("[data-alerts-search]");
+  const tabs = Array.from(root.querySelectorAll("[data-alert-filter]"));
+  const selectAll = root.querySelector("[data-alerts-select-all]");
+  const bulkbar = root.querySelector("[data-alerts-bulkbar]");
+  const selectedCountEl = root.querySelector("[data-alerts-selected]");
+  const emptyEl = root.querySelector("[data-alerts-empty]");
+  const pager = root.querySelector("[data-alerts-pager]");
+  const pagerInfo = root.querySelector("[data-alerts-pager-info]");
+  const prevBtn = root.querySelector("[data-alerts-prev]");
+  const nextBtn = root.querySelector("[data-alerts-next]");
+  const pageSizeSelect = root.querySelector("[data-alerts-page-size]");
+
+  let filter = root.dataset.initialFilter || "all";
+  let query = "";
+  let page = 1;
+  let pageSize = pageSizeSelect ? Number(pageSizeSelect.value) || 50 : 50;
+
+  const matchesFilter = (row) => {
+    const active = row.dataset.active === "true";
+    const ack = row.dataset.ack === "true";
+    const state = row.dataset.state;
+    switch (filter) {
+      case "open": return active && !ack;
+      case "error": return active && state === "error";
+      case "warning": return active && state === "warning";
+      case "ack": return active && ack;
+      case "paused": return active && state === "paused";
+      case "history": return !active;
+      default: return active; // "all" = every active alert
+    }
+  };
+
+  const matchesSearch = (row) => !query || (row.dataset.search || "").includes(query);
+
+  const updateSelection = () => {
+    const checked = root.querySelectorAll("[data-alerts-check]:checked").length;
+    if (selectedCountEl) {
+      selectedCountEl.textContent = String(checked);
+    }
+    if (bulkbar) {
+      bulkbar.hidden = checked === 0;
+    }
+    if (selectAll) {
+      const visible = Array.from(root.querySelectorAll("[data-alert-row]:not([hidden]) [data-alerts-check]"));
+      selectAll.checked = visible.length > 0 && visible.every((cb) => cb.checked);
+    }
+  };
+
+  const resetSelection = () => {
+    root.querySelectorAll("[data-alerts-check]").forEach((cb) => { cb.checked = false; });
+    if (selectAll) {
+      selectAll.checked = false;
+    }
+    updateSelection();
+  };
+
+  const apply = () => {
+    const matched = rows.filter((row) => matchesFilter(row) && matchesSearch(row));
+    const total = matched.length;
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    page = Math.min(Math.max(1, page), pageCount);
+    const start = (page - 1) * pageSize;
+
+    rows.forEach((row) => { row.hidden = true; });
+    matched.slice(start, start + pageSize).forEach((row) => { row.hidden = false; });
+
+    tabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.alertFilter === filter));
+
+    if (emptyEl) {
+      emptyEl.hidden = total !== 0 || rows.length === 0;
+    }
+    if (pager) {
+      pager.hidden = total === 0;
+    }
+    if (pagerInfo) {
+      pagerInfo.textContent = `Page ${page} of ${pageCount} · ${total} alert${total === 1 ? "" : "s"}`;
+    }
+    if (prevBtn) {
+      prevBtn.disabled = page <= 1;
+    }
+    if (nextBtn) {
+      nextBtn.disabled = page >= pageCount;
+    }
+
+    resetSelection();
+  };
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", (event) => {
+      event.preventDefault();
+      filter = tab.dataset.alertFilter || "all";
+      page = 1;
+      try {
+        const url = new URL(location.href);
+        if (filter === "all") {
+          url.searchParams.delete("alertFilter");
+        } else {
+          url.searchParams.set("alertFilter", filter);
+        }
+        history.replaceState(null, "", url);
+      } catch (error) {
+        /* URL may be unavailable; the tab still switches */
+      }
+      apply();
+    });
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      query = searchInput.value.trim().toLowerCase();
+      page = 1;
+      apply();
+    });
+  }
+
+  if (pageSizeSelect) {
+    pageSizeSelect.addEventListener("change", () => {
+      pageSize = Number(pageSizeSelect.value) || 50;
+      page = 1;
+      apply();
+    });
+  }
+
+  if (prevBtn) {
+    prevBtn.addEventListener("click", () => { page -= 1; apply(); });
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => { page += 1; apply(); });
+  }
+
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      root.querySelectorAll("[data-alert-row]:not([hidden]) [data-alerts-check]").forEach((cb) => {
+        cb.checked = selectAll.checked;
+      });
+      updateSelection();
+    });
+  }
+
+  root.querySelectorAll("[data-alerts-check]").forEach((cb) => {
+    cb.addEventListener("change", updateSelection);
+  });
+
+  apply();
+}
 
 // Sensor-chip tags: show as many as fit on the meta line, collapse the rest into a "+N" chip
 // whose title (mouseover) lists the hidden tags. A single ResizeObserver re-measures each strip
