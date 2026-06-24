@@ -158,6 +158,8 @@ public sealed class SensorDetailsModel : PageModel
         var statisticsSummary = BuildChannelStatistics(
             statisticsBuckets, latestObservation, defaultChannelKey, defaultChannelLabel, displayScale, measurementKind);
         var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
+        var isAcknowledged = _workspaceStore.Workspace.Alerts
+            .Any(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementId == sensor.Id);
 
         View = new SensorDetailsViewModel(
             sensor.Id,
@@ -174,6 +176,7 @@ public sealed class SensorDetailsModel : PageModel
             currentStateColor,
             currentMessage,
             sensor.IsPaused,
+            isAcknowledged,
             executionProbe,
             defaultChannelLabel,
             unit,
@@ -917,6 +920,7 @@ public sealed record SensorDetailsViewModel(
     string StateColor,
     string? StateMessage,
     bool IsPaused,
+    bool IsAcknowledged,
     string? ExecutionProbe,
     string DefaultChannelLabel,
     string Unit,
