@@ -88,7 +88,10 @@
                                 <textarea asp-for="SensorParameterFields[i].Value" rows="4" class="form-control workspace-textarea" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
                                 break;
                             case SensorParameterKind.Secret:
-                                <input asp-for="SensorParameterFields[i].Value" type="password" autocomplete="off" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
+                                @* Keep a just-typed secret across a Test/Preview/validation re-post (password
+                                   inputs are never echoed by asp-for) — but only on POST, so a stored secret
+                                   is never rendered on the initial GET. *@
+                                <input asp-for="SensorParameterFields[i].Value" type="password" autocomplete="off" class="form-control workspace-input" value="@(string.Equals(Context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase) ? field.Value : null)" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
                                 break;
                             default:
                                 <input asp-for="SensorParameterFields[i].Value" type="text" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />

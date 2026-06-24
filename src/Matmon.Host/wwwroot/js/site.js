@@ -1358,6 +1358,9 @@ function initializeSensorTabs() {
 
     const names = buttons.map((button) => button.dataset.sensorTabTarget);
     const useHash = tabBar.dataset.tabHash === "true";
+    // Remember the active tab per editor URL so a full-page re-post (e.g. clicking "Test")
+    // returns you to the same tab instead of snapping back to the first one.
+    const tabKey = "matmon-sensor-tab:" + location.pathname + location.search;
 
     const activate = (name) => {
       buttons.forEach((button) => {
@@ -1368,6 +1371,11 @@ function initializeSensorTabs() {
       panels.forEach((panel) => {
         panel.hidden = panel.dataset.sensorTab !== name;
       });
+      try {
+        sessionStorage.setItem(tabKey, name);
+      } catch (error) {
+        /* sessionStorage may be unavailable */
+      }
     };
 
     buttons.forEach((button) => {
@@ -1384,12 +1392,18 @@ function initializeSensorTabs() {
       });
     });
 
-    // Pick the initial tab: server intent (data-active-tab) wins, then the URL hash
-    // (so a full-page reload — e.g. the statistics filter — keeps you on the right tab),
-    // otherwise the first tab.
+    // Pick the initial tab: server intent (data-active-tab) wins, then the URL hash, then the
+    // tab remembered for this page (survives a Test/Preview re-post), otherwise the first tab.
     const hashName = useHash ? (location.hash || "").replace(/^#/, "") : "";
+    let storedName = null;
+    try {
+      storedName = sessionStorage.getItem(tabKey);
+    } catch (error) {
+      storedName = null;
+    }
     const initial = (names.includes(tabBar.dataset.activeTab) ? tabBar.dataset.activeTab : null)
       || (names.includes(hashName) ? hashName : null)
+      || (names.includes(storedName) ? storedName : null)
       || names[0];
     activate(initial);
   });
