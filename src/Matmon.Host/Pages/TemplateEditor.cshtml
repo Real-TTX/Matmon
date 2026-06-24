@@ -270,7 +270,8 @@
                                         <label>
                                             <span>Kind</span>
                                             <select asp-for="TemplateEditor.CredentialBundles[i].Kind" class="form-select workspace-select" data-credential-kind-select>
-                                                @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>())
+                                                @* 'Ssh' is hidden (redundant with 'Linux' — both use ssh.*); kept only when a legacy bundle already has it. *@
+                                                @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>().Where(kind => kind != MonitoringCredentialKind.Ssh || credential.Kind == MonitoringCredentialKind.Ssh))
                                                 {
                                                     <option value="@kind">@kind</option>
                                                 }
