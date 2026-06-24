@@ -12090,33 +12090,52 @@ button.workspace-action-menu-link {
 .alerts-pager-size select { width: auto; }
 
 /* Acknowledged element state --------------------------------------------------
-   An acknowledged alert is "handled", so its element shows two-tone — the severity colour
-   (yellow / red) split with ack-blue — instead of a loud, unhandled red/yellow. The split keeps
-   Warning-Ack visually distinct from Error-Ack. Driven by data-acknowledged next to data-state. */
+   Acknowledged = "handled". Shown as a separate blue "Ack" pill (next to the severity pill so both
+   stay readable) plus a two-tone LEFT accent: the severity colour on top, ack-blue on the bottom —
+   so Warning-Ack and Error-Ack stay distinct. The gradient is laid only on the left border via
+   border-image-width (the other borders keep their normal colour). */
 :root { --matmon-ack: #5f8dff; }
 
-.state-pill[data-acknowledged="true"] {
-  background: linear-gradient(110deg, rgba(124, 142, 171, 0.16) 0 50%, rgba(95, 141, 255, 0.34) 50% 100%);
-}
-.state-pill[data-acknowledged="true"][data-state="warning"] {
-  background: linear-gradient(110deg, rgba(243, 179, 107, 0.34) 0 50%, rgba(95, 141, 255, 0.34) 50% 100%);
-}
-.state-pill[data-acknowledged="true"][data-state="error"] {
-  background: linear-gradient(110deg, rgba(255, 127, 147, 0.34) 0 50%, rgba(95, 141, 255, 0.34) 50% 100%);
+.state-pill[data-state="ack"] {
+  background: rgba(95, 141, 255, 0.30);
 }
 
-/* Tree node + sensor chip accent (driven by --tree-state-color): turn it ack-blue so the node no
-   longer reads as a loud alarm; the two-tone pill above still carries the original severity. */
-.monitoring-tree-node[data-acknowledged="true"],
+/* Tree sensor chip — its left accent is driven by --tree-state-color (the severity colour). */
 .monitoring-sensor-chip[data-acknowledged="true"] {
-  --tree-state-color: var(--matmon-ack) !important;
+  border-left-color: transparent;
+  border-image-source: linear-gradient(to bottom, var(--tree-state-color, #7c8eab) 0 50%, var(--matmon-ack) 50% 100%);
+  border-image-slice: 1;
+  border-image-width: 0 0 0 1;
 }
 
-/* Monitoring list row: ack-blue left edge + a two-tone state dot (severity / ack-blue). */
-.monitoring-list-row[data-acknowledged="true"] { border-left-color: var(--matmon-ack); }
+/* Monitoring list row — its left accent is an explicit per-state colour. */
+.monitoring-list-row[data-acknowledged="true"] {
+  border-left-color: transparent;
+  border-image-slice: 1;
+  border-image-width: 0 0 0 1;
+}
+.monitoring-list-row[data-acknowledged="true"][data-state="warning"] {
+  border-image-source: linear-gradient(to bottom, var(--matmon-warning) 0 50%, var(--matmon-ack) 50% 100%);
+}
+.monitoring-list-row[data-acknowledged="true"][data-state="error"] {
+  border-image-source: linear-gradient(to bottom, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
+}
 .monitoring-list-row[data-acknowledged="true"][data-state="warning"] .monitoring-list-state-dot {
   background: linear-gradient(135deg, var(--matmon-warning) 0 50%, var(--matmon-ack) 50% 100%);
 }
 .monitoring-list-row[data-acknowledged="true"][data-state="error"] .monitoring-list-state-dot {
   background: linear-gradient(135deg, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
+}
+
+/* Alerts table row — same two-tone left accent (data-ack carries the acknowledged flag). */
+.alerts-row[data-ack="true"] td:first-child {
+  border-left-color: transparent;
+  border-image-slice: 1;
+  border-image-width: 0 0 0 1;
+}
+.alerts-row[data-ack="true"][data-state="warning"] td:first-child {
+  border-image-source: linear-gradient(to bottom, var(--matmon-warning) 0 50%, var(--matmon-ack) 50% 100%);
+}
+.alerts-row[data-ack="true"][data-state="error"] td:first-child {
+  border-image-source: linear-gradient(to bottom, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
 }

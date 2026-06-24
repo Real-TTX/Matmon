@@ -238,11 +238,15 @@
                             <span class="monitoring-list-state-dot" aria-hidden="true"></span>
                             @if (hasState)
                             {
-                                <span class="state-pill" data-state="@node.StateKey" data-acknowledged="@(node.IsAcknowledged ? "true" : null)">@node.StateLabel@(node.IsAcknowledged ? " · Ack" : "")</span>
+                                <span class="state-pill" data-state="@node.StateKey">@node.StateLabel</span>
                             }
                             else
                             {
                                 <span class="monitoring-list-muted-pill">@node.Kind</span>
+                            }
+                            @if (node.IsAcknowledged)
+                            {
+                                <span class="state-pill" data-state="ack">Ack</span>
                             }
                             @if (node.IsHighlighted)
                             {

@@ -194,7 +194,11 @@
             {
                 @if (!string.IsNullOrWhiteSpace(Model.StateLabel))
                 {
-                    <span class="state-pill" data-state="@Model.StateKey" data-acknowledged="@(Model.IsAcknowledged ? "true" : null)">@Model.StateLabel@(Model.IsAcknowledged ? " · Ack" : "")</span>
+                    <span class="state-pill" data-state="@Model.StateKey">@Model.StateLabel</span>
+                    @if (Model.IsAcknowledged)
+                    {
+                        <span class="state-pill" data-state="ack">Ack</span>
+                    }
                 }
             }
             else

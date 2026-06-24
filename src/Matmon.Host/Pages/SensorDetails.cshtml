@@ -50,7 +50,11 @@
         </div>
 
         <div class="sensor-header-side">
-            <span class="state-pill" data-state="@Model.View.StateKey" data-acknowledged="@(Model.View.IsAcknowledged ? "true" : null)">@Model.View.StateLabel@(Model.View.IsAcknowledged ? " · Acknowledged" : "")</span>
+            <span class="state-pill" data-state="@Model.View.StateKey">@Model.View.StateLabel</span>
+            @if (Model.View.IsAcknowledged)
+            {
+                <span class="state-pill" data-state="ack">Acknowledged</span>
+            }
             <div class="sensor-current-value">
                 <strong>@Model.View.CurrentValueText</strong>
                 @if (!string.IsNullOrWhiteSpace(Model.View.Unit))
