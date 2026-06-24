@@ -26,6 +26,22 @@
     var pausedAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
     var activeAlertCount = allAlerts.Count(a => a.IsActive);
     var resolvedAlertCount = allAlerts.Count(a => !a.IsActive);
+
+    bool MatchesInitialFilter(WorkspaceAlertRow a) => alertFilter switch
+    {
+        "open" => a.IsActive && !a.IsAcknowledged,
+        "error" => a.IsActive && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase),
+        "warning" => a.IsActive && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase),
+        "ack" => a.IsActive && a.IsAcknowledged,
+        "paused" => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase),
+        "history" => !a.IsActive,
+        _ => a.IsActive
+    };
+    // Render only the first page (active filter, the client's default 50/page) as visible so the
+    // first paint already matches what the client-side script settles on — no flash of all rows
+    // before the JS filters and pages. The script then drives every later filter/search/page change.
+    const int InitialPageSize = 50;
+    var initialVisibleIds = allAlerts.Where(MatchesInitialFilter).Take(InitialPageSize).Select(a => a.Id).ToHashSet();
 }
 
 <section class="dashboard-shell alerts-page" data-alerts data-initial-filter="@alertFilter">
@@ -93,6 +109,7 @@
                     {
                         var canAck = alert.IsActive && !alert.IsAcknowledged;
                         <tr class="alerts-row" data-alert-row
+                            hidden="@(initialVisibleIds.Contains(alert.Id) ? null : "hidden")"
                             data-active="@alert.IsActive.ToString().ToLowerInvariant()"
                             data-ack="@alert.IsAcknowledged.ToString().ToLowerInvariant()"
                             data-state="@alert.StateKey"
