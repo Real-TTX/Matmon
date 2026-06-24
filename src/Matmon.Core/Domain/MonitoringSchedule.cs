@@ -16,11 +16,26 @@ public sealed class MonitoringSchedule
 
     public int? EverySeconds { get; set; }
 
+    /// <summary>Legacy single weekday — kept for older data; superseded by <see cref="DaysOfWeek"/>.</summary>
     public DayOfWeek? DayOfWeek { get; set; }
+
+    /// <summary>Weekdays a Weekly schedule fires on (e.g. Monday + Thursday). Empty falls back to <see cref="DayOfWeek"/>.</summary>
+    public List<DayOfWeek> DaysOfWeek { get; set; } = [];
 
     public int? DayOfMonth { get; set; }
 
     public TimeSpan? TimeOfDay { get; set; }
+
+    /// <summary>The effective set of weekdays (the new list, or the legacy single day, or Monday).</summary>
+    public IReadOnlyList<DayOfWeek> ResolveDays()
+    {
+        if (DaysOfWeek.Count > 0)
+        {
+            return DaysOfWeek.Distinct().OrderBy(day => (int)day).ToList();
+        }
+
+        return [DayOfWeek ?? System.DayOfWeek.Monday];
+    }
 
     public MonitoringSchedule Clone()
     {
@@ -29,6 +44,7 @@ public sealed class MonitoringSchedule
             Mode = Mode,
             EverySeconds = EverySeconds,
             DayOfWeek = DayOfWeek,
+            DaysOfWeek = [.. DaysOfWeek],
             DayOfMonth = DayOfMonth,
             TimeOfDay = TimeOfDay
         };
@@ -40,6 +56,7 @@ public sealed class MonitoringSchedule
             Mode == other.Mode &&
             EverySeconds == other.EverySeconds &&
             DayOfWeek == other.DayOfWeek &&
+            ResolveDays().SequenceEqual(other.ResolveDays()) &&
             DayOfMonth == other.DayOfMonth &&
             TimeOfDay == other.TimeOfDay;
     }
@@ -50,7 +67,7 @@ public sealed class MonitoringSchedule
         {
             MonitoringScheduleMode.Every => $"every {FormatDuration(TimeSpan.FromSeconds(Math.Max(EverySeconds ?? 0, (int)SensorScheduleDefaults.Minimum.TotalSeconds)))}",
             MonitoringScheduleMode.Daily => $"daily {FormatTime(TimeOfDay)}",
-            MonitoringScheduleMode.Weekly => $"weekly {DayOfWeek ?? System.DayOfWeek.Monday} {FormatTime(TimeOfDay)}",
+            MonitoringScheduleMode.Weekly => $"weekly {string.Join(", ", ResolveDays())} {FormatTime(TimeOfDay)}",
             MonitoringScheduleMode.Monthly => $"monthly day {Math.Clamp(DayOfMonth ?? 1, 1, 31)} {FormatTime(TimeOfDay)}",
             _ => "schedule"
         };
@@ -177,7 +194,7 @@ public static class MonitoringScheduleCalculator
         return schedule.Mode switch
         {
             MonitoringScheduleMode.Daily => GetDailyOccurrence(nowLocal, time),
-            MonitoringScheduleMode.Weekly => GetWeeklyOccurrence(nowLocal, schedule.DayOfWeek ?? DayOfWeek.Monday, time),
+            MonitoringScheduleMode.Weekly => GetWeeklyOccurrence(nowLocal, schedule.ResolveDays(), time),
             MonitoringScheduleMode.Monthly => GetMonthlyOccurrence(nowLocal, Math.Clamp(schedule.DayOfMonth ?? 1, 1, 31), time),
             _ => null
         };
@@ -189,7 +206,7 @@ public static class MonitoringScheduleCalculator
         return schedule.Mode switch
         {
             MonitoringScheduleMode.Daily => GetNextDailyOccurrence(nowLocal, time),
-            MonitoringScheduleMode.Weekly => GetNextWeeklyOccurrence(nowLocal, schedule.DayOfWeek ?? DayOfWeek.Monday, time),
+            MonitoringScheduleMode.Weekly => GetNextWeeklyOccurrence(nowLocal, schedule.ResolveDays(), time),
             MonitoringScheduleMode.Monthly => GetNextMonthlyOccurrence(nowLocal, Math.Clamp(schedule.DayOfMonth ?? 1, 1, 31), time),
             _ => null
         };
@@ -201,7 +218,13 @@ public static class MonitoringScheduleCalculator
         return occurrence <= nowLocal ? occurrence : occurrence.AddDays(-1);
     }
 
-    private static DateTimeOffset GetWeeklyOccurrence(DateTimeOffset nowLocal, DayOfWeek dayOfWeek, TimeSpan time)
+    // Most recent past occurrence across all selected weekdays.
+    private static DateTimeOffset GetWeeklyOccurrence(DateTimeOffset nowLocal, IReadOnlyList<DayOfWeek> days, TimeSpan time)
+    {
+        return days.Select(day => GetWeeklyOccurrenceForDay(nowLocal, day, time)).Max();
+    }
+
+    private static DateTimeOffset GetWeeklyOccurrenceForDay(DateTimeOffset nowLocal, DayOfWeek dayOfWeek, TimeSpan time)
     {
         var daysSince = ((int)nowLocal.DayOfWeek - (int)dayOfWeek + 7) % 7;
         var date = nowLocal.Date.AddDays(-daysSince);
@@ -233,7 +256,13 @@ public static class MonitoringScheduleCalculator
         return occurrence > nowLocal ? occurrence : occurrence.AddDays(1);
     }
 
-    private static DateTimeOffset GetNextWeeklyOccurrence(DateTimeOffset nowLocal, DayOfWeek dayOfWeek, TimeSpan time)
+    // Soonest future occurrence across all selected weekdays.
+    private static DateTimeOffset GetNextWeeklyOccurrence(DateTimeOffset nowLocal, IReadOnlyList<DayOfWeek> days, TimeSpan time)
+    {
+        return days.Select(day => GetNextWeeklyOccurrenceForDay(nowLocal, day, time)).Min();
+    }
+
+    private static DateTimeOffset GetNextWeeklyOccurrenceForDay(DateTimeOffset nowLocal, DayOfWeek dayOfWeek, TimeSpan time)
     {
         var daysUntil = ((int)dayOfWeek - (int)nowLocal.DayOfWeek + 7) % 7;
         var occurrence = AtLocalTime(nowLocal.Date.AddDays(daysUntil), time, nowLocal.Offset);

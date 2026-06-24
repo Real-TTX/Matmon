@@ -1759,6 +1759,7 @@ public sealed class WorkspaceModel : PageModel
             ScheduleEveryValue = scheduleState.EveryValue,
             ScheduleEveryUnit = scheduleState.EveryUnit,
             ScheduleDayOfWeek = scheduleState.DayOfWeek,
+            ScheduleDaysOfWeek = scheduleState.DaysOfWeek,
             ScheduleDayOfMonth = scheduleState.DayOfMonth,
             ScheduleTime = scheduleState.Time,
             ScheduleInheritedLabel = scheduleState.InheritedLabel,
@@ -1871,6 +1872,7 @@ public sealed class WorkspaceModel : PageModel
             ScheduleEveryValue = scheduleState.EveryValue,
             ScheduleEveryUnit = scheduleState.EveryUnit,
             ScheduleDayOfWeek = scheduleState.DayOfWeek,
+            ScheduleDaysOfWeek = scheduleState.DaysOfWeek,
             ScheduleDayOfMonth = scheduleState.DayOfMonth,
             ScheduleTime = scheduleState.Time,
             ScheduleInheritedLabel = scheduleState.InheritedLabel,
@@ -3655,7 +3657,7 @@ public sealed class WorkspaceModel : PageModel
             editor.SchedulePreset,
             editor.ScheduleEveryValue,
             editor.ScheduleEveryUnit,
-            editor.ScheduleDayOfWeek,
+            editor.ScheduleDaysOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
 
@@ -3730,7 +3732,7 @@ public sealed class WorkspaceModel : PageModel
             editor.SchedulePreset,
             editor.ScheduleEveryValue,
             editor.ScheduleEveryUnit,
-            editor.ScheduleDayOfWeek,
+            editor.ScheduleDaysOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
 
@@ -3838,12 +3840,18 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    private static List<DayOfWeek> NormalizeScheduleDays(IReadOnlyList<DayOfWeek>? days)
+    {
+        var list = (days ?? []).Distinct().OrderBy(day => (int)day).ToList();
+        return list.Count > 0 ? list : [DayOfWeek.Monday];
+    }
+
     private static void ApplyScheduleSettings(
         MonitoringSettings settings,
         string? scheduleMode,
         int? scheduleEveryValue,
         string? scheduleEveryUnit,
-        DayOfWeek? scheduleDayOfWeek,
+        IReadOnlyList<DayOfWeek>? scheduleDaysOfWeek,
         int? scheduleDayOfMonth,
         string? scheduleTime)
     {
@@ -3871,7 +3879,7 @@ public sealed class WorkspaceModel : PageModel
             "weekly" => new MonitoringSchedule
             {
                 Mode = MonitoringScheduleMode.Weekly,
-                DayOfWeek = scheduleDayOfWeek ?? DayOfWeek.Monday,
+                DaysOfWeek = NormalizeScheduleDays(scheduleDaysOfWeek),
                 TimeOfDay = timeOfDay
             },
             "monthly" => new MonitoringSchedule
@@ -4606,7 +4614,7 @@ public sealed class WorkspaceModel : PageModel
             editor.SchedulePreset,
             editor.ScheduleEveryValue,
             editor.ScheduleEveryUnit,
-            editor.ScheduleDayOfWeek,
+            editor.ScheduleDaysOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
         var definition = RequireSensorDefinition(editor.SensorTypeKey);
@@ -4632,7 +4640,7 @@ public sealed class WorkspaceModel : PageModel
             editor.SchedulePreset,
             editor.ScheduleEveryValue,
             editor.ScheduleEveryUnit,
-            editor.ScheduleDayOfWeek,
+            editor.ScheduleDaysOfWeek,
             editor.ScheduleDayOfMonth,
             editor.ScheduleTime);
 
@@ -5238,11 +5246,16 @@ public sealed class WorkspaceModel : PageModel
         var (mode, everyValue, everyUnit, dayOfWeek, dayOfMonth, time) =
             ReadScheduleInput(localSettings.PollingSchedule, localSettings.PollingInterval);
 
+        var daysOfWeek = localSettings.PollingSchedule is { Mode: MonitoringScheduleMode.Weekly } weekly
+            ? weekly.ResolveDays().ToList()
+            : new List<DayOfWeek>();
+
         return new ScheduleEditorState(
             mode,
             everyValue,
             everyUnit,
             dayOfWeek,
+            daysOfWeek,
             dayOfMonth,
             time,
             FormatScheduleSummary(effectiveSettings));
@@ -6650,6 +6663,9 @@ public interface ISensorScheduleEditor
 
     DayOfWeek? ScheduleDayOfWeek { get; set; }
 
+    /// <summary>Weekly schedule weekdays (multi-select), e.g. Monday + Thursday.</summary>
+    List<DayOfWeek> ScheduleDaysOfWeek { get; set; }
+
     int? ScheduleDayOfMonth { get; set; }
 
     string? ScheduleTime { get; set; }
@@ -6690,6 +6706,8 @@ public sealed class CreateSensorInput : ISensorThresholdEditor, ISensorScheduleE
     public string ScheduleEveryUnit { get; set; } = "minutes";
 
     public DayOfWeek? ScheduleDayOfWeek { get; set; } = DayOfWeek.Monday;
+
+    public List<DayOfWeek> ScheduleDaysOfWeek { get; set; } = [];
 
     public int? ScheduleDayOfMonth { get; set; } = 1;
 
@@ -6855,6 +6873,8 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
     public string ScheduleEveryUnit { get; set; } = "minutes";
 
     public DayOfWeek? ScheduleDayOfWeek { get; set; } = DayOfWeek.Monday;
+
+    public List<DayOfWeek> ScheduleDaysOfWeek { get; set; } = [];
 
     public int? ScheduleDayOfMonth { get; set; } = 1;
 
@@ -7040,6 +7060,7 @@ internal sealed record ScheduleEditorState(
     int? EveryValue,
     string EveryUnit,
     DayOfWeek? DayOfWeek,
+    List<DayOfWeek> DaysOfWeek,
     int? DayOfMonth,
     string? Time,
     string InheritedLabel);
@@ -7101,6 +7122,8 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISens
     public string ScheduleEveryUnit { get; set; } = "minutes";
 
     public DayOfWeek? ScheduleDayOfWeek { get; set; } = DayOfWeek.Monday;
+
+    public List<DayOfWeek> ScheduleDaysOfWeek { get; set; } = [];
 
     public int? ScheduleDayOfMonth { get; set; } = 1;
 

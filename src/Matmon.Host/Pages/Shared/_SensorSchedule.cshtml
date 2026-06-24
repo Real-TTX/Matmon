@@ -52,15 +52,18 @@
             <input asp-for="ScheduleTime" type="time" class="form-control workspace-input" data-schedule-time-input />
         </label>
 
-        <label data-schedule-weekday hidden>
-            <span>Weekday</span>
-            <select asp-for="ScheduleDayOfWeek" class="form-select workspace-select" data-schedule-weekday-input>
+        <div data-schedule-weekday hidden>
+            <span class="workspace-label">Weekdays</span>
+            <div class="schedule-weekday-grid">
                 @foreach (var day in Enum.GetValues<DayOfWeek>())
                 {
-                    <option value="@day">@day</option>
+                    <label class="schedule-weekday-option">
+                        <input type="checkbox" name="@Html.NameFor(m => m.ScheduleDaysOfWeek)" value="@day" checked="@(Model.ScheduleDaysOfWeek.Contains(day))" data-schedule-weekday-input />
+                        <span>@day.ToString().Substring(0, 3)</span>
+                    </label>
                 }
-            </select>
-        </label>
+            </div>
+        </div>
 
         <label data-schedule-monthday hidden>
             <span>Day of month</span>

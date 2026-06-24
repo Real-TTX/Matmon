@@ -1560,7 +1560,7 @@ function initializeScheduleEditors() {
     const valueInput = editor.querySelector("[data-schedule-every-value]");
     const unitInput = editor.querySelector("[data-schedule-every-unit]");
     const timeInput = editor.querySelector("[data-schedule-time-input]");
-    const weekdayInput = editor.querySelector("[data-schedule-weekday-input]");
+    const weekdayInputs = editor.querySelectorAll("[data-schedule-weekday-input]");
     const monthdayInput = editor.querySelector("[data-schedule-monthday-input]");
     const preview = editor.querySelector("[data-schedule-preview]");
     const previewTimes = editor.querySelector("[data-schedule-preview-times]");
@@ -1611,17 +1611,27 @@ function initializeScheduleEditors() {
           next.setDate(next.getDate() + 1);
         }
       } else if (mode === "weekly") {
-        const target = dowIndex(weekdayInput && weekdayInput.value);
-        const d = new Date(now);
-        d.setHours(h, m, 0, 0);
-        d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7));
-        if (d <= now) {
-          d.setDate(d.getDate() + 7);
+        const days = Array.from(weekdayInputs)
+          .filter((c) => c.checked)
+          .map((c) => dowIndex(c.value));
+        if (days.length === 0) {
+          days.push(1); // default Monday
         }
-        for (let i = 0; i < 3; i++) {
-          runs.push(new Date(d));
-          d.setDate(d.getDate() + 7);
-        }
+        const candidates = [];
+        days.forEach((target) => {
+          const d = new Date(now);
+          d.setHours(h, m, 0, 0);
+          d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7));
+          if (d <= now) {
+            d.setDate(d.getDate() + 7);
+          }
+          for (let i = 0; i < 3; i++) {
+            candidates.push(new Date(d));
+            d.setDate(d.getDate() + 7);
+          }
+        });
+        candidates.sort((a, b) => a - b);
+        return candidates.slice(0, 3);
       } else if (mode === "monthly") {
         const dom = Math.min(Math.max(parseInt((monthdayInput && monthdayInput.value) || "1", 10) || 1, 1), 31);
         let cur = buildMonthly(now.getFullYear(), now.getMonth(), dom, h, m);
@@ -1665,12 +1675,13 @@ function initializeScheduleEditors() {
     };
 
     modeSelect.addEventListener("change", refresh);
-    [valueInput, unitInput, timeInput, weekdayInput, monthdayInput].forEach((el) => {
+    [valueInput, unitInput, timeInput, monthdayInput].forEach((el) => {
       if (el) {
         el.addEventListener("change", refresh);
         el.addEventListener("input", refresh);
       }
     });
+    weekdayInputs.forEach((el) => el.addEventListener("change", refresh));
 
     editor.querySelectorAll("[data-chip-value]").forEach((chip) => {
       chip.addEventListener("click", () => {

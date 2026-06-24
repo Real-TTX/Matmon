@@ -9466,6 +9466,30 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-variant-numeric: tabular-nums;
 }
 
+.schedule-weekday-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.schedule-weekday-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.schedule-weekday-option:has(input:checked) {
+  border-color: var(--matmon-accent);
+  background: rgba(95, 141, 255, 0.12);
+}
+
 .workspace-section-intro {
   margin: 0;
   font-size: 0.82rem;
