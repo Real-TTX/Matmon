@@ -35,7 +35,79 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMapCarousel();
   initializeElementPickers();
   initializeTagInputs();
+  initializeTagOverflow();
 });
+
+// Sensor-chip tags: show as many as fit on the meta line, collapse the rest into a "+N" chip
+// whose title (mouseover) lists the hidden tags. A single ResizeObserver re-measures each strip
+// on resize and when it first becomes visible (e.g. a tree node is expanded), so it's correct
+// without any layout thrash on the server side.
+let tagOverflowObserver = null;
+
+function initializeTagOverflow(root) {
+  const scope = root || document;
+  const strips = scope.querySelectorAll("[data-tag-overflow]");
+  if (strips.length === 0) {
+    return;
+  }
+
+  if (!tagOverflowObserver && "ResizeObserver" in window) {
+    tagOverflowObserver = new ResizeObserver((entries) => {
+      entries.forEach((entry) => applyTagOverflow(entry.target));
+    });
+  }
+
+  strips.forEach((strip) => {
+    applyTagOverflow(strip);
+    if (tagOverflowObserver) {
+      tagOverflowObserver.observe(strip);
+    }
+  });
+}
+
+function applyTagOverflow(strip) {
+  const chips = Array.from(strip.querySelectorAll("[data-tag-chip]"));
+  if (chips.length === 0) {
+    return;
+  }
+
+  let more = strip.querySelector("[data-tag-more]");
+  if (!more) {
+    more = document.createElement("span");
+    more.className = "tree-tag is-mini tag-overflow-more";
+    more.setAttribute("data-tag-more", "");
+    strip.appendChild(more);
+  }
+
+  // Reset to "all visible" before measuring.
+  chips.forEach((chip) => {
+    chip.hidden = false;
+  });
+  more.hidden = true;
+
+  if (strip.clientWidth === 0) {
+    return; // not laid out yet — the observer will call us again once it is
+  }
+
+  const limit = strip.getBoundingClientRect().right + 1;
+  const last = chips[chips.length - 1];
+  if (last.getBoundingClientRect().right <= limit) {
+    return; // everything fits
+  }
+
+  // Overflow: reveal the +N chip and hide tags from the end until it fits.
+  more.hidden = false;
+  const hidden = [];
+  for (let i = chips.length - 1; i >= 0; i--) {
+    chips[i].hidden = true;
+    hidden.unshift(chips[i].textContent.trim());
+    more.textContent = "+" + hidden.length;
+    more.title = hidden.join(", ");
+    if (more.getBoundingClientRect().right <= limit) {
+      break;
+    }
+  }
+}
 
 // Tile size (S/M/L) is a live, client-only preference on <html> + localStorage. The
 // Monitoring page also writes the attribute before first paint (inline script), so
