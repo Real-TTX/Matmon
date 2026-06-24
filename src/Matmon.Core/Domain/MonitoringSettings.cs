@@ -636,9 +636,96 @@ public sealed class MonitoringSettings
         MonitoringSettings settings,
         IEnumerable<MonitoringCredentialKind> allowedKinds)
     {
-        if (TryResolveCredentialBundle(settings, allowedKinds, out var credential))
+        var allowed = allowedKinds.Distinct().ToList();
+
+        if (TryResolveCredentialBundle(settings, allowed, out var credential))
         {
             ApplyCredentialValues(settings, credential);
+            return;
+        }
+
+        // Fallback: no credential of the kind(s) this sensor expects exists — use a Generic bundle
+        // if there is one (the explicitly-selected one when it's Generic, otherwise the first),
+        // mapping its username/password/token onto the keys each expected kind actually reads. This
+        // lets a single Generic credential serve sensors that would normally need a typed bundle.
+        if (allowed.Count == 0)
+        {
+            return;
+        }
+
+        var generic = ResolveGenericFallback(settings);
+        if (generic is null)
+        {
+            return;
+        }
+
+        // Sensors that read generic.* directly (e.g. VMware) still get the raw values.
+        ApplyCredentialValues(settings, generic);
+
+        foreach (var kind in allowed)
+        {
+            foreach (var (key, value) in MapGenericCredential(generic, kind))
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                if (settings.Parameters.TryGetValue(key, out var existing) && !string.IsNullOrWhiteSpace(existing))
+                {
+                    continue;
+                }
+
+                settings.Parameters[key] = value;
+            }
+        }
+    }
+
+    private static MonitoringCredentialBundle? ResolveGenericFallback(MonitoringSettings settings)
+    {
+        if (settings.SelectedCredentialId is Guid selectedId)
+        {
+            var selected = settings.Credentials.FirstOrDefault(candidate => candidate.Id == selectedId);
+            if (selected is { Kind: MonitoringCredentialKind.Generic })
+            {
+                return selected;
+            }
+        }
+
+        return settings.Credentials.FirstOrDefault(candidate => candidate.Kind == MonitoringCredentialKind.Generic);
+    }
+
+    // Maps a Generic bundle's username/password/token onto the credential keys a typed sensor reads.
+    // Proxmox (token id/secret) and SNMP (community / v3) have no meaningful username/password
+    // mapping, so they're left to a dedicated bundle.
+    private static IEnumerable<(string Key, string? Value)> MapGenericCredential(
+        MonitoringCredentialBundle generic,
+        MonitoringCredentialKind kind)
+    {
+        generic.Values.TryGetValue("generic.username", out var user);
+        generic.Values.TryGetValue("generic.password", out var pass);
+        generic.Values.TryGetValue("generic.token", out var token);
+
+        switch (kind)
+        {
+            case MonitoringCredentialKind.Windows:
+                yield return ("winrm.username", user);
+                yield return ("winrm.password", pass);
+                break;
+            case MonitoringCredentialKind.Ssh:
+            case MonitoringCredentialKind.Linux:
+                yield return ("ssh.username", user);
+                yield return ("ssh.password", pass);
+                break;
+            case MonitoringCredentialKind.SqlServer:
+                yield return ("mssql.username", user);
+                yield return ("mssql.password", pass);
+                break;
+            case MonitoringCredentialKind.Unifi:
+                yield return ("unifi.apiKey", string.IsNullOrWhiteSpace(token) ? pass : token);
+                yield return ("unifi.username", user);
+                yield return ("unifi.password", pass);
+                break;
         }
     }
 
