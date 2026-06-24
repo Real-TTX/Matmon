@@ -11966,10 +11966,12 @@ button.workspace-action-menu-link {
 .alerts-bulkbar-count { color: var(--matmon-muted); font-size: 0.82rem; }
 .alerts-bulkbar-count strong { color: var(--matmon-text); }
 
+/* Matches the shared data-table look (see .discovery-result-table): shaded sticky header,
+   tight cells, same font + radius — so the Alerts table reads like the other lists. */
 .alerts-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--matmon-border);
-  border-radius: var(--matmon-radius-medium);
+  border-radius: 9px;
   background: var(--matmon-surface);
 }
 
@@ -11977,26 +11979,30 @@ button.workspace-action-menu-link {
   width: 100%;
   min-width: 880px;
   border-collapse: collapse;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
+}
+
+.alerts-table th,
+.alerts-table td {
+  padding: 0.34rem 0.5rem;
+  border-bottom: 1px solid var(--matmon-border);
+  vertical-align: middle;
 }
 
 .alerts-table thead th {
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--matmon-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--matmon-surface-strong);
   color: var(--matmon-muted);
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.alerts-table tbody td {
-  padding: 0.45rem 0.6rem;
-  border-bottom: 1px solid rgba(124, 142, 171, 0.12);
-  vertical-align: middle;
-}
 .alerts-table tbody tr:last-child td { border-bottom: none; }
 .alerts-table tbody tr:hover { background: rgba(124, 142, 171, 0.06); }
 
