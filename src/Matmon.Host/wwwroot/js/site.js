@@ -2966,6 +2966,9 @@ function initializeMapDesigner() {
     rows: readGridValue(rowInput?.value, 8, 3, 16)
   });
 
+  // The grid the user last committed, so a column/row change can scale the tiles relative to it.
+  let lastCommittedGrid = readGrid();
+
   const syncMapSummary = (grid = readGrid()) => {
     const name = mapNameInput?.value?.trim() || "New Map";
     const description = mapDescriptionInput?.value?.trim() || "No description";
@@ -3420,10 +3423,36 @@ function initializeMapDesigner() {
   mapDescriptionInput?.addEventListener("input", () => syncMapSummary());
   displayPresetInput?.addEventListener("change", () => syncGrid(true));
   displayPresetInput?.addEventListener("input", () => syncGrid(true));
-  columnInput?.addEventListener("input", () => syncGrid());
-  columnInput?.addEventListener("change", () => syncGrid(true));
-  rowInput?.addEventListener("input", () => syncGrid());
-  rowInput?.addEventListener("change", () => syncGrid(true));
+  // Scale existing tiles proportionally when the column/row count changes, so the visual layout is
+  // preserved (a finer grid keeps tiles the same size, occupying more cells) instead of leaving them
+  // the same cell-span — which shrank + clustered them to the top-left and squished the graphs.
+  // applyTilePosition (via syncGrid) then clamps everything into the new bounds. Runs on "change"
+  // (commit) only — the per-keystroke "input" reflow is dropped so a half-typed number (which clamps
+  // to the min) can't destroy the tile sizes before the scale is applied.
+  const rescaleTilesToGrid = (oldGrid, newGrid) => {
+    if (!oldGrid || (oldGrid.columns === newGrid.columns && oldGrid.rows === newGrid.rows)) {
+      return;
+    }
+    const colRatio = newGrid.columns / oldGrid.columns;
+    const rowRatio = newGrid.rows / oldGrid.rows;
+    const scalePos = (value, ratio) => Math.max(1, Math.round((Number(value || 1) - 1) * ratio) + 1);
+    const scaleSpan = (value, ratio) => Math.max(1, Math.round(Number(value || 1) * ratio));
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      const { x, y, width, height } = getTileControls(tile);
+      if (width) { width.value = String(scaleSpan(width.value, colRatio)); }
+      if (height) { height.value = String(scaleSpan(height.value, rowRatio)); }
+      if (x) { x.value = String(scalePos(x.value, colRatio)); }
+      if (y) { y.value = String(scalePos(y.value, rowRatio)); }
+    });
+  };
+  const commitGridChange = () => {
+    const nextGrid = readGrid();
+    rescaleTilesToGrid(lastCommittedGrid, nextGrid);
+    lastCommittedGrid = nextGrid;
+    syncGrid(true);
+  };
+  columnInput?.addEventListener("change", commitGridChange);
+  rowInput?.addEventListener("change", commitGridChange);
   scaleInput?.addEventListener("input", () => syncGrid());
   // Recompute the board's fit-to-workbench base width when the window resizes.
   window.addEventListener("resize", () => syncGrid());
