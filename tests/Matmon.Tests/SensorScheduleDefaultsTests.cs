@@ -13,16 +13,38 @@ public sealed class SensorScheduleDefaultsTests
     [Theory]
     [InlineData("http")]
     [InlineData("snmp")]
-    [InlineData("ssl-certificate")]
-    [InlineData("backup-job")]
-    [InlineData("disk-smart")]
+    [InlineData("dns")]
+    [InlineData("windows-health")]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
     [InlineData("totally-unknown-type")]
-    public void Everything_except_ping_uses_the_5_minute_default(string? key)
+    public void Current_data_sensors_use_the_5_minute_default(string? key)
     {
         Assert.Equal(SensorScheduleDefaults.Default, SensorScheduleDefaults.Resolve(key));
+    }
+
+    [Theory]
+    [InlineData("disk-smart")]
+    [InlineData("synology-disk")]
+    [InlineData("windows-disk")]
+    [InlineData("linux-disk")]
+    [InlineData("proxmox-disk")]
+    [InlineData("backup-job")]
+    public void Slow_changing_infra_polls_every_six_hours(string key)
+    {
+        Assert.Equal(TimeSpan.FromHours(6), SensorScheduleDefaults.Resolve(key));
+    }
+
+    [Theory]
+    [InlineData("windows-update")]
+    [InlineData("linux-update")]
+    [InlineData("synology-update")]
+    [InlineData("ssl-certificate")]
+    [InlineData("certificate-chain")]
+    public void Rarely_changing_sensors_poll_once_a_day(string key)
+    {
+        Assert.Equal(TimeSpan.FromHours(24), SensorScheduleDefaults.Resolve(key));
     }
 
     [Fact]
@@ -43,5 +65,6 @@ public sealed class SensorScheduleDefaultsTests
     public void Resolve_is_case_insensitive()
     {
         Assert.Equal(SensorScheduleDefaults.Resolve("ping"), SensorScheduleDefaults.Resolve("PING"));
+        Assert.Equal(SensorScheduleDefaults.Resolve("windows-update"), SensorScheduleDefaults.Resolve("WINDOWS-UPDATE"));
     }
 }

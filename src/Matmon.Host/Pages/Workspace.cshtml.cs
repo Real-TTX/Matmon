@@ -3217,33 +3217,14 @@ public sealed class WorkspaceModel : PageModel
         string severity,
         out ThresholdRule rule)
     {
-        if (string.Equals(sensorTypeKey, PingSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(channelKey, "latency", StringComparison.OrdinalIgnoreCase))
+        // The central table (SensorThresholdDefaults) is the single source for per-type/channel
+        // default conditions; it also seeds them onto a new sensor's settings via Apply().
+        if (SensorThresholdDefaults.TryResolve(sensorTypeKey, channelKey, severity, out rule))
         {
-            rule = new ThresholdRule(
-                ThresholdDirection.Above,
-                string.Equals(severity, "critical", StringComparison.OrdinalIgnoreCase) ? 200 : 80);
             return true;
         }
 
-        if (string.Equals(sensorTypeKey, HttpSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(channelKey, "latency", StringComparison.OrdinalIgnoreCase))
-        {
-            rule = new ThresholdRule(
-                ThresholdDirection.Above,
-                string.Equals(severity, "critical", StringComparison.OrdinalIgnoreCase) ? 1000 : 250);
-            return true;
-        }
-
-        if (string.Equals(sensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(channelKey, "ageSeconds", StringComparison.OrdinalIgnoreCase))
-        {
-            rule = new ThresholdRule(
-                ThresholdDirection.Above,
-                string.Equals(severity, "critical", StringComparison.OrdinalIgnoreCase) ? 60 : 30);
-            return true;
-        }
-
+        // SSL keeps its own defaults (it also migrates the legacy ssl.warningDays/criticalDays params).
         if (string.Equals(sensorTypeKey, SslCertificateSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(channelKey, SslCertificateSensorExecutor.RemainingDaysChannelKey, StringComparison.OrdinalIgnoreCase))
         {

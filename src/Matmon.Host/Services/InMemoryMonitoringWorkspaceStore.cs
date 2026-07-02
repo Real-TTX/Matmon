@@ -833,8 +833,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 sensor.Settings.ApplyFrom(settings);
             }
 
-            // SSL expiry warning/critical lives on the remainingDays channel thresholds — seed the
-            // defaults so a new certificate sensor warns out of the box.
+            // Seed sensible default conditions for this sensor type onto its own settings (only
+            // where the user hasn't set one), so a new sensor alarms sensibly out of the box.
+            SensorThresholdDefaults.Apply(sensorTypeKey, sensor.Settings);
+
+            // SSL expiry warning/critical lives on the remainingDays channel thresholds; its own
+            // seeder also migrates the legacy ssl.warningDays/criticalDays params.
             if (string.Equals(sensorTypeKey, SslCertificateSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
             {
                 SslCertificateSensorExecutor.EnsureDefaultThresholds(sensor.Settings);
