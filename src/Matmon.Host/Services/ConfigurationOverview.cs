@@ -6,6 +6,7 @@ public sealed record ConfigurationOverview(
     string? ProbeName,
     string? MasterUrl,
     int HeartbeatIntervalSeconds,
+    int PollingWorkers,
     string WorkspacePath,
     string AuthUsername,
     string AuthPassword,

@@ -39,6 +39,7 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             _runtimeOptions.ProbeName,
             _runtimeOptions.PrimaryUrl,
             _runtimeOptions.HeartbeatIntervalSeconds,
+            _runtimeOptions.PollingWorkers,
             _runtimeOptions.WorkspacePath,
             _authOptions.Username,
             _authOptions.Password,

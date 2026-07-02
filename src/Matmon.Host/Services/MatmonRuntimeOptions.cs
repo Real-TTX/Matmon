@@ -21,6 +21,14 @@ public sealed class MatmonRuntimeOptions
 
     public int HeartbeatIntervalSeconds { get; set; } = 30;
 
+    /// <summary>
+    /// How many due sensors the primary polls concurrently per cycle. After downtime or resuming a
+    /// paused sensor/folder the overdue sensors are caught up in parallel (most-overdue first),
+    /// instead of one slow sensor blocking the rest. Set via <c>Matmon__PollingWorkers</c>; clamped
+    /// to at least 1. Default 8 (polling is I/O-bound, so a handful of workers helps even on small hosts).
+    /// </summary>
+    public int PollingWorkers { get; set; } = 8;
+
     public string? ProbeToken { get; set; }
 
     public string WorkspacePath { get; set; } = "data/workspace.json";

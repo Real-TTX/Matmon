@@ -63,22 +63,15 @@ public sealed class SensorPollingService : BackgroundService
             return;
         }
 
-        var dueCount = 0;
-
-        using var scope = _scopeFactory.CreateScope();
-        var executionService = scope.ServiceProvider.GetRequiredService<ISensorExecutionService>();
         var now = DateTimeOffset.UtcNow;
 
+        // First pass (no I/O): work out which sensors are due and how overdue each is.
+        var due = new List<(SensorElement Sensor, double OverdueSeconds)>();
         foreach (var sensor in sensors)
         {
             stoppingToken.ThrowIfCancellationRequested();
 
-            if (!IsLocalSensor(sensor, elementsById))
-            {
-                continue;
-            }
-
-            if (sensor.IsPaused)
+            if (!IsLocalSensor(sensor, elementsById) || sensor.IsPaused)
             {
                 continue;
             }
@@ -99,27 +92,52 @@ public sealed class SensorPollingService : BackgroundService
                 continue;
             }
 
-            dueCount++;
-
-            try
-            {
-                var result = await executionService.ExecuteNowAsync(sensor.Id, cancellationToken: stoppingToken);
-                _logger.LogInformation(
-                    "Polled sensor {SensorName} -> {State} ({Message})",
-                    sensor.Name,
-                    result.State,
-                    result.Message ?? "ok");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Scheduled execution for sensor {SensorName} failed", sensor.Name);
-            }
+            // Never-run sensors, then the longest-overdue ones, go first — so a big catch-up (after
+            // downtime, or resuming a paused sensor/folder) fills the biggest gaps first.
+            var overdueSeconds = latestRunUtc is DateTimeOffset last
+                ? (now - last).TotalSeconds
+                : double.MaxValue;
+            due.Add((sensor, overdueSeconds));
         }
 
-        if (dueCount > 0)
+        if (due.Count == 0)
         {
-            _logger.LogInformation("Polled {Count} sensors", dueCount);
+            return;
         }
+
+        due.Sort((left, right) => right.OverdueSeconds.CompareTo(left.OverdueSeconds));
+
+        // Second pass: run the due sensors concurrently with a bounded worker pool, so one slow or
+        // timing-out sensor no longer blocks the rest of the cycle. Each execution gets its own DI
+        // scope; the store serializes the actual observation writes on its own gate.
+        var workers = Math.Max(1, _runtimeOptions.PollingWorkers);
+        await Parallel.ForEachAsync(
+            due,
+            new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = stoppingToken },
+            async (item, cancellationToken) =>
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var executionService = scope.ServiceProvider.GetRequiredService<ISensorExecutionService>();
+                try
+                {
+                    var result = await executionService.ExecuteNowAsync(item.Sensor.Id, cancellationToken: cancellationToken);
+                    _logger.LogInformation(
+                        "Polled sensor {SensorName} -> {State} ({Message})",
+                        item.Sensor.Name,
+                        result.State,
+                        result.Message ?? "ok");
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // shutting down — ignore
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Scheduled execution for sensor {SensorName} failed", item.Sensor.Name);
+                }
+            });
+
+        _logger.LogInformation("Polled {Count} sensors ({Workers} workers)", due.Count, workers);
     }
 
     private static IReadOnlyList<MonitoringElement> BuildLineage(
