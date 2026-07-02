@@ -8532,6 +8532,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: clamp(0.5rem, 5.5cqmin, 1.05rem);
 }
 
 .map-tile-head .state-pill {
@@ -8549,7 +8550,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border: 1px solid var(--matmon-border);
   border-radius: 999px;
   color: var(--matmon-muted);
-  font-size: 0.68rem;
+  font-size: clamp(0.42rem, 3.6cqmin, 0.68rem);
   white-space: nowrap;
 }
 
@@ -8557,7 +8558,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  font-size: clamp(1.6rem, 4.5cqw, 3rem);
+  /* cqmin scales with the tile's smaller side, so the value shrinks in small/narrow tiles instead
+     of staying the old fixed 1.6rem+ (which overflowed once the grid got denser). */
+  font-size: clamp(0.85rem, 20cqmin, 3rem);
   font-weight: 800;
   line-height: 1;
 }
@@ -8614,7 +8617,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-gauge strong {
-  font-size: 1.25rem;
+  font-size: clamp(0.6rem, 9cqmin, 1.4rem);
   line-height: 1;
 }
 
@@ -8626,25 +8629,27 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   color: var(--matmon-muted);
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: clamp(0.42rem, 4.5cqmin, 0.8rem);
 }
 
 .map-tile-graph-frame {
   flex: 1 1 auto;
   display: grid;
   align-items: stretch;
-  min-height: 3rem;
+  /* No fixed floor — the frame must be able to shrink into a small tile instead of overflowing it. */
+  min-height: 0;
   padding: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--map-tile-accent, var(--matmon-border)) 35%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--map-tile-accent, transparent) 10%, transparent);
   color: var(--matmon-muted);
-  font-size: 0.76rem;
+  font-size: clamp(0.42rem, 4cqmin, 0.78rem);
 }
 
 .map-tile-graph {
   width: 100%;
   height: 100%;
-  min-height: 4rem;
+  min-height: 0;
 }
 
 .map-graph-area {
