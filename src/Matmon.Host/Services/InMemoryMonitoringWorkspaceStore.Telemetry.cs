@@ -225,6 +225,25 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 ? _telemetry.PruneEvents(nowUtc - TimeSpan.FromDays(eventDays))
                 : 0;
 
+            // Resolved alerts are Alerta-style and were never pruned, so _document.Alerts (and
+            // workspace.json, and the Alerts page DOM) grew without bound. Keep every active alert,
+            // but bound the resolved tail: drop resolved alerts past the event-retention window and
+            // hard-cap what remains to the newest ones. The AlertRaised/Resolved events keep the
+            // long-term audit trail, so pruning the alert rows loses no history.
+            const int MaxResolvedAlerts = 500;
+            var eventCutoff = eventDays > 0 ? nowUtc - TimeSpan.FromDays(eventDays) : (DateTimeOffset?)null;
+            var keepResolved = _document.Alerts
+                .Where(alert => !alert.IsActive)
+                .Where(alert => eventCutoff is null || (alert.ResolvedUtc ?? alert.LastSeenUtc) >= eventCutoff.Value)
+                .OrderByDescending(alert => alert.ResolvedUtc ?? alert.LastSeenUtc)
+                .Take(MaxResolvedAlerts)
+                .ToHashSet();
+            var alertsPruned = _document.Alerts.RemoveAll(alert => !alert.IsActive && !keepResolved.Contains(alert));
+            if (alertsPruned > 0)
+            {
+                QueueSave(SavePriority.Telemetry);
+            }
+
             return new TelemetryMaintenanceResult(sensors.Count, bucketsWritten, observationsPruned, statisticsPruned, eventsPruned);
         }
     }

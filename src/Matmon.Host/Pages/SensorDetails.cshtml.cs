@@ -158,7 +158,7 @@ public sealed class SensorDetailsModel : PageModel
         var statisticsSummary = BuildChannelStatistics(
             statisticsBuckets, latestObservation, defaultChannelKey, defaultChannelLabel, displayScale, measurementKind);
         var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
-        var isAcknowledged = _workspaceStore.Workspace.Alerts
+        var isAcknowledged = workspace.Alerts
             .Any(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementId == sensor.Id);
 
         View = new SensorDetailsViewModel(

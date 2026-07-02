@@ -5,6 +5,15 @@
     var returnUrl = Request.Path + Request.QueryString;
     var allAlerts = Model.View.Alerts;
 
+    // Render every active alert, but cap the resolved history we render into the DOM — the client-side
+    // table would otherwise materialise thousands of <tr> (a real instance had ~1000+ resolved alerts,
+    // ~3 MB of HTML). Tab counts below still use the full set, so the numbers stay honest; only the
+    // rendered/browsable history is capped to the most recent N.
+    const int ResolvedRenderCap = 200;
+    var renderedAlerts = allAlerts.Where(alert => alert.IsActive)
+        .Concat(allAlerts.Where(alert => !alert.IsActive).Take(ResolvedRenderCap))
+        .ToArray();
+
     string NormalizeAlertFilter(string? value) => value?.Trim().ToLowerInvariant() switch
     {
         "open" => "open",
@@ -41,8 +50,9 @@
     // first paint already matches what the client-side script settles on — no flash of all rows
     // before the JS filters and pages. The script then drives every later filter/search/page change.
     const int InitialPageSize = 50;
-    var initialVisibleIds = allAlerts.Where(MatchesInitialFilter).Take(InitialPageSize).Select(a => a.Id).ToHashSet();
-    var initialMatchCount = allAlerts.Count(MatchesInitialFilter);
+    var initialVisibleIds = renderedAlerts.Where(MatchesInitialFilter).Take(InitialPageSize).Select(a => a.Id).ToHashSet();
+    var initialMatchCount = renderedAlerts.Count(MatchesInitialFilter);
+    var hiddenResolvedCount = resolvedAlertCount - renderedAlerts.Count(alert => !alert.IsActive);
 }
 
 <section class="dashboard-shell alerts-page" data-alerts data-initial-filter="@alertFilter">
@@ -109,6 +119,11 @@
             <span class="panel-hint"><strong data-alerts-count>@initialMatchCount</strong> shown</span>
         </div>
 
+        @if (hiddenResolvedCount > 0)
+        {
+            <div class="workspace-filter-note">Showing the most recent @ResolvedRenderCap of @resolvedAlertCount resolved alerts. Older history is trimmed automatically.</div>
+        }
+
     <form method="post" id="alerts-form" asp-page-handler="AcknowledgeAlerts">
         <input type="hidden" name="returnUrl" value="@returnUrl" />
         <div class="alerts-table-wrap">
@@ -126,7 +141,7 @@
                     </tr>
                 </thead>
                 <tbody data-alerts-body>
-                    @foreach (var alert in allAlerts)
+                    @foreach (var alert in renderedAlerts)
                     {
                         var canAck = alert.IsActive && !alert.IsAcknowledged;
                         <tr class="alerts-row" data-alert-row

@@ -91,7 +91,10 @@ function initializeAlertsTable() {
     const comparator = comparatorFor(sortMode);
     rows = comparator ? originalOrder.slice().sort(comparator) : originalOrder.slice();
     if (tbody) {
-      rows.forEach((row) => tbody.appendChild(row));
+      // Reparent in one batch (a fragment) so the browser reflows once, not once per row.
+      const fragment = document.createDocumentFragment();
+      rows.forEach((row) => fragment.appendChild(row));
+      tbody.appendChild(fragment);
     }
   };
 
@@ -189,10 +192,16 @@ function initializeAlertsTable() {
   });
 
   if (searchInput) {
+    // Debounce so a fast typist doesn't re-run apply() (which touches every rendered row) on
+    // every keystroke.
+    let searchTimer = null;
     searchInput.addEventListener("input", () => {
-      query = searchInput.value.trim().toLowerCase();
-      page = 1;
-      apply();
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => {
+        query = searchInput.value.trim().toLowerCase();
+        page = 1;
+        apply();
+      }, 140);
     });
   }
 
