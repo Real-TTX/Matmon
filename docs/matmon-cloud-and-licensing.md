@@ -61,6 +61,30 @@ Stack: ASP.NET Core .NET 10 (same), but **multi-tenant + PostgreSQL** (not the J
 workspace), S3-compatible object storage for backups, horizontally scalable.
 **New repo: `Matmon.Cloud`.**
 
+## 4a. Identity & Cloud SSO (UniFi-style)
+Goal: one **cloud account (e-mail + password, later MFA)** that can log into the cloud
+**and** into local instances, and that owns **multiple instances**.
+
+Model (like Ubiquiti account / UniFi):
+- **Matmon.Cloud is the Identity Provider (IdP)** — OIDC/OAuth2 (or a simple token
+  exchange). The cloud account is keyed by **e-mail**.
+- **Local accounts stay and work offline** (e-mail + password) — a monitor must log in
+  even when the cloud is unreachable. Cloud SSO is **additive, not required**.
+- **Instance linking / claim:** an instance is "claimed" by a cloud account (reusing the
+  outbound primary→cloud connection + token). Once linked, the Login page offers
+  **"Sign in with Matmon Cloud"** (redirect/token exchange); the cloud identity maps to a
+  local user (auto-provisioned with a role), and the cloud caches enough for offline login.
+- **One account → many instances:** in the cloud, an **account/org owns N linked
+  instances** with **per-instance roles** (owner/admin/viewer). From the cloud dashboard
+  you see all instances and SSO into any — same multi-tenant model as §3/§4.
+
+Steps already done / next:
+- ✅ Local login switched from *username* to **e-mail + password** (`LoginModel.Email`;
+  `ValidateUser` still matches a legacy username for old accounts). This makes the local
+  identity key the same as the future cloud identity.
+- ⬜ Cloud IdP (accounts, MFA), instance-claim flow, "Sign in with Matmon Cloud" button,
+  cloud-identity → local-user mapping, offline credential cache, per-instance roles.
+
 ## 5. License enforcement (to build in Matmon first)
 - **License token**: signed (Ed25519/JWT) by Matmon.Cloud; contains tier, probe limit,
   feature flags, expiry, customer id. Public key baked into the binary → **offline

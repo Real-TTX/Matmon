@@ -28,8 +28,8 @@
             <input type="hidden" asp-for="ReturnUrl" />
 
             <label class="workspace-field">
-                <span>E-mail or username</span>
-                <input asp-for="Username" class="workspace-input" autocomplete="username" />
+                <span>E-mail</span>
+                <input asp-for="Email" class="workspace-input" type="email" autocomplete="email" />
             </label>
 
             <label class="workspace-field">
@@ -38,7 +38,7 @@
             </label>
 
             <div class="auth-actions">
-                <span class="auth-note">Sign in with your e-mail or username</span>
+                <span class="auth-note">Sign in with your e-mail</span>
                 <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
             </div>
         </form>

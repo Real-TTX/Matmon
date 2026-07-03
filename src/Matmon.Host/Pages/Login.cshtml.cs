@@ -22,7 +22,7 @@ public class LoginModel : PageModel
     public string? ReturnUrl { get; set; }
 
     [BindProperty]
-    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 
     [BindProperty]
     public string Password { get; set; } = string.Empty;
@@ -41,15 +41,16 @@ public class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        var enteredUsername = Username?.Trim() ?? string.Empty;
+        var enteredEmail = Email?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(enteredUsername) || string.IsNullOrWhiteSpace(Password))
+        if (string.IsNullOrWhiteSpace(enteredEmail) || string.IsNullOrWhiteSpace(Password))
         {
-            ErrorMessage = "Username and password are required.";
+            ErrorMessage = "E-mail and password are required.";
             return Page();
         }
 
-        var user = _workspaceStore.ValidateUser(enteredUsername, Password);
+        // ValidateUser matches the e-mail (or a legacy username) so older accounts still work.
+        var user = _workspaceStore.ValidateUser(enteredEmail, Password);
         if (user is null)
         {
             ErrorMessage = "Invalid credentials.";
