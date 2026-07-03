@@ -90,7 +90,9 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
     public DashboardSnapshot CreateSnapshot()
     {
-        var workspace = _workspaceStore.Workspace;
+        // Deep-cloned snapshot: this method walks the entire element tree (health, severity, flatten)
+        // and must not race concurrent edits or the polling service.
+        var workspace = _workspaceStore.GetWorkspaceClone();
         var now = DateTimeOffset.UtcNow;
         var templateMap = workspace.Templates.ToDictionary(template => template.Id);
         var sensorDefinitionMap = workspace.SensorDefinitions.ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
@@ -101,7 +103,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var activeAlerts = BuildActiveAlertCandidates(workspace, templateMap, probeHealthMap, sensorHistoryMap, now).ToArray();
 
         _workspaceStore.SyncAlerts(activeAlerts, now);
-        workspace = _workspaceStore.Workspace;
+        workspace = _workspaceStore.GetWorkspaceClone();
 
         var nodeSeverities = new Dictionary<Guid, MonitoringSeverity>();
 

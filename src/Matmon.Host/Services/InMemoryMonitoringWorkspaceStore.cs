@@ -1622,15 +1622,40 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
     private MonitoringWorkspaceSnapshot CreateSnapshot()
     {
+        // Snapshot the mutable collections (cheap — .ToArray() of small lists) so consumers that
+        // enumerate them (e.g. .Workspace.Alerts) can't hit a "collection modified" while the polling
+        // path adds/removes alerts. RootProbe stays live: cloning the whole tree on every getter call
+        // would be O(n²) on pages that read .SensorDefinitions/.Templates per element. Deeply tree-
+        // walking consumers (the dashboard) use GetWorkspaceClone() instead.
         return new MonitoringWorkspaceSnapshot(
             _document.RootProbe,
-            _document.Templates,
-            _document.SensorDefinitions,
+            _document.Templates.ToArray(),
+            _document.SensorDefinitions.ToArray(),
             _document.NotificationConfiguration,
-            _document.NotificationSenders,
-            _document.NotificationReceivers,
-            _document.NotificationRules,
-            _document.Alerts);
+            _document.NotificationSenders.ToArray(),
+            _document.NotificationReceivers.ToArray(),
+            _document.NotificationRules.ToArray(),
+            _document.Alerts.ToArray());
+    }
+
+    /// <summary>
+    /// A fully detached workspace snapshot with a <b>deep-cloned</b> element tree and templates, for
+    /// consumers that walk the whole tree (the dashboard) and must not race concurrent edits.
+    /// </summary>
+    public MonitoringWorkspaceSnapshot GetWorkspaceClone()
+    {
+        lock (_gate)
+        {
+            return new MonitoringWorkspaceSnapshot(
+                (ProbeElement)_document.RootProbe.Clone(),
+                _document.Templates.Select(template => template.Clone()).ToArray(),
+                _document.SensorDefinitions.ToArray(),
+                _document.NotificationConfiguration,
+                _document.NotificationSenders.ToArray(),
+                _document.NotificationReceivers.ToArray(),
+                _document.NotificationRules.ToArray(),
+                _document.Alerts.ToArray());
+        }
     }
 
 
