@@ -2952,11 +2952,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     State = alert.State,
                     Message = alert.Message
                 });
+                _notificationSink?.Enqueue(new AlertNotificationEvent(
+                    alert.Id, alert.ElementId, SensorState.Healthy, "Condition cleared", recoveredAt, NotificationTransition.Recovered));
             }
             else if (alert.RecoveredUtc is null)
             {
                 // Condition cleared but nobody has acknowledged it yet — keep it open.
                 alert.RecoveredUtc = recoveredAt;
+                _notificationSink?.Enqueue(new AlertNotificationEvent(
+                    alert.Id, alert.ElementId, SensorState.Healthy, "Condition cleared", recoveredAt, NotificationTransition.Recovered));
             }
         }
     }

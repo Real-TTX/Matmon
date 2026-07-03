@@ -28,6 +28,10 @@ public sealed class NotificationDispatchService : BackgroundService
     private readonly ILogger<NotificationDispatchService> _logger;
     private readonly List<PendingDelivery> _pending = [];
 
+    // Anti-spam / flap suppression: cooldown per (rule, element) + one-recovery-per-episode gating.
+    // Owned by the single dispatch loop (not thread-safe by design).
+    private readonly NotificationThrottle _throttle = new();
+
     public NotificationDispatchService(
         NotificationSpooler spooler,
         IMonitoringWorkspaceStore workspaceStore,
@@ -85,6 +89,7 @@ public sealed class NotificationDispatchService : BackgroundService
             return deliveries;
         }
 
+        var now = DateTimeOffset.UtcNow;
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         elementsById.TryGetValue(notificationEvent.ElementId, out var element);
         _workspaceStore.GetLatestSensorObservations().TryGetValue(notificationEvent.ElementId, out var latest);
@@ -97,14 +102,35 @@ public sealed class NotificationDispatchService : BackgroundService
                 continue;
             }
 
-            if (rule.TriggerStates.Count > 0 && !rule.TriggerStates.Contains(notificationEvent.State))
+            if (!RuleTargetsElement(rule, notificationEvent.ElementId, elementsById))
             {
                 continue;
             }
 
-            if (!RuleTargetsElement(rule, notificationEvent.ElementId, elementsById))
+            if (notificationEvent.Transition == NotificationTransition.Raised)
             {
-                continue;
+                if (rule.TriggerStates.Count > 0 && !rule.TriggerStates.Contains(notificationEvent.State))
+                {
+                    continue;
+                }
+
+                // Cooldown: don't re-notify the same rule+element within CooldownMinutes. Combined with
+                // the persist-until-ack model, this is what stops a flapping sensor from spamming.
+                if (_throttle.IsWithinCooldown(rule.Id, notificationEvent.ElementId, rule.CooldownMinutes, now))
+                {
+                    _logger.LogDebug("Suppressed notification for rule {Rule} on {Element} — within cooldown", rule.Name, notificationEvent.ElementId);
+                    continue;
+                }
+            }
+            else
+            {
+                // Recovery: only notify a rule that actually sent the raise for this episode. This also
+                // prevents flapping from spamming recovery mails (a re-raise that was cooldown-suppressed
+                // never marks the episode active, so its recovery is skipped too).
+                if (!_throttle.IsEpisodeActive(rule.Id, notificationEvent.ElementId))
+                {
+                    continue;
+                }
             }
 
             var smtp = ResolveSmtp(rule, workspace);
@@ -131,6 +157,16 @@ public sealed class NotificationDispatchService : BackgroundService
                 HtmlBody = NotificationTemplateRenderer.RenderHtml(rule.HtmlTemplate, context, NotificationTemplateCatalog.DefaultHtmlTemplate),
                 RuleName = rule.Name
             });
+
+            // Update flap/cooldown state now that a mail is queued for this (rule, element).
+            if (notificationEvent.Transition == NotificationTransition.Raised)
+            {
+                _throttle.MarkRaised(rule.Id, notificationEvent.ElementId, now);
+            }
+            else
+            {
+                _throttle.MarkRecovered(rule.Id, notificationEvent.ElementId);
+            }
         }
 
         return deliveries;
@@ -253,8 +289,9 @@ public sealed class NotificationDispatchService : BackgroundService
         var now = DateTimeOffset.UtcNow;
         var context = new NotificationTemplateContext();
         var sensor = element as SensorElement;
-        var stateLabel = MonitoringStatePresentation.Label(notificationEvent.State);
-        var stateKey = MonitoringStatePresentation.Key(notificationEvent.State);
+        var isRecovery = notificationEvent.Transition != NotificationTransition.Raised;
+        var stateLabel = isRecovery ? "Recovered" : MonitoringStatePresentation.Label(notificationEvent.State);
+        var stateKey = isRecovery ? "recovered" : MonitoringStatePresentation.Key(notificationEvent.State);
         var elementPath = alert?.ElementPath ?? BuildElementPath(notificationEvent.ElementId, elementsById);
         var since = alert?.FirstSeenUtc ?? notificationEvent.TimestampUtc;
 
