@@ -195,6 +195,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Records that the scheduled summary report was sent at the given time.</summary>
     void MarkSummaryReportSent(DateTimeOffset sentUtc);
 
+    /// <summary>This instance's persisted Matmon.Cloud link credentials (a detached clone).</summary>
+    CloudConnectionState GetCloudConnection();
+
+    /// <summary>Persists the Matmon.Cloud link credentials (after registering).</summary>
+    void UpdateCloudConnection(CloudConnectionState state);
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

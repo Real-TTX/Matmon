@@ -55,4 +55,14 @@ public sealed class MatmonRuntimeOptions
     /// only read from configuration/env — never committed.
     /// </summary>
     public string? UnifiCloudApiKey { get; set; }
+
+    /// <summary>
+    /// Base URL of the Matmon.Cloud control plane (e.g. <c>Matmon__CloudUrl=http://localhost:8055</c>).
+    /// When set, a Primary registers itself once and sends heartbeats + metadata to the cloud
+    /// (dead-man-switch + public dashboard). Empty = fully offline, no cloud connection.
+    /// </summary>
+    public string? CloudUrl { get; set; }
+
+    /// <summary>Display name reported to Matmon.Cloud (defaults to the root probe / machine name).</summary>
+    public string? CloudInstanceName { get; set; }
 }

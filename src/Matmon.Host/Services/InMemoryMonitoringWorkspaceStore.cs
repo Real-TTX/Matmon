@@ -1039,6 +1039,24 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public CloudConnectionState GetCloudConnection()
+    {
+        lock (_gate)
+        {
+            return _document.Cloud.Clone();
+        }
+    }
+
+    public void UpdateCloudConnection(CloudConnectionState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        lock (_gate)
+        {
+            _document.Cloud = state.Clone();
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
     {
         lock (_gate)
@@ -3301,6 +3319,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public NotificationWorkspaceConfiguration NotificationConfiguration { get; set; } = new();
 
         public SummaryReportSettings SummaryReport { get; set; } = new();
+
+        public CloudConnectionState Cloud { get; set; } = new();
 
         public List<NotificationSender> NotificationSenders { get; set; } = [];
 

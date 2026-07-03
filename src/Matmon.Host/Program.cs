@@ -153,6 +153,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<StatisticsRollupService>();
     builder.Services.AddHostedService<NotificationDispatchService>();
     builder.Services.AddHostedService<ReportSchedulerService>();
+    builder.Services.AddHostedService<CloudConnectionService>();
 }
 else
 {
