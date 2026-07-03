@@ -214,17 +214,20 @@ public sealed class WorkspaceModel : PageModel
                 NewSensor.Description,
                 createSettings);
 
-            sensor.Tags = MonitoringTagResolver.Parse(NewSensor.TagsText);
-
-            if (selectedTemplate is not null)
+            // Apply the post-create mutations under the store lock (tags + template copy write the
+            // element's settings/tags in place — doing it outside the lock would race readers).
+            _workspaceStore.UpdateElement(sensor.Id, element =>
             {
-                // Copy the template's values into the new sensor (the form values the user saw/edited
-                // win) and remember the origin so it can be restored later — no live link. Template
-                // tags merge into the user's tags inside ApplyTemplateCopy.
-                ApplyTemplateCopy(sensor, selectedTemplate, elementWins: true);
-            }
+                element.Tags = MonitoringTagResolver.Parse(NewSensor.TagsText);
 
-            _workspaceStore.Save();
+                if (selectedTemplate is not null)
+                {
+                    // Copy the template's values into the new sensor (the form values the user saw/edited
+                    // win) and remember the origin so it can be restored later — no live link. Template
+                    // tags merge into the user's tags inside ApplyTemplateCopy.
+                    ApplyTemplateCopy(element, selectedTemplate, elementWins: true);
+                }
+            });
 
             StatusMessage = $"Sensor '{sensor.Name}' angelegt.";
             return RedirectAfterAction(ReturnUrl, "/Monitoring");
@@ -670,16 +673,28 @@ public sealed class WorkspaceModel : PageModel
                 throw new InvalidOperationException("Kein Element ausgewählt.");
             }
 
-            var element = _workspaceStore.FindElement(ElementEditor.Id)
-                ?? throw new InvalidOperationException("Element nicht gefunden.");
+            var credentialIssueCount = 0;
+            string? elementName = null;
+            MonitoringElementKind elementKind = default;
 
-            var credentialIssueCount = ApplyElementEditor(element, ElementEditor);
+            // Mutate under the store lock (UpdateElement) instead of editing a live reference outside
+            // it, so the edit is serialized against readers and the polling service.
+            var found = _workspaceStore.UpdateElement(ElementEditor.Id, element =>
+            {
+                credentialIssueCount = ApplyElementEditor(element, ElementEditor);
+                elementName = element.Name;
+                elementKind = element.Kind;
+            });
 
-            _workspaceStore.Save();
+            if (!found)
+            {
+                throw new InvalidOperationException("Element nicht gefunden.");
+            }
+
             StatusMessage = credentialIssueCount == 0
-                ? $"{element.Kind} '{element.Name}' gespeichert."
-                : $"{element.Kind} '{element.Name}' gespeichert. {credentialIssueCount} credential issue{(credentialIssueCount == 1 ? string.Empty : "s")} found.";
-            return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
+                ? $"{elementKind} '{elementName}' gespeichert."
+                : $"{elementKind} '{elementName}' gespeichert. {credentialIssueCount} credential issue{(credentialIssueCount == 1 ? string.Empty : "s")} found.";
+            return RedirectToPage(new { selectedId = ElementEditor.Id, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
         {
@@ -704,8 +719,7 @@ public sealed class WorkspaceModel : PageModel
             var template = _workspaceStore.FindTemplate(originId)
                 ?? throw new InvalidOperationException("Das Herkunfts-Template existiert nicht mehr.");
 
-            ApplyTemplateCopy(element, template, elementWins: false);
-            _workspaceStore.Save();
+            _workspaceStore.UpdateElement(element.Id, e => ApplyTemplateCopy(e, template, elementWins: false));
             StatusMessage = $"'{element.Name}' aus Template '{template.Name}' wiederhergestellt.";
             return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
         }
@@ -724,8 +738,11 @@ public sealed class WorkspaceModel : PageModel
             var element = _workspaceStore.FindElement(ElementEditor.Id)
                 ?? throw new InvalidOperationException("Element nicht gefunden.");
 
-            element.TemplateOriginId = null;
-            _workspaceStore.Save();
+            if (!_workspaceStore.UpdateElement(element.Id, e => e.TemplateOriginId = null))
+            {
+                throw new InvalidOperationException("Element nicht gefunden.");
+            }
+
             StatusMessage = $"Template-Herkunft von '{element.Name}' gelöst.";
             return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
         }
@@ -822,13 +839,17 @@ public sealed class WorkspaceModel : PageModel
             var templateMap = _workspaceStore.Workspace.Templates.ToDictionary(candidate => candidate.Id);
             var impactedSensors = BuildTemplateImpactRows(_workspaceStore.Workspace.RootProbe, template, templateMap).Count;
 
-            ApplyTemplateEditor(template, TemplateEditor);
+            var templateName = template.Name;
+            _workspaceStore.UpdateTemplate(TemplateEditor.Id, edited =>
+            {
+                ApplyTemplateEditor(edited, TemplateEditor);
+                templateName = edited.Name;
+            });
 
-            _workspaceStore.Save();
             StatusMessage = impactedSensors == 0
-                ? $"Template '{template.Name}' gespeichert. Keine Sensoren betroffen."
-                : $"Template '{template.Name}' gespeichert. {impactedSensors} Sensor{(impactedSensors == 1 ? string.Empty : "en")} betroffen.";
-            return RedirectToPage(new { selectedId = SelectedId, selectedTemplateId = template.Id });
+                ? $"Template '{templateName}' gespeichert. Keine Sensoren betroffen."
+                : $"Template '{templateName}' gespeichert. {impactedSensors} Sensor{(impactedSensors == 1 ? string.Empty : "en")} betroffen.";
+            return RedirectToPage(new { selectedId = SelectedId, selectedTemplateId = TemplateEditor.Id });
         }
         catch (Exception ex)
         {

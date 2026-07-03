@@ -18,4 +18,20 @@ public sealed class MonitoringTemplate
 
     /// <summary>Tags merged into an element's own tags when this template is applied (copy + origin).</summary>
     public List<string> Tags { get; set; } = [];
+
+    /// <summary>Deep, detached copy — see <see cref="MonitoringElement.Clone"/>.</summary>
+    public MonitoringTemplate Clone()
+    {
+        return new MonitoringTemplate
+        {
+            Id = Id,
+            Key = Key,
+            Name = Name,
+            TargetKind = TargetKind,
+            SensorTypeKey = SensorTypeKey,
+            ParentTemplateId = ParentTemplateId,
+            Settings = Settings.Clone(),
+            Tags = [.. Tags]
+        };
+    }
 }

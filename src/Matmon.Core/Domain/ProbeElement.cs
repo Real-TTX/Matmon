@@ -18,4 +18,18 @@ public sealed class ProbeElement : MonitoringContainerElement
     public List<string> Subnets { get; set; } = [];
 
     public override MonitoringElementKind Kind => MonitoringElementKind.Probe;
+
+    public override MonitoringElement Clone()
+    {
+        var clone = new ProbeElement(Name)
+        {
+            Id = Id,
+            ProbeId = ProbeId,
+            EnrollmentToken = EnrollmentToken,
+            Subnets = [.. Subnets]
+        };
+        CopyBaseTo(clone);
+        CopyChildrenTo(clone);
+        return clone;
+    }
 }

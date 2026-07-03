@@ -120,7 +120,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     {
         lock (_gate)
         {
-            return EnumerateElements(_document.RootProbe).ToArray();
+            // Clone the tree once and enumerate the copy, so callers get detached, internally
+            // consistent elements they can read without racing writers that mutate the live tree.
+            return EnumerateElements(_document.RootProbe.Clone()).ToArray();
         }
     }
 
@@ -128,7 +130,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     {
         lock (_gate)
         {
-            return _document.Templates.ToArray();
+            return _document.Templates.Select(template => template.Clone()).ToArray();
         }
     }
 
@@ -586,6 +588,81 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         lock (_gate)
         {
             return _document.Templates.FirstOrDefault(template => template.Id == id);
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="mutate"/> against the live element under <c>_gate</c>, then queues a save.
+    /// This is the race-free way to edit an element: unlike <see cref="FindElement"/> + mutate + Save
+    /// (which mutates outside the lock), the mutation here is serialized against readers and the
+    /// polling service. Returns false if the id is unknown.
+    /// </summary>
+    public bool UpdateElement(Guid id, Action<MonitoringElement> mutate)
+    {
+        ArgumentNullException.ThrowIfNull(mutate);
+        lock (_gate)
+        {
+            var element = FindElementInternal(id);
+            if (element is null)
+            {
+                return false;
+            }
+
+            mutate(element);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    /// <summary>Template counterpart of <see cref="UpdateElement"/>: mutation runs under <c>_gate</c>.</summary>
+    public bool UpdateTemplate(Guid id, Action<MonitoringTemplate> mutate)
+    {
+        ArgumentNullException.ThrowIfNull(mutate);
+        lock (_gate)
+        {
+            var template = _document.Templates.FirstOrDefault(candidate => candidate.Id == id);
+            if (template is null)
+            {
+                return false;
+            }
+
+            mutate(template);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Resolves everything needed to execute a sensor — lineage, effective settings and target —
+    /// atomically under <c>_gate</c>, returning a detached snapshot. Lets the polling hot path avoid
+    /// walking the live element tree (which would race concurrent edits). Null if the id is not a sensor.
+    /// </summary>
+    public SensorExecutionPlan? GetSensorExecutionPlan(Guid sensorId)
+    {
+        lock (_gate)
+        {
+            if (FindElementInternal(sensorId) is not SensorElement sensor)
+            {
+                return null;
+            }
+
+            var lineage = BuildLineage(sensor);
+            var templates = _document.Templates.ToDictionary(template => template.Id);
+            // Resolve() builds a fresh MonitoringSettings (deep ApplyFrom), so it is already detached
+            // from the live element settings.
+            var effective = _telemetryInheritanceResolver.Resolve(lineage, templates);
+            var target = SensorTargetResolver.Resolve(sensor, lineage);
+            return new SensorExecutionPlan(sensor.Id, sensor.SensorTypeKey, target, sensor.IsPaused, effective);
+        }
+    }
+
+    /// <summary>The sensor-definition catalog. Entries are an immutable catalog (rebuilt on load, not
+    /// mutated at runtime), so this is a lightweight accessor that avoids cloning the whole workspace.</summary>
+    public IReadOnlyList<SensorDefinition> GetSensorDefinitions()
+    {
+        lock (_gate)
+        {
+            return _document.SensorDefinitions.ToArray();
         }
     }
 

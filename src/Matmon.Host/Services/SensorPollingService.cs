@@ -52,9 +52,9 @@ public sealed class SensorPollingService : BackgroundService
 
     private async Task PollDueSensorsAsync(CancellationToken stoppingToken)
     {
-        var snapshot = _workspaceStore.Workspace;
+        // Cloned, detached copies — the due-set computation reads these without racing writers.
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
-        var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
+        var templateMap = _workspaceStore.GetAllTemplates().ToDictionary(template => template.Id);
         var latestBySensor = _workspaceStore.GetLatestSensorObservations();
 
         var sensors = elementsById.Values.OfType<SensorElement>().ToArray();

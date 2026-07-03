@@ -61,6 +61,13 @@ public interface IMonitoringWorkspaceStore
     MonitoringElement? FindElement(Guid id);
 
     /// <summary>
+    /// Runs <paramref name="mutate"/> against the live element under the store lock, then queues a
+    /// save. Race-free alternative to <see cref="FindElement"/> + mutate + <see cref="Save"/>.
+    /// Returns false if the id is unknown.
+    /// </summary>
+    bool UpdateElement(Guid id, Action<MonitoringElement> mutate);
+
+    /// <summary>
     /// Resolves a target token (an element id, or a <c>tag:&lt;name&gt;</c> tag) to the set of
     /// sensors it points at: the element's subtree sensors, or every sensor whose effective
     /// tags include that tag. Empty for an empty/unknown token.
@@ -68,6 +75,18 @@ public interface IMonitoringWorkspaceStore
     IReadOnlyList<SensorElement> ResolveTargetSensors(string? targetToken);
 
     MonitoringTemplate? FindTemplate(Guid id);
+
+    /// <summary>Template counterpart of <see cref="UpdateElement"/>: mutation runs under the store lock.</summary>
+    bool UpdateTemplate(Guid id, Action<MonitoringTemplate> mutate);
+
+    /// <summary>
+    /// Resolves lineage, effective settings and target for a sensor atomically under the store lock,
+    /// returning a detached snapshot for execution. Null if the id is not a sensor.
+    /// </summary>
+    SensorExecutionPlan? GetSensorExecutionPlan(Guid sensorId);
+
+    /// <summary>The sensor-definition catalog (lightweight; avoids cloning the whole workspace).</summary>
+    IReadOnlyList<SensorDefinition> GetSensorDefinitions();
 
     NotificationSender? FindNotificationSender(Guid id);
 

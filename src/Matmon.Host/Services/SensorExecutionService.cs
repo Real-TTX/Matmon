@@ -6,7 +6,6 @@ public sealed class SensorExecutionService : ISensorExecutionService
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly IReadOnlyDictionary<string, ISensorExecutor> _executors;
-    private readonly MonitoringInheritanceResolver _resolver = new();
 
     public SensorExecutionService(
         IMonitoringWorkspaceStore workspaceStore,
@@ -21,48 +20,45 @@ public sealed class SensorExecutionService : ISensorExecutionService
         MonitoringSettings? overrideSettings = null,
         CancellationToken cancellationToken = default)
     {
-        var sensor = _workspaceStore.FindElement(sensorId) as SensorElement
+        // Resolve everything atomically under the store lock into a detached plan, so the polling
+        // hot path never reads the live element tree while a request is mutating it.
+        var plan = _workspaceStore.GetSensorExecutionPlan(sensorId)
             ?? throw new InvalidOperationException("Selected element is not a sensor.");
 
-        var lineage = BuildLineage(sensor);
-        var snapshot = _workspaceStore.Workspace;
-        var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
-        var effectiveSettings = _resolver.Resolve(lineage, templateMap);
+        var effectiveSettings = plan.EffectiveSettings;
 
         if (overrideSettings is not null)
         {
             ApplyOverrideSettings(effectiveSettings, overrideSettings);
         }
 
-        if (sensor.IsPaused)
+        if (plan.IsPaused)
         {
             var pausedResult = SensorExecutionResult.Paused("Sensor is paused.");
-            _workspaceStore.RecordSensorObservation(sensor.Id, pausedResult, DateTimeOffset.UtcNow, effectiveSettings);
+            _workspaceStore.RecordSensorObservation(plan.SensorId, pausedResult, DateTimeOffset.UtcNow, effectiveSettings);
             return pausedResult;
         }
 
-        if (!_executors.TryGetValue(sensor.SensorTypeKey, out var executor))
+        if (!_executors.TryGetValue(plan.SensorTypeKey, out var executor))
         {
-            throw new InvalidOperationException($"No executor is registered for sensor type '{sensor.SensorTypeKey}'.");
+            throw new InvalidOperationException($"No executor is registered for sensor type '{plan.SensorTypeKey}'.");
         }
 
-        ApplySensorCredentialDefaults(effectiveSettings, sensor.SensorTypeKey, snapshot.SensorDefinitions);
+        ApplySensorCredentialDefaults(effectiveSettings, plan.SensorTypeKey, _workspaceStore.GetSensorDefinitions());
 
         if (effectiveSettings.Enabled == false)
         {
             var disabledResult = SensorExecutionResult.Disabled("Sensor is disabled.");
-            _workspaceStore.RecordSensorObservation(sensor.Id, disabledResult, DateTimeOffset.UtcNow, effectiveSettings);
+            _workspaceStore.RecordSensorObservation(plan.SensorId, disabledResult, DateTimeOffset.UtcNow, effectiveSettings);
             return disabledResult;
         }
 
-        var target = SensorTargetResolver.Resolve(sensor, lineage);
-
         return await ExecuteCoreAsync(
             executor,
-            sensor.SensorTypeKey,
-            target,
+            plan.SensorTypeKey,
+            plan.Target,
             effectiveSettings,
-            sensor.Id,
+            plan.SensorId,
             recordObservation: true,
             cancellationToken);
     }
@@ -73,7 +69,7 @@ public sealed class SensorExecutionService : ISensorExecutionService
         MonitoringSettings settings,
         CancellationToken cancellationToken = default)
     {
-        ApplySensorCredentialDefaults(settings, sensorTypeKey, _workspaceStore.Workspace.SensorDefinitions);
+        ApplySensorCredentialDefaults(settings, sensorTypeKey, _workspaceStore.GetSensorDefinitions());
         return ExecuteCoreAsync(
             ResolveExecutor(sensorTypeKey),
             sensorTypeKey,
@@ -82,28 +78,6 @@ public sealed class SensorExecutionService : ISensorExecutionService
             sensorId: null,
             recordObservation: false,
             cancellationToken);
-    }
-
-    private IReadOnlyList<MonitoringElement> BuildLineage(MonitoringElement element)
-    {
-        var lineage = new List<MonitoringElement>();
-        var current = element;
-
-        while (true)
-        {
-            lineage.Add(current);
-
-            if (current.ParentId is not Guid parentId)
-            {
-                break;
-            }
-
-            current = _workspaceStore.FindElement(parentId)
-                ?? throw new InvalidOperationException($"Parent element '{parentId}' could not be found.");
-        }
-
-        lineage.Reverse();
-        return lineage;
     }
 
     private static void ApplyOverrideSettings(MonitoringSettings target, MonitoringSettings source)

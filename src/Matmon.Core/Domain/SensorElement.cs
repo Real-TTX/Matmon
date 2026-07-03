@@ -15,4 +15,11 @@ public sealed class SensorElement : MonitoringElement
     public bool IsPaused { get; set; }
 
     public override MonitoringElementKind Kind => MonitoringElementKind.Sensor;
+
+    public override MonitoringElement Clone()
+    {
+        var clone = new SensorElement(Name, SensorTypeKey, Target) { Id = Id, IsPaused = IsPaused };
+        CopyBaseTo(clone);
+        return clone;
+    }
 }

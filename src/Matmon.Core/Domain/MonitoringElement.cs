@@ -48,6 +48,24 @@ public abstract class MonitoringElement
     public abstract MonitoringElementKind Kind { get; }
 
     public virtual bool CanHaveChildren => false;
+
+    /// <summary>
+    /// Deep, detached copy — mutating the clone (or its <see cref="Settings"/> / children) never
+    /// touches the original. Used by the store's read accessors so callers can read/enumerate a private
+    /// copy without racing writers that mutate the live tree.
+    /// </summary>
+    public abstract MonitoringElement Clone();
+
+    protected void CopyBaseTo(MonitoringElement clone)
+    {
+        clone.Name = Name;
+        clone.Description = Description;
+        clone.Tags = [.. Tags];
+        clone.ParentId = ParentId;
+        clone.Settings = Settings.Clone();
+        clone.TemplateOriginId = TemplateOriginId;
+        clone.AppliedTemplateIds = [.. AppliedTemplateIds];
+    }
 }
 
 public abstract class MonitoringContainerElement : MonitoringElement
@@ -59,4 +77,9 @@ public abstract class MonitoringContainerElement : MonitoringElement
     public override bool CanHaveChildren => true;
 
     public List<MonitoringElement> Children { get; set; } = [];
+
+    protected void CopyChildrenTo(MonitoringContainerElement clone)
+    {
+        clone.Children = Children.Select(child => child.Clone()).ToList();
+    }
 }
