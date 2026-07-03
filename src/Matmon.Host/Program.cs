@@ -235,10 +235,13 @@ if (runtimeOptions.Mode == AppMode.Primary)
         Results.Ok(provider.CreateSnapshot()));
 
     app.MapGet("/api/probes", (IProbeRegistry registry) =>
-        Results.Ok(registry.GetAll()));
+        Results.Ok(registry.GetAll()))
+        .RequireAuthorization(MatmonSecurity.AdminPolicy);
 
+    // Exposes seed admin credentials + probe enrollment tokens — admin-only, not any signed-in user.
     app.MapGet("/api/configuration", (IConfigurationOverviewProvider provider) =>
-        Results.Ok(provider.GetOverview()));
+        Results.Ok(provider.GetOverview()))
+        .RequireAuthorization(MatmonSecurity.AdminPolicy);
 
     app.MapGet("/api/discovery-jobs/{jobId:guid}", (Guid jobId, DiscoveryJobStore discoveryJobs) =>
     {

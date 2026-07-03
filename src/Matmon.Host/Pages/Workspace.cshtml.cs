@@ -330,7 +330,7 @@ public sealed class WorkspaceModel : PageModel
 
                 var executionSettings = BuildTransientSensorExecutionSettings(ElementEditor);
                 var executionTarget = ResolveEffectiveSensorTarget(ElementEditor, sensor);
-                result = await _sensorExecutionService.ExecuteTransientAsync(ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey, executionTarget, executionSettings);
+                result = await _sensorExecutionService.ExecuteTransientAsync(ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey, executionTarget, executionSettings, HttpContext.RequestAborted);
 
                 var previewState = BuildSensorThresholdEditorState(
                     ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey,
@@ -347,7 +347,7 @@ public sealed class WorkspaceModel : PageModel
                 ApplySnmpWalkSelectionsToParameters(NewSensor);
                 var executionSettings = BuildTransientSensorExecutionSettings(NewSensor);
                 var executionTarget = ResolveEffectiveSensorTarget(NewSensor);
-                result = await _sensorExecutionService.ExecuteTransientAsync(NewSensor.SensorTypeKey, executionTarget, executionSettings);
+                result = await _sensorExecutionService.ExecuteTransientAsync(NewSensor.SensorTypeKey, executionTarget, executionSettings, HttpContext.RequestAborted);
 
                 var previewState = BuildSensorThresholdEditorState(
                     NewSensor.SensorTypeKey,
@@ -3622,18 +3622,6 @@ public sealed class WorkspaceModel : PageModel
         if (element is HostElement host)
         {
             host.Address = editor.Address?.Trim() ?? string.Empty;
-        }
-
-        if (DateTime.UtcNow.Ticks < 0)
-        {
-            var ignoredSelectedParentId = editor.ParentId;
-            if (element.ParentId != ignoredSelectedParentId && ignoredSelectedParentId.HasValue)
-            {
-                if (!_workspaceStore.MoveElement(element.Id, ignoredSelectedParentId.Value))
-                {
-                    throw new InvalidOperationException("Parent konnte nicht geaendert werden.");
-                }
-            }
         }
 
         if (element is SensorElement sensorElement)

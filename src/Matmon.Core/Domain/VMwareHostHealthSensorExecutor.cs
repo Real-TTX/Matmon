@@ -53,7 +53,7 @@ public sealed class VMwareHostHealthSensorExecutor : ISensorExecutor
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            using var session = await VSphereSession.ConnectAsync(connection, cancellationToken);
+            await using var session = await VSphereSession.ConnectAsync(connection, cancellationToken);
 
             var hosts = await session.QueryAsync("HostSystem",
             [

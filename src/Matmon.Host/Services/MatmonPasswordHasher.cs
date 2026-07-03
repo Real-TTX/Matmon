@@ -33,7 +33,9 @@ public static class MatmonPasswordHasher
             !string.Equals(parts[0], "pbkdf2-sha256", StringComparison.Ordinal) ||
             !int.TryParse(parts[1], out var iterations))
         {
-            return string.Equals(password, storedHash, StringComparison.Ordinal);
+            // Every password is stored as a pbkdf2 hash (MatmonPasswordHasher.Hash). An unrecognized
+            // format is not a valid credential — never fall back to a plaintext comparison.
+            return false;
         }
 
         try

@@ -974,6 +974,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
     public bool DeleteElement(Guid id)
     {
+        List<Guid> removedSensorIds;
         lock (_gate)
         {
             if (_document.RootProbe.Id == id)
@@ -981,20 +982,38 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 return false;
             }
 
-            if (FindElement(id) is SensorElement sensor &&
+            var target = FindElement(id);
+            if (target is null)
+            {
+                return false;
+            }
+
+            if (target is SensorElement sensor &&
                 string.Equals(sensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
+            // Capture the sensor ids in the subtree so their telemetry can be purged after removal.
+            removedSensorIds = EnumerateElements(target).OfType<SensorElement>().Select(element => element.Id).ToList();
+
             var removed = RemoveChild(_document.RootProbe, id);
-            if (removed)
+            if (!removed)
             {
-                QueueSave(SavePriority.Configuration);
+                return false;
             }
 
-            return removed;
+            QueueSave(SavePriority.Configuration);
         }
+
+        // Purge outside the gate: SQLite I/O must not block the workspace lock, and the GUID ids can
+        // never be reused, so there is no race with a concurrent re-create.
+        foreach (var sensorId in removedSensorIds)
+        {
+            _telemetry.PurgeSensor(sensorId);
+        }
+
+        return true;
     }
 
     public IReadOnlyList<SensorElement> ResolveTargetSensors(string? targetToken)
@@ -1476,11 +1495,22 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
             if (string.IsNullOrWhiteSpace(probe.EnrollmentToken))
             {
-                return true;
+                // A probe with no enrollment token is only ever the local root/master probe, which
+                // executes in-process and never calls the remote /api/probes/* endpoints. Refusing it
+                // here closes an anonymous auth bypass (previously any token — or none — was accepted).
+                return false;
             }
 
-            return string.Equals(probe.EnrollmentToken, probeToken, StringComparison.Ordinal);
+            return !string.IsNullOrEmpty(probeToken) && FixedTimeEquals(probe.EnrollmentToken, probeToken);
         }
+    }
+
+    private static bool FixedTimeEquals(string expected, string provided)
+    {
+        // Constant-time comparison so a probe token cannot be recovered by timing the response.
+        var expectedBytes = System.Text.Encoding.UTF8.GetBytes(expected);
+        var providedBytes = System.Text.Encoding.UTF8.GetBytes(provided);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes);
     }
 
     public void Save()
@@ -1625,11 +1655,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     credential.Values = values is null
                         ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                         : new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+                    credential.HydrationFailed = false;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to decrypt credential bundle {CredentialId}", credential.Id);
                     credential.Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    // Preserve the stored ciphertext: a transient decrypt failure (e.g. missing
+                    // DataProtection keys) must not be re-encrypted as an empty payload on the next save.
+                    credential.HydrationFailed = true;
                 }
             }
         }
@@ -1641,6 +1675,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         {
             foreach (var credential in settings.Credentials)
             {
+                if (credential.HydrationFailed)
+                {
+                    // Decryption failed at load; keep the original ciphertext untouched rather than
+                    // clobbering it with an encryption of the empty in-memory Values.
+                    continue;
+                }
+
                 try
                 {
                     var payload = JsonSerializer.Serialize(credential.Values, FileSerializerOptions);

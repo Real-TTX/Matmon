@@ -106,6 +106,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         MonitoringSettings.TryReadParameter(context.Settings, "unifi.apiKey", out var apiKey);
         MonitoringSettings.TryReadParameter(context.Settings, "unifi.username", out var username);
         MonitoringSettings.TryReadParameter(context.Settings, "unifi.password", out var password);
+        var timeout = context.Settings.Timeout ?? TimeSpan.FromSeconds(15);
 
         var watch = Stopwatch.StartNew();
         try
@@ -117,14 +118,14 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
                     return SensorExecutionResult.Critical(TimeSpan.Zero, "Cloud mode requires the Site Manager API key");
                 }
 
-                using var cloudClient = CreateApiKeyClient(apiKey, verifySsl);
+                using var cloudClient = CreateApiKeyClient(apiKey, verifySsl, timeout);
                 return await ExecuteCloudAsync(cloudClient, context, watch, cancellationToken);
             }
 
             // Local mode: prefer a local API key (integration API), else username + password (controller login).
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
-                using var localClient = CreateApiKeyClient(apiKey, verifySsl);
+                using var localClient = CreateApiKeyClient(apiKey, verifySsl, timeout);
                 return await ExecuteLocalAsync(localClient, context, watch, cancellationToken);
             }
 
@@ -147,9 +148,9 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         }
     }
 
-    private static HttpClient CreateApiKeyClient(string apiKey, bool verifySsl)
+    private static HttpClient CreateApiKeyClient(string apiKey, bool verifySsl, TimeSpan timeout)
     {
-        var client = CreateHttpClient(verifySsl);
+        var client = CreateHttpClient(verifySsl, timeout);
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-KEY", apiKey.Trim());
         client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
         return client;
@@ -213,7 +214,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
             return SensorExecutionResult.Critical(watch.Elapsed, "local mode needs a controller base URL or host target");
         }
 
-        using var client = CreateHttpClient(verifySsl);
+        using var client = CreateHttpClient(verifySsl, context.Settings.Timeout ?? TimeSpan.FromSeconds(15));
         client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
         // UniFi OS login — the auth cookie is stored by the handler's cookie container
@@ -478,7 +479,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         return !string.IsNullOrWhiteSpace(requested) ? requested : firstId ?? string.Empty;
     }
 
-    private static HttpClient CreateHttpClient(bool verifySsl)
+    private static HttpClient CreateHttpClient(bool verifySsl, TimeSpan timeout)
     {
         var handler = new HttpClientHandler();
         if (!verifySsl)
@@ -488,7 +489,9 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
 
         return new HttpClient(handler, disposeHandler: true)
         {
-            Timeout = Timeout.InfiniteTimeSpan
+            // A finite timeout so a hung controller can't pin a polling worker indefinitely; on expiry
+            // HttpClient throws a canceled exception with an internal token, caught as "request timed out".
+            Timeout = timeout
         };
     }
 }

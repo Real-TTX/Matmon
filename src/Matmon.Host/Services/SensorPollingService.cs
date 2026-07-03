@@ -110,7 +110,8 @@ public sealed class SensorPollingService : BackgroundService
         // Second pass: run the due sensors concurrently with a bounded worker pool, so one slow or
         // timing-out sensor no longer blocks the rest of the cycle. Each execution gets its own DI
         // scope; the store serializes the actual observation writes on its own gate.
-        var workers = Math.Max(1, _runtimeOptions.PollingWorkers);
+        // Clamp to a sane range so a misconfigured value can't spawn thousands of concurrent scopes/sockets.
+        var workers = Math.Clamp(_runtimeOptions.PollingWorkers, 1, 256);
         await Parallel.ForEachAsync(
             due,
             new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = stoppingToken },

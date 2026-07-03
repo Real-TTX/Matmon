@@ -62,7 +62,7 @@ public sealed class SensorDetailsModel : PageModel
     {
         try
         {
-            var result = await _sensorExecutionService.ExecuteNowAsync(SensorId);
+            var result = await _sensorExecutionService.ExecuteNowAsync(SensorId, cancellationToken: HttpContext.RequestAborted);
             StatusMessage = $"Run now: {MonitoringStatePresentation.Label(result.State)} - check {result.Duration.TotalMilliseconds:0.#} ms"
                 + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}");
             return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window) });

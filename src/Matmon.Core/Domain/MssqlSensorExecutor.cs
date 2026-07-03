@@ -183,6 +183,12 @@ public sealed class MssqlSensorExecutor : ISensorExecutor
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, $"SQL query timed out after {timeout.TotalSeconds:0.#} seconds");
         }
+        catch (OperationCanceledException)
+        {
+            // Real caller cancellation (e.g. shutdown) is not a sensor fault — don't raise Critical.
+            watch.Stop();
+            return SensorExecutionResult.Unknown("query cancelled");
+        }
         catch (Exception ex)
         {
             watch.Stop();

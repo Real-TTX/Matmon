@@ -121,7 +121,9 @@ public sealed class CertificateChainSensorExecutor : ISensorExecutor
                 policyErrors = errors;
                 return true;
             });
-            await ssl.AuthenticateAsClientAsync(serverName);
+            await ssl.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions { TargetHost = serverName },
+                timeoutCts.Token);
             watch.Stop();
 
             if (ssl.RemoteCertificate is null)

@@ -86,7 +86,7 @@ public sealed class VMwareHealthSensorExecutor : ISensorExecutor
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            using var session = await VSphereSession.ConnectAsync(connection, cancellationToken);
+            await using var session = await VSphereSession.ConnectAsync(connection, cancellationToken);
 
             var hosts = await session.QueryAsync("HostSystem",
                 ["name", "runtime.connectionState", "runtime.powerState"], cancellationToken);
@@ -209,7 +209,7 @@ internal sealed class VSphereObject
 /// Minimal vSphere SOAP (vim25) client: retrieves the service content, logs in (cookie auth via
 /// the handler's cookie container) and queries managed objects through a container view.
 /// </summary>
-internal sealed class VSphereSession : IDisposable
+internal sealed class VSphereSession : IAsyncDisposable
 {
     private const string Vim = "urn:vim25";
 
@@ -218,14 +218,16 @@ internal sealed class VSphereSession : IDisposable
     private readonly string _propertyCollector;
     private readonly string _rootFolder;
     private readonly string _viewManager;
+    private readonly string _sessionManager;
 
-    private VSphereSession(HttpClient client, Uri sdkUri, string propertyCollector, string rootFolder, string viewManager)
+    private VSphereSession(HttpClient client, Uri sdkUri, string propertyCollector, string rootFolder, string viewManager, string sessionManager)
     {
         _client = client;
         _sdkUri = sdkUri;
         _propertyCollector = propertyCollector;
         _rootFolder = rootFolder;
         _viewManager = viewManager;
+        _sessionManager = sessionManager;
     }
 
     public static async Task<VSphereSession> ConnectAsync(VSphereConnection connection, CancellationToken cancellationToken)
@@ -250,14 +252,15 @@ internal sealed class VSphereSession : IDisposable
                 $"<RetrieveServiceContent xmlns=\"{Vim}\"><_this type=\"ServiceInstance\">ServiceInstance</_this></RetrieveServiceContent>",
                 cancellationToken);
             var content = ParseElement(contentXml, "returnval");
+            var sessionManager = ReadMoRef(content, "sessionManager");
             var session = new VSphereSession(
                 client,
                 sdkUri,
                 ReadMoRef(content, "propertyCollector"),
                 ReadMoRef(content, "rootFolder"),
-                ReadMoRef(content, "viewManager"));
+                ReadMoRef(content, "viewManager"),
+                sessionManager);
 
-            var sessionManager = ReadMoRef(content, "sessionManager");
             await PostAsync(client, sdkUri,
                 $"<Login xmlns=\"{Vim}\"><_this type=\"SessionManager\">{Escape(sessionManager)}</_this><userName>{Escape(connection.Username)}</userName><password>{Escape(connection.Password)}</password></Login>",
                 cancellationToken);
@@ -365,5 +368,27 @@ internal sealed class VSphereSession : IDisposable
     private static string Escape(string value) =>
         value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-    public void Dispose() => _client.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        // Best-effort server-side logout so vSphere sessions don't accumulate until they time out.
+        // Bounded by a short deadline so a hung server can't stall shutdown of the poll.
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_sessionManager))
+            {
+                using var logoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await PostAsync(_client, _sdkUri,
+                    $"<Logout xmlns=\"{Vim}\"><_this type=\"SessionManager\">{Escape(_sessionManager)}</_this></Logout>",
+                    logoutCts.Token);
+            }
+        }
+        catch
+        {
+            // ignore — the session will expire on its own
+        }
+        finally
+        {
+            _client.Dispose();
+        }
+    }
 }

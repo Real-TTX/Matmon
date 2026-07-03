@@ -145,17 +145,21 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             ? configuredPort
             : 8006;
 
+        var timeout = context.Settings.Timeout ?? TimeSpan.FromSeconds(15);
+
         var watch = Stopwatch.StartNew();
         try
         {
             using var client = CreateHttpClient(verifySsl);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeout);
             var apiBaseUri = BuildApiBaseUri(context.Target, port);
             var authHeader = BuildAuthorizationHeader(user, tokenId, tokenSecret);
 
             return scope switch
             {
-                "node" => await ExecuteNodeAsync(client, apiBaseUri, context.Settings, authHeader, user, tokenId, context.Target, watch, cancellationToken),
-                _ => await ExecuteClusterAsync(client, apiBaseUri, context.Settings, authHeader, user, tokenId, watch, cancellationToken)
+                "node" => await ExecuteNodeAsync(client, apiBaseUri, context.Settings, authHeader, user, tokenId, context.Target, watch, timeoutCts.Token),
+                _ => await ExecuteClusterAsync(client, apiBaseUri, context.Settings, authHeader, user, tokenId, watch, timeoutCts.Token)
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

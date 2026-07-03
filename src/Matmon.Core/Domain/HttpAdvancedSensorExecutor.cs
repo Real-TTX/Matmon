@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -160,8 +161,8 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
                 : HttpMethod.Get;
 
             using var request = new HttpRequestMessage(method, targetUri);
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeoutCts.Token);
-            var body = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+            var body = await ReadBodyWithLimitAsync(response.Content, MaxBodyBytes, timeoutCts.Token);
             watch.Stop();
 
             var channels = new List<SensorChannelValue>
@@ -224,6 +225,42 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, ex.Message);
         }
+    }
+
+    // Cap on the response body buffered for content checks, so a huge/misbehaving endpoint can't OOM.
+    private const int MaxBodyBytes = 8 * 1024 * 1024;
+
+    private static async Task<string> ReadBodyWithLimitAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while (buffer.Length < maxBytes &&
+            (read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken)) > 0)
+        {
+            var toCopy = (int)Math.Min(read, maxBytes - buffer.Length);
+            buffer.Write(chunk, 0, toCopy);
+        }
+
+        return ResolveEncoding(content.Headers.ContentType?.CharSet).GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+    }
+
+    private static Encoding ResolveEncoding(string? charSet)
+    {
+        if (!string.IsNullOrWhiteSpace(charSet))
+        {
+            try
+            {
+                return Encoding.GetEncoding(charSet.Trim().Trim('"'));
+            }
+            catch
+            {
+                // fall through to UTF-8
+            }
+        }
+
+        return Encoding.UTF8;
     }
 
     private static IReadOnlyList<SensorChannelValue> ExtractChannels(MonitoringSettings settings, string body)

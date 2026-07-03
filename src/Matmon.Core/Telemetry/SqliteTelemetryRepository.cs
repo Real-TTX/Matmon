@@ -688,6 +688,33 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    public int PurgeSensor(Guid sensorId)
+    {
+        var id = sensorId.ToString();
+        lock (_sync)
+        {
+            using var transaction = _connection.BeginTransaction();
+            var removed = 0;
+            foreach (var sql in new[]
+            {
+                "DELETE FROM observation WHERE sensor_id = $sensor;",
+                "DELETE FROM sensor_statistics WHERE sensor_id = $sensor;",
+                "DELETE FROM event WHERE element_id = $sensor;"
+            })
+            {
+                using var cmd = _connection.CreateCommand();
+                cmd.Transaction = transaction;
+                cmd.CommandText = sql;
+                cmd.Parameters.AddWithValue("$sensor", id);
+                removed += cmd.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+            _latestBySensor.Remove(sensorId);
+            return removed;
+        }
+    }
+
     // --- Bulk maintenance / migration / backup -------------------------------
 
     public TelemetryCounts GetCounts()

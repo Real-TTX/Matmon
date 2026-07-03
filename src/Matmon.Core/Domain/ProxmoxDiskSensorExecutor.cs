@@ -61,11 +61,20 @@ public sealed class ProxmoxDiskSensorExecutor : ISensorExecutor
             return SensorExecutionResult.Critical(TimeSpan.Zero, "PVE host / API URL is required");
         }
 
-        if (!MonitoringSettings.TryReadParameter(context.Settings, "pve.user", out var user) || string.IsNullOrWhiteSpace(user) ||
-            !MonitoringSettings.TryReadParameter(context.Settings, "pve.tokenId", out var tokenId) || string.IsNullOrWhiteSpace(tokenId) ||
+        MonitoringSettings.TryReadParameter(context.Settings, "pve.user", out var user);
+        user = (user ?? string.Empty).Trim();
+
+        if (!MonitoringSettings.TryReadParameter(context.Settings, "pve.tokenId", out var tokenId) || string.IsNullOrWhiteSpace(tokenId) ||
             !MonitoringSettings.TryReadParameter(context.Settings, "pve.tokenSecret", out var tokenSecret) || string.IsNullOrWhiteSpace(tokenSecret))
         {
-            return SensorExecutionResult.Critical(TimeSpan.Zero, "Proxmox API user, token name and token secret are required");
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "Proxmox token ID and token secret are required");
+        }
+
+        // A full token ID already carries the user@realm (root@pam!name); the separate API user is
+        // only needed when the Token ID is just the bare name — mirror ProxmoxPveSensorExecutor.
+        if (!tokenId.Contains('!') && string.IsNullOrWhiteSpace(user))
+        {
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "Enter the full Token ID (user@realm!name), or set the API user separately");
         }
 
         var verifySsl = MonitoringSettings.TryReadParameterBool(context.Settings, "pve.verifySsl", out var configuredVerifySsl) && configuredVerifySsl;

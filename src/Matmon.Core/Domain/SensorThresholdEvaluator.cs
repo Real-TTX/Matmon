@@ -1,4 +1,3 @@
-using System.Globalization;
 
 namespace Matmon.Core.Domain;
 
@@ -121,10 +120,5 @@ public static class SensorThresholdEvaluator
         }
 
         return $"{existing}; {addition}";
-    }
-
-    private static string FormatValue(double value)
-    {
-        return value.ToString("0.###", CultureInfo.InvariantCulture);
     }
 }

@@ -124,7 +124,11 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         try
         {
             using var process = StartSshProcess(context.Target.Trim(), username.Trim(), port, context.Settings, timeout, RemoteScript);
-            using var registration = cancellationToken.Register(() =>
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeout);
+            // Fires on both caller cancellation and the timeout deadline, so a hung ssh child is
+            // always killed (Dispose alone does not terminate a still-running process).
+            using var registration = timeoutCts.Token.Register(() =>
             {
                 try
                 {
@@ -138,9 +142,9 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
                 }
             });
 
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).WaitAsync(timeout, cancellationToken);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+            await process.WaitForExitAsync(timeoutCts.Token);
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
             watch.Stop();
@@ -167,8 +171,9 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
 
             return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
         }
-        catch (TimeoutException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            // The linked CTS fired via CancelAfter — a timeout, not a caller cancellation.
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, "ssh timeout");
         }
@@ -192,6 +197,13 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         TimeSpan timeout,
         string script)
     {
+        // Prevent SSH option injection: a target or username beginning with '-' would be parsed by
+        // ssh as an option (e.g. "-oProxyCommand=..."), not as the destination.
+        if (target.StartsWith('-') || username.StartsWith('-'))
+        {
+            throw new InvalidOperationException("ssh host and username must not start with '-'");
+        }
+
         var startInfo = new ProcessStartInfo("ssh")
         {
             RedirectStandardOutput = true,

@@ -29,6 +29,14 @@ public sealed class MonitoringCredentialBundle
     [JsonIgnore]
     public Dictionary<string, string> Values { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Set when decrypting <see cref="ProtectedValues"/> failed at load (e.g. DataProtection keys
+    /// temporarily unavailable). Runtime-only; never persisted. While true the stored ciphertext must
+    /// be preserved as-is on save so a transient decrypt failure cannot destroy the secret.
+    /// </summary>
+    [JsonIgnore]
+    public bool HydrationFailed { get; set; }
+
     public MonitoringCredentialBundle Clone()
     {
         return new MonitoringCredentialBundle
@@ -38,7 +46,8 @@ public sealed class MonitoringCredentialBundle
             Kind = Kind,
             Description = Description,
             ProtectedValues = ProtectedValues,
-            Values = new Dictionary<string, string>(Values, StringComparer.OrdinalIgnoreCase)
+            Values = new Dictionary<string, string>(Values, StringComparer.OrdinalIgnoreCase),
+            HydrationFailed = HydrationFailed
         };
     }
 

@@ -260,6 +260,11 @@ if ($physical) {
                     lastFailureMessage = BuildParseFailureMessage(stdout, stderr, process.ExitCode);
                     if (IsRemoteConnectivityFailure(lastFailureMessage) && candidateUsername != usernameCandidates.Last())
                     {
+                        // Dispose this attempt's process before it is overwritten by the next candidate,
+                        // otherwise each retried username leaks a Process handle.
+                        TryKill(process);
+                        process.Dispose();
+                        process = null;
                         continue;
                     }
 
@@ -1007,7 +1012,9 @@ catch {
         List<SensorChannelValue> channels,
         ref SensorState? stateHint)
     {
-        var regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Multiline);
+        // Bound execution: a user-supplied pattern that catastrophically backtracks must not pin the
+        // polling worker. On expiry this throws RegexMatchTimeoutException, surfaced as a failed result.
+        var regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Multiline, TimeSpan.FromSeconds(2));
         var match = regex.Match(text);
         if (!match.Success)
         {

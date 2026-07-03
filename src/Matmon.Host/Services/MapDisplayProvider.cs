@@ -199,9 +199,8 @@ public sealed class MapDisplayProvider
         var value = tile.Kind is MonitoringMapTileKind.Value or MonitoringMapTileKind.Status
             ? $"{healthy}/{sensorStates.Length}"
             : string.Empty;
-        double? progressPercent = sensorStates.Length == 0
-            ? null
-            : Math.Clamp((double)healthy / sensorStates.Length * 100, 0, 100);
+        // sensorStates is guaranteed non-empty here (the Length == 0 case returned early above).
+        double? progressPercent = Math.Clamp((double)healthy / sensorStates.Length * 100, 0, 100);
         var progressLabel = $"{healthy}/{sensorStates.Length} OK";
 
         return new MapDisplayTileViewModel(

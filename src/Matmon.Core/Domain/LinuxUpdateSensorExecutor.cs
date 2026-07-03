@@ -73,7 +73,11 @@ printf 'updatesAvailable=%s\n' "$([ "$upd" -gt 0 ] 2>/dev/null && echo 1 || echo
         {
             using var process = LinuxSshHealthSensorExecutor.StartSshProcess(
                 context.Target.Trim(), username.Trim(), port, context.Settings, timeout, UpdateScript);
-            using var registration = cancellationToken.Register(() =>
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeout);
+            // Fires on both caller cancellation and the timeout deadline, so a hung ssh child is
+            // always killed (Dispose alone does not terminate a still-running process).
+            using var registration = timeoutCts.Token.Register(() =>
             {
                 try
                 {
@@ -87,9 +91,9 @@ printf 'updatesAvailable=%s\n' "$([ "$upd" -gt 0 ] 2>/dev/null && echo 1 || echo
                 }
             });
 
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).WaitAsync(timeout, cancellationToken);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+            await process.WaitForExitAsync(timeoutCts.Token);
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
             watch.Stop();
@@ -121,8 +125,9 @@ printf 'updatesAvailable=%s\n' "$([ "$upd" -gt 0 ] 2>/dev/null && echo 1 || echo
 
             return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
         }
-        catch (TimeoutException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            // The linked CTS fired via CancelAfter — a timeout, not a caller cancellation.
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, "ssh timeout");
         }

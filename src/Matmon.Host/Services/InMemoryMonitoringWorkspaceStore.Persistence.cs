@@ -207,12 +207,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             try
             {
                 WriteUtf8File(tempPath, json);
-                File.Move(tempPath, _workspacePath, overwrite: true);
-            }
-            catch (Exception moveEx)
-            {
-                _logger.LogWarning(moveEx, "Atomic workspace move failed, falling back to direct write");
-                WriteUtf8File(_workspacePath, json);
+                MoveIntoPlace(tempPath, _workspacePath);
             }
             finally
             {
@@ -227,6 +222,26 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         {
             _logger.LogError(ex, "Failed to save workspace to {WorkspacePath}", _workspacePath);
             throw;
+        }
+    }
+
+    private static void MoveIntoPlace(string tempPath, string destinationPath)
+    {
+        // Retry the atomic move briefly — transient sharing violations (AV / backup holding the file
+        // on Windows) are common. Never fall back to a non-atomic direct write: on failure we let the
+        // exception propagate so the existing, valid workspace file is left intact and the save retries.
+        const int attempts = 4;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(tempPath, destinationPath, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < attempts)
+            {
+                Thread.Sleep(50 * attempt);
+            }
         }
     }
 

@@ -15,6 +15,7 @@ public sealed class DiscoveryJobStore
 
     private readonly ConcurrentDictionary<Guid, DiscoveryJobSnapshot> _jobs = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationSources = new();
+    private readonly object _persistGate = new();
     private readonly ILogger<DiscoveryJobStore> _logger;
     private readonly string _storePath;
 
@@ -49,8 +50,34 @@ public sealed class DiscoveryJobStore
 
         _jobs[job.JobId] = job;
         _cancellationSources[job.JobId] = new CancellationTokenSource();
+        PruneOldJobs();
         PersistRecentJobs();
         return job;
+    }
+
+    // Bound in-memory growth: keep only the most recent jobs, disposing the cancellation sources of
+    // the evicted (old, finished) ones. Without this both dictionaries grow for the process lifetime.
+    private void PruneOldJobs()
+    {
+        var keep = _jobs.Values
+            .OrderByDescending(job => job.CreatedUtc)
+            .Take(PersistedJobLimit)
+            .Select(job => job.JobId)
+            .ToHashSet();
+
+        foreach (var id in _jobs.Keys.ToArray())
+        {
+            if (keep.Contains(id))
+            {
+                continue;
+            }
+
+            _jobs.TryRemove(id, out _);
+            if (_cancellationSources.TryRemove(id, out var source))
+            {
+                source.Dispose();
+            }
+        }
     }
 
     public DiscoveryJobSnapshot? Find(Guid jobId)
@@ -328,25 +355,34 @@ public sealed class DiscoveryJobStore
 
     private void PersistRecentJobs()
     {
-        try
+        // Serialize writers: PersistRecentJobs is called from Create/Cancel/Complete on different
+        // threads, and two concurrent File writes can corrupt the file or throw sharing violations.
+        lock (_persistGate)
         {
-            var directory = Path.GetDirectoryName(_storePath);
-            if (!string.IsNullOrWhiteSpace(directory))
+            try
             {
-                Directory.CreateDirectory(directory);
-            }
+                var directory = Path.GetDirectoryName(_storePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
 
-            var jobs = _jobs.Values
-                .OrderByDescending(job => job.CreatedUtc)
-                .Take(PersistedJobLimit)
-                .Select(CloneJob)
-                .ToArray();
-            var document = new DiscoveryJobStoreDocument(jobs);
-            File.WriteAllText(_storePath, JsonSerializer.Serialize(document, FileJsonOptions));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to persist discovery jobs to {DiscoveryJobStorePath}", _storePath);
+                var jobs = _jobs.Values
+                    .OrderByDescending(job => job.CreatedUtc)
+                    .Take(PersistedJobLimit)
+                    .Select(CloneJob)
+                    .ToArray();
+                var document = new DiscoveryJobStoreDocument(jobs);
+
+                // Write to a temp file then atomically replace, so a crash mid-write can't truncate it.
+                var tempPath = _storePath + ".tmp";
+                File.WriteAllText(tempPath, JsonSerializer.Serialize(document, FileJsonOptions));
+                File.Move(tempPath, _storePath, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist discovery jobs to {DiscoveryJobStorePath}", _storePath);
+            }
         }
     }
 

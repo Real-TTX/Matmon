@@ -128,6 +128,9 @@ public sealed class SlaveSensorWorker : BackgroundService
             var lastExecutedUtc = _lastExecutedUtc.TryGetValue(assignment.SensorId, out var localLastExecuted)
                 ? localLastExecuted
                 : assignment.LastObservationUtc;
+            // Same per-sensor-type fallback cadence the primary's SensorPollingService uses, instead of
+            // a flat 15s, so a secondary polls slow-changing sensors (disks, updates) at a sane rate.
+            var fallbackInterval = SensorScheduleDefaults.Resolve(assignment.SensorTypeKey);
             upcomingExecutions.Add(new SlaveProbeUpcomingExecution(
                 assignment.SensorId,
                 assignment.Name,
@@ -137,11 +140,11 @@ public sealed class SlaveSensorWorker : BackgroundService
                     assignment.Settings,
                     lastExecutedUtc,
                     now,
-                    TimeSpan.FromSeconds(15)),
+                    fallbackInterval),
                 lastExecutedUtc,
                 BuildScheduleSummary(assignment.Settings)));
 
-            if (!MonitoringScheduleCalculator.IsDue(assignment.Settings, lastExecutedUtc, now, TimeSpan.FromSeconds(15)))
+            if (!MonitoringScheduleCalculator.IsDue(assignment.Settings, lastExecutedUtc, now, fallbackInterval))
             {
                 continue;
             }
@@ -159,6 +162,17 @@ public sealed class SlaveSensorWorker : BackgroundService
                 result.Message,
                 executedUtc));
             _lastExecutedUtc[assignment.SensorId] = executedUtc;
+        }
+
+        // Drop last-run bookkeeping for sensors no longer assigned, so the dictionary can't grow
+        // unbounded as sensors are added and removed over the probe's lifetime.
+        if (_lastExecutedUtc.Count > assignments.Sensors.Count)
+        {
+            var assignedIds = assignments.Sensors.Select(sensor => sensor.SensorId).ToHashSet();
+            foreach (var staleId in _lastExecutedUtc.Keys.Where(id => !assignedIds.Contains(id)).ToArray())
+            {
+                _lastExecutedUtc.Remove(staleId);
+            }
         }
 
         _runtimeState.UpdateUpcomingExecutions(upcomingExecutions);

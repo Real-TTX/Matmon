@@ -69,6 +69,9 @@ public interface ITelemetryRepository
 
     int PruneStatistics(Guid sensorId, DateTimeOffset cutoffUtc);
 
+    /// <summary>Removes all telemetry (observations, statistics and events) for a deleted sensor/element. Returns rows removed.</summary>
+    int PurgeSensor(Guid sensorId);
+
     // --- Bulk maintenance, migration and backup ------------------------------
 
     TelemetryCounts GetCounts();
