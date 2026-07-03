@@ -264,4 +264,6 @@ Matmon is under active development. The current focus is building a practical, v
 
 ## License
 
-Matmon is licensed under the [MIT License](LICENSE).
+Matmon is **proprietary** software — see the [LICENSE](LICENSE). Commercial use is
+governed by the applicable Matmon product plan (Free / Business / Enterprise).
+Bundled third-party components keep their own licenses.

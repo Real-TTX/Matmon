@@ -4,7 +4,7 @@ Guidance for working in this repository. Keep it in sync with the code — updat
 
 ## What Matmon is
 
-A lightweight, self-hosted network monitoring platform (a compact PRTG-style alternative) for home / small-business networks. ASP.NET Core on **.NET 10**, C#, Razor Pages UI, Docker-first. MIT licensed. Published image: `ghcr.io/real-ttx/matmon:latest`.
+A lightweight, self-hosted network monitoring platform (a compact PRTG-style alternative) for home / small-business networks. ASP.NET Core on **.NET 10**, C#, Razor Pages UI, Docker-first. **Proprietary** (was MIT; relicensed before any public download — see `LICENSE` and `docs/matmon-cloud-and-licensing.md`). Published images: `ghcr.io/real-ttx/matmon` + Docker Hub (`matmon`).
 
 ## Build / run / verify
 
