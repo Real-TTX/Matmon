@@ -13,13 +13,16 @@ public class ConfigModel : PageModel
 {
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly SummaryReportSender _summaryReportSender;
 
     public ConfigModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
-        IMonitoringWorkspaceStore workspaceStore)
+        IMonitoringWorkspaceStore workspaceStore,
+        SummaryReportSender summaryReportSender)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
+        _summaryReportSender = summaryReportSender;
     }
 
     public ConfigurationOverview Overview { get; private set; } = default!;
@@ -44,6 +47,13 @@ public class ConfigModel : PageModel
 
     [BindProperty]
     public StorageCleanupInput StorageCleanup { get; set; } = new();
+
+    [BindProperty]
+    public SummaryReportInput SummaryReport { get; set; } = new();
+
+    public DateTimeOffset? SummaryReportLastSentUtc { get; private set; }
+
+    public bool SummaryReportHasSmtp { get; private set; }
 
     [BindProperty]
     public IFormFile? BackupUpload { get; set; }
@@ -218,6 +228,57 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "backup" });
     }
 
+    public IActionResult OnPostSaveSummaryReport()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            _workspaceStore.UpdateSummaryReportSettings(new SummaryReportSettings
+            {
+                Enabled = SummaryReport.Enabled,
+                Cadence = SummaryReport.Cadence,
+                HourOfDay = Math.Clamp(SummaryReport.HourOfDay, 0, 23),
+                DayOfWeek = SummaryReport.DayOfWeek,
+                Recipients = (SummaryReport.Recipients ?? string.Empty).Trim(),
+                Subject = string.IsNullOrWhiteSpace(SummaryReport.Subject) ? "Matmon summary report" : SummaryReport.Subject.Trim()
+            });
+            StatusMessage = "Summary report settings saved.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "reports" });
+    }
+
+    public async Task<IActionResult> OnPostSendSummaryReportNowAsync()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var settings = _workspaceStore.GetSummaryReportSettings();
+            var sent = await _summaryReportSender.SendAsync(settings, HttpContext.RequestAborted);
+            StatusMessage = sent
+                ? "Test summary report sent."
+                : "Report not sent — check that recipients and SMTP settings are configured.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(new { tab = "reports" });
+    }
+
     public bool IsActiveTab(string tab)
     {
         return string.Equals(ActiveTab, tab, StringComparison.OrdinalIgnoreCase);
@@ -267,6 +328,7 @@ public class ConfigModel : PageModel
             "probes" => "probes",
             "storage" => "storage",
             "backup" => "backup",
+            "reports" => "reports",
             "users" => "users",
             _ => "general"
         };
@@ -284,6 +346,20 @@ public class ConfigModel : PageModel
     {
         Overview = _configurationOverviewProvider.GetOverview();
         Users = _workspaceStore.GetUsers();
+
+        var reportSettings = _workspaceStore.GetSummaryReportSettings();
+        SummaryReport = new SummaryReportInput
+        {
+            Enabled = reportSettings.Enabled,
+            Cadence = reportSettings.Cadence,
+            HourOfDay = reportSettings.HourOfDay,
+            DayOfWeek = reportSettings.DayOfWeek,
+            Recipients = reportSettings.Recipients,
+            Subject = reportSettings.Subject
+        };
+        SummaryReportLastSentUtc = reportSettings.LastSentUtc;
+        SummaryReportHasSmtp = _workspaceStore.HasEmailNotifications() ||
+            !string.IsNullOrWhiteSpace(_workspaceStore.Workspace.NotificationConfiguration.Email.SmtpHost);
         BackupJobs = _workspaceStore.GetBackupJobs();
         BackupSnapshots = _workspaceStore.GetBackupSnapshots();
         StorageTelemetry = _workspaceStore.GetStorageTelemetryOverview();
@@ -312,4 +388,19 @@ public sealed class StorageCleanupInput
     public StorageCleanupScope Scope { get; set; } = StorageCleanupScope.Telemetry;
 
     public int OlderThanDays { get; set; } = 30;
+}
+
+public sealed class SummaryReportInput
+{
+    public bool Enabled { get; set; }
+
+    public SummaryReportCadence Cadence { get; set; } = SummaryReportCadence.Daily;
+
+    public int HourOfDay { get; set; } = 7;
+
+    public DayOfWeek DayOfWeek { get; set; } = DayOfWeek.Monday;
+
+    public string Recipients { get; set; } = string.Empty;
+
+    public string Subject { get; set; } = "Matmon summary report";
 }
