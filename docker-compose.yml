@@ -5,6 +5,7 @@ services:
       dockerfile: src/Matmon.Host/Dockerfile
     extra_hosts:
       - "pc-terminal:host-gateway"
+      - "host.docker.internal:host-gateway"
     environment:
       Matmon__Mode: Primary
       Matmon__HeartbeatIntervalSeconds: 30
@@ -18,6 +19,10 @@ services:
       Matmon__UnifiCloudApiKey: ${UNIFI_CLOUD_API_KEY:-}
       # Allow-list for the "Local Program" sensor (semicolon-separated files/dirs). Empty = none.
       Matmon__AllowedProgramPaths: ${MATMON_ALLOWED_PROGRAM_PATHS:-}
+      # Matmon.Cloud control-plane link (heartbeat + public status). Real values via .env (gitignored).
+      Matmon__CloudUrl: ${MATMON_CLOUD_URL:-}
+      Matmon__CloudInstanceId: ${MATMON_CLOUD_INSTANCE_ID:-}
+      Matmon__CloudInstanceToken: ${MATMON_CLOUD_INSTANCE_TOKEN:-}
     ports:
       - "8099:8099"
     volumes:

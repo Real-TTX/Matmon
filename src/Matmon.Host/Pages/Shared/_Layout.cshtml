@@ -137,7 +137,9 @@
                             <a asp-area="" asp-page="/Events" class="topnav-link @NavClass("/Events")">Events</a>
                             @if (isAdmin)
                             {
-                                <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">System</a>
+                                var onCloudTab = string.Equals(currentPage, "/Config", StringComparison.OrdinalIgnoreCase) && string.Equals(Context.Request.Query["tab"], "cloud", StringComparison.OrdinalIgnoreCase);
+                                <a asp-area="" asp-page="/Config" class="topnav-link @(string.Equals(currentPage, "/Config", StringComparison.OrdinalIgnoreCase) && !onCloudTab ? "is-active" : "")">System</a>
+                                <a asp-area="" asp-page="/Config" asp-route-tab="cloud" class="topnav-link @(onCloudTab ? "is-active" : "")">Cloud</a>
                             }
                         }
                     }
