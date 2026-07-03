@@ -13,6 +13,9 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// QuestPDF Community license (free for small businesses / < $1M revenue) — required before any PDF gen.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 var runtimeOptions = builder.Configuration.GetSection("Matmon").Get<MatmonRuntimeOptions>() ?? new MatmonRuntimeOptions();
 runtimeOptions.ProbeId ??= Environment.MachineName;
 runtimeOptions.ProbeName ??= Environment.MachineName;
@@ -59,6 +62,7 @@ builder.Services.AddSingleton<NotificationSpooler>();
 builder.Services.AddSingleton<INotificationSink>(sp => sp.GetRequiredService<NotificationSpooler>());
 builder.Services.AddSingleton<INotificationEmailSender, MailKitEmailSender>();
 builder.Services.AddSingleton<SummaryReportDataCollector>();
+builder.Services.AddSingleton<AuditReportPdfBuilder>();
 builder.Services.AddSingleton<SummaryReportSender>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());

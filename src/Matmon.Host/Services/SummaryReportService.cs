@@ -13,7 +13,7 @@ public sealed class SummaryReportDataCollector
         _workspaceStore = workspaceStore;
     }
 
-    public SummaryReportData Collect(DateTimeOffset nowUtc, TimeSpan window)
+    public SummaryReportData Collect(DateTimeOffset nowUtc, TimeSpan window, int maxSensorLines = 10)
     {
         var fromUtc = nowUtc - window;
         var elements = _workspaceStore.GetAllElements();
@@ -83,7 +83,7 @@ public sealed class SummaryReportDataCollector
         var lowestUptime = lines
             .OrderBy(line => line.UptimePercent ?? double.MaxValue)
             .ThenByDescending(line => StateSeverity(line.State))
-            .Take(10)
+            .Take(Math.Max(1, maxSensorLines))
             .ToArray();
 
         var recentEvents = _workspaceStore.GetEvents(200)
@@ -156,19 +156,24 @@ public sealed class SummaryReportDataCollector
 /// <summary>Builds and sends the summary report. Reusable by the scheduler and an on-demand "send now".</summary>
 public sealed class SummaryReportSender
 {
+    private const int PdfSensorLines = 200;
+
     private readonly SummaryReportDataCollector _collector;
     private readonly INotificationEmailSender _emailSender;
+    private readonly AuditReportPdfBuilder _pdfBuilder;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly ILogger<SummaryReportSender> _logger;
 
     public SummaryReportSender(
         SummaryReportDataCollector collector,
         INotificationEmailSender emailSender,
+        AuditReportPdfBuilder pdfBuilder,
         IMonitoringWorkspaceStore workspaceStore,
         ILogger<SummaryReportSender> logger)
     {
         _collector = collector;
         _emailSender = emailSender;
+        _pdfBuilder = pdfBuilder;
         _workspaceStore = workspaceStore;
         _logger = logger;
     }
@@ -189,15 +194,33 @@ public sealed class SummaryReportSender
             return false;
         }
 
-        var window = settings.Cadence == SummaryReportCadence.Weekly ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
-        var data = _collector.Collect(DateTimeOffset.UtcNow, window);
-        var report = SummaryReportBuilder.Build(data);
+        var now = DateTimeOffset.UtcNow;
+        var window = WindowFor(settings.Cadence);
+        var report = SummaryReportBuilder.Build(_collector.Collect(now, window));
         var subject = string.IsNullOrWhiteSpace(settings.Subject) ? report.Subject : settings.Subject;
 
-        await _emailSender.SendAsync(smtp, settings.Recipients, subject, report.TextBody, report.HtmlBody, cancellationToken);
+        IReadOnlyList<EmailAttachment>? attachments = null;
+        if (settings.AttachPdf)
+        {
+            // Collect a fuller sensor list for the PDF than the (short) e-mail body.
+            var pdf = _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines));
+            attachments = [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", pdf, "application/pdf")];
+        }
+
+        await _emailSender.SendAsync(smtp, settings.Recipients, subject, report.TextBody, report.HtmlBody, cancellationToken, attachments);
         _logger.LogInformation("Summary report sent to {Recipients}", settings.Recipients);
         return true;
     }
+
+    /// <summary>Builds the standalone PDF audit report for download (independent of e-mail delivery).</summary>
+    public byte[] BuildAuditPdf(SummaryReportCadence cadence)
+    {
+        var data = _collector.Collect(DateTimeOffset.UtcNow, WindowFor(cadence), PdfSensorLines);
+        return _pdfBuilder.Build(data);
+    }
+
+    private static TimeSpan WindowFor(SummaryReportCadence cadence) =>
+        cadence == SummaryReportCadence.Weekly ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
 
     private EmailNotificationSettings? ResolveSmtp()
     {

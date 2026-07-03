@@ -27,6 +27,9 @@ public sealed class SummaryReportSettings
 
     public string Subject { get; set; } = "Matmon summary report";
 
+    /// <summary>Attach a PDF audit report to the summary e-mail.</summary>
+    public bool AttachPdf { get; set; }
+
     /// <summary>When the last scheduled report was sent (runtime bookkeeping, not user-set).</summary>
     public DateTimeOffset? LastSentUtc { get; set; }
 
@@ -40,6 +43,7 @@ public sealed class SummaryReportSettings
             DayOfWeek = DayOfWeek,
             Recipients = Recipients,
             Subject = Subject,
+            AttachPdf = AttachPdf,
             LastSentUtc = LastSentUtc
         };
     }

@@ -573,6 +573,10 @@
                     <input type="checkbox" asp-for="SummaryReport.Enabled" />
                     <span>Enable the scheduled summary report</span>
                 </label>
+                <label class="workspace-check-field workspace-span-2">
+                    <input type="checkbox" asp-for="SummaryReport.AttachPdf" />
+                    <span>Attach a PDF audit report to the e-mail</span>
+                </label>
                 <label class="workspace-field">
                     <span>Cadence</span>
                     <select asp-for="SummaryReport.Cadence" asp-items="Html.GetEnumSelectList<SummaryReportCadence>()"></select>
@@ -599,6 +603,7 @@
                 <div class="workspace-form-actions workspace-span-2">
                     <button type="submit" class="workspace-submit" asp-page-handler="SaveSummaryReport">@MatmonIcons.Render("check")<span>Save</span></button>
                     <button type="submit" class="workspace-secondary-submit" asp-page-handler="SendSummaryReportNow">@MatmonIcons.Render("mail")<span>Send test now</span></button>
+                    <button type="submit" class="workspace-secondary-submit" asp-page-handler="DownloadAuditPdf">@MatmonIcons.Render("download")<span>Download audit PDF</span></button>
                 </div>
             </form>
         </section>

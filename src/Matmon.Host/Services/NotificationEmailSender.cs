@@ -5,6 +5,8 @@ using MimeKit;
 
 namespace Matmon.Host.Services;
 
+public sealed record EmailAttachment(string FileName, byte[] Content, string ContentType);
+
 public interface INotificationEmailSender
 {
     Task SendAsync(
@@ -13,7 +15,8 @@ public interface INotificationEmailSender
         string subject,
         string textBody,
         string htmlBody,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyList<EmailAttachment>? attachments = null);
 }
 
 public sealed class MailKitEmailSender : INotificationEmailSender
@@ -24,7 +27,8 @@ public sealed class MailKitEmailSender : INotificationEmailSender
         string subject,
         string textBody,
         string htmlBody,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<EmailAttachment>? attachments = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (string.IsNullOrWhiteSpace(settings.SmtpHost))
@@ -65,6 +69,14 @@ public sealed class MailKitEmailSender : INotificationEmailSender
         if (builder.TextBody is null && builder.HtmlBody is null)
         {
             builder.TextBody = string.IsNullOrWhiteSpace(subject) ? "(no content)" : subject;
+        }
+
+        if (attachments is not null)
+        {
+            foreach (var attachment in attachments)
+            {
+                builder.Attachments.Add(attachment.FileName, attachment.Content, MimeKit.ContentType.Parse(attachment.ContentType));
+            }
         }
 
         message.Body = builder.ToMessageBody();

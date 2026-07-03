@@ -244,7 +244,8 @@ public class ConfigModel : PageModel
                 HourOfDay = Math.Clamp(SummaryReport.HourOfDay, 0, 23),
                 DayOfWeek = SummaryReport.DayOfWeek,
                 Recipients = (SummaryReport.Recipients ?? string.Empty).Trim(),
-                Subject = string.IsNullOrWhiteSpace(SummaryReport.Subject) ? "Matmon summary report" : SummaryReport.Subject.Trim()
+                Subject = string.IsNullOrWhiteSpace(SummaryReport.Subject) ? "Matmon summary report" : SummaryReport.Subject.Trim(),
+                AttachPdf = SummaryReport.AttachPdf
             });
             StatusMessage = "Summary report settings saved.";
         }
@@ -277,6 +278,25 @@ public class ConfigModel : PageModel
         }
 
         return RedirectToPage(new { tab = "reports" });
+    }
+
+    public IActionResult OnPostDownloadAuditPdf()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var pdf = _summaryReportSender.BuildAuditPdf(SummaryReport.Cadence);
+            return File(pdf, "application/pdf", $"matmon-audit-{DateTimeOffset.Now:yyyyMMdd-HHmm}.pdf");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            return RedirectToPage(new { tab = "reports" });
+        }
     }
 
     public bool IsActiveTab(string tab)
@@ -355,7 +375,8 @@ public class ConfigModel : PageModel
             HourOfDay = reportSettings.HourOfDay,
             DayOfWeek = reportSettings.DayOfWeek,
             Recipients = reportSettings.Recipients,
-            Subject = reportSettings.Subject
+            Subject = reportSettings.Subject,
+            AttachPdf = reportSettings.AttachPdf
         };
         SummaryReportLastSentUtc = reportSettings.LastSentUtc;
         SummaryReportHasSmtp = _workspaceStore.HasEmailNotifications() ||
@@ -403,4 +424,6 @@ public sealed class SummaryReportInput
     public string Recipients { get; set; } = string.Empty;
 
     public string Subject { get; set; } = "Matmon summary report";
+
+    public bool AttachPdf { get; set; }
 }
