@@ -138,3 +138,31 @@ of externally-safe sensor types.
 To build: an executor allow-list for the cloud probe; per-tenant quota/limits; wire the
 cloud-hosted executor to a tenant's account/instance; surface the Cloud Probe + its
 permitted sensor types in the Primary UI (license-gated).
+
+## 11. Full remote access (UniFi-style) — design for it now, build later
+Goal: operate a Matmon instance **fully through the cloud with the SAME UI** — like
+unifi.ui.com proxying into a local console. Key stance: **the cloud PROXIES the local
+Matmon UI (reverse tunnel); we do NOT rebuild a parallel management UI in the cloud.**
+Same philosophy as Cloud Sensors: reuse one codebase, don't duplicate.
+
+**Tiered, modular access — per user, per instance:**
+1. **Status only** (what exists) — heartbeat/metadata + public page.
+2. **Alerts / ack** — see + acknowledge alerts via the cloud.
+3. **Full access** — the cloud reverse-proxies the local Matmon UI so the user drives the
+   real UI remotely (behind NAT).
+One cloud account → **many instances**, each with a **role** (owner/admin/viewer) +
+**access tier**.
+
+**How Full Access works:** the Primary already connects **outbound** to the cloud. Upgrade
+that to a **persistent bidirectional channel (WebSocket)**; the cloud tunnels the user's
+browser HTTP through it to the local UI. Auth: the cloud (SSO) asserts "user X has role Y on
+instance Z"; the local instance trusts that assertion (signed by the instance link).
+
+**Vorsehen now (cheap, keeps the door open — don't build the tunnel yet):**
+- Cloud stays **portal + proxy**; don't invest in a duplicate cloud-side management UI.
+- Keep the outbound `CloudConnectionService` link **upgradeable to a WS tunnel** (it's the seed).
+- Keep the local Matmon UI **reverse-proxy / base-path friendly** — relative URLs, honor
+  forwarded headers (already configured), no hardcoded absolute hosts.
+- Model **per-instance role + access tier** in the cloud ownership schema when we add roles.
+- **Cloud SSO is the prerequisite** for Full Access (local must trust a cloud-issued identity).
+- Full Access is powerful → per-instance capability checks + audit + strong auth (MFA).
