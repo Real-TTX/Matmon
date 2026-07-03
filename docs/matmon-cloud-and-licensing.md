@@ -82,8 +82,16 @@ Steps already done / next:
 - ✅ Local login switched from *username* to **e-mail + password** (`LoginModel.Email`;
   `ValidateUser` still matches a legacy username for old accounts). This makes the local
   identity key the same as the future cloud identity.
-- ⬜ Cloud IdP (accounts, MFA), instance-claim flow, "Sign in with Matmon Cloud" button,
-  cloud-identity → local-user mapping, offline credential cache, per-instance roles.
+- ✅ **Cloud accounts + instance ownership + roles (multi-tenant base)** — Matmon.Cloud has
+  e-mail/password accounts (PBKDF2) and an `InstanceMembership` model: **one account → many
+  instances**, **one instance → many accounts**, each with a role **Owner/Admin/Viewer**
+  (`InstanceService.AddMember/RemoveMember/ListMembers`, owner-gated; owner membership is
+  created with the instance and backfilled for older ones). The cloud dashboard/instances
+  list show the per-instance role; a Members page grants/revokes access. This is the shared
+  base for cloud-side alerts and later Full Access.
+- ⬜ Cloud IdP proper (OIDC/token exchange + MFA), instance-claim flow, "Sign in with
+  Matmon Cloud" button, cloud-identity → local-user mapping, offline credential cache.
+  (The role model above already carries the per-instance role Full Access will assert.)
 
 ## 5. License enforcement (to build in Matmon first)
 - **License token**: signed (Ed25519/JWT) by Matmon.Cloud; contains tier, probe limit,
