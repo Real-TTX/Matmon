@@ -120,3 +120,21 @@ Steps already done / next:
 
 ## 9. Open inputs needed
 Target region/currency, price points, bootstrapping vs funding, team.
+
+## 10. Backlog — Cloud Sensors ("Cloud Probe")
+Idea (license-gated): a user's Primary shows a **"Cloud Probe"** that IS Matmon.Cloud.
+On it you can create only **specific, approved external sensor types** — Ping, HTTP/HTTPS,
+TCP, DNS, SSL-certificate, NTP — i.e. things that monitor a company **from the outside**
+(is my site up / latency / cert expiry as seen from the internet). Deliberately **not**
+script/SNMP/credentialed/internal sensors (safety + multi-tenant isolation).
+
+Architecture (elegant, unified code): the Matmon.Cloud stack **runs a normal Matmon
+instance** (or reuses the `Matmon.Core` `ISensorExecutor` engine + the secondary-probe
+worker) to actually execute those sensors from the cloud's vantage point. Results flow
+back to the user's Primary as the "Cloud Probe" (same primary↔probe model we already have).
+So: one codebase, the cloud is "just another probe" that only exposes an allow-listed set
+of externally-safe sensor types.
+
+To build: an executor allow-list for the cloud probe; per-tenant quota/limits; wire the
+cloud-hosted executor to a tenant's account/instance; surface the Cloud Probe + its
+permitted sensor types in the Primary UI (license-gated).
