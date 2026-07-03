@@ -21,9 +21,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Prepare image name
+      - name: Configure registries
         shell: bash
-        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          # GHCR is always used (via GITHUB_TOKEN). Docker Hub is used in parallel only when the
+          # DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets are configured — otherwise the build still
+          # succeeds and publishes to GHCR only.
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          if [ -n "${DOCKERHUB_USERNAME}" ]; then
+            echo "DOCKERHUB_ENABLED=true" >> "$GITHUB_ENV"
+            echo "DOCKERHUB_IMAGE=docker.io/${DOCKERHUB_USERNAME,,}/matmon" >> "$GITHUB_ENV"
+          else
+            echo "DOCKERHUB_ENABLED=false" >> "$GITHUB_ENV"
+          fi
 
       - name: Compute version and image tags
         id: version
@@ -47,10 +59,20 @@ jobs:
             extra_tag=""
           fi
 
-          tags="${IMAGE_NAME}:${version}"
-          if [ -n "$extra_tag" ]; then
-            tags="${tags}"$'\n'"${IMAGE_NAME}:${extra_tag}"
+          # Publish the same tags to every configured registry (GHCR + optionally Docker Hub).
+          images="${IMAGE_NAME}"
+          if [ "${DOCKERHUB_ENABLED}" = "true" ]; then
+            images="${images} ${DOCKERHUB_IMAGE}"
           fi
+
+          tags=""
+          for img in $images; do
+            tags="${tags}${img}:${version}"$'\n'
+            if [ -n "$extra_tag" ]; then
+              tags="${tags}${img}:${extra_tag}"$'\n'
+            fi
+          done
+          tags="$(printf '%s' "$tags" | sed '/^$/d')"
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           {
@@ -59,6 +81,8 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "Resolved version ${version} for branch ${branch}"
+          echo "Publishing tags:"
+          echo "${tags}"
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
@@ -67,6 +91,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' && env.DOCKERHUB_ENABLED == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and publish image
         uses: docker/build-push-action@v6
