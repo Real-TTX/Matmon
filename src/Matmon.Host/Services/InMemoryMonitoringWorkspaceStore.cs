@@ -1008,6 +1008,37 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public SummaryReportSettings GetSummaryReportSettings()
+    {
+        lock (_gate)
+        {
+            return _document.SummaryReport.Clone();
+        }
+    }
+
+    public void UpdateSummaryReportSettings(SummaryReportSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        lock (_gate)
+        {
+            // Preserve the runtime LastSentUtc bookkeeping; the caller only supplies the user-set fields.
+            var lastSent = _document.SummaryReport.LastSentUtc;
+            var updated = settings.Clone();
+            updated.LastSentUtc = lastSent;
+            _document.SummaryReport = updated;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    public void MarkSummaryReportSent(DateTimeOffset sentUtc)
+    {
+        lock (_gate)
+        {
+            _document.SummaryReport.LastSentUtc = sentUtc;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
     {
         lock (_gate)
@@ -3268,6 +3299,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public List<MonitoringMap> Maps { get; set; } = [];
 
         public NotificationWorkspaceConfiguration NotificationConfiguration { get; set; } = new();
+
+        public SummaryReportSettings SummaryReport { get; set; } = new();
 
         public List<NotificationSender> NotificationSenders { get; set; } = [];
 

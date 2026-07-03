@@ -186,6 +186,15 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Creates an e-mail sender + receiver + a Warning/Critical rule in one go (setup wizard).</summary>
     void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail);
 
+    /// <summary>The scheduled e-mail summary-report settings (a detached clone).</summary>
+    SummaryReportSettings GetSummaryReportSettings();
+
+    /// <summary>Persists the user-set summary-report settings (preserving the runtime last-sent timestamp).</summary>
+    void UpdateSummaryReportSettings(SummaryReportSettings settings);
+
+    /// <summary>Records that the scheduled summary report was sent at the given time.</summary>
+    void MarkSummaryReportSent(DateTimeOffset sentUtc);
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

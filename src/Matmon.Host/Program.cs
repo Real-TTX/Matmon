@@ -58,6 +58,8 @@ builder.Services.AddSingleton<ITelemetryRepository>(_ => new SqliteTelemetryRepo
 builder.Services.AddSingleton<NotificationSpooler>();
 builder.Services.AddSingleton<INotificationSink>(sp => sp.GetRequiredService<NotificationSpooler>());
 builder.Services.AddSingleton<INotificationEmailSender, MailKitEmailSender>();
+builder.Services.AddSingleton<SummaryReportDataCollector>();
+builder.Services.AddSingleton<SummaryReportSender>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
@@ -146,6 +148,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<BackupSchedulerService>();
     builder.Services.AddHostedService<StatisticsRollupService>();
     builder.Services.AddHostedService<NotificationDispatchService>();
+    builder.Services.AddHostedService<ReportSchedulerService>();
 }
 else
 {

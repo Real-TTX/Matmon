@@ -1,0 +1,278 @@
+using Matmon.Core;
+using Matmon.Core.Domain;
+
+namespace Matmon.Host.Services;
+
+/// <summary>Gathers the data for the summary report from the store + telemetry (uptime, counts, events).</summary>
+public sealed class SummaryReportDataCollector
+{
+    private readonly IMonitoringWorkspaceStore _workspaceStore;
+
+    public SummaryReportDataCollector(IMonitoringWorkspaceStore workspaceStore)
+    {
+        _workspaceStore = workspaceStore;
+    }
+
+    public SummaryReportData Collect(DateTimeOffset nowUtc, TimeSpan window)
+    {
+        var fromUtc = nowUtc - window;
+        var elements = _workspaceStore.GetAllElements();
+        var elementsById = elements.ToDictionary(element => element.Id);
+        var sensors = elements.OfType<SensorElement>().ToArray();
+        var latest = _workspaceStore.GetLatestSensorObservations();
+
+        var workspaceName = elements.OfType<ProbeElement>().FirstOrDefault(probe => probe.ParentId is null)?.Name ?? "Matmon";
+        var probeCount = elements.OfType<ProbeElement>().Count();
+        var pausedIds = sensors.Where(sensor => sensor.IsPaused).Select(sensor => sensor.Id).ToHashSet();
+
+        var errorCount = 0;
+        var warningCount = 0;
+        foreach (var (sensorId, observation) in latest)
+        {
+            if (pausedIds.Contains(sensorId))
+            {
+                continue;
+            }
+
+            switch (observation.State)
+            {
+                case SensorState.Critical:
+                    errorCount++;
+                    break;
+                case SensorState.Warning:
+                    warningCount++;
+                    break;
+            }
+        }
+
+        var (openAlerts, acknowledgedAlerts, _, _) = _workspaceStore.GetActiveAlertCounts();
+
+        var lines = new List<SummaryReportSensorLine>();
+        foreach (var sensor in sensors)
+        {
+            if (sensor.IsPaused)
+            {
+                continue;
+            }
+
+            // Dedupe buckets by window start (statistics are per channel; the state distribution is the
+            // same across a sensor's channels, so one bucket per window avoids double counting).
+            var buckets = _workspaceStore.GetSensorStatistics(sensor.Id)
+                .Where(bucket => bucket.BucketStartUtc >= fromUtc)
+                .GroupBy(bucket => bucket.BucketStartUtc)
+                .Select(group => group.First())
+                .ToArray();
+
+            var healthy = buckets.Sum(bucket => bucket.HealthyCount);
+            var warning = buckets.Sum(bucket => bucket.WarningCount);
+            var critical = buckets.Sum(bucket => bucket.CriticalCount);
+            var stateSamples = healthy + warning + critical;
+            double? uptime = stateSamples > 0 ? (double)(healthy + warning) / stateSamples * 100 : null;
+
+            latest.TryGetValue(sensor.Id, out var observation);
+            var unit = ResolveUnit(observation);
+            lines.Add(new SummaryReportSensorLine(
+                BuildPath(sensor.Id, elementsById),
+                observation?.State ?? SensorState.Unknown,
+                uptime,
+                observation?.Value,
+                unit,
+                buckets.Sum(bucket => bucket.SampleCount)));
+        }
+
+        var lowestUptime = lines
+            .OrderBy(line => line.UptimePercent ?? double.MaxValue)
+            .ThenByDescending(line => StateSeverity(line.State))
+            .Take(10)
+            .ToArray();
+
+        var recentEvents = _workspaceStore.GetEvents(200)
+            .Where(monitoringEvent => monitoringEvent.TimestampUtc >= fromUtc)
+            .Take(25)
+            .Select(monitoringEvent => new SummaryReportEventLine(
+                monitoringEvent.TimestampUtc,
+                monitoringEvent.Kind.ToString(),
+                monitoringEvent.ElementPath,
+                monitoringEvent.Message))
+            .ToArray();
+
+        return new SummaryReportData(
+            workspaceName,
+            fromUtc,
+            nowUtc,
+            probeCount,
+            sensors.Length,
+            pausedIds.Count,
+            openAlerts,
+            acknowledgedAlerts,
+            errorCount,
+            warningCount,
+            lowestUptime,
+            recentEvents);
+    }
+
+    private static string? ResolveUnit(SensorObservation? observation)
+    {
+        if (observation?.Channels is not { Count: > 0 } channels)
+        {
+            return null;
+        }
+
+        return channels.FirstOrDefault(channel => !channel.IsVirtual &&
+                   !string.IsNullOrWhiteSpace(observation.DefaultChannelKey) &&
+                   string.Equals(channel.Key, observation.DefaultChannelKey, StringComparison.OrdinalIgnoreCase))?.Unit
+               ?? channels.FirstOrDefault(channel => channel.IsDefault && !channel.IsVirtual)?.Unit;
+    }
+
+    private static int StateSeverity(SensorState state) => state switch
+    {
+        SensorState.Critical => 3,
+        SensorState.Warning => 2,
+        SensorState.Unknown => 1,
+        _ => 0
+    };
+
+    private static string BuildPath(Guid elementId, IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
+    {
+        var names = new List<string>();
+        var current = elementId;
+        var guard = 0;
+        while (elementsById.TryGetValue(current, out var element) && guard++ < 256)
+        {
+            names.Add(element.Name);
+            if (element.ParentId is not Guid parent)
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        names.Reverse();
+        return string.Join(" / ", names);
+    }
+}
+
+/// <summary>Builds and sends the summary report. Reusable by the scheduler and an on-demand "send now".</summary>
+public sealed class SummaryReportSender
+{
+    private readonly SummaryReportDataCollector _collector;
+    private readonly INotificationEmailSender _emailSender;
+    private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly ILogger<SummaryReportSender> _logger;
+
+    public SummaryReportSender(
+        SummaryReportDataCollector collector,
+        INotificationEmailSender emailSender,
+        IMonitoringWorkspaceStore workspaceStore,
+        ILogger<SummaryReportSender> logger)
+    {
+        _collector = collector;
+        _emailSender = emailSender;
+        _workspaceStore = workspaceStore;
+        _logger = logger;
+    }
+
+    public async Task<bool> SendAsync(SummaryReportSettings settings, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (string.IsNullOrWhiteSpace(settings.Recipients))
+        {
+            _logger.LogWarning("Summary report not sent: no recipients configured");
+            return false;
+        }
+
+        var smtp = ResolveSmtp();
+        if (smtp is null)
+        {
+            _logger.LogWarning("Summary report not sent: no SMTP sender configured");
+            return false;
+        }
+
+        var window = settings.Cadence == SummaryReportCadence.Weekly ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
+        var data = _collector.Collect(DateTimeOffset.UtcNow, window);
+        var report = SummaryReportBuilder.Build(data);
+        var subject = string.IsNullOrWhiteSpace(settings.Subject) ? report.Subject : settings.Subject;
+
+        await _emailSender.SendAsync(smtp, settings.Recipients, subject, report.TextBody, report.HtmlBody, cancellationToken);
+        _logger.LogInformation("Summary report sent to {Recipients}", settings.Recipients);
+        return true;
+    }
+
+    private EmailNotificationSettings? ResolveSmtp()
+    {
+        var workspace = _workspaceStore.Workspace;
+        var configured = workspace.NotificationConfiguration.Email;
+        if (!string.IsNullOrWhiteSpace(configured.SmtpHost))
+        {
+            return configured;
+        }
+
+        var sender = workspace.NotificationSenders.FirstOrDefault(candidate =>
+            candidate.Enabled && candidate.Kind == NotificationEndpointKind.Email && !string.IsNullOrWhiteSpace(candidate.Email.SmtpHost));
+        return sender?.Email;
+    }
+}
+
+/// <summary>Primary-only scheduler: sends the summary report when a scheduled slot has passed.</summary>
+public sealed class ReportSchedulerService : BackgroundService
+{
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(1);
+
+    private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly SummaryReportSender _sender;
+    private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ILogger<ReportSchedulerService> _logger;
+
+    public ReportSchedulerService(
+        IMonitoringWorkspaceStore workspaceStore,
+        SummaryReportSender sender,
+        MatmonRuntimeOptions runtimeOptions,
+        ILogger<ReportSchedulerService> logger)
+    {
+        _workspaceStore = workspaceStore;
+        _sender = sender;
+        _runtimeOptions = runtimeOptions;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (_runtimeOptions.Mode != AppMode.Primary)
+        {
+            return;
+        }
+
+        using var timer = new PeriodicTimer(PollInterval);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            try
+            {
+                var settings = _workspaceStore.GetSummaryReportSettings();
+                if (!SummaryReportSchedule.IsDue(settings, DateTimeOffset.Now))
+                {
+                    continue;
+                }
+
+                if (await _sender.SendAsync(settings, stoppingToken))
+                {
+                    _workspaceStore.MarkSummaryReportSent(DateTimeOffset.UtcNow);
+                }
+                else
+                {
+                    // Mark anyway so a misconfigured report doesn't retry every minute; a fix + the next
+                    // slot will pick it back up.
+                    _workspaceStore.MarkSummaryReportSent(DateTimeOffset.UtcNow);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Summary report scheduler tick failed");
+            }
+        }
+    }
+}
