@@ -27,6 +27,7 @@
         {
             <a class="sensor-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
             <a class="sensor-tab @(Model.IsActiveTab("reports") ? "is-active" : "")" asp-page="/Config" asp-route-tab="reports">Reports</a>
+            <a class="sensor-tab @(Model.IsActiveTab("cloud") ? "is-active" : "")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
         }
         @if (canManageUsers)
         {
@@ -606,6 +607,37 @@
                     <button type="submit" class="workspace-secondary-submit" asp-page-handler="DownloadAuditPdf">@MatmonIcons.Render("download")<span>Download audit PDF</span></button>
                 </div>
             </form>
+        </section>
+    }
+    else if (Model.IsActiveTab("cloud") && canManageSystem)
+    {
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("network")<span>Matmon.Cloud connection</span></h2>
+                <span class="panel-hint">Link this instance to the Matmon.Cloud control plane (heartbeat, public status, notification gateway)</span>
+            </div>
+            <div style="padding:16px 18px;">
+                @if (!Model.CloudUrlConfigured)
+                {
+                    <p class="workspace-inline-note">
+                        Not connected. In Matmon.Cloud, sign in and add an instance, then set these on this server and restart:
+                    </p>
+                    <pre style="background:var(--matmon-surface-soft);border:1px solid var(--matmon-border);border-radius:8px;padding:12px;overflow:auto;">Matmon__CloudUrl=https://your-matmon-cloud
+Matmon__CloudInstanceId=&lt;from the cloud UI&gt;
+Matmon__CloudInstanceToken=&lt;from the cloud UI&gt;</pre>
+                }
+                else
+                {
+                    var ok = string.Equals(Model.CloudConnection.LastStatus, "ok", StringComparison.OrdinalIgnoreCase);
+                    <table style="width:100%;border-collapse:collapse;">
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:180px;">Cloud URL</th><td style="padding:8px 10px;">@Model.CloudUrl</td></tr>
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Instance id</th><td style="padding:8px 10px;">@(Model.CloudConnection.InstanceId?.ToString() ?? "–")</td></tr>
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
+                    </table>
+                    <p class="workspace-inline-note" style="margin-top:12px;">Connection is configured via environment variables and applied on restart. To disconnect, remove <code>Matmon__CloudUrl</code>.</p>
+                }
+            </div>
         </section>
     }
     else if (Model.IsActiveTab("users") && canManageUsers)

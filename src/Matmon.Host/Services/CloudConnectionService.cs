@@ -6,10 +6,11 @@ using Matmon.Core.Domain;
 namespace Matmon.Host.Services;
 
 /// <summary>
-/// Primary-only outbound link to Matmon.Cloud: registers this instance once (storing the returned
-/// token), then sends periodic heartbeats + aggregate metadata (version, host, sensor count, active
-/// alerts). Enabled only when <c>Matmon__CloudUrl</c> is set; fully offline otherwise. Failures are
-/// logged and retried on the next tick — the cloud link must never take the monitor down.
+/// Primary-only outbound link to Matmon.Cloud: sends periodic heartbeats + aggregate metadata (version,
+/// host, sensor count, active alerts) for the instance provisioned in the Matmon.Cloud UI. Enabled only
+/// when <c>Matmon__CloudUrl</c> + <c>Matmon__CloudInstanceId</c> + <c>Matmon__CloudInstanceToken</c> are
+/// set; fully offline otherwise. Failures are recorded + retried — the cloud link never takes the monitor
+/// down. The last outcome is stored in <see cref="CloudConnectionState"/> for the in-app status view.
 /// </summary>
 public sealed class CloudConnectionService : BackgroundService
 {
@@ -41,10 +42,19 @@ public sealed class CloudConnectionService : BackgroundService
             return;
         }
 
-        using var client = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromSeconds(15) };
-        var interval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.HeartbeatIntervalSeconds));
+        if (!Guid.TryParse(_runtimeOptions.CloudInstanceId, out var instanceId) || string.IsNullOrWhiteSpace(_runtimeOptions.CloudInstanceToken))
+        {
+            _workspaceStore.UpdateCloudConnection(new CloudConnectionState
+            {
+                CloudUrl = baseUrl,
+                LastStatus = "not configured (set Matmon__CloudInstanceId + Matmon__CloudInstanceToken from the Matmon.Cloud UI)"
+            });
+            _logger.LogWarning("Matmon.Cloud URL set but instance id/token missing — create the instance in the cloud UI and set Matmon__CloudInstanceId + Matmon__CloudInstanceToken");
+            return;
+        }
 
-        // Let the app finish starting before the first sync.
+        var token = _runtimeOptions.CloudInstanceToken!.Trim();
+
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
@@ -54,15 +64,16 @@ public sealed class CloudConnectionService : BackgroundService
             return;
         }
 
-        _logger.LogInformation("Matmon.Cloud link enabled -> {Url}", baseUrl);
+        using var client = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromSeconds(15) };
+        var interval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.HeartbeatIntervalSeconds));
+        _logger.LogInformation("Matmon.Cloud link enabled -> {Url} (instance {InstanceId})", baseUrl, instanceId);
 
         using var timer = new PeriodicTimer(interval);
         do
         {
             try
             {
-                await EnsureRegisteredAsync(client, baseUrl, stoppingToken);
-                await SendHeartbeatAsync(client, stoppingToken);
+                await SendHeartbeatAsync(client, baseUrl, instanceId, token, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -70,47 +81,19 @@ public sealed class CloudConnectionService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Matmon.Cloud sync failed (will retry)");
+                RecordStatus(baseUrl, instanceId, $"failed: {ex.Message}", heartbeatOk: false);
+                _logger.LogWarning(ex, "Matmon.Cloud heartbeat failed (will retry)");
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task EnsureRegisteredAsync(HttpClient client, string baseUrl, CancellationToken cancellationToken)
+    private async Task SendHeartbeatAsync(HttpClient client, string baseUrl, Guid instanceId, string token, CancellationToken cancellationToken)
     {
-        var state = _workspaceStore.GetCloudConnection();
-        if (state.IsRegistered && string.Equals(state.RegisteredUrl, baseUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        using var response = await client.PostAsJsonAsync("api/instances/register", new CloudRegisterRequest(ResolveInstanceName()), cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var payload = await response.Content.ReadFromJsonAsync<CloudRegisterResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("Empty register response from Matmon.Cloud.");
-
-        _workspaceStore.UpdateCloudConnection(new CloudConnectionState
-        {
-            InstanceId = payload.InstanceId,
-            Token = payload.Token,
-            PublicToken = payload.PublicToken,
-            RegisteredUrl = baseUrl
-        });
-        _logger.LogInformation("Registered with Matmon.Cloud as instance {InstanceId}", payload.InstanceId);
-    }
-
-    private async Task SendHeartbeatAsync(HttpClient client, CancellationToken cancellationToken)
-    {
-        var state = _workspaceStore.GetCloudConnection();
-        if (!state.IsRegistered)
-        {
-            return;
-        }
-
         var sensorCount = _workspaceStore.GetAllElements().OfType<SensorElement>().Count();
         var (openAlerts, _, _, _) = _workspaceStore.GetActiveAlertCounts();
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/instances/{state.InstanceId}/heartbeat")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/instances/{instanceId}/heartbeat")
         {
             Content = JsonContent.Create(new CloudHeartbeatRequest(
                 MatmonVersion.Current,
@@ -119,32 +102,30 @@ public sealed class CloudConnectionService : BackgroundService
                 sensorCount,
                 openAlerts))
         };
-        request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", state.Token);
+        request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
         using var response = await client.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            // Token no longer accepted (cloud reset / instance removed) — clear so we re-register.
-            _logger.LogWarning("Matmon.Cloud rejected the instance token; clearing to re-register");
-            _workspaceStore.UpdateCloudConnection(new CloudConnectionState());
+            RecordStatus(baseUrl, instanceId, "unauthorized (check Matmon__CloudInstanceToken)", heartbeatOk: false);
+            _logger.LogWarning("Matmon.Cloud rejected the instance token");
             return;
         }
 
         response.EnsureSuccessStatusCode();
+        RecordStatus(baseUrl, instanceId, "ok", heartbeatOk: true);
     }
 
-    private string ResolveInstanceName()
+    private void RecordStatus(string baseUrl, Guid instanceId, string status, bool heartbeatOk)
     {
-        if (!string.IsNullOrWhiteSpace(_runtimeOptions.CloudInstanceName))
+        _workspaceStore.UpdateCloudConnection(new CloudConnectionState
         {
-            return _runtimeOptions.CloudInstanceName.Trim();
-        }
-
-        var root = _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault(probe => probe.ParentId is null);
-        return string.IsNullOrWhiteSpace(root?.Name) ? Environment.MachineName : root!.Name;
+            InstanceId = instanceId,
+            CloudUrl = baseUrl,
+            LastStatus = status,
+            LastHeartbeatUtc = heartbeatOk ? DateTimeOffset.UtcNow : _workspaceStore.GetCloudConnection().LastHeartbeatUtc
+        });
     }
 
-    private sealed record CloudRegisterRequest(string Name);
-    private sealed record CloudRegisterResponse(Guid InstanceId, string Token, string PublicToken);
     private sealed record CloudHeartbeatRequest(string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts);
 }

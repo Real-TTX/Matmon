@@ -58,11 +58,15 @@ public sealed class MatmonRuntimeOptions
 
     /// <summary>
     /// Base URL of the Matmon.Cloud control plane (e.g. <c>Matmon__CloudUrl=http://localhost:8055</c>).
-    /// When set, a Primary registers itself once and sends heartbeats + metadata to the cloud
-    /// (dead-man-switch + public dashboard). Empty = fully offline, no cloud connection.
+    /// When set together with <see cref="CloudInstanceId"/> + <see cref="CloudInstanceToken"/>, a Primary
+    /// sends heartbeats + metadata to the cloud (dead-man-switch + public dashboard). Create the instance
+    /// in the Matmon.Cloud UI to obtain the id + token. Empty = fully offline, no cloud connection.
     /// </summary>
     public string? CloudUrl { get; set; }
 
-    /// <summary>Display name reported to Matmon.Cloud (defaults to the root probe / machine name).</summary>
-    public string? CloudInstanceName { get; set; }
+    /// <summary>The instance id issued by Matmon.Cloud (<c>Matmon__CloudInstanceId</c>).</summary>
+    public string? CloudInstanceId { get; set; }
+
+    /// <summary>The secret instance token issued by Matmon.Cloud (<c>Matmon__CloudInstanceToken</c>).</summary>
+    public string? CloudInstanceToken { get; set; }
 }

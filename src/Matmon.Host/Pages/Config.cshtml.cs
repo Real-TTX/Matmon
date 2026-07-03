@@ -14,16 +14,25 @@ public class ConfigModel : PageModel
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly SummaryReportSender _summaryReportSender;
+    private readonly MatmonRuntimeOptions _runtimeOptions;
 
     public ConfigModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
-        SummaryReportSender summaryReportSender)
+        SummaryReportSender summaryReportSender,
+        MatmonRuntimeOptions runtimeOptions)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
         _summaryReportSender = summaryReportSender;
+        _runtimeOptions = runtimeOptions;
     }
+
+    public CloudConnectionState CloudConnection { get; private set; } = new();
+
+    public bool CloudUrlConfigured { get; private set; }
+
+    public string? CloudUrl { get; private set; }
 
     public ConfigurationOverview Overview { get; private set; } = default!;
 
@@ -349,6 +358,7 @@ public class ConfigModel : PageModel
             "storage" => "storage",
             "backup" => "backup",
             "reports" => "reports",
+            "cloud" => "cloud",
             "users" => "users",
             _ => "general"
         };
@@ -378,6 +388,10 @@ public class ConfigModel : PageModel
             Subject = reportSettings.Subject,
             AttachPdf = reportSettings.AttachPdf
         };
+        CloudConnection = _workspaceStore.GetCloudConnection();
+        CloudUrl = _runtimeOptions.CloudUrl;
+        CloudUrlConfigured = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
+
         SummaryReportLastSentUtc = reportSettings.LastSentUtc;
         SummaryReportHasSmtp = _workspaceStore.HasEmailNotifications() ||
             !string.IsNullOrWhiteSpace(_workspaceStore.Workspace.NotificationConfiguration.Email.SmtpHost);
