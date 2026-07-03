@@ -53,6 +53,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 builder.Services.AddSingleton<ITelemetryRepository>(_ => new SqliteTelemetryRepository(telemetryDatabasePath));
+// Notification hand-off queue (no deps → no DI cycle with the store) + SMTP sender. The store enqueues
+// alert transitions via INotificationSink; the Primary-only NotificationDispatchService drains + sends.
+builder.Services.AddSingleton<NotificationSpooler>();
+builder.Services.AddSingleton<INotificationSink>(sp => sp.GetRequiredService<NotificationSpooler>());
+builder.Services.AddSingleton<INotificationEmailSender, MailKitEmailSender>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
@@ -140,6 +145,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<SensorPollingService>();
     builder.Services.AddHostedService<BackupSchedulerService>();
     builder.Services.AddHostedService<StatisticsRollupService>();
+    builder.Services.AddHostedService<NotificationDispatchService>();
 }
 else
 {

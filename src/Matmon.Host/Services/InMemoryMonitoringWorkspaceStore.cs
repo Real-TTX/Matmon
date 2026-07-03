@@ -30,6 +30,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private readonly string _backupDirectoryPath;
     private readonly Timer _saveTimer;
     private readonly ITelemetryRepository _telemetry;
+    private readonly INotificationSink? _notificationSink;
     private WorkspaceDocument _document;
     private DateTimeOffset? _firstDirtyUtc;
     private DateTimeOffset _lastBackupUtc = DateTimeOffset.MinValue;
@@ -44,12 +45,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         MatmonAuthOptions authOptions,
         IDataProtectionProvider dataProtectionProvider,
         ITelemetryRepository telemetry,
-        ILogger<InMemoryMonitoringWorkspaceStore> logger)
+        ILogger<InMemoryMonitoringWorkspaceStore> logger,
+        INotificationSink? notificationSink = null)
     {
         _logger = logger;
         _authOptions = authOptions;
         _runtimeOptions = runtimeOptions;
         _telemetry = telemetry;
+        _notificationSink = notificationSink;
         _credentialProtector = dataProtectionProvider.CreateProtector("Matmon.Credentials");
 
         var configuredPath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
@@ -2982,7 +2985,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         var existing = _document.Alerts.FirstOrDefault(alert => alert.IsActive && alert.ElementId == sensorId);
         if (existing is null)
         {
-            _document.Alerts.Add(new MonitoringAlert
+            var raised = new MonitoringAlert
             {
                 ElementId = sensor.Id,
                 ElementKind = sensor.Kind,
@@ -2992,7 +2995,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 Message = message,
                 FirstSeenUtc = timestampUtc,
                 LastSeenUtc = timestampUtc
-            });
+            };
+            _document.Alerts.Add(raised);
 
             AddEvent(new MonitoringEvent
             {
@@ -3005,6 +3009,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 State = result.State,
                 Message = message
             });
+
+            // Hand the raised alert to the notification dispatcher (non-blocking enqueue). Matching,
+            // rendering and SMTP delivery happen off this hot path in NotificationDispatchService.
+            _notificationSink?.Enqueue(new AlertNotificationEvent(
+                raised.Id, raised.ElementId, raised.State, message, timestampUtc, NotificationTransition.Raised));
             return;
         }
 
