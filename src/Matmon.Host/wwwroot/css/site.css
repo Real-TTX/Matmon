@@ -10378,6 +10378,18 @@ body.credential-modal-open {
   vertical-align: middle;
 }
 
+.sensor-threshold-orphan-pill {
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  border-color: color-mix(in srgb, var(--matmon-warning) 45%, transparent);
+  color: var(--matmon-warning);
+}
+
+/* A channel that has stored config but is no longer reported by the sensor's latest run. */
+.sensor-threshold-card[data-threshold-orphaned="true"] {
+  opacity: 0.72;
+}
+
 .sensor-threshold-virtual-note {
   margin-top: 0.45rem;
   padding: 0.45rem 0.6rem;

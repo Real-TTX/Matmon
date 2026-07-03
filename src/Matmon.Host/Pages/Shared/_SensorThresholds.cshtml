@@ -14,18 +14,31 @@
     }
     else
     {
+        @if (Model.SensorChannelThresholdVisibleCount == 0)
+        {
+            <div class="empty-state">
+                @if (hasFixedChannels)
+                {
+                    <text>No channels yet.</text>
+                }
+                else
+                {
+                    <text>This sensor discovers its channels at runtime — they appear after the first run. Use <strong>Test</strong> to preview them, or add one manually below.</text>
+                }
+            </div>
+        }
         <div class="sensor-threshold-list" data-threshold-list>
             @for (var i = 0; i < Model.SensorChannelThresholdFields.Count; i++)
             {
                 var field = Model.SensorChannelThresholdFields[i];
                 var isHidden = i >= Model.SensorChannelThresholdVisibleCount || field.IsDeleted;
-                <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" data-threshold-virtual="@(field.IsVirtual ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
+                <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" data-threshold-virtual="@(field.IsVirtual ? "true" : "false")" data-threshold-orphaned="@(field.IsOrphaned ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
                     <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDefault" />
                     <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDeleted" />
                     <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsVirtual" />
                     <div class="sensor-threshold-head">
                         <div>
-                            <div class="sensor-threshold-name">@(!string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel")@if (field.IsVirtual){<span class="tree-tag is-mini sensor-threshold-virtual-pill">virtual</span>}</div>
+                            <div class="sensor-threshold-name">@(!string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel")@if (field.IsVirtual){<span class="tree-tag is-mini sensor-threshold-virtual-pill">virtual</span>}@if (field.IsOrphaned){<span class="tree-tag is-mini sensor-threshold-orphan-pill" title="Configured, but not in the sensor's latest run. Delete it if the channel is gone for good.">no longer reported</span>}</div>
                             <div class="sensor-threshold-help">
                                 @(!string.IsNullOrWhiteSpace(field.ChannelKey) ? field.ChannelKey : "channel key")
                                 @if (!string.IsNullOrWhiteSpace(field.Unit))

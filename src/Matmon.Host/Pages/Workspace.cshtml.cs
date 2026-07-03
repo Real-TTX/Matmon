@@ -2818,7 +2818,6 @@ public sealed class WorkspaceModel : PageModel
         IReadOnlyList<WorkspaceSensorChannelThresholdFieldInput> currentFields,
         IReadOnlyList<SensorChannelValue>? observedChannels)
     {
-        const int minimumRows = 4;
         const int maximumRows = 10;
 
         var rows = new List<WorkspaceSensorChannelThresholdFieldInput>();
@@ -2838,6 +2837,10 @@ public sealed class WorkspaceModel : PageModel
             rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, hint.Key, hint.Label, hint.Unit, hint.IsDefault, hint.LogByDefault, hint.IsVirtual, currentFieldMap));
         }
 
+        // A managed key that survived here (not already added as an observed channel) has stored config
+        // but isn't in the latest run. Only flag it "orphaned" when the sensor actually reported channels
+        // this run — for a sensor that has never run, these are legitimate pre-configured thresholds.
+        var hasReportedChannels = observedChannels is { Count: > 0 };
         foreach (var channelKey in EnumerateManagedThresholdChannelKeys(settings))
         {
             if (!usedKeys.Add(channelKey))
@@ -2845,7 +2848,9 @@ public sealed class WorkspaceModel : PageModel
                 continue;
             }
 
-            rows.Add(BuildSensorThresholdField(sensorTypeKey, settings, channelKey, null, null, false, true, false, currentFieldMap));
+            var orphanField = BuildSensorThresholdField(sensorTypeKey, settings, channelKey, null, null, false, true, false, currentFieldMap);
+            orphanField.IsOrphaned = hasReportedChannels;
+            rows.Add(orphanField);
         }
 
         foreach (var field in currentFields)
@@ -2859,9 +2864,14 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var configuredCount = rows.Count(row => HasThresholdValues(row));
+        var realRows = rows.Count(row => !string.IsNullOrWhiteSpace(row.ChannelKey));
         var visibleCount = channelMode == SensorChannelMode.Fixed
             ? rows.Count
-            : Math.Min(maximumRows, Math.Max(minimumRows, configuredCount + 1));
+            // Dynamic: nothing to show until channels exist (reported or configured). Once there are
+            // real rows, show them all + one blank spare for a manual add (capped at the maximum).
+            : realRows == 0
+                ? 0
+                : Math.Min(maximumRows, Math.Max(realRows + 1, configuredCount + 1));
 
         if (channelMode == SensorChannelMode.Dynamic)
         {
@@ -2983,21 +2993,11 @@ public sealed class WorkspaceModel : PageModel
                 }
             ];
         }
-        else if (MonitoringSettings.TryReadParameter(settings, "defaultChannelKey", out var configuredDefaultChannelKey) &&
-            !string.IsNullOrWhiteSpace(configuredDefaultChannelKey))
-        {
-            hints =
-            [
-                new SensorChannelValue
-                {
-                    Key = configuredDefaultChannelKey.Trim(),
-                    Label = HumanizeChannelKey(configuredDefaultChannelKey),
-                    IsDefault = true
-                }
-            ];
-        }
         else
         {
+            // Dynamic sensors (script/local script/…) discover their channels at runtime. Don't invent
+            // a placeholder channel from defaultChannelKey — show nothing until the sensor has actually
+            // run (or the user adds one manually). This is what prevents "phantom" channels in the editor.
             return [];
         }
 
@@ -7097,6 +7097,10 @@ public sealed class WorkspaceSensorChannelThresholdFieldInput
 
     /// <summary>A virtual/derived channel (e.g. <c>sensorState</c>): no user thresholds, but it can be picked as the default channel and given a visual.</summary>
     public bool IsVirtual { get; set; }
+
+    /// <summary>Display-only: the channel has stored config (thresholds/visual/logging) but is no longer
+    /// reported by the sensor's latest run. Rendered as "no longer reported" so it isn't mistaken for a live channel.</summary>
+    public bool IsOrphaned { get; set; }
 
     public bool IsDeleted { get; set; }
 }
