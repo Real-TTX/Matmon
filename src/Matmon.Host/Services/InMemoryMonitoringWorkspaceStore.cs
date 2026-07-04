@@ -1057,6 +1057,67 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public CloudConnectionSettings GetCloudConnectionSettings()
+    {
+        lock (_gate)
+        {
+            return _document.CloudSettings.Clone();
+        }
+    }
+
+    /// <summary>Unprotects the stored instance token (for the cloud connection service). Null if none/unreadable.</summary>
+    public string? GetCloudConnectionToken()
+    {
+        lock (_gate)
+        {
+            var protectedToken = _document.CloudSettings.ProtectedToken;
+            if (string.IsNullOrEmpty(protectedToken))
+            {
+                return null;
+            }
+
+            try
+            {
+                return _credentialProtector.Unprotect(protectedToken);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>Connect/save the cloud link from the UI. A null/blank token keeps the stored one.</summary>
+    public void SetCloudConnectionSettings(string? url, string? instanceId, string? token, bool enabled)
+    {
+        lock (_gate)
+        {
+            var settings = _document.CloudSettings;
+            settings.Url = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+            settings.InstanceId = string.IsNullOrWhiteSpace(instanceId) ? null : instanceId.Trim();
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                settings.ProtectedToken = _credentialProtector.Protect(token.Trim());
+            }
+            settings.Enabled = enabled;
+            settings.Configured = true;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    /// <summary>Disconnect from the UI: disable + drop the token, and mark configured so env no longer re-links.</summary>
+    public void DisconnectCloud()
+    {
+        lock (_gate)
+        {
+            _document.CloudSettings.Enabled = false;
+            _document.CloudSettings.ProtectedToken = null;
+            _document.CloudSettings.Configured = true;
+            _document.Cloud = new CloudConnectionState { LastStatus = "disconnected" };
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
     {
         lock (_gate)
@@ -3321,6 +3382,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public SummaryReportSettings SummaryReport { get; set; } = new();
 
         public CloudConnectionState Cloud { get; set; } = new();
+
+        public CloudConnectionSettings CloudSettings { get; set; } = new();
 
         public List<NotificationSender> NotificationSenders { get; set; } = [];
 

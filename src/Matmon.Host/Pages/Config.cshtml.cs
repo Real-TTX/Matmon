@@ -34,6 +34,15 @@ public class ConfigModel : PageModel
 
     public string? CloudUrl { get; private set; }
 
+    /// <summary>UI-managed cloud link settings (persisted; token not exposed).</summary>
+    public CloudConnectionSettings CloudSettings { get; private set; } = new();
+
+    /// <summary>Whether the env-var bootstrap is set (shown as a hint; the UI takes over once used).</summary>
+    public bool CloudEnvBootstrapSet { get; private set; }
+
+    [BindProperty]
+    public CloudConnectInput CloudConnect { get; set; } = new();
+
     public ConfigurationOverview Overview { get; private set; } = default!;
 
     public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
@@ -289,6 +298,53 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "reports" });
     }
 
+    public IActionResult OnPostCloudConnect()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var url = (CloudConnect.Url ?? string.Empty).Trim();
+        var instanceId = (CloudConnect.InstanceId ?? string.Empty).Trim();
+        var token = (CloudConnect.Token ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(instanceId))
+        {
+            ErrorMessage = "Cloud URL and instance id are required.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        if (!Guid.TryParse(instanceId, out _))
+        {
+            ErrorMessage = "The instance id must be the GUID issued by Matmon.Cloud.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        // A token is required unless one is already stored (editing url/id without re-entering the secret).
+        if (string.IsNullOrWhiteSpace(token) && !_workspaceStore.GetCloudConnectionSettings().HasToken)
+        {
+            ErrorMessage = "The instance token is required to connect.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        _workspaceStore.SetCloudConnectionSettings(url, instanceId, string.IsNullOrWhiteSpace(token) ? null : token, enabled: true);
+        StatusMessage = "Connected to Matmon.Cloud — the first heartbeat is sent within a few seconds.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
+    public IActionResult OnPostCloudDisconnect()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        _workspaceStore.DisconnectCloud();
+        StatusMessage = "Disconnected from Matmon.Cloud.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
     public IActionResult OnPostDownloadAuditPdf()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -389,8 +445,13 @@ public class ConfigModel : PageModel
             AttachPdf = reportSettings.AttachPdf
         };
         CloudConnection = _workspaceStore.GetCloudConnection();
-        CloudUrl = _runtimeOptions.CloudUrl;
-        CloudUrlConfigured = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
+        CloudSettings = _workspaceStore.GetCloudConnectionSettings();
+        CloudEnvBootstrapSet = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
+        // Effective values shown in the form: UI settings once configured, else the env bootstrap.
+        CloudUrl = CloudSettings.Configured ? CloudSettings.Url : _runtimeOptions.CloudUrl;
+        CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);
+        CloudConnect.Url ??= CloudUrl;
+        CloudConnect.InstanceId ??= CloudSettings.Configured ? CloudSettings.InstanceId : _runtimeOptions.CloudInstanceId;
 
         SummaryReportLastSentUtc = reportSettings.LastSentUtc;
         SummaryReportHasSmtp = _workspaceStore.HasEmailNotifications() ||
@@ -423,6 +484,15 @@ public sealed class StorageCleanupInput
     public StorageCleanupScope Scope { get; set; } = StorageCleanupScope.Telemetry;
 
     public int OlderThanDays { get; set; } = 30;
+}
+
+public sealed class CloudConnectInput
+{
+    public string? Url { get; set; }
+
+    public string? InstanceId { get; set; }
+
+    public string? Token { get; set; }
 }
 
 public sealed class SummaryReportInput

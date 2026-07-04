@@ -7,16 +7,21 @@ namespace Matmon.Host.Services;
 
 /// <summary>
 /// Primary-only outbound link to Matmon.Cloud: sends periodic heartbeats + aggregate metadata (version,
-/// host, sensor count, active alerts) for the instance provisioned in the Matmon.Cloud UI. Enabled only
-/// when <c>Matmon__CloudUrl</c> + <c>Matmon__CloudInstanceId</c> + <c>Matmon__CloudInstanceToken</c> are
-/// set; fully offline otherwise. Failures are recorded + retried — the cloud link never takes the monitor
-/// down. The last outcome is stored in <see cref="CloudConnectionState"/> for the in-app status view.
+/// host, sensor count, active alerts). The link is <b>managed in the UI</b> (System → Cloud) and persisted
+/// in the workspace; the environment variables (<c>Matmon__CloudUrl</c>/<c>CloudInstanceId</c>/
+/// <c>CloudInstanceToken</c>) are only a first-run bootstrap until the user connects/disconnects in the UI.
+/// The loop re-reads settings every few seconds, so connect/disconnect take effect without a restart.
+/// Failures are recorded + retried — the cloud link never takes the monitor down.
 /// </summary>
 public sealed class CloudConnectionService : BackgroundService
 {
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
+
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly ILogger<CloudConnectionService> _logger;
+
+    private string? _lastStatus;
 
     public CloudConnectionService(
         IMonitoringWorkspaceStore workspaceStore,
@@ -30,30 +35,10 @@ public sealed class CloudConnectionService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_runtimeOptions.Mode != AppMode.Primary || string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl))
+        if (_runtimeOptions.Mode != AppMode.Primary)
         {
             return;
         }
-
-        var baseUrl = _runtimeOptions.CloudUrl.Trim().TrimEnd('/');
-        if (!Uri.TryCreate(baseUrl + "/", UriKind.Absolute, out var baseUri))
-        {
-            _logger.LogWarning("Matmon__CloudUrl '{Url}' is not a valid absolute URL — cloud link disabled", _runtimeOptions.CloudUrl);
-            return;
-        }
-
-        if (!Guid.TryParse(_runtimeOptions.CloudInstanceId, out var instanceId) || string.IsNullOrWhiteSpace(_runtimeOptions.CloudInstanceToken))
-        {
-            _workspaceStore.UpdateCloudConnection(new CloudConnectionState
-            {
-                CloudUrl = baseUrl,
-                LastStatus = "not configured (set Matmon__CloudInstanceId + Matmon__CloudInstanceToken from the Matmon.Cloud UI)"
-            });
-            _logger.LogWarning("Matmon.Cloud URL set but instance id/token missing — create the instance in the cloud UI and set Matmon__CloudInstanceId + Matmon__CloudInstanceToken");
-            return;
-        }
-
-        var token = _runtimeOptions.CloudInstanceToken!.Trim();
 
         try
         {
@@ -64,16 +49,63 @@ public sealed class CloudConnectionService : BackgroundService
             return;
         }
 
-        using var client = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromSeconds(15) };
-        var interval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.HeartbeatIntervalSeconds));
-        _logger.LogInformation("Matmon.Cloud link enabled -> {Url} (instance {InstanceId})", baseUrl, instanceId);
+        HttpClient? client = null;
+        string? clientBaseUrl = null;
+        var heartbeatInterval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.HeartbeatIntervalSeconds));
+        var lastHeartbeat = DateTimeOffset.MinValue;
 
-        using var timer = new PeriodicTimer(interval);
+        using var timer = new PeriodicTimer(PollInterval);
         do
         {
             try
             {
-                await SendHeartbeatAsync(client, baseUrl, instanceId, token, stoppingToken);
+                var link = ResolveLink();
+
+                if (!link.Enabled)
+                {
+                    if (client is not null)
+                    {
+                        client.Dispose();
+                        client = null;
+                        clientBaseUrl = null;
+                        lastHeartbeat = DateTimeOffset.MinValue;
+                        _logger.LogInformation("Matmon.Cloud link disabled");
+                    }
+
+                    if (link.Status is not null)
+                    {
+                        RecordStatus(link.BaseUrl, link.InstanceId, link.Status, heartbeatOk: false, force: false);
+                    }
+
+                    continue;
+                }
+
+                if (client is null || clientBaseUrl != link.BaseUrl)
+                {
+                    client?.Dispose();
+                    client = new HttpClient { BaseAddress = link.BaseUri, Timeout = TimeSpan.FromSeconds(15) };
+                    clientBaseUrl = link.BaseUrl;
+                    lastHeartbeat = DateTimeOffset.MinValue;
+                    _logger.LogInformation("Matmon.Cloud link enabled -> {Url} (instance {InstanceId})", link.BaseUrl, link.InstanceId);
+                }
+
+                if (DateTimeOffset.UtcNow - lastHeartbeat >= heartbeatInterval)
+                {
+                    lastHeartbeat = DateTimeOffset.UtcNow;
+                    try
+                    {
+                        await SendHeartbeatAsync(client, link.BaseUrl!, link.InstanceId!.Value, link.Token!, stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordStatus(link.BaseUrl, link.InstanceId, $"failed: {ex.Message}", heartbeatOk: false, force: true);
+                        _logger.LogWarning(ex, "Matmon.Cloud heartbeat failed (will retry)");
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
@@ -81,11 +113,57 @@ public sealed class CloudConnectionService : BackgroundService
             }
             catch (Exception ex)
             {
-                RecordStatus(baseUrl, instanceId, $"failed: {ex.Message}", heartbeatOk: false);
-                _logger.LogWarning(ex, "Matmon.Cloud heartbeat failed (will retry)");
+                _logger.LogWarning(ex, "Matmon.Cloud tick failed (will retry)");
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
+
+        client?.Dispose();
+    }
+
+    /// <summary>Resolves the effective link: UI settings once the user has taken over, else env bootstrap.</summary>
+    private ResolvedLink ResolveLink()
+    {
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+
+        string? url;
+        string? instanceIdRaw;
+        string? token;
+        bool enabled;
+
+        if (settings.Configured)
+        {
+            enabled = settings.Enabled;
+            url = settings.Url;
+            instanceIdRaw = settings.InstanceId;
+            token = enabled ? _workspaceStore.GetCloudConnectionToken() : null;
+        }
+        else
+        {
+            url = _runtimeOptions.CloudUrl;
+            instanceIdRaw = _runtimeOptions.CloudInstanceId;
+            token = _runtimeOptions.CloudInstanceToken;
+            enabled = !string.IsNullOrWhiteSpace(url);
+        }
+
+        if (!enabled || string.IsNullOrWhiteSpace(url))
+        {
+            // Cleanly off: DisconnectCloud already recorded "disconnected"; don't clobber it every tick.
+            return ResolvedLink.Off(null, null);
+        }
+
+        var baseUrl = url.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(baseUrl + "/", UriKind.Absolute, out var baseUri))
+        {
+            return ResolvedLink.Off(baseUrl, "invalid cloud url");
+        }
+
+        if (!Guid.TryParse(instanceIdRaw, out var instanceId) || string.IsNullOrWhiteSpace(token))
+        {
+            return ResolvedLink.Off(baseUrl, "not configured (missing instance id/token)");
+        }
+
+        return new ResolvedLink(true, baseUrl, baseUri, instanceId, token.Trim(), null);
     }
 
     private async Task SendHeartbeatAsync(HttpClient client, string baseUrl, Guid instanceId, string token, CancellationToken cancellationToken)
@@ -107,17 +185,24 @@ public sealed class CloudConnectionService : BackgroundService
         using var response = await client.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            RecordStatus(baseUrl, instanceId, "unauthorized (check Matmon__CloudInstanceToken)", heartbeatOk: false);
+            RecordStatus(baseUrl, instanceId, "unauthorized (check the instance token)", heartbeatOk: false, force: true);
             _logger.LogWarning("Matmon.Cloud rejected the instance token");
             return;
         }
 
         response.EnsureSuccessStatusCode();
-        RecordStatus(baseUrl, instanceId, "ok", heartbeatOk: true);
+        RecordStatus(baseUrl, instanceId, "ok", heartbeatOk: true, force: true);
     }
 
-    private void RecordStatus(string baseUrl, Guid instanceId, string status, bool heartbeatOk)
+    /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
+    private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)
     {
+        if (!force && string.Equals(_lastStatus, status, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastStatus = status;
         _workspaceStore.UpdateCloudConnection(new CloudConnectionState
         {
             InstanceId = instanceId,
@@ -125,6 +210,11 @@ public sealed class CloudConnectionService : BackgroundService
             LastStatus = status,
             LastHeartbeatUtc = heartbeatOk ? DateTimeOffset.UtcNow : _workspaceStore.GetCloudConnection().LastHeartbeatUtc
         });
+    }
+
+    private sealed record ResolvedLink(bool Enabled, string? BaseUrl, Uri? BaseUri, Guid? InstanceId, string? Token, string? Status)
+    {
+        public static ResolvedLink Off(string? baseUrl, string? status) => new(false, baseUrl, null, null, null, status);
     }
 
     private sealed record CloudHeartbeatRequest(string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts);

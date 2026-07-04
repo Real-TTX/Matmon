@@ -201,6 +201,18 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Persists the Matmon.Cloud link credentials (after registering).</summary>
     void UpdateCloudConnection(CloudConnectionState state);
 
+    /// <summary>UI-managed cloud link settings (a detached clone; token not exposed as plaintext).</summary>
+    CloudConnectionSettings GetCloudConnectionSettings();
+
+    /// <summary>The unprotected instance token for the cloud link (service use); null if none.</summary>
+    string? GetCloudConnectionToken();
+
+    /// <summary>Connect/save the cloud link from the UI (a blank token keeps the stored one).</summary>
+    void SetCloudConnectionSettings(string? url, string? instanceId, string? token, bool enabled);
+
+    /// <summary>Disconnect the cloud link from the UI (disable + drop token; env no longer re-links).</summary>
+    void DisconnectCloud();
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

@@ -617,25 +617,54 @@
                 <span class="panel-hint">Link this instance to the Matmon.Cloud control plane (heartbeat, public status, notification gateway)</span>
             </div>
             <div style="padding:16px 18px;">
-                @if (!Model.CloudUrlConfigured)
-                {
-                    <p class="workspace-inline-note">
-                        Not connected. In Matmon.Cloud, sign in and add an instance, then set these on this server and restart:
-                    </p>
-                    <pre style="background:var(--matmon-surface-soft);border:1px solid var(--matmon-border);border-radius:8px;padding:12px;overflow:auto;">Matmon__CloudUrl=https://your-matmon-cloud
-Matmon__CloudInstanceId=&lt;from the cloud UI&gt;
-Matmon__CloudInstanceToken=&lt;from the cloud UI&gt;</pre>
-                }
-                else
-                {
+                @{
+                    var linkActive = Model.CloudSettings.Configured ? Model.CloudSettings.Enabled : Model.CloudEnvBootstrapSet;
                     var ok = string.Equals(Model.CloudConnection.LastStatus, "ok", StringComparison.OrdinalIgnoreCase);
-                    <table style="width:100%;border-collapse:collapse;">
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:180px;">Cloud URL</th><td style="padding:8px 10px;">@Model.CloudUrl</td></tr>
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Instance id</th><td style="padding:8px 10px;">@(Model.CloudConnection.InstanceId?.ToString() ?? "–")</td></tr>
+                }
+                @if (linkActive)
+                {
+                    <table style="width:100%;border-collapse:collapse;max-width:640px;">
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:160px;">Cloud URL</th><td style="padding:8px 10px;">@Model.CloudUrl</td></tr>
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Instance id</th><td style="padding:8px 10px;">@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
                     </table>
-                    <p class="workspace-inline-note" style="margin-top:12px;">Connection is configured via environment variables and applied on restart. To disconnect, remove <code>Matmon__CloudUrl</code>.</p>
+                    <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
+                        <button type="submit" class="workspace-danger-submit">Disconnect</button>
+                    </form>
+                }
+                else
+                {
+                    <p class="workspace-inline-note">
+                        Not connected. In Matmon.Cloud, sign in and add an instance (Instances → Add), then copy its URL, id and token here.
+                    </p>
+                }
+
+                <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:18px;max-width:560px;">
+                    <label class="workspace-field">
+                        <span>Cloud URL</span>
+                        <input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://your-matmon-cloud" autocomplete="off" />
+                    </label>
+                    <label class="workspace-field">
+                        <span>Instance id</span>
+                        <input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" />
+                    </label>
+                    <label class="workspace-field">
+                        <span>Instance token@(Model.CloudSettings.HasToken ? " (leave blank to keep the stored one)" : "")</span>
+                        <input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="@(Model.CloudSettings.HasToken ? "••••••••" : "token from the cloud UI")" />
+                    </label>
+                    <button type="submit" class="workspace-submit">@(linkActive ? "Save & reconnect" : "Connect")</button>
+                </form>
+
+                @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)
+                {
+                    <p class="workspace-inline-note" style="margin-top:12px;">
+                        Currently bootstrapped from environment variables. Saving here makes the connection UI-managed — no restart, and the environment variables are then ignored.
+                    </p>
+                }
+                else
+                {
+                    <p class="workspace-inline-note" style="margin-top:12px;">Managed here — connect/disconnect take effect within a few seconds, no restart or environment variables needed.</p>
                 }
             </div>
         </section>
