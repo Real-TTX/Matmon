@@ -649,39 +649,45 @@
                     <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
                         <button type="submit" class="workspace-danger-submit">Disconnect</button>
                     </form>
-                }
-                else
-                {
-                    <p class="workspace-inline-note">
-                        Not connected. In Matmon.Cloud, sign in and add an instance (Instances → Add), then copy its URL, id and token here.
-                    </p>
-                }
-
-                <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:18px;max-width:560px;">
-                    <label class="workspace-field">
-                        <span>Cloud URL</span>
-                        <input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://your-matmon-cloud" autocomplete="off" />
-                    </label>
-                    <label class="workspace-field">
-                        <span>Instance id</span>
-                        <input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" />
-                    </label>
-                    <label class="workspace-field">
-                        <span>Instance token@(Model.CloudSettings.HasToken ? " (leave blank to keep the stored one)" : "")</span>
-                        <input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="@(Model.CloudSettings.HasToken ? "••••••••" : "token from the cloud UI")" />
-                    </label>
-                    <button type="submit" class="workspace-submit">@(linkActive ? "Save & reconnect" : "Connect")</button>
-                </form>
-
-                @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)
-                {
-                    <p class="workspace-inline-note" style="margin-top:12px;">
-                        Currently bootstrapped from environment variables. Saving here makes the connection UI-managed — no restart, and the environment variables are then ignored.
-                    </p>
-                }
-                else
-                {
                     <p class="workspace-inline-note" style="margin-top:12px;">Managed here — connect/disconnect take effect within a few seconds, no restart or environment variables needed.</p>
+                }
+                else
+                {
+                    <p class="workspace-inline-note">Sign in with your Matmon.Cloud account and give this instance a name — it registers itself automatically.</p>
+                    <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:14px;max-width:480px;">
+                        <label class="workspace-field">
+                            <span>Cloud URL</span>
+                            <input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://your-matmon-cloud" autocomplete="off" />
+                        </label>
+                        <label class="workspace-field">
+                            <span>Cloud account e-mail</span>
+                            <input asp-for="CloudProvision.Email" type="email" class="workspace-input" autocomplete="off" />
+                        </label>
+                        <label class="workspace-field">
+                            <span>Password</span>
+                            <input asp-for="CloudProvision.Password" type="password" class="workspace-input" autocomplete="off" />
+                        </label>
+                        <label class="workspace-field">
+                            <span>Instance name</span>
+                            <input asp-for="CloudProvision.Name" class="workspace-input" />
+                        </label>
+                        <button type="submit" class="workspace-submit">Connect</button>
+                    </form>
+
+                    <details style="margin-top:14px;">
+                        <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced — connect with an existing instance id + token</summary>
+                        <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:10px;max-width:560px;">
+                            <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://your-matmon-cloud" autocomplete="off" /></label>
+                            <label class="workspace-field"><span>Instance id</span><input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" /></label>
+                            <label class="workspace-field"><span>Instance token</span><input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="token from the cloud UI" /></label>
+                            <button type="submit" class="workspace-submit">Connect with token</button>
+                        </form>
+                    </details>
+
+                    @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)
+                    {
+                        <p class="workspace-inline-note" style="margin-top:12px;">Currently bootstrapped from environment variables — connecting here makes it UI-managed.</p>
+                    }
                 }
 
                 @if (linkActive)

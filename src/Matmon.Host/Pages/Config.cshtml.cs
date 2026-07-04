@@ -6,11 +6,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using System.Globalization;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace Matmon.Host.Pages;
 
 public class ConfigModel : PageModel
 {
+    private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(20) };
+
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly SummaryReportSender _summaryReportSender;
@@ -46,6 +50,9 @@ public class ConfigModel : PageModel
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
     public int ProbeCount { get; private set; }
+
+    [BindProperty]
+    public CloudProvisionInput CloudProvision { get; set; } = new();
 
     [BindProperty]
     public CloudConnectInput CloudConnect { get; set; } = new();
@@ -358,6 +365,66 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
+    /// <summary>UniFi-style connect: sign in to the cloud account + self-register this instance by name.</summary>
+    public async Task<IActionResult> OnPostCloudProvisionAsync(CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var url = (CloudProvision.Url ?? string.Empty).Trim().TrimEnd('/');
+        var email = (CloudProvision.Email ?? string.Empty).Trim();
+        var password = CloudProvision.Password ?? string.Empty;
+        var name = (CloudProvision.Name ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            ErrorMessage = "Cloud URL, e-mail and password are required.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            ErrorMessage = "The cloud URL is not a valid address.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        try
+        {
+            using var response = await CloudHttp.PostAsJsonAsync($"{url}/api/provision", new { email, password, name }, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                ErrorMessage = "Cloud sign-in failed — check your e-mail and password.";
+                return RedirectToPage(new { tab = "cloud" });
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorMessage = $"Cloud provisioning failed ({(int)response.StatusCode}).";
+                return RedirectToPage(new { tab = "cloud" });
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<ProvisionResult>(cancellationToken);
+            if (result is null || string.IsNullOrWhiteSpace(result.InstanceId) || string.IsNullOrWhiteSpace(result.Token))
+            {
+                ErrorMessage = "Matmon.Cloud returned an unexpected response.";
+                return RedirectToPage(new { tab = "cloud" });
+            }
+
+            _workspaceStore.SetCloudConnectionSettings(url, result.InstanceId, result.Token, enabled: true);
+            StatusMessage = $"Connected to Matmon.Cloud as '{name}'.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Could not reach Matmon.Cloud: {ex.Message}";
+        }
+
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
+    private sealed record ProvisionResult(string? InstanceId, string? Token);
+
     public IActionResult OnPostCloudRelay()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -499,6 +566,8 @@ public class ConfigModel : PageModel
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);
         CloudConnect.Url ??= CloudUrl;
         CloudConnect.InstanceId ??= CloudSettings.Configured ? CloudSettings.InstanceId : _runtimeOptions.CloudInstanceId;
+        CloudProvision.Url ??= CloudUrl;
+        CloudProvision.Name ??= _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
         CloudRelay.Recipients ??= CloudSettings.RelayRecipients;
         if (!Request.HasFormContentType)
         {
@@ -537,6 +606,17 @@ public sealed class StorageCleanupInput
     public StorageCleanupScope Scope { get; set; } = StorageCleanupScope.Telemetry;
 
     public int OlderThanDays { get; set; } = 30;
+}
+
+public sealed class CloudProvisionInput
+{
+    public string? Url { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? Password { get; set; }
+
+    public string? Name { get; set; }
 }
 
 public sealed class CloudConnectInput
