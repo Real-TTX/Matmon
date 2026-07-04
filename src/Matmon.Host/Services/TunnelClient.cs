@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Matmon.Core;
@@ -21,7 +22,15 @@ public sealed class TunnelClient : BackgroundService
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly IServer _server;
     private readonly ILogger<TunnelClient> _logger;
-    private readonly HttpClient _local = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    // Decompress the local response so the tunnel always carries plain bytes: the cloud rewrites text
+    // bodies and the browser gets a decodable stream (the static-asset handler otherwise returns brotli/gzip
+    // that, once Content-Encoding is dropped in transit, the browser can't decode → "CSS doesn't load").
+    private readonly HttpClient _local = new(new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        AutomaticDecompression = DecompressionMethods.All
+    })
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
@@ -161,7 +170,10 @@ public sealed class TunnelClient : BackgroundService
 
         foreach (var (key, values) in request.Headers)
         {
-            if (key.Equals("Host", StringComparison.OrdinalIgnoreCase))
+            // Host: let HttpClient set it from the local base. Accept-Encoding: let AutomaticDecompression
+            // manage it (we forward decompressed plain bytes), else the browser's br/gzip pref leaks through.
+            if (key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("Accept-Encoding", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
