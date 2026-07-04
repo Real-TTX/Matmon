@@ -55,6 +55,9 @@ public class ConfigModel : PageModel
     public CloudProvisionInput CloudProvision { get; set; } = new();
 
     [BindProperty]
+    public string? CloudRenameName { get; set; }
+
+    [BindProperty]
     public CloudConnectInput CloudConnect { get; set; } = new();
 
     [BindProperty]
@@ -414,6 +417,49 @@ public class ConfigModel : PageModel
 
             _workspaceStore.SetCloudConnectionSettings(url, result.InstanceId, result.Token, enabled: true);
             StatusMessage = $"Connected to Matmon.Cloud as '{name}'.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Could not reach Matmon.Cloud: {ex.Message}";
+        }
+
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
+    public async Task<IActionResult> OnPostCloudRenameAsync(CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var name = (CloudRenameName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            ErrorMessage = "Enter a display name.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        var url = (settings.Url ?? string.Empty).Trim().TrimEnd('/');
+        var token = _workspaceStore.GetCloudConnectionToken();
+        if (!settings.Enabled || string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(settings.InstanceId) || string.IsNullOrWhiteSpace(token))
+        {
+            ErrorMessage = "Connect to Matmon.Cloud first, then set the display name.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/instances/{settings.InstanceId}/name")
+            {
+                Content = JsonContent.Create(new { name })
+            };
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cancellationToken);
+            StatusMessage = response.IsSuccessStatusCode
+                ? $"Cloud display name set to '{name}'."
+                : $"Matmon.Cloud rejected the rename ({(int)response.StatusCode}).";
         }
         catch (Exception ex)
         {

@@ -646,6 +646,14 @@
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
                     </table>
+                    <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;max-width:480px;">
+                        <label class="workspace-field">
+                            <span>Cloud display name</span>
+                            <input asp-for="CloudRenameName" class="workspace-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
+                        </label>
+                        <button type="submit" class="workspace-submit">Update name</button>
+                        <p class="workspace-inline-note" style="margin-top:8px;">Sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
+                    </form>
                     <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
                         <button type="submit" class="workspace-danger-submit">Disconnect</button>
                     </form>
