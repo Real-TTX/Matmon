@@ -641,7 +641,13 @@
                 @if (linkActive)
                 {
                     <table style="width:100%;border-collapse:collapse;max-width:640px;">
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:160px;">Cloud URL</th><td style="padding:8px 10px;">@Model.CloudUrl</td></tr>
+                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:160px;">Cloud URL</th>
+                            <td style="padding:8px 10px;">
+                                <form method="post" asp-page-handler="CloudUrl" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                    <input asp-for="CloudConnect.Url" class="workspace-input" style="min-width:260px;" autocomplete="off" />
+                                    <button type="submit" class="workspace-secondary-submit">Update</button>
+                                </form>
+                            </td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Instance id</th><td style="padding:8px 10px;">@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
@@ -665,7 +671,7 @@
                     <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:14px;max-width:480px;">
                         <label class="workspace-field">
                             <span>Cloud URL</span>
-                            <input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://your-matmon-cloud" autocomplete="off" />
+                            <input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" />
                         </label>
                         <label class="workspace-field">
                             <span>Cloud account e-mail</span>
@@ -685,7 +691,7 @@
                     <details style="margin-top:14px;">
                         <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced — connect with an existing instance id + token</summary>
                         <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:10px;max-width:560px;">
-                            <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://your-matmon-cloud" autocomplete="off" /></label>
+                            <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Instance id</span><input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Instance token</span><input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="token from the cloud UI" /></label>
                             <button type="submit" class="workspace-submit">Connect with token</button>

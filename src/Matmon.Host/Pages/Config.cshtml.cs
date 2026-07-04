@@ -15,6 +15,9 @@ public class ConfigModel : PageModel
 {
     private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(20) };
 
+    /// <summary>Official Matmon.Cloud address — the default the connect form is prefilled with.</summary>
+    public const string DefaultCloudUrl = "https://cloud.matmon.eu";
+
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly SummaryReportSender _summaryReportSender;
@@ -356,6 +359,33 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
+    public IActionResult OnPostCloudUrl()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var url = (CloudConnect.Url ?? string.Empty).Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            ErrorMessage = "Enter a valid cloud URL.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        if (string.IsNullOrWhiteSpace(settings.InstanceId) || !settings.HasToken)
+        {
+            ErrorMessage = "Connect to Matmon.Cloud first.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        // Keep the same instance id + token (null preserves the stored token); only the address changes.
+        _workspaceStore.SetCloudConnectionSettings(url, settings.InstanceId, null, enabled: true);
+        StatusMessage = $"Cloud URL updated to {url}.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
     public IActionResult OnPostCloudDisconnect()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -610,9 +640,9 @@ public class ConfigModel : PageModel
         // Effective values shown in the form: UI settings once configured, else the env bootstrap.
         CloudUrl = CloudSettings.Configured ? CloudSettings.Url : _runtimeOptions.CloudUrl;
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);
-        CloudConnect.Url ??= CloudUrl;
+        CloudConnect.Url ??= string.IsNullOrWhiteSpace(CloudUrl) ? DefaultCloudUrl : CloudUrl;
         CloudConnect.InstanceId ??= CloudSettings.Configured ? CloudSettings.InstanceId : _runtimeOptions.CloudInstanceId;
-        CloudProvision.Url ??= CloudUrl;
+        CloudProvision.Url ??= string.IsNullOrWhiteSpace(CloudUrl) ? DefaultCloudUrl : CloudUrl;
         CloudProvision.Name ??= _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
         CloudRelay.Recipients ??= CloudSettings.RelayRecipients;
         if (!Request.HasFormContentType)
