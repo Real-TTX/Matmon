@@ -3,6 +3,8 @@ using Matmon.Core.Sample;
 
 namespace Matmon.Host.Services;
 
+public enum ChangePasswordResult { Success, WrongCurrent, TooShort, NotFound }
+
 public interface IMonitoringWorkspaceStore
 {
     MonitoringWorkspaceSnapshot Workspace { get; }
@@ -27,6 +29,15 @@ public interface IMonitoringWorkspaceStore
 
     /// <summary>Find-or-create a user for a "Sign in with Matmon Cloud" identity (SSO). Existing accounts win.</summary>
     MatmonUser UpsertCloudUser(string email, MatmonUserRole role);
+
+    /// <summary>Whether the user has a local password set (SSO-only accounts start without one).</summary>
+    bool HasLocalPassword(Guid userId);
+
+    /// <summary>
+    /// Self-service: set/change the signed-in user's own local password. If they already have one, the
+    /// current password must be supplied; SSO-only accounts (no password) may set one for offline login.
+    /// </summary>
+    ChangePasswordResult ChangeOwnPassword(Guid userId, string? currentPassword, string newPassword);
 
     bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password);
 

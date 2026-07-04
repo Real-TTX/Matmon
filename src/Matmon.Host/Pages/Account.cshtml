@@ -1,0 +1,50 @@
+@page "/account"
+@model AccountModel
+@{
+    ViewData["Title"] = "Account";
+    ViewData["WorkspaceSummarySuppress"] = "true";
+}
+
+<section class="dashboard-shell" style="max-width:480px;">
+    <div class="page-header">
+        <div class="page-title">@MatmonIcons.Render("lock")<h1>Account</h1></div>
+        <span class="panel-hint">@Model.AccountName</span>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <div class="panel">
+        <div class="panel-header"><h2 class="section-title"><span>@(Model.HasPassword ? "Change password" : "Set a local password")</span></h2></div>
+        <div style="padding:16px 18px;">
+            @if (!Model.HasPassword)
+            {
+                <p class="panel-hint" style="margin-top:0;">This account signs in via Matmon.Cloud. Set a local password so you can also sign in with e-mail + password when the cloud is unreachable.</p>
+            }
+            <form method="post" class="workspace-form">
+                @if (Model.HasPassword)
+                {
+                    <label class="workspace-field">
+                        <span>Current password</span>
+                        <input asp-for="CurrentPassword" type="password" class="workspace-input" autocomplete="current-password" />
+                    </label>
+                }
+                <label class="workspace-field">
+                    <span>New password (min. 8 characters)</span>
+                    <input asp-for="NewPassword" type="password" class="workspace-input" autocomplete="new-password" />
+                </label>
+                <label class="workspace-field">
+                    <span>Confirm new password</span>
+                    <input asp-for="ConfirmPassword" type="password" class="workspace-input" autocomplete="new-password" />
+                </label>
+                <button type="submit" class="workspace-submit">@(Model.HasPassword ? "Change password" : "Set password")</button>
+            </form>
+        </div>
+    </div>
+</section>

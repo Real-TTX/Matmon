@@ -46,6 +46,12 @@ public sealed class MatmonPageWriteGuard : IAsyncPageFilter
             return MatmonSecurity.CanOperateAlerts(context.HttpContext.User);
         }
 
+        // Self-service account page (e.g. set/change your own local password) — any signed-in user.
+        if (string.Equals(page, "/Account", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.HttpContext.User.Identity?.IsAuthenticated == true;
+        }
+
         return MatmonSecurity.IsAdmin(context.HttpContext.User);
     }
 }

@@ -265,6 +265,45 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public bool HasLocalPassword(Guid userId)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            return user is not null && !string.IsNullOrWhiteSpace(user.PasswordHash);
+        }
+    }
+
+    public ChangePasswordResult ChangeOwnPassword(Guid userId, string? currentPassword, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+        {
+            return ChangePasswordResult.TooShort;
+        }
+
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            if (user is null)
+            {
+                return ChangePasswordResult.NotFound;
+            }
+
+            // If a local password already exists, require the current one; SSO-only accounts (no hash)
+            // may set a first password without one (they're already authenticated via SSO).
+            if (!string.IsNullOrWhiteSpace(user.PasswordHash) &&
+                !MatmonPasswordHasher.Verify(currentPassword ?? string.Empty, user.PasswordHash))
+            {
+                return ChangePasswordResult.WrongCurrent;
+            }
+
+            user.PasswordHash = MatmonPasswordHasher.Hash(newPassword);
+            user.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return ChangePasswordResult.Success;
+        }
+    }
+
     public bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password)
     {
         lock (_gate)
