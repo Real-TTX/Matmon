@@ -1216,6 +1216,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Enable/disable Full Access (the outbound UI tunnel).</summary>
+    public void SetCloudFullAccess(bool enabled)
+    {
+        lock (_gate)
+        {
+            _document.CloudSettings.FullAccessEnabled = enabled;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public string? GetLicenseToken()
     {
         lock (_gate)

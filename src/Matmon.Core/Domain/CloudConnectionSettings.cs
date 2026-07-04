@@ -31,6 +31,9 @@ public sealed class CloudConnectionSettings
     /// <summary>Comma/semicolon-separated recipients the cloud gateway delivers relayed alerts to.</summary>
     public string? RelayRecipients { get; set; }
 
+    /// <summary>Full Access: keep an outbound tunnel open so the UI is operable through the cloud.</summary>
+    public bool FullAccessEnabled { get; set; }
+
     /// <summary>Whether a token is stored (for display; not persisted).</summary>
     [JsonIgnore]
     public bool HasToken => !string.IsNullOrEmpty(ProtectedToken);
@@ -43,6 +46,7 @@ public sealed class CloudConnectionSettings
         Enabled = Enabled,
         Configured = Configured,
         RelayAlerts = RelayAlerts,
-        RelayRecipients = RelayRecipients
+        RelayRecipients = RelayRecipients,
+        FullAccessEnabled = FullAccessEnabled
     };
 }

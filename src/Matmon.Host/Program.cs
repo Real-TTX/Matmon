@@ -155,6 +155,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<NotificationDispatchService>();
     builder.Services.AddHostedService<ReportSchedulerService>();
     builder.Services.AddHostedService<CloudConnectionService>();
+    builder.Services.AddHostedService<TunnelClient>();
 }
 else
 {

@@ -53,6 +53,9 @@ public class ConfigModel : PageModel
     [BindProperty]
     public CloudRelayInput CloudRelay { get; set; } = new();
 
+    [BindProperty]
+    public bool CloudFullAccess { get; set; }
+
     public ConfigurationOverview Overview { get; private set; } = default!;
 
     public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
@@ -373,6 +376,20 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
+    public IActionResult OnPostCloudFullAccess()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        _workspaceStore.SetCloudFullAccess(CloudFullAccess);
+        StatusMessage = CloudFullAccess
+            ? "Full Access enabled — you can now operate this instance from Matmon.Cloud."
+            : "Full Access disabled.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
     public IActionResult OnPostDownloadAuditPdf()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -486,6 +503,7 @@ public class ConfigModel : PageModel
         if (!Request.HasFormContentType)
         {
             CloudRelay.RelayAlerts = CloudSettings.RelayAlerts;
+            CloudFullAccess = CloudSettings.FullAccessEnabled;
         }
 
         SummaryReportLastSentUtc = reportSettings.LastSentUtc;

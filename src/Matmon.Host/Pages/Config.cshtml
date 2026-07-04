@@ -700,6 +700,17 @@
                         </label>
                         <button type="submit" class="workspace-submit">Save relay settings</button>
                     </form>
+
+                    <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
+                    <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Full Access</span></h3>
+                    <p class="panel-hint" style="margin-bottom:12px;">Keep an outbound tunnel open so you can operate this instance's UI directly from Matmon.Cloud (no inbound port). You still sign in on this instance.</p>
+                    <form method="post" asp-page-handler="CloudFullAccess" class="workspace-form" style="max-width:560px;">
+                        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+                            <input asp-for="CloudFullAccess" type="checkbox" />
+                            <span>Allow operating this instance through Matmon.Cloud</span>
+                        </label>
+                        <button type="submit" class="workspace-submit">Save Full Access</button>
+                    </form>
                 }
             </div>
         </section>

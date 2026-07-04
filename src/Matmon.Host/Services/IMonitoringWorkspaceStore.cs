@@ -230,6 +230,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Enable/disable relaying alerts to the cloud gateway + set its recipients.</summary>
     void SetCloudRelaySettings(bool relayAlerts, string? recipients);
 
+    /// <summary>Enable/disable Full Access (the outbound UI tunnel).</summary>
+    void SetCloudFullAccess(bool enabled);
+
     /// <summary>The last cloud-issued license token (verified offline); null if none.</summary>
     string? GetLicenseToken();
 
