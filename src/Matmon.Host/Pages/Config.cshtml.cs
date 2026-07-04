@@ -1,6 +1,7 @@
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
 using Matmon.Host.Ui;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -8,6 +9,9 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace Matmon.Host.Pages;
 
@@ -23,19 +27,22 @@ public class ConfigModel : PageModel
     private readonly SummaryReportSender _summaryReportSender;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly ILicenseService _licenseService;
+    private readonly IDataProtectionProvider _dataProtection;
 
     public ConfigModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
         SummaryReportSender summaryReportSender,
         MatmonRuntimeOptions runtimeOptions,
-        ILicenseService licenseService)
+        ILicenseService licenseService,
+        IDataProtectionProvider dataProtection)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
         _summaryReportSender = summaryReportSender;
         _runtimeOptions = runtimeOptions;
         _licenseService = licenseService;
+        _dataProtection = dataProtection;
     }
 
     public CloudConnectionState CloudConnection { get; private set; } = new();
@@ -396,6 +403,59 @@ public class ConfigModel : PageModel
         _workspaceStore.DisconnectCloud();
         StatusMessage = "Disconnected from Matmon.Cloud.";
         return RedirectToPage(new { tab = "cloud" });
+    }
+
+    /// <summary>
+    /// UniFi-style connect (OAuth): redirect the admin's browser to the cloud consent page to claim this
+    /// instance. PKCE — we keep the verifier in a data-protected cookie and send only the challenge; the
+    /// callback (<see cref="CloudClaimModel"/>) redeems the returned code for the id + token. The account
+    /// password never touches this instance.
+    /// </summary>
+    public IActionResult OnPostCloudClaim()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var url = (CloudProvision.Url ?? string.Empty).Trim().TrimEnd('/');
+        var name = (CloudProvision.Name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = Environment.MachineName;
+        }
+
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var cloudUri)
+            || (cloudUri.Scheme != Uri.UriSchemeHttp && cloudUri.Scheme != Uri.UriSchemeHttps))
+        {
+            ErrorMessage = "The cloud URL is not a valid address.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        var nonce = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(24));
+        var verifier = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(32));
+        var challenge = CloudClaimFlow.Challenge(verifier);
+
+        var payload = JsonSerializer.Serialize(new CloudClaimFlow.State(nonce, verifier, url));
+        var protector = _dataProtection.CreateProtector(CloudClaimFlow.ProtectorPurpose);
+        Response.Cookies.Append(CloudClaimFlow.CookieName, protector.Protect(payload), new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            IsEssential = true,
+            MaxAge = TimeSpan.FromMinutes(10)
+        });
+
+        var redirectUri = $"{Request.Scheme}://{Request.Host}{Url.Content("~/CloudClaim")}";
+        var target = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString($"{url}/instances/claim", new Dictionary<string, string?>
+        {
+            ["redirect_uri"] = redirectUri,
+            ["state"] = nonce,
+            ["name"] = name,
+            ["code_challenge"] = challenge
+        });
+        return Redirect(target);
     }
 
     /// <summary>UniFi-style connect: sign in to the cloud account + self-register this instance by name.</summary>

@@ -667,19 +667,11 @@
                 }
                 else
                 {
-                    <p class="workspace-inline-note">Sign in with your Matmon.Cloud account and give this instance a name — it registers itself automatically.</p>
-                    <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:14px;max-width:480px;">
+                    <p class="workspace-inline-note">Give this instance a name, then <strong>Connect</strong> — you'll sign in to Matmon.Cloud in your browser and confirm. The instance links itself to your account automatically; no password is entered here.</p>
+                    <form method="post" asp-page-handler="CloudClaim" class="workspace-form" style="margin-top:14px;max-width:480px;">
                         <label class="workspace-field">
                             <span>Cloud URL</span>
                             <input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" />
-                        </label>
-                        <label class="workspace-field">
-                            <span>Cloud account e-mail</span>
-                            <input asp-for="CloudProvision.Email" type="email" class="workspace-input" autocomplete="off" />
-                        </label>
-                        <label class="workspace-field">
-                            <span>Password</span>
-                            <input asp-for="CloudProvision.Password" type="password" class="workspace-input" autocomplete="off" />
                         </label>
                         <label class="workspace-field">
                             <span>Instance name</span>
@@ -689,8 +681,17 @@
                     </form>
 
                     <details style="margin-top:14px;">
-                        <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced — connect with an existing instance id + token</summary>
-                        <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:10px;max-width:560px;">
+                        <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced — connect with e-mail + password, or an existing instance id + token</summary>
+                        <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:12px;max-width:560px;">
+                            <p class="workspace-inline-note" style="margin-top:0;">Headless sign-in: register this instance with your cloud account credentials.</p>
+                            <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
+                            <label class="workspace-field"><span>Cloud account e-mail</span><input asp-for="CloudProvision.Email" type="email" class="workspace-input" autocomplete="off" /></label>
+                            <label class="workspace-field"><span>Password</span><input asp-for="CloudProvision.Password" type="password" class="workspace-input" autocomplete="off" /></label>
+                            <label class="workspace-field"><span>Instance name</span><input asp-for="CloudProvision.Name" class="workspace-input" /></label>
+                            <button type="submit" class="workspace-submit">Connect with password</button>
+                        </form>
+                        <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:16px;max-width:560px;">
+                            <p class="workspace-inline-note" style="margin-top:0;">Manual: paste an instance id + token already created in the cloud UI.</p>
                             <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Instance id</span><input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Instance token</span><input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="token from the cloud UI" /></label>
