@@ -25,6 +25,12 @@ public sealed class CloudConnectionSettings
     /// <summary>True once the user has connected/disconnected via the UI — from then on the UI wins over env.</summary>
     public bool Configured { get; set; }
 
+    /// <summary>Relay raised/recovered alerts to the Matmon.Cloud notification gateway (which delivers them).</summary>
+    public bool RelayAlerts { get; set; }
+
+    /// <summary>Comma/semicolon-separated recipients the cloud gateway delivers relayed alerts to.</summary>
+    public string? RelayRecipients { get; set; }
+
     /// <summary>Whether a token is stored (for display; not persisted).</summary>
     [JsonIgnore]
     public bool HasToken => !string.IsNullOrEmpty(ProtectedToken);
@@ -35,6 +41,8 @@ public sealed class CloudConnectionSettings
         InstanceId = InstanceId,
         ProtectedToken = ProtectedToken,
         Enabled = Enabled,
-        Configured = Configured
+        Configured = Configured,
+        RelayAlerts = RelayAlerts,
+        RelayRecipients = RelayRecipients
     };
 }

@@ -213,6 +213,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Disconnect the cloud link from the UI (disable + drop token; env no longer re-links).</summary>
     void DisconnectCloud();
 
+    /// <summary>Enable/disable relaying alerts to the cloud gateway + set its recipients.</summary>
+    void SetCloudRelaySettings(bool relayAlerts, string? recipients);
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

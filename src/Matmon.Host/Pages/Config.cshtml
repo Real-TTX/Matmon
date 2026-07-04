@@ -666,6 +666,24 @@
                 {
                     <p class="workspace-inline-note" style="margin-top:12px;">Managed here — connect/disconnect take effect within a few seconds, no restart or environment variables needed.</p>
                 }
+
+                @if (linkActive)
+                {
+                    <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
+                    <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Alert relay</span></h3>
+                    <p class="panel-hint" style="margin-bottom:12px;">Relay raised/recovered alerts to the Matmon.Cloud notification gateway — the cloud delivers the e-mail, useful when this instance has no SMTP of its own.</p>
+                    <form method="post" asp-page-handler="CloudRelay" class="workspace-form" style="max-width:560px;">
+                        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+                            <input asp-for="CloudRelay.RelayAlerts" type="checkbox" />
+                            <span>Relay alerts to Matmon.Cloud</span>
+                        </label>
+                        <label class="workspace-field">
+                            <span>Recipients (comma-separated)</span>
+                            <input asp-for="CloudRelay.Recipients" class="workspace-input" placeholder="ops@example.com, oncall@example.com" />
+                        </label>
+                        <button type="submit" class="workspace-submit">Save relay settings</button>
+                    </form>
+                }
             </div>
         </section>
     }

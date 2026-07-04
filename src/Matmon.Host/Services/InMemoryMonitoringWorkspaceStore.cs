@@ -1118,6 +1118,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Enable/disable relaying alerts to the cloud gateway + set its recipients.</summary>
+    public void SetCloudRelaySettings(bool relayAlerts, string? recipients)
+    {
+        lock (_gate)
+        {
+            _document.CloudSettings.RelayAlerts = relayAlerts;
+            _document.CloudSettings.RelayRecipients = string.IsNullOrWhiteSpace(recipients) ? null : recipients.Trim();
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
     {
         lock (_gate)

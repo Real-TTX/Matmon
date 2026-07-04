@@ -43,6 +43,9 @@ public class ConfigModel : PageModel
     [BindProperty]
     public CloudConnectInput CloudConnect { get; set; } = new();
 
+    [BindProperty]
+    public CloudRelayInput CloudRelay { get; set; } = new();
+
     public ConfigurationOverview Overview { get; private set; } = default!;
 
     public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
@@ -345,6 +348,24 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
+    public IActionResult OnPostCloudRelay()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        if (CloudRelay.RelayAlerts && string.IsNullOrWhiteSpace(CloudRelay.Recipients))
+        {
+            ErrorMessage = "Add at least one recipient to relay alerts to the cloud.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        _workspaceStore.SetCloudRelaySettings(CloudRelay.RelayAlerts, CloudRelay.Recipients);
+        StatusMessage = CloudRelay.RelayAlerts ? "Cloud alert relay enabled." : "Cloud alert relay disabled.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
     public IActionResult OnPostDownloadAuditPdf()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -452,6 +473,11 @@ public class ConfigModel : PageModel
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);
         CloudConnect.Url ??= CloudUrl;
         CloudConnect.InstanceId ??= CloudSettings.Configured ? CloudSettings.InstanceId : _runtimeOptions.CloudInstanceId;
+        CloudRelay.Recipients ??= CloudSettings.RelayRecipients;
+        if (!Request.HasFormContentType)
+        {
+            CloudRelay.RelayAlerts = CloudSettings.RelayAlerts;
+        }
 
         SummaryReportLastSentUtc = reportSettings.LastSentUtc;
         SummaryReportHasSmtp = _workspaceStore.HasEmailNotifications() ||
@@ -493,6 +519,13 @@ public sealed class CloudConnectInput
     public string? InstanceId { get; set; }
 
     public string? Token { get; set; }
+}
+
+public sealed class CloudRelayInput
+{
+    public bool RelayAlerts { get; set; }
+
+    public string? Recipients { get; set; }
 }
 
 public sealed class SummaryReportInput
