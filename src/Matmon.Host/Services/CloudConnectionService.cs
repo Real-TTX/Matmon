@@ -51,7 +51,7 @@ public sealed class CloudConnectionService : BackgroundService
 
         HttpClient? client = null;
         string? clientBaseUrl = null;
-        var heartbeatInterval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.HeartbeatIntervalSeconds));
+        var heartbeatInterval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.CloudHeartbeatIntervalSeconds));
         var lastHeartbeat = DateTimeOffset.MinValue;
 
         using var timer = new PeriodicTimer(PollInterval);
@@ -168,8 +168,11 @@ public sealed class CloudConnectionService : BackgroundService
 
     private async Task SendHeartbeatAsync(HttpClient client, string baseUrl, Guid instanceId, string token, CancellationToken cancellationToken)
     {
-        var sensorCount = _workspaceStore.GetAllElements().OfType<SensorElement>().Count();
-        var (openAlerts, _, _, _) = _workspaceStore.GetActiveAlertCounts();
+        var allElements = _workspaceStore.GetAllElements();
+        var sensorCount = allElements.OfType<SensorElement>().Count();
+        var probeCount = allElements.OfType<ProbeElement>().Count();
+        var mapCount = _workspaceStore.GetMaps().Count;
+        var (openAlerts, ackAlerts, errorAlerts, warningAlerts) = _workspaceStore.GetActiveAlertCounts();
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"api/instances/{instanceId}/heartbeat")
         {
@@ -178,7 +181,12 @@ public sealed class CloudConnectionService : BackgroundService
                 Environment.MachineName,
                 null,
                 sensorCount,
-                openAlerts))
+                openAlerts,
+                errorAlerts,
+                warningAlerts,
+                ackAlerts,
+                probeCount,
+                mapCount))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
@@ -249,5 +257,7 @@ public sealed class CloudConnectionService : BackgroundService
         public static ResolvedLink Off(string? baseUrl, string? status) => new(false, baseUrl, null, null, null, status);
     }
 
-    private sealed record CloudHeartbeatRequest(string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts);
+    private sealed record CloudHeartbeatRequest(
+        string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts,
+        int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount);
 }

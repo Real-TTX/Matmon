@@ -6,7 +6,7 @@
     // (no own sidebar / mobile nav) so the cloud console can show a single menu around the iframe.
     var embedded = string.Equals(Context.Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
 }
-<html lang="de">
+<html lang="de" data-embedded="@(embedded ? "1" : "0")">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

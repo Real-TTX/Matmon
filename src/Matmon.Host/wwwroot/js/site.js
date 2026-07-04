@@ -1,4 +1,6 @@
-const dashboardRefreshMs = 5000;
+// Live refresh: 5s normally, but 30s when embedded in the Matmon.Cloud tunnel (each AJAX poll is
+// proxied over the WebSocket tunnel, so keep that traffic light).
+const dashboardRefreshMs = document.documentElement.dataset.embedded === "1" ? 30000 : 5000;
 const themeStorageKey = "matmon-theme";
 const monitoringTreeCollapsedStorageKey = "matmon-monitoring-tree-collapsed";
 const monitoringTreeMoveStorageKey = "matmon-monitoring-tree-move";

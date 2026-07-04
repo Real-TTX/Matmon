@@ -22,6 +22,13 @@ public sealed class MatmonRuntimeOptions
     public int HeartbeatIntervalSeconds { get; set; } = 30;
 
     /// <summary>
+    /// How often the Primary heartbeats to Matmon.Cloud (dead-man-switch + aggregate metadata). Independent
+    /// of the probe <see cref="HeartbeatIntervalSeconds"/> — once a minute is plenty for a check-in, and it
+    /// keeps tunnel/cloud load low. Set via <c>Matmon__CloudHeartbeatIntervalSeconds</c>; floored at 15s.
+    /// </summary>
+    public int CloudHeartbeatIntervalSeconds { get; set; } = 60;
+
+    /// <summary>
     /// How many due sensors the primary polls concurrently per cycle. After downtime or resuming a
     /// paused sensor/folder the overdue sensors are caught up in parallel (most-overdue first),
     /// instead of one slow sensor blocking the rest. Set via <c>Matmon__PollingWorkers</c>; clamped
