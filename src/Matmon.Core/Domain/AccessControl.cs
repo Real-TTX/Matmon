@@ -26,6 +26,12 @@ public sealed class MatmonUser
 
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// True when this account was provisioned/linked via "Sign in with Matmon Cloud" (SSO). Such accounts
+    /// normally have no local password (SSO-only); an admin can still set one for offline login.
+    /// </summary>
+    public bool CloudLinked { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;

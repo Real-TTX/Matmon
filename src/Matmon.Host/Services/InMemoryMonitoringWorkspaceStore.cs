@@ -217,6 +217,54 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>
+    /// Find-or-create a user for a "Sign in with Matmon Cloud" identity. An existing local account with
+    /// that e-mail is returned as-is (its role/password stay under local control); a new one is created
+    /// as a CloudLinked, password-less (SSO-only) account with the given role.
+    /// </summary>
+    public MatmonUser UpsertCloudUser(string email, MatmonUserRole role)
+    {
+        var normalized = (email ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized) || !normalized.Contains('@'))
+        {
+            throw new InvalidOperationException("A valid e-mail is required.");
+        }
+
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var existing = _document.Users.FirstOrDefault(user =>
+                (!string.IsNullOrWhiteSpace(user.Email) && string.Equals(user.Email, normalized, StringComparison.OrdinalIgnoreCase)) ||
+                string.Equals(user.Username, normalized, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is not null)
+            {
+                if (!existing.IsEnabled)
+                {
+                    throw new InvalidOperationException("This account is disabled.");
+                }
+
+                return CloneUser(existing);
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var user = new MatmonUser
+            {
+                Username = normalized,
+                Email = normalized,
+                PasswordHash = string.Empty, // SSO-only until an admin sets a local password
+                Role = role,
+                IsEnabled = true,
+                CloudLinked = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+            _document.Users.Add(user);
+            QueueSave(SavePriority.Configuration);
+            return CloneUser(user);
+        }
+    }
+
     public bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password)
     {
         lock (_gate)

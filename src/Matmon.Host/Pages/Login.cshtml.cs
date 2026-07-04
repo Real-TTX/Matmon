@@ -27,7 +27,13 @@ public class LoginModel : PageModel
     [BindProperty]
     public string Password { get; set; } = string.Empty;
 
+    [BindProperty(SupportsGet = true)]
+    public string? Error { get; set; }
+
     public string? ErrorMessage { get; private set; }
+
+    /// <summary>Whether "Sign in with Matmon Cloud" can be offered (the cloud link is configured + enabled).</summary>
+    public bool CloudSsoAvailable { get; private set; }
 
     public IActionResult OnGet()
     {
@@ -35,6 +41,18 @@ public class LoginModel : PageModel
         {
             return RedirectToLocal(ReturnUrl);
         }
+
+        var cloud = _workspaceStore.GetCloudConnectionSettings();
+        CloudSsoAvailable = cloud.Enabled && !string.IsNullOrWhiteSpace(cloud.Url) && !string.IsNullOrWhiteSpace(cloud.InstanceId);
+
+        ErrorMessage = Error switch
+        {
+            "cloud-not-connected" => "Matmon.Cloud sign-in isn't available — this instance isn't connected to the cloud.",
+            "cloud-denied" => "Cloud sign-in was cancelled.",
+            "cloud-state" => "Cloud sign-in expired or was invalid — please try again.",
+            "cloud-exchange" => "Cloud sign-in failed. Check that your account has access to this instance.",
+            _ => ErrorMessage
+        };
 
         return Page();
     }

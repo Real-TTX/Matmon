@@ -42,5 +42,15 @@
                 <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
             </div>
         </form>
+
+        @if (Model.CloudSsoAvailable)
+        {
+            <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--matmon-muted);font-size:0.85rem;">
+                <span style="flex:1;height:1px;background:var(--matmon-border);"></span>or<span style="flex:1;height:1px;background:var(--matmon-border);"></span>
+            </div>
+            <a href="/signin-cloud?handler=Start" class="workspace-secondary-submit" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;">
+                @MatmonIcons.Render("network")<span>Sign in with Matmon Cloud</span>
+            </a>
+        }
     </div>
 </section>

@@ -25,6 +25,9 @@ public interface IMonitoringWorkspaceStore
 
     MatmonUser CreateUser(string username, string password, MatmonUserRole role);
 
+    /// <summary>Find-or-create a user for a "Sign in with Matmon Cloud" identity (SSO). Existing accounts win.</summary>
+    MatmonUser UpsertCloudUser(string email, MatmonUserRole role);
+
     bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password);
 
     bool DeleteUser(Guid userId);
