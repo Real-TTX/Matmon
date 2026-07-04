@@ -15,17 +15,20 @@ public class ConfigModel : PageModel
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly SummaryReportSender _summaryReportSender;
     private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ILicenseService _licenseService;
 
     public ConfigModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
         SummaryReportSender summaryReportSender,
-        MatmonRuntimeOptions runtimeOptions)
+        MatmonRuntimeOptions runtimeOptions,
+        ILicenseService licenseService)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
         _summaryReportSender = summaryReportSender;
         _runtimeOptions = runtimeOptions;
+        _licenseService = licenseService;
     }
 
     public CloudConnectionState CloudConnection { get; private set; } = new();
@@ -39,6 +42,10 @@ public class ConfigModel : PageModel
 
     /// <summary>Whether the env-var bootstrap is set (shown as a hint; the UI takes over once used).</summary>
     public bool CloudEnvBootstrapSet { get; private set; }
+
+    public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
+
+    public int ProbeCount { get; private set; }
 
     [BindProperty]
     public CloudConnectInput CloudConnect { get; set; } = new();
@@ -465,6 +472,8 @@ public class ConfigModel : PageModel
             Subject = reportSettings.Subject,
             AttachPdf = reportSettings.AttachPdf
         };
+        License = _licenseService.Current;
+        ProbeCount = _workspaceStore.GetAllElements().OfType<ProbeElement>().Count();
         CloudConnection = _workspaceStore.GetCloudConnection();
         CloudSettings = _workspaceStore.GetCloudConnectionSettings();
         CloudEnvBootstrapSet = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);

@@ -123,6 +123,7 @@ builder.Services.AddAuthorization(options =>
 
 RegisterSensorExecutors(builder.Services);
 builder.Services.AddScoped<ISensorExecutionService, SensorExecutionService>();
+builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizePage("/Wizard", MatmonSecurity.AdminPolicy);

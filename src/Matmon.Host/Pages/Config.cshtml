@@ -620,7 +620,24 @@
                 @{
                     var linkActive = Model.CloudSettings.Configured ? Model.CloudSettings.Enabled : Model.CloudEnvBootstrapSet;
                     var ok = string.Equals(Model.CloudConnection.LastStatus, "ok", StringComparison.OrdinalIgnoreCase);
+                    var overLimit = !Model.License.IsUnlimited && Model.ProbeCount > Model.License.ProbeLimit;
                 }
+
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;border:1px solid var(--matmon-border);border-radius:8px;background:var(--matmon-surface-soft);">
+                    <strong>Plan:</strong>
+                    <span>@Model.License.Tier@(Model.License.IsFallback ? " (unlicensed)" : "")</span>
+                    <span style="color:var(--matmon-muted);">·</span>
+                    <span>Probes: @Model.ProbeCount / @Model.License.ProbeLimitDisplay</span>
+                    @if (overLimit)
+                    {
+                        <span style="color:var(--matmon-danger);">· over limit — can't add more</span>
+                    }
+                    @if (Model.License.ExpiresUtc is not null)
+                    {
+                        <span style="color:var(--matmon-muted);">· expires @Model.FormatDateTime(Model.License.ExpiresUtc)</span>
+                    }
+                </div>
+
                 @if (linkActive)
                 {
                     <table style="width:100%;border-collapse:collapse;max-width:640px;">

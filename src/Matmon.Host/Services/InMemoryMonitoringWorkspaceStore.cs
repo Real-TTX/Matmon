@@ -1177,6 +1177,29 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public string? GetLicenseToken()
+    {
+        lock (_gate)
+        {
+            return _document.LicenseToken;
+        }
+    }
+
+    /// <summary>Caches the cloud-issued license token (for offline validation). Only saves on change.</summary>
+    public void SetLicenseToken(string? token)
+    {
+        lock (_gate)
+        {
+            if (string.Equals(_document.LicenseToken, token, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _document.LicenseToken = token;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
     {
         lock (_gate)
@@ -3443,6 +3466,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public CloudConnectionState Cloud { get; set; } = new();
 
         public CloudConnectionSettings CloudSettings { get; set; } = new();
+
+        /// <summary>Last license token fetched from the cloud (verified offline against the baked public key).</summary>
+        public string? LicenseToken { get; set; }
 
         public List<NotificationSender> NotificationSenders { get; set; } = [];
 

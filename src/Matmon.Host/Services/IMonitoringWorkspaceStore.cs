@@ -219,6 +219,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Enable/disable relaying alerts to the cloud gateway + set its recipients.</summary>
     void SetCloudRelaySettings(bool relayAlerts, string? recipients);
 
+    /// <summary>The last cloud-issued license token (verified offline); null if none.</summary>
+    string? GetLicenseToken();
+
+    /// <summary>Caches the cloud-issued license token.</summary>
+    void SetLicenseToken(string? token);
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

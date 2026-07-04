@@ -35,19 +35,22 @@ public sealed class WorkspaceModel : PageModel
     private readonly ISensorExecutionService _sensorExecutionService;
     private readonly MonitoringInheritanceResolver _resolver = new();
     private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ILicenseService _licenseService;
 
     public WorkspaceModel(
         IMonitoringWorkspaceStore workspaceStore,
         IProbeRegistry probeRegistry,
         IDashboardSnapshotProvider dashboardSnapshotProvider,
         ISensorExecutionService sensorExecutionService,
-        MatmonRuntimeOptions runtimeOptions)
+        MatmonRuntimeOptions runtimeOptions,
+        ILicenseService licenseService)
     {
         _workspaceStore = workspaceStore;
         _probeRegistry = probeRegistry;
         _dashboardSnapshotProvider = dashboardSnapshotProvider;
         _sensorExecutionService = sensorExecutionService;
         _runtimeOptions = runtimeOptions;
+        _licenseService = licenseService;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -149,6 +152,13 @@ public sealed class WorkspaceModel : PageModel
     {
         try
         {
+            if (!_licenseService.CanAddProbe(out var licenseReason))
+            {
+                ErrorMessage = licenseReason;
+                LoadViewState(populateEditorValues: false);
+                return Page();
+            }
+
             var probe = _workspaceStore.CreateProbe(NewProbe.ParentId, NewProbe.Name, NewProbe.Description);
             StatusMessage = $"Probe '{probe.Name}' angelegt. Install script is ready.";
             var backUrl = GetSafeReturnUrl("/Config?tab=probes");

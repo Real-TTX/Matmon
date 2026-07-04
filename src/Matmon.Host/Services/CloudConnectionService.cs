@@ -192,7 +192,39 @@ public sealed class CloudConnectionService : BackgroundService
 
         response.EnsureSuccessStatusCode();
         RecordStatus(baseUrl, instanceId, "ok", heartbeatOk: true, force: true);
+        await FetchLicenseAsync(client, instanceId, token, cancellationToken);
     }
+
+    /// <summary>Pulls the signed license token from the cloud and caches it for offline validation.</summary>
+    private async Task FetchLicenseAsync(HttpClient client, Guid instanceId, string token, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/instances/{instanceId}/license");
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<LicenseResponse>(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(payload?.Token))
+            {
+                _workspaceStore.SetLicenseToken(payload.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Matmon.Cloud license fetch failed (will retry next heartbeat)");
+        }
+    }
+
+    private sealed record LicenseResponse(string? Token);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)
