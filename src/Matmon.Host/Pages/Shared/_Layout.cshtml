@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 @inject Matmon.Host.Services.MatmonRuntimeOptions RuntimeOptions
 @inject Matmon.Host.Services.IDashboardSnapshotProvider DashboardSnapshotProvider
+@{
+    // Embedded mode: when reached through the Matmon.Cloud "embed" tunnel, render the page chromeless
+    // (no own sidebar / mobile nav) so the cloud console can show a single menu around the iframe.
+    var embedded = string.Equals(Context.Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
+}
 <html lang="de">
 <head>
     <meta charset="utf-8" />
@@ -26,6 +31,14 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/Matmon.Host.styles.css" asp-append-version="true" />
+    @if (embedded)
+    {
+        <style>
+            .app-shell { display: block !important; }
+            .app-sidebar, .mobile-nav-bar, .sidebar-backdrop, .workspace-summary-strip, .breadcrumb-bar { display: none !important; }
+            .app-main, .app-content { width: 100%; }
+        </style>
+    }
 </head>
 <body class="matmon-shell">
     @{
