@@ -54,11 +54,10 @@
                         </select>
                     </label>
                     <label>
-                        <span>Kind</span>
+                        <span>Type</span>
                         <select asp-for="NewNotificationSender.Kind" class="form-select workspace-select" data-notification-kind-select>
                             <option value="Email">Email</option>
                             <option value="Webhook">Webhook</option>
-                            <option value="Cloud">Cloud</option>
                         </select>
                     </label>
                 </div>
@@ -150,12 +149,20 @@
                         </select>
                     </label>
                     <label>
-                        <span>Kind</span>
-                        <select asp-for="NotificationSenderEditor.Kind" class="form-select workspace-select" data-notification-kind-select>
-                            <option value="Email">Email</option>
-                            <option value="Webhook">Webhook</option>
-                            <option value="Cloud">Cloud</option>
-                        </select>
+                        <span>Type</span>
+                        @if (senderKind == NotificationEndpointKind.Cloud)
+                        {
+                            @* The built-in Matmon Cloud sender's type is fixed — read-only. *@
+                            <input type="text" class="form-control workspace-input" value="Cloud" readonly />
+                            <input type="hidden" asp-for="NotificationSenderEditor.Kind" />
+                        }
+                        else
+                        {
+                            <select asp-for="NotificationSenderEditor.Kind" class="form-select workspace-select" data-notification-kind-select>
+                                <option value="Email">Email</option>
+                                <option value="Webhook">Webhook</option>
+                            </select>
+                        }
                     </label>
                 </div>
 

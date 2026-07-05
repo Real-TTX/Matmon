@@ -1065,6 +1065,15 @@ public sealed class WorkspaceModel : PageModel
             var sender = _workspaceStore.FindNotificationSender(NotificationSenderEditor.Id)
                 ?? throw new InvalidOperationException("Notification Sender nicht gefunden.");
 
+            // A sender in use can't be deleted — tell the user which rules to repoint first (the store just
+            // returns false otherwise, which reads as a mysterious "can't delete").
+            var referencingRules = _workspaceStore.Workspace.NotificationRules.Count(rule => rule.SenderId == sender.Id);
+            if (referencingRules > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Sender '{sender.Name}' is used by {referencingRules} notification rule(s). Remove or repoint them first, then delete the sender.");
+            }
+
             if (!_workspaceStore.DeleteNotificationSender(sender.Id))
             {
                 throw new InvalidOperationException("Notification Sender konnte nicht gelöscht werden.");
