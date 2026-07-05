@@ -20,6 +20,43 @@ var runtimeOptions = builder.Configuration.GetSection("Matmon").Get<MatmonRuntim
 runtimeOptions.ProbeId ??= Environment.MachineName;
 runtimeOptions.ProbeName ??= Environment.MachineName;
 
+// --- Executor run-mode: a stateless sensor-executor service. No workspace, telemetry, auth-cookie, UI or
+//     background loops — just the sensor executors behind a token-authed HTTP API that Matmon.Cloud calls to
+//     run cloud sensors. Returns early so none of the stateful Primary/Secondary wiring below is touched. ---
+if (runtimeOptions.Mode == AppMode.Executor)
+{
+    builder.Services.AddSingleton(runtimeOptions);
+    builder.Services.AddHttpClient();
+    builder.Services.ConfigureHttpJsonOptions(options =>
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    RegisterSensorExecutors(builder.Services, includeProbeSensors: false);
+    builder.Services.AddSingleton<StatelessSensorRunner>();
+
+    var executorApp = builder.Build();
+
+    executorApp.MapGet("/healthz", () => Results.Ok(new { status = "ok", mode = "Executor" }));
+    executorApp.MapGet("/api/mode", () => Results.Ok(new { mode = "Executor" }));
+
+    executorApp.MapGet("/api/sensor-catalog", (HttpRequest request, StatelessSensorRunner runner) =>
+        IsExecutorAuthorized(request, runtimeOptions.ExecutorToken)
+            ? Results.Ok(runner.Catalog)
+            : Results.Unauthorized());
+
+    executorApp.MapPost("/api/execute", async (ExecuteSensorRequest body, HttpRequest request, StatelessSensorRunner runner, CancellationToken ct) =>
+    {
+        if (!IsExecutorAuthorized(request, runtimeOptions.ExecutorToken))
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await runner.ExecuteAsync(body, ct);
+        return Results.Ok(result);
+    });
+
+    await executorApp.RunAsync();
+    return;
+}
+
 // Auth credentials are intentionally left blank when not provided: a bare install (no
 // Matmon__Auth__* env and no appsettings override) has no pre-provisioned admin and falls through
 // to the first-run setup wizard. Setting both via env pre-provisions an admin and skips setup.
@@ -425,7 +462,23 @@ app.MapRazorPages().WithStaticAssets();
 app.Logger.LogInformation("Matmon started in {Mode} mode", runtimeOptions.Mode);
 app.Run();
 
-static void RegisterSensorExecutors(IServiceCollection services)
+// Executor run-mode auth: a shared bearer token in the X-Matmon-Executor-Token header (constant-time compared).
+// An unset token locks the endpoints entirely.
+static bool IsExecutorAuthorized(HttpRequest request, string? expectedToken)
+{
+    if (string.IsNullOrWhiteSpace(expectedToken))
+    {
+        return false;
+    }
+
+    var provided = request.Headers["X-Matmon-Executor-Token"].FirstOrDefault();
+    return !string.IsNullOrEmpty(provided) &&
+        System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(provided),
+            System.Text.Encoding.UTF8.GetBytes(expectedToken));
+}
+
+static void RegisterSensorExecutors(IServiceCollection services, bool includeProbeSensors = true)
 {
     services.AddTransient<ISensorExecutor, PingSensorExecutor>();
     services.AddHttpClient<HttpSensorExecutor>();
@@ -466,10 +519,16 @@ static void RegisterSensorExecutors(IServiceCollection services)
     services.AddTransient<ISensorExecutor, DockerContainerSensorExecutor>();
     services.AddTransient<ISensorExecutor, BackupJobSensorExecutor>();
     services.AddTransient<ISensorExecutor, DiskSmartSensorExecutor>();
-    services.AddTransient<ProbeHeartbeatSensorExecutor>();
-    services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHeartbeatSensorExecutor>());
-    services.AddTransient<ProbeHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHealthSensorExecutor>());
+
+    // Probe heartbeat/health report the probe's OWN state (need probe infra) and are meaningless as cloud
+    // sensors — the stateless Executor mode skips them so its executor set resolves without that plumbing.
+    if (includeProbeSensors)
+    {
+        services.AddTransient<ProbeHeartbeatSensorExecutor>();
+        services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHeartbeatSensorExecutor>());
+        services.AddTransient<ProbeHealthSensorExecutor>();
+        services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHealthSensorExecutor>());
+    }
 }
 
 static string? ReadProbeToken(HttpRequest request)

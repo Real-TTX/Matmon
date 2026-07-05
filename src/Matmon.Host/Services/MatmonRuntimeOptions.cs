@@ -38,6 +38,11 @@ public sealed class MatmonRuntimeOptions
 
     public string? ProbeToken { get; set; }
 
+    /// <summary>Shared secret that authenticates callers of the Executor run-mode's <c>/api/execute</c> and
+    /// <c>/api/sensor-catalog</c> (<c>Matmon__ExecutorToken</c>). Only relevant when <see cref="Mode"/> is
+    /// <see cref="AppMode.Executor"/>; empty = the endpoints reject everything (locked).</summary>
+    public string? ExecutorToken { get; set; }
+
     public string WorkspacePath { get; set; } = "data/workspace.json";
 
     public string? TelemetryPath { get; set; }

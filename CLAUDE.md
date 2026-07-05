@@ -26,12 +26,13 @@ Two projects under `src/`:
   - `Pages/` — Razor Pages UI (`.cshtml` + `.cshtml.cs`). Shared layout in `Pages/Shared/_Layout.cshtml`.
   - `wwwroot/` — `css/site.css` (large, ~9k lines), `js/site.js`, Bootstrap 5 + jQuery under `lib/`.
 
-## Architecture: primary / secondary
+## Architecture: primary / secondary / executor
 
-Mode is set via `Matmon__Mode=Primary|Secondary` (default Primary).
+Mode is set via `Matmon__Mode=Primary|Secondary|Executor` (default Primary; `AppMode` in `Matmon.Core`, string aliases master/slave/executor).
 
 - **Primary** owns the UI, configuration, alerts, history and global state. Registers `SensorPollingService` + `BackupSchedulerService`. Exposes the `/api/probes/*` endpoints that secondaries call.
 - **Secondary** connects **outbound** to the primary (works behind firewalls/NAT), pulls assigned sensor work, executes it, and POSTs results back. Registers `SlaveHeartbeatService` + `SlaveSensorWorker`.
+- **Executor** is a **stateless sensor-executor service** for Matmon.Cloud's cloud sensors: **no workspace, telemetry, auth-cookie, UI or background loops**. `Program.cs` branches early on `AppMode.Executor` and builds a minimal app registering only the sensor executors (`RegisterSensorExecutors(..., includeProbeSensors:false)` — probe heartbeat/health need probe infra + are meaningless in the cloud) + `StatelessSensorRunner`. Two token-authed endpoints (`X-Matmon-Executor-Token` = `Matmon__ExecutorToken`, `FixedTimeEquals`, `IsExecutorAuthorized`): `GET /api/sensor-catalog` (the runnable `SensorDefinition`s — `StatelessSensorRunner.Catalog` filters `SensorDefinitionCatalog.BuiltIns` to registered types) and `POST /api/execute` (`ExecuteSensorRequest{sensorTypeKey,target,parameters,timeoutSeconds,credential{kind,values}}` → runs one `ISensorExecutor` via the same context/credential-mapping as Primary/Secondary → returns `SensorExecutionResult`). Nothing is persisted. `SensorDefinitionCatalog.BuiltIns` (Host/Services) is the single source of the built-in definition list, shared by the store's `EnsureSensorDefinitionCatalog` and the executor. This is how cloud sensors reuse 100% of the executor code with the RCE/native-deps surface isolated in a sidecar (see Matmon.Cloud).
 - Probe auth: a per-probe token sent as `X-Matmon-Probe-Token` header or `?token=` query (`ReadProbeToken` in `Program.cs`; validated via `IMonitoringWorkspaceStore.TryValidateProbe`).
 - **Heartbeat full-sync:** the secondary heartbeat (`ProbeHeartbeatRequest`) also carries system details — OS, host name and reachable IPv4 subnets (CIDR), collected by `ProbeSystemInfoProvider`. The primary keeps them on the in-memory `ProbeStatusSnapshot` (`InMemoryProbeRegistry`). They surface on the probe **Usage** page ("System & networks" panel; the local primary reports itself) and the scoped probe's reported subnets are folded into **Discovery**'s subnet suggestions. The new heartbeat fields are optional (backward-compatible).
 

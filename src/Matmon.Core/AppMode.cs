@@ -7,7 +7,11 @@ namespace Matmon.Core;
 public enum AppMode
 {
     Primary = 0,
-    Secondary = 1
+    Secondary = 1,
+
+    /// <summary>Stateless sensor-executor service: no workspace/persistence/UI, just an authenticated
+    /// HTTP API to run one sensor on demand. Matmon.Cloud drives it to run cloud sensors.</summary>
+    Executor = 2
 }
 
 public sealed class AppModeTypeConverter : EnumConverter
@@ -25,6 +29,7 @@ public sealed class AppModeTypeConverter : EnumConverter
             {
                 "master" or "primary" => AppMode.Primary,
                 "slave" or "secondary" => AppMode.Secondary,
+                "executor" => AppMode.Executor,
                 _ => base.ConvertFrom(context, culture, value)
             };
         }
