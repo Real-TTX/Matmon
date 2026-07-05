@@ -5,7 +5,7 @@
     ViewData["WorkspaceSummarySuppress"] = "true";
 }
 
-<section class="dashboard-shell" style="max-width:480px;">
+<section class="dashboard-shell" style="max-width:640px;">
     <div class="page-header">
         <div class="page-title">@MatmonIcons.Render("lock")<h1>Account</h1></div>
         <span class="panel-hint">@Model.AccountName</span>
@@ -19,6 +19,17 @@
     {
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
+
+    <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header"><h2 class="section-title">@MatmonIcons.Render("spark")<span>Profile</span></h2></div>
+        <div style="padding:14px 18px;">
+            <dl class="account-facts">
+                <div><dt>E-mail</dt><dd>@Model.AccountName</dd></div>
+                <div><dt>Role</dt><dd><span class="account-role-chip">@Model.Role</span></dd></div>
+                <div><dt>Sign-in</dt><dd>@(Model.HasPassword ? "E-mail + password (local)" : "Matmon.Cloud SSO only — no local password set")</dd></div>
+            </dl>
+        </div>
+    </div>
 
     <div class="panel">
         <div class="panel-header"><h2 class="section-title"><span>@(Model.HasPassword ? "Change password" : "Set a local password")</span></h2></div>

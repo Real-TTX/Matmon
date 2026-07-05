@@ -1136,6 +1136,45 @@ body.is-sidebar-open {
   min-width: 0;
 }
 
+/* Account page profile facts (definition list). */
+.account-facts {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.account-facts > div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.account-facts dt {
+  margin: 0;
+  color: var(--matmon-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.account-facts dd {
+  margin: 0;
+  color: var(--matmon-foreground);
+  overflow-wrap: anywhere;
+}
+
+.account-role-chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 999px;
+  background: var(--matmon-sidebar-item-bg);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .account-menu summary::-webkit-details-marker {
   display: none;
 }

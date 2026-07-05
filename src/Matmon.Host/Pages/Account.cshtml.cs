@@ -25,6 +25,7 @@ public class AccountModel : PageModel
 
     public bool HasPassword { get; private set; }
     public string AccountName => User.Identity?.Name ?? "Account";
+    public string Role => User.FindFirstValue(ClaimTypes.Role) ?? "Viewer";
 
     public string? ErrorMessage { get; private set; }
     [TempData] public string? StatusMessage { get; set; }

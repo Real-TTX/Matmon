@@ -31,9 +31,12 @@ public static class TunnelAutoLogin
     public const string TunnelAuthHeader = "X-Matmon-Tunnel-Auth";
 
     /// <summary>
-    /// Register between <c>UseAuthentication</c> and <c>UseAuthorization</c>: it can then populate the current
-    /// request's principal (so the request proceeds without a login redirect) <em>and</em> drop an auth cookie
-    /// for follow-up requests. No secret / wrong secret / already-signed-in ⇒ no-op.
+    /// Register between <c>UseAuthentication</c> and <c>UseAuthorization</c>. Every request that arrives through
+    /// the tunnel carries the cloud's identity assertion + our tunnel secret, so we authenticate the request
+    /// <em>from the assertion itself</em> — we do NOT rely on the auth cookie round-tripping through the
+    /// cross-origin console iframe (that dependency made sign-in "stick only after navigating back and forth").
+    /// A backup cookie is still issued once per identity for any rare assertion-less follow-up. No secret / wrong
+    /// secret / no assertion ⇒ no-op.
     /// </summary>
     public static IApplicationBuilder UseTunnelAutoLogin(this WebApplication app) => app.Use(async (context, next) =>
     {
@@ -44,11 +47,23 @@ public static class TunnelAutoLogin
                 var store = context.RequestServices.GetRequiredService<IMonitoringWorkspaceStore>();
                 var user = store.UpsertCloudUser(email, role);
                 var principal = BuildPrincipal(user);
-                context.User = principal; // authenticate THIS request — no login redirect inside the console
-                await context.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    principal,
-                    new AuthenticationProperties { IsPersistent = false, AllowRefresh = true, ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12) });
+
+                // Did this request already carry a valid cookie for the SAME user?
+                var alreadySignedIn = context.User?.Identity?.IsAuthenticated == true &&
+                    string.Equals(context.User.Identity!.Name, principal.Identity!.Name, StringComparison.OrdinalIgnoreCase);
+
+                // Authenticate THIS request straight from the trusted assertion — no cookie dependency.
+                context.User = principal;
+
+                // Only (re)issue the backup cookie when the identity actually changed, so we don't emit a
+                // Set-Cookie on every AJAX poll.
+                if (!alreadySignedIn)
+                {
+                    await context.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme,
+                        principal,
+                        new AuthenticationProperties { IsPersistent = false, AllowRefresh = true, ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12) });
+                }
             }
             catch (Exception ex)
             {
@@ -65,12 +80,6 @@ public static class TunnelAutoLogin
     {
         email = string.Empty;
         role = MatmonUserRole.Viewer;
-
-        // Already authenticated (e.g. via the auth cookie dropped by a prior tunnel request) → nothing to do.
-        if (context.User?.Identity?.IsAuthenticated == true)
-        {
-            return false;
-        }
 
         var assertion = context.Request.Headers[CloudUserHeader].ToString();
         var presented = context.Request.Headers[TunnelAuthHeader].ToString();
