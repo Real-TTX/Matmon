@@ -9,7 +9,11 @@ public enum NotificationChannelKind
 public enum NotificationEndpointKind
 {
     Email = 0,
-    Webhook = 1
+    Webhook = 1,
+
+    /// <summary>Delivered via the Matmon.Cloud notification gateway (no local SMTP). Enabled from
+    /// System → Cloud; recipients come from the rule's receiver, like any other sender.</summary>
+    Cloud = 2
 }
 
 public sealed class NotificationWorkspaceConfiguration

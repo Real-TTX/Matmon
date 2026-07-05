@@ -1205,13 +1205,37 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    /// <summary>Enable/disable relaying alerts to the cloud gateway + set its recipients.</summary>
-    public void SetCloudRelaySettings(bool relayAlerts, string? recipients)
+    /// <summary>Master switch for cloud alert relay. Enabling provisions/enables the built-in "Matmon Cloud"
+    /// notification sender so rules can select it (recipients come from the rule's receiver); disabling
+    /// turns that sender off but keeps it, so rules keep their reference for when relay is re-enabled.</summary>
+    public void SetCloudRelaySettings(bool relayAlerts)
     {
         lock (_gate)
         {
             _document.CloudSettings.RelayAlerts = relayAlerts;
-            _document.CloudSettings.RelayRecipients = string.IsNullOrWhiteSpace(recipients) ? null : recipients.Trim();
+
+            var cloudSender = _document.NotificationSenders.FirstOrDefault(sender => sender.Kind == NotificationEndpointKind.Cloud);
+            if (relayAlerts)
+            {
+                if (cloudSender is null)
+                {
+                    _document.NotificationSenders.Add(new NotificationSender
+                    {
+                        Name = "Matmon Cloud",
+                        Kind = NotificationEndpointKind.Cloud,
+                        Enabled = true
+                    });
+                }
+                else
+                {
+                    cloudSender.Enabled = true;
+                }
+            }
+            else if (cloudSender is not null)
+            {
+                cloudSender.Enabled = false;
+            }
+
             QueueSave(SavePriority.Configuration);
         }
     }

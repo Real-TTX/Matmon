@@ -227,8 +227,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Disconnect the cloud link from the UI (disable + drop token; env no longer re-links).</summary>
     void DisconnectCloud();
 
-    /// <summary>Enable/disable relaying alerts to the cloud gateway + set its recipients.</summary>
-    void SetCloudRelaySettings(bool relayAlerts, string? recipients);
+    /// <summary>Master switch for cloud alert relay. Enabling provisions/enables the built-in "Matmon Cloud"
+    /// sender (recipients come from the rule's receiver); disabling turns that sender off.</summary>
+    void SetCloudRelaySettings(bool relayAlerts);
 
     /// <summary>Enable/disable Full Access (the outbound UI tunnel).</summary>
     void SetCloudFullAccess(bool enabled);

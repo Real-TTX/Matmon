@@ -4916,6 +4916,7 @@ public sealed class WorkspaceModel : PageModel
         return sender.Kind switch
         {
             NotificationEndpointKind.Webhook => $"{sender.Name} · webhook",
+            NotificationEndpointKind.Cloud => $"{sender.Name} · cloud",
             _ => $"{sender.Name} · email"
         };
     }

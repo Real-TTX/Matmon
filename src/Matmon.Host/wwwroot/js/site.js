@@ -2339,7 +2339,8 @@ function initializeNotificationKindEditors() {
     }
 
     const updatePanels = () => {
-      const kind = select.value === "Webhook" || select.value === "webhook" ? "webhook" : "email";
+      const raw = (select.value || "email").toLowerCase();
+      const kind = raw === "webhook" ? "webhook" : raw === "cloud" ? "cloud" : "email";
       panels.forEach((panel) => {
         panel.hidden = (panel.dataset.notificationKindPanel || "").toLowerCase() !== kind;
       });

@@ -541,14 +541,10 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
-        if (CloudRelay.RelayAlerts && string.IsNullOrWhiteSpace(CloudRelay.Recipients))
-        {
-            ErrorMessage = "Add at least one recipient to relay alerts to the cloud.";
-            return RedirectToPage(new { tab = "cloud" });
-        }
-
-        _workspaceStore.SetCloudRelaySettings(CloudRelay.RelayAlerts, CloudRelay.Recipients);
-        StatusMessage = CloudRelay.RelayAlerts ? "Cloud alert relay enabled." : "Cloud alert relay disabled.";
+        _workspaceStore.SetCloudRelaySettings(CloudRelay.RelayAlerts);
+        StatusMessage = CloudRelay.RelayAlerts
+            ? "Cloud alert relay enabled — use the \"Matmon Cloud\" sender in your notification rules."
+            : "Cloud alert relay disabled.";
         return RedirectToPage(new { tab = "cloud" });
     }
 
@@ -677,7 +673,6 @@ public class ConfigModel : PageModel
         CloudConnect.InstanceId ??= CloudSettings.Configured ? CloudSettings.InstanceId : _runtimeOptions.CloudInstanceId;
         CloudProvision.Url ??= string.IsNullOrWhiteSpace(CloudUrl) ? DefaultCloudUrl : CloudUrl;
         CloudProvision.Name ??= _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
-        CloudRelay.Recipients ??= CloudSettings.RelayRecipients;
         if (!Request.HasFormContentType)
         {
             CloudRelay.RelayAlerts = CloudSettings.RelayAlerts;
@@ -740,8 +735,6 @@ public sealed class CloudConnectInput
 public sealed class CloudRelayInput
 {
     public bool RelayAlerts { get; set; }
-
-    public string? Recipients { get; set; }
 }
 
 public sealed class SummaryReportInput

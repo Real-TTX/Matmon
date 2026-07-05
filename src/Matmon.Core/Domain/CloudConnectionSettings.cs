@@ -25,11 +25,10 @@ public sealed class CloudConnectionSettings
     /// <summary>True once the user has connected/disconnected via the UI — from then on the UI wins over env.</summary>
     public bool Configured { get; set; }
 
-    /// <summary>Relay raised/recovered alerts to the Matmon.Cloud notification gateway (which delivers them).</summary>
+    /// <summary>Master switch for cloud alert relay. When on, a built-in "Matmon Cloud" notification
+    /// sender is available; rules that pick it deliver via the cloud gateway (recipient from the rule's
+    /// receiver). Set from System → Cloud.</summary>
     public bool RelayAlerts { get; set; }
-
-    /// <summary>Comma/semicolon-separated recipients the cloud gateway delivers relayed alerts to.</summary>
-    public string? RelayRecipients { get; set; }
 
     /// <summary>Full Access: keep an outbound tunnel open so the UI is operable through the cloud.</summary>
     public bool FullAccessEnabled { get; set; }
@@ -46,7 +45,6 @@ public sealed class CloudConnectionSettings
         Enabled = Enabled,
         Configured = Configured,
         RelayAlerts = RelayAlerts,
-        RelayRecipients = RelayRecipients,
         FullAccessEnabled = FullAccessEnabled
     };
 }

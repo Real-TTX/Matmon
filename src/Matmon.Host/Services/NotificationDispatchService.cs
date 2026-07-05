@@ -75,7 +75,6 @@ public sealed class NotificationDispatchService : BackgroundService
             try
             {
                 _pending.AddRange(BuildDeliveries(notificationEvent));
-                BuildRelay(notificationEvent);
             }
             catch (Exception ex)
             {
@@ -98,6 +97,9 @@ public sealed class NotificationDispatchService : BackgroundService
         elementsById.TryGetValue(notificationEvent.ElementId, out var element);
         _workspaceStore.GetLatestSensorObservations().TryGetValue(notificationEvent.ElementId, out var latest);
         var alert = workspace.Alerts.FirstOrDefault(candidate => candidate.Id == notificationEvent.AlertId);
+
+        // Resolved once per event: the cloud gateway target for rules that use the Cloud sender (null if relay off).
+        var cloudRelay = ResolveCloudRelay();
 
         foreach (var rule in workspace.NotificationRules)
         {
@@ -137,13 +139,6 @@ public sealed class NotificationDispatchService : BackgroundService
                 }
             }
 
-            var smtp = ResolveSmtp(rule, workspace);
-            if (smtp is null || string.IsNullOrWhiteSpace(smtp.SmtpHost))
-            {
-                _logger.LogWarning("Notification rule {Rule} matched but has no usable SMTP sender", rule.Name);
-                continue;
-            }
-
             var recipient = ResolveRecipient(rule, workspace);
             if (string.IsNullOrWhiteSpace(recipient))
             {
@@ -151,18 +146,64 @@ public sealed class NotificationDispatchService : BackgroundService
                 continue;
             }
 
-            var context = BuildContext(notificationEvent, rule, element, alert, latest, elementsById);
-            deliveries.Add(new PendingDelivery
-            {
-                Smtp = smtp,
-                Recipient = recipient,
-                Subject = NotificationTemplateRenderer.RenderText(rule.SubjectTemplate, context, NotificationTemplateCatalog.DefaultSubjectTemplate),
-                TextBody = NotificationTemplateRenderer.RenderText(rule.TextTemplate, context, NotificationTemplateCatalog.DefaultTextTemplate),
-                HtmlBody = NotificationTemplateRenderer.RenderHtml(rule.HtmlTemplate, context, NotificationTemplateCatalog.DefaultHtmlTemplate),
-                RuleName = rule.Name
-            });
+            // A rule's sender decides the transport: a Cloud sender delivers via the Matmon.Cloud gateway,
+            // anything else (or no sender) via local SMTP. Recipient + templates are identical either way.
+            var sender = rule.SenderId is Guid senderId
+                ? workspace.NotificationSenders.FirstOrDefault(candidate => candidate.Id == senderId)
+                : null;
+            var isCloud = sender is { Kind: NotificationEndpointKind.Cloud };
 
-            // Update flap/cooldown state now that a mail is queued for this (rule, element).
+            EmailNotificationSettings? smtp = null;
+            if (isCloud)
+            {
+                if (!sender!.Enabled || cloudRelay is null)
+                {
+                    _logger.LogWarning("Notification rule {Rule} uses the Cloud sender but cloud relay is disabled or the link is down", rule.Name);
+                    continue;
+                }
+            }
+            else
+            {
+                smtp = ResolveSmtp(rule, workspace);
+                if (smtp is null || string.IsNullOrWhiteSpace(smtp.SmtpHost))
+                {
+                    _logger.LogWarning("Notification rule {Rule} matched but has no usable SMTP sender", rule.Name);
+                    continue;
+                }
+            }
+
+            var context = BuildContext(notificationEvent, rule, element, alert, latest, elementsById);
+            var subject = NotificationTemplateRenderer.RenderText(rule.SubjectTemplate, context, NotificationTemplateCatalog.DefaultSubjectTemplate);
+            var textBody = NotificationTemplateRenderer.RenderText(rule.TextTemplate, context, NotificationTemplateCatalog.DefaultTextTemplate);
+            var htmlBody = NotificationTemplateRenderer.RenderHtml(rule.HtmlTemplate, context, NotificationTemplateCatalog.DefaultHtmlTemplate);
+
+            if (isCloud)
+            {
+                _pendingRelays.Add(new PendingRelay
+                {
+                    Url = cloudRelay!.Value.Url,
+                    Token = cloudRelay.Value.Token,
+                    Recipient = recipient,
+                    Subject = subject,
+                    TextBody = textBody,
+                    HtmlBody = htmlBody,
+                    NextAttemptUtc = DateTimeOffset.UtcNow
+                });
+            }
+            else
+            {
+                deliveries.Add(new PendingDelivery
+                {
+                    Smtp = smtp!,
+                    Recipient = recipient,
+                    Subject = subject,
+                    TextBody = textBody,
+                    HtmlBody = htmlBody,
+                    RuleName = rule.Name
+                });
+            }
+
+            // Update flap/cooldown state now that a notification is queued for this (rule, element).
             if (notificationEvent.Transition == NotificationTransition.Raised)
             {
                 _throttle.MarkRaised(rule.Id, notificationEvent.ElementId, now);
@@ -176,45 +217,25 @@ public sealed class NotificationDispatchService : BackgroundService
         return deliveries;
     }
 
-    /// <summary>
-    /// If cloud alert-relay is enabled + connected, render the event with the default templates and
-    /// queue a POST to the Matmon.Cloud notification gateway (which delivers it). Independent of the
-    /// local SMTP rules — the cloud is a separate delivery transport for the same alert transitions.
-    /// </summary>
-    private void BuildRelay(AlertNotificationEvent notificationEvent)
+    /// <summary>The Matmon.Cloud gateway target (notify URL + token) when cloud alert-relay is enabled and the
+    /// link is connected; null otherwise. Rules whose sender is a Cloud sender deliver through this.</summary>
+    private (string Url, string Token)? ResolveCloudRelay()
     {
         var settings = _workspaceStore.GetCloudConnectionSettings();
         if (!settings.RelayAlerts || !settings.Configured || !settings.Enabled ||
-            string.IsNullOrWhiteSpace(settings.Url) || string.IsNullOrWhiteSpace(settings.InstanceId) ||
-            string.IsNullOrWhiteSpace(settings.RelayRecipients))
+            string.IsNullOrWhiteSpace(settings.Url) || string.IsNullOrWhiteSpace(settings.InstanceId))
         {
-            return;
+            return null;
         }
 
         var token = _workspaceStore.GetCloudConnectionToken();
         if (string.IsNullOrWhiteSpace(token))
         {
-            return;
+            return null;
         }
 
-        var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
-        elementsById.TryGetValue(notificationEvent.ElementId, out var element);
-        _workspaceStore.GetLatestSensorObservations().TryGetValue(notificationEvent.ElementId, out var latest);
-        var alert = _workspaceStore.Workspace.Alerts.FirstOrDefault(candidate => candidate.Id == notificationEvent.AlertId);
-
-        var context = BuildContext(notificationEvent, null, element, alert, latest, elementsById);
         var baseUrl = settings.Url!.Trim().TrimEnd('/');
-
-        _pendingRelays.Add(new PendingRelay
-        {
-            Url = $"{baseUrl}/api/instances/{settings.InstanceId!.Trim()}/notify",
-            Token = token,
-            Recipient = settings.RelayRecipients!,
-            Subject = NotificationTemplateRenderer.RenderText(NotificationTemplateCatalog.DefaultSubjectTemplate, context, NotificationTemplateCatalog.DefaultSubjectTemplate),
-            TextBody = NotificationTemplateRenderer.RenderText(NotificationTemplateCatalog.DefaultTextTemplate, context, NotificationTemplateCatalog.DefaultTextTemplate),
-            HtmlBody = NotificationTemplateRenderer.RenderHtml(NotificationTemplateCatalog.DefaultHtmlTemplate, context, NotificationTemplateCatalog.DefaultHtmlTemplate),
-            NextAttemptUtc = DateTimeOffset.UtcNow
-        });
+        return ($"{baseUrl}/api/instances/{settings.InstanceId!.Trim()}/notify", token);
     }
 
     private async Task ProcessPendingAsync(CancellationToken cancellationToken)
