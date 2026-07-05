@@ -184,6 +184,9 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/BackupRestore", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
+// Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the
+// auto-login middleware (trusts the cloud's identity assertion only when this secret accompanies it).
+builder.Services.AddSingleton<TunnelAuthSecret>();
 
 if (runtimeOptions.Mode == AppMode.Primary)
 {
@@ -265,6 +268,10 @@ if (!app.Environment.IsDevelopment() && runtimeOptions.Mode == AppMode.Primary)
 }
 
 app.UseAuthentication();
+// Seamless Full Access sign-in: a cloud user opening the console through the tunnel is auto-signed-in from the
+// cloud's trusted identity assertion (runs after authentication so it can override the anonymous principal,
+// before authorization so the request is treated as signed-in).
+app.UseTunnelAutoLogin();
 app.UseAuthorization();
 
 app.MapStaticAssets().AllowAnonymous();

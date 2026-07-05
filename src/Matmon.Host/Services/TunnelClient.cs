@@ -22,6 +22,7 @@ public sealed class TunnelClient : BackgroundService
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly IServer _server;
     private readonly ILogger<TunnelClient> _logger;
+    private readonly TunnelAuthSecret _tunnelSecret;
     // Decompress the local response so the tunnel always carries plain bytes: the cloud rewrites text
     // bodies and the browser gets a decodable stream (the static-asset handler otherwise returns brotli/gzip
     // that, once Content-Encoding is dropped in transit, the browser can't decode → "CSS doesn't load").
@@ -39,12 +40,14 @@ public sealed class TunnelClient : BackgroundService
         IMonitoringWorkspaceStore workspaceStore,
         MatmonRuntimeOptions runtimeOptions,
         IServer server,
-        ILogger<TunnelClient> logger)
+        ILogger<TunnelClient> logger,
+        TunnelAuthSecret tunnelSecret)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
         _server = server;
         _logger = logger;
+        _tunnelSecret = tunnelSecret;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -172,8 +175,10 @@ public sealed class TunnelClient : BackgroundService
         {
             // Host: let HttpClient set it from the local base. Accept-Encoding: let AutomaticDecompression
             // manage it (we forward decompressed plain bytes), else the browser's br/gzip pref leaks through.
+            // X-Matmon-Tunnel-Auth: never trust an inbound value — only we (below) may set the real secret.
             if (key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
-                key.Equals("Accept-Encoding", StringComparison.OrdinalIgnoreCase))
+                key.Equals("Accept-Encoding", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals(TunnelAutoLogin.TunnelAuthHeader, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -183,6 +188,10 @@ public sealed class TunnelClient : BackgroundService
                 message.Content.Headers.TryAddWithoutValidation(key, values);
             }
         }
+
+        // Prove to the local pipeline that this request came through our own tunnel (in-process secret), so the
+        // auto-login middleware may trust the cloud's X-Matmon-Cloud-User identity assertion carried above.
+        message.Headers.TryAddWithoutValidation(TunnelAutoLogin.TunnelAuthHeader, _tunnelSecret.Value);
 
         using var reply = await _local.SendAsync(message, HttpCompletionOption.ResponseContentRead, cancellationToken);
         var selfBase = SelfBaseUrl();
