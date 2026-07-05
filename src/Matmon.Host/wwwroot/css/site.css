@@ -1220,11 +1220,15 @@ body.is-sidebar-open {
 }
 
 .account-menu-panel {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.45rem);
-  left: 0;
-  z-index: 40;
+  /* Fixed to the viewport (not absolute) so the upward panel isn't clipped by the sidebar's overflow-y:auto —
+     which bites when the sidebar is tall enough to scroll (the instance's longer nav; the cloud's short nav
+     never scrolled, so it looked fine there). Anchored to the sidebar's bottom-left, matching its width. */
+  position: fixed;
+  left: 0.55rem;
+  right: auto;
+  bottom: 3.6rem;
+  width: min(calc(clamp(250px, 18vw, 300px) - 1.1rem), calc(100vw - 1.1rem));
+  z-index: 60;
   display: grid;
   gap: 0.35rem;
   padding: 0.4rem;
