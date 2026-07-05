@@ -2037,6 +2037,92 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 }
             }
         }
+
+        HydrateNotificationSecrets(document);
+    }
+
+    // ---- Notification secrets (SMTP passwords, webhook secrets) are DataProtection-encrypted at rest ----
+    // Same protect-before-save / hydrate-after-load lifecycle as credential bundles, so they never hit
+    // workspace.json in plaintext. A "slot" is one secret + its ciphertext field on a settings object.
+    private sealed record SecretSlot(Func<string?> GetPlain, Action<string?> SetPlain, Func<string?> GetCipher, Action<string?> SetCipher, Func<bool> GetFailed, Action<bool> SetFailed);
+
+    private static IEnumerable<SecretSlot> EnumerateNotificationSecrets(WorkspaceDocument document)
+    {
+        static SecretSlot Email(EmailNotificationSettings e) => new(
+            () => e.Password, v => e.Password = v, () => e.ProtectedPassword, v => e.ProtectedPassword = v,
+            () => e.PasswordHydrationFailed, v => e.PasswordHydrationFailed = v);
+        static SecretSlot Webhook(WebhookNotificationSettings w) => new(
+            () => w.Secret, v => w.Secret = v, () => w.ProtectedSecret, v => w.ProtectedSecret = v,
+            () => w.SecretHydrationFailed, v => w.SecretHydrationFailed = v);
+
+        yield return Email(document.NotificationConfiguration.Email);
+        yield return Webhook(document.NotificationConfiguration.Webhook);
+        foreach (var sender in document.NotificationSenders)
+        {
+            yield return Email(sender.Email);
+            yield return Webhook(sender.Webhook);
+        }
+        foreach (var receiver in document.NotificationReceivers)
+        {
+            yield return new SecretSlot(
+                () => receiver.Secret, v => receiver.Secret = v, () => receiver.ProtectedSecret, v => receiver.ProtectedSecret = v,
+                () => receiver.SecretHydrationFailed, v => receiver.SecretHydrationFailed = v);
+        }
+    }
+
+    private void HydrateNotificationSecrets(WorkspaceDocument document)
+    {
+        foreach (var slot in EnumerateNotificationSecrets(document))
+        {
+            var cipher = slot.GetCipher();
+            if (string.IsNullOrWhiteSpace(cipher))
+            {
+                // No ciphertext: either no secret, or a legacy plaintext still sitting in the plain field
+                // (from before encryption existed) — leave it, it gets protected on the next save.
+                slot.SetFailed(false);
+                continue;
+            }
+
+            try
+            {
+                slot.SetPlain(_credentialProtector.Unprotect(cipher));
+                slot.SetFailed(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to decrypt a notification secret");
+                slot.SetPlain(null);
+                slot.SetFailed(true); // keep the ciphertext; don't overwrite it with an encryption of empty
+            }
+        }
+    }
+
+    private void ProtectNotificationSecrets(WorkspaceDocument document)
+    {
+        foreach (var slot in EnumerateNotificationSecrets(document))
+        {
+            if (slot.GetFailed())
+            {
+                continue; // decryption failed on load — leave the stored ciphertext intact
+            }
+
+            var plain = slot.GetPlain();
+            if (string.IsNullOrEmpty(plain))
+            {
+                slot.SetCipher(null); // secret cleared
+                continue;
+            }
+
+            try
+            {
+                slot.SetCipher(_credentialProtector.Protect(plain));
+                slot.SetPlain(null); // never serialize the plaintext; hydrate restores it after the write
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to protect a notification secret");
+            }
+        }
     }
 
     private void ProtectCredentialBundles(WorkspaceDocument document)
@@ -2063,6 +2149,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 }
             }
         }
+
+        ProtectNotificationSecrets(document);
     }
 
     private static IEnumerable<MonitoringSettings> EnumerateSettings(WorkspaceDocument document)
@@ -3292,7 +3380,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         existing.State = result.State;
         existing.Message = message;
         existing.LastSeenUtc = timestampUtc;
-        existing.RecoveredUtc = null; // re-alarmed before it was worked off
+
+        // Re-alarm transition: the alert had cleared (RecoveredUtc set) and is now firing again. Re-open the
+        // episode and notify — otherwise the re-fire is silent AND, because the notification episode stays
+        // closed, the *next* recovery is dropped too. The dispatcher applies the per-rule cooldown, so a
+        // flapping sensor still can't spam. (No enqueue while it stays continuously active — only on the flip.)
+        if (existing.RecoveredUtc is not null)
+        {
+            existing.RecoveredUtc = null;
+            _notificationSink?.Enqueue(new AlertNotificationEvent(
+                existing.Id, existing.ElementId, result.State, message, timestampUtc, NotificationTransition.Raised));
+        }
     }
 
     private static JsonSerializerOptions CreateSerializerOptions()

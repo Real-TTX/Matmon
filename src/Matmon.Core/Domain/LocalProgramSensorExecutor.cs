@@ -306,6 +306,24 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
             return false;
         }
 
+        // Follow symlinks/junctions to the FINAL target and validate THAT against the allow-list — otherwise
+        // a link inside an allowed directory (e.g. /app/scripts/x -> /bin/bash) would pass the prefix check
+        // but execute an arbitrary binary. ResolveLinkTarget returns null for a non-link and throws for a
+        // non-existent path; either way we keep the normalized path (a missing file is rejected downstream
+        // by File.Exists, and a real file that isn't a link is validated as-is).
+        try
+        {
+            var resolved = File.ResolveLinkTarget(fullPath, returnFinalTarget: true);
+            if (resolved is not null)
+            {
+                fullPath = Path.GetFullPath(resolved.FullName);
+            }
+        }
+        catch
+        {
+            // not a link, inaccessible, or doesn't exist — keep fullPath
+        }
+
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         foreach (var entry in allowList)
         {

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Matmon.Core.Domain;
 
 public enum NotificationChannelKind
@@ -50,7 +52,15 @@ public sealed class NotificationReceiver
 
     public string Target { get; set; } = string.Empty;
 
+    /// <summary>In-memory plaintext (cleared before serialization; the ciphertext lives in
+    /// <see cref="ProtectedSecret"/>). Never written to workspace.json in the clear.</summary>
     public string? Secret { get; set; }
+
+    /// <summary>DataProtection-encrypted <see cref="Secret"/> — this is what persists.</summary>
+    public string? ProtectedSecret { get; set; }
+
+    /// <summary>Set when decryption failed on load, so save doesn't clobber good ciphertext with empty.</summary>
+    [JsonIgnore] public bool SecretHydrationFailed { get; set; }
 
     public int? TimeoutSeconds { get; set; } = 10;
 }
@@ -69,14 +79,30 @@ public sealed class EmailNotificationSettings
 
     public string? Username { get; set; }
 
+    /// <summary>In-memory plaintext SMTP password (cleared before serialization; ciphertext lives in
+    /// <see cref="ProtectedPassword"/>). Never written to workspace.json in the clear.</summary>
     public string? Password { get; set; }
+
+    /// <summary>DataProtection-encrypted <see cref="Password"/> — this is what persists.</summary>
+    public string? ProtectedPassword { get; set; }
+
+    /// <summary>Set when decryption failed on load, so save doesn't clobber good ciphertext with empty.</summary>
+    [JsonIgnore] public bool PasswordHydrationFailed { get; set; }
 }
 
 public sealed class WebhookNotificationSettings
 {
     public string EndpointUrl { get; set; } = string.Empty;
 
+    /// <summary>In-memory plaintext (cleared before serialization; ciphertext lives in
+    /// <see cref="ProtectedSecret"/>). Never written to workspace.json in the clear.</summary>
     public string? Secret { get; set; }
+
+    /// <summary>DataProtection-encrypted <see cref="Secret"/> — this is what persists.</summary>
+    public string? ProtectedSecret { get; set; }
+
+    /// <summary>Set when decryption failed on load, so save doesn't clobber good ciphertext with empty.</summary>
+    [JsonIgnore] public bool SecretHydrationFailed { get; set; }
 
     public int? TimeoutSeconds { get; set; } = 10;
 }
