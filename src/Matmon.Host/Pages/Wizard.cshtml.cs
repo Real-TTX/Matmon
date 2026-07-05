@@ -22,7 +22,7 @@ public class WizardModel : PageModel
     }
 
     /// <summary>Ordered wizard steps. "welcome" and "done" bookend the optional action steps.</summary>
-    public static readonly string[] StepOrder = ["welcome", "structure", "networks", "discovery", "probes", "notifications", "done"];
+    public static readonly string[] StepOrder = ["welcome", "structure", "networks", "discovery", "probes", "notifications", "cloud", "done"];
 
     /// <summary>Suggested starter folder tree (one level of children), created under the primary node.</summary>
     public static readonly (string Name, string[] Children)[] StarterTree =
@@ -57,6 +57,18 @@ public class WizardModel : PageModel
 
     /// <summary>Whether e-mail notifications are already configured.</summary>
     public bool EmailConfigured { get; private set; }
+
+    /// <summary>Whether this instance is already linked to Matmon.Cloud.</summary>
+    public bool CloudConnected { get; private set; }
+
+    /// <summary>The cloud URL this instance is linked to (when connected).</summary>
+    public string CloudLinkUrl { get; private set; } = string.Empty;
+
+    /// <summary>Default cloud address offered in the connect form.</summary>
+    public string DefaultCloudUrl => "https://cloud.matmon.eu";
+
+    /// <summary>Suggested instance name for the cloud link (this node's name / host name).</summary>
+    public string SuggestedInstanceName { get; private set; } = string.Empty;
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -228,6 +240,14 @@ public class WizardModel : PageModel
         if (Step == "notifications")
         {
             EmailConfigured = _workspaceStore.HasEmailNotifications();
+        }
+
+        if (Step == "cloud")
+        {
+            var cloud = _workspaceStore.GetCloudConnectionSettings();
+            CloudConnected = cloud.Enabled && cloud.HasToken;
+            CloudLinkUrl = cloud.Url ?? string.Empty;
+            SuggestedInstanceName = PrimaryNode()?.Name ?? Environment.MachineName;
         }
 
         if (Step == "structure")

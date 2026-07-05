@@ -13,6 +13,7 @@
         ("discovery", "search", "Discovery"),
         ("probes", "probe", "Remote probes"),
         ("notifications", "bell", "Notifications"),
+        ("cloud", "cloud", "Cloud"),
         ("done", "check", "Done"),
     };
 
@@ -197,6 +198,26 @@
                             <label class="setup-wizard-check"><input type="checkbox" name="useSsl" value="true" checked /> <span>Use SSL/TLS</span></label>
                             <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Set up e-mail alerts</span></button>
                         </form>
+                    }
+                    break;
+
+                case "cloud":
+                    <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Connect to Matmon Cloud</span></h2>
+                    @if (Model.CloudConnected)
+                    {
+                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") Connected to <strong>@Model.CloudLinkUrl</strong>. Manage the link in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
+                    }
+                    else
+                    {
+                        <p>Optional: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay and Full Access (operate this UI from anywhere). You stay in full control — disconnect anytime.</p>
+                        <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="setup-wizard-form">
+                            <div class="setup-wizard-grid">
+                                <label class="workspace-field"><span>Cloud URL</span><input name="CloudProvision.Url" class="workspace-input" value="@Model.DefaultCloudUrl" /></label>
+                                <label class="workspace-field"><span>Instance name</span><input name="CloudProvision.Name" class="workspace-input" value="@Model.SuggestedInstanceName" autocomplete="off" /></label>
+                            </div>
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Connect</span></button>
+                        </form>
+                        <p class="setup-wizard-muted">You'll confirm the link in your Matmon Cloud account. More options (an existing id + token, or e-mail provisioning) live in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
                     }
                     break;
 
