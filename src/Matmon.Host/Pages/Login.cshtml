@@ -43,7 +43,7 @@
             </div>
         </form>
 
-        @if (Model.CloudSsoAvailable)
+        @if (Model.CloudSsoAvailable && !Model.Embedded)
         {
             <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--matmon-muted);font-size:0.85rem;">
                 <span style="flex:1;height:1px;background:var(--matmon-border);"></span>or<span style="flex:1;height:1px;background:var(--matmon-border);"></span>

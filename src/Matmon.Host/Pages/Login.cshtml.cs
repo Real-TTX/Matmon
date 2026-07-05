@@ -35,12 +35,18 @@ public class LoginModel : PageModel
     /// <summary>Whether "Sign in with Matmon Cloud" can be offered (the cloud link is configured + enabled).</summary>
     public bool CloudSsoAvailable { get; private set; }
 
+    /// <summary>Reached through the cloud Full Access tunnel — hide the manual OAuth button (auto-login handles it,
+    /// and its cloud redirect can't survive the tunnel URL rewrite).</summary>
+    public bool Embedded { get; private set; }
+
     public IActionResult OnGet()
     {
         if (User.Identity?.IsAuthenticated == true)
         {
             return RedirectToLocal(ReturnUrl);
         }
+
+        Embedded = string.Equals(Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
 
         var cloud = _workspaceStore.GetCloudConnectionSettings();
         CloudSsoAvailable = cloud.Enabled && !string.IsNullOrWhiteSpace(cloud.Url) && !string.IsNullOrWhiteSpace(cloud.InstanceId);
