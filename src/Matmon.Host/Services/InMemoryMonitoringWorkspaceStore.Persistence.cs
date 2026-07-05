@@ -19,7 +19,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (loaded?.RootProbe is not null)
         {
             _logger.LogInformation("Workspace loaded from {WorkspacePath}", _workspacePath);
-            return loaded;
+            return NormalizeLoadedDocument(loaded);
         }
 
         loaded = TryLoadWorkspaceDocument(_workspaceBackupPath);
@@ -28,7 +28,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             _logger.LogWarning(
                 "Workspace loaded from backup {WorkspacePathBackup} because the primary file could not be read.",
                 _workspaceBackupPath);
-            return loaded;
+            return NormalizeLoadedDocument(loaded);
         }
 
         if (File.Exists(_workspacePath) || File.Exists(_workspaceBackupPath))
@@ -61,6 +61,32 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
 
         return CreatePlainWorkspaceDocument();
+    }
+
+    /// <summary>
+    /// Guarantees the singletons + collections that the store dereferences without null checks are never
+    /// null, even if a hand-edited or older workspace.json set them to <c>null</c> (a null cloudSettings
+    /// otherwise NREs <see cref="GetCloudConnectionSettings"/> and takes the whole host down via TunnelClient).
+    /// </summary>
+    private static WorkspaceDocument NormalizeLoadedDocument(WorkspaceDocument document)
+    {
+        document.NotificationConfiguration ??= new();
+        document.SummaryReport ??= new();
+        document.Cloud ??= new();
+        document.CloudSettings ??= new();
+        document.Templates ??= [];
+        document.SensorDefinitions ??= [];
+        document.Users ??= [];
+        document.Maps ??= [];
+        document.NotificationSenders ??= [];
+        document.NotificationReceivers ??= [];
+        document.NotificationRules ??= [];
+        document.Alerts ??= [];
+        document.BackupJobs ??= [];
+        document.SensorHistory ??= [];
+        document.Events ??= [];
+        document.SensorStatistics ??= [];
+        return document;
     }
 
     private static WorkspaceDocument CreatePlainWorkspaceDocument()

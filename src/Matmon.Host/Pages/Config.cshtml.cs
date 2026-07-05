@@ -366,33 +366,6 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
-    public IActionResult OnPostCloudUrl()
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        var url = (CloudConnect.Url ?? string.Empty).Trim().TrimEnd('/');
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out _))
-        {
-            ErrorMessage = "Enter a valid cloud URL.";
-            return RedirectToPage(new { tab = "cloud" });
-        }
-
-        var settings = _workspaceStore.GetCloudConnectionSettings();
-        if (string.IsNullOrWhiteSpace(settings.InstanceId) || !settings.HasToken)
-        {
-            ErrorMessage = "Connect to Matmon.Cloud first.";
-            return RedirectToPage(new { tab = "cloud" });
-        }
-
-        // Keep the same instance id + token (null preserves the stored token); only the address changes.
-        _workspaceStore.SetCloudConnectionSettings(url, settings.InstanceId, null, enabled: true);
-        StatusMessage = $"Cloud URL updated to {url}.";
-        return RedirectToPage(new { tab = "cloud" });
-    }
-
     public IActionResult OnPostCloudDisconnect()
     {
         if (!MatmonSecurity.IsAdmin(User))

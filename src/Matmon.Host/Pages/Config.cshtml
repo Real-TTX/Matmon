@@ -640,14 +640,10 @@
 
                 @if (linkActive)
                 {
+                    @* Connected: connection identity is locked (disconnect to change). Only the display name is editable. *@
                     <table style="width:100%;border-collapse:collapse;max-width:640px;">
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:160px;">Cloud URL</th>
-                            <td style="padding:8px 10px;">
-                                <form method="post" asp-page-handler="CloudUrl" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                                    <input asp-for="CloudConnect.Url" class="workspace-input" style="min-width:260px;" autocomplete="off" />
-                                    <button type="submit" class="workspace-secondary-submit">Update</button>
-                                </form>
-                            </td></tr>
+                            <td style="padding:8px 10px;">@(Model.CloudUrl ?? "–")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Instance id</th><td style="padding:8px 10px;">@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
@@ -658,12 +654,12 @@
                             <input asp-for="CloudRenameName" class="workspace-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
                         </label>
                         <button type="submit" class="workspace-submit">Update name</button>
-                        <p class="workspace-inline-note" style="margin-top:8px;">Sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
+                        <p class="workspace-inline-note" style="margin-top:8px;">The only setting editable while connected — sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
                     </form>
                     <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
                         <button type="submit" class="workspace-danger-submit">Disconnect</button>
                     </form>
-                    <p class="workspace-inline-note" style="margin-top:12px;">Managed here — connect/disconnect take effect within a few seconds, no restart or environment variables needed.</p>
+                    <p class="workspace-inline-note" style="margin-top:12px;">Connection details are locked while connected — <strong>Disconnect</strong> to change the cloud URL or link a different instance. Takes effect within a few seconds, no restart needed.</p>
                 }
                 else
                 {
