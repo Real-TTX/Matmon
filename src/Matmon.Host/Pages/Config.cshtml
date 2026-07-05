@@ -625,12 +625,21 @@
 
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;border:1px solid var(--matmon-border);border-radius:8px;background:var(--matmon-surface-soft);">
                     <strong>Plan:</strong>
-                    <span>@Model.License.Tier@(Model.License.IsFallback ? " (unlicensed)" : "")</span>
+                    <span>@Model.License.DisplayName@(Model.License.IsFallback ? " (unlicensed)" : "")</span>
                     <span style="color:var(--matmon-muted);">·</span>
                     <span>Probes: @Model.ProbeCount / @Model.License.ProbeLimitDisplay</span>
                     @if (overLimit)
                     {
                         <span style="color:var(--matmon-danger);">· over limit — can't add more</span>
+                    }
+                    <span style="color:var(--matmon-muted);">·</span>
+                    <span>Sensors: @Model.SensorCount / @Model.License.SensorLimitDisplay</span>
+                    <span style="color:var(--matmon-muted);">·</span>
+                    <span>Full Access: @(Model.License.TunnelEnabled ? "included" : "not included")</span>
+                    @if (Model.License.CloudSensorsEnabled)
+                    {
+                        <span style="color:var(--matmon-muted);">·</span>
+                        <span>Cloud sensors: @(Model.License.CloudSensorLimit < 0 ? "∞" : Model.License.CloudSensorLimit.ToString())</span>
                     }
                     @if (Model.License.ExpiresUtc is not null)
                     {

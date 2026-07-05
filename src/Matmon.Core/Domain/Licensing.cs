@@ -8,7 +8,8 @@ public enum LicenseTier
 {
     Free = 0,
     Business = 1,
-    Enterprise = 2
+    Enterprise = 2,
+    Custom = 3
 }
 
 /// <summary>
@@ -23,8 +24,23 @@ public sealed class LicenseInfo
 
     public LicenseTier Tier { get; init; } = LicenseTier.Free;
 
+    /// <summary>The plan's display name from the cloud template (e.g. "Business-2026"). Null for legacy tokens.</summary>
+    public string? PlanName { get; init; }
+
     /// <summary>Max number of probes (nodes) allowed; <see cref="Unlimited"/> for no limit.</summary>
     public int ProbeLimit { get; init; }
+
+    /// <summary>Max number of sensors allowed; <see cref="Unlimited"/> for no limit.</summary>
+    public int SensorLimit { get; init; } = Unlimited;
+
+    /// <summary>Max cloud sensors allowed (informational on the instance; the cloud enforces its own).</summary>
+    public int CloudSensorLimit { get; init; }
+
+    /// <summary>Whether Full Access (the outbound tunnel) is included in the plan.</summary>
+    public bool TunnelEnabled { get; init; } = true;
+
+    /// <summary>Whether cloud sensors are included in the plan.</summary>
+    public bool CloudSensorsEnabled { get; init; }
 
     public DateTimeOffset? ExpiresUtc { get; init; }
 
@@ -41,11 +57,23 @@ public sealed class LicenseInfo
 
     public string ProbeLimitDisplay => IsUnlimited ? "unlimited" : ProbeLimit.ToString();
 
-    /// <summary>The default license when none is present: Free, a small probe allowance.</summary>
+    public bool IsSensorUnlimited => SensorLimit == Unlimited;
+
+    public string SensorLimitDisplay => IsSensorUnlimited ? "unlimited" : SensorLimit.ToString();
+
+    /// <summary>The plan's display name, or the tier as a fallback for legacy tokens.</summary>
+    public string DisplayName => string.IsNullOrWhiteSpace(PlanName) ? Tier.ToString() : PlanName;
+
+    /// <summary>The default license when none is present: Free — a small allowance, no premium features.</summary>
     public static LicenseInfo Fallback() => new()
     {
         Tier = LicenseTier.Free,
+        PlanName = null,
         ProbeLimit = 1,
+        SensorLimit = 10,
+        CloudSensorLimit = 0,
+        TunnelEnabled = false,
+        CloudSensorsEnabled = false,
         IssuedUtc = DateTimeOffset.UnixEpoch,
         IsFallback = true
     };
@@ -58,7 +86,10 @@ public sealed class LicenseInfo
 /// </summary>
 public static class LicenseCrypto
 {
-    private sealed record Payload(int t, int p, long e, long iss, string id);
+    // New fields (n/sl/csl/te/cse) are nullable so a legacy token that lacks them verifies fine and maps to
+    // permissive defaults (current behavior), rather than falsely reading 0/false and blocking things.
+    private sealed record Payload(int t, int p, long e, long iss, string id,
+        string? n = null, int? sl = null, int? csl = null, bool? te = null, bool? cse = null);
 
     public static string Sign(LicenseInfo license, string privateKeyPkcs8Base64)
     {
@@ -67,7 +98,12 @@ public static class LicenseCrypto
             license.ProbeLimit,
             license.ExpiresUtc?.ToUnixTimeSeconds() ?? 0,
             license.IssuedUtc.ToUnixTimeSeconds(),
-            license.InstanceId ?? string.Empty);
+            license.InstanceId ?? string.Empty,
+            license.PlanName,
+            license.SensorLimit,
+            license.CloudSensorLimit,
+            license.TunnelEnabled,
+            license.CloudSensorsEnabled);
 
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         using var ecdsa = ECDsa.Create();
@@ -113,7 +149,13 @@ public static class LicenseCrypto
                 ProbeLimit = payload.p,
                 ExpiresUtc = payload.e > 0 ? DateTimeOffset.FromUnixTimeSeconds(payload.e) : null,
                 IssuedUtc = DateTimeOffset.FromUnixTimeSeconds(payload.iss),
-                InstanceId = string.IsNullOrEmpty(payload.id) ? null : payload.id
+                InstanceId = string.IsNullOrEmpty(payload.id) ? null : payload.id,
+                PlanName = string.IsNullOrEmpty(payload.n) ? null : payload.n,
+                // Legacy tokens lack these → permissive defaults (grandfather the prior no-limit behavior).
+                SensorLimit = payload.sl ?? LicenseInfo.Unlimited,
+                CloudSensorLimit = payload.csl ?? 0,
+                TunnelEnabled = payload.te ?? true,
+                CloudSensorsEnabled = payload.cse ?? false
             };
         }
         catch

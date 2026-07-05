@@ -61,6 +61,8 @@ public class ConfigModel : PageModel
 
     public int ProbeCount { get; private set; }
 
+    public int SensorCount { get; private set; }
+
     [BindProperty]
     public CloudProvisionInput CloudProvision { get; set; } = new();
 
@@ -555,6 +557,13 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
+        // Full Access is a licensed feature — refuse to enable it on a plan that doesn't include it.
+        if (CloudFullAccess && !_licenseService.Current.TunnelEnabled)
+        {
+            ErrorMessage = "Full Access isn't included in your plan. Upgrade the plan in Matmon.Cloud to enable it.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
         _workspaceStore.SetCloudFullAccess(CloudFullAccess);
         StatusMessage = CloudFullAccess
             ? "Full Access enabled — you can now operate this instance from Matmon.Cloud."
@@ -662,7 +671,9 @@ public class ConfigModel : PageModel
             AttachPdf = reportSettings.AttachPdf
         };
         License = _licenseService.Current;
-        ProbeCount = _workspaceStore.GetAllElements().OfType<ProbeElement>().Count();
+        var allElements = _workspaceStore.GetAllElements();
+        ProbeCount = allElements.OfType<ProbeElement>().Count();
+        SensorCount = allElements.OfType<SensorElement>().Count();
         CloudConnection = _workspaceStore.GetCloudConnection();
         CloudSettings = _workspaceStore.GetCloudConnectionSettings();
         CloudEnvBootstrapSet = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);

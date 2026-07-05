@@ -14,6 +14,9 @@ public interface ILicenseService
 
     /// <summary>Whether another probe may be added under the current license.</summary>
     bool CanAddProbe(out string reason);
+
+    /// <summary>Whether another sensor may be added under the current license.</summary>
+    bool CanAddSensor(out string reason);
 }
 
 public sealed class LicenseService : ILicenseService
@@ -55,8 +58,29 @@ public sealed class LicenseService : ILicenseService
             return true;
         }
 
-        reason = $"Probe limit reached ({license.ProbeLimit} on the {license.Tier} plan). " +
+        reason = $"Probe limit reached ({license.ProbeLimit} on the {license.DisplayName} plan). " +
             "Upgrade the plan in Matmon.Cloud to add more probes.";
+        return false;
+    }
+
+    public bool CanAddSensor(out string reason)
+    {
+        var license = Current;
+        if (license.IsSensorUnlimited)
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        var sensorCount = _store.GetAllElements().OfType<SensorElement>().Count();
+        if (sensorCount < license.SensorLimit)
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        reason = $"Sensor limit reached ({license.SensorLimit} on the {license.DisplayName} plan). " +
+            "Upgrade the plan in Matmon.Cloud to add more sensors.";
         return false;
     }
 }

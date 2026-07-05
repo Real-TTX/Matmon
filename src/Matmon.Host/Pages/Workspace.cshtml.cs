@@ -208,6 +208,13 @@ public sealed class WorkspaceModel : PageModel
     {
         try
         {
+            if (!_licenseService.CanAddSensor(out var licenseReason))
+            {
+                ErrorMessage = licenseReason;
+                LoadViewState(populateEditorValues: false);
+                return Page();
+            }
+
             NormalizeHeartbeatSensorTarget(NewSensor);
 
             ApplySnmpWalkSelectionsToParameters(NewSensor);
