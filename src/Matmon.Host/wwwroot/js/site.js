@@ -3867,8 +3867,17 @@ function setNavBadge(selector, count, tone, showZero = false) {
 }
 
 function redirectToLogin() {
-  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const loginUrl = new URL("/login", window.location.origin);
+  // When operated through the Matmon.Cloud Full Access tunnel, the instance UI is served under an
+  // /instances/{id}/embed prefix on the CLOUD origin. window.location.origin is then the cloud, so a bare
+  // "/login" would throw the iframe out to the cloud. The tunnel shim exposes the prefix; use it, and strip
+  // it from the returnUrl so the instance's own post-login redirect stays instance-relative (the tunnel
+  // re-adds the prefix). Outside the tunnel the prefix is empty and this behaves exactly as before.
+  const prefix = window.__matmonEmbedPrefix || "";
+  let currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (prefix && currentPath.indexOf(prefix) === 0) {
+    currentPath = currentPath.slice(prefix.length) || "/";
+  }
+  const loginUrl = new URL(prefix + "/login", window.location.origin);
   loginUrl.searchParams.set("returnUrl", currentPath);
   window.location.assign(loginUrl.toString());
 }
