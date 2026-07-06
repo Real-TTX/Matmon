@@ -186,7 +186,8 @@ public sealed class CloudConnectionService : BackgroundService
                 warningAlerts,
                 ackAlerts,
                 probeCount,
-                mapCount))
+                mapCount,
+                ProtocolVersion))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
@@ -257,7 +258,11 @@ public sealed class CloudConnectionService : BackgroundService
         public static ResolvedLink Off(string? baseUrl, string? status) => new(false, baseUrl, null, null, null, status);
     }
 
+    /// <summary>Version of the cloud&lt;-&gt;instance contract this instance speaks. Bump when the heartbeat/API
+    /// contract changes; the cloud flags instances reporting an older protocol as "outdated".</summary>
+    public const int ProtocolVersion = 1;
+
     private sealed record CloudHeartbeatRequest(
         string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts,
-        int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount);
+        int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount, int? ProtocolVersion);
 }
