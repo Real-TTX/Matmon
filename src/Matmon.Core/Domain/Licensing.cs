@@ -86,6 +86,10 @@ public sealed class LicenseInfo
 /// </summary>
 public static class LicenseCrypto
 {
+    /// <summary>A signed license is rejected if its validity window (issued→expires) exceeds this — no license may
+    /// be valid longer than 15 months. Keep the cloud signer's cap in sync with this value.</summary>
+    public const int MaxValidityMonths = 15;
+
     // New fields (n/sl/csl/te/cse) are nullable so a legacy token that lacks them verifies fine and maps to
     // permissive defaults (current behavior), rather than falsely reading 0/false and blocking things.
     private sealed record Payload(int t, int p, long e, long iss, string id,
@@ -143,7 +147,7 @@ public static class LicenseCrypto
                 return null;
             }
 
-            return new LicenseInfo
+            var license = new LicenseInfo
             {
                 Tier = (LicenseTier)payload.t,
                 ProbeLimit = payload.p,
@@ -157,6 +161,16 @@ public static class LicenseCrypto
                 TunnelEnabled = payload.te ?? true,
                 CloudSensorsEnabled = payload.cse ?? false
             };
+
+            // Hard cap: a signed license may not be valid longer than MaxValidityMonths from issue. Defense-in-depth
+            // so a forged/over-issued or long-cached token can't grant a perpetual license offline — a connected
+            // instance re-fetches a fresh (rolling) token each heartbeat, so this never bites in normal operation.
+            if (license.ExpiresUtc is { } expiry && expiry > license.IssuedUtc.AddMonths(MaxValidityMonths))
+            {
+                return null;
+            }
+
+            return license;
         }
         catch
         {

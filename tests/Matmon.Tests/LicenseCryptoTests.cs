@@ -19,12 +19,13 @@ public class LicenseCryptoTests
     public void Sign_then_verify_round_trips_the_license()
     {
         var (priv, pub) = FreshKeypair();
+        var issued = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
         var license = new LicenseInfo
         {
             Tier = LicenseTier.Business,
             ProbeLimit = 5,
-            ExpiresUtc = DateTimeOffset.FromUnixTimeSeconds(1_900_000_000),
-            IssuedUtc = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000),
+            ExpiresUtc = issued.AddMonths(12), // within the 15-month cap
+            IssuedUtc = issued,
             InstanceId = "11111111-2222-3333-4444-555555555555"
         };
 
@@ -36,6 +37,23 @@ public class LicenseCryptoTests
         Assert.Equal(5, verified.ProbeLimit);
         Assert.Equal(license.ExpiresUtc, verified.ExpiresUtc);
         Assert.Equal(license.InstanceId, verified.InstanceId);
+    }
+
+    [Fact]
+    public void License_valid_longer_than_15_months_is_rejected()
+    {
+        var (priv, pub) = FreshKeypair();
+        var issued = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
+        var overlong = new LicenseInfo
+        {
+            Tier = LicenseTier.Enterprise,
+            ProbeLimit = -1,
+            IssuedUtc = issued,
+            ExpiresUtc = issued.AddMonths(16) // exceeds the hard cap
+        };
+
+        var token = LicenseCrypto.Sign(overlong, priv);
+        Assert.Null(LicenseCrypto.Verify(token, pub));
     }
 
     [Fact]
