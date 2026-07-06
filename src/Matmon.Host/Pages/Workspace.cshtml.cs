@@ -4839,15 +4839,27 @@ public sealed class WorkspaceModel : PageModel
 
     private IReadOnlyList<WorkspaceNotificationReceiverRow> BuildNotificationReceiverRows(MonitoringWorkspaceSnapshot snapshot)
     {
-        return snapshot.NotificationReceivers
+        // Built-in virtual receiver groups (All users / All admins / All operators) shown first as read-only rows,
+        // so they're discoverable in the Receivers tab — not just inside the pickers. Resolved to real e-mails at send time.
+        var builtIns = NotificationReceiverDefaults.All.Select(builtIn => new WorkspaceNotificationReceiverRow(
+            builtIn.Id,
+            builtIn.Name,
+            Enabled: true,
+            Kind: "Group",
+            Target: "resolved to matching users' e-mails at send time",
+            Summary: "Built-in group",
+            IsBuiltIn: true));
+
+        var real = snapshot.NotificationReceivers
             .Select(receiver => new WorkspaceNotificationReceiverRow(
                 receiver.Id,
                 receiver.Name,
                 receiver.Enabled,
                 receiver.Kind.ToString(),
                 receiver.Target,
-                BuildNotificationReceiverSummary(snapshot.NotificationReceivers, receiver.Id, receiver.Kind == NotificationEndpointKind.Webhook ? NotificationChannelKind.Webhook : NotificationChannelKind.Email, receiver.Target)))
-            .ToArray();
+                BuildNotificationReceiverSummary(snapshot.NotificationReceivers, receiver.Id, receiver.Kind == NotificationEndpointKind.Webhook ? NotificationChannelKind.Webhook : NotificationChannelKind.Email, receiver.Target)));
+
+        return builtIns.Concat(real).ToArray();
     }
 
     private IReadOnlyList<WorkspaceAlertRow> BuildAlertRows(MonitoringWorkspaceSnapshot snapshot)
@@ -6684,7 +6696,8 @@ public sealed record WorkspaceNotificationReceiverRow(
     bool Enabled,
     string Kind,
     string Target,
-    string Summary);
+    string Summary,
+    bool IsBuiltIn = false);
 
 public sealed class CreateProbeInput
 {

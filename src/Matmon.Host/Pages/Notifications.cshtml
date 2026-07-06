@@ -150,22 +150,25 @@
         <section class="panel panel-stack workspace-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("inbox")<span>Receivers</span></h2>
-                <span class="panel-hint">@Model.View.NotificationReceiverCount receivers</span>
+                <span class="panel-hint">@Model.View.NotificationReceivers.Count receivers</span>
             </div>
 
             <div class="notification-rule-list">
                 @foreach (var receiver in Model.View.NotificationReceivers)
                 {
-                    <article class="notification-rule-row @(Model.NotificationReceiverEditor.Id == receiver.Id ? "is-selected" : string.Empty)">
+                    <article class="notification-rule-row @(!receiver.IsBuiltIn && Model.NotificationReceiverEditor.Id == receiver.Id ? "is-selected" : string.Empty)">
                         <div class="notification-rule-main">
-                            <div class="notification-rule-name">@receiver.Name</div>
+                            <div class="notification-rule-name">@receiver.Name @if (receiver.IsBuiltIn) { <span class="notif-type-chip">Built-in group</span> }</div>
                             <div class="notification-rule-meta">@receiver.Kind | @receiver.Target</div>
                             <div class="notification-rule-meta">@receiver.Summary</div>
                         </div>
                         <div class="notification-rule-side">
                             <span class="notification-rule-state @(receiver.Enabled ? "is-enabled" : "is-disabled")">@(receiver.Enabled ? "Enabled" : "Disabled")</span>
                             <div class="workspace-row-actions">
-                                <a class="workspace-action-link" asp-page="/NotificationReceiverEditor" asp-route-selectedNotificationReceiverId="@receiver.Id" asp-route-returnUrl="/notifications#receivers">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                @if (!receiver.IsBuiltIn)
+                                {
+                                    <a class="workspace-action-link" asp-page="/NotificationReceiverEditor" asp-route-selectedNotificationReceiverId="@receiver.Id" asp-route-returnUrl="/notifications#receivers">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                }
                             </div>
                         </div>
                     </article>
