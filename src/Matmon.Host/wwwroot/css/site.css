@@ -1344,19 +1344,16 @@ body.is-sidebar-open {
   background: var(--matmon-sidebar-item-bg);
 }
 
+/* Show the icon matching the current theme MODE (light=sun, dark=moon, system=split sun/moon). */
 .theme-toggle-icon {
-  display: inline-flex;
+  display: none;
   align-items: center;
 }
 
-html[data-theme="dark"] .theme-toggle-icon-light-target,
-html[data-theme="light"] .theme-toggle-icon-dark-target {
+html[data-theme-mode="light"] .theme-toggle-icon[data-theme-icon="light"],
+html[data-theme-mode="dark"] .theme-toggle-icon[data-theme-icon="dark"],
+html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   display: inline-flex;
-}
-
-html[data-theme="dark"] .theme-toggle-icon-dark-target,
-html[data-theme="light"] .theme-toggle-icon-light-target {
-  display: none;
 }
 
 .auth-shell {

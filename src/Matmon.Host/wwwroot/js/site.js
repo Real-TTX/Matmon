@@ -785,38 +785,57 @@ function initializeThemeToggle() {
     return;
   }
 
-  const applyTheme = (theme) => {
-    const normalizedTheme = theme === "light" ? "light" : "dark";
-    document.documentElement.dataset.theme = normalizedTheme;
+  const media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const labelFor = { light: "Light", dark: "Dark", system: "System" };
+  const nextMode = { light: "dark", dark: "system", system: "light" };
+
+  const readMode = () => {
+    try {
+      const stored = localStorage.getItem(themeStorageKey);
+      if (stored === "light" || stored === "dark" || stored === "system") {
+        return stored;
+      }
+    } catch {
+      // ignore
+    }
+    return "system"; // default: follow the OS
+  };
+
+  const apply = (mode) => {
+    const dark = mode === "dark" || (mode === "system" && media && media.matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.documentElement.dataset.themeMode = mode;
 
     buttons.forEach((button) => {
       const label = button.querySelector("[data-theme-label]");
-      button.dataset.theme = normalizedTheme;
-      button.title = normalizedTheme === "dark" ? "Switch to bright mode" : "Switch to dark mode";
+      button.title = "Theme: " + labelFor[mode] + " — click to change";
       button.setAttribute("aria-label", button.title);
-
       if (label) {
-        label.textContent = normalizedTheme === "dark" ? "Bright" : "Dark";
+        label.textContent = labelFor[mode];
       }
     });
   };
 
-  applyTheme(document.documentElement.dataset.theme || "dark");
+  apply(readMode());
 
   buttons.forEach((button) => {
     button.addEventListener("click", () => {
-      const currentTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-      const nextTheme = currentTheme === "dark" ? "light" : "dark";
-
+      const mode = nextMode[readMode()] || "light";
       try {
-        localStorage.setItem(themeStorageKey, nextTheme);
+        localStorage.setItem(themeStorageKey, mode);
       } catch {
         // Theme selection stays functional even if storage is unavailable.
       }
-
-      applyTheme(nextTheme);
+      apply(mode);
     });
   });
+
+  // Re-resolve when the OS theme changes while in "system" mode.
+  if (media) {
+    const onChange = () => { if (readMode() === "system") { apply("system"); } };
+    if (media.addEventListener) { media.addEventListener("change", onChange); }
+    else if (media.addListener) { media.addListener(onChange); }
+  }
 }
 
 function initializeMobileSidebarMenu() {

@@ -14,17 +14,20 @@
     <script>
         (() => {
             const storageKey = "matmon-theme";
-            let theme = "dark";
+            let mode = "system";
             try {
                 const stored = localStorage.getItem(storageKey);
-                if (stored === "light" || stored === "dark") {
-                    theme = stored;
+                if (stored === "light" || stored === "dark" || stored === "system") {
+                    mode = stored;
                 }
             } catch {
-                theme = "dark";
+                mode = "system";
             }
 
-            document.documentElement.dataset.theme = theme;
+            const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+            const dark = mode === "dark" || (mode === "system" && prefersDark);
+            document.documentElement.dataset.theme = dark ? "dark" : "light";
+            document.documentElement.dataset.themeMode = mode;
         })();
     </script>
     <script type="importmap"></script>
@@ -158,10 +161,11 @@
 
                 <div class="sidebar-footer">
                     <div class="sidebar-footer-tools">
-                        <button type="button" class="sidebar-icon-button topnav-theme-toggle" data-theme-toggle title="Toggle theme">
-                            <span class="theme-toggle-icon theme-toggle-icon-light-target">@MatmonIcons.Render("sun")</span>
-                            <span class="theme-toggle-icon theme-toggle-icon-dark-target">@MatmonIcons.Render("moon")</span>
-                            <span class="workspace-sr-only" data-theme-label>Bright</span>
+                        <button type="button" class="sidebar-icon-button topnav-theme-toggle" data-theme-toggle title="Theme">
+                            <span class="theme-toggle-icon" data-theme-icon="light">@MatmonIcons.Render("sun")</span>
+                            <span class="theme-toggle-icon" data-theme-icon="dark">@MatmonIcons.Render("moon")</span>
+                            <span class="theme-toggle-icon" data-theme-icon="system">@MatmonIcons.Render("theme-system")</span>
+                            <span class="workspace-sr-only" data-theme-label>System</span>
                         </button>
 
                         @if (User.Identity?.IsAuthenticated == true)

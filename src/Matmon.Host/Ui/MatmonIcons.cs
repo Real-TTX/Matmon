@@ -219,6 +219,16 @@ public static class MatmonIcons
         ["moon"] = """
             <path d="M10.8 2.7A5.8 5.8 0 1 0 13.3 10a4.8 4.8 0 0 1-2.5.7A5.8 5.8 0 0 1 10.8 2.7Z" />
             """,
+        // Split sun/moon — the "System / follow OS" theme state.
+        ["theme-system"] = """
+            <circle cx="8" cy="8" r="4.4" />
+            <path d="M8 3.6A4.4 4.4 0 0 1 8 12.4Z" fill="currentColor" stroke="none" />
+            <path d="M8 0.9v1.3" />
+            <path d="M8 13.8v1.3" />
+            <path d="M1.1 8h1.3" />
+            <path d="M2.9 2.9l0.95 0.95" />
+            <path d="M2.9 13.1l0.95-0.95" />
+            """,
         ["square"] = """
             <rect x="3" y="3" width="10" height="10" />
             """,
