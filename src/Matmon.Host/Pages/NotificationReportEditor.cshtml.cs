@@ -63,10 +63,17 @@ public class NotificationReportEditorModel : PageModel
     public async Task<IActionResult> OnPostSendTestAsync(CancellationToken cancellationToken)
     {
         var settings = _workspaceStore.GetSummaryReportSettings();
-        var sent = await _summaryReportSender.SendAsync(settings, cancellationToken);
-        StatusMessage = sent
-            ? "Report sent."
-            : "Report not sent — check the recipient/receiver and that an SMTP sender is configured.";
+        try
+        {
+            var sent = await _summaryReportSender.SendAsync(settings, cancellationToken);
+            StatusMessage = sent
+                ? "Report sent."
+                : "Report not sent — check the recipient/receiver and that an SMTP sender is configured.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Report not sent: {ex.Message}";
+        }
         return RedirectToPage();
     }
 
