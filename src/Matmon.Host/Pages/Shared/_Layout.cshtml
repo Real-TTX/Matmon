@@ -48,6 +48,24 @@
     @{
         var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
         string NavClass(string page) => string.Equals(currentPage, page, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
+
+        // Section-aware sidebar highlight (mirrors the cloud shell): a nav item stays active on ALL of its
+        // section's sub-pages (editors, tabs), matched by URL-path prefix rather than exact page name.
+        var currentPath = Context.Request.Path.Value ?? string.Empty;
+        bool PathStarts(string prefix) => currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        // /monitoring is a shared prefix (Sensors + the Templates editor + the Probe-usage page live under it),
+        // so Templates/Probes are resolved first and excluded from Sensors (most-specific-prefix wins). Root "/"
+        // must be exact — it is a prefix of every path.
+        var dashboardActive = string.Equals(currentPath, "/", StringComparison.OrdinalIgnoreCase);
+        var probesActive = PathStarts("/probes") || PathStarts("/system/probes") || PathStarts("/monitoring/probe");
+        var templatesActive = PathStarts("/templates") || PathStarts("/monitoring/template");
+        var mapsActive = PathStarts("/maps");
+        var notificationsActive = PathStarts("/notifications");
+        var eventsActive = PathStarts("/events");
+        var discoveryActive = PathStarts("/discovery");
+        var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/backup");
+        var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive;
+        string Active(bool on) => on ? "is-active" : string.Empty;
         var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
         var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
         var suppressWorkspaceSummary = string.Equals(ViewData["WorkspaceSummarySuppress"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
@@ -144,17 +162,17 @@
                         }
                         else
                         {
-                            <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">Dashboard</a>
-                            <a asp-area="" asp-page="/Monitoring" class="topnav-link @NavClass("/Monitoring")">Sensors</a>
-                            <a asp-area="" asp-page="/Probes" class="topnav-link @NavClass("/Probes")">Probes</a>
-                            <a asp-area="" asp-page="/Discovery" class="topnav-link @NavClass("/Discovery")">Discovery</a>
-                            <a asp-area="" asp-page="/Maps" class="topnav-link @NavClass("/Maps")">Maps</a>
-                            <a asp-area="" asp-page="/Templates" class="topnav-link @NavClass("/Templates")">Templates</a>
-                            <a asp-area="" asp-page="/Notifications" class="topnav-link @NavClass("/Notifications")">Notifications</a>
-                            <a asp-area="" asp-page="/Events" class="topnav-link @NavClass("/Events")">Events</a>
+                            <a asp-area="" asp-page="/Index" class="topnav-link @Active(dashboardActive)">Dashboard</a>
+                            <a asp-area="" asp-page="/Monitoring" class="topnav-link @Active(sensorsActive)">Sensors</a>
+                            <a asp-area="" asp-page="/Probes" class="topnav-link @Active(probesActive)">Probes</a>
+                            <a asp-area="" asp-page="/Discovery" class="topnav-link @Active(discoveryActive)">Discovery</a>
+                            <a asp-area="" asp-page="/Maps" class="topnav-link @Active(mapsActive)">Maps</a>
+                            <a asp-area="" asp-page="/Templates" class="topnav-link @Active(templatesActive)">Templates</a>
+                            <a asp-area="" asp-page="/Notifications" class="topnav-link @Active(notificationsActive)">Notifications</a>
+                            <a asp-area="" asp-page="/Events" class="topnav-link @Active(eventsActive)">Events</a>
                             @if (isAdmin)
                             {
-                                <a asp-area="" asp-page="/Config" class="topnav-link @NavClass("/Config")">System</a>
+                                <a asp-area="" asp-page="/Config" class="topnav-link @Active(systemActive)">System</a>
                             }
                         }
                     }

@@ -2950,12 +2950,14 @@ function initializeMapDesigner() {
     Value: "Value",
     Graph: "Graph"
   };
+  // Minimum tile size floors. Kept small so tiles can shrink to 1-2 columns wide (any height) —
+  // a graph keeps a 2-column floor since a 1-wide sparkline is unreadable; everything else allows 1.
   const sizeLimits = {
-    Text: { minWidth: 2, minHeight: 1, maxWidth: 12, maxHeight: 6, defaultWidth: 4, defaultHeight: 2 },
-    Element: { minWidth: 2, minHeight: 1, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
-    Status: { minWidth: 3, minHeight: 2, maxWidth: 12, maxHeight: 8, defaultWidth: 4, defaultHeight: 2 },
-    Value: { minWidth: 2, minHeight: 2, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
-    Graph: { minWidth: 4, minHeight: 3, maxWidth: 12, maxHeight: 10, defaultWidth: 5, defaultHeight: 3 }
+    Text: { minWidth: 1, minHeight: 1, maxWidth: 12, maxHeight: 6, defaultWidth: 4, defaultHeight: 2 },
+    Element: { minWidth: 1, minHeight: 1, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
+    Status: { minWidth: 1, minHeight: 1, maxWidth: 12, maxHeight: 8, defaultWidth: 4, defaultHeight: 2 },
+    Value: { minWidth: 1, minHeight: 1, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
+    Graph: { minWidth: 2, minHeight: 2, maxWidth: 12, maxHeight: 10, defaultWidth: 5, defaultHeight: 3 }
   };
   const kindHints = {
     "0": "Text tiles do not need a target.",

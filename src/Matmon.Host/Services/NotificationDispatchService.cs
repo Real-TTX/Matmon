@@ -120,11 +120,12 @@ public sealed class NotificationDispatchService : BackgroundService
                     continue;
                 }
 
-                // Cooldown: don't re-notify the same rule+element within CooldownMinutes. Combined with
-                // the persist-until-ack model, this is what stops a flapping sensor from spamming.
-                if (_throttle.IsWithinCooldown(rule.Id, notificationEvent.ElementId, rule.CooldownMinutes, now))
+                // Rate limit: at most Threshold raised mails per CooldownMinutes window for this rule+element
+                // (Threshold null/≤0 = 1, i.e. one mail per window). Combined with the persist-until-ack model,
+                // this is what stops a flapping sensor from spamming.
+                if (_throttle.IsWithinCooldown(rule.Id, notificationEvent.ElementId, rule.CooldownMinutes, rule.Threshold, now))
                 {
-                    _logger.LogDebug("Suppressed notification for rule {Rule} on {Element} — within cooldown", rule.Name, notificationEvent.ElementId);
+                    _logger.LogDebug("Suppressed notification for rule {Rule} on {Element} — rate limit reached", rule.Name, notificationEvent.ElementId);
                     continue;
                 }
             }

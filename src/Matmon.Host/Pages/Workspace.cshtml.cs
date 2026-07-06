@@ -2035,6 +2035,7 @@ public sealed class WorkspaceModel : PageModel
             IncludeDescendants = rule.IncludeDescendants,
             TriggerStates = rule.TriggerStates.ToList(),
             CooldownMinutes = rule.CooldownMinutes,
+            Threshold = rule.Threshold,
             SubjectTemplate = string.IsNullOrWhiteSpace(rule.SubjectTemplate) ? NotificationTemplateCatalog.DefaultSubjectTemplate : rule.SubjectTemplate,
             TextTemplate = string.IsNullOrWhiteSpace(rule.TextTemplate) ? NotificationTemplateCatalog.DefaultTextTemplate : rule.TextTemplate,
             HtmlTemplate = string.IsNullOrWhiteSpace(rule.HtmlTemplate) ? NotificationTemplateCatalog.DefaultHtmlTemplate : rule.HtmlTemplate,
@@ -2092,6 +2093,7 @@ public sealed class WorkspaceModel : PageModel
             editor.IncludeDescendants,
             editor.TriggerStates,
             editor.CooldownMinutes,
+            editor.Threshold,
             editor.SubjectTemplate,
             editor.TextTemplate,
             editor.HtmlTemplate);
@@ -2181,6 +2183,7 @@ public sealed class WorkspaceModel : PageModel
             editor.IncludeDescendants,
             editor.TriggerStates,
             editor.CooldownMinutes,
+            editor.Threshold,
             editor.SubjectTemplate,
             editor.TextTemplate,
             editor.HtmlTemplate);
@@ -2196,6 +2199,7 @@ public sealed class WorkspaceModel : PageModel
         bool includeDescendants,
         IEnumerable<SensorState>? triggerStates,
         int? cooldownMinutes,
+        int? threshold,
         string? subjectTemplate,
         string? textTemplate,
         string? htmlTemplate)
@@ -2213,6 +2217,7 @@ public sealed class WorkspaceModel : PageModel
         rule.TargetElementId = targetElementId;
         rule.IncludeDescendants = includeDescendants;
         rule.CooldownMinutes = cooldownMinutes is int cooldown && cooldown > 0 ? cooldown : null;
+        rule.Threshold = threshold is int t && t > 0 ? t : null;
         rule.SubjectTemplate = string.IsNullOrWhiteSpace(subjectTemplate) ? string.Empty : subjectTemplate;
         rule.TextTemplate = string.IsNullOrWhiteSpace(textTemplate) ? string.Empty : textTemplate;
         rule.HtmlTemplate = string.IsNullOrWhiteSpace(htmlTemplate) ? string.Empty : htmlTemplate;
@@ -4816,7 +4821,7 @@ public sealed class WorkspaceModel : PageModel
                 BuildNotificationReceiverSummary(snapshot.NotificationReceivers, rule.ReceiverId, rule.ChannelKind, rule.Recipient),
                 BuildNotificationTargetSummary(rule, nodes),
                 BuildNotificationTriggerSummary(rule.TriggerStates),
-                BuildNotificationCooldownSummary(rule.CooldownMinutes)))
+                BuildNotificationCooldownSummary(rule.CooldownMinutes, rule.Threshold)))
             .ToArray();
     }
 
@@ -4974,11 +4979,17 @@ public sealed class WorkspaceModel : PageModel
         return labels.Length == 0 ? "no states" : string.Join(", ", labels);
     }
 
-    private static string BuildNotificationCooldownSummary(int? cooldownMinutes)
+    private static string BuildNotificationCooldownSummary(int? cooldownMinutes, int? threshold)
     {
-        return cooldownMinutes is int cooldown && cooldown > 0
-            ? $"cooldown {cooldown}m"
-            : "no cooldown";
+        if (cooldownMinutes is not int cooldown || cooldown <= 0)
+        {
+            return "no cooldown";
+        }
+
+        var limit = threshold is int t && t > 0 ? t : 1;
+        return limit > 1
+            ? $"max {limit}/{cooldown}m"
+            : $"cooldown {cooldown}m";
     }
 
     private (string Summary, string Subject, string Text, string Html) BuildNotificationRulePreview(
@@ -6851,7 +6862,9 @@ public sealed class CreateNotificationRuleInput
 
     public List<SensorState> TriggerStates { get; set; } = [];
 
-    public int? CooldownMinutes { get; set; }
+    public int? CooldownMinutes { get; set; } = 15;
+
+    public int? Threshold { get; set; } = 5;
 
     public string SubjectTemplate { get; set; } = NotificationTemplateCatalog.DefaultSubjectTemplate;
 
@@ -7357,6 +7370,8 @@ public sealed class WorkspaceNotificationRuleEditorInput
     public List<SensorState> TriggerStates { get; set; } = [];
 
     public int? CooldownMinutes { get; set; }
+
+    public int? Threshold { get; set; }
 
     public string SubjectTemplate { get; set; } = NotificationTemplateCatalog.DefaultSubjectTemplate;
 

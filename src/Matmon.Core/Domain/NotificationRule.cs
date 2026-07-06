@@ -22,7 +22,18 @@ public sealed class NotificationRule
 
     public List<SensorState> TriggerStates { get; set; } = [];
 
+    /// <summary>
+    /// Rolling suppression window in minutes. Together with <see cref="Threshold"/> this is a rate limit:
+    /// at most <see cref="Threshold"/> "raised" mails per (rule, element) within this window. Null / ≤0 = no
+    /// suppression.
+    /// </summary>
     public int? CooldownMinutes { get; set; }
+
+    /// <summary>
+    /// Max number of "raised" mails allowed per <see cref="CooldownMinutes"/> window (per rule+element).
+    /// Null / ≤0 is treated as 1 — i.e. the classic "one mail per window" cooldown (backward compatible).
+    /// </summary>
+    public int? Threshold { get; set; }
 
     public string SubjectTemplate { get; set; } = string.Empty;
 

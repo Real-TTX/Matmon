@@ -76,8 +76,13 @@
                         </select>
                     </label>
                     <label>
-                        <span>Cooldown minutes</span>
+                        <span>Cooldown window (min)</span>
                         <input asp-for="NewNotificationRule.CooldownMinutes" type="number" min="1" class="form-control workspace-input" />
+                    </label>
+                    <label>
+                        <span>Threshold (max per window)</span>
+                        <input asp-for="NewNotificationRule.Threshold" type="number" min="1" placeholder="1" class="form-control workspace-input" />
+                        <span class="workspace-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
                     </label>
                     <label class="workspace-span-2">
                         <span>Trigger states</span>
@@ -187,8 +192,13 @@
                         </select>
                     </label>
                     <label>
-                        <span>Cooldown minutes</span>
+                        <span>Cooldown window (min)</span>
                         <input asp-for="NotificationRuleEditor.CooldownMinutes" type="number" min="1" class="form-control workspace-input" />
+                    </label>
+                    <label>
+                        <span>Threshold (max per window)</span>
+                        <input asp-for="NotificationRuleEditor.Threshold" type="number" min="1" placeholder="1" class="form-control workspace-input" />
+                        <span class="workspace-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
                     </label>
                     <label class="workspace-span-2">
                         <span>Trigger states</span>

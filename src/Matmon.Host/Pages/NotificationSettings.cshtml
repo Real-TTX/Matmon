@@ -1,60 +1,7 @@
 @page "/notifications/senders"
-@model WorkspaceModel
 @{
-    ViewData["Title"] = "Notification senders";
-    var returnUrl = Request.Path + Request.QueryString;
+    // Senders are now a tab on the unified /notifications page. Keep this route as a redirect so
+    // bookmarks and editor back-links still work (lands on the Senders tab via the #hash).
+    Layout = null;
+    ViewContext.HttpContext.Response.Redirect("/notifications#senders");
 }
-
-<section class="dashboard-shell">
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("mail")
-            <h1>Senders</h1>
-        </div>
-    </div>
-
-    <div class="sensor-tabs">
-        <a class="sensor-tab" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
-        <a class="sensor-tab is-active" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
-        <a class="sensor-tab" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
-    </div>
-
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("mail")<span>Senders</span></h2>
-            <span class="panel-hint">@Model.View.NotificationSenderCount senders</span>
-        </div>
-
-        <div class="notification-rule-list">
-            @foreach (var sender in Model.View.NotificationSenders)
-            {
-                <article class="notification-rule-row @(Model.NotificationSenderEditor.Id == sender.Id ? "is-selected" : string.Empty)">
-                    <div class="notification-rule-main">
-                        <div class="notification-rule-name">@sender.Name</div>
-                        <div class="notification-rule-meta">@sender.Kind | @sender.Summary</div>
-                    </div>
-                    <div class="notification-rule-side">
-                        <span class="notification-rule-state @(sender.Enabled ? "is-enabled" : "is-disabled")">@(sender.Enabled ? "Enabled" : "Disabled")</span>
-                        <div class="workspace-row-actions">
-                            <a class="workspace-action-link" asp-page="/NotificationSenderEditor" asp-route-selectedNotificationSenderId="@sender.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                        </div>
-                    </div>
-                </article>
-            }
-        </div>
-
-        <div class="page-actions">
-            <a class="workspace-action-link" asp-page="/NotificationSenderEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>Sender</span></a>
-        </div>
-    </section>
-</section>

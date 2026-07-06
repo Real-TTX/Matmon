@@ -8513,6 +8513,19 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   max-height: calc(100vh - 15rem);
 }
 
+/* Narrow viewports: let the in-app board reflow vertically and fill the width instead of being
+   letterboxed into a thin strip by the fixed 16:9 aspect-ratio. Tiles keep their column spans, so
+   a 1-2 wide tile stays a readable fraction of the width; rows get a usable min height. The public
+   wallboard (.public-map-shell .map-canvas) is intentionally NOT touched — it keeps its TV shape. */
+@media (max-width: 640px) {
+  .map-view-panel .map-canvas {
+    aspect-ratio: auto;
+    max-height: none;
+    min-height: 0;
+    grid-template-rows: repeat(var(--map-rows, 8), minmax(3rem, auto));
+  }
+}
+
 .map-tile {
   --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tone, var(--matmon-border)));
   grid-column: var(--tile-x, 1) / span var(--tile-w, 3);
