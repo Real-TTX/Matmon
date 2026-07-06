@@ -1259,14 +1259,11 @@ body.is-sidebar-open {
 }
 
 .account-menu-panel {
-  /* Anchored to the trigger (position:absolute in the relative .account-menu), opening upward — identical to
-     the cloud. The sidebar's overflow-y:auto only bites if it actually scrolls; the mobile override below flips
-     it to open downward on narrow screens. */
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.45rem);
-  left: 0;
-  z-index: 40;
+  /* position:FIXED (not absolute): the sidebar (.topbar) is overflow-y:auto and, with the instance's long nav,
+     actually scrolls — which would CLIP an absolutely-positioned panel opening upward. Fixed escapes every
+     overflow ancestor; JS (initializeAccountMenu) anchors left/width/bottom to the trigger's on-screen rect. */
+  position: fixed;
+  z-index: 60;
   display: grid;
   gap: 0.35rem;
   padding: 0.4rem;

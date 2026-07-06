@@ -893,6 +893,20 @@ function initializeAccountMenu() {
     return;
   }
 
+  // The panel is position:fixed (so the scrolling sidebar's overflow can't clip it). Anchor it to the
+  // trigger's actual on-screen rect on open: opens upward, left-aligned, matching the trigger width.
+  const positionPanel = (menu) => {
+    const trigger = menu.querySelector(".account-menu-trigger");
+    const panel = menu.querySelector(".account-menu-panel");
+    if (!trigger || !panel) { return; }
+    const r = trigger.getBoundingClientRect();
+    panel.style.left = Math.round(r.left) + "px";
+    panel.style.width = Math.round(r.width) + "px";
+    panel.style.bottom = Math.round(window.innerHeight - r.top + 6) + "px";
+    panel.style.top = "auto";
+    panel.style.right = "auto";
+  };
+
   const closeMenus = (except = null) => {
     menus.forEach((menu) => {
       if (menu !== except) {
@@ -905,9 +919,14 @@ function initializeAccountMenu() {
     menu.addEventListener("toggle", () => {
       if (menu.open) {
         closeMenus(menu);
+        positionPanel(menu);
       }
     });
   });
+
+  const repositionOpen = () => menus.forEach((menu) => { if (menu.open) { positionPanel(menu); } });
+  window.addEventListener("resize", repositionOpen);
+  window.addEventListener("scroll", repositionOpen, true); // capture: also catch the sidebar scrolling
 
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
