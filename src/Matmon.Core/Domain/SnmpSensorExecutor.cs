@@ -438,9 +438,12 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             return defaultChannel.Message ?? $"{label} returned no numeric value";
         }
 
-        return string.IsNullOrWhiteSpace(defaultChannel.Unit)
-            ? $"{label} {FormatNumber(defaultChannel.Value.Value)}"
-            : $"{label} {FormatNumber(defaultChannel.Value.Value)} {defaultChannel.Unit}";
+        // Auto-scale so durations/bytes read naturally (e.g. uptime seconds → days), consistent with the
+        // sensor-detail view — the tree/state message showed raw seconds before.
+        var display = SensorUnitConverter.Format(defaultChannel.Value.Value, defaultChannel.Unit, defaultChannel.MeasurementKind);
+        return string.IsNullOrWhiteSpace(display.Unit)
+            ? $"{label} {display.Text}"
+            : $"{label} {display.Text} {display.Unit}";
     }
 
     private static string BuildErrorMessage(int errorStatus, int errorIndex)
