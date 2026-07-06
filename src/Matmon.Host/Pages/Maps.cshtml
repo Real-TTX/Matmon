@@ -4,8 +4,14 @@
     ViewData["Title"] = "Maps";
     var map = Model.SelectedMap;
 
+    // Through the cloud tunnel the request host is the instance's INTERNAL host (localhost), so an absolute URL
+    // built from it is wrong + unreachable. In that case emit a root-relative URL (the tunnel/browser resolves
+    // it against the real origin); direct access keeps the absolute URL (correct for the homelab host).
+    var embeddedMaps = string.Equals(ViewContext.HttpContext.Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
     string PublicUrl(MonitoringMap candidate)
-        => Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme)
+        => (embeddedMaps
+                ? Url.Page("/MapPublic", null, new { token = candidate.PublicToken })
+                : Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme))
             ?? $"/Maps/Public/{candidate.PublicToken}";
 
     string MapPresetText(MonitoringMap map)

@@ -5643,8 +5643,13 @@ public sealed class WorkspaceModel : PageModel
         };
         var isPausedSensor = element is SensorElement pausedSensor && pausedSensor.IsPaused;
         var isHighlightedSensor = element.Kind == MonitoringElementKind.Sensor && effectiveSettings.Highlight == true;
-        var stateKey = isPausedSensor ? MonitoringStatePresentation.PausedKey : string.Empty;
-        var stateLabel = isPausedSensor ? MonitoringStatePresentation.PausedLabel : null;
+        // Carry the live state onto the flat row so the state filter (which runs on these rows) works — previously
+        // only paused was set, so filtering by warning/error/ok matched nothing.
+        var liveSeries = telemetrySeriesMap.TryGetValue(element.Id, out var seriesForState) ? seriesForState : null;
+        var stateKey = isPausedSensor
+            ? MonitoringStatePresentation.PausedKey
+            : (liveSeries?.StateKey ?? string.Empty);
+        var stateLabel = isPausedSensor ? MonitoringStatePresentation.PausedLabel : liveSeries?.StateLabel;
         var stateMessage = isPausedSensor ? "polling paused" : null;
 
         rows.Add(new WorkspaceNodeRow(
