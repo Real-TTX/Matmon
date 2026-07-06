@@ -105,9 +105,13 @@ public class NotificationReportEditorModel : PageModel
             .Where(sender => sender.Kind == NotificationEndpointKind.Email)
             .Select(sender => new SelectListItem($"{sender.Name}{(sender.Enabled ? "" : " (disabled)")}", sender.Id.ToString()))
             .ToList();
-        Receivers = workspace.NotificationReceivers
-            .Select(receiver => new SelectListItem($"{receiver.Name} — {receiver.Target}", receiver.Id.ToString()))
-            .ToList();
+        Receivers =
+        [
+            // Built-in virtual receiver → all enabled users' e-mails (resolved at send time).
+            new SelectListItem(NotificationReceiverDefaults.AllUsersName, NotificationReceiverDefaults.AllUsersReceiverId.ToString()),
+            .. workspace.NotificationReceivers
+                .Select(receiver => new SelectListItem($"{receiver.Name} — {receiver.Target}", receiver.Id.ToString()))
+        ];
         HasSmtp = _workspaceStore.HasEmailNotifications()
             || !string.IsNullOrWhiteSpace(workspace.NotificationConfiguration.Email.SmtpHost);
     }

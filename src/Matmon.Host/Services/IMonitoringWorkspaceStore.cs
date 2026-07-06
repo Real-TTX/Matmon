@@ -15,6 +15,9 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyList<MatmonUser> GetUsers();
 
+    /// <summary>Comma-joined e-mails of all enabled users — target of the built-in "All users" receiver.</summary>
+    string ResolveAllUsersRecipients();
+
     MatmonUser? FindUser(Guid userId);
 
     MatmonUser? ValidateUser(string username, string password);

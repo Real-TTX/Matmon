@@ -149,6 +149,19 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Comma-joined e-mail addresses of all enabled users with a valid e-mail — the target the
+    /// built-in "All users" notification receiver expands to at send time.</summary>
+    public string ResolveAllUsersRecipients()
+    {
+        lock (_gate)
+        {
+            return string.Join(", ", _document.Users
+                .Where(user => user.IsEnabled && !string.IsNullOrWhiteSpace(user.Email) && user.Email.Contains('@'))
+                .Select(user => user.Email.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+        }
+    }
+
     public MatmonUser? FindUser(Guid userId)
     {
         lock (_gate)

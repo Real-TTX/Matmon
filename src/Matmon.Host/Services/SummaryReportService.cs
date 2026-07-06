@@ -219,6 +219,11 @@ public sealed class SummaryReportSender
     {
         if (settings.ReceiverId is { } receiverId)
         {
+            if (NotificationReceiverDefaults.IsBuiltIn(receiverId))
+            {
+                return _workspaceStore.ResolveAllUsersRecipients();
+            }
+
             var receiver = _workspaceStore.Workspace.NotificationReceivers.FirstOrDefault(r => r.Id == receiverId);
             if (receiver is not null && !string.IsNullOrWhiteSpace(receiver.Target))
             {
