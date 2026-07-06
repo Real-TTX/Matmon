@@ -26,7 +26,6 @@
         @if (canManageSystem)
         {
             <a class="sensor-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
-            <a class="sensor-tab @(Model.IsActiveTab("reports") ? "is-active" : "")" asp-page="/Config" asp-route-tab="reports">Reports</a>
             <a class="sensor-tab @(Model.IsActiveTab("cloud") ? "is-active" : "")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
         }
         @if (canManageUsers)
@@ -558,55 +557,12 @@
         <section class="panel config-block">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("mail")<span>Summary report</span></h2>
-                <span class="panel-hint">Scheduled e-mail digest: uptime, worst sensors, alerts &amp; recent events</span>
+                <span class="panel-hint">Moved to Notifications</span>
             </div>
-
-            @if (!Model.SummaryReportHasSmtp)
-            {
-                <section class="workspace-banner workspace-banner-warning">
-                    @MatmonIcons.Render("warning")
-                    <span>No SMTP sender is configured yet — set up e-mail notifications first, otherwise the report can't be delivered.</span>
-                </section>
-            }
-
-            <form method="post" class="workspace-form-grid">
-                <label class="workspace-check-field workspace-span-2">
-                    <input type="checkbox" asp-for="SummaryReport.Enabled" />
-                    <span>Enable the scheduled summary report</span>
-                </label>
-                <label class="workspace-check-field workspace-span-2">
-                    <input type="checkbox" asp-for="SummaryReport.AttachPdf" />
-                    <span>Attach a PDF audit report to the e-mail</span>
-                </label>
-                <label class="workspace-field">
-                    <span>Cadence</span>
-                    <select asp-for="SummaryReport.Cadence" asp-items="Html.GetEnumSelectList<SummaryReportCadence>()"></select>
-                </label>
-                <label class="workspace-field">
-                    <span>Send at hour (0–23, local)</span>
-                    <input asp-for="SummaryReport.HourOfDay" type="number" min="0" max="23" />
-                </label>
-                <label class="workspace-field">
-                    <span>Weekday (weekly only)</span>
-                    <select asp-for="SummaryReport.DayOfWeek" asp-items="Html.GetEnumSelectList<DayOfWeek>()"></select>
-                </label>
-                <label class="workspace-field">
-                    <span>Subject</span>
-                    <input asp-for="SummaryReport.Subject" />
-                </label>
-                <label class="workspace-field workspace-span-2">
-                    <span>Recipients (comma or semicolon separated)</span>
-                    <input asp-for="SummaryReport.Recipients" placeholder="ops@example.com, boss@example.com" />
-                </label>
-                <p class="workspace-inline-note workspace-span-2">
-                    Reuses your notification SMTP settings. Last sent: @Model.FormatDateTime(Model.SummaryReportLastSentUtc)
-                </p>
-                <div class="workspace-form-actions workspace-span-2">
-                    <button type="submit" class="workspace-submit" asp-page-handler="SaveSummaryReport">@MatmonIcons.Render("check")<span>Save</span></button>
-                    <button type="submit" class="workspace-secondary-submit" asp-page-handler="SendSummaryReportNow">@MatmonIcons.Render("mail")<span>Send test now</span></button>
-                    <button type="submit" class="workspace-secondary-submit" asp-page-handler="DownloadAuditPdf">@MatmonIcons.Render("download")<span>Download audit PDF</span></button>
-                </div>
-            </form>
+            <div style="padding:16px 18px;">
+                <p class="workspace-inline-note" style="margin-top:0;">The scheduled summary report now lives with the other notifications — as the <strong>Scheduled</strong> entry in the unified Notifications list, with the same Sender/Receiver options.</p>
+                <a class="workspace-submit" asp-page="/NotificationReportEditor">@MatmonIcons.Render("mail")<span>Open scheduled report</span></a>
+            </div>
         </section>
     }
     else if (Model.IsActiveTab("cloud") && canManageSystem)

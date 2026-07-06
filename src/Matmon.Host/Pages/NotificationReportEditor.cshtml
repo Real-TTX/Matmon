@@ -1,0 +1,101 @@
+@page "/notifications/report"
+@model NotificationReportEditorModel
+@{
+    ViewData["Title"] = "Scheduled report";
+}
+
+<section class="dashboard-shell" style="max-width:720px;">
+    <div class="page-header">
+        <div class="page-title">@MatmonIcons.Render("mail")<h1>Scheduled report</h1></div>
+        <span class="panel-hint">A recurring summary e-mail (uptime, worst sensors, alerts, recent events)</span>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+    @if (!Model.HasSmtp)
+    {
+        <div class="workspace-banner workspace-banner-warning">No SMTP sender is configured yet — add one under <a asp-page="/NotificationSettings">Senders</a> so the report can be delivered.</div>
+    }
+
+    <form method="post" class="panel workspace-form" style="padding:18px 20px;display:grid;gap:14px;">
+        <label style="display:flex;gap:8px;align-items:center;">
+            <input asp-for="Enabled" type="checkbox" value="true" />
+            <span>Enabled — send this report on schedule</span>
+        </label>
+
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+            <label class="workspace-field" style="min-width:160px;">
+                <span>Cadence</span>
+                <select asp-for="Cadence" class="workspace-input">
+                    <option value="Daily">Daily</option>
+                    <option value="Weekly">Weekly</option>
+                </select>
+            </label>
+            <label class="workspace-field" style="width:120px;">
+                <span>Hour of day (0–23)</span>
+                <input asp-for="HourOfDay" type="number" min="0" max="23" class="workspace-input" />
+            </label>
+            <label class="workspace-field" style="min-width:160px;">
+                <span>Weekday (weekly)</span>
+                <select asp-for="DayOfWeek" class="workspace-input">
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                </select>
+            </label>
+        </div>
+
+        <label class="workspace-field">
+            <span>Sender</span>
+            <select asp-for="SenderId" asp-items="Model.Senders" class="workspace-input">
+                <option value="">Default SMTP (workspace / first e-mail sender)</option>
+            </select>
+            <span class="panel-hint" style="margin-top:4px;">Which SMTP endpoint sends the report. Manage endpoints under <a asp-page="/NotificationSettings">Senders</a>.</span>
+        </label>
+
+        <label class="workspace-field">
+            <span>Receiver</span>
+            <select asp-for="ReceiverId" asp-items="Model.Receivers" class="workspace-input">
+                <option value="">— use the recipient list below —</option>
+            </select>
+            <span class="panel-hint" style="margin-top:4px;">Pick a saved receiver, or leave empty and enter addresses below. Manage under <a asp-page="/NotificationReceivers">Receivers</a>.</span>
+        </label>
+
+        <label class="workspace-field">
+            <span>Recipients (when no receiver is picked)</span>
+            <input asp-for="Recipients" class="workspace-input" placeholder="ops@example.com, manager@example.com" />
+        </label>
+
+        <label class="workspace-field">
+            <span>Subject</span>
+            <input asp-for="Subject" class="workspace-input" />
+        </label>
+
+        <label style="display:flex;gap:8px;align-items:center;">
+            <input asp-for="AttachPdf" type="checkbox" value="true" />
+            <span>Attach a PDF audit report to the e-mail</span>
+        </label>
+
+        @if (Model.LastSentUtc is { } sent)
+        {
+            <p class="panel-hint" style="margin:0;">Last sent: @sent.ToLocalTime().ToString("g")</p>
+        }
+
+        <div class="form-action-bar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <a class="workspace-secondary-submit" asp-page="/Notifications">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+            <button type="submit" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save</span></button>
+            <button type="submit" asp-page-handler="SendTest" class="workspace-secondary-submit">@MatmonIcons.Render("mail")<span>Send now</span></button>
+            <button type="submit" asp-page-handler="DownloadPdf" class="workspace-secondary-submit">@MatmonIcons.Render("download")<span>Download audit PDF</span></button>
+        </div>
+    </form>
+</section>

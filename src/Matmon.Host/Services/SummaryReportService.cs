@@ -181,13 +181,15 @@ public sealed class SummaryReportSender
     public async Task<bool> SendAsync(SummaryReportSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (string.IsNullOrWhiteSpace(settings.Recipients))
+
+        var recipients = ResolveRecipients(settings);
+        if (string.IsNullOrWhiteSpace(recipients))
         {
             _logger.LogWarning("Summary report not sent: no recipients configured");
             return false;
         }
 
-        var smtp = ResolveSmtp();
+        var smtp = ResolveSmtp(settings);
         if (smtp is null)
         {
             _logger.LogWarning("Summary report not sent: no SMTP sender configured");
@@ -207,9 +209,24 @@ public sealed class SummaryReportSender
             attachments = [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", pdf, "application/pdf")];
         }
 
-        await _emailSender.SendAsync(smtp, settings.Recipients, subject, report.TextBody, report.HtmlBody, cancellationToken, attachments);
-        _logger.LogInformation("Summary report sent to {Recipients}", settings.Recipients);
+        await _emailSender.SendAsync(smtp, recipients, subject, report.TextBody, report.HtmlBody, cancellationToken, attachments);
+        _logger.LogInformation("Summary report sent to {Recipients}", recipients);
         return true;
+    }
+
+    /// <summary>Recipient(s): the chosen receiver's target, else the free-text recipients list.</summary>
+    private string ResolveRecipients(SummaryReportSettings settings)
+    {
+        if (settings.ReceiverId is { } receiverId)
+        {
+            var receiver = _workspaceStore.Workspace.NotificationReceivers.FirstOrDefault(r => r.Id == receiverId);
+            if (receiver is not null && !string.IsNullOrWhiteSpace(receiver.Target))
+            {
+                return receiver.Target;
+            }
+        }
+
+        return settings.Recipients;
     }
 
     /// <summary>Builds the standalone PDF audit report for download (independent of e-mail delivery).</summary>
@@ -222,9 +239,20 @@ public sealed class SummaryReportSender
     private static TimeSpan WindowFor(SummaryReportCadence cadence) =>
         cadence == SummaryReportCadence.Weekly ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
 
-    private EmailNotificationSettings? ResolveSmtp()
+    private EmailNotificationSettings? ResolveSmtp(SummaryReportSettings settings)
     {
         var workspace = _workspaceStore.Workspace;
+
+        // A chosen sender wins (lets the user pick a specific SMTP endpoint, like a trigger rule does).
+        if (settings.SenderId is { } senderId)
+        {
+            var chosen = workspace.NotificationSenders.FirstOrDefault(s => s.Id == senderId);
+            if (chosen is not null && chosen.Kind == NotificationEndpointKind.Email && !string.IsNullOrWhiteSpace(chosen.Email.SmtpHost))
+            {
+                return chosen.Email;
+            }
+        }
+
         var configured = workspace.NotificationConfiguration.Email;
         if (!string.IsNullOrWhiteSpace(configured.SmtpHost))
         {

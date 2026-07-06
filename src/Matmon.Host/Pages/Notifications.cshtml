@@ -1,8 +1,23 @@
 @page "/notifications"
 @model WorkspaceModel
+@using Matmon.Core.Domain
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     ViewData["Title"] = "Notifications";
     var returnUrl = Request.Path + Request.QueryString;
+
+    // The single scheduled "summary report" is shown as one row in the same list as the trigger rules.
+    var report = WorkspaceStore.GetSummaryReportSettings();
+    var ws = WorkspaceStore.Workspace;
+    var reportSender = report.SenderId is { } sid
+        ? (ws.NotificationSenders.FirstOrDefault(s => s.Id == sid)?.Name ?? "unknown sender")
+        : "Default SMTP";
+    var reportReceiver = report.ReceiverId is { } rid
+        ? (ws.NotificationReceivers.FirstOrDefault(r => r.Id == rid)?.Name ?? "unknown receiver")
+        : (string.IsNullOrWhiteSpace(report.Recipients) ? "no recipients" : report.Recipients);
+    var reportSchedule = report.Cadence == SummaryReportCadence.Weekly
+        ? $"Weekly · {report.DayOfWeek} {report.HourOfDay:00}:00"
+        : $"Daily · {report.HourOfDay:00}:00";
 }
 
 <section class="dashboard-shell">
@@ -10,7 +25,6 @@
     {
         <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
     }
-
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
@@ -24,23 +38,53 @@
     </div>
 
     <div class="sensor-tabs">
-        <a class="sensor-tab is-active" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
+        <a class="sensor-tab is-active" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Notifications</span></a>
         <a class="sensor-tab" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
         <a class="sensor-tab" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
     </div>
 
     <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("bell")<span>Rules</span></h2>
-            <span class="panel-hint">@Model.View.NotificationRuleCount rules</span>
+        <style>
+            .notif-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding:12px 16px; border-bottom:1px solid var(--matmon-sidebar-item-border); }
+            .notif-type-btn { padding:0.28rem 0.7rem; border:1px solid var(--matmon-border); border-radius:999px; background:var(--matmon-surface); color:var(--matmon-muted); cursor:pointer; font-size:0.82rem; }
+            .notif-type-btn.is-active { color:var(--matmon-foreground); border-color:var(--matmon-accent); background:var(--matmon-sidebar-item-hover-bg); }
+            .notif-toolbar .workspace-input { max-width:260px; }
+            .notif-type-chip { display:inline-block; padding:0.05rem 0.5rem; border:1px solid var(--matmon-border); border-radius:999px; font-size:0.72rem; color:var(--matmon-muted); margin-left:6px; }
+        </style>
+
+        <div class="notif-toolbar" data-notif-filter>
+            <div style="display:flex;gap:6px;">
+                <button type="button" class="notif-type-btn is-active" data-notif-type-filter="all">All</button>
+                <button type="button" class="notif-type-btn" data-notif-type-filter="trigger">Trigger</button>
+                <button type="button" class="notif-type-btn" data-notif-type-filter="scheduled">Scheduled</button>
+            </div>
+            <input type="search" class="workspace-input" data-notif-search placeholder="Search notifications…" aria-label="Search notifications" />
+            <span class="panel-hint" style="margin-left:auto;">@(Model.View.NotificationRuleCount) trigger · 1 scheduled</span>
         </div>
 
         <div class="notification-rule-list">
+            @* Scheduled: the summary report (single) *@
+            <article class="notification-rule-row" data-notif-row data-notif-type="scheduled" data-notif-name="summary report @report.Subject">
+                <div class="notification-rule-main">
+                    <div class="notification-rule-name">Summary report <span class="notif-type-chip">Scheduled</span></div>
+                    <div class="notification-rule-meta">@reportSender -> @reportReceiver</div>
+                    <div class="notification-rule-meta">@reportSchedule@(report.AttachPdf ? " | +PDF" : "")</div>
+                </div>
+                <div class="notification-rule-side">
+                    <span class="notification-rule-state @(report.Enabled ? "is-enabled" : "is-disabled")">@(report.Enabled ? "Enabled" : "Disabled")</span>
+                    <div class="workspace-row-actions">
+                        <a class="workspace-action-link" asp-page="/NotificationReportEditor">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                    </div>
+                </div>
+            </article>
+
+            @* Trigger: the alert-based rules *@
             @foreach (var rule in Model.View.NotificationRules)
             {
-                <article class="notification-rule-row @(Model.NotificationRuleEditor.Id == rule.Id ? "is-selected" : string.Empty)">
+                <article class="notification-rule-row @(Model.NotificationRuleEditor.Id == rule.Id ? "is-selected" : string.Empty)"
+                         data-notif-row data-notif-type="trigger" data-notif-name="@rule.Name">
                     <div class="notification-rule-main">
-                        <div class="notification-rule-name">@rule.Name</div>
+                        <div class="notification-rule-name">@rule.Name <span class="notif-type-chip">Trigger</span></div>
                         <div class="notification-rule-meta">@rule.Sender -> @rule.Receiver</div>
                         <div class="notification-rule-meta">@rule.Target | @rule.Triggers | @rule.Cooldown</div>
                     </div>
@@ -55,7 +99,37 @@
         </div>
 
         <div class="page-actions">
-            <a class="workspace-action-link" asp-page="/NotificationRuleEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>Rule</span></a>
+            <a class="workspace-action-link" asp-page="/NotificationRuleEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>Trigger notification</span></a>
+            <a class="workspace-action-link" asp-page="/NotificationReportEditor">@MatmonIcons.Render("clock")<span>Scheduled report</span></a>
         </div>
     </section>
 </section>
+
+<script>
+    (function () {
+        var root = document.querySelector("[data-notif-filter]");
+        if (!root) { return; }
+        var rows = Array.prototype.slice.call(document.querySelectorAll("[data-notif-row]"));
+        var search = root.querySelector("[data-notif-search]");
+        var typeBtns = Array.prototype.slice.call(root.querySelectorAll("[data-notif-type-filter]"));
+        var activeType = "all";
+        function apply() {
+            var q = ((search && search.value) || "").trim().toLowerCase();
+            rows.forEach(function (row) {
+                var t = row.getAttribute("data-notif-type");
+                var n = (row.getAttribute("data-notif-name") || "").toLowerCase();
+                var show = (activeType === "all" || activeType === t) && (q === "" || n.indexOf(q) >= 0);
+                row.hidden = !show;
+            });
+        }
+        typeBtns.forEach(function (b) {
+            b.addEventListener("click", function () {
+                activeType = b.getAttribute("data-notif-type-filter");
+                typeBtns.forEach(function (x) { x.classList.toggle("is-active", x === b); });
+                apply();
+            });
+        });
+        if (search) { search.addEventListener("input", apply); }
+        apply();
+    })();
+</script>

@@ -167,6 +167,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/Config", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/CloudClaim", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/MapEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/NotificationReportEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ProbeCreate", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ProbeInstall", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/UserCreate", MatmonSecurity.AdminPolicy);

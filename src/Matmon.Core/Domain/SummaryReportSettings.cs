@@ -22,7 +22,15 @@ public sealed class SummaryReportSettings
     /// <summary>Weekday the weekly report is sent (ignored for daily).</summary>
     public DayOfWeek DayOfWeek { get; set; } = DayOfWeek.Monday;
 
-    /// <summary>Comma/semicolon-separated recipient addresses.</summary>
+    /// <summary>Optional notification sender (SMTP endpoint) to send through. When null, falls back to the
+    /// workspace default SMTP / first enabled e-mail sender (legacy behaviour).</summary>
+    public Guid? SenderId { get; set; }
+
+    /// <summary>Optional notification receiver whose target is the recipient. When null, <see cref="Recipients"/>
+    /// is used.</summary>
+    public Guid? ReceiverId { get; set; }
+
+    /// <summary>Comma/semicolon-separated recipient addresses (used when <see cref="ReceiverId"/> is not set).</summary>
     public string Recipients { get; set; } = string.Empty;
 
     public string Subject { get; set; } = "Matmon summary report";
@@ -41,6 +49,8 @@ public sealed class SummaryReportSettings
             Cadence = Cadence,
             HourOfDay = HourOfDay,
             DayOfWeek = DayOfWeek,
+            SenderId = SenderId,
+            ReceiverId = ReceiverId,
             Recipients = Recipients,
             Subject = Subject,
             AttachPdf = AttachPdf,
