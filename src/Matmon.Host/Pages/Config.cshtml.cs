@@ -24,7 +24,6 @@ public class ConfigModel : PageModel
 
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
-    private readonly SummaryReportSender _summaryReportSender;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly ILicenseService _licenseService;
     private readonly IDataProtectionProvider _dataProtection;
@@ -32,14 +31,12 @@ public class ConfigModel : PageModel
     public ConfigModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
-        SummaryReportSender summaryReportSender,
         MatmonRuntimeOptions runtimeOptions,
         ILicenseService licenseService,
         IDataProtectionProvider dataProtection)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
-        _summaryReportSender = summaryReportSender;
         _runtimeOptions = runtimeOptions;
         _licenseService = licenseService;
         _dataProtection = dataProtection;
@@ -100,13 +97,6 @@ public class ConfigModel : PageModel
 
     [BindProperty]
     public StorageCleanupInput StorageCleanup { get; set; } = new();
-
-    [BindProperty]
-    public SummaryReportInput SummaryReport { get; set; } = new();
-
-    public DateTimeOffset? SummaryReportLastSentUtc { get; private set; }
-
-    public bool SummaryReportHasSmtp { get; private set; }
 
     [BindProperty]
     public IFormFile? BackupUpload { get; set; }
@@ -279,58 +269,6 @@ public class ConfigModel : PageModel
         }
 
         return RedirectToPage(new { tab = "backup" });
-    }
-
-    public IActionResult OnPostSaveSummaryReport()
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            _workspaceStore.UpdateSummaryReportSettings(new SummaryReportSettings
-            {
-                Enabled = SummaryReport.Enabled,
-                Cadence = SummaryReport.Cadence,
-                HourOfDay = Math.Clamp(SummaryReport.HourOfDay, 0, 23),
-                DayOfWeek = SummaryReport.DayOfWeek,
-                Recipients = (SummaryReport.Recipients ?? string.Empty).Trim(),
-                Subject = string.IsNullOrWhiteSpace(SummaryReport.Subject) ? "Matmon summary report" : SummaryReport.Subject.Trim(),
-                AttachPdf = SummaryReport.AttachPdf
-            });
-            StatusMessage = "Summary report settings saved.";
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-
-        return RedirectToPage(new { tab = "reports" });
-    }
-
-    public async Task<IActionResult> OnPostSendSummaryReportNowAsync()
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            var settings = _workspaceStore.GetSummaryReportSettings();
-            var sent = await _summaryReportSender.SendAsync(settings, HttpContext.RequestAborted);
-            StatusMessage = sent
-                ? "Test summary report sent."
-                : "Report not sent — check that recipients and SMTP settings are configured.";
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-
-        return RedirectToPage(new { tab = "reports" });
     }
 
     public IActionResult OnPostCloudConnect()
@@ -571,25 +509,6 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
-    public IActionResult OnPostDownloadAuditPdf()
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            var pdf = _summaryReportSender.BuildAuditPdf(SummaryReport.Cadence);
-            return File(pdf, "application/pdf", $"matmon-audit-{DateTimeOffset.Now:yyyyMMdd-HHmm}.pdf");
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            return RedirectToPage(new { tab = "reports" });
-        }
-    }
-
     public bool IsActiveTab(string tab)
     {
         return string.Equals(ActiveTab, tab, StringComparison.OrdinalIgnoreCase);
@@ -661,18 +580,6 @@ public class ConfigModel : PageModel
     {
         Overview = _configurationOverviewProvider.GetOverview();
         Users = _workspaceStore.GetUsers();
-
-        var reportSettings = _workspaceStore.GetSummaryReportSettings();
-        SummaryReport = new SummaryReportInput
-        {
-            Enabled = reportSettings.Enabled,
-            Cadence = reportSettings.Cadence,
-            HourOfDay = reportSettings.HourOfDay,
-            DayOfWeek = reportSettings.DayOfWeek,
-            Recipients = reportSettings.Recipients,
-            Subject = reportSettings.Subject,
-            AttachPdf = reportSettings.AttachPdf
-        };
         License = _licenseService.Current;
         var allElements = _workspaceStore.GetAllElements();
         ProbeCount = allElements.OfType<ProbeElement>().Count();
@@ -693,9 +600,6 @@ public class ConfigModel : PageModel
             CloudFullAccess = CloudSettings.FullAccessEnabled;
         }
 
-        SummaryReportLastSentUtc = reportSettings.LastSentUtc;
-        SummaryReportHasSmtp = _workspaceStore.HasEmailNotifications() ||
-            !string.IsNullOrWhiteSpace(_workspaceStore.Workspace.NotificationConfiguration.Email.SmtpHost);
         BackupJobs = _workspaceStore.GetBackupJobs();
         BackupSnapshots = _workspaceStore.GetBackupSnapshots();
         StorageTelemetry = _workspaceStore.GetStorageTelemetryOverview();
@@ -751,19 +655,3 @@ public sealed class CloudRelayInput
     public bool RelayAlerts { get; set; }
 }
 
-public sealed class SummaryReportInput
-{
-    public bool Enabled { get; set; }
-
-    public SummaryReportCadence Cadence { get; set; } = SummaryReportCadence.Daily;
-
-    public int HourOfDay { get; set; } = 7;
-
-    public DayOfWeek DayOfWeek { get; set; } = DayOfWeek.Monday;
-
-    public string Recipients { get; set; } = string.Empty;
-
-    public string Subject { get; set; } = "Matmon summary report";
-
-    public bool AttachPdf { get; set; }
-}
