@@ -758,6 +758,14 @@
                         <span role="cell">
                             <strong>@user.Username</strong>
                             <small>@user.Id</small>
+                            @if (user.CloudLinked)
+                            {
+                                <span class="account-role-chip" title="Signs in via Matmon.Cloud (SSO)@(Model.HasLocalPassword(user) ? " — also has a local password" : " — no local password set")">Cloud</span>
+                            }
+                            else
+                            {
+                                <span class="account-role-chip" title="Local account (e-mail + password)">Local</span>
+                            }
                             @if (Model.IsCurrentUser(user))
                             {
                                 <span class="state-pill" data-state="ok">Current</span>

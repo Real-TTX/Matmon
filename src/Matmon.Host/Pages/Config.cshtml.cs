@@ -622,6 +622,9 @@ public class ConfigModel : PageModel
         return MatmonSecurity.IsCurrentUser(User, user.Id);
     }
 
+    /// <summary>Whether the account has a local password (cloud/SSO accounts may not — shown on the user row).</summary>
+    public bool HasLocalPassword(MatmonUser user) => _workspaceStore.HasLocalPassword(user.Id);
+
     public bool CanInstallProbe(SystemProbeOverview probe)
     {
         return ProbeInstallCommandBuilder.CanInstallProbe(probe);
