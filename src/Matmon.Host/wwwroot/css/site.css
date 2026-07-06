@@ -1259,11 +1259,12 @@ body.is-sidebar-open {
 }
 
 .account-menu-panel {
-  /* position:FIXED (not absolute): the sidebar (.topbar) is overflow-y:auto and, with the instance's long nav,
-     actually scrolls — which would CLIP an absolutely-positioned panel opening upward. Fixed escapes every
-     overflow ancestor; JS (initializeAccountMenu) anchors left/width/bottom to the trigger's on-screen rect. */
-  position: fixed;
-  z-index: 60;
+  /* Identical to the cloud: anchored above the trigger in the relative .account-menu, opening upward. */
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 40;
   display: grid;
   gap: 0.35rem;
   padding: 0.4rem;
@@ -1271,6 +1272,11 @@ body.is-sidebar-open {
   border-radius: 8px;
   background: var(--matmon-surface);
   box-shadow: var(--matmon-shadow);
+}
+
+/* Left-align the menu actions (Account / Log out) — matches the cloud (was centered on the instance). */
+.account-menu-panel .account-menu-action {
+  justify-content: flex-start;
 }
 
 .account-menu-meta {

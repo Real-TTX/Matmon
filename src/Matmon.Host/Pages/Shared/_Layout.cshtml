@@ -188,13 +188,11 @@
                                         <small>@accountRole</small>
                                     </div>
                                     <a asp-area="" asp-page="/Account" class="account-menu-action">
-                                        @MatmonIcons.Render("gear")
-                                        <span>Account &amp; password</span>
+                                        <span>Account</span>
                                     </a>
                                     <form asp-page="/Logout" method="post" class="account-menu-form">
                                         <button type="submit" class="account-menu-action">
-                                            @MatmonIcons.Render("arrow-left")
-                                            <span>Logout</span>
+                                            <span>Log out</span>
                                         </button>
                                     </form>
                                 </div>
