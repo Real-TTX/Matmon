@@ -182,8 +182,13 @@ public static class LicenseCrypto
     }
 }
 
-/// <summary>The baked-in public key used to verify cloud-issued license tokens offline.</summary>
+/// <summary>
+/// The baked-in public key used to verify cloud-issued license tokens offline. This is the PRODUCTION
+/// public key; its private half lives only in the cloud's <c>License__PrivateKey</c> env (never in this
+/// repo). To rotate, regenerate a P-256 keypair, put this SPKI-base64 public half here and the PKCS#8-base64
+/// private half in the cloud env — both must change together or no token will validate.
+/// </summary>
 public static class LicensePublicKey
 {
-    public const string Spki = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEy5cClV5DsCmAxTzv1eMMS1EhuSiv7leBuJS5zxul5rBs1XJ7kx9u4LgaTa2h2uLs0uZ+z4KhqG6m14opg0afkQ==";
+    public const string Spki = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXg2FoQzay7QYQuk10oDNbl+R/B8WPOVDWRO5QFJFbKwe9rWtRgKBYi3scM04RR1z+Tz0BfDd19Golv5As9iweA==";
 }
