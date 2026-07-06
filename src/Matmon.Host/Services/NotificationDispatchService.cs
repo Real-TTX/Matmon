@@ -139,7 +139,7 @@ public sealed class NotificationDispatchService : BackgroundService
                 }
             }
 
-            var recipient = ResolveRecipient(rule, workspace, _workspaceStore.ResolveAllUsersRecipients());
+            var recipient = ResolveRecipient(rule, workspace, _workspaceStore);
             if (string.IsNullOrWhiteSpace(recipient))
             {
                 _logger.LogWarning("Notification rule {Rule} matched but has no recipient", rule.Name);
@@ -371,7 +371,7 @@ public sealed class NotificationDispatchService : BackgroundService
         return string.IsNullOrWhiteSpace(fallback.SmtpHost) ? null : fallback;
     }
 
-    private static string ResolveRecipient(NotificationRule rule, MonitoringWorkspaceSnapshot workspace, string allUsersRecipients)
+    private static string ResolveRecipient(NotificationRule rule, MonitoringWorkspaceSnapshot workspace, IMonitoringWorkspaceStore store)
     {
         if (!string.IsNullOrWhiteSpace(rule.Recipient))
         {
@@ -382,7 +382,7 @@ public sealed class NotificationDispatchService : BackgroundService
         {
             if (NotificationReceiverDefaults.IsBuiltIn(receiverId))
             {
-                return allUsersRecipients;
+                return store.ResolveBuiltInRecipients(receiverId);
             }
 
             var receiver = workspace.NotificationReceivers.FirstOrDefault(candidate => candidate.Id == receiverId && candidate.Enabled);

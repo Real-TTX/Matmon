@@ -105,7 +105,15 @@ public sealed class SensorPollingService : BackgroundService
             return;
         }
 
-        due.Sort((left, right) => right.OverdueSeconds.CompareTo(left.OverdueSeconds));
+        // Order a catch-up burst (after downtime or resuming a paused folder) by sensor-type LOAD first —
+        // cheap/fast types (ping, TCP, DNS) before heavy ones (VMware, SNMP walks, remote scripts) — so the
+        // tree greens up as fast as possible; within the same load tier, the longest-overdue / never-run first.
+        due.Sort((left, right) =>
+        {
+            var byTier = SensorExecutionLoadRanking.GetTier(left.Sensor.SensorTypeKey)
+                .CompareTo(SensorExecutionLoadRanking.GetTier(right.Sensor.SensorTypeKey));
+            return byTier != 0 ? byTier : right.OverdueSeconds.CompareTo(left.OverdueSeconds);
+        });
 
         // Second pass: run the due sensors concurrently with a bounded worker pool, so one slow or
         // timing-out sensor no longer blocks the rest of the cycle. Each execution gets its own DI

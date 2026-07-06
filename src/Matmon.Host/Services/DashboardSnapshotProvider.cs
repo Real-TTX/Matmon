@@ -600,6 +600,21 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                 null);
         }
 
+        // Overdue run → Unknown: if the last reading is well past this sensor type's cadence (a paused folder
+        // was resumed, or the node was down), the old value no longer reflects reality. It flips back to its
+        // real state as soon as the catch-up poll writes a fresh observation.
+        var staleAfter = SensorScheduleDefaults.Resolve(sensor.SensorTypeKey) * 2;
+        if (DateTimeOffset.UtcNow - latestObservation.TimestampUtc > staleAfter)
+        {
+            return new SensorDisplaySnapshot(
+                SensorState.Unknown,
+                MonitoringStatePresentation.UnknownKey,
+                MonitoringStatePresentation.UnknownLabel,
+                MonitoringStatePresentation.UnknownColor,
+                "awaiting refresh (overdue)",
+                GetObservationDefaultValue(latestObservation, defaultChannelKey));
+        }
+
         var defaultValue = GetObservationDefaultValue(latestObservation, defaultChannelKey);
 
         return latestObservation.State switch
@@ -660,6 +675,13 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         SensorObservation? latestObservation)
     {
         if (sensor.IsPaused || latestObservation is null)
+        {
+            return inheritedSeverity;
+        }
+
+        // Overdue run → treat as Unknown (contributes no severity), matching the sensor's own Unknown display,
+        // so a stale reading (e.g. after a paused folder resumes) doesn't keep the tree coloured on old data.
+        if (DateTimeOffset.UtcNow - latestObservation.TimestampUtc > SensorScheduleDefaults.Resolve(sensor.SensorTypeKey) * 2)
         {
             return inheritedSeverity;
         }

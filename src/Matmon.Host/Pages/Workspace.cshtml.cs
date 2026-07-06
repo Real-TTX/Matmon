@@ -4788,11 +4788,12 @@ public sealed class WorkspaceModel : PageModel
     {
         var options = new List<SelectListItem>
         {
-            new("Select receiver", string.Empty, selectedReceiverId is null),
-            // Built-in virtual receiver → all enabled users' e-mails (resolved at send time).
-            new(NotificationReceiverDefaults.AllUsersName, NotificationReceiverDefaults.AllUsersReceiverId.ToString(),
-                selectedReceiverId == NotificationReceiverDefaults.AllUsersReceiverId)
+            new("Select receiver", string.Empty, selectedReceiverId is null)
         };
+
+        // Built-in virtual receivers → all enabled users / admins / operators (resolved at send time).
+        options.AddRange(NotificationReceiverDefaults.All.Select(builtIn =>
+            new SelectListItem(builtIn.Name, builtIn.Id.ToString(), builtIn.Id == selectedReceiverId)));
 
         options.AddRange(receivers.Select(receiver => new SelectListItem(
             $"{receiver.Name} ({receiver.Kind})",

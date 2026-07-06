@@ -107,8 +107,8 @@ public class NotificationReportEditorModel : PageModel
             .ToList();
         Receivers =
         [
-            // Built-in virtual receiver → all enabled users' e-mails (resolved at send time).
-            new SelectListItem(NotificationReceiverDefaults.AllUsersName, NotificationReceiverDefaults.AllUsersReceiverId.ToString()),
+            // Built-in virtual receivers → all enabled users / admins / operators (resolved at send time).
+            .. NotificationReceiverDefaults.All.Select(builtIn => new SelectListItem(builtIn.Name, builtIn.Id.ToString())),
             .. workspace.NotificationReceivers
                 .Select(receiver => new SelectListItem($"{receiver.Name} — {receiver.Target}", receiver.Id.ToString()))
         ];

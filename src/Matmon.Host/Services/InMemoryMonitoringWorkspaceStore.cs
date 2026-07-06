@@ -149,14 +149,20 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    /// <summary>Comma-joined e-mail addresses of all enabled users with a valid e-mail — the target the
-    /// built-in "All users" notification receiver expands to at send time.</summary>
-    public string ResolveAllUsersRecipients()
+    /// <summary>Comma-joined e-mails of the enabled users matching a built-in receiver's role filter (All users
+    /// / All admins / All operators) — the target that built-in expands to at send time.</summary>
+    public string ResolveBuiltInRecipients(Guid receiverId)
     {
+        var builtIn = NotificationReceiverDefaults.Find(receiverId);
+        if (builtIn is null)
+        {
+            return string.Empty;
+        }
+
         lock (_gate)
         {
             return string.Join(", ", _document.Users
-                .Where(user => user.IsEnabled && !string.IsNullOrWhiteSpace(user.Email) && user.Email.Contains('@'))
+                .Where(user => user.IsEnabled && !string.IsNullOrWhiteSpace(user.Email) && user.Email.Contains('@') && builtIn.RoleMatch(user.Role))
                 .Select(user => user.Email.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase));
         }
