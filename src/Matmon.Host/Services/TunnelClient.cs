@@ -94,38 +94,91 @@ public sealed class TunnelClient : BackgroundService
             .Replace("http://", "ws://", StringComparison.OrdinalIgnoreCase);
         var uri = new Uri($"{wsUrl}/api/instances/{instanceId.Trim()}/tunnel");
 
+        // Linked token so we can tear the tunnel down promptly when the settings change — not just when the
+        // socket happens to drop. Without this, an already-open socket keeps serving after Full Access is
+        // switched off or the cloud is disconnected.
+        using var link = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var ct = link.Token;
+
         using var socket = new ClientWebSocket();
         socket.Options.SetRequestHeader("X-Matmon-Instance-Token", token);
-        await socket.ConnectAsync(uri, stoppingToken);
+        await socket.ConnectAsync(uri, ct);
         _logger.LogInformation("Full Access tunnel connected -> {Uri}", uri);
 
-        var sendLock = new SemaphoreSlim(1, 1);
-        var buffer = new ArrayBufferWriter<byte>();
-        var chunk = new byte[16 * 1024];
-
-        while (socket.State == WebSocketState.Open && !stoppingToken.IsCancellationRequested)
+        // Watchdog: close the tunnel as soon as it should no longer be open (Full Access off, cloud
+        // disconnected, or the url/id/token changed). Cancelling the linked token unblocks the receive loop.
+        var watchdog = Task.Run(async () =>
         {
-            buffer.Clear();
-            WebSocketReceiveResult result;
-            do
+            try
             {
-                result = await socket.ReceiveAsync(chunk, stoppingToken);
-                if (result.MessageType == WebSocketMessageType.Close)
+                while (!ct.IsCancellationRequested)
                 {
-                    return;
+                    await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                    var s = _workspaceStore.GetCloudConnectionSettings();
+                    var stillReady = s.FullAccessEnabled && s.Enabled
+                        && string.Equals(s.Url?.Trim().TrimEnd('/'), cloudUrl.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(s.InstanceId?.Trim(), instanceId.Trim(), StringComparison.Ordinal)
+                        && string.Equals(_workspaceStore.GetCloudConnectionToken(), token, StringComparison.Ordinal);
+                    if (!stillReady)
+                    {
+                        _logger.LogInformation("Full Access tunnel closing (link disabled or changed)");
+                        link.Cancel();
+                        return;
+                    }
                 }
-                buffer.Write(chunk.AsSpan(0, result.Count));
             }
-            while (!result.EndOfMessage);
+            catch (OperationCanceledException) { /* torn down elsewhere */ }
+        }, ct);
 
-            var request = JsonSerializer.Deserialize<TunnelRequest>(buffer.WrittenSpan, Json);
-            if (request is null)
+        try
+        {
+            var sendLock = new SemaphoreSlim(1, 1);
+            var buffer = new ArrayBufferWriter<byte>();
+            var chunk = new byte[16 * 1024];
+
+            while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
-                continue;
-            }
+                buffer.Clear();
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await socket.ReceiveAsync(chunk, ct);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        return;
+                    }
+                    buffer.Write(chunk.AsSpan(0, result.Count));
+                }
+                while (!result.EndOfMessage);
 
-            // Handle each request without blocking the receive loop (multiplexed responses).
-            _ = Task.Run(() => HandleRequestAsync(socket, sendLock, request, stoppingToken), stoppingToken);
+                var request = JsonSerializer.Deserialize<TunnelRequest>(buffer.WrittenSpan, Json);
+                if (request is null)
+                {
+                    continue;
+                }
+
+                // Handle each request without blocking the receive loop (multiplexed responses).
+                _ = Task.Run(() => HandleRequestAsync(socket, sendLock, request, ct), ct);
+            }
+        }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+            // The watchdog closed the tunnel (settings changed) — return normally so the service loop idles
+            // and reconnects if Full Access is re-enabled, instead of propagating to a hard stop.
+        }
+        finally
+        {
+            link.Cancel(); // stop the watchdog if we exited for another reason (e.g. the socket dropped)
+            if (socket.State == WebSocketState.Open)
+            {
+                // Best-effort clean close so the cloud unregisters the tunnel immediately.
+                try
+                {
+                    using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "closing", closeCts.Token);
+                }
+                catch { /* ignore */ }
+            }
         }
     }
 
