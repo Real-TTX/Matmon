@@ -199,6 +199,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 return null;
             }
 
+            user.LastLoginUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
             return CloneUser(user);
         }
     }
@@ -237,9 +239,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     }
 
     /// <summary>
-    /// Find-or-create a user for a "Sign in with Matmon Cloud" identity. An existing local account with
-    /// that e-mail is returned as-is (its role/password stay under local control); a new one is created
-    /// as a CloudLinked, password-less (SSO-only) account with the given role.
+    /// Find-or-create a user for a "Sign in with Matmon Cloud" identity. An existing local account with that
+    /// e-mail is signed into (its role/password stay under local control) and flagged CloudLinked so the UI
+    /// shows it's cloud-capable; a new one is created as a CloudLinked, password-less (SSO-only) account.
+    /// Either way the last-login stamp is refreshed.
     /// </summary>
     public MatmonUser UpsertCloudUser(string email, MatmonUserRole role)
     {
@@ -263,6 +266,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     throw new InvalidOperationException("This account is disabled.");
                 }
 
+                // Same identity (matched by e-mail): mark it cloud-capable + stamp the login. It keeps its
+                // local password if it has one, so it can show as both "Local" and "Cloud".
+                existing.CloudLinked = true;
+                existing.LastLoginUtc = DateTimeOffset.UtcNow;
+                QueueSave(SavePriority.Configuration);
                 return CloneUser(existing);
             }
 
@@ -276,7 +284,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 IsEnabled = true,
                 CloudLinked = true,
                 CreatedUtc = now,
-                UpdatedUtc = now
+                UpdatedUtc = now,
+                LastLoginUtc = now
             };
             _document.Users.Add(user);
             QueueSave(SavePriority.Configuration);
@@ -3422,11 +3431,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         {
             Id = source.Id,
             Username = source.Username,
-            PasswordHash = string.Empty,
+            Email = source.Email,
+            PasswordHash = string.Empty, // never expose the hash in a read clone
             Role = source.Role,
             IsEnabled = source.IsEnabled,
+            CloudLinked = source.CloudLinked,
             CreatedUtc = source.CreatedUtc,
-            UpdatedUtc = source.UpdatedUtc
+            UpdatedUtc = source.UpdatedUtc,
+            LastLoginUtc = source.LastLoginUtc
         };
     }
 

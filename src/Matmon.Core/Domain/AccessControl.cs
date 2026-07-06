@@ -35,5 +35,8 @@ public sealed class MatmonUser
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>When the account last signed in (local password or cloud SSO). Null = never since tracking.</summary>
+    public DateTimeOffset? LastLoginUtc { get; set; }
 }
 

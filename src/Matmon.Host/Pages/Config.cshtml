@@ -712,19 +712,31 @@
                 {
                     <div class="system-table-row system-user-row" role="row">
                         <span role="cell">
+                            @{
+                                var hasLocalPw = Model.HasLocalPassword(user);
+                            }
                             <strong>@user.Username</strong>
                             <small>@user.Id</small>
+                            @* An account can sign in locally (password) and/or via Cloud SSO — show both. *@
+                            @if (hasLocalPw)
+                            {
+                                <span class="account-role-chip" title="Can sign in with a local e-mail + password">Local</span>
+                            }
                             @if (user.CloudLinked)
                             {
-                                <span class="account-role-chip" title="Signs in via Matmon.Cloud (SSO)@(Model.HasLocalPassword(user) ? " — also has a local password" : " — no local password set")">Cloud</span>
+                                <span class="account-role-chip" title="Can sign in via Matmon.Cloud (SSO / tunnel)">Cloud</span>
                             }
-                            else
+                            @if (!hasLocalPw && !user.CloudLinked)
                             {
-                                <span class="account-role-chip" title="Local account (e-mail + password)">Local</span>
+                                <span class="account-role-chip" title="Local account">Local</span>
                             }
                             @if (Model.IsCurrentUser(user))
                             {
                                 <span class="state-pill" data-state="ok">Current</span>
+                            }
+                            @if (user.LastLoginUtc is not null)
+                            {
+                                <small style="display:block;color:var(--matmon-muted);">Last login: @Model.FormatDateTime(user.LastLoginUtc)</small>
                             }
                         </span>
                         <span role="cell">@user.Role</span>
