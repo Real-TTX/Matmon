@@ -43,23 +43,30 @@
         <a class="sensor-tab" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
     </div>
 
+    <section class="panel panel-stack monitoring-controls">
+        <form class="monitoring-filter-bar" data-notif-filter onsubmit="return false;">
+            <label class="monitoring-filter-field">
+                <span>@MatmonIcons.Render("search")<small>Search</small></span>
+                <input type="search" class="form-control workspace-input" data-notif-search placeholder="Name, sender, target" aria-label="Search notifications" />
+            </label>
+            <label class="monitoring-filter-field">
+                <span>@MatmonIcons.Render("bell")<small>Type</small></span>
+                <select class="form-select workspace-select" data-notif-type-filter aria-label="Filter by type">
+                    <option value="all">All</option>
+                    <option value="trigger">Trigger</option>
+                    <option value="scheduled">Scheduled</option>
+                </select>
+            </label>
+        </form>
+    </section>
+
     <section class="panel panel-stack workspace-panel">
         <style>
-            .notif-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding:12px 16px; border-bottom:1px solid var(--matmon-sidebar-item-border); }
-            .notif-type-btn { padding:0.28rem 0.7rem; border:1px solid var(--matmon-border); border-radius:999px; background:var(--matmon-surface); color:var(--matmon-muted); cursor:pointer; font-size:0.82rem; }
-            .notif-type-btn.is-active { color:var(--matmon-foreground); border-color:var(--matmon-accent); background:var(--matmon-sidebar-item-hover-bg); }
-            .notif-toolbar .workspace-input { max-width:260px; }
             .notif-type-chip { display:inline-block; padding:0.05rem 0.5rem; border:1px solid var(--matmon-border); border-radius:999px; font-size:0.72rem; color:var(--matmon-muted); margin-left:6px; }
         </style>
-
-        <div class="notif-toolbar" data-notif-filter>
-            <div style="display:flex;gap:6px;">
-                <button type="button" class="notif-type-btn is-active" data-notif-type-filter="all">All</button>
-                <button type="button" class="notif-type-btn" data-notif-type-filter="trigger">Trigger</button>
-                <button type="button" class="notif-type-btn" data-notif-type-filter="scheduled">Scheduled</button>
-            </div>
-            <input type="search" class="workspace-input" data-notif-search placeholder="Search notifications…" aria-label="Search notifications" />
-            <span class="panel-hint" style="margin-left:auto;">@(Model.View.NotificationRuleCount) trigger · 1 scheduled</span>
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("bell")<span>Notification rules</span></h2>
+            <span class="panel-hint">@(Model.View.NotificationRuleCount) trigger · 1 scheduled</span>
         </div>
 
         <div class="notification-rule-list">
@@ -111,10 +118,10 @@
         if (!root) { return; }
         var rows = Array.prototype.slice.call(document.querySelectorAll("[data-notif-row]"));
         var search = root.querySelector("[data-notif-search]");
-        var typeBtns = Array.prototype.slice.call(root.querySelectorAll("[data-notif-type-filter]"));
-        var activeType = "all";
+        var typeSelect = root.querySelector("[data-notif-type-filter]");
         function apply() {
             var q = ((search && search.value) || "").trim().toLowerCase();
+            var activeType = (typeSelect && typeSelect.value) || "all";
             rows.forEach(function (row) {
                 var t = row.getAttribute("data-notif-type");
                 var n = (row.getAttribute("data-notif-name") || "").toLowerCase();
@@ -122,13 +129,7 @@
                 row.hidden = !show;
             });
         }
-        typeBtns.forEach(function (b) {
-            b.addEventListener("click", function () {
-                activeType = b.getAttribute("data-notif-type-filter");
-                typeBtns.forEach(function (x) { x.classList.toggle("is-active", x === b); });
-                apply();
-            });
-        });
+        if (typeSelect) { typeSelect.addEventListener("change", apply); }
         if (search) { search.addEventListener("input", apply); }
         apply();
     })();
