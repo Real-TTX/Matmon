@@ -893,20 +893,6 @@ function initializeAccountMenu() {
     return;
   }
 
-  // The panel is position:fixed (so the sidebar's overflow can't clip it). Anchor it to the trigger's actual
-  // on-screen rect every time it opens — the sidebar scrolls and its width varies, so hardcoded CSS offsets
-  // never lined up. Opens upward, left-aligned, matching the trigger's width.
-  const positionPanel = (menu) => {
-    const trigger = menu.querySelector(".account-menu-trigger");
-    const panel = menu.querySelector(".account-menu-panel");
-    if (!trigger || !panel) { return; }
-    const r = trigger.getBoundingClientRect();
-    panel.style.left = Math.round(r.left) + "px";
-    panel.style.right = "auto";
-    panel.style.width = Math.round(r.width) + "px";
-    panel.style.bottom = Math.round(window.innerHeight - r.top + 6) + "px";
-  };
-
   const closeMenus = (except = null) => {
     menus.forEach((menu) => {
       if (menu !== except) {
@@ -919,14 +905,9 @@ function initializeAccountMenu() {
     menu.addEventListener("toggle", () => {
       if (menu.open) {
         closeMenus(menu);
-        positionPanel(menu);
       }
     });
   });
-
-  const repositionOpen = () => menus.forEach((menu) => { if (menu.open) { positionPanel(menu); } });
-  window.addEventListener("resize", repositionOpen);
-  window.addEventListener("scroll", repositionOpen, true); // capture phase → also catches sidebar scroll
 
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
