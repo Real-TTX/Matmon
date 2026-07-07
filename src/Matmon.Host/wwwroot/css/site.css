@@ -7461,6 +7461,54 @@ body.element-picker-open {
   border-color: rgba(243, 179, 107, 0.24);
 }
 
+/* Reusable modal dialog: a centered card on desktop, full-screen on mobile.
+   Use on a native <dialog> opened via showModal(). */
+.workspace-dialog {
+  border: 1px solid var(--matmon-border);
+  border-radius: 12px;
+  padding: 0;
+  max-width: 520px;
+  width: 92%;
+  background: var(--matmon-surface);
+  color: var(--matmon-foreground);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.workspace-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.workspace-dialog-form {
+  padding: 18px 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.workspace-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .workspace-dialog {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .workspace-dialog-form {
+    height: 100%;
+    align-content: start;
+  }
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(340px, 0.9fr);
