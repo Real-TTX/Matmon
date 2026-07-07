@@ -27,15 +27,28 @@
         <form method="post" class="workspace-form">
             <input type="hidden" asp-for="ReturnUrl" />
 
+            <label class="workspace-field" style="margin-bottom:0.6rem;">
+                <span class="workspace-label">Account type</span>
+                <select asp-for="UserInput.AccountType" class="form-select workspace-select" data-usertype-select>
+                    <option value="Local">Local — username + password</option>
+                    <option value="Cloud">Matmon Cloud — e-mail, SSO (no local password)</option>
+                </select>
+            </label>
+
             <div class="workspace-form-grid">
-                <label class="workspace-field">
+                <label class="workspace-field" data-usertype="local">
                     <span class="workspace-label">Username</span>
                     <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
                 </label>
 
-                <label class="workspace-field">
+                <label class="workspace-field" data-usertype="local">
                     <span class="workspace-label">Password</span>
                     <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" />
+                </label>
+
+                <label class="workspace-field" data-usertype="cloud" hidden>
+                    <span class="workspace-label">Cloud account e-mail</span>
+                    <input asp-for="UserInput.Email" type="email" class="form-control workspace-input" autocomplete="email" />
                 </label>
 
                 <label class="workspace-field">
@@ -44,7 +57,23 @@
                 </label>
             </div>
 
-            <div class="workspace-inline-note">New users are created as enabled accounts.</div>
+            <div class="workspace-inline-note" data-usertype="local">New users are created as enabled accounts.</div>
+            <div class="workspace-inline-note" data-usertype="cloud" hidden>Cloud users sign in with “Sign in with Matmon Cloud” (SSO) — no local password is set. An admin can add one later on the user's page.</div>
+
+            <script>
+                (function () {
+                    var sel = document.querySelector("[data-usertype-select]");
+                    if (!sel) { return; }
+                    function sync() {
+                        var t = (sel.value || "Local").toLowerCase();
+                        document.querySelectorAll("[data-usertype]").forEach(function (el) {
+                            el.hidden = el.getAttribute("data-usertype") !== t;
+                        });
+                    }
+                    sel.addEventListener("change", sync);
+                    sync();
+                })();
+            </script>
 
             <div class="workspace-form-actions">
                 <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>

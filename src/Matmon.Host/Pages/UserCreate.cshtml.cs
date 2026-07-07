@@ -44,8 +44,12 @@ public sealed class UserCreateModel : PageModel
 
         try
         {
-            var user = _workspaceStore.CreateUser(UserInput.Username, UserInput.Password ?? string.Empty, UserInput.Role);
-            StatusMessage = $"User '{user.Username}' created.";
+            var user = UserInput.AccountType == UserAccountType.Cloud
+                ? _workspaceStore.UpsertCloudUser(UserInput.Email ?? string.Empty, UserInput.Role)
+                : _workspaceStore.CreateUser(UserInput.Username, UserInput.Password ?? string.Empty, UserInput.Role);
+            StatusMessage = UserInput.AccountType == UserAccountType.Cloud
+                ? $"Cloud user '{user.Username}' added. They sign in with Matmon Cloud (no local password)."
+                : $"User '{user.Username}' created.";
             return Redirect(GetSafeReturnUrl("/Config?tab=users"));
         }
         catch (Exception ex)
@@ -77,9 +81,20 @@ public sealed class UserCreateModel : PageModel
 
 public sealed class UserCreateInput
 {
+    /// <summary>Local = username + local password; Cloud = link a Matmon Cloud account (e-mail, SSO, no local password).</summary>
+    public UserAccountType AccountType { get; set; } = UserAccountType.Local;
+
     public string Username { get; set; } = string.Empty;
 
     public string? Password { get; set; }
 
+    public string Email { get; set; } = string.Empty;
+
     public MatmonUserRole Role { get; set; } = MatmonUserRole.Viewer;
+}
+
+public enum UserAccountType
+{
+    Local,
+    Cloud
 }
