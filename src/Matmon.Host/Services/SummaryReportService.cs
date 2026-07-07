@@ -1,3 +1,5 @@
+using System.Net.Http;
+using System.Net.Http.Json;
 using Matmon.Core;
 using Matmon.Core.Domain;
 
@@ -189,6 +191,26 @@ public sealed class SummaryReportSender
             return false;
         }
 
+        // A chosen "Cloud" sender routes the report through the cloud gateway instead of local SMTP — so an
+        // instance with no SMTP but a connected cloud link can still e-mail its summary + PDF.
+        var chosenSender = settings.SenderId is { } senderId
+            ? _workspaceStore.Workspace.NotificationSenders.FirstOrDefault(s => s.Id == senderId)
+            : null;
+        var viaCloud = chosenSender is { Kind: NotificationEndpointKind.Cloud };
+
+        var now = DateTimeOffset.UtcNow;
+        var window = WindowFor(settings.Cadence);
+        var report = SummaryReportBuilder.Build(_collector.Collect(now, window));
+        var subject = string.IsNullOrWhiteSpace(settings.Subject) ? report.Subject : settings.Subject;
+
+        // Collect a fuller sensor list for the PDF than the (short) e-mail body.
+        var pdf = settings.AttachPdf ? _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines)) : null;
+
+        if (viaCloud)
+        {
+            return await SendViaCloudAsync(recipients, subject, report.TextBody, report.HtmlBody, pdf, now, cancellationToken);
+        }
+
         var smtp = ResolveSmtp(settings);
         if (smtp is null)
         {
@@ -196,22 +218,54 @@ public sealed class SummaryReportSender
             return false;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var window = WindowFor(settings.Cadence);
-        var report = SummaryReportBuilder.Build(_collector.Collect(now, window));
-        var subject = string.IsNullOrWhiteSpace(settings.Subject) ? report.Subject : settings.Subject;
-
-        IReadOnlyList<EmailAttachment>? attachments = null;
-        if (settings.AttachPdf)
-        {
-            // Collect a fuller sensor list for the PDF than the (short) e-mail body.
-            var pdf = _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines));
-            attachments = [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", pdf, "application/pdf")];
-        }
+        IReadOnlyList<EmailAttachment>? attachments = pdf is null
+            ? null
+            : [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", pdf, "application/pdf")];
 
         await _emailSender.SendAsync(smtp, recipients, subject, report.TextBody, report.HtmlBody, cancellationToken, attachments);
         _logger.LogInformation("Summary report sent to {Recipients}", recipients);
         return true;
+    }
+
+    private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+    /// <summary>Relay the summary report (subject/body + optional PDF) through the connected Matmon.Cloud gateway
+    /// (POST /api/instances/{id}/notify, instance-token auth) — the cloud spools + retries it like every cloud mail.</summary>
+    private async Task<bool> SendViaCloudAsync(string recipients, string subject, string? text, string? html, byte[]? pdf, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var cloud = _workspaceStore.GetCloudConnectionSettings();
+        if (!cloud.Configured || string.IsNullOrWhiteSpace(cloud.Url) || string.IsNullOrWhiteSpace(cloud.InstanceId))
+        {
+            _logger.LogWarning("Summary report not sent: Cloud sender chosen but the cloud link isn't configured.");
+            return false;
+        }
+        var token = _workspaceStore.GetCloudConnectionToken();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            _logger.LogWarning("Summary report not sent: Cloud sender chosen but no cloud token is stored.");
+            return false;
+        }
+
+        var url = $"{cloud.Url!.Trim().TrimEnd('/')}/api/instances/{cloud.InstanceId!.Trim()}/notify";
+        object? attachment = pdf is null
+            ? null
+            : new { FileName = $"matmon-audit-{now:yyyyMMdd}.pdf", ContentType = "application/pdf", Content = pdf };
+        var body = new { Channel = "email", To = recipients, Subject = subject, Text = text, Html = html, Attachment = attachment };
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body) };
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            _logger.LogInformation("Summary report relayed to Matmon.Cloud -> {Recipients}", recipients);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Summary report relay to Matmon.Cloud failed");
+            return false;
+        }
     }
 
     /// <summary>Recipient(s): the chosen receiver's target, else the free-text recipients list.</summary>
