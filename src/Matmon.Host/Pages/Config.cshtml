@@ -27,6 +27,7 @@
         {
             <a class="sensor-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
             <a class="sensor-tab @(Model.IsActiveTab("cloud") ? "is-active" : "")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
+            <a class="sensor-tab @(Model.IsActiveTab("license") ? "is-active" : "")" asp-page="/Config" asp-route-tab="license">License</a>
         }
         @if (canManageUsers)
         {
@@ -690,6 +691,48 @@
                         <button type="submit" class="workspace-submit">Save Full Access</button>
                     </form>
                 }
+            </div>
+        </section>
+    }
+    else if (Model.IsActiveTab("license") && canManageSystem)
+    {
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("lock")<span>License</span></h2>
+                <span class="panel-hint">@Model.License.DisplayName@(Model.License.IsFallback ? " · unlicensed (Free)" : "")</span>
+            </div>
+            <div style="padding:16px 18px;display:grid;gap:18px;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;">
+                    <div><div class="panel-hint">Plan</div><div style="font-weight:600;">@Model.License.DisplayName</div></div>
+                    <div><div class="panel-hint">Probes</div><div>@Model.ProbeCount / @Model.License.ProbeLimitDisplay</div></div>
+                    <div><div class="panel-hint">Sensors</div><div>@Model.SensorCount / @Model.License.SensorLimitDisplay</div></div>
+                    <div><div class="panel-hint">Cloud sensors</div><div>@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "—")</div></div>
+                    <div><div class="panel-hint">Full Access</div><div>@(Model.License.TunnelEnabled ? "included" : "not included")</div></div>
+                    <div><div class="panel-hint">Expires</div><div>@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</div></div>
+                </div>
+                <p class="panel-hint" style="margin:0;max-width:680px;">
+                    The license is verified <strong>offline</strong> against Matmon's public key, so it keeps working when the cloud is
+                    unreachable. When connected, Matmon.Cloud refreshes it automatically on each heartbeat.
+                </p>
+
+                <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
+                    <h2 class="section-title" style="font-size:15px;margin:0 0 6px;"><span>Apply a token manually</span></h2>
+                    <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored — an invalid or expired token is rejected. A connected cloud will overwrite a manual token on its next heartbeat.</p>
+                    <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="max-width:680px;display:grid;gap:10px;">
+                        <label class="workspace-field">
+                            <span>License token</span>
+                            <textarea asp-for="LicenseTokenInput" class="workspace-input" rows="4" placeholder="paste the signed token here" style="font-family:monospace;font-size:12px;"></textarea>
+                        </label>
+                        <div><button type="submit" class="workspace-submit">Apply token</button></div>
+                    </form>
+                    @if (Model.HasStoredLicenseToken)
+                    {
+                        <form method="post" asp-page-handler="ClearLicenseToken" style="margin-top:10px;"
+                              onsubmit="return confirm('Clear the cached license token? The instance drops to the Free fallback until the cloud re-issues one.');">
+                            <button type="submit" class="workspace-danger-submit">Clear license token</button>
+                        </form>
+                    }
+                </div>
             </div>
         </section>
     }

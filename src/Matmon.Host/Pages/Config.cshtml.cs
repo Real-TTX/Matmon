@@ -56,6 +56,13 @@ public class ConfigModel : PageModel
 
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
+    /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) — drives the Clear action.</summary>
+    public bool HasStoredLicenseToken { get; private set; }
+
+    /// <summary>Manual license token paste (offline / cloud-unreachable path).</summary>
+    [BindProperty]
+    public string? LicenseTokenInput { get; set; }
+
     public int ProbeCount { get; private set; }
 
     public int SensorCount { get; private set; }
@@ -304,6 +311,47 @@ public class ConfigModel : PageModel
         _workspaceStore.SetCloudConnectionSettings(url, instanceId, string.IsNullOrWhiteSpace(token) ? null : token, enabled: true);
         StatusMessage = "Connected to Matmon.Cloud — the first heartbeat is sent within a few seconds.";
         return RedirectToPage(new { tab = "cloud" });
+    }
+
+    /// <summary>Apply a signed license token by hand (offline / cloud-unreachable). Verified against the baked
+    /// public key before it's stored, so an invalid/expired/foreign token is rejected.</summary>
+    public IActionResult OnPostSetLicenseToken()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var token = (LicenseTokenInput ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            ErrorMessage = "Paste a license token to apply.";
+            return RedirectToPage(new { tab = "license" });
+        }
+
+        var verified = LicenseCrypto.Verify(token, LicensePublicKey.Spki);
+        if (verified is null)
+        {
+            ErrorMessage = "That token is not valid (wrong signature, expired, or malformed). Nothing was changed.";
+            return RedirectToPage(new { tab = "license" });
+        }
+
+        _workspaceStore.SetLicenseToken(token);
+        StatusMessage = $"License applied: {verified.DisplayName}. Note: a connected cloud will overwrite this on its next heartbeat.";
+        return RedirectToPage(new { tab = "license" });
+    }
+
+    /// <summary>Clear the cached license token — the instance falls back to Free (until the cloud re-issues one).</summary>
+    public IActionResult OnPostClearLicenseToken()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        _workspaceStore.SetLicenseToken(null);
+        StatusMessage = "License token cleared — the instance is now on the Free fallback.";
+        return RedirectToPage(new { tab = "license" });
     }
 
     public IActionResult OnPostCloudDisconnect()
@@ -563,6 +611,7 @@ public class ConfigModel : PageModel
             "backup" => "backup",
             "reports" => "reports",
             "cloud" => "cloud",
+            "license" => "license",
             "users" => "users",
             _ => "general"
         };
@@ -572,7 +621,8 @@ public class ConfigModel : PageModel
     {
         var tab = NormalizeTab(Tab);
         return (string.Equals(tab, "users", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(tab, "backup", StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(tab, "backup", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(tab, "license", StringComparison.OrdinalIgnoreCase)) &&
             !MatmonSecurity.IsAdmin(User);
     }
 
@@ -581,6 +631,7 @@ public class ConfigModel : PageModel
         Overview = _configurationOverviewProvider.GetOverview();
         Users = _workspaceStore.GetUsers();
         License = _licenseService.Current;
+        HasStoredLicenseToken = !string.IsNullOrEmpty(_workspaceStore.GetLicenseToken());
         var allElements = _workspaceStore.GetAllElements();
         ProbeCount = allElements.OfType<ProbeElement>().Count();
         SensorCount = allElements.OfType<SensorElement>().Count();
