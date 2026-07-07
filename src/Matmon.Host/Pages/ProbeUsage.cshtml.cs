@@ -132,7 +132,7 @@ public sealed class ProbeUsageModel : PageModel
                 ? SensorState.Paused
                 : latestObservation?.State ?? SensorState.Unknown;
 
-            var scheduleSummary = FormatScheduleSummary(effectiveSettings);
+            var scheduleSummary = FormatScheduleSummary(effectiveSettings, SensorScheduleDefaults.Resolve(sensor.SensorTypeKey));
             var estimatedRunsPerDay = EstimateExecutionsPerDay(effectiveSettings, sensor.SensorTypeKey);
             var averageBytes = EstimateAverageObservationBytes(history, latestObservation);
             var estimatedBytesPerHour = averageBytes * estimatedRunsPerDay / 24d;
@@ -425,7 +425,7 @@ public sealed class ProbeUsageModel : PageModel
         return Encoding.UTF8.GetByteCount(json);
     }
 
-    private static string FormatScheduleSummary(MonitoringSettings settings)
+    private static string FormatScheduleSummary(MonitoringSettings settings, TimeSpan defaultInterval)
     {
         if (settings.PollingSchedule is not null)
         {
@@ -437,7 +437,8 @@ public sealed class ProbeUsageModel : PageModel
             return $"every {MonitoringSchedule.FormatDuration(interval)}";
         }
 
-        return "every 15s";
+        // No explicit schedule anywhere → the poller uses the per-type default; show that, not the 15s floor.
+        return $"every {MonitoringSchedule.FormatDuration(defaultInterval)}";
     }
 
     private static string FormatDuration(TimeSpan duration)

@@ -1540,7 +1540,7 @@ public sealed class WorkspaceModel : PageModel
             createCredentialSettings.Credentials,
             sensorDefinition?.CredentialKinds ?? [],
             NewSensor.SelectedCredentialId);
-        NewSensor.ScheduleInheritedLabel = FormatScheduleSummary(createCredentialSettings);
+        NewSensor.ScheduleInheritedLabel = FormatScheduleSummary(createCredentialSettings, SensorScheduleDefaults.Resolve(NewSensor.SensorTypeKey));
 
         PopulateSensorParameterEditor(NewSensor, snapshot.SensorDefinitions);
         PopulateSensorThresholdEditor(NewSensor, snapshot, latestSensorObservations);
@@ -1837,7 +1837,8 @@ public sealed class WorkspaceModel : PageModel
             ? BuildSensorAdvancedParametersText(localSettings.Parameters, [])
             : BuildSensorAdvancedParametersText(localSettings.Parameters, sensorDefinition.Parameters.Select(parameter => parameter.Key));
         var credentialBundleState = BuildCredentialBundleEditorState(localSettings.Credentials);
-        var scheduleState = BuildScheduleEditorState(localSettings, effectiveSettings);
+        var scheduleDefaultInterval = SensorScheduleDefaults.Resolve((element as SensorElement)?.SensorTypeKey);
+        var scheduleState = BuildScheduleEditorState(localSettings, effectiveSettings, scheduleDefaultInterval);
         var telemetryProfile = element is SensorElement sensorForProfile
             ? Matmon.Core.Telemetry.SensorTelemetryProfiles.Resolve(sensorForProfile.SensorTypeKey)
             : null;
@@ -1876,7 +1877,7 @@ public sealed class WorkspaceModel : PageModel
             },
             EnabledInheritedLabel = FormatInheritedEnabledLabel(effectiveSettings.Enabled),
             PollingIntervalSeconds = localSettings.PollingInterval is TimeSpan pollingInterval ? (int?)Math.Round(pollingInterval.TotalSeconds) : null,
-            PollingIntervalSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.PollingInterval),
+            PollingIntervalSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.PollingInterval ?? scheduleDefaultInterval),
             TimeoutSeconds = localSettings.Timeout is TimeSpan timeout ? (int?)Math.Round(timeout.TotalSeconds) : null,
             TimeoutSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.Timeout),
             RetryCount = localSettings.RetryCount,
@@ -1959,7 +1960,8 @@ public sealed class WorkspaceModel : PageModel
             ? BuildSensorAdvancedParametersText(localSettings.Parameters, [])
             : BuildSensorAdvancedParametersText(localSettings.Parameters, templateDefinition.Parameters.Select(parameter => parameter.Key));
         var credentialBundleState = BuildCredentialBundleEditorState(localSettings.Credentials);
-        var scheduleState = BuildScheduleEditorState(localSettings, effectiveSettings);
+        var scheduleDefaultInterval = SensorScheduleDefaults.Resolve(template.SensorTypeKey);
+        var scheduleState = BuildScheduleEditorState(localSettings, effectiveSettings, scheduleDefaultInterval);
 
         return new WorkspaceTemplateEditorInput
         {
@@ -1989,7 +1991,7 @@ public sealed class WorkspaceModel : PageModel
             },
             EnabledInheritedLabel = FormatInheritedEnabledLabel(effectiveSettings.Enabled),
             PollingIntervalSeconds = localSettings.PollingInterval is TimeSpan pollingInterval ? (int?)Math.Round(pollingInterval.TotalSeconds) : null,
-            PollingIntervalSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.PollingInterval),
+            PollingIntervalSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.PollingInterval ?? scheduleDefaultInterval),
             TimeoutSeconds = localSettings.Timeout is TimeSpan timeout ? (int?)Math.Round(timeout.TotalSeconds) : null,
             TimeoutSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.Timeout),
             RetryCount = localSettings.RetryCount,
@@ -5346,7 +5348,7 @@ public sealed class WorkspaceModel : PageModel
         };
     }
 
-    private static ScheduleEditorState BuildScheduleEditorState(MonitoringSettings localSettings, MonitoringSettings effectiveSettings)
+    private static ScheduleEditorState BuildScheduleEditorState(MonitoringSettings localSettings, MonitoringSettings effectiveSettings, TimeSpan defaultInterval)
     {
         var (mode, everyValue, everyUnit, dayOfWeek, dayOfMonth, time) =
             ReadScheduleInput(localSettings.PollingSchedule, localSettings.PollingInterval);
@@ -5363,7 +5365,7 @@ public sealed class WorkspaceModel : PageModel
             daysOfWeek,
             dayOfMonth,
             time,
-            FormatScheduleSummary(effectiveSettings));
+            FormatScheduleSummary(effectiveSettings, defaultInterval));
     }
 
     private static (string Mode, int? EveryValue, string EveryUnit, DayOfWeek? DayOfWeek, int? DayOfMonth, string? Time)
@@ -5430,7 +5432,7 @@ public sealed class WorkspaceModel : PageModel
         return ("every", safeSeconds, "seconds", DayOfWeek.Monday, 1, "00:00");
     }
 
-    private static string FormatScheduleSummary(MonitoringSettings settings)
+    private static string FormatScheduleSummary(MonitoringSettings settings, TimeSpan defaultInterval)
     {
         if (settings.PollingSchedule is not null)
         {
@@ -5442,7 +5444,10 @@ public sealed class WorkspaceModel : PageModel
             return $"every {MonitoringSchedule.FormatDuration(interval)}";
         }
 
-        return "every 15s";
+        // Nothing set on the sensor or any ancestor → the poller falls back to the per-type default
+        // (SensorScheduleDefaults). Surface THAT here, not the bare 15s floor, so the editor shows the
+        // real effective cadence (e.g. "every 5 min" / "every 30 s") instead of looking unset.
+        return $"every {MonitoringSchedule.FormatDuration(defaultInterval)}";
     }
 
     private static string FormatScheduleTime(TimeSpan? time)
