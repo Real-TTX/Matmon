@@ -715,24 +715,40 @@
                     unreachable. When connected, Matmon.Cloud refreshes it automatically on each heartbeat.
                 </p>
 
-                <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
-                    <h2 class="section-title" style="font-size:15px;margin:0 0 6px;"><span>Apply a token manually</span></h2>
-                    <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored — an invalid or expired token is rejected. A connected cloud will overwrite a manual token on its next heartbeat.</p>
-                    <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="max-width:680px;display:grid;gap:10px;">
-                        <label class="workspace-field">
-                            <span>License token</span>
-                            <textarea asp-for="LicenseTokenInput" class="workspace-input" rows="4" placeholder="paste the signed token here" style="font-family:monospace;font-size:12px;"></textarea>
-                        </label>
-                        <div><button type="submit" class="workspace-submit">Apply token</button></div>
-                    </form>
-                    @if (Model.HasStoredLicenseToken)
-                    {
-                        <form method="post" asp-page-handler="ClearLicenseToken" style="margin-top:10px;"
-                              onsubmit="return confirm('Clear the cached license token? The instance drops to the Free fallback until the cloud re-issues one.');">
-                            <button type="submit" class="workspace-danger-submit">Clear license token</button>
+                @if (Model.CloudLinkActive && Model.License.IsFallback)
+                {
+                    <div class="workspace-banner workspace-banner-warning" style="max-width:680px;margin:0;">
+                        Connected to Matmon.Cloud, but no valid license token has arrived yet — this instance is on the <strong>Free</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.
+                    </div>
+                }
+
+                @if (!Model.CloudLinkActive)
+                {
+                    <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
+                        <h2 class="section-title" style="font-size:15px;margin:0 0 6px;"><span>Apply a token manually</span></h2>
+                        <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored — an invalid or expired token is rejected.</p>
+                        <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="max-width:680px;display:grid;gap:10px;">
+                            <label class="workspace-field">
+                                <span>License token</span>
+                                <textarea asp-for="LicenseTokenInput" class="workspace-input" rows="4" placeholder="paste the signed token here" style="font-family:monospace;font-size:12px;"></textarea>
+                            </label>
+                            <div><button type="submit" class="workspace-submit">Apply token</button></div>
                         </form>
-                    }
-                </div>
+                        @if (Model.HasStoredLicenseToken)
+                        {
+                            <form method="post" asp-page-handler="ClearLicenseToken" style="margin-top:10px;"
+                                  onsubmit="return confirm('Clear the cached license token? The instance drops to the Free fallback until the cloud re-issues one.');">
+                                <button type="submit" class="workspace-danger-submit">Clear license token</button>
+                            </form>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
+                        <p class="workspace-inline-note" style="margin:0;max-width:680px;">Manual license entry is disabled while connected to Matmon.Cloud — the license is managed by the cloud and refreshed on each heartbeat. <strong>Disconnect</strong> the cloud (System → Cloud) to license this instance offline.</p>
+                    </div>
+                }
             </div>
         </section>
     }

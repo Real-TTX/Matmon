@@ -54,6 +54,10 @@ public class ConfigModel : PageModel
     /// <summary>Whether the env-var bootstrap is set (shown as a hint; the UI takes over once used).</summary>
     public bool CloudEnvBootstrapSet { get; private set; }
 
+    /// <summary>True when the cloud link is actively managing the license (connected via the UI, or the env
+    /// bootstrap is set). While active, manual token entry is disabled — the cloud re-issues it on each heartbeat.</summary>
+    public bool CloudLinkActive { get; private set; }
+
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
     /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) — drives the Clear action.</summary>
@@ -320,6 +324,16 @@ public class ConfigModel : PageModel
         if (!MatmonSecurity.IsAdmin(User))
         {
             return Forbid();
+        }
+
+        // While the cloud link is active it OWNS the license (re-issued each heartbeat), so a manual token would
+        // just be overwritten — refuse it and tell the admin to disconnect first for offline licensing.
+        var cloud = _workspaceStore.GetCloudConnectionSettings();
+        var cloudActive = cloud.Configured ? cloud.Enabled : !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
+        if (cloudActive)
+        {
+            ErrorMessage = "Manual license entry is disabled while connected to Matmon.Cloud — the cloud manages the license and would overwrite it on the next heartbeat. Disconnect the cloud first (System → Cloud).";
+            return RedirectToPage(new { tab = "license" });
         }
 
         var token = (LicenseTokenInput ?? string.Empty).Trim();
@@ -638,6 +652,7 @@ public class ConfigModel : PageModel
         CloudConnection = _workspaceStore.GetCloudConnection();
         CloudSettings = _workspaceStore.GetCloudConnectionSettings();
         CloudEnvBootstrapSet = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
+        CloudLinkActive = CloudSettings.Configured ? CloudSettings.Enabled : CloudEnvBootstrapSet;
         // Effective values shown in the form: UI settings once configured, else the env bootstrap.
         CloudUrl = CloudSettings.Configured ? CloudSettings.Url : _runtimeOptions.CloudUrl;
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);
