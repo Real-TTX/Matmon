@@ -94,7 +94,7 @@
                     <article class="notification-rule-row @(Model.NotificationRuleEditor.Id == rule.Id ? "is-selected" : string.Empty)"
                              data-notif-row data-notif-type="trigger" data-notif-name="@rule.Name">
                         <div class="notification-rule-main">
-                            <div class="notification-rule-name">@rule.Name <span class="notif-type-chip">Trigger</span></div>
+                            <div class="notification-rule-name">@rule.Name <span class="notif-type-chip">Trigger</span> <span class="notif-type-chip" style="background:var(--matmon-surface-soft);color:var(--matmon-muted);">@rule.Channel</span></div>
                             <div class="notification-rule-meta">@rule.Sender -> @rule.Receiver</div>
                             <div class="notification-rule-meta">@rule.Target | @rule.Triggers | @rule.Cooldown</div>
                         </div>

@@ -4821,7 +4821,8 @@ public sealed class WorkspaceModel : PageModel
                 BuildNotificationReceiverSummary(snapshot.NotificationReceivers, rule.ReceiverId, rule.ChannelKind, rule.Recipient),
                 BuildNotificationTargetSummary(rule, nodes),
                 BuildNotificationTriggerSummary(rule.TriggerStates),
-                BuildNotificationCooldownSummary(rule.CooldownMinutes, rule.Threshold)))
+                BuildNotificationCooldownSummary(rule.CooldownMinutes, rule.Threshold),
+                rule.ChannelKind.ToString()))
             .ToArray();
     }
 
@@ -6686,7 +6687,8 @@ public sealed record WorkspaceNotificationRuleRow(
     string Receiver,
     string Target,
     string Triggers,
-    string Cooldown);
+    string Cooldown,
+    string Channel);
 
 public sealed record WorkspaceNotificationSenderRow(
     Guid Id,

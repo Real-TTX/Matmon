@@ -35,6 +35,7 @@ Channels: {{channels.summary}}
     <tr><th style="text-align:left;padding:6px 0;">Probe</th><td style="padding:6px 0;">{{probe.name}}</td></tr>
   </table>
   <div style="margin-top:16px;">{{{channels.table_html}}}</div>
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;">Sent by Matmon · automated monitoring alert.</div>
 </div>
 """;
 
