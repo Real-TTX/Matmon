@@ -7436,6 +7436,7 @@ body.element-picker-open {
   padding: 0.65rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--matmon-border);
+  margin: 0.85rem 0 1.1rem;
 }
 
 .workspace-banner-success {
