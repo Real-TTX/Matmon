@@ -7,9 +7,9 @@ namespace Matmon.Core.Domain;
 /// <summary>
 /// Reports UniFi health via the API-key (X-API-KEY) interface, in two modes:
 /// <list type="bullet">
-/// <item><b>Cloud</b> — the UniFi Site Manager API at <c>https://api.ui.com</c>,
+/// <item><b>Cloud</b> - the UniFi Site Manager API at <c>https://api.ui.com</c>,
 /// listing the consoles/hosts on the account and how many are online.</item>
-/// <item><b>Local</b> — a controller's Network Integration API at
+/// <item><b>Local</b> - a controller's Network Integration API at
 /// <c>https://&lt;host&gt;/proxy/network/integration/v1</c>, listing the adopted
 /// devices of a site and how many are online.</item>
 /// </list>
@@ -24,7 +24,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
     {
         Key = "unifi-health",
         DisplayName = "UniFi Health",
-        Description = "UniFi console/device availability via the API key — cloud (api.ui.com) or a local controller's integration API.",
+        Description = "UniFi console/device availability via the API key - cloud (api.ui.com) or a local controller's integration API.",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [
@@ -217,7 +217,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
         using var client = CreateHttpClient(verifySsl, context.Settings.Timeout ?? TimeSpan.FromSeconds(15));
         client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
-        // UniFi OS login — the auth cookie is stored by the handler's cookie container
+        // UniFi OS login - the auth cookie is stored by the handler's cookie container
         // and replayed on the device request; the CSRF token is echoed back as a header.
         var loginPayload = JsonSerializer.Serialize(new { username, password });
         using var loginContent = new StringContent(loginPayload, System.Text.Encoding.UTF8, "application/json");
@@ -293,7 +293,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
             ? $"{reachableMessage}, but no {noun}s reported"
             : offline > 0
                 ? $"{online}/{total} {noun}s online ({offline} offline)"
-                : $"{reachableMessage} — {online} {noun}s online";
+                : $"{reachableMessage} - {online} {noun}s online";
 
         var result = state switch
         {
@@ -410,7 +410,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
             }
         }
 
-        // No recognizable signal — assume reachable items are up rather than flag a false outage.
+        // No recognizable signal - assume reachable items are up rather than flag a false outage.
         return true;
     }
 

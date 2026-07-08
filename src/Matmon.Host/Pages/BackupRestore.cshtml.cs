@@ -210,7 +210,7 @@ public class BackupRestoreModel : PageModel
 
     private IActionResult RedirectToConfig()
     {
-        // Only follow a local return URL — never an absolute/off-site one (open-redirect guard).
+        // Only follow a local return URL - never an absolute/off-site one (open-redirect guard).
         if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
         {
             return Redirect(ReturnUrl);

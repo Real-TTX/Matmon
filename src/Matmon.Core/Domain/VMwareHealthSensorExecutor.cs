@@ -384,7 +384,7 @@ internal sealed class VSphereSession : IAsyncDisposable
         }
         catch
         {
-            // ignore — the session will expire on its own
+            // ignore - the session will expire on its own
         }
         finally
         {

@@ -9,7 +9,7 @@ namespace Matmon.Host.Pages;
 
 /// <summary>
 /// Self-service account page for the signed-in user: set/change a local password. This is the offline
-/// fallback for SSO ("Sign in with Matmon Cloud") accounts — once they set a local password they can log
+/// fallback for SSO ("Sign in with Matmon Cloud") accounts - once they set a local password they can log
 /// in with e-mail + password even when the cloud is unreachable.
 /// </summary>
 public class AccountModel : PageModel
@@ -72,7 +72,7 @@ public class AccountModel : PageModel
         switch (result)
         {
             case ChangePasswordResult.Success:
-                StatusMessage = HasPassword ? "Password changed." : "Local password set — you can now sign in offline.";
+                StatusMessage = HasPassword ? "Password changed." : "Local password set - you can now sign in offline.";
                 return RedirectToPage();
             case ChangePasswordResult.WrongCurrent:
                 ErrorMessage = "The current password is incorrect.";

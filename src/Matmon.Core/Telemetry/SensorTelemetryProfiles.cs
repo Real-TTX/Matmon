@@ -4,7 +4,7 @@ namespace Matmon.Core.Telemetry;
 /// Sensible telemetry retention/aggregation defaults for a sensor. Numeric
 /// trend sensors (latency, throughput) keep raw samples briefly but summarise
 /// them per hour for a long time; availability sensors keep raw data longer and
-/// summarise per day. These are only the fallback — an explicit
+/// summarise per day. These are only the fallback - an explicit
 /// <see cref="Matmon.Core.Domain.MonitoringSettings"/> override always wins.
 /// </summary>
 public sealed record SensorTelemetryProfile(

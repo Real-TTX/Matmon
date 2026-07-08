@@ -2,7 +2,7 @@ using Matmon.Core.Domain;
 
 namespace Matmon.Host.Services;
 
-/// <summary>Runs a single sensor on demand with NO workspace/persistence — the engine behind the Executor
+/// <summary>Runs a single sensor on demand with NO workspace/persistence - the engine behind the Executor
 /// run-mode. Reuses the exact same <see cref="ISensorExecutor"/> implementations + credential mapping as the
 /// Primary/Secondary, so cloud sensors share 100% of the executor code. Constructed once (singleton); the
 /// executors themselves are resolved per call from the injected set.</summary>
@@ -21,7 +21,7 @@ public sealed class StatelessSensorRunner
             .ToArray();
     }
 
-    /// <summary>The runnable sensor catalog (types + parameters) — the cloud fetches this to build its UI.</summary>
+    /// <summary>The runnable sensor catalog (types + parameters) - the cloud fetches this to build its UI.</summary>
     public IReadOnlyList<SensorDefinition> Catalog => _catalog;
 
     public async Task<SensorExecutionResult> ExecuteAsync(ExecuteSensorRequest request, CancellationToken cancellationToken)

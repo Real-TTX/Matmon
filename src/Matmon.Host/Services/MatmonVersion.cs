@@ -6,8 +6,8 @@ namespace Matmon.Host.Services;
 /// Resolves the build version shown in the UI. CI bakes the real version into
 /// the image via the <c>MATMON_VERSION</c> environment variable (release builds
 /// look like <c>0.1.&lt;run&gt;-&lt;builddate&gt;</c>, dev builds like
-/// <c>nightly-&lt;run&gt;-&lt;builddate&gt;</c>). When the variable is absent — a
-/// plain local/dev run — we fall back to <c>local-&lt;builddate&gt;</c> derived
+/// <c>nightly-&lt;run&gt;-&lt;builddate&gt;</c>). When the variable is absent - a
+/// plain local/dev run - we fall back to <c>local-&lt;builddate&gt;</c> derived
 /// from the assembly's build timestamp.
 /// </summary>
 public static class MatmonVersion

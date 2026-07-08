@@ -5,10 +5,10 @@ namespace Matmon.Core.Domain;
 /// <summary>
 /// A downsampled summary of one sensor channel over a fixed time window
 /// (<see cref="BucketMinutes"/>). Statistics are stored per channel: one bucket
-/// per (sensor, channel, window) — <see cref="DefaultChannelKey"/> carries the
+/// per (sensor, channel, window) - <see cref="DefaultChannelKey"/> carries the
 /// channel identity. Buckets are recomputed accurately from the raw observations
-/// that fall inside the window — see <c>Matmon.Core.Telemetry.TelemetryRollup</c>
-/// — so percentiles and the state distribution reflect the real samples rather
+/// that fall inside the window - see <c>Matmon.Core.Telemetry.TelemetryRollup</c>
+/// - so percentiles and the state distribution reflect the real samples rather
 /// than a lossy running average.
 /// </summary>
 public sealed class SensorStatisticsBucket
@@ -35,10 +35,10 @@ public sealed class SensorStatisticsBucket
 
     public double? Maximum { get; set; }
 
-    /// <summary>The low percentile (e.g. the 1st percentile — "bottom 1%").</summary>
+    /// <summary>The low percentile (e.g. the 1st percentile - "bottom 1%").</summary>
     public double? LowPercentile { get; set; }
 
-    /// <summary>The high percentile (e.g. the 99th percentile — "top 1%").</summary>
+    /// <summary>The high percentile (e.g. the 99th percentile - "top 1%").</summary>
     public double? HighPercentile { get; set; }
 
     public double? LastValue { get; set; }

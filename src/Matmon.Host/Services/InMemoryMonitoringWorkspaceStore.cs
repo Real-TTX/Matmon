@@ -150,7 +150,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     }
 
     /// <summary>Comma-joined e-mails of the enabled users matching a built-in receiver's role filter (All users
-    /// / All admins / All operators) — the target that built-in expands to at send time.</summary>
+    /// / All admins / All operators) - the target that built-in expands to at send time.</summary>
     public string ResolveBuiltInRecipients(Guid receiverId)
     {
         var builtIn = NotificationReceiverDefaults.Find(receiverId);
@@ -751,7 +751,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     }
 
     /// <summary>
-    /// Resolves everything needed to execute a sensor — lineage, effective settings and target —
+    /// Resolves everything needed to execute a sensor - lineage, effective settings and target -
     /// atomically under <c>_gate</c>, returning a detached snapshot. Lets the polling hot path avoid
     /// walking the live element tree (which would race concurrent edits). Null if the id is not a sensor.
     /// </summary>
@@ -825,7 +825,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
                 if (alert.IsAcknowledged)
                 {
-                    // An acknowledged alert is "handled" — it counts as Ack, never as an
+                    // An acknowledged alert is "handled" - it counts as Ack, never as an
                     // Error/Warning in the status, even if its underlying state is critical.
                     acknowledged++;
                     continue;
@@ -1949,7 +1949,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             {
                 // A probe with no enrollment token is only ever the local root/master probe, which
                 // executes in-process and never calls the remote /api/probes/* endpoints. Refusing it
-                // here closes an anonymous auth bypass (previously any token — or none — was accepted).
+                // here closes an anonymous auth bypass (previously any token - or none - was accepted).
                 return false;
             }
 
@@ -1997,7 +1997,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
     private MonitoringWorkspaceSnapshot CreateSnapshot()
     {
-        // Snapshot the mutable collections (cheap — .ToArray() of small lists) so consumers that
+        // Snapshot the mutable collections (cheap - .ToArray() of small lists) so consumers that
         // enumerate them (e.g. .Workspace.Alerts) can't hit a "collection modified" while the polling
         // path adds/removes alerts. RootProbe stays live: cloning the whole tree on every getter call
         // would be O(n²) on pages that read .SensorDefinitions/.Templates per element. Deeply tree-
@@ -2185,7 +2185,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             if (string.IsNullOrWhiteSpace(cipher))
             {
                 // No ciphertext: either no secret, or a legacy plaintext still sitting in the plain field
-                // (from before encryption existed) — leave it, it gets protected on the next save.
+                // (from before encryption existed) - leave it, it gets protected on the next save.
                 slot.SetFailed(false);
                 continue;
             }
@@ -2210,7 +2210,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         {
             if (slot.GetFailed())
             {
-                continue; // decryption failed on load — leave the stored ciphertext intact
+                continue; // decryption failed on load - leave the stored ciphertext intact
             }
 
             var plain = slot.GetPlain();
@@ -2281,7 +2281,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         {
             // Only the generic small-office/home-lab presets are seeded. The Windows Health,
             // Synology NAS and Proxmox PVE templates were workarounds from before those got
-            // dedicated full sensors (windows-health / synology-health / proxmox-health) — they're
+            // dedicated full sensors (windows-health / synology-health / proxmox-health) - they're
             // redundant now, so they're no longer seeded (existing copies stay deletable).
             EnsureSmallOfficeHomeLabTemplates();
         }
@@ -2298,7 +2298,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             _document.NotificationReceivers ??= [];
             _document.NotificationRules ??= [];
 
-            // A clean install starts with no senders/receivers/rules — the user sets up
+            // A clean install starts with no senders/receivers/rules - the user sets up
             // notifications themselves (no example.local demo data). Existing rules are still
             // fixed up below, and ResolveReceiverIdForRule creates a receiver on demand.
             foreach (var rule in _document.NotificationRules)
@@ -2337,7 +2337,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 _document.Users[0].UpdatedUtc = DateTimeOffset.UtcNow;
             }
 
-            // An install that already has an account is past first-run setup — mark it so the setup
+            // An install that already has an account is past first-run setup - mark it so the setup
             // wizard never hijacks a configured instance (migration for pre-setup workspaces).
             _document.SetupCompletedUtc ??= DateTimeOffset.UtcNow;
             return;
@@ -3376,7 +3376,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             }
             else if (alert.RecoveredUtc is null)
             {
-                // Condition cleared but nobody has acknowledged it yet — keep it open.
+                // Condition cleared but nobody has acknowledged it yet - keep it open.
                 alert.RecoveredUtc = recoveredAt;
                 _notificationSink?.Enqueue(new AlertNotificationEvent(
                     alert.Id, alert.ElementId, SensorState.Healthy, "Condition cleared", recoveredAt, NotificationTransition.Recovered));
@@ -3448,9 +3448,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         existing.LastSeenUtc = timestampUtc;
 
         // Re-alarm transition: the alert had cleared (RecoveredUtc set) and is now firing again. Re-open the
-        // episode and notify — otherwise the re-fire is silent AND, because the notification episode stays
+        // episode and notify - otherwise the re-fire is silent AND, because the notification episode stays
         // closed, the *next* recovery is dropped too. The dispatcher applies the per-rule cooldown, so a
-        // flapping sensor still can't spam. (No enqueue while it stays continuously active — only on the flip.)
+        // flapping sensor still can't spam. (No enqueue while it stays continuously active - only on the flip.)
         if (existing.RecoveredUtc is not null)
         {
             existing.RecoveredUtc = null;

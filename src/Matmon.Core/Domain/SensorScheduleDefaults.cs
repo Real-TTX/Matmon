@@ -4,10 +4,10 @@ namespace Matmon.Core.Domain;
 /// Default poll interval per sensor type, used as the fallback when neither the sensor nor any
 /// ancestor sets an explicit schedule. The tiers are deliberately simple and intent-driven:
 /// <list type="bullet">
-/// <item><b>Ping</b> — 30 s (the one fast reachability check).</item>
-/// <item><b>Most sensors</b> — 5 min (the <see cref="Default"/> "current data" cadence).</item>
-/// <item><b>Slow-changing infra</b> (disk SMART, backup jobs) — 6 h.</item>
-/// <item><b>Rarely-changing</b> (pending updates, certificate expiry) — once a day.</item>
+/// <item><b>Ping</b> - 30 s (the one fast reachability check).</item>
+/// <item><b>Most sensors</b> - 5 min (the <see cref="Default"/> "current data" cadence).</item>
+/// <item><b>Slow-changing infra</b> (disk SMART, backup jobs) - 6 h.</item>
+/// <item><b>Rarely-changing</b> (pending updates, certificate expiry) - once a day.</item>
 /// </list>
 /// An explicit <see cref="MonitoringSettings.PollingInterval"/> on the sensor/its ancestors always
 /// wins; it is only ever clamped to <see cref="Minimum"/>.

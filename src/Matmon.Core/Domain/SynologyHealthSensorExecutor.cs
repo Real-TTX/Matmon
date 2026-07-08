@@ -8,7 +8,7 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
     private const string SystemMibRoot = "1.3.6.1.4.1.6574.1";
     private const string DiskTableRoot = "1.3.6.1.4.1.6574.2.1.1";
     private const string RaidTableRoot = "1.3.6.1.4.1.6574.3.1.1";
-    // CPU and memory load are not in the Synology MIB — they come from the standard UCD-SNMP-MIB
+    // CPU and memory load are not in the Synology MIB - they come from the standard UCD-SNMP-MIB
     // that DSM's net-snmp exposes: ssCpu* under 2021.11, memory (KB) under 2021.4.
     private const string CpuMibRoot = "1.3.6.1.4.1.2021.11";
     private const string MemoryMibRoot = "1.3.6.1.4.1.2021.4";
@@ -562,7 +562,7 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             {
                 // Single 0=healthy / 1=warning / 2=critical SMART summary across all
                 // disks + RAIDs (same convention as the other Health sensors). Status
-                // flag — opt out of statistics logging by default.
+                // flag - opt out of statistics logging by default.
                 Key = "smartStatus",
                 Label = "SMART status",
                 Value = (diskCritical + diskFailing + raidCrashed) > 0

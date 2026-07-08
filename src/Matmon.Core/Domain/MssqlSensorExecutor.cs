@@ -185,7 +185,7 @@ public sealed class MssqlSensorExecutor : ISensorExecutor
         }
         catch (OperationCanceledException)
         {
-            // Real caller cancellation (e.g. shutdown) is not a sensor fault — don't raise Critical.
+            // Real caller cancellation (e.g. shutdown) is not a sensor fault - don't raise Critical.
             watch.Stop();
             return SensorExecutionResult.Unknown("query cancelled");
         }

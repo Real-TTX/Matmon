@@ -242,7 +242,7 @@ Run locally with hot reload (rebuilds and reloads on every change, served at htt
 ./scripts/dev.ps1
 ```
 
-This wraps `dotnet watch run` for `src/Matmon.Host`. Keep it running in a terminal — Razor and CSS/JS changes refresh live, C# changes trigger a quick rebuild and restart, so the browser always shows the current code.
+This wraps `dotnet watch run` for `src/Matmon.Host`. Keep it running in a terminal - Razor and CSS/JS changes refresh live, C# changes trigger a quick rebuild and restart, so the browser always shows the current code.
 
 Run locally through Docker:
 
@@ -264,6 +264,6 @@ Matmon is under active development. The current focus is building a practical, v
 
 ## License
 
-Matmon is **proprietary** software — see the [LICENSE](LICENSE). Commercial use is
+Matmon is **proprietary** software - see the [LICENSE](LICENSE). Commercial use is
 governed by the applicable Matmon product plan (Free / Business / Enterprise).
 Bundled third-party components keep their own licenses.

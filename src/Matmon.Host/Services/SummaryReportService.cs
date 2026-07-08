@@ -191,7 +191,7 @@ public sealed class SummaryReportSender
             return false;
         }
 
-        // A chosen "Cloud" sender routes the report through the cloud gateway instead of local SMTP — so an
+        // A chosen "Cloud" sender routes the report through the cloud gateway instead of local SMTP - so an
         // instance with no SMTP but a connected cloud link can still e-mail its summary + PDF.
         var chosenSender = settings.SenderId is { } senderId
             ? _workspaceStore.Workspace.NotificationSenders.FirstOrDefault(s => s.Id == senderId)
@@ -230,7 +230,7 @@ public sealed class SummaryReportSender
     private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     /// <summary>Relay the summary report (subject/body + optional PDF) through the connected Matmon.Cloud gateway
-    /// (POST /api/instances/{id}/notify, instance-token auth) — the cloud spools + retries it like every cloud mail.</summary>
+    /// (POST /api/instances/{id}/notify, instance-token auth) - the cloud spools + retries it like every cloud mail.</summary>
     private async Task<bool> SendViaCloudAsync(string recipients, string subject, string? text, string? html, byte[]? pdf, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var cloud = _workspaceStore.GetCloudConnectionSettings();

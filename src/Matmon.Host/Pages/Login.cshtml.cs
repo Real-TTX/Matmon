@@ -35,7 +35,7 @@ public class LoginModel : PageModel
     /// <summary>Whether "Sign in with Matmon Cloud" can be offered (the cloud link is configured + enabled).</summary>
     public bool CloudSsoAvailable { get; private set; }
 
-    /// <summary>Reached through the cloud Full Access tunnel — hide the manual OAuth button (auto-login handles it,
+    /// <summary>Reached through the cloud Full Access tunnel - hide the manual OAuth button (auto-login handles it,
     /// and its cloud redirect can't survive the tunnel URL rewrite).</summary>
     public bool Embedded { get; private set; }
 
@@ -53,9 +53,9 @@ public class LoginModel : PageModel
 
         ErrorMessage = Error switch
         {
-            "cloud-not-connected" => "Matmon.Cloud sign-in isn't available — this instance isn't connected to the cloud.",
+            "cloud-not-connected" => "Matmon.Cloud sign-in isn't available - this instance isn't connected to the cloud.",
             "cloud-denied" => "Cloud sign-in was cancelled.",
-            "cloud-state" => "Cloud sign-in expired or was invalid — please try again.",
+            "cloud-state" => "Cloud sign-in expired or was invalid - please try again.",
             "cloud-exchange" => "Cloud sign-in failed. Check that your account has access to this instance.",
             _ => ErrorMessage
         };

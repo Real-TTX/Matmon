@@ -5,7 +5,7 @@ public sealed record ScriptSensorVariable(string Name, string Description, strin
 
 /// <summary>
 /// The context environment variables exposed to the locally-executed script/program sensors
-/// (<c>local-script</c>, <c>local-program</c>) — see
+/// (<c>local-script</c>, <c>local-program</c>) - see
 /// <c>LocalScriptSensorExecutor.ApplyContextEnvironment</c>. Used to render a "variables you
 /// can use" reference in the sensor editors. Remote sensors (PowerShell Remote) run their
 /// script in the remote session and do <em>not</em> get these, so they return nothing.

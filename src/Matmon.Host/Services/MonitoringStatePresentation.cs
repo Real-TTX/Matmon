@@ -42,7 +42,7 @@ public static class MonitoringStatePresentation
         // A probe that heartbeats every `window` seconds naturally ages up to ~1x the window before
         // its next beat, so anything within ~1.5x is healthy (covers normal aging + jitter/late beats).
         // Flagging earlier (the old 0.75x) made a perfectly on-time probe flap to Warning right before
-        // every beat — which, once acknowledged, kept resolving on each beat and re-raising on the next
+        // every beat - which, once acknowledged, kept resolving on each beat and re-raising on the next
         // delay. Only a genuinely missed beat (>1.5x) is a delay; several missed beats (>3x) is an outage.
         if (ageSeconds <= heartbeatWindowSeconds * 1.5)
         {

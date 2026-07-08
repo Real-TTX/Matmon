@@ -253,7 +253,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
     private static void MoveIntoPlace(string tempPath, string destinationPath)
     {
-        // Retry the atomic move briefly — transient sharing violations (AV / backup holding the file
+        // Retry the atomic move briefly - transient sharing violations (AV / backup holding the file
         // on Windows) are common. Never fall back to a non-atomic direct write: on failure we let the
         // exception propagate so the existing, valid workspace file is left intact and the save retries.
         const int attempts = 4;

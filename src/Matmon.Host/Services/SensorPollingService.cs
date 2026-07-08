@@ -52,7 +52,7 @@ public sealed class SensorPollingService : BackgroundService
 
     private async Task PollDueSensorsAsync(CancellationToken stoppingToken)
     {
-        // Cloned, detached copies — the due-set computation reads these without racing writers.
+        // Cloned, detached copies - the due-set computation reads these without racing writers.
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         var templateMap = _workspaceStore.GetAllTemplates().ToDictionary(template => template.Id);
         var latestBySensor = _workspaceStore.GetLatestSensorObservations();
@@ -92,7 +92,7 @@ public sealed class SensorPollingService : BackgroundService
                 continue;
             }
 
-            // Never-run sensors, then the longest-overdue ones, go first — so a big catch-up (after
+            // Never-run sensors, then the longest-overdue ones, go first - so a big catch-up (after
             // downtime, or resuming a paused sensor/folder) fills the biggest gaps first.
             var overdueSeconds = latestRunUtc is DateTimeOffset last
                 ? (now - last).TotalSeconds
@@ -105,8 +105,8 @@ public sealed class SensorPollingService : BackgroundService
             return;
         }
 
-        // Order a catch-up burst (after downtime or resuming a paused folder) by sensor-type LOAD first —
-        // cheap/fast types (ping, TCP, DNS) before heavy ones (VMware, SNMP walks, remote scripts) — so the
+        // Order a catch-up burst (after downtime or resuming a paused folder) by sensor-type LOAD first -
+        // cheap/fast types (ping, TCP, DNS) before heavy ones (VMware, SNMP walks, remote scripts) - so the
         // tree greens up as fast as possible; within the same load tier, the longest-overdue / never-run first.
         due.Sort((left, right) =>
         {
@@ -138,7 +138,7 @@ public sealed class SensorPollingService : BackgroundService
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    // shutting down — ignore
+                    // shutting down - ignore
                 }
                 catch (Exception ex)
                 {

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 namespace Matmon.Host.Pages;
 
 /// <summary>
-/// The scheduled "summary report" notification — the single scheduled entry shown in the unified Notifications
+/// The scheduled "summary report" notification - the single scheduled entry shown in the unified Notifications
 /// list (moved here from System → Config). Uses the same Sender/Receiver endpoints as trigger rules, falling
 /// back to a free-text recipients list + the workspace default SMTP.
 /// </summary>
@@ -68,7 +68,7 @@ public class NotificationReportEditorModel : PageModel
             var sent = await _summaryReportSender.SendAsync(settings, cancellationToken);
             StatusMessage = sent
                 ? "Report sent."
-                : "Report not sent — check the recipient/receiver and that an SMTP sender is configured.";
+                : "Report not sent - check the recipient/receiver and that an SMTP sender is configured.";
         }
         catch (Exception ex)
         {
@@ -101,7 +101,7 @@ public class NotificationReportEditorModel : PageModel
         }
 
         var workspace = _workspaceStore.Workspace;
-        // Email senders (local SMTP) AND Cloud senders (relay through the connected Matmon.Cloud gateway) —
+        // Email senders (local SMTP) AND Cloud senders (relay through the connected Matmon.Cloud gateway) -
         // the report path handles both (SummaryReportSender.SendAsync routes a Cloud sender via the relay).
         Senders = workspace.NotificationSenders
             .Where(sender => sender.Kind == NotificationEndpointKind.Email || sender.Kind == NotificationEndpointKind.Cloud)
@@ -114,7 +114,7 @@ public class NotificationReportEditorModel : PageModel
             // Built-in virtual receivers → all enabled users / admins / operators (resolved at send time).
             .. NotificationReceiverDefaults.All.Select(builtIn => new SelectListItem(builtIn.Name, builtIn.Id.ToString())),
             .. workspace.NotificationReceivers
-                .Select(receiver => new SelectListItem($"{receiver.Name} — {receiver.Target}", receiver.Id.ToString()))
+                .Select(receiver => new SelectListItem($"{receiver.Name} - {receiver.Target}", receiver.Id.ToString()))
         ];
         HasSmtp = _workspaceStore.HasEmailNotifications()
             || !string.IsNullOrWhiteSpace(workspace.NotificationConfiguration.Email.SmtpHost);

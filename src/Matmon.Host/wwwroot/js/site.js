@@ -74,7 +74,7 @@ function initializeAlertsTable() {
   let sortMode = sortSelect ? sortSelect.value : "default";
 
   // Sorting reorders the actual rows in the DOM (re-append) so the visible page shows them in order;
-  // "default" restores the server's order (active first, newest last-seen) — which is also what the
+  // "default" restores the server's order (active first, newest last-seen) - which is also what the
   // server-rendered first page assumes, so the initial paint never reshuffles.
   const severityRank = (row) => row.dataset.active !== "true" ? 0 : (row.dataset.state === "error" ? 3 : row.dataset.state === "warning" ? 2 : 1);
   const comparatorFor = (mode) => {
@@ -295,7 +295,7 @@ function applyTagOverflow(strip) {
   more.hidden = true;
 
   if (strip.clientWidth === 0) {
-    return; // not laid out yet — the observer will call us again once it is
+    return; // not laid out yet - the observer will call us again once it is
   }
 
   const limit = strip.getBoundingClientRect().right + 1;
@@ -320,7 +320,7 @@ function applyTagOverflow(strip) {
 
 // Tile size (S/M/L) is a live, client-only preference on <html> + localStorage. The
 // Monitoring page also writes the attribute before first paint (inline script), so
-// there is no flash and — crucially — no URL round-trip/redirect to switch size.
+// there is no flash and - crucially - no URL round-trip/redirect to switch size.
 function initializeMonitoringSizeToggle() {
   const buttons = document.querySelectorAll("[data-monitoring-size-set]");
   if (buttons.length === 0) {
@@ -356,13 +356,13 @@ function initializeMonitoringSizeToggle() {
 // Right-click anywhere on a tree node opens that node's action menu AT THE CURSOR
 // (the deepest node under the cursor wins, so right-clicking a child sensor opens the
 // sensor's menu). We just record the cursor on the menu and open it; the shared menu
-// code (positionMenu) reads _openAtPointer and places it there, hidden until ready —
+// code (positionMenu) reads _openAtPointer and places it there, hidden until ready -
 // the same path the ⋯ button uses (which anchors to itself, with no _openAtPointer).
 function initializeTreeContextMenu() {
   document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
     tree.addEventListener("contextmenu", (event) => {
       const target = event.target instanceof Element ? event.target : null;
-      // Only react when the cursor is actually over a sensor chip or a container row —
+      // Only react when the cursor is actually over a sensor chip or a container row -
       // not the gaps/padding around them. Otherwise closest("[data-tree-node]") would
       // grab the nearest ancestor node and open a menu for an element you're not on.
       const hit = target?.closest(".monitoring-sensor-chip, .monitoring-tree-row");
@@ -600,8 +600,8 @@ function initializeElementPickers() {
     trigger.addEventListener("click", open);
     closeButton?.addEventListener("click", close);
     // When the picker sits inside a <label> (e.g. the map tile "Target" field), the
-    // label forwards clicks on non-control descendants to its first labelable control —
-    // the trigger button — which instantly re-opens the dialog after a selection/close.
+    // label forwards clicks on non-control descendants to its first labelable control -
+    // the trigger button - which instantly re-opens the dialog after a selection/close.
     // Swallow the default action for clicks inside the dialog that aren't on a real
     // control so the label can't re-trigger the button.
     backdrop.addEventListener("click", (event) => {
@@ -651,7 +651,7 @@ function initializeMapCarousel() {
     let active = 0;
     let timer = null;
 
-    // "Overlay — on mouse-move / change": reveal the page indicator on activity, then fade it.
+    // "Overlay - on mouse-move / change": reveal the page indicator on activity, then fade it.
     const stage = carousel.closest("[data-map-pagination]");
     const autoHideNav = stage?.dataset.mapPagination === "overlayonactivity";
     let activityTimer = null;
@@ -757,7 +757,7 @@ function initializeWorkspaceSummaryPlacement() {
 
   const targetHeader = document.querySelector("main .page-header");
   if (!targetHeader) {
-    // No header to host it — reveal it where it already is (the sidebar).
+    // No header to host it - reveal it where it already is (the sidebar).
     summaryStrip.classList.add("is-placed");
     return;
   }
@@ -769,7 +769,7 @@ function initializeWorkspaceSummaryPlacement() {
   );
 
   if (shouldSkipMove) {
-    // Left where it was rendered (in the sidebar) — just reveal it in place.
+    // Left where it was rendered (in the sidebar) - just reveal it in place.
     summaryStrip.classList.add("is-placed");
     return;
   }
@@ -808,7 +808,7 @@ function initializeThemeToggle() {
 
     buttons.forEach((button) => {
       const label = button.querySelector("[data-theme-label]");
-      button.title = "Theme: " + labelFor[mode] + " — click to change";
+      button.title = "Theme: " + labelFor[mode] + " - click to change";
       button.setAttribute("aria-label", button.title);
       if (label) {
         label.textContent = labelFor[mode];
@@ -1280,7 +1280,7 @@ function initializeMonitoringTree() {
   document.querySelectorAll("[data-tree-collapse-all]").forEach((button) =>
     button.addEventListener("click", () => applyBulkCollapse(() => true)));
   // "Probe level": keep every probe expanded (incl. secondary probes nested under
-  // the root probe), collapse folders/hosts — so you always see the probes plus
+  // the root probe), collapse folders/hosts - so you always see the probes plus
   // their first level, nothing deeper. Depth can't be used because the secondary
   // probes sit one level deeper than the root probe.
   document.querySelectorAll("[data-tree-collapse-level]").forEach((button) =>
@@ -2248,7 +2248,7 @@ function initializeCredentialEditors() {
         modal.hidden = true;
       }
       syncSummary(row);
-      // A row with no name is treated as "no entry" — collapse it back out of the list.
+      // A row with no name is treated as "no entry" - collapse it back out of the list.
       const nameInput = row.querySelector("input[name$='.Name']");
       if (nameInput && nameInput.value.trim() === "") {
         row.hidden = true;
@@ -2950,7 +2950,7 @@ function initializeMapDesigner() {
     Value: "Value",
     Graph: "Graph"
   };
-  // Minimum tile size floors. Kept small so tiles can shrink to 1-2 columns wide (any height) —
+  // Minimum tile size floors. Kept small so tiles can shrink to 1-2 columns wide (any height) -
   // a graph keeps a 2-column floor since a 1-wide sparkline is unreadable; everything else allows 1.
   const sizeLimits = {
     Text: { minWidth: 1, minHeight: 1, maxWidth: 12, maxHeight: 6, defaultWidth: 4, defaultHeight: 2 },
@@ -3040,7 +3040,7 @@ function initializeMapDesigner() {
     // Real zoom: give the board a FIXED pixel base width (fits the workbench at 100%)
     // and scale it with the CSS `zoom` property. A percentage width (min(100%, …)) would
     // re-fill the parent under zoom, so the board stayed the same size and only the inner
-    // content shrank — a fixed px width makes zoom scale the WHOLE board uniformly (the
+    // content shrank - a fixed px width makes zoom scale the WHOLE board uniformly (the
     // workbench scrolls above 100%, the board shrinks to fit below). getBoundingClientRect
     // reports zoomed coords, so drag/resize stays correct.
     const workbench = canvas.closest(".map-designer-workbench");
@@ -3449,9 +3449,9 @@ function initializeMapDesigner() {
   displayPresetInput?.addEventListener("input", () => syncGrid(true));
   // Scale existing tiles proportionally when the column/row count changes, so the visual layout is
   // preserved (a finer grid keeps tiles the same size, occupying more cells) instead of leaving them
-  // the same cell-span — which shrank + clustered them to the top-left and squished the graphs.
+  // the same cell-span - which shrank + clustered them to the top-left and squished the graphs.
   // applyTilePosition (via syncGrid) then clamps everything into the new bounds. Runs on "change"
-  // (commit) only — the per-keystroke "input" reflow is dropped so a half-typed number (which clamps
+  // (commit) only - the per-keystroke "input" reflow is dropped so a half-typed number (which clamps
   // to the min) can't destroy the tile sizes before the scale is applied.
   const rescaleTilesToGrid = (oldGrid, newGrid) => {
     if (!oldGrid || (oldGrid.columns === newGrid.columns && oldGrid.rows === newGrid.rows)) {
@@ -3801,7 +3801,7 @@ function setDashboardStatusText(chart, role, value) {
 function renderNavCounters(snapshot) {
   // Everything here is alert-based so the sidebar badge agrees with the Alerts page. The big
   // number is open (unacknowledged) alerts; the Err/Warn tiles are active alerts by severity
-  // (which can outlive sensor recovery, Alerta-style — that's why sensor states diverged before).
+  // (which can outlive sensor recovery, Alerta-style - that's why sensor states diverged before).
   const openAlerts = Number(snapshot.activeAlertCount ?? 0);
   const acknowledgedAlerts = Number(snapshot.acknowledgedAlertCount ?? 0);
   const errorAlerts = Number(snapshot.errorAlertCount ?? 0);

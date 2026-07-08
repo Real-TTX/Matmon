@@ -6,7 +6,7 @@ namespace Matmon.Core.Domain;
 /// <summary>
 /// Runs a local executable by path on the Matmon host/probe and extracts numeric channels
 /// from its output (same parsing as the script sensors). For safety the program path must be
-/// on an administrator-controlled allow-list — the <c>Matmon__AllowedProgramPaths</c>
+/// on an administrator-controlled allow-list - the <c>Matmon__AllowedProgramPaths</c>
 /// environment variable (semicolon/newline separated, each entry an exact file path or a
 /// directory whose programs are permitted). With no allow-list configured, nothing runs.
 /// </summary>
@@ -247,7 +247,7 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
         var allowList = ReadAllowList();
         if (allowList.Count == 0)
         {
-            return [new SensorParameterOption { Value = string.Empty, Label = "(no paths allowed — set Matmon__AllowedProgramPaths)" }];
+            return [new SensorParameterOption { Value = string.Empty, Label = "(no paths allowed - set Matmon__AllowedProgramPaths)" }];
         }
 
         return allowList
@@ -306,7 +306,7 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
             return false;
         }
 
-        // Follow symlinks/junctions to the FINAL target and validate THAT against the allow-list — otherwise
+        // Follow symlinks/junctions to the FINAL target and validate THAT against the allow-list - otherwise
         // a link inside an allowed directory (e.g. /app/scripts/x -> /bin/bash) would pass the prefix check
         // but execute an arbitrary binary. ResolveLinkTarget returns null for a non-link and throws for a
         // non-existent path; either way we keep the normalized path (a missing file is rejected downstream
@@ -321,7 +321,7 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
         }
         catch
         {
-            // not a link, inaccessible, or doesn't exist — keep fullPath
+            // not a link, inaccessible, or doesn't exist - keep fullPath
         }
 
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;

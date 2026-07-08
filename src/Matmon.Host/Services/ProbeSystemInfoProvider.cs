@@ -10,7 +10,7 @@ public sealed record ProbeSystemInfo(string OperatingSystem, string Host, IReadO
 
 /// <summary>
 /// Collects the local operating system, host name and reachable IPv4 subnets (as CIDR) so a secondary
-/// probe can report them to the primary — surfaced as probe details and as discovery scan suggestions.
+/// probe can report them to the primary - surfaced as probe details and as discovery scan suggestions.
 /// </summary>
 public static class ProbeSystemInfoProvider
 {

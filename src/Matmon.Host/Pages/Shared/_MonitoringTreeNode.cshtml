@@ -2,7 +2,7 @@
 @{
     var returnUrl = Context.Request.Path + Context.Request.QueryString;
     // Viewers are read-only: gate every mutating affordance behind admin (the write-guard enforces
-    // it server-side too — this just hides the controls).
+    // it server-side too - this just hides the controls).
     var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
     var canAddFolder = isAdmin && (Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder);
     var canAddHost = isAdmin && (Model.Kind == MonitoringElementKind.Probe || Model.Kind == MonitoringElementKind.Folder);
@@ -203,7 +203,7 @@
             }
             else
             {
-                @* Container summary as pills (replaces the redundant state pill — the
+                @* Container summary as pills (replaces the redundant state pill - the
                    left-edge accent already shows the rolled-up state). *@
                 <span class="monitoring-count-pill" data-count="total">@Model.SensorCount @(Model.SensorCount == 1 ? "Sensor" : "Sensors")</span>
                 @if (Model.WarningCount > 0)

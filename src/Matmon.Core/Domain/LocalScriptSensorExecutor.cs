@@ -242,7 +242,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
 
     /// <summary>
     /// Exposes the monitoring context to the script as environment variables: the host/target,
-    /// the sensor type, and — when a credential is selected — its fields. Credential values are
+    /// the sensor type, and - when a credential is selected - its fields. Credential values are
     /// published both verbatim (<c>MATMON_CRED_&lt;FIELD&gt;</c>) and normalized
     /// (<c>MATMON_USERNAME</c>/<c>MATMON_PASSWORD</c>/<c>MATMON_TOKEN</c>) so a script can stay
     /// credential-kind-agnostic. In PowerShell read them via <c>$env:MATMON_HOST</c>; in shell via <c>$MATMON_HOST</c>.

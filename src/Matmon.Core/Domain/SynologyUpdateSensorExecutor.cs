@@ -115,7 +115,7 @@ printf 'updatesAvailable=%s\n' "$avail"
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            // The linked CTS fired via CancelAfter — a timeout, not a caller cancellation.
+            // The linked CTS fired via CancelAfter - a timeout, not a caller cancellation.
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, "ssh timeout");
         }

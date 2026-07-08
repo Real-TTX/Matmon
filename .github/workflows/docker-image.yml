@@ -27,7 +27,7 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           # GHCR is always used (via GITHUB_TOKEN). Docker Hub is used in parallel only when the
-          # DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets are configured — otherwise the build still
+          # DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets are configured - otherwise the build still
           # succeeds and publishes to GHCR only.
           echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
           if [ -n "${DOCKERHUB_USERNAME}" ]; then

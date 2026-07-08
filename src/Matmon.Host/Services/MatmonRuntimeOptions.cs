@@ -23,7 +23,7 @@ public sealed class MatmonRuntimeOptions
 
     /// <summary>
     /// How often the Primary heartbeats to Matmon.Cloud (dead-man-switch + aggregate metadata). Independent
-    /// of the probe <see cref="HeartbeatIntervalSeconds"/> — once a minute is plenty for a check-in, and it
+    /// of the probe <see cref="HeartbeatIntervalSeconds"/> - once a minute is plenty for a check-in, and it
     /// keeps tunnel/cloud load low. Set via <c>Matmon__CloudHeartbeatIntervalSeconds</c>; floored at 15s.
     /// </summary>
     public int CloudHeartbeatIntervalSeconds { get; set; } = 60;
@@ -64,7 +64,7 @@ public sealed class MatmonRuntimeOptions
     /// <summary>
     /// When set (e.g. via <c>Matmon__UnifiCloudApiKey</c>), the primary auto-provisions a
     /// "UniFi Cloud" health sensor on startup using this Site Manager API key. The key is
-    /// only read from configuration/env — never committed.
+    /// only read from configuration/env - never committed.
     /// </summary>
     public string? UnifiCloudApiKey { get; set; }
 

@@ -2,7 +2,7 @@
 # Local development with hot reload.
 #
 # Runs the Matmon host through `dotnet watch`, so every change you (or an
-# assistant) make on disk is rebuilt and reloaded automatically — Razor pages
+# assistant) make on disk is rebuilt and reloaded automatically - Razor pages
 # and CSS/JS refresh live, C# changes trigger a quick rebuild + restart. Just
 # keep this running in a terminal and the browser at http://localhost:5084
 # always shows the current code. The first run opens the browser for you.

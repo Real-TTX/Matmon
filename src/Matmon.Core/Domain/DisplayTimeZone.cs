@@ -36,7 +36,7 @@ public static class DisplayTimeZone
     }
 }
 
-/// <summary>Timestamp display conversions into <see cref="DisplayTimeZone.Current"/> — drop-in for <c>ToLocalTime()</c>.</summary>
+/// <summary>Timestamp display conversions into <see cref="DisplayTimeZone.Current"/> - drop-in for <c>ToLocalTime()</c>.</summary>
 public static class DisplayTimeExtensions
 {
     public static DateTimeOffset ToDisplay(this DateTimeOffset utc) =>

@@ -2,7 +2,7 @@ namespace Matmon.Core.Domain;
 
 /// <summary>
 /// Per-(rule, element) anti-spam / flap-suppression policy for notification dispatch. Not thread-safe by
-/// design — it is owned and used only by the single-threaded dispatch loop. Check with
+/// design - it is owned and used only by the single-threaded dispatch loop. Check with
 /// <see cref="IsWithinCooldown"/> / <see cref="IsEpisodeActive"/>, then commit with
 /// <see cref="MarkRaised"/> / <see cref="MarkRecovered"/> only once a mail is actually queued (so a rule
 /// with no sender/recipient doesn't consume the budget or open an episode).
@@ -52,7 +52,7 @@ public sealed class NotificationThrottle
         return recent >= limit;
     }
 
-    /// <summary>Records that a raised mail was queued — counts toward the rate limit and starts/keeps the episode.</summary>
+    /// <summary>Records that a raised mail was queued - counts toward the rate limit and starts/keeps the episode.</summary>
     public void MarkRaised(Guid ruleId, Guid elementId, DateTimeOffset now)
     {
         var key = (ruleId, elementId);

@@ -10,7 +10,7 @@ namespace Matmon.Core.Domain;
 /// <see cref="MonitoringSettings"/> (only where none is set yet), so a new sensor alarms sensibly
 /// out of the box.</item>
 /// </list>
-/// An explicit threshold already present on the sensor (or inherited) always wins — <see cref="Apply"/>
+/// An explicit threshold already present on the sensor (or inherited) always wins - <see cref="Apply"/>
 /// never overwrites, and the editor reads the stored value first. Values are chosen for a typical
 /// home / small-business network; the user can always override per channel.
 /// </summary>

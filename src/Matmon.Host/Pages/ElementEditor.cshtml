@@ -111,7 +111,7 @@
                             <label class="workspace-span-2">
                                 <span>Scan networks (subnets)</span>
                                 <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="form-control workspace-textarea" placeholder="10.10.0.0/16&#10;192.168.1.0/24"></textarea>
-                                <small class="workspace-field-hint">One CIDR per line. Networks this probe should scan — useful for routed networks it can reach but doesn't auto-detect. Shown on the Probes page and offered as Discovery suggestions.</small>
+                                <small class="workspace-field-hint">One CIDR per line. Networks this probe should scan - useful for routed networks it can reach but doesn't auto-detect. Shown on the Probes page and offered as Discovery suggestions.</small>
                             </label>
                             <div class="workspace-span-2">
                                 <span class="workspace-label">Snippet</span>
@@ -133,7 +133,7 @@
                                 <span>Type</span>
                                 <select class="form-select workspace-select" asp-items="Model.ElementEditor.SensorTypeOptions" disabled aria-disabled="true" title="The sensor type is fixed after creation"></select>
                                 <input type="hidden" asp-for="ElementEditor.SensorTypeKey" />
-                                <small class="workspace-field-hint">Fixed after creation — history, channels &amp; statistics all depend on it. Create a new sensor to use a different type.</small>
+                                <small class="workspace-field-hint">Fixed after creation - history, channels &amp; statistics all depend on it. Create a new sensor to use a different type.</small>
                             </label>
                             @if (string.Equals(Model.ElementEditor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                             {
@@ -300,7 +300,7 @@
                                             <label>
                                                 <span>Kind</span>
                                                 <select asp-for="ElementEditor.CredentialBundles[i].Kind" class="form-select workspace-select" data-credential-kind-select>
-                                                    @* 'Ssh' is hidden (redundant with 'Linux' — both use ssh.*); kept only when a legacy bundle already has it. *@
+                                                    @* 'Ssh' is hidden (redundant with 'Linux' - both use ssh.*); kept only when a legacy bundle already has it. *@
                                                     @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>().Where(kind => kind != MonitoringCredentialKind.Ssh || credential.Kind == MonitoringCredentialKind.Ssh))
                                                     {
                                                         <option value="@kind">@kind</option>
@@ -345,7 +345,7 @@
                                             </div>
 
                                             <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
-                                                <div class="workspace-inline-note">Proxmox API token — exactly as shown in the Proxmox UI (Token ID + secret).</div>
+                                                <div class="workspace-inline-note">Proxmox API token - exactly as shown in the Proxmox UI (Token ID + secret).</div>
                                                 <div class="sensor-threshold-grid">
                                                     <label class="workspace-span-2">
                                                         <span>Token ID</span>
@@ -417,7 +417,7 @@
                                             </div>
 
                                             <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="generic" hidden="@(credential.Kind == MonitoringCredentialKind.Generic ? null : "hidden")">
-                                                <div class="workspace-inline-note">Generic credentials — exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</div>
+                                                <div class="workspace-inline-note">Generic credentials - exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</div>
                                                 <div class="sensor-threshold-grid">
                                                     <label>
                                                         <span>Username</span>
@@ -465,7 +465,7 @@
                         @if (Model.ElementEditor.TemplateOriginId is not null)
                         {
                             <div class="workspace-inline-note">
-                                Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "—")</strong>. Its values were copied in — later template edits don't change this element until you restore.
+                                Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "-")</strong>. Its values were copied in - later template edits don't change this element until you restore.
                             </div>
                             <div class="workspace-form-actions">
                                 <button type="submit" asp-page-handler="ReapplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Restore from template</span></button>
@@ -474,7 +474,7 @@
                         }
                         else
                         {
-                            <div class="workspace-inline-note">Not created from a template. Templates are chosen when you create a sensor — start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</div>
+                            <div class="workspace-inline-note">Not created from a template. Templates are chosen when you create a sensor - start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</div>
                         }
                     </div>
 

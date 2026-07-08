@@ -239,7 +239,7 @@ public sealed class ProbeUsageModel : PageModel
             })
             .ToArray();
 
-        // "Largest logs": the sensors with the most actually-stored observations — a fast,
+        // "Largest logs": the sensors with the most actually-stored observations - a fast,
         // retrospective way to spot mis-scheduled (over-polling) sensors.
         var topLogSensors = filteredSensorRowsWithPercent
             .Where(row => row.StoredObservationCount > 0)

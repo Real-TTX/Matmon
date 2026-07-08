@@ -12,7 +12,7 @@ namespace Matmon.Host.Services;
 /// Full Access client (Primary-only): when enabled + connected to the cloud, keeps one outbound WebSocket
 /// open to the cloud tunnel, receives browser HTTP requests, replays them against this instance's own UI,
 /// and returns the responses. This is what lets a browser drive the local UI through the cloud without any
-/// inbound port — the connection is always instance→cloud.
+/// inbound port - the connection is always instance→cloud.
 /// </summary>
 public sealed class TunnelClient : BackgroundService
 {
@@ -94,7 +94,7 @@ public sealed class TunnelClient : BackgroundService
             .Replace("http://", "ws://", StringComparison.OrdinalIgnoreCase);
         var uri = new Uri($"{wsUrl}/api/instances/{instanceId.Trim()}/tunnel");
 
-        // Linked token so we can tear the tunnel down promptly when the settings change — not just when the
+        // Linked token so we can tear the tunnel down promptly when the settings change - not just when the
         // socket happens to drop. Without this, an already-open socket keeps serving after Full Access is
         // switched off or the cloud is disconnected.
         using var link = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
@@ -163,7 +163,7 @@ public sealed class TunnelClient : BackgroundService
         }
         catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
         {
-            // The watchdog closed the tunnel (settings changed) — return normally so the service loop idles
+            // The watchdog closed the tunnel (settings changed) - return normally so the service loop idles
             // and reconnects if Full Access is re-enabled, instead of propagating to a hard stop.
         }
         finally
@@ -228,7 +228,7 @@ public sealed class TunnelClient : BackgroundService
         {
             // Host: let HttpClient set it from the local base. Accept-Encoding: let AutomaticDecompression
             // manage it (we forward decompressed plain bytes), else the browser's br/gzip pref leaks through.
-            // X-Matmon-Tunnel-Auth: never trust an inbound value — only we (below) may set the real secret.
+            // X-Matmon-Tunnel-Auth: never trust an inbound value - only we (below) may set the real secret.
             if (key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
                 key.Equals("Accept-Encoding", StringComparison.OrdinalIgnoreCase) ||
                 key.Equals(TunnelAutoLogin.TunnelAuthHeader, StringComparison.OrdinalIgnoreCase))

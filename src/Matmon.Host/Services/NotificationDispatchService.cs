@@ -6,7 +6,7 @@ namespace Matmon.Host.Services;
 
 /// <summary>
 /// Primary-only background dispatcher: drains alert transitions from the <see cref="NotificationSpooler"/>,
-/// matches them against notification rules, renders the templates and sends via SMTP — with an in-memory
+/// matches them against notification rules, renders the templates and sends via SMTP - with an in-memory
 /// retry spooler (exponential-ish backoff) so a transient SMTP failure is retried instead of lost.
 /// </summary>
 public sealed class NotificationDispatchService : BackgroundService
@@ -125,7 +125,7 @@ public sealed class NotificationDispatchService : BackgroundService
                 // this is what stops a flapping sensor from spamming.
                 if (_throttle.IsWithinCooldown(rule.Id, notificationEvent.ElementId, rule.CooldownMinutes, rule.Threshold, now))
                 {
-                    _logger.LogDebug("Suppressed notification for rule {Rule} on {Element} — rate limit reached", rule.Name, notificationEvent.ElementId);
+                    _logger.LogDebug("Suppressed notification for rule {Rule} on {Element} - rate limit reached", rule.Name, notificationEvent.ElementId);
                     continue;
                 }
             }
@@ -266,7 +266,7 @@ public sealed class NotificationDispatchService : BackgroundService
                 if (delivery.Attempt >= RetryBackoff.Length)
                 {
                     _pending.RemoveAt(i);
-                    _logger.LogError(ex, "Notification to {Recipient} for rule {Rule} failed after {Attempts} attempts — giving up",
+                    _logger.LogError(ex, "Notification to {Recipient} for rule {Rule} failed after {Attempts} attempts - giving up",
                         delivery.Recipient, delivery.RuleName, delivery.Attempt);
                 }
                 else
@@ -314,7 +314,7 @@ public sealed class NotificationDispatchService : BackgroundService
                 if (relay.Attempt >= RetryBackoff.Length)
                 {
                     _pendingRelays.RemoveAt(i);
-                    _logger.LogError(ex, "Cloud relay to {Recipient} failed after {Attempts} attempts — giving up", relay.Recipient, relay.Attempt);
+                    _logger.LogError(ex, "Cloud relay to {Recipient} failed after {Attempts} attempts - giving up", relay.Recipient, relay.Attempt);
                 }
                 else
                 {

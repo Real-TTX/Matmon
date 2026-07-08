@@ -7,7 +7,7 @@ namespace Matmon.Core.Telemetry;
 /// <summary>
 /// Embedded SQLite implementation of <see cref="ITelemetryRepository"/>. Keeps a
 /// single connection open for the lifetime of the process (WAL mode) and
-/// serializes access with a lock — appropriate for the single-process,
+/// serializes access with a lock - appropriate for the single-process,
 /// self-hosted Matmon primary. Timestamps are stored as Unix milliseconds (UTC)
 /// and per-observation channels as a JSON blob.
 /// </summary>

@@ -182,7 +182,7 @@ public sealed class SynologyDiskSensorExecutor : ISensorExecutor
         });
         channels.Add(new SensorChannelValue
         {
-            // 0 = all healthy, 1 = warning, 2 = critical — same convention as the Health sensors.
+            // 0 = all healthy, 1 = warning, 2 = critical - same convention as the Health sensors.
             Key = "smartStatus",
             Label = "SMART status",
             Value = worst,

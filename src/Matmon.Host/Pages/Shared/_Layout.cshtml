@@ -55,7 +55,7 @@
         bool PathStarts(string prefix) => currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
         // /monitoring is a shared prefix (Sensors + the Templates editor + the Probe-usage page live under it),
         // so Templates/Probes are resolved first and excluded from Sensors (most-specific-prefix wins). Root "/"
-        // must be exact — it is a prefix of every path.
+        // must be exact - it is a prefix of every path.
         var dashboardActive = string.Equals(currentPath, "/", StringComparison.OrdinalIgnoreCase);
         var probesActive = PathStarts("/probes") || PathStarts("/system/probes") || PathStarts("/monitoring/probe");
         var templatesActive = PathStarts("/templates") || PathStarts("/monitoring/template");
@@ -90,7 +90,7 @@
         // tone/state/hint logic in site.js so the JS update is visually a no-op.
         // All alert-based so the badge agrees with the Alerts page. Big number = open
         // (unacknowledged) alerts; Err/Warn tiles = active alerts by severity (these persist
-        // after the sensor recovers, Alerta-style — counting sensor states diverged from the page).
+        // after the sensor recovers, Alerta-style - counting sensor states diverged from the page).
         var openAlerts = workspaceSummary?.OpenAlertCount ?? 0;
         var ackAlerts = workspaceSummary?.AcknowledgedAlertCount ?? 0;
         var errorAlerts = workspaceSummary?.ErrorAlertCount ?? 0;
@@ -110,7 +110,7 @@
     @if (embedded)
     {
         // For the Matmon.Cloud console: publish this instance's own effective nav (role- and mode-aware) so the
-        // cloud sidebar mirrors exactly what the instance shows — not a hardcoded guess. cloud.js reads this from
+        // cloud sidebar mirrors exactly what the instance shows - not a hardcoded guess. cloud.js reads this from
         // the (same-origin) iframe on load and rebuilds the console menu; older instances that don't emit it fall
         // back to the cloud's static menu.
         var embedNav = new List<object>();

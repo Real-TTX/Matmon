@@ -219,7 +219,7 @@ public static class MatmonIcons
         ["moon"] = """
             <path d="M10.8 2.7A5.8 5.8 0 1 0 13.3 10a4.8 4.8 0 0 1-2.5.7A5.8 5.8 0 0 1 10.8 2.7Z" />
             """,
-        // Split sun/moon — the "System / follow OS" theme state.
+        // Split sun/moon - the "System / follow OS" theme state.
         ["theme-system"] = """
             <circle cx="8" cy="8" r="4.4" />
             <path d="M8 3.6A4.4 4.4 0 0 1 8 12.4Z" fill="currentColor" stroke="none" />

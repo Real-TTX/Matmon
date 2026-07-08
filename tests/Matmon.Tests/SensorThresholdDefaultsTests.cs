@@ -70,7 +70,7 @@ public sealed class SensorThresholdDefaultsTests
         var settings = new MonitoringSettings();
         SensorThresholdDefaults.Apply("no-such-type", settings);
         SensorThresholdDefaults.Apply(null, settings);
-        // nothing added — no throw, no thresholds
+        // nothing added - no throw, no thresholds
         Assert.False(MonitoringSettings.TryReadChannelThreshold(settings, "cpuLoad", "warning", out _));
     }
 }

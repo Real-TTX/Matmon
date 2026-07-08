@@ -16,7 +16,7 @@ public sealed class WindowsHealthSensorExecutor : ISensorExecutor
     {
         Key = "windows-health",
         DisplayName = "Windows Health",
-        Description = "Overall Windows health over WinRM — CPU, memory, disk usage and a SMART summary.",
+        Description = "Overall Windows health over WinRM - CPU, memory, disk usage and a SMART summary.",
         ChannelMode = SensorChannelMode.Dynamic,
         Parameters = PowerShellRemoteSensorExecutor.Definition.Parameters
             .Where(parameter => parameter.Key.StartsWith("winrm.", StringComparison.OrdinalIgnoreCase))

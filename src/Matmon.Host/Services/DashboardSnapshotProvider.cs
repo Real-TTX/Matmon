@@ -50,7 +50,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             }
         }
 
-        // Error/warning sensor counts from the cached latest-observation states (cheap —
+        // Error/warning sensor counts from the cached latest-observation states (cheap -
         // no telemetry scan), so the sidebar alert badge renders real numbers on first
         // paint instead of flashing 0 → N once the client refresh lands.
         var errorSensorCount = 0;
@@ -140,7 +140,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
         var activeAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged);
         var acknowledgedAlertCount = workspace.Alerts.Count(alert => alert.IsActive && alert.IsAcknowledged);
-        // Open (unacknowledged) alerts split by severity — an acknowledged alert is "handled", so it
+        // Open (unacknowledged) alerts split by severity - an acknowledged alert is "handled", so it
         // counts as Ack, not as an Error/Warning in the status (mirrors the Alerts page buckets).
         var errorAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged && alert.State != SensorState.Warning && alert.State != SensorState.Paused);
         var warningAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged && alert.State == SensorState.Warning);

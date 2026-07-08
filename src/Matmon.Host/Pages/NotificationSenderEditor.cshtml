@@ -121,7 +121,7 @@
 
                 <div class="workspace-details workspace-span-2" data-notification-kind-panel="cloud" hidden="@(senderKind == NotificationEndpointKind.Cloud ? null : "hidden")">
                     <div class="workspace-details-body">
-                        <p class="panel-hint" style="margin:0;">Delivered via the Matmon.Cloud notification gateway — no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+                        <p class="panel-hint" style="margin:0;">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
                     </div>
                 </div>
 
@@ -152,7 +152,7 @@
                         <span>Type</span>
                         @if (senderKind == NotificationEndpointKind.Cloud)
                         {
-                            @* The built-in Matmon Cloud sender's type is fixed — read-only. *@
+                            @* The built-in Matmon Cloud sender's type is fixed - read-only. *@
                             <input type="text" class="form-control workspace-input" value="Cloud" readonly />
                             <input type="hidden" asp-for="NotificationSenderEditor.Kind" />
                         }
@@ -225,7 +225,7 @@
 
                 <div class="workspace-details workspace-span-2" data-notification-kind-panel="cloud" hidden="@(senderKind == NotificationEndpointKind.Cloud ? null : "hidden")">
                     <div class="workspace-details-body">
-                        <p class="panel-hint" style="margin:0;">Delivered via the Matmon.Cloud notification gateway — no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+                        <p class="panel-hint" style="margin:0;">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
                     </div>
                 </div>
 

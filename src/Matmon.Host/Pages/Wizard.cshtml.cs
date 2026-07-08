@@ -44,7 +44,7 @@ public class WizardModel : PageModel
     /// <summary>Subnets already configured on the primary probe (what discovery will scan).</summary>
     public IReadOnlyList<string> ConfiguredSubnets { get; private set; } = [];
 
-    /// <summary>Auto-detected local networks not yet configured — offered as one-click suggestions.</summary>
+    /// <summary>Auto-detected local networks not yet configured - offered as one-click suggestions.</summary>
     public IReadOnlyList<string> SuggestedNetworks { get; private set; } = [];
 
     /// <summary>Remote (non-primary) probes, with the values needed for their deploy command.</summary>
@@ -216,7 +216,7 @@ public class WizardModel : PageModel
         }
 
         _workspaceStore.ConfigureEmailNotifications(smtpHost!.Trim(), smtpPort, username, password, useSsl, from, to);
-        StatusMessage = $"E-mail alerts set up — {to} will be notified on Warning/Critical.";
+        StatusMessage = $"E-mail alerts set up - {to} will be notified on Warning/Critical.";
         return RedirectToPage(new { step = "notifications" });
     }
 

@@ -439,7 +439,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         }
 
         // Auto-scale so durations/bytes read naturally (e.g. uptime seconds → days), consistent with the
-        // sensor-detail view — the tree/state message showed raw seconds before.
+        // sensor-detail view - the tree/state message showed raw seconds before.
         var display = SensorUnitConverter.Format(defaultChannel.Value.Value, defaultChannel.Unit, defaultChannel.MeasurementKind);
         return string.IsNullOrWhiteSpace(display.Unit)
             ? $"{label} {display.Text}"
@@ -551,7 +551,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
 
         var pduReader = new BerReader(pduElement.Content);
         var responseRequestId = (int)DecodeInteger(pduReader.ReadElement(), 0x02, "SNMP request id");
-        // A Report PDU (0xA8) is an engine-discovery / time-sync notification — the useful data
+        // A Report PDU (0xA8) is an engine-discovery / time-sync notification - the useful data
         // (engine id, boots, time) is in the message security parameters, and some agents (e.g.
         // Synology) don't echo the request id on Reports. Only enforce the match for a real
         // GET-RESPONSE (0xA2).
@@ -1165,7 +1165,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         }
 
         // The scoped PDU is a SEQUENCE (0x30). With privacy on, msgData is an OCTET STRING that
-        // wraps the *encrypted* SEQUENCE — decrypt it, then read that SEQUENCE. With privacy off,
+        // wraps the *encrypted* SEQUENCE - decrypt it, then read that SEQUENCE. With privacy off,
         // msgData already IS the plaintext scoped-PDU SEQUENCE, so use it directly. (Reading its
         // .Content here would start at the contextEngineID OCTET STRING and fail as tag 0x04.)
         BerElement scopedElement;

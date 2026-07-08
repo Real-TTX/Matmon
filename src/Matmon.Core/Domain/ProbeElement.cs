@@ -12,7 +12,7 @@ public sealed class ProbeElement : MonitoringContainerElement
 
     /// <summary>
     /// Admin-configured subnets (CIDR) this probe is responsible for scanning. Independent of the
-    /// auto-detected interfaces a secondary reports in its heartbeat — a probe can reach (route to)
+    /// auto-detected interfaces a secondary reports in its heartbeat - a probe can reach (route to)
     /// networks it isn't directly attached to, so these are set by hand and used as discovery scopes.
     /// </summary>
     public List<string> Subnets { get; set; } = [];

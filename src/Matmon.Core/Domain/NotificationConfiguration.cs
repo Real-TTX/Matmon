@@ -56,7 +56,7 @@ public sealed class NotificationReceiver
     /// <see cref="ProtectedSecret"/>). Never written to workspace.json in the clear.</summary>
     public string? Secret { get; set; }
 
-    /// <summary>DataProtection-encrypted <see cref="Secret"/> — this is what persists.</summary>
+    /// <summary>DataProtection-encrypted <see cref="Secret"/> - this is what persists.</summary>
     public string? ProtectedSecret { get; set; }
 
     /// <summary>Set when decryption failed on load, so save doesn't clobber good ciphertext with empty.</summary>
@@ -83,7 +83,7 @@ public sealed class EmailNotificationSettings
     /// <see cref="ProtectedPassword"/>). Never written to workspace.json in the clear.</summary>
     public string? Password { get; set; }
 
-    /// <summary>DataProtection-encrypted <see cref="Password"/> — this is what persists.</summary>
+    /// <summary>DataProtection-encrypted <see cref="Password"/> - this is what persists.</summary>
     public string? ProtectedPassword { get; set; }
 
     /// <summary>Set when decryption failed on load, so save doesn't clobber good ciphertext with empty.</summary>
@@ -98,7 +98,7 @@ public sealed class WebhookNotificationSettings
     /// <see cref="ProtectedSecret"/>). Never written to workspace.json in the clear.</summary>
     public string? Secret { get; set; }
 
-    /// <summary>DataProtection-encrypted <see cref="Secret"/> — this is what persists.</summary>
+    /// <summary>DataProtection-encrypted <see cref="Secret"/> - this is what persists.</summary>
     public string? ProtectedSecret { get; set; }
 
     /// <summary>Set when decryption failed on load, so save doesn't clobber good ciphertext with empty.</summary>

@@ -119,7 +119,7 @@ public sealed class AuditReportPdfBuilder
                         {
                             BodyCell(table).Text(line.TimestampUtc.ToDisplay().ToString("g", CultureInfo.CurrentCulture));
                             BodyCell(table).Text(line.Kind);
-                            BodyCell(table).Text($"{line.Path} — {line.Message}");
+                            BodyCell(table).Text($"{line.Path} - {line.Message}");
                         }
                     });
                 });

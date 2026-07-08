@@ -270,7 +270,7 @@
                                         <label>
                                             <span>Kind</span>
                                             <select asp-for="TemplateEditor.CredentialBundles[i].Kind" class="form-select workspace-select" data-credential-kind-select>
-                                                @* 'Ssh' is hidden (redundant with 'Linux' — both use ssh.*); kept only when a legacy bundle already has it. *@
+                                                @* 'Ssh' is hidden (redundant with 'Linux' - both use ssh.*); kept only when a legacy bundle already has it. *@
                                                 @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>().Where(kind => kind != MonitoringCredentialKind.Ssh || credential.Kind == MonitoringCredentialKind.Ssh))
                                                 {
                                                     <option value="@kind">@kind</option>
@@ -315,7 +315,7 @@
                                         </div>
 
                                         <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
-                                            <div class="workspace-inline-note">Proxmox API token — exactly as shown in the Proxmox UI (Token ID + secret).</div>
+                                            <div class="workspace-inline-note">Proxmox API token - exactly as shown in the Proxmox UI (Token ID + secret).</div>
                                             <div class="sensor-threshold-grid">
                                                 <label class="workspace-span-2">
                                                     <span>Token ID</span>
@@ -387,7 +387,7 @@
                                         </div>
 
                                         <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="generic" hidden="@(credential.Kind == MonitoringCredentialKind.Generic ? null : "hidden")">
-                                            <div class="workspace-inline-note">Generic credentials — exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</div>
+                                            <div class="workspace-inline-note">Generic credentials - exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</div>
                                             <div class="sensor-threshold-grid">
                                                 <label>
                                                     <span>Username</span>

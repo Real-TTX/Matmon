@@ -644,7 +644,7 @@ public sealed class MonitoringSettings
             return;
         }
 
-        // Fallback: no credential of the kind(s) this sensor expects exists — use a Generic bundle
+        // Fallback: no credential of the kind(s) this sensor expects exists - use a Generic bundle
         // if there is one (the explicitly-selected one when it's Generic, otherwise the first),
         // mapping its username/password/token onto the keys each expected kind actually reads. This
         // lets a single Generic credential serve sensors that would normally need a typed bundle.

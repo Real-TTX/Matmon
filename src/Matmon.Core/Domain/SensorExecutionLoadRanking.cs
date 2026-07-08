@@ -3,7 +3,7 @@ namespace Matmon.Core.Domain;
 /// <summary>
 /// A rough per-sensor-type execution "cost" tier, used as a secondary sort so a catch-up burst (e.g. after a
 /// paused folder is resumed) runs the cheap/fast checks first (ping, TCP, DNS) before the heavy ones (VMware,
-/// Proxmox, SNMP walks, remote scripts). Purely an ordering hint — it never changes what runs, only the order.
+/// Proxmox, SNMP walks, remote scripts). Purely an ordering hint - it never changes what runs, only the order.
 /// </summary>
 public static class SensorExecutionLoadRanking
 {
@@ -13,7 +13,7 @@ public static class SensorExecutionLoadRanking
 
     private static readonly Dictionary<string, int> Tiers = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Light — tiny network probes, near-instant.
+        // Light - tiny network probes, near-instant.
         ["ping"] = Light,
         ["tcp-port"] = Light,
         ["dns"] = Light,
@@ -23,7 +23,7 @@ public static class SensorExecutionLoadRanking
         ["probe-heartbeat"] = Light,
         ["probe-health"] = Light,
 
-        // Moderate — a single API/cert/query round-trip.
+        // Moderate - a single API/cert/query round-trip.
         ["ssl-certificate"] = Moderate,
         ["certificate-chain"] = Moderate,
         ["docker-container"] = Moderate,
@@ -35,7 +35,7 @@ public static class SensorExecutionLoadRanking
         ["linux-update"] = Moderate,
         ["synology-update"] = Moderate,
 
-        // Heavy — SNMP walks, SSH/WinRM/script sessions, hypervisor/NAS SOAP+multi-call, disk/SMART scans.
+        // Heavy - SNMP walks, SSH/WinRM/script sessions, hypervisor/NAS SOAP+multi-call, disk/SMART scans.
         ["snmp"] = Heavy,
         ["snmp-interface"] = Heavy,
         ["ups-snmp"] = Heavy,

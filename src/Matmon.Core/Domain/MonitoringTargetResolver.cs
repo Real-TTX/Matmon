@@ -7,7 +7,7 @@ namespace Matmon.Core.Domain;
 /// stored as a single string token that is either an element id (a <see cref="Guid"/>)
 /// or a tag, written as <c>tag:&lt;name&gt;</c>. A tag target is dynamic: it resolves to
 /// every sensor whose <em>effective</em> tags include that tag (same aggregation as a
-/// folder, but cross-tree). This helper only parses/formats the token — resolving it to
+/// folder, but cross-tree). This helper only parses/formats the token - resolving it to
 /// actual sensors needs the topology and lives in the workspace store.
 /// </summary>
 public static class MonitoringTargetResolver

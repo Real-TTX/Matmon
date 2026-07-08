@@ -30,7 +30,7 @@ public sealed class MatmonPageWriteGuard : IAsyncPageFilter
             return true;
         }
 
-        // First-run setup creates the very first admin while still anonymous — must be postable.
+        // First-run setup creates the very first admin while still anonymous - must be postable.
         if (string.Equals(page, "/Setup", StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -46,7 +46,7 @@ public sealed class MatmonPageWriteGuard : IAsyncPageFilter
             return MatmonSecurity.CanOperateAlerts(context.HttpContext.User);
         }
 
-        // Self-service account page (e.g. set/change your own local password) — any signed-in user.
+        // Self-service account page (e.g. set/change your own local password) - any signed-in user.
         if (string.Equals(page, "/Account", StringComparison.OrdinalIgnoreCase))
         {
             return context.HttpContext.User.Identity?.IsAuthenticated == true;

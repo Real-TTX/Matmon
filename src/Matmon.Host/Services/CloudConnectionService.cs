@@ -11,7 +11,7 @@ namespace Matmon.Host.Services;
 /// in the workspace; the environment variables (<c>Matmon__CloudUrl</c>/<c>CloudInstanceId</c>/
 /// <c>CloudInstanceToken</c>) are only a first-run bootstrap until the user connects/disconnects in the UI.
 /// The loop re-reads settings every few seconds, so connect/disconnect take effect without a restart.
-/// Failures are recorded + retried — the cloud link never takes the monitor down.
+/// Failures are recorded + retried - the cloud link never takes the monitor down.
 /// </summary>
 public sealed class CloudConnectionService : BackgroundService
 {

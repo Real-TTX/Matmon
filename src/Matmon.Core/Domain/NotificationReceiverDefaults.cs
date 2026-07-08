@@ -2,7 +2,7 @@ namespace Matmon.Core.Domain;
 
 /// <summary>
 /// Built-in, non-persisted notification receivers offered in the receiver pickers (rules + scheduled report).
-/// Each expands at send time to the e-mails of all enabled users whose role matches — so membership is always
+/// Each expands at send time to the e-mails of all enabled users whose role matches - so membership is always
 /// current without maintaining a recipient list.
 /// </summary>
 public static class NotificationReceiverDefaults

@@ -44,7 +44,7 @@ public sealed class NotificationSpooler : INotificationSink
     {
         ArgumentNullException.ThrowIfNull(notificationEvent);
 
-        // Drop rather than grow unbounded — only happens if the dispatcher is far behind (e.g. SMTP down
+        // Drop rather than grow unbounded - only happens if the dispatcher is far behind (e.g. SMTP down
         // for a long time); those retries are already tracked in the dispatcher's own pending list.
         if (Volatile.Read(ref _count) >= Capacity)
         {

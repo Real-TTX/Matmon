@@ -678,7 +678,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
 
     private static void AppendResourceTypeChannels(List<SensorChannelValue> channels, ResourceSnapshot snapshot)
     {
-        // VMs (QEMU) — always emitted so the counts are stable even at zero.
+        // VMs (QEMU) - always emitted so the counts are stable even at zero.
         channels.Add(new SensorChannelValue { Key = "vmOnline", Label = "VMs online", Value = snapshot.QemuRunningCount });
         channels.Add(new SensorChannelValue { Key = "vmOffline", Label = "VMs offline", Value = snapshot.QemuStoppedCount });
         channels.Add(new SensorChannelValue { Key = "vmTotal", Label = "VMs total", Value = snapshot.QemuCount, LogByDefault = false });

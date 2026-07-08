@@ -13,5 +13,5 @@ public sealed record ExecuteSensorRequest(
     ExecuteCredential? Credential);
 
 /// <summary>Optional credential values for the execution (kept off <see cref="MonitoringSettings"/> so the
-/// [JsonIgnore]'d bundle Values survive the wire — the runner rebuilds the bundle in memory).</summary>
+/// [JsonIgnore]'d bundle Values survive the wire - the runner rebuilds the bundle in memory).</summary>
 public sealed record ExecuteCredential(MonitoringCredentialKind Kind, Dictionary<string, string> Values);

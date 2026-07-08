@@ -1274,7 +1274,7 @@ body.is-sidebar-open {
   box-shadow: var(--matmon-shadow);
 }
 
-/* Left-align the menu actions (Account / Log out) — matches the cloud (was centered on the instance). */
+/* Left-align the menu actions (Account / Log out) - matches the cloud (was centered on the instance). */
 .account-menu-panel .account-menu-action {
   justify-content: flex-start;
 }
@@ -2638,7 +2638,7 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   align-self: center;
   justify-self: start;
   /* This reuses .tree-kind for the chip colour, but .tree-kind is a fixed 1.9rem icon
-     square — here it holds the event-kind text ("State changed", …), so size it to fit
+     square - here it holds the event-kind text ("State changed", …), so size it to fit
      the label instead of cramming the text into a tiny box. */
   width: auto;
   height: auto;
@@ -3117,7 +3117,7 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
 }
 
 .monitoring-tree .tree-kind {
-  /* In the tree the box is invisible (transparent) — size it to the icon instead of
+  /* In the tree the box is invisible (transparent) - size it to the icon instead of
      the fixed 1.9rem square from the base rule, so the icon sits on the same optical
      line as the name/toggle instead of floating in an oversized box. */
   width: auto;
@@ -3535,7 +3535,7 @@ html[data-monitoring-size="l"] .monitoring-tree .monitoring-sensor-graph {
   color: #000;
 }
 
-/* Light mode: invert the effect — a milky overlay that washes the chip out, with
+/* Light mode: invert the effect - a milky overlay that washes the chip out, with
    dark solid buttons that pop against it (a dark veil + white buttons read as too
    heavy on the otherwise light UI). */
 html[data-theme="light"] .monitoring-sensor-chip::after {
@@ -4563,8 +4563,8 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* Truncate the FRONT of the path (ellipsis on the left) so the end — the element
-     and its nearest parents — is always visible. */
+  /* Truncate the FRONT of the path (ellipsis on the left) so the end - the element
+     and its nearest parents - is always visible. */
   direction: rtl;
   text-align: left;
 }
@@ -4693,7 +4693,7 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
 }
 
 .element-picker-tag {
-  /* Override .workspace-select's width:100% — otherwise the tag dropdown takes the
+  /* Override .workspace-select's width:100% - otherwise the tag dropdown takes the
      whole head, collapsing the search box and pushing the close (X) off-screen. */
   flex: 0 0 auto;
   width: auto;
@@ -8565,7 +8565,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 /* Narrow viewports: let the in-app board reflow vertically and fill the width instead of being
    letterboxed into a thin strip by the fixed 16:9 aspect-ratio. Tiles keep their column spans, so
    a 1-2 wide tile stays a readable fraction of the width; rows get a usable min height. The public
-   wallboard (.public-map-shell .map-canvas) is intentionally NOT touched — it keeps its TV shape. */
+   wallboard (.public-map-shell .map-canvas) is intentionally NOT touched - it keeps its TV shape. */
 @media (max-width: 640px) {
   .map-view-panel .map-canvas {
     aspect-ratio: auto;
@@ -8582,7 +8582,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   /* Flex column so the main visual (graph/gauge/value/progress) can grow and fill the
      tile instead of the content packing at the top and leaving the cell half empty.
      justify-content:center balances "flat" tiles (summary/state/text without a growing
-     visual) so they use the height too — tiles with a flex:1 visual are unaffected
+     visual) so they use the height too - tiles with a flex:1 visual are unaffected
      because the visual already consumes the free space. */
   display: flex;
   flex-direction: column;
@@ -8740,7 +8740,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   flex: 1 1 auto;
   display: grid;
   align-items: stretch;
-  /* No fixed floor — the frame must be able to shrink into a small tile instead of overflowing it. */
+  /* No fixed floor - the frame must be able to shrink into a small tile instead of overflowing it. */
   min-height: 0;
   padding: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--map-tile-accent, var(--matmon-border)) 35%, transparent);
@@ -8805,7 +8805,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: 0;
 }
 
-/* Read-only tile type (the kind is fixed when the tile is dragged in — delete + re-drag
+/* Read-only tile type (the kind is fixed when the tile is dragged in - delete + re-drag
    to change it, no dropdown). */
 .map-property-readonly {
   padding: 0.32rem 0.1rem;
@@ -9380,7 +9380,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: 0;
 }
 
-/* Scope the column template to BOTH the header and the data rows so they line up — the base
+/* Scope the column template to BOTH the header and the data rows so they line up - the base
    .system-table-row is a 6-column grid (for the probe table); the user table has 5 columns. */
 .system-user-table .system-table-row {
   grid-template-columns: minmax(13rem, 1.3fr) minmax(5rem, 0.7fr) minmax(7rem, 0.55fr) minmax(10rem, 1fr) minmax(9rem, auto);
@@ -10401,7 +10401,7 @@ body.credential-modal-open {
   border-bottom: 1px solid var(--matmon-border);
 }
 
-/* The container/host credential-definition section had no layout of its own — give it the
+/* The container/host credential-definition section had no layout of its own - give it the
    same grid spacing as the sensor credential section so the header/note/list don't crowd. */
 .workspace-credential-section {
   display: grid;
@@ -10711,7 +10711,7 @@ body.credential-modal-open {
 }
 
 /* The panel is JS-positioned (fixed). Until positionMenu has placed it and added
-   .is-floating, keep it hidden synchronously — its default absolute spot (below the
+   .is-floating, keep it hidden synchronously - its default absolute spot (below the
    button) would otherwise flash for a frame before being moved or flipped above.
    visibility (not display) so it still has dimensions for the position math. */
 .workspace-action-menu[open] > .workspace-action-menu-panel {
@@ -12093,7 +12093,7 @@ button.workspace-action-menu-link {
 .alerts-bulkbar-count strong { color: var(--matmon-text); }
 
 /* Matches the shared data-table look (see .discovery-result-table): shaded sticky header,
-   tight cells, same font + radius — so the Alerts table reads like the other lists. */
+   tight cells, same font + radius - so the Alerts table reads like the other lists. */
 .alerts-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--matmon-border);
@@ -12212,7 +12212,7 @@ button.workspace-action-menu-link {
 
 /* Acknowledged element state --------------------------------------------------
    Acknowledged = "handled". Shown as a separate blue "Ack" pill (next to the severity pill so both
-   stay readable) plus a two-tone LEFT accent: the severity colour on top, ack-blue on the bottom —
+   stay readable) plus a two-tone LEFT accent: the severity colour on top, ack-blue on the bottom -
    so Warning-Ack and Error-Ack stay distinct. The gradient is laid only on the left border via
    border-image-width (the other borders keep their normal colour). */
 :root { --matmon-ack: #5f8dff; }
@@ -12221,7 +12221,7 @@ button.workspace-action-menu-link {
   background: rgba(95, 141, 255, 0.30);
 }
 
-/* Tree sensor chip — its left accent is driven by --tree-state-color (the severity colour). */
+/* Tree sensor chip - its left accent is driven by --tree-state-color (the severity colour). */
 .monitoring-sensor-chip[data-acknowledged="true"] {
   border-left-color: transparent;
   border-image-source: linear-gradient(to bottom, var(--tree-state-color, #7c8eab) 0 50%, var(--matmon-ack) 50% 100%);
@@ -12229,7 +12229,7 @@ button.workspace-action-menu-link {
   border-image-width: 0 0 0 1;
 }
 
-/* Monitoring list row — its left accent is an explicit per-state colour. */
+/* Monitoring list row - its left accent is an explicit per-state colour. */
 .monitoring-list-row[data-acknowledged="true"] {
   border-left-color: transparent;
   border-image-slice: 1;
@@ -12248,7 +12248,7 @@ button.workspace-action-menu-link {
   background: linear-gradient(135deg, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
 }
 
-/* Alerts table row — same two-tone left accent (data-ack carries the acknowledged flag). */
+/* Alerts table row - same two-tone left accent (data-ack carries the acknowledged flag). */
 .alerts-row[data-ack="true"] td:first-child {
   border-left-color: transparent;
   border-image-slice: 1;

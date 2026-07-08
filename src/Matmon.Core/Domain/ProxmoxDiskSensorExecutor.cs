@@ -71,7 +71,7 @@ public sealed class ProxmoxDiskSensorExecutor : ISensorExecutor
         }
 
         // A full token ID already carries the user@realm (root@pam!name); the separate API user is
-        // only needed when the Token ID is just the bare name — mirror ProxmoxPveSensorExecutor.
+        // only needed when the Token ID is just the bare name - mirror ProxmoxPveSensorExecutor.
         if (!tokenId.Contains('!') && string.IsNullOrWhiteSpace(user))
         {
             return SensorExecutionResult.Critical(TimeSpan.Zero, "Enter the full Token ID (user@realm!name), or set the API user separately");

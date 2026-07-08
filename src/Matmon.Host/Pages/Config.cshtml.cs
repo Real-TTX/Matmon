@@ -19,7 +19,7 @@ public class ConfigModel : PageModel
 {
     private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(20) };
 
-    /// <summary>Official Matmon.Cloud address — the default the connect form is prefilled with.</summary>
+    /// <summary>Official Matmon.Cloud address - the default the connect form is prefilled with.</summary>
     public const string DefaultCloudUrl = "https://cloud.matmon.eu";
 
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
@@ -55,7 +55,7 @@ public class ConfigModel : PageModel
     public bool CloudEnvBootstrapSet { get; private set; }
 
     /// <summary>True when the cloud link is actively managing the license (connected via the UI, or the env
-    /// bootstrap is set). While active, manual token entry is disabled — the cloud re-issues it on each heartbeat.</summary>
+    /// bootstrap is set). While active, manual token entry is disabled - the cloud re-issues it on each heartbeat.</summary>
     public bool CloudLinkActive { get; private set; }
 
     /// <summary>System-default display timezone (IANA id; empty = server local). Applies to everyone without
@@ -68,7 +68,7 @@ public class ConfigModel : PageModel
 
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
-    /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) — drives the Clear action.</summary>
+    /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) - drives the Clear action.</summary>
     public bool HasStoredLicenseToken { get; private set; }
 
     /// <summary>Manual license token paste (offline / cloud-unreachable path).</summary>
@@ -321,7 +321,7 @@ public class ConfigModel : PageModel
         }
 
         _workspaceStore.SetCloudConnectionSettings(url, instanceId, string.IsNullOrWhiteSpace(token) ? null : token, enabled: true);
-        StatusMessage = "Connected to Matmon.Cloud — the first heartbeat is sent within a few seconds.";
+        StatusMessage = "Connected to Matmon.Cloud - the first heartbeat is sent within a few seconds.";
         return RedirectToPage(new { tab = "cloud" });
     }
 
@@ -335,12 +335,12 @@ public class ConfigModel : PageModel
         }
 
         // While the cloud link is active it OWNS the license (re-issued each heartbeat), so a manual token would
-        // just be overwritten — refuse it and tell the admin to disconnect first for offline licensing.
+        // just be overwritten - refuse it and tell the admin to disconnect first for offline licensing.
         var cloud = _workspaceStore.GetCloudConnectionSettings();
         var cloudActive = cloud.Configured ? cloud.Enabled : !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
         if (cloudActive)
         {
-            ErrorMessage = "Manual license entry is disabled while connected to Matmon.Cloud — the cloud manages the license and would overwrite it on the next heartbeat. Disconnect the cloud first (System → Cloud).";
+            ErrorMessage = "Manual license entry is disabled while connected to Matmon.Cloud - the cloud manages the license and would overwrite it on the next heartbeat. Disconnect the cloud first (System → Cloud).";
             return RedirectToPage(new { tab = "license" });
         }
 
@@ -427,7 +427,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "partner" });
     }
 
-    /// <summary>Clear the cached license token — the instance falls back to Free (until the cloud re-issues one).</summary>
+    /// <summary>Clear the cached license token - the instance falls back to Free (until the cloud re-issues one).</summary>
     public IActionResult OnPostClearLicenseToken()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -436,7 +436,7 @@ public class ConfigModel : PageModel
         }
 
         _workspaceStore.SetLicenseToken(null);
-        StatusMessage = "License token cleared — the instance is now on the Free fallback.";
+        StatusMessage = "License token cleared - the instance is now on the Free fallback.";
         return RedirectToPage(new { tab = "license" });
     }
 
@@ -454,7 +454,7 @@ public class ConfigModel : PageModel
 
     /// <summary>
     /// UniFi-style connect (OAuth): redirect the admin's browser to the cloud consent page to claim this
-    /// instance. PKCE — we keep the verifier in a data-protected cookie and send only the challenge; the
+    /// instance. PKCE - we keep the verifier in a data-protected cookie and send only the challenge; the
     /// callback (<see cref="CloudClaimModel"/>) redeems the returned code for the id + token. The account
     /// password never touches this instance.
     /// </summary>
@@ -535,7 +535,7 @@ public class ConfigModel : PageModel
             using var response = await CloudHttp.PostAsJsonAsync($"{url}/api/provision", new { email, password, name }, cancellationToken);
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                ErrorMessage = "Cloud sign-in failed — check your e-mail and password.";
+                ErrorMessage = "Cloud sign-in failed - check your e-mail and password.";
                 return RedirectToPage(new { tab = "cloud" });
             }
 
@@ -617,7 +617,7 @@ public class ConfigModel : PageModel
 
         _workspaceStore.SetCloudRelaySettings(CloudRelay.RelayAlerts);
         StatusMessage = CloudRelay.RelayAlerts
-            ? "Cloud alert relay enabled — use the \"Matmon Cloud\" sender in your notification rules."
+            ? "Cloud alert relay enabled - use the \"Matmon Cloud\" sender in your notification rules."
             : "Cloud alert relay disabled.";
         return RedirectToPage(new { tab = "cloud" });
     }
@@ -629,7 +629,7 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
-        // Full Access is a licensed feature — refuse to enable it on a plan that doesn't include it.
+        // Full Access is a licensed feature - refuse to enable it on a plan that doesn't include it.
         if (CloudFullAccess && !_licenseService.Current.TunnelEnabled)
         {
             ErrorMessage = "Full Access isn't included in your plan. Upgrade the plan in Matmon.Cloud to enable it.";
@@ -638,7 +638,7 @@ public class ConfigModel : PageModel
 
         _workspaceStore.SetCloudFullAccess(CloudFullAccess);
         StatusMessage = CloudFullAccess
-            ? "Full Access enabled — you can now operate this instance from Matmon.Cloud."
+            ? "Full Access enabled - you can now operate this instance from Matmon.Cloud."
             : "Full Access disabled.";
         return RedirectToPage(new { tab = "cloud" });
     }
@@ -675,7 +675,7 @@ public class ConfigModel : PageModel
         return MatmonSecurity.IsCurrentUser(User, user.Id);
     }
 
-    /// <summary>Whether the account has a local password (cloud/SSO accounts may not — shown on the user row).</summary>
+    /// <summary>Whether the account has a local password (cloud/SSO accounts may not - shown on the user row).</summary>
     public bool HasLocalPassword(MatmonUser user) => _workspaceStore.HasLocalPassword(user.Id);
 
     public bool CanInstallProbe(SystemProbeOverview probe)

@@ -14,7 +14,7 @@ public enum LicenseTier
 
 /// <summary>
 /// A validated license for an instance. Issued (signed) by Matmon.Cloud and verified locally, offline,
-/// against a baked-in public key — so the monitor keeps enforcing the last known license even when the
+/// against a baked-in public key - so the monitor keeps enforcing the last known license even when the
 /// cloud is unreachable.
 /// </summary>
 public sealed class LicenseInfo
@@ -64,7 +64,7 @@ public sealed class LicenseInfo
     /// <summary>The plan's display name, or the tier as a fallback for legacy tokens.</summary>
     public string DisplayName => string.IsNullOrWhiteSpace(PlanName) ? Tier.ToString() : PlanName;
 
-    /// <summary>The default license when none is present: Free — a small allowance, no premium features.</summary>
+    /// <summary>The default license when none is present: Free - a small allowance, no premium features.</summary>
     public static LicenseInfo Fallback() => new()
     {
         Tier = LicenseTier.Free,
@@ -86,7 +86,7 @@ public sealed class LicenseInfo
 /// </summary>
 public static class LicenseCrypto
 {
-    /// <summary>A signed license is rejected if its validity window (issued→expires) exceeds this — no license may
+    /// <summary>A signed license is rejected if its validity window (issued→expires) exceeds this - no license may
     /// be valid longer than 15 months. Keep the cloud signer's cap in sync with this value.</summary>
     public const int MaxValidityMonths = 15;
 
@@ -163,7 +163,7 @@ public static class LicenseCrypto
             };
 
             // Hard cap: a signed license may not be valid longer than MaxValidityMonths from issue. Defense-in-depth
-            // so a forged/over-issued or long-cached token can't grant a perpetual license offline — a connected
+            // so a forged/over-issued or long-cached token can't grant a perpetual license offline - a connected
             // instance re-fetches a fresh (rolling) token each heartbeat, so this never bites in normal operation.
             if (license.ExpiresUtc is { } expiry && expiry > license.IssuedUtc.AddMonths(MaxValidityMonths))
             {
@@ -200,7 +200,7 @@ public static class LicenseCrypto
 /// The baked-in public key used to verify cloud-issued license tokens offline. This is the PRODUCTION
 /// public key; its private half lives only in the cloud's <c>License__PrivateKey</c> env (never in this
 /// repo). To rotate, regenerate a P-256 keypair, put this SPKI-base64 public half here and the PKCS#8-base64
-/// private half in the cloud env — both must change together or no token will validate.
+/// private half in the cloud env - both must change together or no token will validate.
 /// </summary>
 public static class LicensePublicKey
 {

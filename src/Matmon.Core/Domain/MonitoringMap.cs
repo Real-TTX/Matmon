@@ -129,7 +129,7 @@ public enum MonitoringMapPaginationMode
     /// <summary>Page controls overlay the board, appear on mouse-move / slide change, then fade out.</summary>
     OverlayOnActivity = 2,
 
-    /// <summary>No page controls — the board just auto-rotates.</summary>
+    /// <summary>No page controls - the board just auto-rotates.</summary>
     Hidden = 3
 }
 

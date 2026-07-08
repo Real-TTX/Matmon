@@ -80,7 +80,7 @@ public class CloudClaimModel : PageModel
             }
 
             _workspaceStore.SetCloudConnectionSettings(pending.Url, result.InstanceId, result.Token, enabled: true);
-            TempData["StatusMessage"] = "Connected to Matmon.Cloud — the first heartbeat is sent within a few seconds.";
+            TempData["StatusMessage"] = "Connected to Matmon.Cloud - the first heartbeat is sent within a few seconds.";
         }
         catch (Exception ex)
         {

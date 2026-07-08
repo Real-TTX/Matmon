@@ -32,7 +32,7 @@
                 <h1>@display.Map.Name</h1>
                 <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
             </div>
-            <div class="public-map-meta" title="Page reloads every 30 s — the time shows the data is current">
+            <div class="public-map-meta" title="Page reloads every 30 s - the time shows the data is current">
                 <span class="public-map-meta-brand">Matmon</span>
                 <span>@Matmon.Host.Services.MatmonVersion.Current</span>
                 <span class="public-map-meta-time">@MatmonIcons.Render("clock")<span>@DateTimeOffset.Now.ToString("dd.MM.yyyy HH:mm:ss")</span></span>

@@ -31,7 +31,7 @@ public sealed class NotificationRule
 
     /// <summary>
     /// Max number of "raised" mails allowed per <see cref="CooldownMinutes"/> window (per rule+element).
-    /// Null / ≤0 is treated as 1 — i.e. the classic "one mail per window" cooldown (backward compatible).
+    /// Null / ≤0 is treated as 1 - i.e. the classic "one mail per window" cooldown (backward compatible).
     /// </summary>
     public int? Threshold { get; set; }
 

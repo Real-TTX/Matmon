@@ -39,7 +39,7 @@ public abstract class MonitoringElement
     public Guid? TemplateOriginId { get; set; }
 
     /// <summary>
-    /// Legacy live-inheritance links. No longer populated — templates are copied now. Kept so old
+    /// Legacy live-inheritance links. No longer populated - templates are copied now. Kept so old
     /// workspaces still deserialize; <c>MigrateAppliedTemplatesToCopies</c> bakes any remaining links
     /// into <see cref="Settings"/> on load and clears this list.
     /// </summary>
@@ -50,7 +50,7 @@ public abstract class MonitoringElement
     public virtual bool CanHaveChildren => false;
 
     /// <summary>
-    /// Deep, detached copy — mutating the clone (or its <see cref="Settings"/> / children) never
+    /// Deep, detached copy - mutating the clone (or its <see cref="Settings"/> / children) never
     /// touches the original. Used by the store's read accessors so callers can read/enumerate a private
     /// copy without racing writers that mutate the live tree.
     /// </summary>

@@ -30,8 +30,8 @@
             <label class="workspace-field" style="margin-bottom:0.6rem;">
                 <span class="workspace-label">Account type</span>
                 <select asp-for="UserInput.AccountType" class="form-select workspace-select" data-usertype-select>
-                    <option value="Local">Local — username + password</option>
-                    <option value="Cloud">Matmon Cloud — e-mail, SSO (no local password)</option>
+                    <option value="Local">Local - username + password</option>
+                    <option value="Cloud">Matmon Cloud - e-mail, SSO (no local password)</option>
                 </select>
             </label>
 
@@ -58,7 +58,7 @@
             </div>
 
             <div class="workspace-inline-note" data-usertype="local">New users are created as enabled accounts.</div>
-            <div class="workspace-inline-note" data-usertype="cloud" hidden>Cloud users sign in with “Sign in with Matmon Cloud” (SSO) — no local password is set. An admin can add one later on the user's page.</div>
+            <div class="workspace-inline-note" data-usertype="cloud" hidden>Cloud users sign in with “Sign in with Matmon Cloud” (SSO) - no local password is set. An admin can add one later on the user's page.</div>
 
             <script>
                 (function () {

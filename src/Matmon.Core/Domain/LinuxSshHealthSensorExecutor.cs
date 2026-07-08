@@ -173,7 +173,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            // The linked CTS fired via CancelAfter — a timeout, not a caller cancellation.
+            // The linked CTS fired via CancelAfter - a timeout, not a caller cancellation.
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, "ssh timeout");
         }
@@ -255,7 +255,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
             var isSmart = string.Equals(key, "smartStatus", StringComparison.OrdinalIgnoreCase);
             if (isSmart && value < 0)
             {
-                // SMART unavailable (no smartctl, or disks not readable without root) —
+                // SMART unavailable (no smartctl, or disks not readable without root) -
                 // skip rather than show a confusing "-1" channel.
                 continue;
             }
@@ -266,7 +266,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
                 Label = isSmart ? "SMART status" : Humanize(key),
                 Value = value,
                 Unit = key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase) ? "%" : null,
-                // SMART is a 0=healthy / 2=critical status summary — opt it out of
+                // SMART is a 0=healthy / 2=critical status summary - opt it out of
                 // statistics logging by default like other status flags.
                 LogByDefault = !isSmart
             });

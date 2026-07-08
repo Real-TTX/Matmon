@@ -107,7 +107,7 @@ public interface IMonitoringWorkspaceStore
     IReadOnlyList<SensorDefinition> GetSensorDefinitions();
 
     /// <summary>
-    /// A fully detached workspace snapshot with a deep-cloned element tree and templates — for
+    /// A fully detached workspace snapshot with a deep-cloned element tree and templates - for
     /// consumers (the dashboard) that walk the whole tree and must not race concurrent edits.
     /// </summary>
     MonitoringWorkspaceSnapshot GetWorkspaceClone();
@@ -120,7 +120,7 @@ public interface IMonitoringWorkspaceStore
 
     bool AcknowledgeAlert(Guid alertId, string? acknowledgedBy = null);
 
-    /// <summary>Cheap counts of the persisted active alerts (open vs. acknowledged, plus the error/warning severity split) — no snapshot clone.</summary>
+    /// <summary>Cheap counts of the persisted active alerts (open vs. acknowledged, plus the error/warning severity split) - no snapshot clone.</summary>
     (int Open, int Acknowledged, int Error, int Warning) GetActiveAlertCounts();
 
     void RecordSensorObservation(

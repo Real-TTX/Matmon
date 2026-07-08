@@ -10,7 +10,7 @@ namespace Matmon.Host.Services;
 /// <summary>
 /// Per-process shared secret the Full Access <see cref="TunnelClient"/> stamps on every request it replays
 /// locally (the <c>X-Matmon-Tunnel-Auth</c> header). It is random per start and never leaves the process, so a
-/// request carrying it is proven to have arrived through <em>this</em> instance's own tunnel — not forged by a
+/// request carrying it is proven to have arrived through <em>this</em> instance's own tunnel - not forged by a
 /// direct caller against the (publicly reachable) instance. This is the trust anchor for the auto-login
 /// middleware: the cloud's identity assertion is only honoured when accompanied by this secret.
 /// </summary>
@@ -22,7 +22,7 @@ public sealed class TunnelAuthSecret
 /// <summary>
 /// Seamless Full Access sign-in. When a cloud user opens the instance console through the tunnel they are
 /// already authenticated on the cloud and a member of the instance, so the cloud injects an identity assertion
-/// (<c>X-Matmon-Cloud-User = "email|role"</c>) that this middleware turns into a local sign-in — no second
+/// (<c>X-Matmon-Cloud-User = "email|role"</c>) that this middleware turns into a local sign-in - no second
 /// login, no OAuth round-trip inside the iframe.
 /// </summary>
 public static class TunnelAutoLogin
@@ -33,7 +33,7 @@ public static class TunnelAutoLogin
     /// <summary>
     /// Register between <c>UseAuthentication</c> and <c>UseAuthorization</c>. Every request that arrives through
     /// the tunnel carries the cloud's identity assertion + our tunnel secret, so we authenticate the request
-    /// <em>from the assertion itself</em> — we do NOT rely on the auth cookie round-tripping through the
+    /// <em>from the assertion itself</em> - we do NOT rely on the auth cookie round-tripping through the
     /// cross-origin console iframe (that dependency made sign-in "stick only after navigating back and forth").
     /// A backup cookie is still issued once per identity for any rare assertion-less follow-up. No secret / wrong
     /// secret / no assertion ⇒ no-op.
@@ -52,7 +52,7 @@ public static class TunnelAutoLogin
                 var alreadySignedIn = context.User?.Identity?.IsAuthenticated == true &&
                     string.Equals(context.User.Identity!.Name, principal.Identity!.Name, StringComparison.OrdinalIgnoreCase);
 
-                // Authenticate THIS request straight from the trusted assertion — no cookie dependency.
+                // Authenticate THIS request straight from the trusted assertion - no cookie dependency.
                 context.User = principal;
 
                 // Only (re)issue the backup cookie when the identity actually changed, so we don't emit a

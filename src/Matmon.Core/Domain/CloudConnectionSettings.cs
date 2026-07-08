@@ -22,7 +22,7 @@ public sealed class CloudConnectionSettings
     /// <summary>Whether the link is active. Disconnect sets this false.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>True once the user has connected/disconnected via the UI — from then on the UI wins over env.</summary>
+    /// <summary>True once the user has connected/disconnected via the UI - from then on the UI wins over env.</summary>
     public bool Configured { get; set; }
 
     /// <summary>Master switch for cloud alert relay. When on, a built-in "Matmon Cloud" notification

@@ -180,7 +180,7 @@ public sealed class SensorDetailsModel : PageModel
             executionProbe,
             defaultChannelLabel,
             unit,
-            currentValue.HasValue ? currentDisplay.Text : "—",
+            currentValue.HasValue ? currentDisplay.Text : "-",
             latestObservation is null ? null : latestObservation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
             latestObservation is null ? null : FormatDuration(latestObservation.Duration),
             windows,
@@ -567,7 +567,7 @@ public sealed class SensorDetailsModel : PageModel
 
     private static string FormatStat(double? value, SensorUnitScale scale, SensorMeasurementKind kind)
     {
-        return value.HasValue ? SensorUnitConverter.Format(value, scale, kind).Text : "—";
+        return value.HasValue ? SensorUnitConverter.Format(value, scale, kind).Text : "-";
     }
 
     private static string FormatBucketPeriod(DateTimeOffset bucketStartUtc, int bucketMinutes)
@@ -726,7 +726,7 @@ public sealed class SensorDetailsModel : PageModel
                     observation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
                     MonitoringStatePresentation.Key(observation.State),
                     MonitoringStatePresentation.Label(observation.State),
-                    defaultValue.HasValue ? display.Text : "—",
+                    defaultValue.HasValue ? display.Text : "-",
                     display.Unit,
                     FormatDuration(observation.Duration),
                     observation.Message,
@@ -869,7 +869,7 @@ public sealed class SensorDetailsModel : PageModel
     {
         return value.HasValue
             ? value.Value.ToString("0.###", CultureInfo.InvariantCulture)
-            : "—";
+            : "-";
     }
 
     private static string HumanizeChannelKey(string channelKey)

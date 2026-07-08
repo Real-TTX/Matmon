@@ -442,7 +442,7 @@ public sealed class DiscoveryModel : PageModel
             }
         }
 
-        // The subnets the (remote) probe actually reported are the most relevant — list them first.
+        // The subnets the (remote) probe actually reported are the most relevant - list them first.
         foreach (var cidr in probeReportedNetworks)
         {
             Add(cidr);

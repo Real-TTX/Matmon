@@ -123,7 +123,7 @@
                 }
                 @if (allowedPrograms.Count == 0)
                 {
-                    <p class="workspace-inline-note">No program paths are allowed yet. The <strong>Local Program</strong> sensor only runs executables listed here — set the <code>Matmon__AllowedProgramPaths</code> environment variable (semicolon-separated absolute paths or directories), then restart.</p>
+                    <p class="workspace-inline-note">No program paths are allowed yet. The <strong>Local Program</strong> sensor only runs executables listed here - set the <code>Matmon__AllowedProgramPaths</code> environment variable (semicolon-separated absolute paths or directories), then restart.</p>
                 }
                 else
                 {
@@ -583,7 +583,7 @@
                 <span class="panel-hint">Moved to Notifications</span>
             </div>
             <div style="padding:16px 18px;">
-                <p class="workspace-inline-note" style="margin-top:0;">The scheduled summary report now lives with the other notifications — as the <strong>Scheduled</strong> entry in the unified Notifications list, with the same Sender/Receiver options.</p>
+                <p class="workspace-inline-note" style="margin-top:0;">The scheduled summary report now lives with the other notifications - as the <strong>Scheduled</strong> entry in the unified Notifications list, with the same Sender/Receiver options.</p>
                 <a class="workspace-submit" asp-page="/NotificationReportEditor">@MatmonIcons.Render("mail")<span>Open scheduled report</span></a>
             </div>
         </section>
@@ -609,7 +609,7 @@
                     <span>Probes: @Model.ProbeCount / @Model.License.ProbeLimitDisplay</span>
                     @if (overLimit)
                     {
-                        <span style="color:var(--matmon-danger);">· over limit — can't add more</span>
+                        <span style="color:var(--matmon-danger);">· over limit - can't add more</span>
                     }
                     <span style="color:var(--matmon-muted);">·</span>
                     <span>Sensors: @Model.SensorCount / @Model.License.SensorLimitDisplay</span>
@@ -642,16 +642,16 @@
                             <input asp-for="CloudRenameName" class="workspace-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
                         </label>
                         <button type="submit" class="workspace-submit">Update name</button>
-                        <p class="workspace-inline-note" style="margin-top:8px;">The only setting editable while connected — sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
+                        <p class="workspace-inline-note" style="margin-top:8px;">The only setting editable while connected - sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
                     </form>
                     <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
                         <button type="submit" class="workspace-danger-submit">Disconnect</button>
                     </form>
-                    <p class="workspace-inline-note" style="margin-top:12px;">Connection details are locked while connected — <strong>Disconnect</strong> to change the cloud URL or link a different instance. Takes effect within a few seconds, no restart needed.</p>
+                    <p class="workspace-inline-note" style="margin-top:12px;">Connection details are locked while connected - <strong>Disconnect</strong> to change the cloud URL or link a different instance. Takes effect within a few seconds, no restart needed.</p>
                 }
                 else
                 {
-                    <p class="workspace-inline-note">Give this instance a name, then <strong>Connect</strong> — you'll sign in to Matmon.Cloud in your browser and confirm. The instance links itself to your account automatically; no password is entered here.</p>
+                    <p class="workspace-inline-note">Give this instance a name, then <strong>Connect</strong> - you'll sign in to Matmon.Cloud in your browser and confirm. The instance links itself to your account automatically; no password is entered here.</p>
                     <form method="post" asp-page-handler="CloudClaim" class="workspace-form" style="margin-top:14px;max-width:480px;">
                         <label class="workspace-field">
                             <span>Cloud URL</span>
@@ -665,7 +665,7 @@
                     </form>
 
                     <details style="margin-top:14px;">
-                        <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced — connect with e-mail + password, or an existing instance id + token</summary>
+                        <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced - connect with e-mail + password, or an existing instance id + token</summary>
                         <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:12px;max-width:560px;">
                             <p class="workspace-inline-note" style="margin-top:0;">Headless sign-in: register this instance with your cloud account credentials.</p>
                             <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
@@ -685,7 +685,7 @@
 
                     @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)
                     {
-                        <p class="workspace-inline-note" style="margin-top:12px;">Currently bootstrapped from environment variables — connecting here makes it UI-managed.</p>
+                        <p class="workspace-inline-note" style="margin-top:12px;">Currently bootstrapped from environment variables - connecting here makes it UI-managed.</p>
                     }
                 }
 
@@ -693,7 +693,7 @@
                 {
                     <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
                     <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Alert relay</span></h3>
-                    <p class="panel-hint" style="margin-bottom:12px;">Let Matmon.Cloud deliver your alerts — useful when this instance has no SMTP of its own. When enabled, a <strong>Matmon Cloud</strong> notification sender becomes available: pick it in a <a asp-page="/Notifications">notification rule</a> and the cloud delivers to that rule's receiver. No SMTP or recipients to configure here.</p>
+                    <p class="panel-hint" style="margin-bottom:12px;">Let Matmon.Cloud deliver your alerts - useful when this instance has no SMTP of its own. When enabled, a <strong>Matmon Cloud</strong> notification sender becomes available: pick it in a <a asp-page="/Notifications">notification rule</a> and the cloud delivers to that rule's receiver. No SMTP or recipients to configure here.</p>
                     <form method="post" asp-page-handler="CloudRelay" class="workspace-form" style="max-width:560px;">
                         <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
                             <input asp-for="CloudRelay.RelayAlerts" type="checkbox" />
@@ -728,7 +728,7 @@
                     <div><div class="panel-hint">Plan</div><div style="font-weight:600;">@Model.License.DisplayName</div></div>
                     <div><div class="panel-hint">Probes</div><div>@Model.ProbeCount / @Model.License.ProbeLimitDisplay</div></div>
                     <div><div class="panel-hint">Sensors</div><div>@Model.SensorCount / @Model.License.SensorLimitDisplay</div></div>
-                    <div><div class="panel-hint">Cloud sensors</div><div>@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "—")</div></div>
+                    <div><div class="panel-hint">Cloud sensors</div><div>@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "-")</div></div>
                     <div><div class="panel-hint">Full Access</div><div>@(Model.License.TunnelEnabled ? "included" : "not included")</div></div>
                     <div><div class="panel-hint">Expires</div><div>@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</div></div>
                 </div>
@@ -740,7 +740,7 @@
                 @if (Model.CloudLinkActive && Model.License.IsFallback)
                 {
                     <div class="workspace-banner workspace-banner-warning" style="max-width:680px;margin:0;">
-                        Connected to Matmon.Cloud, but no valid license token has arrived yet — this instance is on the <strong>Free</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.
+                        Connected to Matmon.Cloud, but no valid license token has arrived yet - this instance is on the <strong>Free</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.
                     </div>
                 }
 
@@ -748,7 +748,7 @@
                 {
                     <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
                         <h2 class="section-title" style="font-size:15px;margin:0 0 6px;"><span>Apply a token manually</span></h2>
-                        <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored — an invalid or expired token is rejected.</p>
+                        <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored - an invalid or expired token is rejected.</p>
                         <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="max-width:680px;display:grid;gap:10px;">
                             <label class="workspace-field">
                                 <span>License token</span>
@@ -768,7 +768,7 @@
                 else
                 {
                     <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
-                        <p class="workspace-inline-note" style="margin:0;max-width:680px;">Manual license entry is disabled while connected to Matmon.Cloud — the license is managed by the cloud and refreshed on each heartbeat. <strong>Disconnect</strong> the cloud (System → Cloud) to license this instance offline.</p>
+                        <p class="workspace-inline-note" style="margin:0;max-width:680px;">Manual license entry is disabled while connected to Matmon.Cloud - the license is managed by the cloud and refreshed on each heartbeat. <strong>Disconnect</strong> the cloud (System → Cloud) to license this instance offline.</p>
                     </div>
                 }
             </div>
@@ -831,7 +831,7 @@
                             }
                             <strong>@user.Username</strong>
                             <small>@user.Id</small>
-                            @* An account can sign in locally (password) and/or via Cloud SSO — show both. *@
+                            @* An account can sign in locally (password) and/or via Cloud SSO - show both. *@
                             @if (hasLocalPw)
                             {
                                 <span class="account-role-chip" title="Can sign in with a local e-mail + password">Local</span>

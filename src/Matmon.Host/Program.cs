@@ -13,7 +13,7 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// QuestPDF Community license (free for small businesses / < $1M revenue) — required before any PDF gen.
+// QuestPDF Community license (free for small businesses / < $1M revenue) - required before any PDF gen.
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var runtimeOptions = builder.Configuration.GetSection("Matmon").Get<MatmonRuntimeOptions>() ?? new MatmonRuntimeOptions();
@@ -21,7 +21,7 @@ runtimeOptions.ProbeId ??= Environment.MachineName;
 runtimeOptions.ProbeName ??= Environment.MachineName;
 
 // --- Executor run-mode: a stateless sensor-executor service. No workspace, telemetry, auth-cookie, UI or
-//     background loops — just the sensor executors behind a token-authed HTTP API that Matmon.Cloud calls to
+//     background loops - just the sensor executors behind a token-authed HTTP API that Matmon.Cloud calls to
 //     run cloud sensors. Returns early so none of the stateful Primary/Secondary wiring below is touched. ---
 if (runtimeOptions.Mode == AppMode.Executor)
 {
@@ -330,7 +330,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
         Results.Ok(registry.GetAll()))
         .RequireAuthorization(MatmonSecurity.AdminPolicy);
 
-    // Exposes seed admin credentials + probe enrollment tokens — admin-only, not any signed-in user.
+    // Exposes seed admin credentials + probe enrollment tokens - admin-only, not any signed-in user.
     app.MapGet("/api/configuration", (IConfigurationOverviewProvider provider) =>
         Results.Ok(provider.GetOverview()))
         .RequireAuthorization(MatmonSecurity.AdminPolicy);
@@ -559,7 +559,7 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     services.AddTransient<ISensorExecutor, DiskSmartSensorExecutor>();
 
     // Probe heartbeat/health report the probe's OWN state (need probe infra) and are meaningless as cloud
-    // sensors — the stateless Executor mode skips them so its executor set resolves without that plumbing.
+    // sensors - the stateless Executor mode skips them so its executor set resolves without that plumbing.
     if (includeProbeSensors)
     {
         services.AddTransient<ProbeHeartbeatSensorExecutor>();

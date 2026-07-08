@@ -34,7 +34,7 @@ public static class MatmonPasswordHasher
             !int.TryParse(parts[1], out var iterations))
         {
             // Every password is stored as a pbkdf2 hash (MatmonPasswordHasher.Hash). An unrecognized
-            // format is not a valid credential — never fall back to a plaintext comparison.
+            // format is not a valid credential - never fall back to a plaintext comparison.
             return false;
         }
 

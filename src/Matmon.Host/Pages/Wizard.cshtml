@@ -53,7 +53,7 @@
             {
                 case "welcome":
                     <h2 class="section-title">@MatmonIcons.Render("spark")<span>Your account is ready</span></h2>
-                    <p>These steps are optional — set things up now, or skip and do it later.</p>
+                    <p>These steps are optional - set things up now, or skip and do it later.</p>
                     break;
 
                 case "structure":
@@ -87,7 +87,7 @@
 
                 case "networks":
                     <h2 class="section-title">@MatmonIcons.Render("network")<span>Your node's networks</span></h2>
-                    <p>Subnets this node monitors — used by discovery.</p>
+                    <p>Subnets this node monitors - used by discovery.</p>
 
                     @if (Model.ConfiguredSubnets.Count > 0)
                     {
@@ -116,7 +116,7 @@
 
                     @if (Model.SuggestedNetworks.Count > 0)
                     {
-                        <p class="setup-wizard-muted">Detected — click to add:</p>
+                        <p class="setup-wizard-muted">Detected - click to add:</p>
                         <div class="setup-wizard-suggestions">
                             @foreach (var net in Model.SuggestedNetworks)
                             {
@@ -147,14 +147,14 @@
                     }
                     else
                     {
-                        <p class="setup-wizard-muted">No networks configured yet — add a subnet in the Networks step first.</p>
+                        <p class="setup-wizard-muted">No networks configured yet - add a subnet in the Networks step first.</p>
                         <a class="workspace-secondary-submit setup-wizard-open" href="/setup/wizard?step=networks">@MatmonIcons.Render("arrow-left")<span>Back to Networks</span></a>
                     }
                     break;
 
                 case "probes":
                     <h2 class="section-title">@MatmonIcons.Render("probe")<span>Add remote probes</span></h2>
-                    <p>Monitor another site or devices behind NAT — the probe connects outbound to this server.</p>
+                    <p>Monitor another site or devices behind NAT - the probe connects outbound to this server.</p>
                     @foreach (var probe in Model.RemoteProbes)
                     {
                         <div class="setup-wizard-probe">
@@ -209,7 +209,7 @@
                     }
                     else
                     {
-                        <p>Optional: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay and Full Access (operate this UI from anywhere). You stay in full control — disconnect anytime.</p>
+                        <p>Optional: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay and Full Access (operate this UI from anywhere). You stay in full control - disconnect anytime.</p>
                         <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="setup-wizard-form">
                             <div class="setup-wizard-grid">
                                 <label class="workspace-field"><span>Cloud URL</span><input name="CloudProvision.Url" class="workspace-input" value="@Model.DefaultCloudUrl" /></label>

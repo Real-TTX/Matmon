@@ -4,7 +4,7 @@ namespace Matmon.Tests;
 
 // These tests deliberately cover only the timezone-independent paths
 // (interval fallback + "Every" schedule). Daily/Weekly/Monthly use the local
-// time zone and would be non-deterministic across machines — covered later.
+// time zone and would be non-deterministic across machines - covered later.
 public class MonitoringScheduleCalculatorTests
 {
     private static readonly DateTimeOffset Now = new(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);

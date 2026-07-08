@@ -16,7 +16,7 @@ public sealed class MonitoringSchedule
 
     public int? EverySeconds { get; set; }
 
-    /// <summary>Legacy single weekday — kept for older data; superseded by <see cref="DaysOfWeek"/>.</summary>
+    /// <summary>Legacy single weekday - kept for older data; superseded by <see cref="DaysOfWeek"/>.</summary>
     public DayOfWeek? DayOfWeek { get; set; }
 
     /// <summary>Weekdays a Weekly schedule fires on (e.g. Monday + Thursday). Empty falls back to <see cref="DayOfWeek"/>.</summary>

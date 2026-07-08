@@ -32,7 +32,7 @@ public sealed class SslCertificateSensorExecutor : ISensorExecutor
                 Key = "ssl.serverName",
                 Label = "Server name (SNI)",
                 Kind = SensorParameterKind.Text,
-                Description = "Optional. SNI / hostname sent in the TLS handshake — only needed when the target is an IP or the host serves several certificates. Empty = the target host.",
+                Description = "Optional. SNI / hostname sent in the TLS handshake - only needed when the target is an IP or the host serves several certificates. Empty = the target host.",
                 Placeholder = "www.example.com"
             }
         ]

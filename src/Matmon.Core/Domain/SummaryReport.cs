@@ -42,7 +42,7 @@ public static class SummaryReportBuilder
         ArgumentNullException.ThrowIfNull(data);
 
         var period = $"{data.FromUtc.ToLocalTime():g} – {data.ToUtc.ToLocalTime():g}";
-        var subject = $"{data.WorkspaceName} summary — {data.ActiveAlertCount} active alert{(data.ActiveAlertCount == 1 ? string.Empty : "s")}";
+        var subject = $"{data.WorkspaceName} summary - {data.ActiveAlertCount} active alert{(data.ActiveAlertCount == 1 ? string.Empty : "s")}";
 
         return new SummaryReport(subject, BuildText(data, period), BuildHtml(data, period));
     }
@@ -50,7 +50,7 @@ public static class SummaryReportBuilder
     private static string BuildText(SummaryReportData data, string period)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"{data.WorkspaceName} — summary report");
+        sb.AppendLine($"{data.WorkspaceName} - summary report");
         sb.AppendLine(period);
         sb.AppendLine();
         sb.AppendLine($"Probes: {data.ProbeCount}   Sensors: {data.SensorCount} ({data.PausedSensorCount} paused)");
@@ -77,7 +77,7 @@ public static class SummaryReportBuilder
             sb.AppendLine("Recent events:");
             foreach (var line in data.RecentEvents)
             {
-                sb.AppendLine($"  {line.TimestampUtc.ToLocalTime():g}  {line.Kind}  {line.Path} — {line.Message}");
+                sb.AppendLine($"  {line.TimestampUtc.ToLocalTime():g}  {line.Kind}  {line.Path} - {line.Message}");
             }
         }
 
@@ -88,7 +88,7 @@ public static class SummaryReportBuilder
     {
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#111827;max-width:720px;\">");
-        sb.Append($"<h2 style=\"margin:0 0 4px 0;\">{Enc(data.WorkspaceName)} — summary report</h2>");
+        sb.Append($"<h2 style=\"margin:0 0 4px 0;\">{Enc(data.WorkspaceName)} - summary report</h2>");
         sb.Append($"<div style=\"color:#6b7280;margin-bottom:16px;\">{Enc(period)}</div>");
 
         sb.Append("<div style=\"display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;\">");
@@ -128,7 +128,7 @@ public static class SummaryReportBuilder
                 sb.Append("<tr>");
                 sb.Append($"<td style=\"padding:4px 8px;color:#6b7280;white-space:nowrap;\">{Enc(line.TimestampUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))}</td>");
                 sb.Append($"<td style=\"padding:4px 8px;\">{Enc(line.Kind)}</td>");
-                sb.Append($"<td style=\"padding:4px 8px;\">{Enc(line.Path)} — {Enc(line.Message)}</td>");
+                sb.Append($"<td style=\"padding:4px 8px;\">{Enc(line.Path)} - {Enc(line.Message)}</td>");
                 sb.Append("</tr>");
             }
 

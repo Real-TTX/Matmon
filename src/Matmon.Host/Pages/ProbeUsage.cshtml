@@ -185,7 +185,7 @@
                 <h2 class="section-title">@MatmonIcons.Render("clock")<span>Largest logs</span></h2>
                 <span class="panel-hint">stored entries per sensor · @Model.View.TotalStoredObservationCountText total</span>
             </div>
-            <div class="probe-usage-log-hint">Sensors with the most stored history. An outlier here usually means an over-fast poll interval or too-long retention — a good place to spot misconfigured sensors.</div>
+            <div class="probe-usage-log-hint">Sensors with the most stored history. An outlier here usually means an over-fast poll interval or too-long retention - a good place to spot misconfigured sensors.</div>
             <div class="probe-usage-log-list">
                 @foreach (var logSensor in Model.View.TopLogSensors)
                 {

@@ -20,13 +20,13 @@
     }
     @if (!Model.HasSmtp)
     {
-        <div class="workspace-banner workspace-banner-warning">No SMTP sender is configured yet — add one under <a asp-page="/NotificationSettings">Senders</a> so the report can be delivered.</div>
+        <div class="workspace-banner workspace-banner-warning">No SMTP sender is configured yet - add one under <a asp-page="/NotificationSettings">Senders</a> so the report can be delivered.</div>
     }
 
     <form method="post" class="panel workspace-form" style="padding:18px 20px;display:grid;gap:14px;">
         <label style="display:flex;gap:8px;align-items:center;">
             <input asp-for="Enabled" type="checkbox" value="true" />
-            <span>Enabled — send this report on schedule</span>
+            <span>Enabled - send this report on schedule</span>
         </label>
 
         <div style="display:flex;gap:14px;flex-wrap:wrap;">
@@ -66,7 +66,7 @@
         <label class="workspace-field">
             <span>Receiver</span>
             <select asp-for="ReceiverId" asp-items="Model.Receivers" class="workspace-input">
-                <option value="">— use the recipient list below —</option>
+                <option value="">- use the recipient list below -</option>
             </select>
             <span class="panel-hint" style="margin-top:4px;">Pick a saved receiver, or leave empty and enter addresses below. Manage under <a asp-page="/NotificationReceivers">Receivers</a>.</span>
         </label>

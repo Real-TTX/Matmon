@@ -124,7 +124,7 @@ public static class SensorUnitConverter
     {
         if (!value.HasValue)
         {
-            return new SensorValueDisplay(null, scale.Unit, "—");
+            return new SensorValueDisplay(null, scale.Unit, "-");
         }
 
         if (GuessMeasurementKind(scale.Unit, kind) == SensorMeasurementKind.Boolean)
