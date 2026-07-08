@@ -730,11 +730,13 @@
                     <div><div class="panel-hint">Sensors</div><div>@Model.SensorCount / @Model.License.SensorLimitDisplay</div></div>
                     <div><div class="panel-hint">Cloud sensors</div><div>@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "-")</div></div>
                     <div><div class="panel-hint">Full Access</div><div>@(Model.License.TunnelEnabled ? "included" : "not included")</div></div>
-                    <div><div class="panel-hint">Expires</div><div>@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</div></div>
+                    <div><div class="panel-hint">Valid until</div><div>@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</div></div>
                 </div>
                 <p class="panel-hint" style="margin:0;max-width:680px;">
-                    The license is verified <strong>offline</strong> against Matmon's public key, so it keeps working when the cloud is
-                    unreachable. When connected, Matmon.Cloud refreshes it automatically on each heartbeat.
+                    The license is a short <strong>lease</strong>, verified <strong>offline</strong> against Matmon's public key. While
+                    connected, Matmon.Cloud renews it on every heartbeat, so the "valid until" date keeps rolling forward - you don't
+                    need to do anything. If this instance can't reach the cloud for about two weeks (or its license is revoked), the
+                    lease lapses and it falls back to the <strong>Free</strong> tier until it checks in again.
                 </p>
 
                 @if (Model.CloudLinkActive && Model.License.IsFallback)
