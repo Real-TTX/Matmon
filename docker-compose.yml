@@ -43,3 +43,27 @@ services:
       - "8100:8099"
     depends_on:
       - primary
+
+  # A fresh SECOND primary for exercising the first-run setup ASSISTANT end-to-end (empty workspace →
+  # /setup: create the admin account → 2FA → connect to Matmon.Cloud → license). Its own data volume keeps
+  # it pristine and separate from the main `primary`. No Matmon__Auth__* + no seeding flags = a clean wizard.
+  # Reset it to run the wizard again: `docker compose rm -sf assistant` then delete ./data-assistant.
+  # Runs on demand only (profile), so a plain `docker compose up` still starts just primary + probe:
+  #   docker compose --profile assistant up -d --build assistant   → http://localhost:8101
+  assistant:
+    profiles: ["assistant"]
+    build:
+      context: .
+      dockerfile: src/Matmon.Host/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      Matmon__Mode: Primary
+      Matmon__HeartbeatIntervalSeconds: 30
+      Matmon__WorkspacePath: data/workspace.json
+      # Pre-fill the cloud URL for the wizard's connect step (optional; via .env, gitignored).
+      Matmon__CloudUrl: ${MATMON_CLOUD_URL:-}
+    ports:
+      - "8101:8099"
+    volumes:
+      - ./data-assistant:/app/data
