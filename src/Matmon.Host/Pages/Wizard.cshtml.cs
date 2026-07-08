@@ -29,8 +29,14 @@ public class WizardModel : PageModel
         _licenseService = licenseService;
     }
 
-    /// <summary>Ordered wizard steps. "welcome" and "done" bookend the optional action steps.</summary>
-    public static readonly string[] StepOrder = ["welcome", "structure", "networks", "discovery", "probes", "notifications", "cloud", "2fa", "license", "done"];
+    // Reworked flow: the cloud decision comes first (it determines whether SMTP + a manual license are even
+    // needed), then the merged setup steps. "welcome"/"done" bookend the optional action steps.
+    //   cloud          - connect to Matmon.Cloud (+ license note, offline-notify)
+    //   notifications  - alert delivery: via the cloud relay when connected, else local SMTP
+    //   structure      - folder tree + the networks to monitor (merged)
+    //   discovery      - scan those networks + add remote probes (merged)
+    //   twofactor      - secure the admin account (TOTP)
+    public static readonly string[] StepOrder = ["welcome", "cloud", "notifications", "structure", "discovery", "twofactor", "done"];
 
     /// <summary>Suggested starter folder tree (one level of children), created under the primary node.</summary>
     public static readonly (string Name, string[] Children)[] StarterTree =
@@ -69,6 +75,9 @@ public class WizardModel : PageModel
     /// <summary>Whether this instance is already linked to Matmon.Cloud.</summary>
     public bool CloudConnected { get; private set; }
 
+    /// <summary>Whether alerts are being relayed through Matmon.Cloud (so local SMTP isn't needed).</summary>
+    public bool CloudRelayEnabled { get; private set; }
+
     /// <summary>The cloud URL this instance is linked to (when connected).</summary>
     public string CloudLinkUrl { get; private set; } = string.Empty;
 
@@ -84,7 +93,7 @@ public class WizardModel : PageModel
     public string? QrSvg => Enrollment is null ? null : TotpQr.Svg(Enrollment.OtpauthUri);
     [BindProperty] public string? TotpCode { get; set; }
 
-    // --- License ---
+    // --- License (shown inside the cloud step) ---
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
     /// <summary>While connected the cloud owns the license (re-issued each heartbeat), so manual entry is refused.</summary>
     public bool CloudManagesLicense { get; private set; }
@@ -92,8 +101,8 @@ public class WizardModel : PageModel
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    [TempData]
-    public string? StatusMessage { get; set; }
+    [TempData] public string? StatusMessage { get; set; }
+    [TempData] public string? ErrorMessage { get; set; }
 
     public int StepIndex => Math.Max(0, Array.IndexOf(StepOrder, Step));
 
@@ -140,14 +149,14 @@ public class WizardModel : PageModel
     {
         _workspaceStore.AddPrimaryProbeSubnet(cidr ?? string.Empty);
         StatusMessage = string.IsNullOrWhiteSpace(cidr) ? null : $"Added network {cidr.Trim()} to this node.";
-        return RedirectToPage(new { step = "networks" });
+        return RedirectToPage(new { step = "structure" });
     }
 
     public IActionResult OnPostRemoveNetwork(string? cidr)
     {
         _workspaceStore.RemovePrimaryProbeSubnet(cidr ?? string.Empty);
         StatusMessage = string.IsNullOrWhiteSpace(cidr) ? null : $"Removed network {cidr.Trim()}.";
-        return RedirectToPage(new { step = "networks" });
+        return RedirectToPage(new { step = "structure" });
     }
 
     public IActionResult OnPostStartDiscovery()
@@ -156,8 +165,8 @@ public class WizardModel : PageModel
         var subnets = _workspaceStore.GetPrimaryProbeSubnets();
         if (root is null || subnets.Count == 0)
         {
-            StatusMessage = "Add at least one network first, then start a scan.";
-            return RedirectToPage(new { step = subnets.Count == 0 ? "networks" : "discovery" });
+            StatusMessage = "Add at least one network first (previous step), then start a scan.";
+            return RedirectToPage(new { step = subnets.Count == 0 ? "structure" : "discovery" });
         }
 
         var request = new NetworkDiscoveryRequest(
@@ -219,12 +228,12 @@ public class WizardModel : PageModel
         if (root is null)
         {
             StatusMessage = "No primary node found.";
-            return RedirectToPage(new { step = "probes" });
+            return RedirectToPage(new { step = "discovery" });
         }
 
         var probe = _workspaceStore.CreateProbe(root.Id, string.IsNullOrWhiteSpace(name) ? "Remote probe" : name.Trim(), null);
         StatusMessage = $"Created remote probe '{probe.Name}'. Deploy it with the command below.";
-        return RedirectToPage(new { step = "probes" });
+        return RedirectToPage(new { step = "discovery" });
     }
 
     public IActionResult OnPostConfigureNotifications(string? smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string? fromEmail, string? toEmail)
@@ -239,6 +248,24 @@ public class WizardModel : PageModel
 
         _workspaceStore.ConfigureEmailNotifications(smtpHost!.Trim(), smtpPort, username, password, useSsl, from, to);
         StatusMessage = $"E-mail alerts set up - {to} will be notified on Warning/Critical.";
+        return RedirectToPage(new { step = "notifications" });
+    }
+
+    /// <summary>Notifications step: route alert e-mail through the connected Matmon.Cloud gateway (no local SMTP
+    /// needed) by enabling the built-in "Matmon Cloud" relay sender. Toggle off to disable it again.</summary>
+    public IActionResult OnPostEnableCloudRelay(bool enable)
+    {
+        var cloud = _workspaceStore.GetCloudConnectionSettings();
+        if (enable && !(cloud.Enabled && cloud.HasToken))
+        {
+            StatusMessage = "Connect to Matmon.Cloud first (previous step) to relay alerts through it.";
+            return RedirectToPage(new { step = "notifications" });
+        }
+
+        _workspaceStore.SetCloudRelaySettings(enable);
+        StatusMessage = enable
+            ? "Alerts will be delivered through Matmon.Cloud - no local SMTP server needed."
+            : "Cloud alert delivery turned off.";
         return RedirectToPage(new { step = "notifications" });
     }
 
@@ -280,8 +307,8 @@ public class WizardModel : PageModel
     public IActionResult OnPostStartTotp()
     {
         PrimaryUrl = $"{Request.Scheme}://{Request.Host}";
-        Load("2fa");
-        if (TwoFactorEnabled) { return RedirectToPage(new { step = "2fa" }); }
+        Load("twofactor");
+        if (TwoFactorEnabled) { return RedirectToPage(new { step = "twofactor" }); }
         Enrollment = _workspaceStore.BeginTotpEnrollment(UserId, TotpIssuer);
         return Page();
     }
@@ -290,46 +317,46 @@ public class WizardModel : PageModel
     public IActionResult OnPostConfirmTotp()
     {
         PrimaryUrl = $"{Request.Scheme}://{Request.Host}";
-        Load("2fa");
+        Load("twofactor");
         if (_workspaceStore.ConfirmTotp(UserId, TotpCode ?? string.Empty))
         {
             StatusMessage = "Two-factor authentication is now enabled.";
-            return RedirectToPage(new { step = "2fa" });
+            return RedirectToPage(new { step = "twofactor" });
         }
 
-        StatusMessage = "That code wasn't valid - enter a fresh one from your authenticator.";
+        ErrorMessage = "That code wasn't valid - enter a fresh one from your authenticator.";
         Enrollment = _workspaceStore.GetPendingTotpEnrollment(UserId, TotpIssuer);
         return Page();
     }
 
-    /// <summary>License step: apply a signed license token by hand (offline / cloud-unreachable). Verified against
-    /// the baked public key first; refused while the cloud link owns the license.</summary>
+    /// <summary>Cloud step (offline path): apply a signed license token by hand. Verified against the baked public
+    /// key first; refused while the cloud link owns the license.</summary>
     public IActionResult OnPostSetLicenseToken()
     {
-        Load("license");
+        Load("cloud");
         if (CloudManagesLicense)
         {
             StatusMessage = "The cloud manages your license while connected - disconnect first for a manual token.";
-            return RedirectToPage(new { step = "license" });
+            return RedirectToPage(new { step = "cloud" });
         }
 
         var token = (LicenseTokenInput ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
-            StatusMessage = "Paste a license token to apply.";
-            return RedirectToPage(new { step = "license" });
+            ErrorMessage = "Paste a license token to apply.";
+            return RedirectToPage(new { step = "cloud" });
         }
 
         var verified = LicenseCrypto.Verify(token, LicensePublicKey.Spki);
         if (verified is null)
         {
-            StatusMessage = "That token isn't valid (wrong signature, expired, or malformed). Nothing changed.";
-            return RedirectToPage(new { step = "license" });
+            ErrorMessage = "That token isn't valid (wrong signature, expired, or malformed). Nothing changed.";
+            return RedirectToPage(new { step = "cloud" });
         }
 
         _workspaceStore.SetLicenseToken(token);
         StatusMessage = $"License applied: {verified.DisplayName}.";
-        return RedirectToPage(new { step = "license" });
+        return RedirectToPage(new { step = "cloud" });
     }
 
     private void Load(string? step)
@@ -340,38 +367,22 @@ public class WizardModel : PageModel
             Step = "welcome";
         }
 
-        if (Step == "probes")
-        {
-            RemoteProbes = _workspaceStore.GetAllElements()
-                .OfType<ProbeElement>()
-                .Where(probe => probe.ParentId is not null)
-                .Select(probe => new WizardProbe(probe.Name, probe.ProbeId ?? string.Empty, probe.EnrollmentToken ?? string.Empty))
-                .ToArray();
-        }
-
-        if (Step == "notifications")
-        {
-            EmailConfigured = _workspaceStore.HasEmailNotifications();
-        }
-
         if (Step == "cloud")
         {
             var cloud = _workspaceStore.GetCloudConnectionSettings();
             CloudConnected = cloud.Enabled && cloud.HasToken;
             CloudLinkUrl = cloud.Url ?? string.Empty;
             SuggestedInstanceName = PrimaryNode()?.Name ?? Environment.MachineName;
-        }
-
-        if (Step == "2fa")
-        {
-            TwoFactorEnabled = _workspaceStore.FindUser(UserId)?.TwoFactorEnabled ?? false;
-        }
-
-        if (Step == "license")
-        {
             License = _licenseService.Current;
+            CloudManagesLicense = CloudConnected;
+        }
+
+        if (Step == "notifications")
+        {
             var cloud = _workspaceStore.GetCloudConnectionSettings();
-            CloudManagesLicense = cloud.Enabled && cloud.HasToken;
+            CloudConnected = cloud.Enabled && cloud.HasToken;
+            CloudRelayEnabled = cloud.RelayAlerts;
+            EmailConfigured = _workspaceStore.HasEmailNotifications();
         }
 
         if (Step == "structure")
@@ -384,28 +395,29 @@ public class WizardModel : PageModel
                     .Where(folder => folder.ParentId == root.Id)
                     .Select(folder => folder.Name)
                     .ToArray();
-        }
 
-        if (Step is "networks" or "discovery")
-        {
             ConfiguredSubnets = _workspaceStore.GetPrimaryProbeSubnets();
-        }
-
-        if (Step == "networks")
-        {
             IReadOnlyList<string> detected;
-            try
-            {
-                detected = ProbeSystemInfoProvider.Collect().Networks;
-            }
-            catch
-            {
-                detected = [];
-            }
-
+            try { detected = ProbeSystemInfoProvider.Collect().Networks; }
+            catch { detected = []; }
             SuggestedNetworks = detected
                 .Where(net => !ConfiguredSubnets.Any(existing => string.Equals(existing, net, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
+        }
+
+        if (Step == "discovery")
+        {
+            ConfiguredSubnets = _workspaceStore.GetPrimaryProbeSubnets();
+            RemoteProbes = _workspaceStore.GetAllElements()
+                .OfType<ProbeElement>()
+                .Where(probe => probe.ParentId is not null)
+                .Select(probe => new WizardProbe(probe.Name, probe.ProbeId ?? string.Empty, probe.EnrollmentToken ?? string.Empty))
+                .ToArray();
+        }
+
+        if (Step == "twofactor")
+        {
+            TwoFactorEnabled = _workspaceStore.FindUser(UserId)?.TwoFactorEnabled ?? false;
         }
     }
 

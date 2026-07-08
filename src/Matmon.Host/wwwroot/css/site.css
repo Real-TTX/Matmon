@@ -1649,6 +1649,40 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   gap: 0.4rem;
 }
 
+/* Sub-section heading inside a merged step (e.g. "Folders" / "Networks" under Structure & networks). */
+.setup-wizard-subhead {
+  margin: 0.2rem 0 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--matmon-border);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--matmon-muted);
+  text-transform: uppercase;
+}
+.setup-wizard-subhead:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* Collapsible "advanced / alternative" disclosure (e.g. manual license token, own SMTP server). */
+.setup-wizard-details {
+  border: 1px solid var(--matmon-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.8rem;
+  background: var(--matmon-surface-strong);
+}
+.setup-wizard-details > summary {
+  cursor: pointer;
+  color: var(--matmon-muted);
+  font-weight: 600;
+  list-style: revert;
+}
+.setup-wizard-details[open] > summary {
+  margin-bottom: 0.5rem;
+  color: var(--matmon-foreground);
+}
+
 .setup-wizard-suggestions form {
   margin: 0;
 }

@@ -1,0 +1,16 @@
+@model Matmon.Host.Pages.WizardModel
+@* Local SMTP setup form for the wizard's notifications step. Used both when no cloud is connected and,
+   behind a "use your own SMTP server" disclosure, when the cloud is connected. Posts to the Wizard page's
+   ConfigureNotifications handler (asp-page-handler carries the antiforgery token + the correct action). *@
+<form method="post" asp-page-handler="ConfigureNotifications" class="setup-wizard-form">
+    <div class="setup-wizard-grid">
+        <label class="workspace-field"><span>SMTP host</span><input name="smtpHost" class="workspace-input" placeholder="smtp.example.com" autocomplete="off" /></label>
+        <label class="workspace-field"><span>Port</span><input name="smtpPort" type="number" class="workspace-input" value="587" /></label>
+        <label class="workspace-field"><span>Username</span><input name="username" class="workspace-input" autocomplete="off" /></label>
+        <label class="workspace-field"><span>Password</span><input name="password" type="password" class="workspace-input" autocomplete="new-password" /></label>
+        <label class="workspace-field"><span>From address</span><input name="fromEmail" type="email" class="workspace-input" placeholder="matmon@yourdomain" autocomplete="off" /></label>
+        <label class="workspace-field"><span>Send alerts to</span><input name="toEmail" type="email" class="workspace-input" placeholder="you@yourdomain" autocomplete="off" /></label>
+    </div>
+    <label class="setup-wizard-check"><input type="checkbox" name="useSsl" value="true" checked /> <span>Use SSL/TLS</span></label>
+    <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Set up e-mail alerts</span></button>
+</form>

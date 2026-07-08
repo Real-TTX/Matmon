@@ -70,13 +70,13 @@ public class CloudClaimModel : PageModel
 
             if (!response.IsSuccessStatusCode)
             {
-                return Fail($"Matmon.Cloud rejected the connection ({(int)response.StatusCode}). Please try again.");
+                return Fail($"Matmon.Cloud rejected the connection ({(int)response.StatusCode}). Please try again.", pending.ReturnUrl);
             }
 
             var result = await response.Content.ReadFromJsonAsync<ClaimExchangeResult>(cancellationToken);
             if (result is null || string.IsNullOrWhiteSpace(result.InstanceId) || string.IsNullOrWhiteSpace(result.Token))
             {
-                return Fail("Matmon.Cloud returned an unexpected response.");
+                return Fail("Matmon.Cloud returned an unexpected response.", pending.ReturnUrl);
             }
 
             _workspaceStore.SetCloudConnectionSettings(pending.Url, result.InstanceId, result.Token, enabled: true);
@@ -84,16 +84,22 @@ public class CloudClaimModel : PageModel
         }
         catch (Exception ex)
         {
-            return Fail($"Could not reach Matmon.Cloud: {ex.Message}");
+            return Fail($"Could not reach Matmon.Cloud: {ex.Message}", pending.ReturnUrl);
         }
 
-        return RedirectToPage("/Config", new { tab = "cloud" });
+        return Done(pending.ReturnUrl);
     }
 
-    private IActionResult Fail(string message)
+    /// <summary>Return to where the flow started - the setup wizard when it kicked off the claim, else Cloud settings.</summary>
+    private IActionResult Done(string? returnUrl) =>
+        !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)
+            ? LocalRedirect(returnUrl)
+            : RedirectToPage("/Config", new { tab = "cloud" });
+
+    private IActionResult Fail(string message, string? returnUrl = null)
     {
         TempData["ErrorMessage"] = message;
-        return RedirectToPage("/Config", new { tab = "cloud" });
+        return Done(returnUrl);
     }
 
     private sealed record ClaimExchangeResult(string? InstanceId, string? Token);
@@ -105,8 +111,10 @@ internal static class CloudClaimFlow
     public const string CookieName = "matmon_cloud_claim";
     public const string ProtectorPurpose = "Matmon.CloudClaim.v1";
 
-    /// <summary>The pending claim kept (data-protected) between the redirect out and the callback.</summary>
-    public sealed record State(string Nonce, string Verifier, string Url);
+    /// <summary>The pending claim kept (data-protected) between the redirect out and the callback.
+    /// <paramref name="ReturnUrl"/> carries where to send the browser after the claim (e.g. back into the
+    /// setup wizard); null falls back to the System → Cloud page.</summary>
+    public sealed record State(string Nonce, string Verifier, string Url, string? ReturnUrl = null);
 
     public static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

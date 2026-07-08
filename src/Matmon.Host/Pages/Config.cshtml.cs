@@ -458,7 +458,7 @@ public class ConfigModel : PageModel
     /// callback (<see cref="CloudClaimModel"/>) redeems the returned code for the id + token. The account
     /// password never touches this instance.
     /// </summary>
-    public IActionResult OnPostCloudClaim()
+    public IActionResult OnPostCloudClaim(string? returnUrl)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -483,7 +483,10 @@ public class ConfigModel : PageModel
         var verifier = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(32));
         var challenge = CloudClaimFlow.Challenge(verifier);
 
-        var payload = JsonSerializer.Serialize(new CloudClaimFlow.State(nonce, verifier, url));
+        // Carry a local return target (e.g. the setup wizard's cloud step) through the PKCE round-trip so the
+        // callback sends the browser back there instead of always landing on System → Cloud.
+        var safeReturn = !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : null;
+        var payload = JsonSerializer.Serialize(new CloudClaimFlow.State(nonce, verifier, url, safeReturn));
         var protector = _dataProtection.CreateProtector(CloudClaimFlow.ProtectorPurpose);
         Response.Cookies.Append(CloudClaimFlow.CookieName, protector.Protect(payload), new CookieOptions
         {

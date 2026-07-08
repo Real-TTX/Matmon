@@ -8,19 +8,15 @@
     var steps = new (string Key, string Icon, string Label)[]
     {
         ("welcome", "spark", "Welcome"),
-        ("structure", "folder", "Structure"),
-        ("networks", "network", "Networks"),
-        ("discovery", "search", "Discovery"),
-        ("probes", "probe", "Remote probes"),
+        ("cloud", "cloud", "Cloud & license"),
         ("notifications", "bell", "Notifications"),
-        ("cloud", "cloud", "Cloud"),
-        ("2fa", "lock", "Two-factor"),
-        ("license", "tag", "License"),
+        ("structure", "folder", "Structure & networks"),
+        ("discovery", "search", "Devices & probes"),
+        ("twofactor", "lock", "Security"),
         ("done", "check", "Done"),
     };
 
     string StepUrl(string? key) => key is null ? "/" : $"/setup/wizard?step={key}";
-
     var primaryUrl = Model.PrimaryUrl;
 }
 
@@ -50,17 +46,97 @@
         {
             <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
         }
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+        }
         <div class="setup-wizard-body">
             @switch (Model.Step)
             {
                 case "welcome":
                     <h2 class="section-title">@MatmonIcons.Render("spark")<span>Your account is ready</span></h2>
-                    <p>These steps are optional - set things up now, or skip and do it later.</p>
+                    <p>A few quick, optional steps to get monitoring going. We'll start with the cloud connection - it decides whether you even need to set up e-mail or a license by hand. Skip anything you don't need; you can change it all later.</p>
+                    break;
+
+                case "cloud":
+                    <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Connect to Matmon Cloud</span></h2>
+                    @if (Model.CloudConnected)
+                    {
+                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") Connected to <strong>@Model.CloudLinkUrl</strong>. Your license is managed automatically (currently <strong>@Model.License.DisplayName</strong>), and you can relay alert e-mail through the cloud in the next step - no SMTP needed.</p>
+                        <form method="post" asp-page-handler="CloudMonitoring" class="setup-wizard-form">
+                            <label class="setup-wizard-check"><input type="checkbox" name="notifyOnProblems" value="true" checked /> <span>E-mail me if this instance goes offline (and when it recovers)</span></label>
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Save</span></button>
+                        </form>
+                        <p class="setup-wizard-muted" style="margin-top:10px;">Manage the link anytime in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
+                    }
+                    else
+                    {
+                        <p>Optional but recommended: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay (send alerts without your own mail server), Full Access, and automatic license management. You stay in control - disconnect anytime.</p>
+                        <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="setup-wizard-form">
+                            <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
+                            <div class="setup-wizard-grid">
+                                <label class="workspace-field"><span>Cloud URL</span><input name="CloudProvision.Url" class="workspace-input" value="@Model.DefaultCloudUrl" /></label>
+                                <label class="workspace-field"><span>Instance name</span><input name="CloudProvision.Name" class="workspace-input" value="@Model.SuggestedInstanceName" autocomplete="off" /></label>
+                            </div>
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Connect</span></button>
+                        </form>
+                        <p class="setup-wizard-muted" style="margin-top:8px;">You'll confirm the link in your Matmon Cloud account, then land back here.</p>
+
+                        <details class="setup-wizard-details" style="margin-top:14px;">
+                            <summary>No cloud? Apply a license token manually (offline / air-gapped)</summary>
+                            <p class="setup-wizard-muted" style="margin:8px 0;">Without the cloud you're on the <strong>@Model.License.DisplayName</strong> tier. For an air-gapped install, paste a signed license token issued by Matmon.Cloud:</p>
+                            <form method="post" asp-page-handler="SetLicenseToken" class="setup-wizard-form">
+                                <label class="workspace-field"><span>License token</span><textarea name="LicenseTokenInput" class="workspace-input" rows="3" placeholder="Paste the signed token…"></textarea></label>
+                                <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("check")<span>Apply license</span></button>
+                            </form>
+                        </details>
+                    }
+                    break;
+
+                case "notifications":
+                    <h2 class="section-title">@MatmonIcons.Render("bell")<span>Get notified</span></h2>
+                    @if (Model.CloudConnected)
+                    {
+                        @if (Model.CloudRelayEnabled)
+                        {
+                            <p class="setup-wizard-muted">@MatmonIcons.Render("check") Alerts are delivered through <strong>Matmon.Cloud</strong> - no mail server of your own required. Pick recipients per rule under <a href="/notifications" target="_blank" rel="noopener">Notifications ↗</a>.</p>
+                            <form method="post" asp-page-handler="EnableCloudRelay" class="setup-wizard-form">
+                                <input type="hidden" name="enable" value="false" />
+                                <button type="submit" class="workspace-secondary-submit">Turn cloud delivery off</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <p>You're connected to Matmon.Cloud, so alert e-mail can go out through the cloud gateway - the simplest option, no SMTP server needed.</p>
+                            <form method="post" asp-page-handler="EnableCloudRelay" class="setup-wizard-form">
+                                <input type="hidden" name="enable" value="true" />
+                                <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Deliver alerts via Matmon.Cloud</span></button>
+                            </form>
+                        }
+                        <details class="setup-wizard-details" style="margin-top:14px;">
+                            <summary>Use your own SMTP server instead</summary>
+                            @await Html.PartialAsync("_WizardSmtpForm", Model)
+                        </details>
+                    }
+                    else
+                    {
+                        <p>Set up e-mail alerts on Warning/Critical. (Connect Matmon.Cloud in the previous step to skip this and relay alerts through the cloud instead.)</p>
+                        @if (Model.EmailConfigured)
+                        {
+                            <p class="setup-wizard-muted">@MatmonIcons.Render("check") E-mail is configured. Manage it in <a href="/notifications" target="_blank" rel="noopener">Notifications ↗</a>.</p>
+                        }
+                        else
+                        {
+                            @await Html.PartialAsync("_WizardSmtpForm", Model)
+                        }
+                    }
                     break;
 
                 case "structure":
-                    <h2 class="section-title">@MatmonIcons.Render("folder")<span>Organize your monitoring</span></h2>
-                    <p>Create a starter folder structure on your node.</p>
+                    <h2 class="section-title">@MatmonIcons.Render("folder")<span>Organize &amp; scope your monitoring</span></h2>
+                    <p>Create a starter folder structure, and tell this node which networks it may scan.</p>
+
+                    <h3 class="setup-wizard-subhead">Folders</h3>
                     <ul class="setup-wizard-tree">
                         @foreach (var (name, children) in WizardModel.StarterTree)
                         {
@@ -68,12 +144,7 @@
                                 <span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@name</span></span>
                                 @if (children.Length > 0)
                                 {
-                                    <ul>
-                                        @foreach (var child in children)
-                                        {
-                                            <li><span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@child</span></span></li>
-                                        }
-                                    </ul>
+                                    <ul>@foreach (var child in children){<li><span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@child</span></span></li>}</ul>
                                 }
                             </li>
                         }
@@ -85,12 +156,8 @@
                     {
                         <p class="setup-wizard-muted">Already under your node: @string.Join(", ", Model.ExistingFolders)</p>
                     }
-                    break;
 
-                case "networks":
-                    <h2 class="section-title">@MatmonIcons.Render("network")<span>Your node's networks</span></h2>
-                    <p>Subnets this node monitors - used by discovery.</p>
-
+                    <h3 class="setup-wizard-subhead" style="margin-top:18px;">Networks</h3>
                     @if (Model.ConfiguredSubnets.Count > 0)
                     {
                         <ul class="setup-wizard-chips">
@@ -110,12 +177,10 @@
                     {
                         <p class="setup-wizard-muted">No subnets configured yet.</p>
                     }
-
                     <form method="post" asp-page-handler="AddNetwork" class="setup-wizard-add">
                         <input type="text" name="cidr" class="workspace-input" placeholder="e.g. 192.168.1.0/24" autocomplete="off" />
                         <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Add</span></button>
                     </form>
-
                     @if (Model.SuggestedNetworks.Count > 0)
                     {
                         <p class="setup-wizard-muted">Detected - click to add:</p>
@@ -132,8 +197,10 @@
                     break;
 
                 case "discovery":
-                    <h2 class="section-title">@MatmonIcons.Render("search")<span>Discover your devices</span></h2>
-                    <p>Scan your node's networks for devices.</p>
+                    <h2 class="section-title">@MatmonIcons.Render("search")<span>Find your devices</span></h2>
+                    <p>Scan the networks from the previous step, and (optionally) add remote probes for other sites.</p>
+
+                    <h3 class="setup-wizard-subhead">Discovery scan</h3>
                     @if (Model.ConfiguredSubnets.Count > 0)
                     {
                         <ul class="setup-wizard-chips">
@@ -149,14 +216,12 @@
                     }
                     else
                     {
-                        <p class="setup-wizard-muted">No networks configured yet - add a subnet in the Networks step first.</p>
-                        <a class="workspace-secondary-submit setup-wizard-open" href="/setup/wizard?step=networks">@MatmonIcons.Render("arrow-left")<span>Back to Networks</span></a>
+                        <p class="setup-wizard-muted">No networks yet - add a subnet in the previous step (Structure &amp; networks) first.</p>
+                        <a class="workspace-secondary-submit setup-wizard-open" href="/setup/wizard?step=structure">@MatmonIcons.Render("arrow-left")<span>Back to networks</span></a>
                     }
-                    break;
 
-                case "probes":
-                    <h2 class="section-title">@MatmonIcons.Render("probe")<span>Add remote probes</span></h2>
-                    <p>Monitor another site or devices behind NAT - the probe connects outbound to this server.</p>
+                    <h3 class="setup-wizard-subhead" style="margin-top:18px;">Remote probes</h3>
+                    <p class="setup-wizard-muted" style="margin-top:0;">Monitor another site or devices behind NAT - the probe connects outbound to this server.</p>
                     @foreach (var probe in Model.RemoteProbes)
                     {
                         <div class="setup-wizard-probe">
@@ -179,56 +244,8 @@
                     }
                     break;
 
-                case "notifications":
-                    <h2 class="section-title">@MatmonIcons.Render("bell")<span>Get notified</span></h2>
-                    <p>Set up e-mail alerts on Warning/Critical.</p>
-                    @if (Model.EmailConfigured)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") E-mail notifications are configured. Manage them in <a href="/notifications" target="_blank" rel="noopener">Notifications ↗</a>.</p>
-                    }
-                    else
-                    {
-                        <form method="post" asp-page-handler="ConfigureNotifications" class="setup-wizard-form">
-                            <div class="setup-wizard-grid">
-                                <label class="workspace-field"><span>SMTP host</span><input name="smtpHost" class="workspace-input" placeholder="smtp.example.com" autocomplete="off" /></label>
-                                <label class="workspace-field"><span>Port</span><input name="smtpPort" type="number" class="workspace-input" value="587" /></label>
-                                <label class="workspace-field"><span>Username</span><input name="username" class="workspace-input" autocomplete="off" /></label>
-                                <label class="workspace-field"><span>Password</span><input name="password" type="password" class="workspace-input" autocomplete="new-password" /></label>
-                                <label class="workspace-field"><span>From address</span><input name="fromEmail" type="email" class="workspace-input" placeholder="matmon@yourdomain" autocomplete="off" /></label>
-                                <label class="workspace-field"><span>Send alerts to</span><input name="toEmail" type="email" class="workspace-input" placeholder="you@yourdomain" autocomplete="off" /></label>
-                            </div>
-                            <label class="setup-wizard-check"><input type="checkbox" name="useSsl" value="true" checked /> <span>Use SSL/TLS</span></label>
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Set up e-mail alerts</span></button>
-                        </form>
-                    }
-                    break;
-
-                case "cloud":
-                    <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Connect to Matmon Cloud</span></h2>
-                    @if (Model.CloudConnected)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") Connected to <strong>@Model.CloudLinkUrl</strong>. Manage the link in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
-                        <form method="post" asp-page-handler="CloudMonitoring" class="setup-wizard-form">
-                            <label class="setup-wizard-check"><input type="checkbox" name="notifyOnProblems" value="true" checked /> <span>E-mail me if this instance goes offline (and when it recovers)</span></label>
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Save notification</span></button>
-                        </form>
-                    }
-                    else
-                    {
-                        <p>Optional: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay and Full Access (operate this UI from anywhere). You stay in full control - disconnect anytime.</p>
-                        <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="setup-wizard-form">
-                            <div class="setup-wizard-grid">
-                                <label class="workspace-field"><span>Cloud URL</span><input name="CloudProvision.Url" class="workspace-input" value="@Model.DefaultCloudUrl" /></label>
-                                <label class="workspace-field"><span>Instance name</span><input name="CloudProvision.Name" class="workspace-input" value="@Model.SuggestedInstanceName" autocomplete="off" /></label>
-                            </div>
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Connect</span></button>
-                        </form>
-                        <p class="setup-wizard-muted">You'll confirm the link in your Matmon Cloud account. More options (an existing id + token, or e-mail provisioning) live in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
-                    }
-                    break;
-
-                case "2fa":
-                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Protect your account</span></h2>
+                case "twofactor":
+                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Secure your account</span></h2>
                     @if (Model.TwoFactorEnabled)
                     {
                         <p class="setup-wizard-muted">@MatmonIcons.Render("check") Two-factor authentication is enabled. Manage it on your <a href="/Account" target="_blank" rel="noopener">Account ↗</a>.</p>
@@ -250,23 +267,6 @@
                         <p>Add a second factor (an authenticator app) so a stolen password alone can't sign in. Optional, but recommended for the admin account.</p>
                         <form method="post" asp-page-handler="StartTotp">
                             <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("lock")<span>Set up two-factor</span></button>
-                        </form>
-                    }
-                    break;
-
-                case "license":
-                    <h2 class="section-title">@MatmonIcons.Render("tag")<span>License</span></h2>
-                    <p class="setup-wizard-muted">Current plan: <strong>@Model.License.DisplayName</strong> · @Model.License.SensorLimitDisplay sensors.</p>
-                    @if (Model.CloudManagesLicense)
-                    {
-                        <p>Your license is managed by Matmon.Cloud - applied automatically and kept current each heartbeat. Nothing to do here.</p>
-                    }
-                    else
-                    {
-                        <p>Air-gapped or not using the cloud? Paste a signed license token to apply it offline. Otherwise you stay on the free tier - you can add a license later under System → License.</p>
-                        <form method="post" asp-page-handler="SetLicenseToken" class="setup-wizard-form">
-                            <label class="workspace-field"><span>License token</span><textarea name="LicenseTokenInput" class="workspace-input" rows="3" placeholder="Paste the signed token…"></textarea></label>
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply license</span></button>
                         </form>
                     }
                     break;
