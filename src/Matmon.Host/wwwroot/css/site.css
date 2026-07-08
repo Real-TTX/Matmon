@@ -11195,11 +11195,38 @@ button.workspace-action-menu-link {
     text-align: left;
   }
 
+  /* Dashboards on phones: stack the status panel so the "Sensor Status" chart renders full-width
+     (not squeezed beside the copy), and shrink the count tiles into a compact 2-col grid so they
+     stop eating the screen. The panel rule also targets .dashboard-home-shell to beat its more
+     specific desktop 3-column rule. */
   .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .metric-card {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .dashboard-status-panel,
+  .dashboard-home-shell .dashboard-status-panel {
     grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  .dashboard-status-chart {
+    order: 2;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .dashboard-status-donut,
+  .dashboard-home-shell .dashboard-status-donut {
+    width: clamp(9rem, 60vw, 14rem);
   }
 
   .dashboard-status-legend {
+    order: 3;
     grid-template-columns: 1fr;
   }
 
