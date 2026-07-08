@@ -288,6 +288,14 @@ public sealed class SummaryReportSender
         return settings.Recipients;
     }
 
+    /// <summary>Renders the report for an on-screen preview (subject + HTML body), sending nothing - so the admin
+    /// can see exactly what the scheduled e-mail will contain, from live data, without SMTP or the cloud.</summary>
+    public (string Subject, string HtmlBody) BuildPreview(SummaryReportCadence cadence)
+    {
+        var report = SummaryReportBuilder.Build(_collector.Collect(DateTimeOffset.UtcNow, WindowFor(cadence)));
+        return (report.Subject, report.HtmlBody);
+    }
+
     /// <summary>Builds the standalone PDF audit report for download (independent of e-mail delivery).</summary>
     public byte[] BuildAuditPdf(SummaryReportCadence cadence)
     {

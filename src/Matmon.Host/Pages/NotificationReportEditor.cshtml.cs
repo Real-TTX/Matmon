@@ -37,6 +37,10 @@ public class NotificationReportEditorModel : PageModel
     public bool HasSmtp { get; private set; }
     public DateTimeOffset? LastSentUtc { get; private set; }
 
+    /// <summary>Set by the "Preview" action - the rendered report (subject + HTML body) shown inline.</summary>
+    public string? PreviewSubject { get; private set; }
+    public string? PreviewHtml { get; private set; }
+
     [TempData] public string? StatusMessage { get; set; }
     public string? ErrorMessage { get; private set; }
 
@@ -81,6 +85,18 @@ public class NotificationReportEditorModel : PageModel
     {
         var pdf = _summaryReportSender.BuildAuditPdf(Cadence);
         return File(pdf, "application/pdf", $"matmon-audit-{DateTimeOffset.UtcNow:yyyyMMdd}.pdf");
+    }
+
+    /// <summary>Render the report on-screen from live data (no send) - the "example" preview. Keeps the posted
+    /// form values (so the chosen cadence drives the window) instead of reloading the stored settings.</summary>
+    public IActionResult OnPostPreview()
+    {
+        Load(fromStore: false);
+        LastSentUtc = _workspaceStore.GetSummaryReportSettings().LastSentUtc;
+        var (subject, html) = _summaryReportSender.BuildPreview(Cadence);
+        PreviewSubject = subject;
+        PreviewHtml = html;
+        return Page();
     }
 
     private void Load(bool fromStore)
