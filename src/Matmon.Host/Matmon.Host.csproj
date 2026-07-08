@@ -9,6 +9,8 @@
     <PackageReference Include="MailKit" Version="4.17.0" />
     <!-- PDF audit reports (Community license configured in Program.cs). -->
     <PackageReference Include="QuestPDF" Version="2026.6.1" />
+    <!-- QR codes for TOTP two-factor enrollment (offline, managed renderer - no System.Drawing). -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <PropertyGroup>

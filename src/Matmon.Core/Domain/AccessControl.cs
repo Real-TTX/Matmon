@@ -41,5 +41,16 @@ public sealed class MatmonUser
 
     /// <summary>Per-user display-timezone override (IANA id, e.g. "Europe/Berlin"). Null = use the system default.</summary>
     public string? TimeZoneId { get; set; }
+
+    // --- Two-factor auth (TOTP). Optional, self-enrolled. An e-mailed code is the login/disable fallback. ---
+
+    /// <summary>Whether TOTP two-factor is active for this user (requires a confirmed enrollment).</summary>
+    public bool TwoFactorEnabled { get; set; }
+
+    /// <summary>The TOTP shared secret (Base32), DataProtection-encrypted at rest in workspace.json. Null = not enrolled.</summary>
+    public string? TotpSecretProtected { get; set; }
+
+    /// <summary>When TOTP was confirmed/enabled (audit).</summary>
+    public DateTimeOffset? TotpEnrolledUtc { get; set; }
 }
 
