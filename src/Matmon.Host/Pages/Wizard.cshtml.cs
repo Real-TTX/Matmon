@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Security.Claims;
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -7,22 +9,28 @@ namespace Matmon.Host.Pages;
 
 public class WizardModel : PageModel
 {
+    private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private const string TotpIssuer = "Matmon";
+
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly DiscoveryJobStore _discoveryJobs;
     private readonly NetworkDiscoveryService _discoveryService;
+    private readonly ILicenseService _licenseService;
 
     public WizardModel(
         IMonitoringWorkspaceStore workspaceStore,
         DiscoveryJobStore discoveryJobs,
-        NetworkDiscoveryService discoveryService)
+        NetworkDiscoveryService discoveryService,
+        ILicenseService licenseService)
     {
         _workspaceStore = workspaceStore;
         _discoveryJobs = discoveryJobs;
         _discoveryService = discoveryService;
+        _licenseService = licenseService;
     }
 
     /// <summary>Ordered wizard steps. "welcome" and "done" bookend the optional action steps.</summary>
-    public static readonly string[] StepOrder = ["welcome", "structure", "networks", "discovery", "probes", "notifications", "cloud", "done"];
+    public static readonly string[] StepOrder = ["welcome", "structure", "networks", "discovery", "probes", "notifications", "cloud", "2fa", "license", "done"];
 
     /// <summary>Suggested starter folder tree (one level of children), created under the primary node.</summary>
     public static readonly (string Name, string[] Children)[] StarterTree =
@@ -69,6 +77,20 @@ public class WizardModel : PageModel
 
     /// <summary>Suggested instance name for the cloud link (this node's name / host name).</summary>
     public string SuggestedInstanceName { get; private set; } = string.Empty;
+
+    // --- 2FA (TOTP) enrollment - same store API as the Account page ---
+    public bool TwoFactorEnabled { get; private set; }
+    public TotpEnrollmentInfo? Enrollment { get; private set; }
+    public string? QrSvg => Enrollment is null ? null : TotpQr.Svg(Enrollment.OtpauthUri);
+    [BindProperty] public string? TotpCode { get; set; }
+
+    // --- License ---
+    public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
+    /// <summary>While connected the cloud owns the license (re-issued each heartbeat), so manual entry is refused.</summary>
+    public bool CloudManagesLicense { get; private set; }
+    [BindProperty] public string? LicenseTokenInput { get; set; }
+
+    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -220,6 +242,96 @@ public class WizardModel : PageModel
         return RedirectToPage(new { step = "notifications" });
     }
 
+    /// <summary>Cloud step: enable/disable the cloud-side offline notification for this instance (token-authed call
+    /// to the just-connected cloud). Default on, so a fresh Free instance is watched out of the box.</summary>
+    public async Task<IActionResult> OnPostCloudMonitoringAsync(bool notifyOnProblems, CancellationToken cancellationToken)
+    {
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        var url = (settings.Url ?? string.Empty).Trim().TrimEnd('/');
+        var token = _workspaceStore.GetCloudConnectionToken();
+        if (!settings.Enabled || string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(settings.InstanceId) || string.IsNullOrWhiteSpace(token))
+        {
+            StatusMessage = "Connect to Matmon.Cloud first, then choose notifications.";
+            return RedirectToPage(new { step = "cloud" });
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/instances/{settings.InstanceId}/monitoring")
+            {
+                Content = JsonContent.Create(new { notifyOnProblems })
+            };
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cancellationToken);
+            StatusMessage = response.IsSuccessStatusCode
+                ? (notifyOnProblems ? "Matmon.Cloud will e-mail you if this instance goes offline." : "Offline notifications turned off.")
+                : $"Matmon.Cloud rejected the change ({(int)response.StatusCode}).";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not reach Matmon.Cloud: {ex.Message}";
+        }
+
+        return RedirectToPage(new { step = "cloud" });
+    }
+
+    /// <summary>2FA step: begin TOTP enrollment (generate + store a secret, show its QR). 2FA stays OFF until a
+    /// code confirms it.</summary>
+    public IActionResult OnPostStartTotp()
+    {
+        PrimaryUrl = $"{Request.Scheme}://{Request.Host}";
+        Load("2fa");
+        if (TwoFactorEnabled) { return RedirectToPage(new { step = "2fa" }); }
+        Enrollment = _workspaceStore.BeginTotpEnrollment(UserId, TotpIssuer);
+        return Page();
+    }
+
+    /// <summary>2FA step: confirm enrollment with a code from the authenticator; turns 2FA on.</summary>
+    public IActionResult OnPostConfirmTotp()
+    {
+        PrimaryUrl = $"{Request.Scheme}://{Request.Host}";
+        Load("2fa");
+        if (_workspaceStore.ConfirmTotp(UserId, TotpCode ?? string.Empty))
+        {
+            StatusMessage = "Two-factor authentication is now enabled.";
+            return RedirectToPage(new { step = "2fa" });
+        }
+
+        StatusMessage = "That code wasn't valid - enter a fresh one from your authenticator.";
+        Enrollment = _workspaceStore.GetPendingTotpEnrollment(UserId, TotpIssuer);
+        return Page();
+    }
+
+    /// <summary>License step: apply a signed license token by hand (offline / cloud-unreachable). Verified against
+    /// the baked public key first; refused while the cloud link owns the license.</summary>
+    public IActionResult OnPostSetLicenseToken()
+    {
+        Load("license");
+        if (CloudManagesLicense)
+        {
+            StatusMessage = "The cloud manages your license while connected - disconnect first for a manual token.";
+            return RedirectToPage(new { step = "license" });
+        }
+
+        var token = (LicenseTokenInput ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            StatusMessage = "Paste a license token to apply.";
+            return RedirectToPage(new { step = "license" });
+        }
+
+        var verified = LicenseCrypto.Verify(token, LicensePublicKey.Spki);
+        if (verified is null)
+        {
+            StatusMessage = "That token isn't valid (wrong signature, expired, or malformed). Nothing changed.";
+            return RedirectToPage(new { step = "license" });
+        }
+
+        _workspaceStore.SetLicenseToken(token);
+        StatusMessage = $"License applied: {verified.DisplayName}.";
+        return RedirectToPage(new { step = "license" });
+    }
+
     private void Load(string? step)
     {
         Step = (step ?? string.Empty).Trim().ToLowerInvariant();
@@ -248,6 +360,18 @@ public class WizardModel : PageModel
             CloudConnected = cloud.Enabled && cloud.HasToken;
             CloudLinkUrl = cloud.Url ?? string.Empty;
             SuggestedInstanceName = PrimaryNode()?.Name ?? Environment.MachineName;
+        }
+
+        if (Step == "2fa")
+        {
+            TwoFactorEnabled = _workspaceStore.FindUser(UserId)?.TwoFactorEnabled ?? false;
+        }
+
+        if (Step == "license")
+        {
+            License = _licenseService.Current;
+            var cloud = _workspaceStore.GetCloudConnectionSettings();
+            CloudManagesLicense = cloud.Enabled && cloud.HasToken;
         }
 
         if (Step == "structure")

@@ -14,6 +14,8 @@
         ("probes", "probe", "Remote probes"),
         ("notifications", "bell", "Notifications"),
         ("cloud", "cloud", "Cloud"),
+        ("2fa", "lock", "Two-factor"),
+        ("license", "tag", "License"),
         ("done", "check", "Done"),
     };
 
@@ -206,6 +208,10 @@
                     @if (Model.CloudConnected)
                     {
                         <p class="setup-wizard-muted">@MatmonIcons.Render("check") Connected to <strong>@Model.CloudLinkUrl</strong>. Manage the link in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
+                        <form method="post" asp-page-handler="CloudMonitoring" class="setup-wizard-form">
+                            <label class="setup-wizard-check"><input type="checkbox" name="notifyOnProblems" value="true" checked /> <span>E-mail me if this instance goes offline (and when it recovers)</span></label>
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Save notification</span></button>
+                        </form>
                     }
                     else
                     {
@@ -218,6 +224,50 @@
                             <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Connect</span></button>
                         </form>
                         <p class="setup-wizard-muted">You'll confirm the link in your Matmon Cloud account. More options (an existing id + token, or e-mail provisioning) live in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
+                    }
+                    break;
+
+                case "2fa":
+                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Protect your account</span></h2>
+                    @if (Model.TwoFactorEnabled)
+                    {
+                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") Two-factor authentication is enabled. Manage it on your <a href="/Account" target="_blank" rel="noopener">Account ↗</a>.</p>
+                    }
+                    else if (Model.Enrollment is not null)
+                    {
+                        <p>Scan this QR code with your authenticator app (or enter the key), then type the 6-digit code to turn on two-factor.</p>
+                        <div class="setup-wizard-2fa" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+                            <div class="setup-wizard-qr" style="width:168px;height:168px;">@Html.Raw(Model.QrSvg)</div>
+                            <p class="setup-wizard-muted">Manual key:<br /><code>@Model.Enrollment.SecretBase32</code></p>
+                        </div>
+                        <form method="post" asp-page-handler="ConfirmTotp" class="setup-wizard-add">
+                            <input type="text" name="TotpCode" class="workspace-input" placeholder="123456" inputmode="numeric" autocomplete="one-time-code" />
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Enable</span></button>
+                        </form>
+                    }
+                    else
+                    {
+                        <p>Add a second factor (an authenticator app) so a stolen password alone can't sign in. Optional, but recommended for the admin account.</p>
+                        <form method="post" asp-page-handler="StartTotp">
+                            <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("lock")<span>Set up two-factor</span></button>
+                        </form>
+                    }
+                    break;
+
+                case "license":
+                    <h2 class="section-title">@MatmonIcons.Render("tag")<span>License</span></h2>
+                    <p class="setup-wizard-muted">Current plan: <strong>@Model.License.DisplayName</strong> · @Model.License.SensorLimitDisplay sensors.</p>
+                    @if (Model.CloudManagesLicense)
+                    {
+                        <p>Your license is managed by Matmon.Cloud - applied automatically and kept current each heartbeat. Nothing to do here.</p>
+                    }
+                    else
+                    {
+                        <p>Air-gapped or not using the cloud? Paste a signed license token to apply it offline. Otherwise you stay on the free tier - you can add a license later under System → License.</p>
+                        <form method="post" asp-page-handler="SetLicenseToken" class="setup-wizard-form">
+                            <label class="workspace-field"><span>License token</span><textarea name="LicenseTokenInput" class="workspace-input" rows="3" placeholder="Paste the signed token…"></textarea></label>
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply license</span></button>
+                        </form>
                     }
                     break;
 
