@@ -636,7 +636,7 @@
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
                         <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
                     </table>
-                    <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;max-width:480px;">
+                    <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;">
                         <label class="workspace-field">
                             <span>Cloud display name</span>
                             <input asp-for="CloudRenameName" class="workspace-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
@@ -652,7 +652,7 @@
                 else
                 {
                     <p class="workspace-inline-note">Give this instance a name, then <strong>Connect</strong> - you'll sign in to Matmon.Cloud in your browser and confirm. The instance links itself to your account automatically; no password is entered here.</p>
-                    <form method="post" asp-page-handler="CloudClaim" class="workspace-form" style="margin-top:14px;max-width:480px;">
+                    <form method="post" asp-page-handler="CloudClaim" class="workspace-form" style="margin-top:14px;">
                         <label class="workspace-field">
                             <span>Cloud URL</span>
                             <input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" />
@@ -666,7 +666,7 @@
 
                     <details style="margin-top:14px;">
                         <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced - connect with e-mail + password, or an existing instance id + token</summary>
-                        <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:12px;max-width:560px;">
+                        <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:12px;">
                             <p class="workspace-inline-note" style="margin-top:0;">Headless sign-in: register this instance with your cloud account credentials.</p>
                             <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Cloud account e-mail</span><input asp-for="CloudProvision.Email" type="email" class="workspace-input" autocomplete="off" /></label>
@@ -674,7 +674,7 @@
                             <label class="workspace-field"><span>Instance name</span><input asp-for="CloudProvision.Name" class="workspace-input" /></label>
                             <button type="submit" class="workspace-submit">Connect with password</button>
                         </form>
-                        <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:16px;max-width:560px;">
+                        <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:16px;">
                             <p class="workspace-inline-note" style="margin-top:0;">Manual: paste an instance id + token already created in the cloud UI.</p>
                             <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Instance id</span><input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" /></label>
@@ -694,7 +694,7 @@
                     <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
                     <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Alert relay</span></h3>
                     <p class="panel-hint" style="margin-bottom:12px;">Let Matmon.Cloud deliver your alerts - useful when this instance has no SMTP of its own. When enabled, a <strong>Matmon Cloud</strong> notification sender becomes available: pick it in a <a asp-page="/Notifications">notification rule</a> and the cloud delivers to that rule's receiver. No SMTP or recipients to configure here.</p>
-                    <form method="post" asp-page-handler="CloudRelay" class="workspace-form" style="max-width:560px;">
+                    <form method="post" asp-page-handler="CloudRelay" class="workspace-form">
                         <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
                             <input asp-for="CloudRelay.RelayAlerts" type="checkbox" />
                             <span>Enable the Matmon Cloud sender</span>
@@ -705,7 +705,7 @@
                     <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
                     <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Full Access</span></h3>
                     <p class="panel-hint" style="margin-bottom:12px;">Keep an outbound tunnel open so you can operate this instance's UI directly from Matmon.Cloud (no inbound port). You still sign in on this instance.</p>
-                    <form method="post" asp-page-handler="CloudFullAccess" class="workspace-form" style="max-width:560px;">
+                    <form method="post" asp-page-handler="CloudFullAccess" class="workspace-form">
                         <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
                             <input asp-for="CloudFullAccess" type="checkbox" />
                             <span>Allow operating this instance through Matmon.Cloud</span>
@@ -751,7 +751,7 @@
                     <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
                         <h2 class="section-title" style="font-size:15px;margin:0 0 6px;"><span>Apply a token manually</span></h2>
                         <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored - an invalid or expired token is rejected.</p>
-                        <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="max-width:680px;display:grid;gap:10px;">
+                        <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="display:grid;gap:10px;">
                             <label class="workspace-field">
                                 <span>License token</span>
                                 <textarea asp-for="LicenseTokenInput" class="workspace-input" rows="4" placeholder="paste the signed token here" style="font-family:monospace;font-size:12px;"></textarea>
@@ -798,7 +798,7 @@
                     <div class="config-row"><dt>Access</dt><dd><span class="state-pill" data-state="@(sp.CanManage ? "ok" : "warning")">@(sp.CanManage ? "Allowed" : "Not allowed")</span></dd></div>
                 </dl>
 
-                <form method="post" asp-page-handler="ServicePartnerConsent" class="workspace-form" style="margin-top:14px;max-width:640px;">
+                <form method="post" asp-page-handler="ServicePartnerConsent" class="workspace-form" style="margin-top:14px;">
                     <label style="display:flex;gap:8px;align-items:flex-start;">
                         <input type="checkbox" name="canManage" value="true" checked="@sp.CanManage" style="margin-top:3px;" />
                         <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (Full Access + reporting).</span>
