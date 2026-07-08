@@ -101,9 +101,13 @@ public class NotificationReportEditorModel : PageModel
         }
 
         var workspace = _workspaceStore.Workspace;
+        // Email senders (local SMTP) AND Cloud senders (relay through the connected Matmon.Cloud gateway) —
+        // the report path handles both (SummaryReportSender.SendAsync routes a Cloud sender via the relay).
         Senders = workspace.NotificationSenders
-            .Where(sender => sender.Kind == NotificationEndpointKind.Email)
-            .Select(sender => new SelectListItem($"{sender.Name}{(sender.Enabled ? "" : " (disabled)")}", sender.Id.ToString()))
+            .Where(sender => sender.Kind == NotificationEndpointKind.Email || sender.Kind == NotificationEndpointKind.Cloud)
+            .Select(sender => new SelectListItem(
+                $"{sender.Name}{(sender.Kind == NotificationEndpointKind.Cloud ? " (Cloud relay)" : "")}{(sender.Enabled ? "" : " (disabled)")}",
+                sender.Id.ToString()))
             .ToList();
         Receivers =
         [
