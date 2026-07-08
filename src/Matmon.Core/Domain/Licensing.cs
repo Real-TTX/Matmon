@@ -204,5 +204,5 @@ public static class LicenseCrypto
 /// </summary>
 public static class LicensePublicKey
 {
-    public const string Spki = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXg2FoQzay7QYQuk10oDNbl+R/B8WPOVDWRO5QFJFbKwe9rWtRgKBYi3scM04RR1z+Tz0BfDd19Golv5As9iweA==";
+    public const string Spki = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEk+NSaV09kk4bBW/GetEtTBXAjjRSdrHfymEoVx9yjiZJvT5imb/1ajoyQ5nzJdczU7BPV+83mGH9ZZ+tXXq9PA==";
 }
