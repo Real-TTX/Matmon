@@ -5,6 +5,9 @@ namespace Matmon.Host.Services;
 
 public enum ChangePasswordResult { Success, WrongCurrent, TooShort, NotFound }
 
+/// <summary>A TOTP enrollment in progress: the Base32 secret (for manual entry) + the otpauth URI (for the QR).</summary>
+public sealed record TotpEnrollmentInfo(string SecretBase32, string OtpauthUri);
+
 public interface IMonitoringWorkspaceStore
 {
     MonitoringWorkspaceSnapshot Workspace { get; }
@@ -42,6 +45,21 @@ public interface IMonitoringWorkspaceStore
     /// current password must be supplied; SSO-only accounts (no password) may set one for offline login.
     /// </summary>
     ChangePasswordResult ChangeOwnPassword(Guid userId, string? currentPassword, string newPassword);
+
+    // --- Two-factor (TOTP) ---
+    /// <summary>Generate + store an (encrypted) secret and return it + the otpauth URI for the QR. 2FA stays OFF
+    /// until <see cref="ConfirmTotp"/> succeeds.</summary>
+    TotpEnrollmentInfo? BeginTotpEnrollment(Guid userId, string issuer);
+    /// <summary>Re-derive the QR/manual key for a not-yet-confirmed enrollment (re-show the same secret).</summary>
+    TotpEnrollmentInfo? GetPendingTotpEnrollment(Guid userId, string issuer);
+    /// <summary>Confirm enrollment with an authenticator code; enables 2FA.</summary>
+    bool ConfirmTotp(Guid userId, string code);
+    /// <summary>Verify a TOTP code for an enrolled user (login).</summary>
+    bool VerifyTotp(Guid userId, string code);
+    /// <summary>Turn 2FA off + clear the secret. The CALLER authorizes first (TOTP or e-mailed code).</summary>
+    bool DisableTotp(Guid userId);
+    /// <summary>The user's e-mail for a login/disable fallback code, or null.</summary>
+    string? GetUserEmail(Guid userId);
 
     bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password);
 

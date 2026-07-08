@@ -21,7 +21,7 @@
     }
 
     <section data-tabs>
-        <div class="sensor-tabs" data-sensor-tabs data-tab-hash="true" data-active-tab="@(Model.ErrorMessage is not null ? "security" : null)">
+        <div class="sensor-tabs" data-sensor-tabs data-tab-hash="true" data-active-tab="@(Model.ShowSecurityTab ? "security" : null)">
             <button type="button" class="sensor-tab" data-sensor-tab-target="general">General</button>
             <button type="button" class="sensor-tab" data-sensor-tab-target="security">Security</button>
         </div>
@@ -79,6 +79,49 @@
                         </label>
                         <button type="submit" class="workspace-submit">@(Model.HasPassword ? "Change password" : "Set password")</button>
                     </form>
+                </div>
+            </div>
+
+            <div class="panel" style="margin-top:16px;">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Two-factor authentication</span></h2>
+                    <span class="panel-hint">@(Model.TwoFactorEnabled ? "On" : "Off")</span>
+                </div>
+                <div style="padding:16px 18px;">
+                    @if (Model.Enrollment is not null)
+                    {
+                        <p class="panel-hint" style="margin-top:0;">Scan this QR with your authenticator app (or enter the key manually), then enter the 6-digit code to confirm.</p>
+                        <div style="background:#fff;padding:10px;border-radius:10px;width:max-content;max-width:100%;margin:0 0 12px;">@Html.Raw(Model.QrSvg)</div>
+                        <p style="margin:0 0 12px;">Manual key: <code style="user-select:all;">@Model.Enrollment.SecretBase32</code></p>
+                        <form method="post" asp-page-handler="ConfirmTotp" class="workspace-form">
+                            <label class="workspace-field">
+                                <span>Code from your app</span>
+                                <input asp-for="TotpCode" class="workspace-input" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                            </label>
+                            <button type="submit" class="workspace-submit">Enable two-factor</button>
+                        </form>
+                    }
+                    else if (Model.TwoFactorEnabled)
+                    {
+                        <p style="margin-top:0;">Two-factor is <strong>enabled</strong>@(Model.TwoFactorSince is { } since ? $" since {since.ToDisplay():yyyy-MM-dd}" : ""). At sign-in you enter a code from your authenticator (or request a one-time code by e-mail).</p>
+                        <form method="post" asp-page-handler="DisableTotp" class="workspace-form" onsubmit="return confirm('Disable two-factor authentication?');">
+                            <label class="workspace-field">
+                                <span>Authenticator code — or an e-mailed code (to confirm)</span>
+                                <input asp-for="TotpCode" class="workspace-input" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                            </label>
+                            <button type="submit" class="workspace-danger-submit">Disable two-factor</button>
+                        </form>
+                        <form method="post" asp-page-handler="SendDisableCode" style="margin-top:8px;">
+                            <button type="submit" class="workspace-secondary-submit">Lost your authenticator? E-mail me a code</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="panel-hint" style="margin-top:0;">Add a second step at sign-in with an authenticator app (TOTP). If you lose your device, you can get a one-time code by e-mail.</p>
+                        <form method="post" asp-page-handler="StartTotp">
+                            <button type="submit" class="workspace-submit">Set up two-factor</button>
+                        </form>
+                    }
                 </div>
             </div>
         </div>

@@ -12,10 +12,12 @@ namespace Matmon.Host.Pages;
 public class LoginModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly Pending2faCookie _pending;
 
-    public LoginModel(IMonitoringWorkspaceStore workspaceStore)
+    public LoginModel(IMonitoringWorkspaceStore workspaceStore, Pending2faCookie pending)
     {
         _workspaceStore = workspaceStore;
+        _pending = pending;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -81,26 +83,15 @@ public class LoginModel : PageModel
             return Page();
         }
 
-        var claims = new List<Claim>
+        // Password OK. If the user has 2FA on, hand off to the second factor with a short-lived encrypted
+        // "pending" cookie (no auth cookie until the code is verified).
+        if (user.TwoFactorEnabled)
         {
-            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Name, user.Username),
-            new(ClaimTypes.Role, user.Role.ToString())
-        };
+            _pending.Issue(HttpContext, user.Id, ReturnUrl);
+            return RedirectToPage("/LoginTwoFactor");
+        }
 
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var principal = new ClaimsPrincipal(identity);
-
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            principal,
-            new AuthenticationProperties
-            {
-                IsPersistent = true,
-                AllowRefresh = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
-            });
-
+        await InstanceSignIn.SignInAsync(HttpContext, user);
         return RedirectToLocal(ReturnUrl);
     }
 

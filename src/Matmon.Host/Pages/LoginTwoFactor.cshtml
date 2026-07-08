@@ -1,0 +1,52 @@
+@page "/login/2fa"
+@model LoginTwoFactorModel
+@{
+    Layout = "_AnonymousLayout";
+    ViewData["Title"] = "Two-factor";
+    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
+}
+
+<section class="dashboard-shell auth-shell auth-shell-login">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("lock")
+            <h1>Two-factor</h1>
+        </div>
+    </div>
+
+    <div class="panel auth-card">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("spark")<span>Verify</span></h2>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.InfoMessage))
+        {
+            <div class="workspace-banner workspace-banner-success">@Model.InfoMessage</div>
+        }
+
+        <p class="panel-hint" style="margin:0 0 14px;">Enter the 6-digit code from your authenticator app, or request a one-time code by e-mail.</p>
+
+        <form method="post" asp-page-handler="Verify" class="workspace-form auth-form">
+            <label class="workspace-field">
+                <span>Authentication code</span>
+                <input asp-for="Code" class="workspace-input" inputmode="numeric" autocomplete="one-time-code" autofocus placeholder="123456" />
+            </label>
+            <div class="auth-actions">
+                <span class="auth-note">From your authenticator</span>
+                <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Verify</span></button>
+            </div>
+        </form>
+
+        <form method="post" asp-page-handler="SendEmail" style="margin-top:12px;">
+            <button type="submit" class="workspace-secondary-submit" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;">
+                <span>Send a code to my e-mail instead</span>
+            </button>
+        </form>
+
+        <p class="panel-hint" style="margin-top:14px;text-align:center;"><a href="/login">Back to sign in</a></p>
+    </div>
+</section>

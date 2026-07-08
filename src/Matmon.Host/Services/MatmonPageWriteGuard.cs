@@ -30,6 +30,12 @@ public sealed class MatmonPageWriteGuard : IAsyncPageFilter
             return true;
         }
 
+        // Second login step (TOTP / e-mailed code) - still anonymous, must be postable.
+        if (string.Equals(page, "/LoginTwoFactor", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         // First-run setup creates the very first admin while still anonymous - must be postable.
         if (string.Equals(page, "/Setup", StringComparison.OrdinalIgnoreCase))
         {

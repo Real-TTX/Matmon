@@ -332,6 +332,95 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    // --- Two-factor (TOTP). The secret is stored DataProtection-encrypted; verification stays inside the store. ---
+
+    public TotpEnrollmentInfo? BeginTotpEnrollment(Guid userId, string issuer)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            if (user is null) { return null; }
+            var secret = MatmonTotp.GenerateSecret();
+            user.TotpSecretProtected = _credentialProtector.Protect(secret);
+            user.TwoFactorEnabled = false; // not active until confirmed
+            user.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return new TotpEnrollmentInfo(secret, MatmonTotp.BuildOtpauthUri(issuer, TotpAccountName(user), secret));
+        }
+    }
+
+    public TotpEnrollmentInfo? GetPendingTotpEnrollment(Guid userId, string issuer)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            var secret = UnprotectOrNull(user?.TotpSecretProtected);
+            if (user is null || user.TwoFactorEnabled || secret is null) { return null; }
+            return new TotpEnrollmentInfo(secret, MatmonTotp.BuildOtpauthUri(issuer, TotpAccountName(user), secret));
+        }
+    }
+
+    public bool ConfirmTotp(Guid userId, string code)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            var secret = UnprotectOrNull(user?.TotpSecretProtected);
+            if (user is null || secret is null || !MatmonTotp.Verify(secret, code)) { return false; }
+            user.TwoFactorEnabled = true;
+            user.TotpEnrolledUtc = DateTimeOffset.UtcNow;
+            user.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    public bool VerifyTotp(Guid userId, string code)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            if (user is null || !user.TwoFactorEnabled) { return false; }
+            return MatmonTotp.Verify(UnprotectOrNull(user.TotpSecretProtected), code);
+        }
+    }
+
+    /// <summary>Turn 2FA off + clear the secret. The CALLER authorizes first (a valid TOTP or e-mailed code).</summary>
+    public bool DisableTotp(Guid userId)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            if (user is null || !user.TwoFactorEnabled) { return false; }
+            user.TwoFactorEnabled = false;
+            user.TotpSecretProtected = null;
+            user.TotpEnrolledUtc = null;
+            user.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    /// <summary>The e-mail to send a login/disable code to, or null (unknown user or no e-mail on file).</summary>
+    public string? GetUserEmail(Guid userId)
+    {
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(candidate => candidate.Id == userId);
+            return string.IsNullOrWhiteSpace(user?.Email) ? null : user.Email;
+        }
+    }
+
+    private static string TotpAccountName(MatmonUser user) =>
+        string.IsNullOrWhiteSpace(user.Email) ? user.Username : user.Email;
+
+    private string? UnprotectOrNull(string? cipher)
+    {
+        if (string.IsNullOrEmpty(cipher)) { return null; }
+        try { return _credentialProtector.Unprotect(cipher); }
+        catch { return null; }
+    }
+
     public bool UpdateUser(Guid userId, string username, MatmonUserRole role, bool isEnabled, string? password)
     {
         lock (_gate)
@@ -3517,7 +3606,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             CloudLinked = source.CloudLinked,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc,
-            LastLoginUtc = source.LastLoginUtc
+            LastLoginUtc = source.LastLoginUtc,
+            TimeZoneId = source.TimeZoneId,
+            TwoFactorEnabled = source.TwoFactorEnabled,
+            TotpEnrolledUtc = source.TotpEnrolledUtc
+            // TotpSecretProtected intentionally NOT copied (like PasswordHash) - verification stays inside the store.
         };
     }
 

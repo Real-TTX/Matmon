@@ -188,6 +188,8 @@ builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvi
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the
 // auto-login middleware (trusts the cloud's identity assertion only when this secret accompanies it).
 builder.Services.AddSingleton<TunnelAuthSecret>();
+builder.Services.AddSingleton<Pending2faCookie>();
+builder.Services.AddSingleton<LoginCodeStore>();
 
 if (runtimeOptions.Mode == AppMode.Primary)
 {
