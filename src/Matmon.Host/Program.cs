@@ -38,9 +38,16 @@ if (runtimeOptions.Mode == AppMode.Executor)
     executorApp.MapGet("/api/mode", () => Results.Ok(new { mode = "Executor" }));
 
     executorApp.MapGet("/api/sensor-catalog", (HttpRequest request, StatelessSensorRunner runner) =>
-        IsExecutorAuthorized(request, runtimeOptions.ExecutorToken)
-            ? Results.Ok(runner.Catalog)
-            : Results.Unauthorized());
+    {
+        if (!IsExecutorAuthorized(request, runtimeOptions.ExecutorToken))
+        {
+            return Results.Unauthorized();
+        }
+        // The executor shares the instance image, so its version is the cloud's reference for "latest released
+        // version" - the cloud reads this header to flag instances that are behind (see the update-check feature).
+        request.HttpContext.Response.Headers["X-Matmon-Version"] = Matmon.Host.Services.MatmonVersion.Current;
+        return Results.Ok(runner.Catalog);
+    });
 
     executorApp.MapPost("/api/execute", async (ExecuteSensorRequest body, HttpRequest request, StatelessSensorRunner runner, CancellationToken ct) =>
     {
