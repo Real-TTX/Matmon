@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 @inject Matmon.Host.Services.MatmonRuntimeOptions RuntimeOptions
 @inject Matmon.Host.Services.IDashboardSnapshotProvider DashboardSnapshotProvider
+@inject Matmon.Host.Services.CloudUpdateState CloudUpdate
 @{
     // Embedded mode: when reached through the Matmon.Cloud "embed" tunnel, render the page chromeless
     // (no own sidebar / mobile nav) so the cloud console can show a single menu around the iframe.
@@ -257,9 +258,13 @@
                         }
                     </div>
 
-                    <a class="sidebar-version" asp-area="" asp-page="/About" title="About Matmon">
+                    <a class="sidebar-version" asp-area="" asp-page="/About" title="@(CloudUpdate.UpdateAvailable ? $"A newer Matmon build is available{(CloudUpdate.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : "About Matmon")">
                         <span class="sidebar-version-brand">Matmon</span>
                         <span class="sidebar-version-tag">@Matmon.Host.Services.MatmonVersion.Current</span>
+                        @if (CloudUpdate.UpdateAvailable)
+                        {
+                            <span class="sidebar-version-tag" style="background:rgba(95,141,255,.18);color:var(--matmon-accent,#5f8dff);font-weight:700;">Update</span>
+                        }
                     </a>
                 </div>
             </div>

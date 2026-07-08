@@ -197,6 +197,9 @@ builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvi
 builder.Services.AddSingleton<TunnelAuthSecret>();
 builder.Services.AddSingleton<Pending2faCookie>();
 builder.Services.AddSingleton<LoginCodeStore>();
+// Holds the "newer build available" signal the cloud returns on each heartbeat. Registered globally (the
+// layout reads it) even though only the Primary's CloudConnectionService writes it.
+builder.Services.AddSingleton<CloudUpdateState>();
 
 if (runtimeOptions.Mode == AppMode.Primary)
 {

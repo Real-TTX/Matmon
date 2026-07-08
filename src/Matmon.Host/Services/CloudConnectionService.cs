@@ -19,6 +19,7 @@ public sealed class CloudConnectionService : BackgroundService
 
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly CloudUpdateState _updateState;
     private readonly ILogger<CloudConnectionService> _logger;
 
     private string? _lastStatus;
@@ -26,10 +27,12 @@ public sealed class CloudConnectionService : BackgroundService
     public CloudConnectionService(
         IMonitoringWorkspaceStore workspaceStore,
         MatmonRuntimeOptions runtimeOptions,
+        CloudUpdateState updateState,
         ILogger<CloudConnectionService> logger)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
+        _updateState = updateState;
         _logger = logger;
     }
 
@@ -201,9 +204,23 @@ public sealed class CloudConnectionService : BackgroundService
 
         response.EnsureSuccessStatusCode();
         RecordStatus(baseUrl, instanceId, "ok", heartbeatOk: true, force: true);
+
+        // The heartbeat response carries whether a newer build (same channel) is available - the cloud does the
+        // compare (it knows the latest version), so we just cache the result for the UI. Tolerate an older cloud
+        // that doesn't return the fields.
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<HeartbeatResponse>(cancellationToken);
+            _updateState.Set(body?.UpdateAvailable ?? false, body?.LatestVersion);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { /* older cloud without the fields, or a non-JSON body - ignore */ }
+
         await FetchLicenseAsync(client, instanceId, token, cancellationToken);
         await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
     }
+
+    private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable);
 
     /// <summary>Pulls the signed license token from the cloud and caches it for offline validation.</summary>
     private async Task FetchLicenseAsync(HttpClient client, Guid instanceId, string token, CancellationToken cancellationToken)
