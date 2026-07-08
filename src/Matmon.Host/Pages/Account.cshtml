@@ -37,6 +37,20 @@
                     </dl>
                 </div>
             </div>
+
+            <div class="panel" style="margin-top:16px;">
+                <div class="panel-header"><h2 class="section-title">@MatmonIcons.Render("clock")<span>Preferences</span></h2></div>
+                <div style="padding:16px 18px;">
+                    <form method="post" asp-page-handler="TimeZone" class="workspace-form">
+                        <label class="workspace-field">
+                            <span>Display timezone</span>
+                            <select asp-for="TimeZoneId" asp-items="Model.TimeZoneItems" class="form-select workspace-select"></select>
+                            <span class="panel-hint" style="margin-top:4px;">Timestamps across the UI are shown in this zone. <strong>System default</strong> uses the server/admin setting. Data is always stored in UTC.</span>
+                        </label>
+                        <button type="submit" class="workspace-submit">Save timezone</button>
+                    </form>
+                </div>
+            </div>
         </div>
 
         <div data-sensor-tab="security" hidden>

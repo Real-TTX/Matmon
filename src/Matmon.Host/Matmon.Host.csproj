@@ -17,4 +17,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Display-timezone extensions (ToDisplay) are used across pages/services. -->
+    <Using Include="Matmon.Core.Domain" />
+  </ItemGroup>
+
 </Project>

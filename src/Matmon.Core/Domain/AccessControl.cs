@@ -38,5 +38,8 @@ public sealed class MatmonUser
 
     /// <summary>When the account last signed in (local password or cloud SSO). Null = never since tracking.</summary>
     public DateTimeOffset? LastLoginUtc { get; set; }
+
+    /// <summary>Per-user display-timezone override (IANA id, e.g. "Europe/Berlin"). Null = use the system default.</summary>
+    public string? TimeZoneId { get; set; }
 }
 

@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Matmon.Host.Services;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Matmon.Host.Pages;
@@ -23,6 +25,9 @@ public class AccountModel : PageModel
     [BindProperty] public string NewPassword { get; set; } = string.Empty;
     [BindProperty] public string ConfirmPassword { get; set; } = string.Empty;
 
+    [BindProperty] public string? TimeZoneId { get; set; }
+    public IReadOnlyList<SelectListItem> TimeZoneItems { get; private set; } = [];
+
     public bool HasPassword { get; private set; }
     public string AccountName => User.Identity?.Name ?? "Account";
     public string Role => User.FindFirstValue(ClaimTypes.Role) ?? "Viewer";
@@ -35,11 +40,27 @@ public class AccountModel : PageModel
     public void OnGet()
     {
         HasPassword = _workspaceStore.HasLocalPassword(UserId);
+        LoadTimeZone();
+    }
+
+    private void LoadTimeZone()
+    {
+        TimeZoneId = _workspaceStore.FindUser(UserId)?.TimeZoneId;
+        TimeZoneItems = TimeZoneOptions.Build(TimeZoneId, "System default");
+    }
+
+    /// <summary>Save the signed-in user's display-timezone override (empty = use the system default).</summary>
+    public IActionResult OnPostTimeZone()
+    {
+        _workspaceStore.SetUserTimeZone(UserId, TimeZoneId);
+        StatusMessage = "Display timezone updated.";
+        return RedirectToPage();
     }
 
     public IActionResult OnPost()
     {
         HasPassword = _workspaceStore.HasLocalPassword(UserId);
+        LoadTimeZone();
 
         if (NewPassword != ConfirmPassword)
         {

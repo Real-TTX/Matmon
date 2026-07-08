@@ -81,7 +81,7 @@ public sealed class EventsModel : PageModel
     {
         return new WorkspaceEventRow(
             entry.Id,
-            entry.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss"),
+            entry.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
             entry.Kind.ToString(),
             FormatKindLabel(entry.Kind),
             entry.ElementId,

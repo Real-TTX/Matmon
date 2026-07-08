@@ -181,7 +181,7 @@ public sealed class SensorDetailsModel : PageModel
             defaultChannelLabel,
             unit,
             currentValue.HasValue ? currentDisplay.Text : "—",
-            latestObservation is null ? null : latestObservation.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss"),
+            latestObservation is null ? null : latestObservation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
             latestObservation is null ? null : FormatDuration(latestObservation.Duration),
             windows,
             selectedWindow,
@@ -723,7 +723,7 @@ public sealed class SensorDetailsModel : PageModel
 
                 var display = SensorUnitConverter.Format(defaultValue, displayScale);
                 return new SensorObservationRow(
-                    observation.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss"),
+                    observation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
                     MonitoringStatePresentation.Key(observation.State),
                     MonitoringStatePresentation.Label(observation.State),
                     defaultValue.HasValue ? display.Text : "—",

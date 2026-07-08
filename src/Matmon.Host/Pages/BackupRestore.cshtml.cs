@@ -115,7 +115,7 @@ public class BackupRestoreModel : PageModel
             return "-";
         }
 
-        return timestampUtc.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss");
+        return timestampUtc.Value.ToDisplay().ToString("dd.MM.yyyy HH:mm:ss");
     }
 
     public string FormatSections(WorkspaceBackupSection sections)

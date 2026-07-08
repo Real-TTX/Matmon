@@ -1301,6 +1301,50 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>The admin-configured system display timezone (IANA id); null = server local.</summary>
+    public string? GetDisplayTimeZoneId()
+    {
+        lock (_gate)
+        {
+            return _document.DisplayTimeZoneId;
+        }
+    }
+
+    /// <summary>Set the system default display timezone (IANA id, or null to clear). Only saves on change.</summary>
+    public void SetDisplayTimeZoneId(string? timeZoneId)
+    {
+        var normalized = string.IsNullOrWhiteSpace(timeZoneId) ? null : timeZoneId.Trim();
+        lock (_gate)
+        {
+            if (string.Equals(_document.DisplayTimeZoneId, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _document.DisplayTimeZoneId = normalized;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    /// <summary>Set a user's per-user display-timezone override (IANA id, or null to clear).</summary>
+    public bool SetUserTimeZone(Guid userId, string? timeZoneId)
+    {
+        var normalized = string.IsNullOrWhiteSpace(timeZoneId) ? null : timeZoneId.Trim();
+        lock (_gate)
+        {
+            var user = _document.Users.FirstOrDefault(u => u.Id == userId);
+            if (user is null)
+            {
+                return false;
+            }
+
+            user.TimeZoneId = normalized;
+            user.UpdatedUtc = DateTimeOffset.UtcNow;
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
     public void ConfigureEmailNotifications(string smtpHost, int? smtpPort, string? username, string? password, bool useSsl, string fromEmail, string toEmail)
     {
         lock (_gate)
@@ -3630,6 +3674,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>Last license token fetched from the cloud (verified offline against the baked public key).</summary>
         public string? LicenseToken { get; set; }
+
+        /// <summary>System-wide display timezone (IANA id); null = server local.</summary>
+        public string? DisplayTimeZoneId { get; set; }
 
         public List<NotificationSender> NotificationSenders { get; set; } = [];
 

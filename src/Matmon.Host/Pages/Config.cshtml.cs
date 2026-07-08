@@ -58,6 +58,11 @@ public class ConfigModel : PageModel
     /// bootstrap is set). While active, manual token entry is disabled — the cloud re-issues it on each heartbeat.</summary>
     public bool CloudLinkActive { get; private set; }
 
+    /// <summary>System-default display timezone (IANA id; empty = server local). Applies to everyone without
+    /// their own per-user override (set on /account).</summary>
+    [BindProperty] public string? DisplayTimeZoneId { get; set; }
+    public IReadOnlyList<SelectListItem> TimeZoneItems { get; private set; } = [];
+
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
     /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) — drives the Clear action.</summary>
@@ -355,6 +360,20 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "license" });
     }
 
+    /// <summary>Set the system-default display timezone (admin). Applied live so timestamps switch immediately.</summary>
+    public IActionResult OnPostDisplayTimeZone()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        _workspaceStore.SetDisplayTimeZoneId(DisplayTimeZoneId);
+        DisplayTimeZone.SystemDefault = DisplayTimeZone.Resolve(DisplayTimeZoneId) ?? TimeZoneInfo.Local;
+        StatusMessage = "System display timezone saved.";
+        return RedirectToPage(new { tab = "general" });
+    }
+
     /// <summary>Clear the cached license token — the instance falls back to Free (until the cloud re-issues one).</summary>
     public IActionResult OnPostClearLicenseToken()
     {
@@ -583,7 +602,7 @@ public class ConfigModel : PageModel
             return "-";
         }
 
-        return timestampUtc.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss");
+        return timestampUtc.Value.ToDisplay().ToString("dd.MM.yyyy HH:mm:ss");
     }
 
     public static string FormatPercent(double? value)
@@ -653,6 +672,8 @@ public class ConfigModel : PageModel
         CloudSettings = _workspaceStore.GetCloudConnectionSettings();
         CloudEnvBootstrapSet = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
         CloudLinkActive = CloudSettings.Configured ? CloudSettings.Enabled : CloudEnvBootstrapSet;
+        DisplayTimeZoneId = _workspaceStore.GetDisplayTimeZoneId();
+        TimeZoneItems = TimeZoneOptions.Build(DisplayTimeZoneId, "Server local");
         // Effective values shown in the form: UI settings once configured, else the env bootstrap.
         CloudUrl = CloudSettings.Configured ? CloudSettings.Url : _runtimeOptions.CloudUrl;
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);

@@ -42,7 +42,7 @@
 
     string FormatLocalTimestamp(DateTimeOffset? timestamp)
     {
-        return timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+        return timestamp?.ToDisplay().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     }
 
     string FormatDueTimestamp(DateTimeOffset? timestamp)
@@ -58,8 +58,8 @@
             return "due now";
         }
 
-        var local = timestamp.Value.ToLocalTime();
-        var nowLocal = DateTimeOffset.Now;
+        var local = timestamp.Value.ToDisplay();
+        var nowLocal = DateTimeOffset.UtcNow.ToDisplay();
         return local.Date == nowLocal.Date
             ? local.ToString("HH:mm:ss")
             : local.ToString("yyyy-MM-dd HH:mm");
@@ -228,7 +228,7 @@
                                 <span class="state-pill" data-state="@transferState">
                                     @(entry.TransferSucceeded == true ? "sent" : entry.TransferSucceeded == false ? "failed" : "pending")
                                 </span>
-                                <span class="probe-result-time">@entry.ExecutedUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                                <span class="probe-result-time">@entry.ExecutedUtc.ToDisplay().ToString("HH:mm:ss")</span>
                             </div>
                         </article>
                     }
@@ -252,7 +252,7 @@
                     @foreach (var entry in Model.SlaveSnapshot.Events)
                     {
                         <article class="event-row" data-state="@(entry.IsError ? "error" : "ok")">
-                            <span class="event-row-time">@entry.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                            <span class="event-row-time">@entry.TimestampUtc.ToDisplay().ToString("HH:mm:ss")</span>
                             <span class="event-row-kind">@entry.Direction</span>
                             <span class="event-row-state">@entry.Kind</span>
                             <span class="event-row-message">@entry.Message</span>

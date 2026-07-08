@@ -205,7 +205,37 @@ else
     builder.Services.AddHostedService<SlaveSensorWorker>();
 }
 
+builder.Services.AddHttpContextAccessor();
+
 var app = builder.Build();
+
+// Display timezone (#52): render timestamps in the signed-in user's zone → the admin system default → server
+// local. Provider reads the store fresh (in-memory) but memoizes per request. Everything is stored UTC.
+{
+    var tzAccessor = app.Services.GetRequiredService<IHttpContextAccessor>();
+    var tzStore = app.Services.GetRequiredService<IMonitoringWorkspaceStore>();
+    DisplayTimeZone.SystemDefault = DisplayTimeZone.Resolve(tzStore.GetDisplayTimeZoneId()) ?? TimeZoneInfo.Local;
+    DisplayTimeZone.PerRequestZoneProvider = () =>
+    {
+        var http = tzAccessor.HttpContext;
+        const string key = "__matmon_display_tz";
+        if (http is not null && http.Items.TryGetValue(key, out var cached))
+        {
+            return cached as TimeZoneInfo;
+        }
+        TimeZoneInfo? zone = null;
+        if (http?.User is { Identity.IsAuthenticated: true } user &&
+            Guid.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uid))
+        {
+            zone = DisplayTimeZone.Resolve(tzStore.FindUser(uid)?.TimeZoneId);
+        }
+        if (http is not null)
+        {
+            http.Items[key] = zone;
+        }
+        return zone; // null → DisplayTimeZone.Current falls back to SystemDefault
+    };
+}
 
 app.UseForwardedHeaders();
 

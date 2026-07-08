@@ -37,7 +37,7 @@ public sealed class AuditReportPdfBuilder
             column.Item().PaddingTop(2).Text(text =>
             {
                 text.Span("Period: ").FontColor(Colors.Grey.Darken1);
-                text.Span($"{data.FromUtc.ToLocalTime():g} – {data.ToUtc.ToLocalTime():g}");
+                text.Span($"{data.FromUtc.ToDisplay():g} – {data.ToUtc.ToDisplay():g}");
                 text.Span($"    Generated: {DateTimeOffset.Now:g}").FontColor(Colors.Grey.Medium);
             });
             column.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
@@ -117,7 +117,7 @@ public sealed class AuditReportPdfBuilder
 
                         foreach (var line in data.RecentEvents)
                         {
-                            BodyCell(table).Text(line.TimestampUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture));
+                            BodyCell(table).Text(line.TimestampUtc.ToDisplay().ToString("g", CultureInfo.CurrentCulture));
                             BodyCell(table).Text(line.Kind);
                             BodyCell(table).Text($"{line.Path} — {line.Message}");
                         }

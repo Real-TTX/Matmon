@@ -185,7 +185,7 @@ public sealed class ProbeUsageModel : PageModel
                 sensor.IsPaused,
                 effectiveSettings.Highlight == true,
                 scheduleSummary,
-                latestObservation is null ? "-" : latestObservation.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm"),
+                latestObservation is null ? "-" : latestObservation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm"),
                 history.Length.ToString(CultureInfo.InvariantCulture),
                 averageDuration.HasValue ? FormatDuration(TimeSpan.FromMilliseconds(averageDuration.Value)) : "-",
                 estimatedBytesPerHour,
@@ -327,7 +327,7 @@ public sealed class ProbeUsageModel : PageModel
             MonitoringStatePresentation.Key(MonitoringSeverity.Ok),
             "Online",
             liveStatus.Message ?? "online",
-            liveStatus.LastSeenUtc.ToLocalTime().ToString("dd.MM HH:mm:ss"));
+            liveStatus.LastSeenUtc.ToDisplay().ToString("dd.MM HH:mm:ss"));
     }
 
     private static double EstimateLoadScore(

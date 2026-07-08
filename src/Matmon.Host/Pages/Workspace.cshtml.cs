@@ -4880,15 +4880,15 @@ public sealed class WorkspaceModel : PageModel
                 GetAlertStateKey(alert.State),
                 FormatSensorStateLabel(alert.State),
                 alert.Message,
-                alert.FirstSeenUtc.ToLocalTime().ToString("g"),
-                alert.LastSeenUtc.ToLocalTime().ToString("g"),
+                alert.FirstSeenUtc.ToDisplay().ToString("g"),
+                alert.LastSeenUtc.ToDisplay().ToString("g"),
                 alert.IsActive,
                 alert.IsAcknowledged,
                 alert.IsRecovered,
-                alert.AcknowledgedUtc?.ToLocalTime().ToString("g"),
+                alert.AcknowledgedUtc?.ToDisplay().ToString("g"),
                 alert.AcknowledgedBy,
-                alert.RecoveredUtc?.ToLocalTime().ToString("g"),
-                alert.ResolvedUtc?.ToLocalTime().ToString("g"),
+                alert.RecoveredUtc?.ToDisplay().ToString("g"),
+                alert.ResolvedUtc?.ToDisplay().ToString("g"),
                 alert.FirstSeenUtc.ToUnixTimeMilliseconds(),
                 alert.LastSeenUtc.ToUnixTimeMilliseconds()))
             .ToArray();
@@ -5756,7 +5756,7 @@ public sealed class WorkspaceModel : PageModel
                 node.ProbeId ?? "-",
                 enrollmentToken ?? "-",
                 MonitoringStatePresentation.Label(severity),
-                probeStatus?.LastSeenUtc.ToLocalTime().ToString("HH:mm:ss") ?? (node.Depth == 0 ? "local" : "-"),
+                probeStatus?.LastSeenUtc.ToDisplay().ToString("HH:mm:ss") ?? (node.Depth == 0 ? "local" : "-"),
                 probeStatus is null
                     ? (node.Depth == 0 ? "local primary" : "no heartbeat")
                     : BuildProbeStatusMessage(severity, now - probeStatus.LastSeenUtc),
@@ -5998,7 +5998,7 @@ public sealed class WorkspaceModel : PageModel
 
         private string? Unit => _series?.Unit;
 
-        private string? LastCheck => _latestObservation?.TimestampUtc.ToLocalTime().ToString("HH:mm:ss");
+        private string? LastCheck => _latestObservation?.TimestampUtc.ToDisplay().ToString("HH:mm:ss");
 
         public void InitializeAggregateState()
         {

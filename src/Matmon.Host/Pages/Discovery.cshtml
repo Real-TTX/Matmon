@@ -589,7 +589,7 @@
                                 <td><span class="state-pill" data-state="@recentTone">@recent.Status</span></td>
                                 <td>@recent.ProgressPercent%</td>
                                 <td>@recent.Results.Count</td>
-                                <td>@recent.CreatedUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@recent.CreatedUtc.ToDisplay().ToString("dd.MM.yyyy HH:mm")</td>
                                 <td>
                                     <div class="discovery-job-actions">
                                         <a class="workspace-action-link" asp-page="/Discovery" asp-route-jobId="@recent.JobId">@MatmonIcons.Render("search")<span>Open</span></a>

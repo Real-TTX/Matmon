@@ -132,6 +132,24 @@
                     <p class="workspace-inline-note">Configured via <code>Matmon__AllowedProgramPaths</code>. Each entry is an exact executable path or a directory whose programs may run.</p>
                 }
             </section>
+
+            @if (canManageSystem)
+            {
+                <section class="panel config-block">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("clock")<span>Display timezone</span></h2>
+                        <span class="panel-hint">system default</span>
+                    </div>
+                    <form method="post" asp-page-handler="DisplayTimeZone" class="workspace-form" style="padding:14px 18px;">
+                        <label class="workspace-field">
+                            <span class="workspace-label">Timezone</span>
+                            <select asp-for="DisplayTimeZoneId" asp-items="Model.TimeZoneItems" class="form-select workspace-select"></select>
+                            <span class="workspace-inline-note" style="margin-top:6px;">Default zone for rendering timestamps. Each user can override it on their own <a asp-page="/Account">Account</a> page. Data is always stored in UTC.</span>
+                        </label>
+                        <button type="submit" class="workspace-submit" style="margin-top:10px;">Save</button>
+                    </form>
+                </section>
+            }
         </div>
     }
     else if (Model.IsActiveTab("probes"))

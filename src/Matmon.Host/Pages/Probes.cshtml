@@ -67,7 +67,7 @@
                             <span class="state-pill" data-state="@state">@probe.State</span>
                             <small>@probe.Message</small>
                         </span>
-                        <span role="cell">@(probe.LastSeenUtc.HasValue ? probe.LastSeenUtc.Value.ToLocalTime().ToString("g") : "-")</span>
+                        <span role="cell">@(probe.LastSeenUtc.HasValue ? probe.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</span>
                         <span role="cell">@probe.SensorCount</span>
                         <span role="cell" class="probe-overview-actions">
                             <details class="workspace-action-menu">

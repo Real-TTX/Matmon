@@ -244,6 +244,15 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Caches the cloud-issued license token.</summary>
     void SetLicenseToken(string? token);
 
+    /// <summary>The admin-configured system display timezone (IANA id); null = server local.</summary>
+    string? GetDisplayTimeZoneId();
+
+    /// <summary>Set the system default display timezone (IANA id, or null to clear).</summary>
+    void SetDisplayTimeZoneId(string? timeZoneId);
+
+    /// <summary>Set a user's per-user display-timezone override (IANA id, or null to clear).</summary>
+    bool SetUserTimeZone(Guid userId, string? timeZoneId);
+
     NotificationReceiver CreateNotificationReceiver(string name);
 
     NotificationRule CreateNotificationRule(string name);

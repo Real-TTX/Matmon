@@ -222,7 +222,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             var severity = MonitoringStatePresentation.FromHeartbeatAge(ageSeconds, heartbeatWindowSeconds);
             probeHealthMap[probe.Id] = new ProbeHealthSnapshot(
                 severity,
-                liveSnapshot.LastSeenUtc.ToLocalTime().ToString("HH:mm:ss"),
+                liveSnapshot.LastSeenUtc.ToDisplay().ToString("HH:mm:ss"),
                 BuildHeartbeatMessage(severity, ageSeconds));
         }
 

@@ -88,7 +88,7 @@
 
         @if (Model.LastSentUtc is { } sent)
         {
-            <p class="panel-hint" style="margin:0;">Last sent: @sent.ToLocalTime().ToString("g")</p>
+            <p class="panel-hint" style="margin:0;">Last sent: @sent.ToDisplay().ToString("g")</p>
         }
 
         <div class="form-action-bar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
