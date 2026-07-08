@@ -28,6 +28,10 @@
             <a class="sensor-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
             <a class="sensor-tab @(Model.IsActiveTab("cloud") ? "is-active" : "")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
             <a class="sensor-tab @(Model.IsActiveTab("license") ? "is-active" : "")" asp-page="/Config" asp-route-tab="license">License</a>
+            @if (Model.ServicePartnerInfo?.HasPartner == true)
+            {
+                <a class="sensor-tab @(Model.IsActiveTab("partner") ? "is-active" : "")" asp-page="/Config" asp-route-tab="partner">Service partner</a>
+            }
         }
         @if (canManageUsers)
         {
@@ -767,6 +771,39 @@
                         <p class="workspace-inline-note" style="margin:0;max-width:680px;">Manual license entry is disabled while connected to Matmon.Cloud — the license is managed by the cloud and refreshed on each heartbeat. <strong>Disconnect</strong> the cloud (System → Cloud) to license this instance offline.</p>
                     </div>
                 }
+            </div>
+        </section>
+    }
+    else if (Model.IsActiveTab("partner") && canManageSystem && Model.ServicePartnerInfo?.HasPartner == true)
+    {
+        var sp = Model.ServicePartnerInfo;
+        <section class="panel config-block">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Service partner</span></h2>
+                <span class="panel-hint">@sp.Name</span>
+            </div>
+            <div style="padding:16px 18px;">
+                <dl class="config-list">
+                    <div class="config-row"><dt>Partner</dt><dd>@sp.Name</dd></div>
+                    @if (!string.IsNullOrWhiteSpace(sp.ContactEmail))
+                    {
+                        <div class="config-row"><dt>Contact</dt><dd><a href="mailto:@sp.ContactEmail">@sp.ContactEmail</a></dd></div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(sp.ContactPhone))
+                    {
+                        <div class="config-row"><dt>Phone</dt><dd>@sp.ContactPhone</dd></div>
+                    }
+                    <div class="config-row"><dt>Access</dt><dd><span class="state-pill" data-state="@(sp.CanManage ? "ok" : "warning")">@(sp.CanManage ? "Allowed" : "Not allowed")</span></dd></div>
+                </dl>
+
+                <form method="post" asp-page-handler="ServicePartnerConsent" class="workspace-form" style="margin-top:14px;max-width:640px;">
+                    <label style="display:flex;gap:8px;align-items:flex-start;">
+                        <input type="checkbox" name="canManage" value="true" checked="@sp.CanManage" style="margin-top:3px;" />
+                        <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (Full Access + reporting).</span>
+                    </label>
+                    <button type="submit" class="workspace-submit" style="margin-top:10px;">Save consent</button>
+                </form>
+                <p class="workspace-inline-note" style="margin-top:8px;max-width:680px;">This is your consent for the partner shown above. It's stored in Matmon.Cloud and re-synced on each heartbeat; revoking it stops their access.</p>
             </div>
         </section>
     }

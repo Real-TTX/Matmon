@@ -63,6 +63,9 @@ public class ConfigModel : PageModel
     [BindProperty] public string? DisplayTimeZoneId { get; set; }
     public IReadOnlyList<SelectListItem> TimeZoneItems { get; private set; } = [];
 
+    /// <summary>The managing service partner (from the cloud), shown on the Service partner tab; null if none.</summary>
+    public ServicePartnerInfo? ServicePartnerInfo { get; private set; }
+
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
     /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) — drives the Clear action.</summary>
@@ -374,6 +377,56 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "general" });
     }
 
+    /// <summary>Set the customer's consent for the managing service partner to access this instance. Posts the
+    /// change to Matmon.Cloud (the authority); the next heartbeat re-syncs it. Admin-only.</summary>
+    public async Task<IActionResult> OnPostServicePartnerConsentAsync(bool canManage, CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        var token = _workspaceStore.GetCloudConnectionToken();
+        var url = (settings.Configured ? settings.Url : _runtimeOptions.CloudUrl)?.Trim().TrimEnd('/');
+        var instanceId = settings.Configured ? settings.InstanceId : _runtimeOptions.CloudInstanceId;
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(instanceId) || string.IsNullOrWhiteSpace(token))
+        {
+            ErrorMessage = "Not connected to Matmon.Cloud.";
+            return RedirectToPage(new { tab = "partner" });
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/instances/{instanceId}/service-partner/consent")
+            {
+                Content = JsonContent.Create(new { canManage })
+            };
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorMessage = $"Matmon.Cloud rejected the change ({(int)response.StatusCode}).";
+                return RedirectToPage(new { tab = "partner" });
+            }
+
+            // Reflect immediately; the next heartbeat re-syncs the authoritative value from the cloud.
+            var current = _workspaceStore.GetServicePartnerInfo();
+            if (current is not null)
+            {
+                current.CanManage = canManage;
+                _workspaceStore.SetServicePartnerInfo(current);
+            }
+            StatusMessage = canManage ? "Service partner access granted." : "Service partner access revoked.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Could not reach Matmon.Cloud: {ex.Message}";
+        }
+
+        return RedirectToPage(new { tab = "partner" });
+    }
+
     /// <summary>Clear the cached license token — the instance falls back to Free (until the cloud re-issues one).</summary>
     public IActionResult OnPostClearLicenseToken()
     {
@@ -645,6 +698,7 @@ public class ConfigModel : PageModel
             "reports" => "reports",
             "cloud" => "cloud",
             "license" => "license",
+            "partner" => "partner",
             "users" => "users",
             _ => "general"
         };
@@ -655,7 +709,8 @@ public class ConfigModel : PageModel
         var tab = NormalizeTab(Tab);
         return (string.Equals(tab, "users", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(tab, "backup", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(tab, "license", StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(tab, "license", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(tab, "partner", StringComparison.OrdinalIgnoreCase)) &&
             !MatmonSecurity.IsAdmin(User);
     }
 
@@ -674,6 +729,7 @@ public class ConfigModel : PageModel
         CloudLinkActive = CloudSettings.Configured ? CloudSettings.Enabled : CloudEnvBootstrapSet;
         DisplayTimeZoneId = _workspaceStore.GetDisplayTimeZoneId();
         TimeZoneItems = TimeZoneOptions.Build(DisplayTimeZoneId, "Server local");
+        ServicePartnerInfo = _workspaceStore.GetServicePartnerInfo();
         // Effective values shown in the form: UI settings once configured, else the env bootstrap.
         CloudUrl = CloudSettings.Configured ? CloudSettings.Url : _runtimeOptions.CloudUrl;
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);

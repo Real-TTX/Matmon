@@ -1301,6 +1301,41 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>The managing service partner (name/contact + consent), cached from the cloud on heartbeat.</summary>
+    public ServicePartnerInfo? GetServicePartnerInfo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner?.Clone();
+        }
+    }
+
+    /// <summary>Caches the cloud-reported service partner + consent. Only saves on change.</summary>
+    public void SetServicePartnerInfo(ServicePartnerInfo? info)
+    {
+        lock (_gate)
+        {
+            if (info is null)
+            {
+                if (_document.ServicePartner is null)
+                {
+                    return;
+                }
+                _document.ServicePartner = null;
+            }
+            else
+            {
+                if (info.ValueEquals(_document.ServicePartner))
+                {
+                    return;
+                }
+                _document.ServicePartner = info.Clone();
+            }
+
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     /// <summary>The admin-configured system display timezone (IANA id); null = server local.</summary>
     public string? GetDisplayTimeZoneId()
     {
@@ -3674,6 +3709,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>Last license token fetched from the cloud (verified offline against the baked public key).</summary>
         public string? LicenseToken { get; set; }
+
+        /// <summary>Managing service partner (name/contact + consent), cached from the cloud on heartbeat.</summary>
+        public ServicePartnerInfo? ServicePartner { get; set; }
 
         /// <summary>System-wide display timezone (IANA id); null = server local.</summary>
         public string? DisplayTimeZoneId { get; set; }

@@ -202,6 +202,7 @@ public sealed class CloudConnectionService : BackgroundService
         response.EnsureSuccessStatusCode();
         RecordStatus(baseUrl, instanceId, "ok", heartbeatOk: true, force: true);
         await FetchLicenseAsync(client, instanceId, token, cancellationToken);
+        await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
     }
 
     /// <summary>Pulls the signed license token from the cloud and caches it for offline validation.</summary>
@@ -234,6 +235,48 @@ public sealed class CloudConnectionService : BackgroundService
     }
 
     private sealed record LicenseResponse(string? Token);
+
+    /// <summary>Pulls the managing service partner + consent from the cloud and caches it for the System tab.</summary>
+    private async Task FetchServicePartnerAsync(HttpClient client, Guid instanceId, string token, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/instances/{instanceId}/service-partner");
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<ServicePartnerResponse>(cancellationToken);
+            if (payload is null)
+            {
+                return;
+            }
+
+            _workspaceStore.SetServicePartnerInfo(payload.HasPartner
+                ? new ServicePartnerInfo
+                {
+                    HasPartner = true,
+                    Name = payload.Name,
+                    ContactEmail = payload.ContactEmail,
+                    ContactPhone = payload.ContactPhone,
+                    CanManage = payload.CanManage,
+                }
+                : null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Matmon.Cloud service-partner fetch failed (will retry next heartbeat)");
+        }
+    }
+
+    private sealed record ServicePartnerResponse(bool HasPartner, string? Name, string? ContactEmail, string? ContactPhone, bool CanManage);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

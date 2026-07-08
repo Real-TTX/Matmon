@@ -244,6 +244,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Caches the cloud-issued license token.</summary>
     void SetLicenseToken(string? token);
 
+    /// <summary>The managing service partner (name/contact + consent) cached from the cloud; null if none fetched.</summary>
+    ServicePartnerInfo? GetServicePartnerInfo();
+
+    /// <summary>Caches the cloud-reported service partner + consent.</summary>
+    void SetServicePartnerInfo(ServicePartnerInfo? info);
+
     /// <summary>The admin-configured system display timezone (IANA id); null = server local.</summary>
     string? GetDisplayTimeZoneId();
 
