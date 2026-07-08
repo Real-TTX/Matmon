@@ -46,6 +46,11 @@
                     <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" />
                 </label>
 
+                <label class="workspace-field" data-usertype="local">
+                    <span class="workspace-label">Confirm password</span>
+                    <input asp-for="UserInput.PasswordConfirm" type="password" class="form-control workspace-input" autocomplete="new-password" />
+                </label>
+
                 <label class="workspace-field" data-usertype="cloud" hidden>
                     <span class="workspace-label">Cloud account e-mail</span>
                     <input asp-for="UserInput.Email" type="email" class="form-control workspace-input" autocomplete="email" />

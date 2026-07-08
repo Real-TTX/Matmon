@@ -42,6 +42,15 @@ public sealed class UserCreateModel : PageModel
             return Forbid();
         }
 
+        // Local accounts: the password + its confirmation must match (Cloud/SSO accounts have no local password).
+        if (UserInput.AccountType == UserAccountType.Local &&
+            (UserInput.Password ?? string.Empty) != (UserInput.PasswordConfirm ?? string.Empty))
+        {
+            ErrorMessage = "The passwords do not match.";
+            LoadView();
+            return Page();
+        }
+
         try
         {
             var user = UserInput.AccountType == UserAccountType.Cloud
@@ -87,6 +96,8 @@ public sealed class UserCreateInput
     public string Username { get; set; } = string.Empty;
 
     public string? Password { get; set; }
+
+    public string? PasswordConfirm { get; set; }
 
     public string Email { get; set; } = string.Empty;
 
