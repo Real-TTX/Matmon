@@ -26,6 +26,4 @@ public sealed class AboutModel : PageModel
     public string OperatingSystem => RuntimeInformation.OSDescription.Trim();
 
     public string Architecture => RuntimeInformation.ProcessArchitecture.ToString();
-
-    public const string RepositoryUrl = "https://github.com/Real-TTX/Matmon";
 }
