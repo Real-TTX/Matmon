@@ -107,6 +107,32 @@
         if (pausedSensors > 0) { hintParts.Add($"{pausedSensors} paused"); }
         var alertHint = hintParts.Count > 0 ? string.Join(" / ", hintParts) : "All clear";
     }
+    @if (embedded)
+    {
+        // For the Matmon.Cloud console: publish this instance's own effective nav (role- and mode-aware) so the
+        // cloud sidebar mirrors exactly what the instance shows — not a hardcoded guess. cloud.js reads this from
+        // the (same-origin) iframe on load and rebuilds the console menu; older instances that don't emit it fall
+        // back to the cloud's static menu.
+        var embedNav = new List<object>();
+        if (isSecondaryMode)
+        {
+            embedNav.Add(new { label = "Probe", path = "" });
+        }
+        else
+        {
+            embedNav.Add(new { label = "Dashboard", path = "" });
+            embedNav.Add(new { label = "Alerts", path = "Alerts" });
+            embedNav.Add(new { label = "Sensors", path = "Monitoring" });
+            embedNav.Add(new { label = "Probes", path = "Probes" });
+            embedNav.Add(new { label = "Discovery", path = "Discovery" });
+            embedNav.Add(new { label = "Maps", path = "Maps" });
+            embedNav.Add(new { label = "Templates", path = "Templates" });
+            embedNav.Add(new { label = "Notifications", path = "Notifications" });
+            embedNav.Add(new { label = "Events", path = "Events" });
+            if (isAdmin) { embedNav.Add(new { label = "System", path = "Config" }); }
+        }
+        <script type="application/json" id="matmon-embed-nav">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(embedNav))</script>
+    }
     <div class="app-shell">
         <div class="mobile-nav-bar">
             <button type="button"
