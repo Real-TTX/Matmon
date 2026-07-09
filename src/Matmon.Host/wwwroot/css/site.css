@@ -4592,6 +4592,10 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
 .element-picker {
   position: relative;
   width: 100%;
+  /* As a grid/flex item the default min-width:auto is min-content, which lets the trigger's text blow the
+     column wider than the field (it overflowed the map property panel). Pin it so it shrinks + truncates. */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .element-picker-trigger {
@@ -9119,9 +9123,39 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   }
 }
 
-/* A ring gauge is illegible below ~2 rows (the ring + centred text collapse to a few pixels and clip), so
-   on a short tile it degrades to its number + label on one line - the percentage still carries the reading. */
-@container (max-height: 138px) {
+/* One-row value / summary tile (row span = 1) -> a single line: label left, metric right, so a slim strip
+   (e.g. 6x1) reads cleanly instead of stacking title over value. Keyed on the row span (data-tile-h), not
+   a container query, because a tile cannot size-query ITSELF - only its descendants can. Scoped to plain
+   value/summary tiles (a direct .map-tile-value, no gauge/progress/graph block) + the designer's value mock. */
+.map-tile[data-tile-h="1"]:has(> .map-tile-value):not(:has(> .map-tile-progress-wrap)):not(:has(> .map-tile-graph-frame)),
+.map-tile-editor[data-tile-h="1"][data-preview="value"] {
+  flex-flow: row wrap;
+  align-items: center;
+  column-gap: 0.6rem;
+  row-gap: 0.1rem;
+}
+
+.map-tile[data-tile-h="1"]:has(> .map-tile-value):not(:has(> .map-tile-progress-wrap)):not(:has(> .map-tile-graph-frame)) > .map-tile-head,
+.map-tile-editor[data-tile-h="1"][data-preview="value"] > .map-tile-head {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+.map-tile[data-tile-h="1"]:has(> .map-tile-value):not(:has(> .map-tile-progress-wrap)):not(:has(> .map-tile-graph-frame)) > .map-tile-value {
+  flex: 0 1 auto;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.map-tile-editor[data-tile-h="1"][data-preview="value"] > .map-tile-mock {
+  flex: 0 1 auto;
+  margin-left: auto;
+  align-self: center;
+}
+
+/* The ring only degrades to a flat number + bar once the tile is genuinely too short for a legible ring;
+   keep the ring for everything above that so it does not vanish "too early" on medium tiles. */
+@container (max-height: 104px) {
   .map-tile-gauge {
     aspect-ratio: auto;
     width: 100%;
@@ -9236,6 +9270,164 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-tile-editor[data-preview="text"] .map-tile-mock {
   display: none;
+}
+
+/* --- Icon picker (shared modal: visual glyph grid + search) --- */
+.icon-picker-field {
+  min-width: 0;
+}
+
+.icon-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.icon-picker-trigger-glyph {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--matmon-accent, var(--matmon-text));
+}
+
+.icon-picker-trigger-glyph .ui-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.icon-picker-trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-picker-trigger-caret {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  height: 0.9rem;
+  opacity: 0.6;
+}
+
+.icon-picker-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 1rem 1rem;
+}
+
+.icon-picker-modal[hidden] {
+  display: none;
+}
+
+.icon-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.icon-picker-dialog {
+  position: relative;
+  width: min(34rem, 100%);
+  max-height: 74vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--matmon-surface);
+  border: 1px solid var(--matmon-border);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.icon-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--matmon-border);
+}
+
+.icon-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icon-picker-search .ui-icon {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.icon-picker-search input {
+  min-width: 0;
+}
+
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.2rem, 1fr));
+  gap: 0.4rem;
+  padding: 0.8rem;
+  overflow: auto;
+}
+
+.icon-picker-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.6rem 0.35rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 9px;
+  background: var(--matmon-surface-soft);
+  color: var(--matmon-text);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.icon-picker-cell[hidden] {
+  display: none;
+}
+
+.icon-picker-cell:hover,
+.icon-picker-cell:focus-visible {
+  border-color: var(--matmon-accent);
+  background: color-mix(in srgb, var(--matmon-accent) 14%, var(--matmon-surface-soft));
+  outline: none;
+}
+
+.icon-picker-cell.is-active {
+  border-color: var(--matmon-accent);
+  box-shadow: inset 0 0 0 1px var(--matmon-accent);
+}
+
+.icon-picker-cell .icon-picker-glyph .ui-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.icon-picker-cell .icon-picker-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.66rem;
+  color: var(--matmon-muted);
+}
+
+.icon-picker-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--matmon-muted);
 }
 
 .map-designer-shell {

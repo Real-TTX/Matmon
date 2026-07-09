@@ -27,12 +27,32 @@
 
     <form method="post" class="map-editor-form" data-map-designer-form>
         <input type="hidden" asp-for="Input.Id" />
-        <datalist id="map-icon-keys">
-            @foreach (var iconKey in Matmon.Host.Ui.MatmonIcons.Keys)
-            {
-                <option value="@iconKey"></option>
-            }
-        </datalist>
+        <div class="icon-picker-modal" data-icon-picker-modal hidden>
+            <div class="icon-picker-backdrop" data-icon-picker-close></div>
+            <div class="icon-picker-dialog" role="dialog" aria-modal="true" aria-label="Choose icon">
+                <div class="icon-picker-head">
+                    <div class="icon-picker-search">
+                        @MatmonIcons.Render("search")
+                        <input type="text" class="form-control workspace-input" placeholder="Search icons…" data-icon-picker-search autocomplete="off" />
+                    </div>
+                    <button type="button" class="workspace-secondary-submit" data-icon-picker-close aria-label="Close">@MatmonIcons.Render("x")</button>
+                </div>
+                <div class="icon-picker-grid" data-icon-picker-grid>
+                    <button type="button" class="icon-picker-cell is-clear" data-icon-key="" data-icon-search="auto default none clear">
+                        <span class="icon-picker-glyph">@MatmonIcons.Render("square")</span>
+                        <span class="icon-picker-name">Auto</span>
+                    </button>
+                    @foreach (var iconKey in Matmon.Host.Ui.MatmonIcons.Keys)
+                    {
+                        <button type="button" class="icon-picker-cell" data-icon-key="@iconKey" data-icon-search="@iconKey">
+                            <span class="icon-picker-glyph">@MatmonIcons.Render(iconKey)</span>
+                            <span class="icon-picker-name">@iconKey</span>
+                        </button>
+                    }
+                </div>
+                <div class="icon-picker-empty" data-icon-picker-empty hidden>No matching icons.</div>
+            </div>
+        </div>
 
         <section class="panel map-editor-panel">
             <div class="panel-header">
@@ -100,6 +120,10 @@
                         @MatmonIcons.Render("signal")
                         <span><strong>Progress</strong><small>Progress bar of a percent channel</small></span>
                     </button>
+                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Row" data-map-tool-width="6" data-map-tool-height="1">
+                        @MatmonIcons.Render("list")
+                        <span><strong>Row</strong><small>Slim one-line value or summary</small></span>
+                    </button>
                     <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Text" data-map-tool-title="Text" data-map-tool-width="4" data-map-tool-height="2">
                         @MatmonIcons.Render("list")
                         <span><strong>Text</strong><small>Label, notes or instructions</small></span>
@@ -135,6 +159,7 @@
                                      data-state="@(preview?.StateKey ?? "ok")"
                                      data-kind="@tile.Kind"
                                      data-preview="@PreviewMode(tile)"
+                                     data-tile-h="@tile.Height"
                                      style="--tile-x: @tile.X; --tile-y: @tile.Y; --tile-w: @tile.Width; --tile-h: @tile.Height; @TileStyle(tile)"
                                      hidden="@(tile.IsDeleted ? "hidden" : null)">
                                 <input type="hidden" asp-for="Input.Tiles[index].Id" />
@@ -266,10 +291,15 @@
                                 </label>
                                 <div class="map-property-section">
                                     <span class="workspace-label">Appearance</span>
-                                    <label class="workspace-field">
+                                    <div class="workspace-field icon-picker-field">
                                         <span class="workspace-label">Icon</span>
-                                        <input asp-for="Input.Tiles[index].IconKey" list="map-icon-keys" class="form-control workspace-input" placeholder="auto (by type) — type to search" autocomplete="off" data-map-property-icon />
-                                    </label>
+                                        <input type="hidden" asp-for="Input.Tiles[index].IconKey" data-map-property-icon data-icon-picker-value />
+                                        <button type="button" class="form-control workspace-input icon-picker-trigger" data-icon-picker-trigger>
+                                            <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render(string.IsNullOrWhiteSpace(tile.IconKey) ? "square" : tile.IconKey)</span>
+                                            <span class="icon-picker-trigger-label" data-icon-picker-trigger-label>@(string.IsNullOrWhiteSpace(tile.IconKey) ? "Auto (by type)" : tile.IconKey)</span>
+                                            <span class="icon-picker-trigger-caret" aria-hidden="true">▾</span>
+                                        </button>
+                                    </div>
                                     <label class="workspace-field">
                                         <span class="workspace-label">Background</span>
                                         <input asp-for="Input.Tiles[index].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
@@ -307,6 +337,7 @@
                          data-state="ok"
                          data-kind="__kind__"
                          data-preview="value"
+                         data-tile-h="__h__"
                          style="--tile-x: __x__; --tile-y: __y__; --tile-w: __w__; --tile-h: __h__;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
                     <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
@@ -360,10 +391,15 @@
                     </label>
                     <div class="map-property-section">
                         <span class="workspace-label">Appearance</span>
-                        <label class="workspace-field">
+                        <div class="workspace-field icon-picker-field">
                             <span class="workspace-label">Icon</span>
-                            <input name="Input.Tiles[__index__].IconKey" list="map-icon-keys" class="form-control workspace-input" placeholder="auto (by type) — type to search" autocomplete="off" data-map-property-icon />
-                        </label>
+                            <input type="hidden" name="Input.Tiles[__index__].IconKey" value="" data-map-property-icon data-icon-picker-value />
+                            <button type="button" class="form-control workspace-input icon-picker-trigger" data-icon-picker-trigger>
+                                <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render("square")</span>
+                                <span class="icon-picker-trigger-label" data-icon-picker-trigger-label>Auto (by type)</span>
+                                <span class="icon-picker-trigger-caret" aria-hidden="true">▾</span>
+                            </button>
+                        </div>
                         <label class="workspace-field">
                             <span class="workspace-label">Background</span>
                             <input name="Input.Tiles[__index__].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />

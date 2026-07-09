@@ -36,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMapDesigner();
   initializeMapCarousel();
   initializeElementPickers();
+  initializeIconPicker();
   initializeTagInputs();
   initializeTagOverflow();
   initializeAlertsTable();
@@ -484,6 +485,119 @@ function initializeTagInputs() {
 
     commit();
     render();
+  });
+}
+
+// Icon picker: one shared modal (visual glyph grid + search) opened by any [data-icon-picker-trigger].
+// Trigger wiring is idempotent per element so it survives cloned map tiles; modal wiring runs once.
+// The active field is held on the modal element so the (once-wired) modal handlers see the current target.
+function initializeIconPicker() {
+  const modal = document.querySelector("[data-icon-picker-modal]");
+  if (!modal) {
+    return;
+  }
+
+  const grid = modal.querySelector("[data-icon-picker-grid]");
+  const searchInput = modal.querySelector("[data-icon-picker-search]");
+  const empty = modal.querySelector("[data-icon-picker-empty]");
+  const cells = grid ? [...grid.querySelectorAll(".icon-picker-cell")] : [];
+
+  const applyFilter = () => {
+    const query = (searchInput?.value || "").trim().toLowerCase();
+    let shown = 0;
+    cells.forEach((cell) => {
+      const match = !query || (cell.dataset.iconSearch || "").includes(query);
+      cell.hidden = !match;
+      if (match) {
+        shown += 1;
+      }
+    });
+    if (empty) {
+      empty.hidden = shown > 0;
+    }
+  };
+
+  const close = () => {
+    modal.hidden = true;
+    modal._iconField = null;
+  };
+
+  const open = (field) => {
+    modal._iconField = field;
+    const current = field.querySelector("[data-icon-picker-value]")?.value || "";
+    cells.forEach((cell) => cell.classList.toggle("is-active", (cell.dataset.iconKey || "") === current));
+    if (searchInput) {
+      searchInput.value = "";
+    }
+    applyFilter();
+    modal.hidden = false;
+    searchInput?.focus();
+    grid?.querySelector(".icon-picker-cell.is-active")?.scrollIntoView({ block: "nearest" });
+  };
+
+  const choose = (key, cell) => {
+    const field = modal._iconField;
+    if (!field) {
+      return;
+    }
+    const input = field.querySelector("[data-icon-picker-value]");
+    const label = field.querySelector("[data-icon-picker-trigger-label]");
+    const glyph = field.querySelector("[data-icon-picker-trigger-glyph]");
+    const sourceGlyph = cell?.querySelector(".icon-picker-glyph")?.firstElementChild;
+    if (input) {
+      input.value = key;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    if (label) {
+      label.textContent = key || "Auto (by type)";
+    }
+    if (glyph && sourceGlyph) {
+      glyph.replaceChildren(sourceGlyph.cloneNode(true));
+    }
+    // Live WYSIWYG: reflect a chosen icon on the tile itself (skip Auto - the tile keeps its kind icon).
+    if (key && sourceGlyph) {
+      const panel = field.closest("[data-map-property-panel]");
+      const tileIndex = panel?.dataset.tileIndex;
+      if (tileIndex !== undefined) {
+        document.querySelector(`[data-map-tile][data-tile-index="${tileIndex}"] .map-tile-icon`)
+          ?.replaceChildren(sourceGlyph.cloneNode(true));
+      }
+    }
+    close();
+  };
+
+  if (modal.dataset.iconPickerReady !== "1") {
+    modal.dataset.iconPickerReady = "1";
+    searchInput?.addEventListener("input", applyFilter);
+    searchInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        close();
+      }
+    });
+    modal.addEventListener("click", (event) => {
+      if (event.target.closest("[data-icon-picker-close]")) {
+        close();
+        return;
+      }
+      const cell = event.target.closest(".icon-picker-cell");
+      if (cell) {
+        choose(cell.dataset.iconKey || "", cell);
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-icon-picker-trigger]").forEach((trigger) => {
+    if (trigger.dataset.iconPickerBound === "1") {
+      return;
+    }
+    trigger.dataset.iconPickerBound = "1";
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      const field = trigger.closest(".icon-picker-field");
+      if (field) {
+        open(field);
+      }
+    });
   });
 }
 
@@ -3157,6 +3271,8 @@ function initializeMapDesigner() {
     tile.style.setProperty("--tile-y", String(nextY));
     tile.style.setProperty("--tile-w", String(nextWidth));
     tile.style.setProperty("--tile-h", String(nextHeight));
+    // Drives the single-line strip layout for one-row value/summary tiles (CSS keys on data-tile-h).
+    tile.dataset.tileH = String(nextHeight);
     const readout = panel?.querySelector("[data-map-property-size]");
     if (readout) {
       readout.textContent = `Size ${nextWidth} x ${nextHeight} · Min ${limits.minWidth} x ${limits.minHeight} · Max ${limits.maxWidth} x ${limits.maxHeight}`;
@@ -3572,9 +3688,10 @@ function initializeMapDesigner() {
       visualSelect.value = tool.visual;
     }
     setupTile(tile);
-    // Initialize the freshly cloned tile's element picker (guarded so existing
-    // pickers aren't re-wired).
+    // Initialize the freshly cloned tile's element + icon pickers (guarded so existing
+    // ones aren't re-wired).
     initializeElementPickers();
+    initializeIconPicker();
     selectTile(index);
   };
 
