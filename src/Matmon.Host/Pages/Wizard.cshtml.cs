@@ -52,8 +52,16 @@ public class WizardModel : PageModel
 
     public string Step { get; private set; } = "welcome";
 
-    /// <summary>Top-level folder names already present under the primary node.</summary>
-    public IReadOnlyList<string> ExistingFolders { get; private set; } = [];
+    /// <summary>Per-folder present/missing status of the starter tree (idempotent: only missing ones get created).</summary>
+    public IReadOnlyList<StarterFolderStatus> StarterFolders { get; private set; } = [];
+
+    /// <summary>How many starter folders are still missing (0 = the whole structure already exists).</summary>
+    public int MissingFolderCount { get; private set; }
+
+    /// <summary>True once every starter folder exists - the create button then shows a done state.</summary>
+    public bool AllFoldersExist => StarterFolders.Count > 0 && MissingFolderCount == 0;
+
+    public sealed record StarterFolderStatus(string Label, int Depth, bool Exists);
 
     /// <summary>Subnets already configured on the primary probe (what discovery will scan).</summary>
     public IReadOnlyList<string> ConfiguredSubnets { get; private set; } = [];
@@ -105,6 +113,14 @@ public class WizardModel : PageModel
     [TempData] public string? ErrorMessage { get; set; }
 
     public int StepIndex => Math.Max(0, Array.IndexOf(StepOrder, Step));
+
+    /// <summary>Human step number (1-based) and total, for the "2 / 7" progress counter.</summary>
+    public int StepNumber => StepIndex + 1;
+
+    public int StepCount => StepOrder.Length;
+
+    /// <summary>Progress-bar fill 0-100, reaching 100% on the final step.</summary>
+    public int ProgressPercent => (int)Math.Round(100.0 * StepNumber / StepCount);
 
     public int ActionStepNumber => StepIndex;          // welcome = 0, first action = 1, …
 
@@ -388,13 +404,29 @@ public class WizardModel : PageModel
         if (Step == "structure")
         {
             var root = PrimaryNode();
-            ExistingFolders = root is null
-                ? []
-                : _workspaceStore.GetAllElements()
-                    .OfType<FolderElement>()
-                    .Where(folder => folder.ParentId == root.Id)
-                    .Select(folder => folder.Name)
-                    .ToArray();
+            var folders = _workspaceStore.GetAllElements().OfType<FolderElement>().ToList();
+            var statuses = new List<StarterFolderStatus>();
+            var missing = 0;
+            foreach (var (name, children) in StarterTree)
+            {
+                var top = root is null
+                    ? null
+                    : folders.FirstOrDefault(folder => folder.ParentId == root.Id &&
+                        string.Equals(folder.Name, name, StringComparison.OrdinalIgnoreCase));
+                var topExists = top is not null;
+                if (!topExists) { missing++; }
+                statuses.Add(new StarterFolderStatus(name, 0, topExists));
+
+                foreach (var child in children)
+                {
+                    var childExists = topExists && folders.Any(folder => folder.ParentId == top!.Id &&
+                        string.Equals(folder.Name, child, StringComparison.OrdinalIgnoreCase));
+                    if (!childExists) { missing++; }
+                    statuses.Add(new StarterFolderStatus(child, 1, childExists));
+                }
+            }
+            StarterFolders = statuses;
+            MissingFolderCount = missing;
 
             ConfiguredSubnets = _workspaceStore.GetPrimaryProbeSubnets();
             IReadOnlyList<string> detected;

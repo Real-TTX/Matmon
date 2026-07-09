@@ -246,6 +246,10 @@ public static class MatmonIcons
             """,
     };
 
+    /// <summary>All available glyph keys (sorted) - for icon pickers.</summary>
+    public static IReadOnlyList<string> Keys { get; } =
+        IconBodies.Keys.OrderBy(key => key, System.StringComparer.OrdinalIgnoreCase).ToArray();
+
     public static IHtmlContent Render(string name, string? cssClass = null)
     {
         var body = IconBodies.TryGetValue(name, out var iconBody) ? iconBody : IconBodies["square"];

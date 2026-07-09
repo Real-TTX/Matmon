@@ -29,17 +29,18 @@
         <a class="workspace-secondary-submit setup-wizard-skip" href="/">@MatmonIcons.Render("x")<span>Skip setup</span></a>
     </div>
 
-    <ol class="setup-wizard-rail" aria-label="Setup progress">
-        @for (var i = 0; i < steps.Length; i++)
-        {
-            var s = steps[i];
-            var state = i < Model.StepIndex ? "is-done" : (i == Model.StepIndex ? "is-current" : string.Empty);
-            <li class="setup-wizard-step @state">
-                <span class="setup-wizard-step-mark">@(i < Model.StepIndex ? MatmonIcons.Render("check") : MatmonIcons.Render(s.Icon))</span>
-                <span class="setup-wizard-step-label">@s.Label</span>
-            </li>
-        }
-    </ol>
+    @{
+        var current = steps[Math.Clamp(Model.StepIndex, 0, steps.Length - 1)];
+    }
+    <div class="setup-wizard-progress" aria-label="Setup progress">
+        <div class="setup-wizard-progress-head">
+            <span class="setup-wizard-progress-step">@MatmonIcons.Render(current.Icon)<span>@current.Label</span></span>
+            <span class="setup-wizard-progress-count">Step @Model.StepNumber / @Model.StepCount</span>
+        </div>
+        <div class="setup-wizard-progress-track" role="progressbar" aria-valuenow="@Model.StepNumber" aria-valuemin="1" aria-valuemax="@Model.StepCount">
+            <span class="setup-wizard-progress-bar" style="width:@Model.ProgressPercent%"></span>
+        </div>
+    </div>
 
     <div class="panel setup-wizard-panel">
         @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -137,24 +138,28 @@
                     <p>Create a starter folder structure, and tell this node which networks it may scan.</p>
 
                     <h3 class="setup-wizard-subhead">Folders</h3>
+                    <p class="setup-wizard-muted" style="margin-top:0;">This starter structure - only the missing folders are created, existing ones are left as they are.</p>
                     <ul class="setup-wizard-tree">
-                        @foreach (var (name, children) in WizardModel.StarterTree)
+                        @foreach (var folder in Model.StarterFolders)
                         {
-                            <li>
-                                <span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@name</span></span>
-                                @if (children.Length > 0)
+                            <li class="setup-wizard-folder@(folder.Depth > 0 ? " is-child" : string.Empty)@(folder.Exists ? " is-done" : string.Empty)">
+                                <span class="setup-wizard-tree-item">@(folder.Exists ? MatmonIcons.Render("check") : MatmonIcons.Render("folder"))<span>@folder.Label</span></span>
+                                @if (folder.Exists)
                                 {
-                                    <ul>@foreach (var child in children){<li><span class="setup-wizard-tree-item">@MatmonIcons.Render("folder")<span>@child</span></span></li>}</ul>
+                                    <span class="setup-wizard-folder-tag">exists</span>
                                 }
                             </li>
                         }
                     </ul>
-                    <form method="post" asp-page-handler="CreateStructure">
-                        <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("plus")<span>Create these folders</span></button>
-                    </form>
-                    @if (Model.ExistingFolders.Count > 0)
+                    @if (Model.AllFoldersExist)
                     {
-                        <p class="setup-wizard-muted">Already under your node: @string.Join(", ", Model.ExistingFolders)</p>
+                        <button type="button" class="workspace-submit setup-wizard-open" disabled>@MatmonIcons.Render("check")<span>All folders exist</span></button>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="CreateStructure">
+                            <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("plus")<span>Create @Model.MissingFolderCount missing folder@(Model.MissingFolderCount == 1 ? string.Empty : "s")</span></button>
+                        </form>
                     }
 
                     <h3 class="setup-wizard-subhead" style="margin-top:18px;">Networks</h3>
@@ -221,27 +226,31 @@
                     }
 
                     <h3 class="setup-wizard-subhead" style="margin-top:18px;">Remote probes</h3>
-                    <p class="setup-wizard-muted" style="margin-top:0;">Monitor another site or devices behind NAT - the probe connects outbound to this server.</p>
-                    @foreach (var probe in Model.RemoteProbes)
+                    <p class="setup-wizard-muted" style="margin-top:0;">Optional - monitor another site or devices behind NAT. The probe connects outbound to this server.</p>
+                    @if (Model.RemoteProbes.Count > 0)
                     {
-                        <div class="setup-wizard-probe">
-                            <strong class="setup-wizard-tree-item">@MatmonIcons.Render("probe")<span>@probe.Name</span></strong>
-                            <pre class="setup-wizard-code">docker run -d \
+                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") @Model.RemoteProbes.Count remote probe@(Model.RemoteProbes.Count == 1 ? string.Empty : "s") already added. Deploy each with its command (replace <code>@primaryUrl</code> with an address the probe can reach):</p>
+                        @foreach (var probe in Model.RemoteProbes)
+                        {
+                            <div class="setup-wizard-probe">
+                                <strong class="setup-wizard-tree-item">@MatmonIcons.Render("probe")<span>@probe.Name</span></strong>
+                                <pre class="setup-wizard-code">docker run -d \
   -e Matmon__Mode=Secondary \
   -e Matmon__ProbeId=@probe.ProbeId \
   -e Matmon__ProbeToken=@probe.Token \
   -e Matmon__PrimaryUrl=@primaryUrl \
   ghcr.io/real-ttx/matmon:latest</pre>
-                        </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="setup-wizard-muted">No remote probes yet - add one below to get its deploy command.</p>
                     }
                     <form method="post" asp-page-handler="CreateProbe" class="setup-wizard-add">
                         <input type="text" name="name" class="workspace-input" placeholder="Probe name, e.g. Branch office" autocomplete="off" />
                         <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create probe</span></button>
                     </form>
-                    @if (Model.RemoteProbes.Count > 0)
-                    {
-                        <p class="setup-wizard-muted">Replace <code>@primaryUrl</code> with this server's address reachable from the probe.</p>
-                    }
                     break;
 
                 case "twofactor":

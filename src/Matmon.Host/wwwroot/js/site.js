@@ -2397,6 +2397,12 @@ function initializeDiscoveryJobRefresh() {
 
   initializeDiscoveryAssistantActions();
 
+  if (importMode) {
+    // Import view = a completed job, rendered server-side and static. No streaming to poll, and we must
+    // not overwrite the richly server-rendered tree with the client renderer. Just leave it as-is.
+    return;
+  }
+
   const refresh = async () => {
     try {
       const response = await fetch(`/api/discovery-jobs/${encodeURIComponent(jobId)}`, {
@@ -2543,6 +2549,12 @@ function renderDiscoveryJob(job, elements) {
   applyDiscoveryTableState(document.querySelector("[data-discovery-results-panel]"));
 }
 
+// A suggestion at/above this confidence is "recommended" (default-selected + badged). Mirror in Discovery.cshtml.
+const DISCOVERY_RECOMMENDED_MIN = 80;
+// Inline copies of the host/sensor glyphs (MatmonIcons) so the client-streamed tree matches the server render.
+const DISCOVERY_HOST_ICON = '<svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.2" width="11" height="7.1" /><path d="M6 13.1h4" /><path d="M8 10.3v2.8" /></svg>';
+const DISCOVERY_SENSOR_ICON = '<svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4.8" /><circle cx="8" cy="8" r="1.5" /><path d="M8 1.5v2" /><path d="M8 12.5v2" /><path d="M1.5 8h2" /><path d="M12.5 8h2" /></svg>';
+
 function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSuggestions, expandedByAddress, importMode) {
   const address = String(result.address ?? "");
   const hostName = String(result.hostName ?? "");
@@ -2553,10 +2565,11 @@ function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSugg
   const openPortsText = openPorts.join(", ");
   const snmpResponded = Boolean(result.snmpResponded);
   const snmpSummary = String(result.snmpSummary ?? "");
-  const selected = selectedByAddress.has(address) ? selectedByAddress.get(address) : true;
   const suggestedSensors = Array.isArray(result.suggestedSensors) ? result.suggestedSensors : [];
-  const expanded = expandedByAddress.has(address) ? expandedByAddress.get(address) : false;
   const sensorCount = suggestedSensors.length;
+  const anyRecommended = suggestedSensors.some((suggestion) => Number(suggestion.confidence ?? 0) >= DISCOVERY_RECOMMENDED_MIN);
+  const selected = selectedByAddress.has(address) ? selectedByAddress.get(address) : anyRecommended;
+  const expanded = expandedByAddress.has(address) ? expandedByAddress.get(address) : sensorCount > 0;
   const searchText = [
     address,
     hostName,
@@ -2570,17 +2583,18 @@ function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSugg
       String(suggestion.reason ?? "")
     ])
   ].join(" ");
-  const suggestionRows = suggestedSensors
-    .map((suggestion, sensorIndex) => renderDiscoverySuggestionRow(address, suggestion, index, sensorIndex, selectedSuggestions, importMode))
-    .join("");
-  const hostControl = importMode
-    ? `
-        <input type="checkbox" name="SelectedHostAddresses" value="${escapeAttribute(address)}" ${selected ? "checked" : ""} />
-      `
+
+  const sensorsMarkup = sensorCount === 0
+    ? `<div class="discovery-node-empty">No sensor suggestions.</div>`
+    : `<div class="discovery-node-sensors">${suggestedSensors.map((suggestion) => renderDiscoverySuggestionRow(address, suggestion, selectedSuggestions, importMode)).join("")}</div>`;
+
+  const hostCheck = importMode
+    ? `<input type="checkbox" class="discovery-node-check" name="SelectedHostAddresses" value="${escapeAttribute(address)}" data-discovery-host-check ${selected ? "checked" : ""} />`
     : "";
+  const nodeClass = importMode ? `discovery-node ${selected ? "is-selected" : "is-disabled"}` : "discovery-node";
 
   return `
-    <tr class="discovery-host-row"
+    <div class="${nodeClass}"
         data-discovery-address="${escapeAttribute(address)}"
         data-discovery-host="${escapeAttribute(hostName)}"
         data-discovery-text="${escapeAttribute(searchText)}"
@@ -2590,55 +2604,56 @@ function renderDiscoveryResultRow(result, index, selectedByAddress, selectedSugg
         data-discovery-snmp="${snmpResponded ? "true" : "false"}"
         data-discovery-sensor-count="${sensorCount}"
         data-discovery-expanded="${expanded ? "true" : "false"}">
-      <td class="discovery-table-select">
-        <button type="button" class="discovery-row-toggle" data-discovery-toggle aria-expanded="${expanded ? "true" : "false"}">${expanded ? "-" : "+"}</button>
-        ${hostControl}
-      </td>
-      <td class="discovery-address-cell"><span class="tree-kind" data-kind="host"><span>Host</span></span><strong>${escapeHtml(address)}</strong></td>
-      <td>${hostName ? escapeHtml(hostName) : "-"}</td>
-      <td>${pingAlive ? `${escapeHtml(pingMs)} ms` : "-"}</td>
-      <td title="${escapeAttribute(openPortsText)}">${openPorts.length > 0 ? `${openPorts.length} open` : "-"}</td>
-      <td>${snmpResponded ? "yes" : "-"}</td>
-      <td><span class="state-pill" data-state="${sensorCount > 0 ? "ok" : "warning"}">${sensorCount} service${sensorCount === 1 ? "" : "s"}</span></td>
-    </tr>
-    <tr class="discovery-suggestion-panel" data-discovery-parent-address="${escapeAttribute(address)}" ${expanded ? "" : "hidden"}>
-      <td colspan="7">
-        <div class="discovery-host-message">${escapeHtml(message || "No summary.")}</div>
-        ${suggestionRows ? `<div class="discovery-suggestion-list">${suggestionRows}</div>` : `<div class="empty-state">No sensor suggestions.</div>`}
-      </td>
-    </tr>
+      <div class="discovery-node-head">
+        ${hostCheck}
+        <button type="button" class="discovery-node-toggle" data-discovery-toggle aria-expanded="${expanded ? "true" : "false"}">${expanded ? "▾" : "▸"}</button>
+        <span class="tree-kind" data-kind="host">${DISCOVERY_HOST_ICON}</span>
+        <span class="discovery-node-title">
+          <strong>${escapeHtml(address)}</strong>
+          ${hostName ? `<span class="discovery-node-sub">${escapeHtml(hostName)}</span>` : ""}
+        </span>
+        <span class="discovery-node-facts">
+          ${pingAlive ? `<span class="discovery-fact" data-ok>${escapeHtml(pingMs)} ms</span>` : ""}
+          ${openPorts.length > 0 ? `<span class="discovery-fact" title="${escapeAttribute(openPortsText)}">${openPorts.length} port${openPorts.length === 1 ? "" : "s"}</span>` : ""}
+          ${snmpResponded ? `<span class="discovery-fact">SNMP</span>` : ""}
+        </span>
+        <span class="discovery-node-count">${sensorCount} sensor${sensorCount === 1 ? "" : "s"}</span>
+      </div>
+      <div class="discovery-node-body"${expanded ? "" : " hidden"}>
+        ${message ? `<div class="discovery-node-message">${escapeHtml(message)}</div>` : ""}
+        ${sensorsMarkup}
+      </div>
+    </div>
   `;
 }
 
-function renderDiscoverySuggestionRow(address, suggestion, resultIndex, sensorIndex, selectedSuggestions, importMode) {
+function renderDiscoverySuggestionRow(address, suggestion, selectedSuggestions, importMode) {
   const sensorTypeKey = String(suggestion.sensorTypeKey ?? "");
   const name = String(suggestion.name ?? sensorTypeKey);
   const target = String(suggestion.target ?? "");
   const reason = String(suggestion.reason ?? "");
-  const confidence = Number(suggestion.confidence ?? 0);
-  const suggestionKey = buildDiscoverySuggestionKey(address, sensorTypeKey, target, name);
-  const selected = selectedSuggestions.has(suggestionKey) ? selectedSuggestions.get(suggestionKey) : true;
+  const confidence = Number.isFinite(Number(suggestion.confidence)) ? Number(suggestion.confidence) : 0;
+  const recommended = confidence >= DISCOVERY_RECOMMENDED_MIN;
+  const pillState = recommended ? "ok" : "warning";
+  const targetMarkup = target ? `<span class="discovery-sensor-target">${escapeHtml(target)}</span>` : "";
+  const iconAndName = `
+      <span class="tree-kind" data-kind="sensor">${DISCOVERY_SENSOR_ICON}</span>
+      <span class="sensor-chip">${escapeHtml(sensorTypeKey)}</span>
+      <span class="discovery-sensor-name" title="${escapeAttribute(reason)}">${escapeHtml(name)}</span>
+      ${targetMarkup}
+      <span class="discovery-sensor-spacer"></span>`;
+  const pill = `<span class="state-pill" data-state="${pillState}">${confidence}%</span>`;
 
   if (!importMode) {
-    return `
-      <div class="discovery-suggestion-row discovery-suggestion-row-readonly">
-        <span class="sensor-chip">${escapeHtml(sensorTypeKey)}</span>
-        <span class="discovery-suggestion-name">${escapeHtml(name)}</span>
-        ${target ? `<span class="event-row-path">${escapeHtml(target)}</span>` : ""}
-        ${reason ? `<span class="event-row-message">${escapeHtml(reason)}</span>` : ""}
-        <span class="state-pill" data-state="ok">${Number.isFinite(confidence) ? confidence : 0}%</span>
-      </div>
-    `;
+    return `<div class="discovery-sensor is-readonly">${iconAndName}${pill}</div>`;
   }
 
+  const suggestionKey = buildDiscoverySuggestionKey(address, sensorTypeKey, target, name);
+  const selected = selectedSuggestions.has(suggestionKey) ? selectedSuggestions.get(suggestionKey) : recommended;
+  const badge = recommended ? `<span class="discovery-sensor-badge">Recommended</span>` : "";
   return `
-    <label class="discovery-suggestion-row" data-discovery-suggestion-key="${escapeAttribute(suggestionKey)}">
-      <input type="checkbox" name="SelectedSuggestionKeys" value="${escapeAttribute(suggestionKey)}" ${selected ? "checked" : ""} />
-      <span class="sensor-chip">${escapeHtml(sensorTypeKey)}</span>
-      <span class="discovery-suggestion-name">${escapeHtml(name)}</span>
-      ${target ? `<span class="event-row-path">${escapeHtml(target)}</span>` : ""}
-      ${reason ? `<span class="event-row-message">${escapeHtml(reason)}</span>` : ""}
-      <span class="state-pill" data-state="ok">${Number.isFinite(confidence) ? confidence : 0}%</span>
+    <label class="discovery-sensor" data-discovery-suggestion-key="${escapeAttribute(suggestionKey)}" data-discovery-recommended="${recommended ? "true" : "false"}">
+      <input type="checkbox" name="SelectedSuggestionKeys" value="${escapeAttribute(suggestionKey)}" data-discovery-sensor-check ${selected ? "checked" : ""} />${iconAndName}${badge}${pill}
     </label>
   `;
 }
@@ -2653,14 +2668,61 @@ function initializeDiscoveryAssistantActions() {
     return;
   }
 
-  const setChecked = (checked) => {
-    form.querySelectorAll(".discovery-suggestion-row input[type='checkbox'], .discovery-host-row input[type='checkbox']").forEach((checkbox) => {
-      checkbox.checked = checked;
+  // Reflect a host's checkbox onto its card: dim + disable its sensor checkboxes when it won't be imported.
+  const syncNodeDisabled = (node) => {
+    const hostCheck = node.querySelector("[data-discovery-host-check]");
+    const selected = hostCheck ? hostCheck.checked : true; // host-scoped nodes have no toggle: always in.
+    node.classList.toggle("is-selected", selected);
+    node.classList.toggle("is-disabled", !selected);
+    node.querySelectorAll("[data-discovery-sensor-check]").forEach((checkbox) => {
+      checkbox.disabled = !selected;
     });
   };
 
-  document.querySelector("[data-discovery-select-all]")?.addEventListener("click", () => setChecked(true));
-  document.querySelector("[data-discovery-select-none]")?.addEventListener("click", () => setChecked(false));
+  const applyPreset = (preset) => {
+    form.querySelectorAll(".discovery-node").forEach((node) => {
+      const hostCheck = node.querySelector("[data-discovery-host-check]");
+      const sensorChecks = Array.from(node.querySelectorAll("[data-discovery-sensor-check]"));
+      if (preset === "none") {
+        if (hostCheck) { hostCheck.checked = false; }
+        sensorChecks.forEach((checkbox) => { checkbox.checked = false; });
+      } else if (preset === "all") {
+        if (hostCheck) { hostCheck.checked = true; }
+        sensorChecks.forEach((checkbox) => { checkbox.checked = true; });
+        node.classList.add("is-showing-extras"); // everything is checked now - reveal the extras too
+      } else {
+        // recommended: only the recommended sensors (host iff it has one), extras collapsed again.
+        sensorChecks.forEach((checkbox) => {
+          const row = checkbox.closest(".discovery-sensor");
+          checkbox.checked = row?.dataset.discoveryRecommended === "true";
+        });
+        if (hostCheck) { hostCheck.checked = sensorChecks.some((checkbox) => checkbox.checked); }
+        node.classList.remove("is-showing-extras");
+      }
+      syncNodeDisabled(node);
+    });
+  };
+
+  form.querySelectorAll("[data-discovery-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyPreset(button.dataset.discoveryPreset || "recommended");
+      form.querySelectorAll("[data-discovery-preset]").forEach((other) => {
+        other.classList.toggle("is-active", other === button);
+      });
+    });
+  });
+
+  form.querySelectorAll("[data-discovery-host-check]").forEach((hostCheck) => {
+    hostCheck.addEventListener("change", () => {
+      const node = hostCheck.closest(".discovery-node");
+      if (node) {
+        syncNodeDisabled(node);
+      }
+    });
+  });
+
+  // Initial pass: keep the server-rendered checked state but make sure dim + sensor-disabled agree with it.
+  form.querySelectorAll(".discovery-node").forEach(syncNodeDisabled);
 }
 
 function initializeDiscoveryResultTable() {
@@ -2670,38 +2732,32 @@ function initializeDiscoveryResultTable() {
   }
 
   panel.dataset.discoveryTableInitialized = "true";
-  panel.dataset.discoverySort = panel.dataset.discoverySort || "address";
-  panel.dataset.discoverySortDirection = panel.dataset.discoverySortDirection || "asc";
 
   panel.querySelector("[data-discovery-filter]")?.addEventListener("input", () => applyDiscoveryTableState(panel));
   panel.querySelector("[data-discovery-service-filter]")?.addEventListener("change", () => applyDiscoveryTableState(panel));
 
-  panel.querySelectorAll("[data-discovery-sort]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const sortKey = button.dataset.discoverySort || "address";
-      const currentSort = panel.dataset.discoverySort || "address";
-      const currentDirection = panel.dataset.discoverySortDirection || "asc";
-      panel.dataset.discoverySort = sortKey;
-      panel.dataset.discoverySortDirection = currentSort === sortKey && currentDirection === "asc" ? "desc" : "asc";
-      applyDiscoveryTableState(panel);
-    });
-  });
-
   panel.addEventListener("click", (event) => {
+    const more = event.target.closest("[data-discovery-more]");
+    if (more) {
+      const moreNode = more.closest(".discovery-node");
+      if (moreNode) {
+        const showing = moreNode.classList.toggle("is-showing-extras");
+        more.setAttribute("aria-expanded", showing ? "true" : "false");
+      }
+      return;
+    }
+
     const toggle = event.target.closest("[data-discovery-toggle]");
     if (!toggle) {
       return;
     }
 
-    const row = toggle.closest(".discovery-host-row");
-    if (!row) {
+    const node = toggle.closest(".discovery-node");
+    if (!node) {
       return;
     }
 
-    const expanded = row.dataset.discoveryExpanded !== "true";
-    row.dataset.discoveryExpanded = expanded ? "true" : "false";
-    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-    toggle.textContent = expanded ? "-" : "+";
+    node.dataset.discoveryExpanded = node.dataset.discoveryExpanded !== "true" ? "true" : "false";
     applyDiscoveryTableState(panel);
   });
 
@@ -2753,47 +2809,28 @@ function applyDiscoveryTableState(panel) {
     return;
   }
 
-  const sortKey = panel.dataset.discoverySort || "address";
-  const sortDirection = panel.dataset.discoverySortDirection === "desc" ? "desc" : "asc";
   const search = String(panel.querySelector("[data-discovery-filter]")?.value || "").trim().toLowerCase();
   const serviceFilter = String(panel.querySelector("[data-discovery-service-filter]")?.value || "all");
-  const pairs = Array.from(body.querySelectorAll(".discovery-host-row")).map((row) => ({
-    row,
-    details: row.nextElementSibling?.classList.contains("discovery-suggestion-panel") ? row.nextElementSibling : null
-  }));
-
-  pairs.sort((left, right) => compareDiscoveryRows(left.row, right.row, sortKey, sortDirection));
-  pairs.forEach((pair) => {
-    body.appendChild(pair.row);
-    if (pair.details) {
-      body.appendChild(pair.details);
-    }
-  });
 
   let visibleCount = 0;
-  pairs.forEach((pair) => {
-    const visible = discoveryRowMatches(pair.row, search, serviceFilter);
-    pair.row.hidden = !visible;
+  body.querySelectorAll(".discovery-node").forEach((node) => {
+    const visible = discoveryRowMatches(node, search, serviceFilter);
+    node.hidden = !visible;
     if (visible) {
       visibleCount++;
     }
 
-    const expanded = visible && pair.row.dataset.discoveryExpanded === "true";
-    const toggle = pair.row.querySelector("[data-discovery-toggle]");
+    const expanded = node.dataset.discoveryExpanded === "true";
+    const toggle = node.querySelector("[data-discovery-toggle]");
     if (toggle) {
-      toggle.textContent = expanded ? "-" : "+";
+      toggle.textContent = expanded ? "▾" : "▸";
       toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
     }
 
-    if (pair.details) {
-      pair.details.hidden = !expanded;
+    const bodyElement = node.querySelector(".discovery-node-body");
+    if (bodyElement) {
+      bodyElement.hidden = !expanded;
     }
-  });
-
-  panel.querySelectorAll("[data-discovery-sort]").forEach((button) => {
-    const active = button.dataset.discoverySort === sortKey;
-    button.classList.toggle("is-active", active);
-    button.dataset.direction = active ? sortDirection : "";
   });
 
   const visibleCountElement = panel.querySelector("[data-discovery-visible-count]");
@@ -2950,14 +2987,15 @@ function initializeMapDesigner() {
     Value: "Value",
     Graph: "Graph"
   };
-  // Minimum tile size floors. Kept small so tiles can shrink to 1-2 columns wide (any height) -
-  // a graph keeps a 2-column floor since a 1-wide sparkline is unreadable; everything else allows 1.
+  // One consistent rule (mirrors Core MonitoringMapTileConstraints): a per-kind readability floor, and a
+  // maximum of the whole board for every kind (the big maxWidth/maxHeight are capped to the live grid in
+  // getSizeLimits). A graph needs >=3x2; an aggregate/summary >=2x1; text/value/element can be a single cell.
   const sizeLimits = {
-    Text: { minWidth: 1, minHeight: 1, maxWidth: 12, maxHeight: 6, defaultWidth: 4, defaultHeight: 2 },
-    Element: { minWidth: 1, minHeight: 1, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
-    Status: { minWidth: 1, minHeight: 1, maxWidth: 12, maxHeight: 8, defaultWidth: 4, defaultHeight: 2 },
-    Value: { minWidth: 1, minHeight: 1, maxWidth: 8, maxHeight: 6, defaultWidth: 3, defaultHeight: 2 },
-    Graph: { minWidth: 2, minHeight: 2, maxWidth: 12, maxHeight: 10, defaultWidth: 5, defaultHeight: 3 }
+    Text: { minWidth: 1, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 4, defaultHeight: 1 },
+    Element: { minWidth: 1, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 3, defaultHeight: 2 },
+    Status: { minWidth: 2, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 4, defaultHeight: 2 },
+    Value: { minWidth: 1, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 2, defaultHeight: 2 },
+    Graph: { minWidth: 3, minHeight: 2, maxWidth: 24, maxHeight: 16, defaultWidth: 5, defaultHeight: 3 }
   };
   const kindHints = {
     "0": "Text tiles do not need a target.",
@@ -3128,6 +3166,11 @@ function initializeMapDesigner() {
     if (readout) {
       readout.textContent = `Size ${nextWidth} x ${nextHeight} · Min ${limits.minWidth} x ${limits.minHeight} · Max ${limits.maxWidth} x ${limits.maxHeight}`;
     }
+    // Live size badge on the tile itself (shown while dragging/resizing) - "you see the tile taking shape".
+    const badge = tile.querySelector("[data-map-tile-size-badge]");
+    if (badge) {
+      badge.textContent = `${nextWidth} × ${nextHeight}`;
+    }
   };
 
   const applyTileAppearance = (tile, panel) => {
@@ -3211,6 +3254,17 @@ function initializeMapDesigner() {
         : (selectedText || "No target selected");
     }
 
+    const showCard = panel.querySelector("[data-map-property-show-card]")?.checked ?? true;
+    tile.classList.toggle("is-plain", !showCard);
+
+    // Design-mode realistic preview: pick the mock (value / gauge / progress / graph / text) from kind + visual.
+    const visual = (panel.querySelector("[data-map-property-visual-type]")?.value || "").trim();
+    tile.dataset.preview = kind === "Text" ? "text"
+      : kind === "Graph" ? "graph"
+      : visual === "Gauge" ? "gauge"
+      : visual === "ProgressBar" ? "progress"
+      : "value";
+
     syncPanelVisibility(panel);
     applyTileAppearance(tile, panel);
     applyTilePosition(tile);
@@ -3280,7 +3334,7 @@ function initializeMapDesigner() {
     panel?.querySelectorAll("[data-map-tile-width], [data-map-tile-height]").forEach((input) => {
       input.addEventListener("input", () => applyTilePosition(tile));
     });
-    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge]").forEach((input) => {
+    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card]").forEach((input) => {
       input.addEventListener("input", () => syncTileFromPanel(panel));
       input.addEventListener("change", () => syncTileFromPanel(panel));
     });

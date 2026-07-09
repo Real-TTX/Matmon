@@ -76,6 +76,14 @@ public sealed class MonitoringMapTile
 
     public string? Text { get; set; }
 
+    /// <summary>Optional glyph key (a <c>MatmonIcons</c> name) shown on the tile - chosen via the icon picker.
+    /// Null/empty = no icon. Scales with the tile size at render time.</summary>
+    public string? IconKey { get; set; }
+
+    /// <summary>When false the tile drops its card chrome (background/border/shadow) and renders "bare" -
+    /// e.g. a section heading placed at height 1 with no visible tile. Defaults to true (a normal card).</summary>
+    public bool ShowCard { get; set; } = true;
+
     public int X { get; set; } = 1;
 
     public int Y { get; set; } = 1;
@@ -141,4 +149,28 @@ public enum MonitoringMapTileVisualType
 
     /// <summary>Derive the visual from the sensor's configured channel visual (see ChannelVisuals), or its measurement kind.</summary>
     Auto = 3
+}
+
+/// <summary>
+/// Per-kind sizing rules for map tiles, in grid cells. One consistent source of truth for the designer's
+/// resize clamp (previously ad-hoc / "random") and any validation, so each tile kind has a sensible floor
+/// and ceiling. Maxima are capped to the board (columns/rows).
+/// </summary>
+public static class MonitoringMapTileConstraints
+{
+    /// <summary>(minWidth, minHeight, maxWidth, maxHeight) in grid cells for a tile kind. The only per-kind
+    /// rule is a readability floor (a graph narrower than 3x2 or an aggregate under 2x1 is useless); every
+    /// tile may grow up to the whole board, so the maximum is simply the grid size.</summary>
+    public static (int MinWidth, int MinHeight, int MaxWidth, int MaxHeight) For(MonitoringMapTileKind kind, int columns, int rows)
+    {
+        var cols = Math.Max(1, columns);
+        var rws = Math.Max(1, rows);
+        var (minWidth, minHeight) = kind switch
+        {
+            MonitoringMapTileKind.Graph => (3, 2),
+            MonitoringMapTileKind.Status => (2, 1),
+            _ => (1, 1), // Text / Value / Element can be as small as a single cell
+        };
+        return (Math.Min(minWidth, cols), Math.Min(minHeight, rws), cols, rws);
+    }
 }

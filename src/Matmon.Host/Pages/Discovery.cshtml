@@ -7,7 +7,6 @@
     var selectedJob = Model.View.SelectedJob;
     var runningJobs = Model.View.RunningJobs;
     var historyJobs = Model.View.HistoryJobs;
-    var discoveryTabImport = Model.Import ? "true" : null;
     var showResults = selectedJob is not null || Model.Results.Count > 0;
     var selectedJobIsActive = selectedJob?.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running;
     var selectedJobTone = selectedJob?.Status == DiscoveryJobStatus.Failed
@@ -25,6 +24,8 @@
         .ToHashSet(StringComparer.Ordinal);
     var hasImportSelection = selectedHostAddresses.Count > 0 || selectedSuggestionKeys.Count > 0;
     var hostScopedImport = string.Equals(selectedJob?.Request.ScopeKind?.ToString(), "Host", StringComparison.OrdinalIgnoreCase);
+    // A suggestion counts as "recommended" (default-selected, badged) at/above this confidence. Mirror in site.js.
+    var recommendedMin = 80;
 }
 
 <section class="dashboard-shell">
@@ -45,188 +46,310 @@
         <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
     }
 
-    @if (selectedJob is { } job)
+    @if (Model.Mode == "scan")
     {
-        <section class="panel panel-stack workspace-panel" data-discovery-job-panel data-discovery-job-id="@job.JobId" data-discovery-active="@selectedJobIsActive.ToString().ToLowerInvariant()">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Probe job</span></h2>
-                <span class="state-pill" data-discovery-job-status data-state="@selectedJobTone">@job.Status</span>
-            </div>
-            <div class="discovery-job-summary">
-                <span>@job.ProbeName</span>
-                <span>@job.Request.Network</span>
-                <span data-discovery-job-message>@(job.Message ?? "Waiting for probe sync")</span>
-            </div>
-            <div class="discovery-progress" data-discovery-progress>
-                <div class="discovery-progress-header">
-                    <strong data-discovery-progress-percent>@job.ProgressPercent%</strong>
-                    <span>
-                        <span data-discovery-progress-scanned>@job.ScannedHosts</span>/<span data-discovery-progress-total>@job.TotalHosts</span>
-                        checked
-                    </span>
-                </div>
-                <div class="discovery-progress-track" aria-hidden="true">
-                    <span data-discovery-progress-bar style="width: @job.ProgressPercent%"></span>
-                </div>
-            </div>
-            @if (job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running)
-            {
-                <form method="post" asp-page-handler="Cancel" asp-route-jobId="@job.JobId" class="page-actions workspace-toolbar">
-                    <span class="workspace-secondary-submit">@MatmonIcons.Render("clock")<span>Live refresh</span></span>
-                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("x")<span>Cancel job</span></button>
-                </form>
-            }
-            else if (canImport)
-            {
-                <div class="page-actions workspace-toolbar">
-                    <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@job.JobId" asp-route-import="true">@MatmonIcons.Render("plus")<span>Create selected</span></a>
-                </div>
-            }
-        </section>
-    }
-
-    <div class="sensor-tabs discovery-tabs" role="tablist" aria-label="Discovery sections">
-        <a class="sensor-tab @(Model.IsActiveTab("scan") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="scan" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("search")<span>Scan</span></a>
-        <a class="sensor-tab @(Model.IsActiveTab("running") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="running" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>Running</span><span class="workspace-tab-count">@runningJobs.Count</span></a>
-        <a class="sensor-tab @(Model.IsActiveTab("history") ? "is-active" : "")" asp-page="/Discovery" asp-route-tab="history" asp-route-jobId="@Model.JobId" asp-route-import="@discoveryTabImport">@MatmonIcons.Render("clock")<span>History</span><span class="workspace-tab-count">@historyJobs.Count</span></a>
-    </div>
-
-    @if (Model.IsActiveTab("scan"))
-    {
-        <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("search")<span>Scan</span></h2>
-            <span class="panel-hint">whole subnet or known hosts</span>
+        @* ---- Start a discovery (its own screen, reached via the "Discover" button) ---- *@
+        <div class="page-actions workspace-toolbar">
+            <a class="workspace-secondary-submit" asp-page="/Discovery">@MatmonIcons.Render("arrow-left")<span>Back to jobs</span></a>
         </div>
 
-        <form method="post" asp-page-handler="Scan" class="workspace-form-grid discovery-form" data-discovery-scan-form>
-            <label class="workspace-field workspace-span-2">
-                <span class="workspace-label">Probe / node</span>
-                <select asp-for="Input.ProbeElementId" asp-items="Model.View.ProbeOptions" class="form-select workspace-select"></select>
-            </label>
-
-            <div class="workspace-field workspace-span-2 discovery-scope">
-                <span class="workspace-label">Scan scope</span>
-                <div class="discovery-scope-options">
-                    <label class="discovery-scope-option">
-                        <input type="radio" asp-for="Input.ScanScope" value="network" />
-                        <span class="discovery-scope-text">
-                            <strong>Whole subnet / range</strong>
-                            <small>Sweep a CIDR, range or single IP</small>
-                        </span>
-                    </label>
-                    <label class="discovery-scope-option">
-                        <input type="radio" asp-for="Input.ScanScope" value="known" />
-                        <span class="discovery-scope-text">
-                            <strong>Known hosts only</strong>
-                            <small>Re-scan the @Model.View.KnownHostCount host@(Model.View.KnownHostCount == 1 ? string.Empty : "s") already under this probe</small>
-                        </span>
-                    </label>
-                </div>
+        <section class="panel panel-stack workspace-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("search")<span>Start a discovery</span></h2>
+                <span class="panel-hint">whole subnet or known hosts</span>
             </div>
 
-            <label class="workspace-field workspace-span-2" data-discovery-network-field>
-                <span class="workspace-label">Network</span>
-                <input asp-for="Input.Network" class="form-control workspace-input" placeholder="10.10.2.0/24 or 10.10.2.1-254" data-discovery-network-input />
-                @if (Model.View.SubnetSuggestions.Count > 0)
+            <form method="post" asp-page-handler="Scan" class="workspace-form-grid discovery-form" data-discovery-scan-form>
+                <label class="workspace-field workspace-span-2">
+                    <span class="workspace-label">Probe / node</span>
+                    <select asp-for="Input.ProbeElementId" asp-items="Model.View.ProbeOptions" class="form-select workspace-select"></select>
+                </label>
+
+                <div class="workspace-field workspace-span-2 discovery-scope">
+                    <span class="workspace-label">Scan scope</span>
+                    <div class="discovery-scope-options">
+                        <label class="discovery-scope-option">
+                            <input type="radio" asp-for="Input.ScanScope" value="network" />
+                            <span class="discovery-scope-text">
+                                <strong>Whole subnet / range</strong>
+                                <small>Sweep a CIDR, range or single IP</small>
+                            </span>
+                        </label>
+                        <label class="discovery-scope-option">
+                            <input type="radio" asp-for="Input.ScanScope" value="known" />
+                            <span class="discovery-scope-text">
+                                <strong>Known hosts only</strong>
+                                <small>Re-scan the @Model.View.KnownHostCount host@(Model.View.KnownHostCount == 1 ? string.Empty : "s") already under this probe</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <label class="workspace-field workspace-span-2" data-discovery-network-field>
+                    <span class="workspace-label">Network</span>
+                    <input asp-for="Input.Network" class="form-control workspace-input" placeholder="10.10.2.0/24 or 10.10.2.1-254" data-discovery-network-input />
+                    @if (Model.View.SubnetSuggestions.Count > 0)
+                    {
+                        <div class="discovery-subnet-suggestions">
+                            <span class="panel-hint">Suggested subnets:</span>
+                            @foreach (var subnet in Model.View.SubnetSuggestions)
+                            {
+                                <button type="button" class="discovery-subnet-chip" data-discovery-subnet="@subnet">@subnet</button>
+                            }
+                        </div>
+                    }
+                </label>
+
+                <div class="workspace-field workspace-span-2">
+                    <span class="workspace-label">Options</span>
+                    <label class="workspace-check"><input asp-for="Input.PingFirst" /> Quick scan — only deep-scan hosts that answer ping (faster; skips silent hosts)</label>
+                    <span class="discovery-check-note">Matmon probes ping, common TCP services and SNMP automatically. SNMP lets it recognize the platform (e.g. a Synology NAS) and suggest the matching sensor — no scan tuning needed.</span>
+                </div>
+
+                <div class="workspace-form-actions workspace-span-2">
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("search")<span>Start discovery</span></button>
+                </div>
+            </form>
+        </section>
+    }
+    else if (Model.Mode == "job")
+    {
+        @* ---- A selected job: its live detail + (when finished) the results / import assistant ---- *@
+        <div class="page-actions workspace-toolbar">
+            <a class="workspace-secondary-submit" asp-page="/Discovery">@MatmonIcons.Render("arrow-left")<span>Back to jobs</span></a>
+        </div>
+
+        @if (selectedJob is { } job)
+        {
+            <section class="panel panel-stack workspace-panel" data-discovery-job-panel data-discovery-job-id="@job.JobId" data-discovery-active="@selectedJobIsActive.ToString().ToLowerInvariant()">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Probe job</span></h2>
+                    <span class="state-pill" data-discovery-job-status data-state="@selectedJobTone">@job.Status</span>
+                </div>
+                <div class="discovery-job-summary">
+                    <span>@job.ProbeName</span>
+                    <span>@job.Request.Network</span>
+                    <span data-discovery-job-message>@(job.Message ?? "Waiting for probe sync")</span>
+                </div>
+                <div class="discovery-progress" data-discovery-progress>
+                    <div class="discovery-progress-header">
+                        <strong data-discovery-progress-percent>@job.ProgressPercent%</strong>
+                        <span>
+                            <span data-discovery-progress-scanned>@job.ScannedHosts</span>/<span data-discovery-progress-total>@job.TotalHosts</span>
+                            checked
+                        </span>
+                    </div>
+                    <div class="discovery-progress-track" aria-hidden="true">
+                        <span data-discovery-progress-bar style="width: @job.ProgressPercent%"></span>
+                    </div>
+                </div>
+                @if (job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running)
                 {
-                    <div class="discovery-subnet-suggestions">
-                        <span class="panel-hint">Suggested subnets:</span>
-                        @foreach (var subnet in Model.View.SubnetSuggestions)
-                        {
-                            <button type="button" class="discovery-subnet-chip" data-discovery-subnet="@subnet">@subnet</button>
-                        }
+                    <form method="post" asp-page-handler="Cancel" asp-route-jobId="@job.JobId" class="page-actions workspace-toolbar">
+                        <span class="workspace-secondary-submit">@MatmonIcons.Render("clock")<span>Live refresh</span></span>
+                        <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("x")<span>Cancel job</span></button>
+                    </form>
+                }
+                else if (canImport)
+                {
+                    <div class="page-actions workspace-toolbar">
+                        <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@job.JobId" asp-route-import="true">@MatmonIcons.Render("plus")<span>Create selected</span></a>
                     </div>
                 }
-            </label>
+            </section>
+        }
 
-            <div class="workspace-field">
-                <span class="workspace-label">Checks</span>
-                <label class="workspace-check"><input asp-for="Input.UsePing" /> Ping</label>
-                <label class="workspace-check"><input asp-for="Input.PingFirst" /> Quick scan: ping first</label>
-                <label class="workspace-check"><input asp-for="Input.UseTcpPorts" /> TCP ports</label>
-                <label class="workspace-check"><input asp-for="Input.UseSnmp" /> SNMP probe</label>
-                <label class="workspace-check"><input asp-for="Input.UseReverseDns" /> Reverse DNS</label>
-                <span class="discovery-check-note">Quick scan runs the ping sweep in parallel and only deep-scans hosts that answer ICMP.</span>
-            </div>
+        @if (showResults)
+        {
+            <section class="panel panel-stack workspace-panel" data-discovery-results-panel data-discovery-import-mode="@showImportAssistant.ToString().ToLowerInvariant()">
+                    <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render(showImportAssistant ? "plus" : "host")<span>@(showImportAssistant ? (hostScopedImport ? "Create sensors" : "Create hosts and sensors") : "Discovery result")</span></h2>
+                    <span class="panel-hint"><span data-discovery-result-count>@Model.Results.Count</span> host@(Model.Results.Count == 1 ? string.Empty : "s") found</span>
+                </div>
 
-            <label class="workspace-field">
-                <span class="workspace-label">TCP ports</span>
-                <input asp-for="Input.TcpPortsText" class="form-control workspace-input" placeholder="22, 80, 443" />
-            </label>
+                @if (showImportAssistant)
+                {
+                    <form method="post" asp-page-handler="CreateSelected" class="discovery-results-form" data-discovery-results-form>
+                        <input type="hidden" asp-for="ImportJobId" />
+                        <input type="hidden" asp-for="Input.ProbeElementId" />
+                        <input type="hidden" asp-for="Input.Network" />
+                        <input type="hidden" asp-for="Input.UsePing" />
+                        <input type="hidden" asp-for="Input.PingFirst" />
+                        <input type="hidden" asp-for="Input.UseTcpPorts" />
+                        <input type="hidden" asp-for="Input.TcpPortsText" />
+                        <input type="hidden" asp-for="Input.UseSnmp" />
+                        <input type="hidden" asp-for="Input.SnmpCommunity" />
+                        <input type="hidden" asp-for="Input.SnmpVersion" />
+                        <input type="hidden" asp-for="Input.SnmpPort" />
+                        <input type="hidden" asp-for="Input.UseReverseDns" />
+                        <input type="hidden" asp-for="Input.TimeoutMs" />
+                        <input type="hidden" asp-for="Input.MaxHosts" />
+                        <input type="hidden" asp-for="Input.Parallelism" />
+                        <input type="hidden" asp-for="Input.CreatePingSensor" />
+                        <input type="hidden" asp-for="Input.CreatePortSensors" />
+                        <input type="hidden" asp-for="Input.CreateHttpSensors" />
+                        <input type="hidden" asp-for="Input.CreateSnmpSensor" />
 
-            <label class="workspace-field">
-                <span class="workspace-label">SNMP community</span>
-                <input asp-for="Input.SnmpCommunity" class="form-control workspace-input" placeholder="public" />
-            </label>
+                        <div class="page-actions workspace-toolbar discovery-assistant-actions discovery-presets">
+                            <span class="panel-hint" style="margin-right:2px;">Preselect:</span>
+                            <button type="button" class="discovery-preset is-active" data-discovery-preset="recommended">@MatmonIcons.Render("check")<span>Recommended</span></button>
+                            <button type="button" class="discovery-preset" data-discovery-preset="all"><span>All</span></button>
+                            <button type="button" class="discovery-preset" data-discovery-preset="none"><span>None</span></button>
+                        </div>
+                        <div class="workspace-inline-note">Pick the hosts to create, then the sensors under each. Unchecking a host greys it out - it won't be imported.</div>
 
-            <label class="workspace-field">
-                <span class="workspace-label">SNMP version</span>
-                <select asp-for="Input.SnmpVersion" class="form-select workspace-select">
-                    <option value="v2c">v2c</option>
-                    <option value="v1">v1</option>
-                </select>
-            </label>
+                        <div class="empty-state" data-discovery-empty hidden="@(Model.Results.Count > 0 ? "hidden" : null)">No hosts discovered yet.</div>
 
-            <label class="workspace-field">
-                <span class="workspace-label">Timeout ms</span>
-                <input asp-for="Input.TimeoutMs" type="number" min="150" max="10000" class="form-control workspace-input" />
-            </label>
+                        <div class="discovery-result-tools">
+                            <label class="monitoring-filter-field">
+                                <span>@MatmonIcons.Render("search")<small>Filter</small></span>
+                                <input type="search" class="form-control workspace-input" placeholder="Address, name, service" data-discovery-filter />
+                            </label>
+                            <label class="monitoring-filter-field">
+                                <span>Service</span>
+                                <select class="form-select workspace-select" data-discovery-service-filter>
+                                    <option value="all">All</option>
+                                    <option value="ping">Ping</option>
+                                    <option value="ports">Open ports</option>
+                                    <option value="snmp">SNMP</option>
+                                    <option value="sensors">Suggestions</option>
+                                </select>
+                            </label>
+                            <span class="panel-hint"><span data-discovery-visible-count>@Model.Results.Count</span> visible</span>
+                        </div>
 
-            <label class="workspace-field">
-                <span class="workspace-label">Max hosts</span>
-                <input asp-for="Input.MaxHosts" type="number" min="1" max="65534" class="form-control workspace-input" />
-            </label>
+                        <div class="discovery-tree" data-discovery-result-list>
+                            @for (var index = 0; index < Model.Results.Count; index++)
+                            {
+                                var result = Model.Results[index];
+                                var portCount = string.IsNullOrWhiteSpace(result.OpenPortsText)
+                                    ? 0
+                                    : result.OpenPortsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+                                var sensorCount = result.SuggestedSensors.Count;
+                                // Pre-select a host when it has any recommended sensor. Under the rank-based rule every host
+                                // with at least one suggestion has one (Ping, a platform-health sensor, or its single best
+                                // other), so this matches the per-sensor recommended logic below and never greys out a host
+                                // whose recommended-but-low-confidence sensor (e.g. linux-ssh-health) is pre-checked.
+                                var anyRecommended = sensorCount > 0;
+                                var searchText = $"{result.Address} {result.HostName} {result.OpenPortsText} {result.SnmpSummary} {result.Message} {string.Join(' ', result.SuggestedSensors.Select(sensor => $"{sensor.SensorTypeKey} {sensor.Name} {sensor.Target} {sensor.Reason}"))}";
+                                var hostChecked = hostScopedImport || (hasImportSelection ? selectedHostAddresses.Contains(result.Address) : anyRecommended);
+                                var expanded = sensorCount > 0;
 
-            <label class="workspace-field">
-                <span class="workspace-label">Parallelism</span>
-                <input asp-for="Input.Parallelism" type="number" min="1" max="128" class="form-control workspace-input" />
-            </label>
+                                <div class="discovery-node @(hostChecked ? "is-selected" : "is-disabled")"
+                                     data-discovery-address="@result.Address"
+                                     data-discovery-host="@result.HostName"
+                                     data-discovery-text="@searchText"
+                                     data-discovery-ping="@(result.PingAlive ? "ok" : "none")"
+                                     data-discovery-ping-ms="@(result.PingMs?.ToString(CultureInfo.InvariantCulture) ?? "")"
+                                     data-discovery-port-count="@portCount"
+                                     data-discovery-snmp="@(result.SnmpResponded ? "true" : "false")"
+                                     data-discovery-sensor-count="@sensorCount"
+                                     data-discovery-expanded="@(expanded ? "true" : "false")">
+                                    <div class="discovery-node-head">
+                                        @if (hostScopedImport)
+                                        {
+                                            <input type="hidden" name="SelectedHostAddresses" value="@result.Address" />
+                                            <input type="checkbox" class="discovery-node-check" checked="checked" disabled="disabled" aria-label="Host selected for sensor import" />
+                                        }
+                                        else
+                                        {
+                                            <input type="checkbox" class="discovery-node-check" name="SelectedHostAddresses" value="@result.Address" data-discovery-host-check checked="@hostChecked" />
+                                        }
+                                        <button type="button" class="discovery-node-toggle" data-discovery-toggle aria-expanded="@(expanded ? "true" : "false")">@(expanded ? "▾" : "▸")</button>
+                                        <span class="tree-kind" data-kind="host">@MatmonIcons.Render("host")</span>
+                                        <span class="discovery-node-title">
+                                            <strong>@result.Address</strong>
+                                            @if (!string.IsNullOrWhiteSpace(result.HostName))
+                                            {
+                                                <span class="discovery-node-sub">@result.HostName</span>
+                                            }
+                                        </span>
+                                        <span class="discovery-node-facts">
+                                            @if (result.PingAlive)
+                                            {
+                                                <span class="discovery-fact" data-ok>@(result.PingMs?.ToString("0.#")) ms</span>
+                                            }
+                                            @if (portCount > 0)
+                                            {
+                                                <span class="discovery-fact" title="@result.OpenPortsText">@portCount port@(portCount == 1 ? string.Empty : "s")</span>
+                                            }
+                                            @if (result.SnmpResponded)
+                                            {
+                                                <span class="discovery-fact">SNMP</span>
+                                            }
+                                        </span>
+                                        <span class="discovery-node-count">@sensorCount sensor@(sensorCount == 1 ? string.Empty : "s")</span>
+                                    </div>
+                                    <div class="discovery-node-body" hidden="@(expanded ? null : "hidden")">
+                                        @if (!string.IsNullOrWhiteSpace(result.Message))
+                                        {
+                                            <div class="discovery-node-message">@result.Message</div>
+                                        }
+                                        @if (sensorCount == 0)
+                                        {
+                                            <div class="discovery-node-empty">No sensor suggestions.</div>
+                                        }
+                                        else
+                                        {
+                                            var hasPlatformHealth = result.SuggestedSensors.Any(sensor => SensorDiscoveryImportance.IsPlatformHealth(sensor.SensorTypeKey));
+                                            // Recommended = Ping + platform-health always; if the host has no platform-health, also its single best (top-confidence non-ping) suggestion.
+                                            var bestOtherType = result.SuggestedSensors
+                                                .Where(sensor => !string.Equals(sensor.SensorTypeKey, SensorDiscoveryImportance.PingKey, StringComparison.OrdinalIgnoreCase))
+                                                .OrderByDescending(sensor => sensor.Confidence)
+                                                .Select(sensor => sensor.SensorTypeKey)
+                                                .FirstOrDefault();
+                                            var orderedSensors = result.SuggestedSensors
+                                                .Select(suggestion =>
+                                                {
+                                                    var key = $"{result.Address}|{suggestion.SensorTypeKey}|{suggestion.Target}|{suggestion.Name}";
+                                                    var rec = SensorDiscoveryImportance.IsRecommended(suggestion.SensorTypeKey)
+                                                        || (!hasPlatformHealth && string.Equals(suggestion.SensorTypeKey, bestOtherType, StringComparison.OrdinalIgnoreCase));
+                                                    var chk = hasImportSelection ? selectedSuggestionKeys.Contains(key) : rec;
+                                                    return (Suggestion: suggestion, Key: key, Recommended: rec, Checked: chk, Extra: !rec && !chk);
+                                                })
+                                                .OrderByDescending(item => SensorDiscoveryImportance.Rank(item.Suggestion.SensorTypeKey))
+                                                .ThenByDescending(item => item.Suggestion.Confidence)
+                                                .ToList();
+                                            var extraCount = orderedSensors.Count(item => item.Extra);
+                                            <div class="discovery-node-sensors">
+                                                @foreach (var item in orderedSensors)
+                                                {
+                                                    <label class="discovery-sensor@(item.Extra ? " is-extra" : string.Empty)" data-discovery-suggestion-key="@item.Key" data-discovery-recommended="@(item.Recommended ? "true" : "false")">
+                                                        <input type="checkbox" name="SelectedSuggestionKeys" value="@item.Key" data-discovery-sensor-check checked="@item.Checked" />
+                                                        <span class="tree-kind" data-kind="sensor">@MatmonIcons.Render("sensor")</span>
+                                                        <span class="sensor-chip">@item.Suggestion.SensorTypeKey</span>
+                                                        <span class="discovery-sensor-name" title="@item.Suggestion.Reason">@item.Suggestion.Name</span>
+                                                        @if (!string.IsNullOrWhiteSpace(item.Suggestion.Target))
+                                                        {
+                                                            <span class="discovery-sensor-target">@item.Suggestion.Target</span>
+                                                        }
+                                                        <span class="discovery-sensor-spacer"></span>
+                                                        @if (item.Recommended)
+                                                        {
+                                                            <span class="discovery-sensor-badge">Recommended</span>
+                                                        }
+                                                        <span class="state-pill" data-state="@(item.Recommended ? "ok" : "warning")">@item.Suggestion.Confidence%</span>
+                                                    </label>
+                                                }
+                                                @if (extraCount > 0)
+                                                {
+                                                    <button type="button" class="discovery-sensor-more" data-discovery-more aria-expanded="false">@MatmonIcons.Render("plus")<span class="discovery-more-show">@extraCount more sensor@(extraCount == 1 ? string.Empty : "s")</span><span class="discovery-more-hide">Hide extra sensors</span></button>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
 
-            <div class="workspace-form-actions workspace-span-2">
-                <button type="submit" class="workspace-submit">@MatmonIcons.Render("search")<span>Start discovery</span></button>
-            </div>
-        </form>
-    </section>
-    }
-
-    @if (showResults)
-    {
-        <section class="panel panel-stack workspace-panel" data-discovery-results-panel data-discovery-import-mode="@showImportAssistant.ToString().ToLowerInvariant()">
-                <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render(showImportAssistant ? "plus" : "host")<span>@(showImportAssistant ? (hostScopedImport ? "Create sensors" : "Create hosts and sensors") : "Discovery result")</span></h2>
-                <span class="panel-hint"><span data-discovery-result-count>@Model.Results.Count</span> host@(Model.Results.Count == 1 ? string.Empty : "s") found</span>
-            </div>
-
-            @if (showImportAssistant)
-            {
-                <form method="post" asp-page-handler="CreateSelected" class="discovery-results-form" data-discovery-results-form>
-                    <input type="hidden" asp-for="ImportJobId" />
-                    <input type="hidden" asp-for="Input.ProbeElementId" />
-                    <input type="hidden" asp-for="Input.Network" />
-                    <input type="hidden" asp-for="Input.UsePing" />
-                    <input type="hidden" asp-for="Input.PingFirst" />
-                    <input type="hidden" asp-for="Input.UseTcpPorts" />
-                    <input type="hidden" asp-for="Input.TcpPortsText" />
-                    <input type="hidden" asp-for="Input.UseSnmp" />
-                    <input type="hidden" asp-for="Input.SnmpCommunity" />
-                    <input type="hidden" asp-for="Input.SnmpVersion" />
-                    <input type="hidden" asp-for="Input.SnmpPort" />
-                    <input type="hidden" asp-for="Input.UseReverseDns" />
-                    <input type="hidden" asp-for="Input.TimeoutMs" />
-                    <input type="hidden" asp-for="Input.MaxHosts" />
-                    <input type="hidden" asp-for="Input.Parallelism" />
-                    <input type="hidden" asp-for="Input.CreatePingSensor" />
-                    <input type="hidden" asp-for="Input.CreatePortSensors" />
-                    <input type="hidden" asp-for="Input.CreateHttpSensors" />
-                    <input type="hidden" asp-for="Input.CreateSnmpSensor" />
-
-                    <div class="page-actions workspace-toolbar discovery-assistant-actions">
-                        <button type="button" class="workspace-secondary-submit" data-discovery-select-all>@MatmonIcons.Render("check")<span>Select all</span></button>
-                        <button type="button" class="workspace-secondary-submit" data-discovery-select-none>@MatmonIcons.Render("x")<span>Select none</span></button>
-                    </div>
-                    <div class="workspace-inline-note">Select the hosts to create or reuse, then tick only the sensor suggestions you want below each host.</div>
-
+                        <div class="page-actions workspace-toolbar">
+                            <button type="submit" class="workspace-submit" data-discovery-import-button disabled="@(Model.Results.Count == 0 ? "disabled" : null)">@MatmonIcons.Render("plus")<span>Create selected hosts/sensors</span></button>
+                            <a class="workspace-secondary-submit" asp-page="/Discovery" asp-route-tab="scan">@MatmonIcons.Render("search")<span>New scan</span></a>
+                        </div>
+                    </form>
+                }
+                else
+                {
                     <div class="empty-state" data-discovery-empty hidden="@(Model.Results.Count > 0 ? "hidden" : null)">No hosts discovered yet.</div>
 
                     <div class="discovery-result-tools">
@@ -247,221 +370,110 @@
                         <span class="panel-hint"><span data-discovery-visible-count>@Model.Results.Count</span> visible</span>
                     </div>
 
-                    <div class="discovery-result-table-wrap">
-                        <table class="discovery-result-table">
-                            <thead>
-                                <tr>
-                                    <th class="discovery-table-select">Use</th>
-                                    <th><button type="button" data-discovery-sort="address">Address</button></th>
-                                    <th><button type="button" data-discovery-sort="host">Name</button></th>
-                                    <th><button type="button" data-discovery-sort="ping">Ping</button></th>
-                                    <th><button type="button" data-discovery-sort="ports">Ports</button></th>
-                                    <th>SNMP</th>
-                                    <th><button type="button" data-discovery-sort="sensors">Found</button></th>
-                                </tr>
-                            </thead>
-                            <tbody data-discovery-result-list>
-                                @for (var index = 0; index < Model.Results.Count; index++)
-                                {
-                                    var result = Model.Results[index];
-                                    var portCount = string.IsNullOrWhiteSpace(result.OpenPortsText)
-                                        ? 0
-                                        : result.OpenPortsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
-                                    var sensorCount = result.SuggestedSensors.Count;
-                                    var searchText = $"{result.Address} {result.HostName} {result.OpenPortsText} {result.SnmpSummary} {result.Message} {string.Join(' ', result.SuggestedSensors.Select(sensor => $"{sensor.SensorTypeKey} {sensor.Name} {sensor.Target} {sensor.Reason}"))}";
-                                    var hostChecked = !hasImportSelection || selectedHostAddresses.Contains(result.Address);
+                    <div class="discovery-tree" data-discovery-result-list>
+                        @for (var index = 0; index < Model.Results.Count; index++)
+                        {
+                            var result = Model.Results[index];
+                            var portCount = string.IsNullOrWhiteSpace(result.OpenPortsText)
+                                ? 0
+                                : result.OpenPortsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+                            var sensorCount = result.SuggestedSensors.Count;
+                            var searchText = $"{result.Address} {result.HostName} {result.OpenPortsText} {result.SnmpSummary} {result.Message} {string.Join(' ', result.SuggestedSensors.Select(sensor => $"{sensor.SensorTypeKey} {sensor.Name} {sensor.Target} {sensor.Reason}"))}";
+                            var expanded = sensorCount > 0;
 
-                                    <tr class="discovery-host-row"
-                                        data-discovery-address="@result.Address"
-                                        data-discovery-host="@result.HostName"
-                                        data-discovery-text="@searchText"
-                                        data-discovery-ping="@(result.PingAlive ? "ok" : "none")"
-                                        data-discovery-ping-ms="@(result.PingMs?.ToString(CultureInfo.InvariantCulture) ?? "")"
-                                        data-discovery-port-count="@portCount"
-                                        data-discovery-snmp="@(result.SnmpResponded ? "true" : "false")"
-                                        data-discovery-sensor-count="@sensorCount"
-                                        data-discovery-expanded="false">
-                                        <td class="discovery-table-select">
-                                            <button type="button" class="discovery-row-toggle" data-discovery-toggle aria-expanded="false">+</button>
-                                            @if (hostScopedImport)
+                            <div class="discovery-node"
+                                 data-discovery-address="@result.Address"
+                                 data-discovery-host="@result.HostName"
+                                 data-discovery-text="@searchText"
+                                 data-discovery-ping="@(result.PingAlive ? "ok" : "none")"
+                                 data-discovery-ping-ms="@(result.PingMs?.ToString(CultureInfo.InvariantCulture) ?? "")"
+                                 data-discovery-port-count="@portCount"
+                                 data-discovery-snmp="@(result.SnmpResponded ? "true" : "false")"
+                                 data-discovery-sensor-count="@sensorCount"
+                                 data-discovery-expanded="@(expanded ? "true" : "false")">
+                                <div class="discovery-node-head">
+                                    <button type="button" class="discovery-node-toggle" data-discovery-toggle aria-expanded="@(expanded ? "true" : "false")">@(expanded ? "▾" : "▸")</button>
+                                    <span class="tree-kind" data-kind="host">@MatmonIcons.Render("host")</span>
+                                    <span class="discovery-node-title">
+                                        <strong>@result.Address</strong>
+                                        @if (!string.IsNullOrWhiteSpace(result.HostName))
+                                        {
+                                            <span class="discovery-node-sub">@result.HostName</span>
+                                        }
+                                    </span>
+                                    <span class="discovery-node-facts">
+                                        @if (result.PingAlive)
+                                        {
+                                            <span class="discovery-fact" data-ok>@(result.PingMs?.ToString("0.#")) ms</span>
+                                        }
+                                        @if (portCount > 0)
+                                        {
+                                            <span class="discovery-fact" title="@result.OpenPortsText">@portCount port@(portCount == 1 ? string.Empty : "s")</span>
+                                        }
+                                        @if (result.SnmpResponded)
+                                        {
+                                            <span class="discovery-fact">SNMP</span>
+                                        }
+                                    </span>
+                                    <span class="discovery-node-count">@sensorCount sensor@(sensorCount == 1 ? string.Empty : "s")</span>
+                                </div>
+                                <div class="discovery-node-body" hidden="@(expanded ? null : "hidden")">
+                                    @if (!string.IsNullOrWhiteSpace(result.Message))
+                                    {
+                                        <div class="discovery-node-message">@result.Message</div>
+                                    }
+                                    @if (sensorCount == 0)
+                                    {
+                                        <div class="discovery-node-empty">No sensor suggestions.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="discovery-node-sensors">
+                                            @foreach (var suggestion in result.SuggestedSensors)
                                             {
-                                                <input type="hidden" name="SelectedHostAddresses" value="@result.Address" />
-                                                <input type="checkbox" checked="checked" disabled="disabled" aria-label="Host selected for sensor import" />
-                                            }
-                                            else
-                                            {
-                                                <input type="checkbox" name="SelectedHostAddresses" value="@result.Address" checked="@hostChecked" />
-                                            }
-                                        </td>
-                                        <td class="discovery-address-cell"><span class="tree-kind" data-kind="host">@MatmonIcons.Render("host")<span>Host</span></span><strong>@result.Address</strong></td>
-                                        <td>@(string.IsNullOrWhiteSpace(result.HostName) ? "-" : result.HostName)</td>
-                                        <td>@(result.PingAlive ? $"{result.PingMs?.ToString("0.#")} ms" : "-")</td>
-                                        <td title="@result.OpenPortsText">@(portCount == 0 ? "-" : $"{portCount} open")</td>
-                                        <td>@(result.SnmpResponded ? "yes" : "-")</td>
-                                        <td><span class="state-pill" data-state="@(sensorCount > 0 ? "ok" : "warning")">@sensorCount service@(sensorCount == 1 ? string.Empty : "s")</span></td>
-                                    </tr>
-                                    <tr class="discovery-suggestion-panel" data-discovery-parent-address="@result.Address" hidden>
-                                        <td colspan="7">
-                                            <div class="discovery-host-message">@result.Message</div>
-                                            @if (result.SuggestedSensors.Count == 0)
-                                            {
-                                                <div class="empty-state">No sensor suggestions.</div>
-                                            }
-                                            else
-                                            {
-                                                <div class="discovery-suggestion-list">
-                                                    @for (var sensorIndex = 0; sensorIndex < result.SuggestedSensors.Count; sensorIndex++)
+                                                var recommended = suggestion.Confidence >= recommendedMin;
+                                                <div class="discovery-sensor is-readonly">
+                                                    <span class="tree-kind" data-kind="sensor">@MatmonIcons.Render("sensor")</span>
+                                                    <span class="sensor-chip">@suggestion.SensorTypeKey</span>
+                                                    <span class="discovery-sensor-name" title="@suggestion.Reason">@suggestion.Name</span>
+                                                    @if (!string.IsNullOrWhiteSpace(suggestion.Target))
                                                     {
-                                                        var suggestion = result.SuggestedSensors[sensorIndex];
-                                                        var suggestionKey = $"{result.Address}|{suggestion.SensorTypeKey}|{suggestion.Target}|{suggestion.Name}";
-                                                        var suggestionChecked = !hasImportSelection || selectedSuggestionKeys.Contains(suggestionKey);
-                                                        <label class="discovery-suggestion-row" data-discovery-suggestion-key="@suggestionKey">
-                                                            <input type="checkbox" name="SelectedSuggestionKeys" value="@suggestionKey" checked="@suggestionChecked" />
-                                                            <span class="sensor-chip">@suggestion.SensorTypeKey</span>
-                                                            <span class="discovery-suggestion-name">@suggestion.Name</span>
-                                                            @if (!string.IsNullOrWhiteSpace(suggestion.Target))
-                                                            {
-                                                                <span class="event-row-path">@suggestion.Target</span>
-                                                            }
-                                                            <span class="event-row-message">@suggestion.Reason</span>
-                                                            <span class="state-pill" data-state="ok">@suggestion.Confidence%</span>
-
-                                                        </label>
+                                                        <span class="discovery-sensor-target">@suggestion.Target</span>
                                                     }
+                                                    <span class="discovery-sensor-spacer"></span>
+                                                    <span class="state-pill" data-state="@(recommended ? "ok" : "warning")">@suggestion.Confidence%</span>
                                                 </div>
                                             }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
                     </div>
 
                     <div class="page-actions workspace-toolbar">
-                        <button type="submit" class="workspace-submit" data-discovery-import-button disabled="@(Model.Results.Count == 0 ? "disabled" : null)">@MatmonIcons.Render("plus")<span>Create selected hosts/sensors</span></button>
-                        <a class="workspace-secondary-submit" asp-page="/Discovery">@MatmonIcons.Render("arrow-left")<span>New scan</span></a>
+                        @if (selectedJob is not null)
+                        {
+                            <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@selectedJob.JobId" asp-route-import="true" data-discovery-import-link hidden="@(!canImport ? "hidden" : null)">@MatmonIcons.Render("plus")<span>@(hostScopedImport ? "Create sensors from host" : "Create sensors from result")</span></a>
+                        }
+                        <a class="workspace-secondary-submit" asp-page="/Discovery" asp-route-tab="scan">@MatmonIcons.Render("search")<span>New scan</span></a>
                     </div>
-                </form>
-            }
-            else
-            {
-                <div class="empty-state" data-discovery-empty hidden="@(Model.Results.Count > 0 ? "hidden" : null)">No hosts discovered yet.</div>
-
-                <div class="discovery-result-tools">
-                    <label class="monitoring-filter-field">
-                        <span>@MatmonIcons.Render("search")<small>Filter</small></span>
-                        <input type="search" class="form-control workspace-input" placeholder="Address, name, service" data-discovery-filter />
-                    </label>
-                    <label class="monitoring-filter-field">
-                        <span>Service</span>
-                        <select class="form-select workspace-select" data-discovery-service-filter>
-                            <option value="all">All</option>
-                            <option value="ping">Ping</option>
-                            <option value="ports">Open ports</option>
-                            <option value="snmp">SNMP</option>
-                            <option value="sensors">Suggestions</option>
-                        </select>
-                    </label>
-                    <span class="panel-hint"><span data-discovery-visible-count>@Model.Results.Count</span> visible</span>
-                </div>
-
-                <div class="discovery-result-table-wrap">
-                    <table class="discovery-result-table">
-                        <thead>
-                            <tr>
-                                <th class="discovery-table-select"></th>
-                                <th><button type="button" data-discovery-sort="address">Address</button></th>
-                                <th><button type="button" data-discovery-sort="host">Name</button></th>
-                                <th><button type="button" data-discovery-sort="ping">Ping</button></th>
-                                <th><button type="button" data-discovery-sort="ports">Ports</button></th>
-                                <th>SNMP</th>
-                                <th><button type="button" data-discovery-sort="sensors">Found</button></th>
-                            </tr>
-                        </thead>
-                        <tbody data-discovery-result-list>
-                            @for (var index = 0; index < Model.Results.Count; index++)
-                            {
-                                var result = Model.Results[index];
-                                var portCount = string.IsNullOrWhiteSpace(result.OpenPortsText)
-                                    ? 0
-                                    : result.OpenPortsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
-                                var sensorCount = result.SuggestedSensors.Count;
-                                var searchText = $"{result.Address} {result.HostName} {result.OpenPortsText} {result.SnmpSummary} {result.Message} {string.Join(' ', result.SuggestedSensors.Select(sensor => $"{sensor.SensorTypeKey} {sensor.Name} {sensor.Target} {sensor.Reason}"))}";
-
-                                <tr class="discovery-host-row"
-                                    data-discovery-address="@result.Address"
-                                    data-discovery-host="@result.HostName"
-                                    data-discovery-text="@searchText"
-                                    data-discovery-ping="@(result.PingAlive ? "ok" : "none")"
-                                    data-discovery-ping-ms="@(result.PingMs?.ToString(CultureInfo.InvariantCulture) ?? "")"
-                                    data-discovery-port-count="@portCount"
-                                    data-discovery-snmp="@(result.SnmpResponded ? "true" : "false")"
-                                    data-discovery-sensor-count="@sensorCount"
-                                    data-discovery-expanded="false">
-                                    <td class="discovery-table-select">
-                                        <button type="button" class="discovery-row-toggle" data-discovery-toggle aria-expanded="false">+</button>
-                                    </td>
-                                    <td class="discovery-address-cell"><span class="tree-kind" data-kind="host">@MatmonIcons.Render("host")<span>Host</span></span><strong>@result.Address</strong></td>
-                                    <td>@(string.IsNullOrWhiteSpace(result.HostName) ? "-" : result.HostName)</td>
-                                    <td>@(result.PingAlive ? $"{result.PingMs?.ToString("0.#")} ms" : "-")</td>
-                                    <td title="@result.OpenPortsText">@(portCount == 0 ? "-" : $"{portCount} open")</td>
-                                    <td>@(result.SnmpResponded ? "yes" : "-")</td>
-                                    <td><span class="state-pill" data-state="@(sensorCount > 0 ? "ok" : "warning")">@sensorCount service@(sensorCount == 1 ? string.Empty : "s")</span></td>
-                                </tr>
-                                <tr class="discovery-suggestion-panel" data-discovery-parent-address="@result.Address" hidden>
-                                    <td colspan="7">
-                                        <div class="discovery-host-message">@result.Message</div>
-                                        @if (result.SuggestedSensors.Count == 0)
-                                        {
-                                            <div class="empty-state">No sensor suggestions.</div>
-                                        }
-                                        else
-                                        {
-                                            <div class="discovery-suggestion-list">
-                                                @foreach (var suggestion in result.SuggestedSensors)
-                                                {
-                                                    <div class="discovery-suggestion-row discovery-suggestion-row-readonly">
-                                                        <span class="sensor-chip">@suggestion.SensorTypeKey</span>
-                                                        <span class="discovery-suggestion-name">@suggestion.Name</span>
-                                                        @if (!string.IsNullOrWhiteSpace(suggestion.Target))
-                                                        {
-                                                            <span class="event-row-path">@suggestion.Target</span>
-                                                        }
-                                                        <span class="event-row-message">@suggestion.Reason</span>
-                                                        <span class="state-pill" data-state="ok">@suggestion.Confidence%</span>
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="page-actions workspace-toolbar">
-                    @if (selectedJob is not null)
-                    {
-                        <a class="workspace-submit" asp-page="/Discovery" asp-route-jobId="@selectedJob.JobId" asp-route-import="true" data-discovery-import-link hidden="@(!canImport ? "hidden" : null)">@MatmonIcons.Render("plus")<span>@(hostScopedImport ? "Create sensors from host" : "Create sensors from result")</span></a>
-                    }
-                    <a class="workspace-secondary-submit" asp-page="/Discovery">@MatmonIcons.Render("arrow-left")<span>New scan</span></a>
-                </div>
-            }
-        </section>
+                }
+            </section>
+        }
     }
-
-    @if (Model.IsActiveTab("running"))
+    else
     {
+        @* ---- Home: Running section (with the Discover button) + the Jobs history list ---- *@
         <section class="panel panel-stack workspace-panel">
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Running</span></h2>
+                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Running</span><span class="workspace-tab-count">@runningJobs.Count</span></h2>
                 <span class="panel-hint">Active discovery jobs on probes</span>
             </div>
 
             @if (runningJobs.Count == 0)
             {
-                <div class="empty-state">No running discovery...</div>
+                <div class="empty-state">Nothing running right now. Start a scan with <strong>Discover</strong> below.</div>
             }
             else
             {
@@ -487,10 +499,10 @@
                                         : "warning";
                                 <tr>
                                     <td>
-                                        <a class="tree-kind discovery-job-link" data-kind="probe" asp-page="/Discovery" asp-route-jobId="@running.JobId" asp-route-tab="running">@running.ProbeName</a>
+                                        <a class="tree-kind discovery-job-link" data-kind="probe" asp-page="/Discovery" asp-route-jobId="@running.JobId">@running.ProbeName</a>
                                     </td>
                                     <td>
-                                        <a class="discovery-job-main-link" asp-page="/Discovery" asp-route-jobId="@running.JobId" asp-route-tab="running">
+                                        <a class="discovery-job-main-link" asp-page="/Discovery" asp-route-jobId="@running.JobId">
                                             <strong>@running.Request.Network</strong>
                                             <span>@(running.Message ?? running.Status.ToString())</span>
                                         </a>
@@ -500,7 +512,7 @@
                                     <td>@(string.IsNullOrWhiteSpace(running.Message) ? "-" : running.Message)</td>
                                     <td>
                                         <div class="discovery-job-actions">
-                                            <a class="workspace-action-link" asp-page="/Discovery" asp-route-jobId="@running.JobId" asp-route-tab="running">@MatmonIcons.Render("search")<span>Open</span></a>
+                                            <a class="workspace-action-link" asp-page="/Discovery" asp-route-jobId="@running.JobId">@MatmonIcons.Render("search")<span>Open</span></a>
                                             <form method="post" asp-page-handler="Cancel" asp-route-jobId="@running.JobId">
                                                 <button type="submit" class="workspace-action-link workspace-danger-submit">@MatmonIcons.Render("x")<span>Cancel</span></button>
                                             </form>
@@ -512,14 +524,15 @@
                     </table>
                 </div>
             }
-        </section>
-    }
 
-    @if (Model.IsActiveTab("history"))
-    {
+            <div class="page-actions workspace-toolbar discovery-home-actions">
+                <a class="workspace-submit" asp-page="/Discovery" asp-route-tab="scan">@MatmonIcons.Render("search")<span>Discover</span></a>
+            </div>
+        </section>
+
         <section class="panel panel-stack workspace-panel" data-discovery-jobs-panel>
             <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>History</span></h2>
+                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Jobs</span></h2>
                 <span class="panel-hint"><span data-discovery-job-visible-count>@historyJobs.Count</span> / @historyJobs.Count visible</span>
             </div>
 

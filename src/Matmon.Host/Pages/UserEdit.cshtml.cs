@@ -62,6 +62,14 @@ public sealed class UserEditModel : PageModel
             return Page();
         }
 
+        // A new password (optional on edit - blank leaves it unchanged) must match its confirmation.
+        if (!string.IsNullOrEmpty(UserInput.Password) &&
+            UserInput.Password != (UserInput.PasswordConfirm ?? string.Empty))
+        {
+            ErrorMessage = "The passwords do not match.";
+            return Page();
+        }
+
         try
         {
             _workspaceStore.UpdateUser(UserRecord.Id, UserInput.Username, UserInput.Role, UserInput.IsEnabled, UserInput.Password);
@@ -120,6 +128,8 @@ public sealed class UserEditInput
     public string Username { get; set; } = string.Empty;
 
     public string? Password { get; set; }
+
+    public string? PasswordConfirm { get; set; }
 
     public MatmonUserRole Role { get; set; } = MatmonUserRole.Viewer;
 

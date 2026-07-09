@@ -9,11 +9,18 @@ namespace Matmon.Host.Pages;
 public sealed class MapEditorModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly MapDisplayProvider _displayProvider;
 
-    public MapEditorModel(IMonitoringWorkspaceStore workspaceStore)
+    public MapEditorModel(IMonitoringWorkspaceStore workspaceStore, MapDisplayProvider displayProvider)
     {
         _workspaceStore = workspaceStore;
+        _displayProvider = displayProvider;
     }
+
+    /// <summary>Live display view-models for the SAVED tiles, keyed by tile id. Lets the designer render each
+    /// tile's real state / value / graph (dimmed) underneath the edit chrome, so designing is WYSIWYG.</summary>
+    public IReadOnlyDictionary<Guid, MapDisplayTileViewModel> TilePreviews { get; private set; } =
+        new Dictionary<Guid, MapDisplayTileViewModel>();
 
     [BindProperty(SupportsGet = true)]
     public Guid? MapId { get; set; }
@@ -158,6 +165,8 @@ public sealed class MapEditorModel : PageModel
         TextColor = tile.TextColor,
         GraphType = tile.GraphType,
         VisualType = tile.VisualType,
+        IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim(),
+        ShowCard = tile.ShowCard,
         ShowTitle = tile.ShowTitle,
         ShowStateBadge = tile.ShowStateBadge,
         ShowElementName = tile.ShowElementName
@@ -210,11 +219,19 @@ public sealed class MapEditorModel : PageModel
                     TextColor = tile.TextColor,
                     GraphType = tile.GraphType,
                     VisualType = tile.VisualType,
+                    IconKey = tile.IconKey,
+                    ShowCard = tile.ShowCard,
                     ShowTitle = tile.ShowTitle,
                     ShowStateBadge = tile.ShowStateBadge,
                     ShowElementName = tile.ShowElementName
                 })).ToList()
             };
+
+            var display = _displayProvider.Build(map);
+            TilePreviews = display.Tiles
+                .Where(vm => vm.Tile.Id != Guid.Empty)
+                .GroupBy(vm => vm.Tile.Id)
+                .ToDictionary(group => group.Key, group => group.First());
         }
         else
         {
@@ -352,6 +369,10 @@ public sealed class MapTileInput
     public MonitoringMapTileGraphType GraphType { get; set; } = MonitoringMapTileGraphType.Line;
 
     public MonitoringMapTileVisualType VisualType { get; set; } = MonitoringMapTileVisualType.Card;
+
+    public string? IconKey { get; set; }
+
+    public bool ShowCard { get; set; } = true;
 
     public bool ShowTitle { get; set; } = true;
 

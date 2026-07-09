@@ -1478,62 +1478,65 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   flex-wrap: wrap;
 }
 
-.setup-wizard-rail {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  counter-reset: wizard-step;
-}
-
-.setup-wizard-step {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.4rem 0.7rem;
-  border-radius: 999px;
-  color: var(--matmon-muted);
-  background: var(--matmon-surface-strong);
-  box-shadow: inset 0 0 0 1px var(--matmon-sidebar-item-border);
-  font-size: 0.84rem;
-  white-space: nowrap;
-}
-
-.setup-wizard-step.is-current {
-  color: var(--matmon-foreground);
-  box-shadow: inset 0 0 0 1px var(--matmon-accent);
-  background: linear-gradient(180deg, var(--matmon-surface-strong), var(--matmon-sidebar-bg));
-}
-
-.setup-wizard-step.is-done {
-  color: var(--matmon-accent);
-}
-
-.setup-wizard-step-mark {
-  display: inline-flex;
-  width: 1.1rem;
-  height: 1.1rem;
-}
-
-.setup-wizard-step-mark svg {
-  width: 100%;
-  height: 100%;
-}
-
 .setup-wizard-panel {
   display: grid;
   gap: 1.1rem;
   padding: 1.5rem 1.6rem;
 }
 
+/* Compact single-step progress: current step label + "Step N / M" counter over a fill bar.
+   (Replaces the old full step rail, which wrapped onto multiple ugly lines on narrow widths.) */
 .setup-wizard-progress {
-  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.setup-wizard-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.setup-wizard-progress-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--matmon-foreground);
+}
+
+.setup-wizard-progress-step svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--matmon-accent);
+}
+
+.setup-wizard-progress-count {
   color: var(--matmon-muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.setup-wizard-progress-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--matmon-surface-strong);
+  box-shadow: inset 0 0 0 1px var(--matmon-sidebar-item-border);
+  overflow: hidden;
+}
+
+.setup-wizard-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--matmon-accent);
+  transition: width 0.35s ease;
 }
 
 .setup-wizard-body {
@@ -1714,6 +1717,34 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   width: 1rem;
   height: 1rem;
   color: var(--matmon-accent);
+}
+
+/* Folder step: each starter folder shows present (check + "exists") or to-be-created. */
+.setup-wizard-folder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.setup-wizard-folder.is-child {
+  margin-left: 1.1rem;
+}
+
+.setup-wizard-folder.is-done .setup-wizard-tree-item {
+  color: var(--matmon-muted);
+}
+
+.setup-wizard-folder.is-done .setup-wizard-tree-item svg {
+  color: var(--matmon-ok, #22c55e);
+}
+
+.setup-wizard-folder-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--matmon-ok, #22c55e);
 }
 
 .setup-wizard-probe {
@@ -8417,6 +8448,276 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-weight: 700;
 }
 
+/* ---- Discovery import as a tree of host cards (replaces the wide table) ---- */
+.discovery-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.discovery-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.7rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 999px;
+  background: var(--matmon-surface);
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.discovery-preset svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.discovery-preset:hover {
+  color: var(--matmon-foreground);
+}
+
+.discovery-preset.is-active {
+  color: var(--matmon-foreground);
+  border-color: var(--matmon-accent);
+  background: rgba(95, 141, 255, 0.12);
+}
+
+.discovery-tree {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.discovery-node {
+  border: 1px solid var(--matmon-border);
+  border-radius: 10px;
+  background: var(--matmon-surface);
+  overflow: hidden;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.discovery-node.is-selected {
+  border-color: rgba(95, 141, 255, 0.5);
+}
+
+.discovery-node.is-disabled {
+  opacity: 0.48;
+}
+
+.discovery-node-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.discovery-node-check {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.discovery-node-toggle {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  background: var(--matmon-surface-soft);
+  color: var(--matmon-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.discovery-node-toggle:hover {
+  color: var(--matmon-foreground);
+}
+
+.discovery-node-title {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.discovery-node-title strong {
+  font-size: 0.9rem;
+}
+
+.discovery-node-sub {
+  color: var(--matmon-muted);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discovery-node-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.discovery-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.14rem 0.45rem;
+  border-radius: 6px;
+  background: var(--matmon-surface-soft);
+  color: var(--matmon-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.discovery-fact[data-ok] {
+  color: var(--matmon-ok, #22c55e);
+}
+
+.discovery-node-count {
+  color: var(--matmon-muted);
+  font-size: 0.73rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.discovery-node-body {
+  border-top: 1px solid var(--matmon-border);
+  padding: 0.5rem 0.65rem 0.6rem 2.5rem;
+  display: grid;
+  gap: 0.35rem;
+  background: var(--matmon-surface-soft);
+}
+
+.discovery-node-message {
+  color: var(--matmon-muted);
+  font-size: 0.75rem;
+}
+
+.discovery-node-empty {
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+  padding: 0.15rem 0;
+}
+
+.discovery-node-sensors {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.discovery-sensor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.34rem 0.5rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 8px;
+  background: var(--matmon-surface);
+  cursor: pointer;
+}
+
+.discovery-sensor.is-readonly {
+  cursor: default;
+}
+
+.discovery-sensor > input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+
+.discovery-sensor-name {
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discovery-sensor-target {
+  color: var(--matmon-muted);
+  font-size: 0.73rem;
+  font-family: var(--matmon-mono, ui-monospace, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.discovery-sensor-spacer {
+  flex: 1 1 auto;
+}
+
+.discovery-sensor-badge {
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--matmon-ok, #22c55e);
+  white-space: nowrap;
+}
+
+/* Non-recommended ("extra") sensors stay collapsed per host until the "+N more" toggle is used,
+   the All preset checks them, or the user checks one (kept visible via :has). */
+.discovery-sensor.is-extra {
+  display: none;
+}
+
+.discovery-sensor.is-extra:has(input:checked) {
+  display: flex;
+}
+
+.discovery-node.is-showing-extras .discovery-sensor.is-extra {
+  display: flex;
+}
+
+.discovery-sensor-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: flex-start;
+  padding: 0.22rem 0.55rem;
+  border: 1px dashed var(--matmon-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--matmon-muted);
+  font-size: 0.74rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.discovery-sensor-more:hover {
+  color: var(--matmon-foreground);
+  border-color: var(--matmon-accent);
+}
+
+.discovery-sensor-more svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.discovery-more-hide {
+  display: none;
+}
+
+.discovery-node.is-showing-extras .discovery-more-show {
+  display: none;
+}
+
+.discovery-node.is-showing-extras .discovery-more-hide {
+  display: inline;
+}
+
+.discovery-node.is-disabled .discovery-node-body {
+  pointer-events: none;
+}
+
 .discovery-job-link {
   color: inherit;
   text-decoration: none;
@@ -8664,6 +8965,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   --map-tile-tone: #7c8eab;
 }
 
+/* Plain tile (ShowCard = false): a bare heading/label with no card chrome - e.g. a section title at height 1. */
+.map-tile.is-plain {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0.15rem 0.35rem;
+}
+
 .map-tile-head {
   display: flex;
   align-items: center;
@@ -8813,6 +9122,41 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-graph-bars {
   stroke-width: 3.2;
+}
+
+/* Design-mode realistic preview: the editor tile shows a static mock of how the real tile will look
+   (a big value, a gauge, a progress bar or a sparkline), picked by the tile's data-preview attribute
+   (set server-side + kept in sync by site.js from kind + visual type). Reuses the real display visuals. */
+.map-tile-mock {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.map-tile-mock-part {
+  display: none;
+}
+
+.map-tile-editor[data-preview="value"] .map-tile-mock-part[data-mock="value"] {
+  display: flex;
+}
+
+.map-tile-editor[data-preview="gauge"] .map-tile-mock-part[data-mock="gauge"] {
+  display: grid;
+}
+
+.map-tile-editor[data-preview="progress"] .map-tile-mock-part[data-mock="progress"] {
+  display: grid;
+}
+
+.map-tile-editor[data-preview="graph"] .map-tile-mock-part[data-mock="graph"] {
+  display: grid;
+}
+
+.map-tile-editor[data-preview="text"] .map-tile-mock {
+  display: none;
 }
 
 .map-designer-shell {
@@ -9019,6 +9363,61 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-tile-resize-handle:hover {
   opacity: 1;
+}
+
+/* While dragging/resizing a tile: the real tile content stays visible underneath (the "ghost"), with a
+   crisp accent frame + a live "W × H" badge on top so you see the tile take shape. */
+.map-tile-size-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--matmon-accent) 88%, black);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+  z-index: 3;
+}
+
+.map-tile-editor.is-resizing .map-tile-size-badge,
+.map-tile-editor.is-dragging .map-tile-size-badge {
+  opacity: 1;
+}
+
+.map-tile-editor.is-resizing {
+  z-index: 20;
+  outline: 2px dashed color-mix(in srgb, var(--matmon-accent) 75%, white);
+  outline-offset: 2px;
+}
+
+/* Design preview: the real tile content (value/gauge/graph, from live data) sits DIMMED underneath, so the
+   edit chrome (title, handles, size badge) stays legible on top - "you see the values through it". */
+.map-tile-editor .map-tile-mock {
+  opacity: 0.6;
+}
+
+.map-tile-editor.is-resizing .map-tile-mock,
+.map-tile-editor.is-dragging .map-tile-mock {
+  opacity: 0.38;
+}
+
+/* Keep the tile usable as it shrinks: drop the kind label on small tiles and scale the remove button. */
+.map-tile-editor .map-tile-remove {
+  width: clamp(1.1rem, 16cqmin, 1.75rem);
+  height: clamp(1.1rem, 16cqmin, 1.75rem);
+}
+
+@container (max-width: 150px) {
+  .map-tile-editor .map-tile-kind-label {
+    display: none;
+  }
 }
 
 .map-property-empty,
@@ -9452,6 +9851,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .user-edit-summary.workspace-summary-card {
   width: 100%;
+  /* Full-width entity header: name on the left, metric chips on the right.
+     (Override the base card's flex-end, which is meant for the right-hand header slot.) */
+  justify-content: space-between;
 }
 
 .workspace-details {

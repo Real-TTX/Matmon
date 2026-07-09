@@ -6,7 +6,7 @@
 }
 
 <section class="dashboard-shell">
-    <div class="page-header">
+    <div class="page-header" style="padding-inline:0.5rem;">
         <div class="page-title">@MatmonIcons.Render("lock")<h1>Account</h1></div>
         <span class="panel-hint">@Model.AccountName</span>
     </div>
@@ -26,7 +26,7 @@
             <button type="button" class="sensor-tab" data-sensor-tab-target="security">Security</button>
         </div>
 
-        <div data-sensor-tab="general">
+        <div data-sensor-tab="general" style="margin-top:16px;">
             <div class="panel">
                 <div class="panel-header"><h2 class="section-title">@MatmonIcons.Render("spark")<span>Profile</span></h2></div>
                 <div style="padding:14px 18px;">
@@ -53,7 +53,7 @@
             </div>
         </div>
 
-        <div data-sensor-tab="security" hidden>
+        <div data-sensor-tab="security" hidden style="margin-top:16px;">
             <div class="panel">
                 <div class="panel-header"><h2 class="section-title"><span>@(Model.HasPassword ? "Change password" : "Set a local password")</span></h2></div>
                 <div style="padding:16px 18px;">

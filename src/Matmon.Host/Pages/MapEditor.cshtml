@@ -27,6 +27,12 @@
 
     <form method="post" class="map-editor-form" data-map-designer-form>
         <input type="hidden" asp-for="Input.Id" />
+        <datalist id="map-icon-keys">
+            @foreach (var iconKey in Matmon.Host.Ui.MatmonIcons.Keys)
+            {
+                <option value="@iconKey"></option>
+            }
+        </datalist>
 
         <section class="panel map-editor-panel">
             <div class="panel-header">
@@ -117,12 +123,18 @@
                         @for (var index = 0; index < Model.Input.Tiles.Count; index++)
                         {
                             var tile = Model.Input.Tiles[index];
-                            <article class="map-tile map-tile-editor"
+                            var preview = Model.TilePreviews.GetValueOrDefault(tile.Id);
+                            var previewProgress = preview?.ProgressPercent?.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+                            var previewGraphPath = string.IsNullOrWhiteSpace(preview?.GraphLinePath)
+                                ? "M0,32 L14,24 L28,28 L42,14 L56,20 L70,9 L84,15 L100,7"
+                                : preview!.GraphLinePath;
+                            <article class="map-tile map-tile-editor@(tile.ShowCard ? "" : " is-plain")"
                                      data-map-tile
                                      data-tile-index="@index"
                                      data-slide-id="@tile.SlideId"
-                                     data-state="ok"
+                                     data-state="@(preview?.StateKey ?? "ok")"
                                      data-kind="@tile.Kind"
+                                     data-preview="@PreviewMode(tile)"
                                      style="--tile-x: @tile.X; --tile-y: @tile.Y; --tile-w: @tile.Width; --tile-h: @tile.Height; @TileStyle(tile)"
                                      hidden="@(tile.IsDeleted ? "hidden" : null)">
                                 <input type="hidden" asp-for="Input.Tiles[index].Id" />
@@ -137,7 +149,14 @@
                                     <span class="map-tile-kind-label" data-map-tile-kind-label>@KindLabel(tile.Kind)</span>
                                     <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
                                 </div>
-                                <p data-map-tile-preview>@Preview(tile)</p>
+                                <div class="map-tile-mock" data-map-tile-mock aria-hidden="true">
+                                    <div class="map-tile-value map-tile-mock-part" data-mock="value">@(preview is { } pv && !string.IsNullOrWhiteSpace(pv.Value) ? pv.Value : "—")</div>
+                                    <div class="map-tile-gauge map-tile-mock-part" data-mock="gauge" style="--map-progress: @(previewProgress ?? "68")"><span><strong>@(previewProgress ?? "68")</strong><small>%</small></span></div>
+                                    <div class="map-tile-progress-wrap map-tile-mock-part" data-mock="progress"><div class="map-tile-progress" style="--map-progress: @(previewProgress ?? "68")"><span></span></div></div>
+                                    <div class="map-tile-graph-frame map-tile-mock-part" data-mock="graph"><svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"><path class="map-graph-line" d="@previewGraphPath" /></svg></div>
+                                </div>
+                                <p data-map-tile-preview>@(preview is { } p2 && !string.IsNullOrWhiteSpace(p2.Subtitle) ? p2.Subtitle : Preview(tile))</p>
+                                <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">@tile.Width × @tile.Height</span>
                                 <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
                             </article>
                         }
@@ -236,6 +255,10 @@
                                 <div class="map-property-section">
                                     <span class="workspace-label">Appearance</span>
                                     <label class="workspace-field">
+                                        <span class="workspace-label">Icon</span>
+                                        <input asp-for="Input.Tiles[index].IconKey" list="map-icon-keys" class="form-control workspace-input" placeholder="auto (by type) — type to search" autocomplete="off" data-map-property-icon />
+                                    </label>
+                                    <label class="workspace-field">
                                         <span class="workspace-label">Background</span>
                                         <input asp-for="Input.Tiles[index].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
                                     </label>
@@ -249,6 +272,7 @@
                                     </label>
                                 </div>
                                 <div class="map-property-checks">
+                                    <label><input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card /> <span>Card background</span></label>
                                     <label><input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title /> <span>Show title</span></label>
                                     <label><input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge /> <span>Show state badge</span></label>
                                     <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
@@ -270,6 +294,7 @@
                          data-slide-id="__slideId__"
                          data-state="ok"
                          data-kind="__kind__"
+                         data-preview="value"
                          style="--tile-x: __x__; --tile-y: __y__; --tile-w: __w__; --tile-h: __h__;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
                     <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
@@ -283,7 +308,14 @@
                         <span class="map-tile-kind-label" data-map-tile-kind-label>__kindLabel__</span>
                         <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
                     </div>
+                    <div class="map-tile-mock" data-map-tile-mock aria-hidden="true">
+                        <div class="map-tile-value map-tile-mock-part" data-mock="value">—</div>
+                        <div class="map-tile-gauge map-tile-mock-part" data-mock="gauge" style="--map-progress: 68"><span><strong>68</strong><small>%</small></span></div>
+                        <div class="map-tile-progress-wrap map-tile-mock-part" data-mock="progress"><div class="map-tile-progress" style="--map-progress: 68"><span></span></div></div>
+                        <div class="map-tile-graph-frame map-tile-mock-part" data-mock="graph"><svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"><path class="map-graph-line" d="M0,32 L14,24 L28,28 L42,14 L56,20 L70,9 L84,15 L100,7" /></svg></div>
+                    </div>
                     <p data-map-tile-preview>No target selected</p>
+                    <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__w__ × __h__</span>
                     <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
                 </article>
                 <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
@@ -317,6 +349,10 @@
                     <div class="map-property-section">
                         <span class="workspace-label">Appearance</span>
                         <label class="workspace-field">
+                            <span class="workspace-label">Icon</span>
+                            <input name="Input.Tiles[__index__].IconKey" list="map-icon-keys" class="form-control workspace-input" placeholder="auto (by type) — type to search" autocomplete="off" data-map-property-icon />
+                        </label>
+                        <label class="workspace-field">
                             <span class="workspace-label">Background</span>
                             <input name="Input.Tiles[__index__].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
                         </label>
@@ -330,6 +366,7 @@
                         </label>
                     </div>
                     <div class="map-property-checks">
+                        <label><input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card /> <span>Card background</span></label>
                         <label><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /> <span>Show title</span></label>
                         <label><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /> <span>Show state badge</span></label>
                         <label><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /> <span>Show target name</span></label>
@@ -394,6 +431,19 @@
 
         return tile.ElementId.HasValue ? "Target selected" : "No target selected";
     }
+
+    // Which realistic mock the design-mode tile shows (kept in sync client-side by site.js from kind + visual).
+    private static string PreviewMode(MapTileInput tile) => tile.Kind switch
+    {
+        MonitoringMapTileKind.Text => "text",
+        MonitoringMapTileKind.Graph => "graph",
+        _ => tile.VisualType switch
+        {
+            MonitoringMapTileVisualType.Gauge => "gauge",
+            MonitoringMapTileVisualType.ProgressBar => "progress",
+            _ => "value"
+        }
+    };
 
     private static string TileStyle(MapTileInput tile)
     {

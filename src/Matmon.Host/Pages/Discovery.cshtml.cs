@@ -67,6 +67,11 @@ public sealed class DiscoveryModel : PageModel
 
     public DiscoveryPageViewModel View { get; private set; } = default!;
 
+    /// <summary>View mode (no more tab bar): "home" = Running section + the Jobs (history) list; "scan" = the
+    /// start-a-scan form on its own screen (reached via the "Discover" button); "job" = a selected job's detail
+    /// and results. Computed in <see cref="LoadView"/> from Tab / JobId / posted results.</summary>
+    public string Mode { get; private set; } = "home";
+
     public IActionResult OnGet()
     {
         LoadView();
@@ -91,15 +96,16 @@ public sealed class DiscoveryModel : PageModel
             {
                 StartLocalDiscovery(job);
                 StatusMessage = $"Discovery job started on '{probe.Name}'.";
-                return RedirectToPage(new { jobId = job.JobId, tab = "running" });
+                return RedirectToPage(new { jobId = job.JobId });
             }
 
             StatusMessage = $"Discovery job queued for probe '{probe.Name}'. The secondary probe will pick it up on its next sync.";
-            return RedirectToPage(new { jobId = job.JobId, tab = "running" });
+            return RedirectToPage(new { jobId = job.JobId });
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
+            Tab = "scan"; // keep the scan form on screen so the error is shown in context
             LoadView();
             return Page();
         }
@@ -125,11 +131,11 @@ public sealed class DiscoveryModel : PageModel
             {
                 StartLocalDiscovery(job);
                 StatusMessage = $"Discovery job started for {hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} below {scopeLabel} '{scope.Name}'.";
-                return RedirectToPage(new { jobId = job.JobId, tab = "running" });
+                return RedirectToPage(new { jobId = job.JobId });
             }
 
             StatusMessage = $"Discovery job queued on probe '{probe.Name}' for {hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} below {scopeLabel} '{scope.Name}'.";
-            return RedirectToPage(new { jobId = job.JobId, tab = "running" });
+            return RedirectToPage(new { jobId = job.JobId });
         }
         catch (Exception ex)
         {
@@ -154,7 +160,7 @@ public sealed class DiscoveryModel : PageModel
             ErrorMessage = "Discovery job could not be cancelled. It may already be finished.";
         }
 
-        return RedirectToPage(new { jobId, tab = "history" });
+        return RedirectToPage("/Discovery");
     }
 
     public IActionResult OnPostCreateSelected()
@@ -249,8 +255,12 @@ public sealed class DiscoveryModel : PageModel
         var historyJobs = recentJobs
             .Where(job => job.Status is not DiscoveryJobStatus.Pending and not DiscoveryJobStatus.Running)
             .ToArray();
-        var activeTab = ResolveActiveTab(job);
-        Tab = activeTab;
+
+        // No tab bar anymore: the "Discover" button opens the scan form (tab=scan) as its own screen;
+        // a selected/just-posted job shows its detail+results; otherwise the Running + Jobs landing.
+        Mode = string.Equals(Tab, "scan", StringComparison.OrdinalIgnoreCase)
+            ? "scan"
+            : (job is not null || Results.Count > 0) ? "job" : "home";
 
         var scopeProbe = probes.FirstOrDefault(probe => probe.Id == Input.ProbeElementId)
             ?? probes.FirstOrDefault(probe => probe.ParentId is null)
@@ -268,43 +278,8 @@ public sealed class DiscoveryModel : PageModel
             runningJobs,
             historyJobs,
             job,
-            activeTab,
             subnetSuggestions,
             knownHostAddresses.Count);
-    }
-
-    private string ResolveActiveTab(DiscoveryJobSnapshot? job)
-    {
-        var requestedTab = NormalizeTab(Tab);
-        if (requestedTab is not null)
-        {
-            return requestedTab;
-        }
-
-        if (job is not null)
-        {
-            return job.Status is DiscoveryJobStatus.Pending or DiscoveryJobStatus.Running
-                ? "running"
-                : "history";
-        }
-
-        return "scan";
-    }
-
-    public bool IsActiveTab(string tab)
-    {
-        return string.Equals(View.ActiveTab, tab, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? NormalizeTab(string? tab)
-    {
-        return tab?.Trim().ToLowerInvariant() switch
-        {
-            "scan" => "scan",
-            "running" => "running",
-            "history" => "history",
-            _ => null
-        };
     }
 
     private DiscoveryResultInput[] BuildSelectedResultsFromJob(
@@ -983,7 +958,7 @@ public sealed class DiscoveryInput
 
     public string TcpPortsText { get; set; } = "22, 80, 135, 139, 443, 445, 1433, 3389, 5000, 5001, 5985, 5986, 8006, 8080, 8099, 8443";
 
-    public bool UseSnmp { get; set; }
+    public bool UseSnmp { get; set; } = true;
 
     public string SnmpCommunity { get; set; } = "public";
 
@@ -1054,6 +1029,5 @@ public sealed record DiscoveryPageViewModel(
     IReadOnlyList<DiscoveryJobSnapshot> RunningJobs,
     IReadOnlyList<DiscoveryJobSnapshot> HistoryJobs,
     DiscoveryJobSnapshot? SelectedJob,
-    string ActiveTab,
     IReadOnlyList<string> SubnetSuggestions,
     int KnownHostCount);

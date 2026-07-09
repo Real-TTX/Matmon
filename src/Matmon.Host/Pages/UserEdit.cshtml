@@ -78,6 +78,11 @@
                         </label>
 
                         <label class="workspace-field">
+                            <span class="workspace-label">Confirm password</span>
+                            <input asp-for="UserInput.PasswordConfirm" type="password" class="form-control workspace-input" autocomplete="new-password" placeholder="repeat new password" />
+                        </label>
+
+                        <label class="workspace-field">
                             <span class="workspace-label">Enabled</span>
                             <label class="workspace-check">
                                 <input asp-for="UserInput.IsEnabled" />

@@ -203,7 +203,9 @@ public sealed class NetworkDiscoveryService
         return suggestions
             .GroupBy(BuildSuggestionKey, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(suggestion => suggestion.Confidence).First())
-            .OrderByDescending(suggestion => suggestion.Confidence)
+            // Importance first (Ping, then platform-health, then the rest), confidence as the tie-breaker.
+            .OrderByDescending(suggestion => SensorDiscoveryImportance.Rank(suggestion.SensorTypeKey))
+            .ThenByDescending(suggestion => suggestion.Confidence)
             .ThenBy(suggestion => suggestion.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -399,22 +401,39 @@ public sealed class NetworkDiscoveryService
             return null;
         }
 
-        try
-        {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(timeout);
-            using var client = new UdpClient(AddressFamily.InterNetwork);
-            var endpoint = new IPEndPoint(ipAddress, 137);
-            var query = BuildNetBiosStatusQuery();
+        // UDP/137 is unreliable (no retransmit), so give it two attempts within the budget.
+        const int attempts = 2;
+        var perAttempt = TimeSpan.FromMilliseconds(Math.Max(250, timeout.TotalMilliseconds / attempts));
+        var query = BuildNetBiosStatusQuery();
+        var endpoint = new IPEndPoint(ipAddress, 137);
 
-            await client.SendAsync(query, query.Length, endpoint).WaitAsync(timeout, timeoutCts.Token);
-            var response = await client.ReceiveAsync().WaitAsync(timeout, timeoutCts.Token);
-            return NormalizeDiscoveredHostName(ParseNetBiosName(response.Buffer));
-        }
-        catch
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
-            return null;
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(perAttempt);
+                using var client = new UdpClient(AddressFamily.InterNetwork);
+                await client.SendAsync(query, query.Length, endpoint).WaitAsync(perAttempt, timeoutCts.Token);
+                var response = await client.ReceiveAsync(timeoutCts.Token);
+                var name = NormalizeDiscoveredHostName(ParseNetBiosName(response.Buffer));
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null; // the whole scan was cancelled
+            }
+            catch
+            {
+                // timeout / ICMP port-unreachable / no answer - fall through and retry once
+            }
         }
+
+        return null;
     }
 
     private static byte[] BuildNetBiosStatusQuery()
@@ -428,7 +447,9 @@ public sealed class NetworkDiscoveryService
 
         Span<byte> encodedName = query.AsSpan(13, 32);
         Span<byte> netBiosName = stackalloc byte[16];
-        netBiosName.Fill((byte)' ');
+        // The NBSTAT "adapter status" wildcard is '*' followed by 15 NUL bytes (NOT space-padded like a
+        // registered name) - space padding is not the wildcard and most Windows/Samba hosts won't answer it.
+        netBiosName.Clear();
         netBiosName[0] = (byte)'*';
 
         for (var index = 0; index < netBiosName.Length; index++)

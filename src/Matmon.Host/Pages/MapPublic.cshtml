@@ -47,7 +47,7 @@
                 <section class="map-canvas public-map-canvas map-carousel-slide" data-map-slide data-slide-index="@slideIndex" hidden="@(slideIndex == 0 ? null : "hidden")" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows; --map-display-width: @preset.Width; --map-display-height: @preset.Height;">
             @foreach (var tile in slide.Tiles)
             {
-                <article class="map-tile map-tile-display" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
+                <article class="map-tile map-tile-display@(tile.Tile.ShowCard ? "" : " is-plain")" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
                     @if (tile.Tile.ShowTitle || tile.Tile.ShowStateBadge)
                     {
                         <div class="map-tile-head">
