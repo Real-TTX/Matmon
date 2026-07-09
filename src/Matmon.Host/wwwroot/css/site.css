@@ -8989,7 +8989,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: clamp(0.5rem, 5.5cqmin, 1.05rem);
+  /* Height-biased but capped by width, so a wide/short tile gets a readable title instead of the tiny value
+     cqmin (the smaller side) used to force. */
+  font-size: clamp(0.62rem, min(11cqh, 9cqw), 1.15rem);
 }
 
 .map-tile-head .state-pill {
@@ -9015,9 +9017,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  /* cqmin scales with the tile's smaller side, so the value shrinks in small/narrow tiles instead
-     of staying the old fixed 1.6rem+ (which overflowed once the grid got denser). */
-  font-size: clamp(0.85rem, 20cqmin, 3rem);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* Fill the available height (cqh) but cap by width (cqw) so it stays big on wide/short tiles yet never
+     overflows a narrow one - a single readable line either way. */
+  font-size: clamp(0.95rem, min(40cqh, 26cqw), 3.4rem);
   font-weight: 800;
   line-height: 1;
 }
@@ -9074,7 +9080,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-gauge strong {
-  font-size: clamp(0.6rem, 9cqmin, 1.4rem);
+  font-size: clamp(0.7rem, 15cqmin, 1.7rem);
   line-height: 1;
 }
 
@@ -9086,7 +9092,17 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   color: var(--matmon-muted);
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: clamp(0.42rem, 4.5cqmin, 0.8rem);
+  white-space: nowrap;
+  font-size: clamp(0.52rem, min(7cqh, 5.5cqw), 0.85rem);
+}
+
+/* Short tiles (roughly one row tall): drop the muted subtitle line so the title + value stay big and
+   readable on a single line instead of three cramped rows. */
+@container (max-height: 92px) {
+  .map-tile > p,
+  .map-tile > small {
+    display: none;
+  }
 }
 
 .map-tile-graph-frame {
