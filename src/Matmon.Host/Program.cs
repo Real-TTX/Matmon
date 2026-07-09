@@ -578,6 +578,9 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHeartbeatSensorExecutor>());
         services.AddTransient<ProbeHealthSensorExecutor>();
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHealthSensorExecutor>());
+        // Instance self-monitoring, driven by the cloud heartbeat's update signal - not a cloud sensor.
+        services.AddTransient<MatmonUpdateSensorExecutor>();
+        services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<MatmonUpdateSensorExecutor>());
     }
 }
 

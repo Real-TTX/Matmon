@@ -17,6 +17,7 @@ public static class SensorUsageCatalog
             ["dns"] = SensorUsageLevel.Low,
             ["ntp"] = SensorUsageLevel.Low,
             ["probe-heartbeat"] = SensorUsageLevel.Low,
+            ["matmon-update"] = SensorUsageLevel.Low,
 
             ["http"] = SensorUsageLevel.Moderate,
             ["http-advanced"] = SensorUsageLevel.Moderate,

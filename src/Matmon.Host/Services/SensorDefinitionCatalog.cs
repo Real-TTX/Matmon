@@ -47,6 +47,7 @@ public static class SensorDefinitionCatalog
         BackupJobSensorExecutor.Definition,
         DiskSmartSensorExecutor.Definition,
         ProbeHeartbeatSensorExecutor.Definition,
-        ProbeHealthSensorExecutor.Definition
+        ProbeHealthSensorExecutor.Definition,
+        MatmonUpdateSensorExecutor.Definition
     ];
 }

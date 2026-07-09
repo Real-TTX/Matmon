@@ -22,6 +22,7 @@ public static class SensorExecutionLoadRanking
         ["http-advanced"] = Light,
         ["probe-heartbeat"] = Light,
         ["probe-health"] = Light,
+        ["matmon-update"] = Light,
 
         // Moderate - a single API/cert/query round-trip.
         ["ssl-certificate"] = Moderate,

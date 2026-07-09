@@ -73,6 +73,7 @@ public static class SensorTypeCategories
 
         ["probe-heartbeat"] = "Probe",
         ["probe-health"] = "Probe",
+        ["matmon-update"] = "Probe",
     };
 
     /// <summary>The category a sensor type belongs to, or <see cref="Other"/>.</summary>
