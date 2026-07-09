@@ -16,6 +16,30 @@ public sealed class MonitoringMap
 
     public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
 
+    /// <summary>Board aspect-ratio numerator / denominator (e.g. 16 / 9). 0 = derive from the legacy
+    /// <see cref="DisplayPreset"/>. Only the RATIO matters - the board scales to fill whatever screen it is
+    /// shown on (notebook, Full-HD wall, 4K), so there are no fixed pixels.</summary>
+    public int AspectRatioWidth { get; set; }
+
+    public int AspectRatioHeight { get; set; }
+
+    /// <summary>How the public wallboard fills a screen whose ratio differs from the map's. Defaults to Stretch
+    /// so existing wallboards keep filling the screen exactly as before; Fit (letterbox) is opt-in per map.</summary>
+    public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Stretch;
+
+    /// <summary>The effective aspect ratio (numerator, denominator): the explicit ratio when set, otherwise the
+    /// legacy display preset's dimensions used purely as a ratio (Full HD/QHD/4K -> 16:9, ultrawide -> ~21:9).</summary>
+    public (int Width, int Height) EffectiveAspect()
+    {
+        if (AspectRatioWidth > 0 && AspectRatioHeight > 0)
+        {
+            return (AspectRatioWidth, AspectRatioHeight);
+        }
+
+        var info = MonitoringMapDisplayPresetCatalog.Resolve(DisplayPreset);
+        return (info.Width, info.Height);
+    }
+
     /// <summary>Seconds each slide is shown before the public wallboard auto-advances to the next slide.</summary>
     public int AutoRotateSeconds { get; set; } = 12;
 
@@ -139,6 +163,16 @@ public enum MonitoringMapPaginationMode
 
     /// <summary>No page controls - the board just auto-rotates.</summary>
     Hidden = 3
+}
+
+/// <summary>How the public wallboard fills a screen whose aspect ratio differs from the map's.</summary>
+public enum MonitoringMapWallboardFit
+{
+    /// <summary>Keep the map's aspect ratio, centered, with slim bars if the screen ratio differs (no distortion).</summary>
+    Fit = 0,
+
+    /// <summary>Stretch the map to fill the whole screen, distorting the ratio if needed (never any bars).</summary>
+    Stretch = 1
 }
 
 public enum MonitoringMapTileVisualType

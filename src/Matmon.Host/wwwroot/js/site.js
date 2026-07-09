@@ -2951,7 +2951,8 @@ function initializeMapDesigner() {
   };
   const mapNameInput = form?.querySelector("[data-map-name]");
   const mapDescriptionInput = form?.querySelector("[data-map-description]");
-  const displayPresetInput = form?.querySelector("[data-map-display-preset]");
+  const aspectWidthInput = form?.querySelector("[data-map-aspect-w]");
+  const aspectHeightInput = form?.querySelector("[data-map-aspect-h]");
   const mapPanel = form?.querySelector("[data-map-property-map-panel]");
   const mapSelectButton = form?.querySelector("[data-map-select-map]");
   const mapTitlePreview = form?.querySelector("[data-map-title-preview]");
@@ -3047,16 +3048,13 @@ function initializeMapDesigner() {
   };
 
   const readDisplayPreset = () => {
-    const selected = displayPresetInput?.selectedOptions?.[0];
-    const key = String(displayPresetInput?.value || "").trim();
-    const preset = presetOptions[key] || presetOptions.FullHd1080;
-    const width = Number(selected?.dataset.displayWidth || preset.width || 1920);
-    const height = Number(selected?.dataset.displayHeight || preset.height || 1080);
-    const label = selected?.textContent?.trim() || preset.label;
+    // Only the aspect ratio matters now - the board scales to fill whatever screen it is shown on.
+    const width = Math.max(1, Math.round(Number(aspectWidthInput?.value) || 16));
+    const height = Math.max(1, Math.round(Number(aspectHeightInput?.value) || 9));
     return {
-      width: Number.isFinite(width) && width > 0 ? width : 1920,
-      height: Number.isFinite(height) && height > 0 ? height : 1080,
-      label
+      width,
+      height,
+      label: `${width}:${height}`
     };
   };
 
@@ -3075,15 +3073,12 @@ function initializeMapDesigner() {
     canvas.style.setProperty("--map-display-width", String(preset.width));
     canvas.style.setProperty("--map-display-height", String(preset.height));
     const scale = readScale();
-    // Real zoom: give the board a FIXED pixel base width (fits the workbench at 100%)
-    // and scale it with the CSS `zoom` property. A percentage width (min(100%, …)) would
-    // re-fill the parent under zoom, so the board stayed the same size and only the inner
-    // content shrank - a fixed px width makes zoom scale the WHOLE board uniformly (the
-    // workbench scrolls above 100%, the board shrinks to fit below). getBoundingClientRect
-    // reports zoomed coords, so drag/resize stays correct.
+    // Only the aspect ratio matters (preset.width/height are ratio numbers now, e.g. 16/9). The board fills
+    // the workbench width at 100% and derives its height from the ratio; the CSS `zoom` property then scales
+    // the WHOLE board uniformly (workbench scrolls above 100%, shrinks below). getBoundingClientRect reports
+    // zoomed coords, so drag/resize stays correct.
     const workbench = canvas.closest(".map-designer-workbench");
-    const available = workbench ? Math.max(320, workbench.clientWidth - 14) : preset.width;
-    const baseWidth = Math.min(available, preset.width);
+    const baseWidth = workbench ? Math.max(320, workbench.clientWidth - 14) : 960;
     canvas.style.width = `${baseWidth}px`;
     canvas.style.minWidth = "";
     canvas.style.minHeight = "";
@@ -3499,8 +3494,18 @@ function initializeMapDesigner() {
   mapSelectButton?.addEventListener("click", selectMap);
   mapNameInput?.addEventListener("input", () => syncMapSummary());
   mapDescriptionInput?.addEventListener("input", () => syncMapSummary());
-  displayPresetInput?.addEventListener("change", () => syncGrid(true));
-  displayPresetInput?.addEventListener("input", () => syncGrid(true));
+  aspectWidthInput?.addEventListener("input", () => syncGrid());
+  aspectHeightInput?.addEventListener("input", () => syncGrid());
+  form?.querySelectorAll("[data-map-aspect-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (aspectWidthInput) { aspectWidthInput.value = button.dataset.aspectW || "16"; }
+      if (aspectHeightInput) { aspectHeightInput.value = button.dataset.aspectH || "9"; }
+      form?.querySelectorAll("[data-map-aspect-preset]").forEach((other) => {
+        other.classList.toggle("is-active", other === button);
+      });
+      syncGrid();
+    });
+  });
   // Scale existing tiles proportionally when the column/row count changes, so the visual layout is
   // preserved (a finer grid keeps tiles the same size, occupying more cells) instead of leaving them
   // the same cell-span - which shrank + clustered them to the top-left and squished the graphs.

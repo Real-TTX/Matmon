@@ -75,9 +75,9 @@ public interface IMonitoringWorkspaceStore
 
     bool UpdateMap(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapTile> tiles);
 
-    MonitoringMap CreateMapWithSlides(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
+    MonitoringMap CreateMapWithSlides(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int aspectRatioWidth, int aspectRatioHeight, MonitoringMapWallboardFit wallboardFit, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
 
-    bool UpdateMapWithSlides(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
+    bool UpdateMapWithSlides(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int aspectRatioWidth, int aspectRatioHeight, MonitoringMapWallboardFit wallboardFit, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
 
     string RotateMapPublicToken(Guid mapId);
 

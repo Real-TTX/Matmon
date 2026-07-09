@@ -8878,8 +8878,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
   grid-template-rows: repeat(var(--map-rows, 8), minmax(0, 1fr));
   gap: 0.45rem;
-  width: min(100%, calc(var(--map-display-width, 1920) * 1px));
-  aspect-ratio: var(--map-display-width, 1920) / var(--map-display-height, 1080);
+  /* Only the aspect ratio matters - fill the container width and derive height from the ratio, so the board
+     scales to any screen (notebook / Full-HD wall / 4K). --map-display-width/height carry the ratio (e.g. 16/9). */
+  width: 100%;
+  aspect-ratio: var(--map-display-width, 16) / var(--map-display-height, 9);
   margin-inline: auto;
   min-height: 28rem;
   padding: 0.55rem;
@@ -9420,6 +9422,50 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   }
 }
 
+/* Map aspect-ratio controls (ratio presets + free B:H). */
+.map-aspect-presets {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.map-aspect-preset {
+  padding: 0.28rem 0.62rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 999px;
+  background: var(--matmon-surface);
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.map-aspect-preset:hover {
+  color: var(--matmon-foreground);
+}
+
+.map-aspect-preset.is-active {
+  color: var(--matmon-foreground);
+  border-color: var(--matmon-accent);
+  background: rgba(95, 141, 255, 0.12);
+}
+
+.map-aspect-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.map-aspect-custom .workspace-input {
+  max-width: 5rem;
+}
+
+.map-aspect-colon {
+  color: var(--matmon-muted);
+  font-weight: 700;
+}
+
 .map-property-empty,
 .map-property-panel {
   padding: 0.65rem;
@@ -9607,6 +9653,23 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   width: 100%;
   max-width: none;
   aspect-ratio: auto;
+}
+
+/* Wallboard fit (per map). Default above = "stretch" (fills the screen). "fit" keeps the map's aspect ratio,
+   centered, with slim letterbox bars if the screen ratio differs. */
+.public-map-stage[data-map-fit="fit"] .public-map-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.public-map-stage[data-map-fit="fit"] .public-map-canvas {
+  aspect-ratio: var(--map-display-width, 16) / var(--map-display-height, 9);
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
 }
 
 /* --- Map carousel (multi-slide) --- */

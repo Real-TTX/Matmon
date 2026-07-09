@@ -95,11 +95,11 @@ public sealed class MapEditorModel : PageModel
             MonitoringMap map;
             if (mapId == Guid.Empty)
             {
-                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, Input.PaginationMode, slides);
+                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AspectRatioWidth, Input.AspectRatioHeight, Input.WallboardFit, Input.AutoRotateSeconds, Input.PaginationMode, slides);
             }
             else
             {
-                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AutoRotateSeconds, Input.PaginationMode, slides))
+                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AspectRatioWidth, Input.AspectRatioHeight, Input.WallboardFit, Input.AutoRotateSeconds, Input.PaginationMode, slides))
                 {
                     return NotFound();
                 }
@@ -196,6 +196,9 @@ public sealed class MapEditorModel : PageModel
                 Columns = map.Columns,
                 Rows = map.Rows,
                 DisplayPreset = map.DisplayPreset,
+                AspectRatioWidth = map.AspectRatioWidth > 0 ? map.AspectRatioWidth : (map.DisplayPreset == MonitoringMapDisplayPreset.Ultrawide3440x1440 ? 21 : 16),
+                AspectRatioHeight = map.AspectRatioHeight > 0 ? map.AspectRatioHeight : 9,
+                WallboardFit = map.WallboardFit,
                 AutoRotateSeconds = map.AutoRotateSeconds,
                 PaginationMode = map.PaginationMode,
                 Slides = slides.Select(slide => new MapSlideInput { Id = slide.Id, Name = slide.Name }).ToList(),
@@ -315,6 +318,12 @@ public sealed class MapEditorInput
     public int Rows { get; set; } = 8;
 
     public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
+
+    public int AspectRatioWidth { get; set; } = 16;
+
+    public int AspectRatioHeight { get; set; } = 9;
+
+    public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Stretch;
 
     public int AutoRotateSeconds { get; set; } = 12;
 

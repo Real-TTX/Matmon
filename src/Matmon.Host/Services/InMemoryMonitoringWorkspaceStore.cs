@@ -591,6 +591,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         int columns,
         int rows,
         MonitoringMapDisplayPreset displayPreset,
+        int aspectRatioWidth,
+        int aspectRatioHeight,
+        MonitoringMapWallboardFit wallboardFit,
         int autoRotateSeconds,
         MonitoringMapPaginationMode paginationMode,
         IReadOnlyList<MonitoringMapSlide> slides)
@@ -609,6 +612,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 Columns = normalizedColumns,
                 Rows = normalizedRows,
                 DisplayPreset = displayPreset,
+                AspectRatioWidth = Math.Clamp(aspectRatioWidth, 0, 64),
+                AspectRatioHeight = Math.Clamp(aspectRatioHeight, 0, 64),
+                WallboardFit = wallboardFit,
                 AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds),
                 PaginationMode = paginationMode,
                 PublicToken = CreateToken(),
@@ -631,6 +637,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         int columns,
         int rows,
         MonitoringMapDisplayPreset displayPreset,
+        int aspectRatioWidth,
+        int aspectRatioHeight,
+        MonitoringMapWallboardFit wallboardFit,
         int autoRotateSeconds,
         MonitoringMapPaginationMode paginationMode,
         IReadOnlyList<MonitoringMapSlide> slides)
@@ -652,6 +661,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             map.Columns = normalizedColumns;
             map.Rows = normalizedRows;
             map.DisplayPreset = displayPreset;
+            map.AspectRatioWidth = Math.Clamp(aspectRatioWidth, 0, 64);
+            map.AspectRatioHeight = Math.Clamp(aspectRatioHeight, 0, 64);
+            map.WallboardFit = wallboardFit;
             map.AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds);
             map.PaginationMode = paginationMode;
             map.Slides = normalizedSlides;

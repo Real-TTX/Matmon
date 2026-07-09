@@ -177,15 +177,27 @@
                             <span class="workspace-label">Description</span>
                             <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
                         </label>
+                        <input type="hidden" asp-for="Input.DisplayPreset" />
+                        <div class="workspace-field">
+                            <span class="workspace-label">Aspect ratio</span>
+                            <div class="map-aspect-presets">
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="9">16:9</button>
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="10">16:10</button>
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="21" data-aspect-h="9">21:9</button>
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="4" data-aspect-h="3">4:3</button>
+                            </div>
+                            <div class="map-aspect-custom">
+                                <input asp-for="Input.AspectRatioWidth" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-w aria-label="Aspect ratio width" />
+                                <span class="map-aspect-colon">:</span>
+                                <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
+                            </div>
+                            <span class="workspace-inline-note">Only the ratio matters — the board scales to any screen. Presets set W:H; edit the fields for a custom ratio.</span>
+                        </div>
                         <label class="workspace-field">
-                            <span class="workspace-label">Optimized for</span>
-                            <select asp-for="Input.DisplayPreset" class="form-select workspace-select" data-map-display-preset>
-                                @foreach (var option in Model.DisplayPresetOptions)
-                                {
-                                    <option value="@option.Value" data-display-width="@option.Width" data-display-height="@option.Height" selected="@(Model.Input.DisplayPreset == option.Value ? "selected" : null)">
-                                        @option.Label
-                                    </option>
-                                }
+                            <span class="workspace-label">Wallboard fit</span>
+                            <select asp-for="Input.WallboardFit" class="form-select workspace-select">
+                                <option value="@MonitoringMapWallboardFit.Fit">Keep ratio (letterbox)</option>
+                                <option value="@MonitoringMapWallboardFit.Stretch">Stretch to fill screen</option>
                             </select>
                         </label>
                         <div class="map-property-section">
