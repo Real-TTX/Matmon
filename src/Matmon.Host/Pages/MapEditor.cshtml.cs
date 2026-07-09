@@ -323,7 +323,7 @@ public sealed class MapEditorInput
 
     public int AspectRatioHeight { get; set; } = 9;
 
-    public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Stretch;
+    public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Fit;
 
     public int AutoRotateSeconds { get; set; } = 12;
 

@@ -23,9 +23,9 @@ public sealed class MonitoringMap
 
     public int AspectRatioHeight { get; set; }
 
-    /// <summary>How the public wallboard fills a screen whose ratio differs from the map's. Defaults to Stretch
-    /// so existing wallboards keep filling the screen exactly as before; Fit (letterbox) is opt-in per map.</summary>
-    public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Stretch;
+    /// <summary>How the public wallboard fills a screen whose ratio differs from the map's. Defaults to Fit
+    /// (keep the aspect ratio, letterboxed) - the ratio is the point; Stretch (fill, distort) is opt-in.</summary>
+    public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Fit;
 
     /// <summary>The effective aspect ratio (numerator, denominator): the explicit ratio when set, otherwise the
     /// legacy display preset's dimensions used purely as a ratio (Full HD/QHD/4K -> 16:9, ultrawide -> ~21:9).</summary>
