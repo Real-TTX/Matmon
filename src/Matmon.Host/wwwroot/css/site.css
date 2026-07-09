@@ -9096,12 +9096,55 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-size: clamp(0.52rem, min(7cqh, 5.5cqw), 0.85rem);
 }
 
-/* Short tiles (roughly one row tall): drop the muted subtitle line so the title + value stay big and
-   readable on a single line instead of three cramped rows. */
-@container (max-height: 92px) {
+/* Progress-bar thickness tracks the tile: slim on a one-row tile, chunkier on a tall one. */
+.map-tile-progress {
+  height: clamp(0.45rem, 9cqh, 0.9rem);
+}
+
+/* One grid-row tall: tighten the chrome and drop the muted subtitle/kind line so the primary metric keeps
+   its size on a single, uncramped line ("1-zeilig") instead of three squeezed rows. */
+@container (max-height: 112px) {
+  .map-tile {
+    padding: 0.4rem 0.6rem;
+    gap: 0.18rem;
+  }
+
+  .map-tile.is-plain {
+    padding: 0.1rem 0.4rem;
+  }
+
   .map-tile > p,
   .map-tile > small {
     display: none;
+  }
+}
+
+/* A ring gauge is illegible below ~2 rows (the ring + centred text collapse to a few pixels and clip), so
+   on a short tile it degrades to its number + label on one line - the percentage still carries the reading. */
+@container (max-height: 138px) {
+  .map-tile-gauge {
+    aspect-ratio: auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+    place-items: center;
+  }
+
+  .map-tile-gauge span {
+    width: 100%;
+    aspect-ratio: auto;
+    grid-auto-flow: column;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.45rem;
+    background: none;
+  }
+
+  .map-tile-gauge strong {
+    font-size: clamp(1rem, min(46cqh, 22cqw), 2.4rem);
   }
 }
 
