@@ -3626,54 +3626,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         };
     }
 
-    private static MonitoringMapTile CloneMapTile(MonitoringMapTile tile)
-    {
-        return new MonitoringMapTile
-        {
-            Id = tile.Id,
-            Kind = tile.Kind,
-            Title = tile.Title,
-            ElementId = tile.ElementId,
-            TargetTag = tile.TargetTag,
-            Text = tile.Text,
-            X = tile.X,
-            Y = tile.Y,
-            Width = tile.Width,
-            Height = tile.Height,
-            BackgroundColor = tile.BackgroundColor,
-            AccentColor = tile.AccentColor,
-            TextColor = tile.TextColor,
-            GraphType = tile.GraphType,
-            VisualType = tile.VisualType,
-            ShowTitle = tile.ShowTitle,
-            ShowStateBadge = tile.ShowStateBadge,
-            ShowElementName = tile.ShowElementName
-        };
-    }
+    // Map/tile cloning is defined once on the domain type (MonitoringMap.Clone) so a newly added field is
+    // copied in a single place. These thin wrappers keep the existing call sites.
+    private static MonitoringMapTile CloneMapTile(MonitoringMapTile tile) => tile.Clone();
 
-    private static MonitoringMap CloneMap(MonitoringMap source)
-    {
-        return new MonitoringMap
-        {
-            Id = source.Id,
-            Name = source.Name,
-            Description = source.Description,
-            PublicToken = source.PublicToken,
-            Columns = source.Columns,
-            Rows = source.Rows,
-            DisplayPreset = source.DisplayPreset,
-            AutoRotateSeconds = source.AutoRotateSeconds,
-            CreatedUtc = source.CreatedUtc,
-            UpdatedUtc = source.UpdatedUtc,
-            Tiles = source.Tiles.Select(CloneMapTile).ToList(),
-            Slides = source.Slides.Select(slide => new MonitoringMapSlide
-            {
-                Id = slide.Id,
-                Name = slide.Name,
-                Tiles = slide.Tiles.Select(CloneMapTile).ToList()
-            }).ToList()
-        };
-    }
+    private static MonitoringMap CloneMap(MonitoringMap source) => source.Clone();
 
     private static string NormalizeUsername(string username)
     {
@@ -3720,6 +3677,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
                     TargetTag = string.IsNullOrWhiteSpace(tile.TargetTag) ? null : tile.TargetTag.Trim(),
                     Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim(),
+                    IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim(),
+                    ShowCard = tile.ShowCard,
                     X = x,
                     Y = y,
                     Width = width,

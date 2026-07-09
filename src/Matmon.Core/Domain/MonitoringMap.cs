@@ -70,6 +70,30 @@ public sealed class MonitoringMap
 
         return [new MonitoringMapSlide { Name = "Slide 1", Tiles = Tiles }];
     }
+
+    /// <summary>Deep, detached copy. Single source of truth for map cloning so a newly added field is
+    /// copied everywhere at once (dropping a field here silently reset it to its default on every read -
+    /// e.g. WallboardFit fell back to Fit, so a "stretch" wallboard never stretched). Covered by a
+    /// reflection parity test.</summary>
+    public MonitoringMap Clone() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Description = Description,
+        PublicToken = PublicToken,
+        Columns = Columns,
+        Rows = Rows,
+        DisplayPreset = DisplayPreset,
+        AspectRatioWidth = AspectRatioWidth,
+        AspectRatioHeight = AspectRatioHeight,
+        WallboardFit = WallboardFit,
+        AutoRotateSeconds = AutoRotateSeconds,
+        PaginationMode = PaginationMode,
+        CreatedUtc = CreatedUtc,
+        UpdatedUtc = UpdatedUtc,
+        Tiles = Tiles.Select(tile => tile.Clone()).ToList(),
+        Slides = Slides.Select(slide => slide.Clone()).ToList()
+    };
 }
 
 public sealed class MonitoringMapSlide
@@ -79,6 +103,13 @@ public sealed class MonitoringMapSlide
     public string Name { get; set; } = "Slide";
 
     public List<MonitoringMapTile> Tiles { get; set; } = [];
+
+    public MonitoringMapSlide Clone() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Tiles = Tiles.Select(tile => tile.Clone()).ToList()
+    };
 }
 
 public sealed class MonitoringMapTile
@@ -131,6 +162,30 @@ public sealed class MonitoringMapTile
     public bool ShowStateBadge { get; set; } = true;
 
     public bool ShowElementName { get; set; } = true;
+
+    public MonitoringMapTile Clone() => new()
+    {
+        Id = Id,
+        Kind = Kind,
+        Title = Title,
+        ElementId = ElementId,
+        TargetTag = TargetTag,
+        Text = Text,
+        IconKey = IconKey,
+        ShowCard = ShowCard,
+        X = X,
+        Y = Y,
+        Width = Width,
+        Height = Height,
+        BackgroundColor = BackgroundColor,
+        AccentColor = AccentColor,
+        TextColor = TextColor,
+        GraphType = GraphType,
+        VisualType = VisualType,
+        ShowTitle = ShowTitle,
+        ShowStateBadge = ShowStateBadge,
+        ShowElementName = ShowElementName
+    };
 }
 
 public enum MonitoringMapTileKind
