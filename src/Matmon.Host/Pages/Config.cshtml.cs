@@ -440,16 +440,47 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "license" });
     }
 
-    public IActionResult OnPostCloudDisconnect()
+    public async Task<IActionResult> OnPostCloudDisconnect()
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
             return Forbid();
         }
 
+        // Tell the cloud we're unlinking FIRST (while the token is still present) so it marks this instance
+        // offline immediately, instead of showing it "online" until the heartbeat times out (~150s). Best-effort.
+        await NotifyCloudDisconnectAsync();
+
         _workspaceStore.DisconnectCloud();
         StatusMessage = "Disconnected from Matmon.Cloud.";
         return RedirectToPage(new { tab = "cloud" });
+    }
+
+    private async Task NotifyCloudDisconnectAsync()
+    {
+        try
+        {
+            var settings = _workspaceStore.GetCloudConnectionSettings();
+            var token = _workspaceStore.GetCloudConnectionToken();
+            if (!settings.Enabled
+                || string.IsNullOrWhiteSpace(settings.Url)
+                || !Guid.TryParse(settings.InstanceId, out var instanceId)
+                || string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
+            var baseUrl = settings.Url.Trim().TrimEnd('/');
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/instances/{instanceId}/disconnect");
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await client.SendAsync(request);
+        }
+        catch
+        {
+            // Cloud unreachable or any error: the local disconnect still proceeds; the cloud will time the
+            // instance out (~150s) as a fallback. A deliberate disconnect must never fail on the cloud round-trip.
+        }
     }
 
     /// <summary>
