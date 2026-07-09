@@ -67,6 +67,32 @@ public sealed class MapEditorModel : PageModel
         return Page();
     }
 
+    /// <summary>Live tile preview for the designer: resolves the real value / state / graph for a target the
+    /// moment it is picked, so designing shows actual data instead of only the last saved snapshot.</summary>
+    public IActionResult OnGetTilePreview(string? token, MonitoringMapTileKind kind, MonitoringMapTileVisualType visualType, MonitoringMapTileGraphType graphType)
+    {
+        var tile = new MonitoringMapTile
+        {
+            Id = Guid.Empty,
+            Kind = kind,
+            VisualType = visualType,
+            GraphType = graphType,
+            ElementId = MonitoringTargetResolver.ElementId(token),
+            TargetTag = MonitoringTargetResolver.TagName(token)
+        };
+
+        var vm = _displayProvider.ResolveTilePreview(tile);
+        return new JsonResult(new
+        {
+            value = vm.Value,
+            hasValue = !string.IsNullOrWhiteSpace(vm.Value),
+            stateKey = vm.StateKey,
+            subtitle = vm.Subtitle,
+            progressPercent = vm.ProgressPercent,
+            graphLinePath = vm.GraphLinePath
+        });
+    }
+
     public IActionResult OnPostAddTile()
     {
         Input.Tiles.Add(new MapTileInput

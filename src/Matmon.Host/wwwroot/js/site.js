@@ -3216,6 +3216,87 @@ function initializeMapDesigner() {
     }
   };
 
+  // --- Live tile preview (real value / state / graph while designing) ---
+  const previewKeyCache = new WeakMap();
+  const previewTimers = new WeakMap();
+
+  const previewKeyFor = (panel) => {
+    const token = (panel.querySelector("[data-map-property-element]")?.value || "").trim();
+    const kind = normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element");
+    const visual = (panel.querySelector("[data-map-property-visual-type]")?.value || "Card").trim() || "Card";
+    const graphType = (panel.querySelector("[data-map-property-graph-type]")?.value || "Line").trim() || "Line";
+    return { token, kind, visual, graphType, key: [token, kind, visual, graphType].join("|") };
+  };
+
+  const applyLivePreview = (tile, data) => {
+    if (!tile || !data) {
+      return;
+    }
+    const mock = tile.querySelector("[data-map-tile-mock]");
+    if (data.stateKey) {
+      tile.dataset.state = data.stateKey;
+    }
+    if (!mock) {
+      return;
+    }
+    const pct = (data.progressPercent === null || data.progressPercent === undefined)
+      ? null
+      : Math.round(data.progressPercent);
+    const valueEl = mock.querySelector('[data-mock="value"]');
+    if (valueEl) {
+      valueEl.textContent = data.hasValue ? data.value : "—";
+    }
+    const gauge = mock.querySelector('[data-mock="gauge"]');
+    if (gauge) {
+      gauge.style.setProperty("--map-progress", pct ?? 0);
+      const strong = gauge.querySelector("strong");
+      if (strong) {
+        strong.textContent = pct ?? "—";
+      }
+    }
+    const progress = mock.querySelector('[data-mock="progress"] .map-tile-progress');
+    if (progress) {
+      progress.style.setProperty("--map-progress", pct ?? 0);
+    }
+    if (data.graphLinePath) {
+      const path = mock.querySelector('[data-mock="graph"] .map-graph-line');
+      if (path) {
+        path.setAttribute("d", data.graphLinePath);
+      }
+    }
+  };
+
+  const refreshTilePreview = (tile, panel) => {
+    if (!tile || !panel) {
+      return;
+    }
+    const info = previewKeyFor(panel);
+    if (previewKeyCache.get(tile) === info.key) {
+      return; // unchanged target/kind/visual - nothing new to fetch (title/colour edits skip)
+    }
+    previewKeyCache.set(tile, info.key);
+    if (info.kind === "Text" || !info.token) {
+      return; // no live value to resolve; keep the placeholder mock
+    }
+    const url = `${window.location.pathname}?handler=TilePreview`
+      + `&token=${encodeURIComponent(info.token)}`
+      + `&kind=${encodeURIComponent(info.kind)}`
+      + `&visualType=${encodeURIComponent(info.visual)}`
+      + `&graphType=${encodeURIComponent(info.graphType)}`;
+    clearTimeout(previewTimers.get(tile));
+    previewTimers.set(tile, setTimeout(() => {
+      fetch(url, { headers: { Accept: "application/json" } })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          // Only apply if this is still the current target for the tile (avoid a stale race).
+          if (data && previewKeyCache.get(tile) === info.key) {
+            applyLivePreview(tile, data);
+          }
+        })
+        .catch(() => {});
+    }, 200));
+  };
+
   const syncTileFromPanel = (panel) => {
     if (!panel) {
       return;
@@ -3263,6 +3344,7 @@ function initializeMapDesigner() {
     syncPanelVisibility(panel);
     applyTileAppearance(tile, panel);
     applyTilePosition(tile);
+    refreshTilePreview(tile, panel);
   };
 
   const selectTile = (index) => {
@@ -3333,6 +3415,11 @@ function initializeMapDesigner() {
       input.addEventListener("input", () => syncTileFromPanel(panel));
       input.addEventListener("change", () => syncTileFromPanel(panel));
     });
+    // The server already rendered each saved tile's real preview, so seed the cache to skip an
+    // identical refetch on load; live fetches then only fire when the user actually changes the target.
+    if (panel) {
+      previewKeyCache.set(tile, previewKeyFor(panel).key);
+    }
     syncTileFromPanel(panel);
 
     tile.querySelector("[data-map-remove-tile]")?.addEventListener("click", (event) => {

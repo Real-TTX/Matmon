@@ -9130,7 +9130,11 @@ html[data-theme="light"] .workspace-textarea::placeholder {
     background: none;
     box-shadow: none;
     border-radius: 0;
-    place-items: center;
+    display: grid;
+    grid-auto-flow: row;
+    align-content: center;
+    justify-items: stretch;
+    gap: 0.28rem;
   }
 
   .map-tile-gauge span {
@@ -9138,13 +9142,27 @@ html[data-theme="light"] .workspace-textarea::placeholder {
     aspect-ratio: auto;
     grid-auto-flow: column;
     align-items: baseline;
-    justify-content: center;
+    justify-content: start;
     gap: 0.45rem;
     background: none;
   }
 
   .map-tile-gauge strong {
     font-size: clamp(1rem, min(46cqh, 22cqw), 2.4rem);
+  }
+
+  /* Slim fill bar under the number so a short gauge still reads as a level, not just a bare figure. */
+  .map-tile-gauge::after {
+    content: "";
+    display: block;
+    width: 100%;
+    height: clamp(0.4rem, 7cqh, 0.7rem);
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--map-tile-accent) 42%, var(--matmon-border));
+    background:
+      linear-gradient(90deg,
+        var(--map-tile-accent) 0 calc(var(--map-progress, 0) * 1%),
+        color-mix(in srgb, var(--map-tile-accent) 12%, var(--matmon-surface-soft)) calc(var(--map-progress, 0) * 1%) 100%);
   }
 }
 

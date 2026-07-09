@@ -43,6 +43,23 @@ public sealed class MapDisplayProvider
         return new MapDisplayViewModel(map, firstTiles, slides);
     }
 
+    /// <summary>Resolve a single tile's live display view-model on demand - used by the map designer to show a
+    /// tile's real value / state / graph the moment its target is picked, without needing a whole saved map.
+    /// Mirrors the per-tile branch of <see cref="Build"/>.</summary>
+    public MapDisplayTileViewModel ResolveTilePreview(MonitoringMapTile tile)
+    {
+        var latest = _workspaceStore.GetLatestSensorObservations();
+
+        if (!string.IsNullOrWhiteSpace(tile.TargetTag))
+        {
+            return BuildTagAggregateTile(tile, latest);
+        }
+
+        var elements = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
+        elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
+        return ResolveTileState(tile, element, latest);
+    }
+
     private MapDisplayTileViewModel ResolveTileState(
         MonitoringMapTile tile,
         MonitoringElement? element,
