@@ -6365,6 +6365,41 @@ body.element-picker-open {
   border-color: rgba(124, 142, 171, 0.18);
 }
 
+/* History "Last results" rows: a coloured left stripe per state for fast scanning, subtle hover, and
+   tabular figures so timestamps + values line up column-wise. */
+.sensor-observation-row {
+  border-left-width: 3px;
+  align-items: center;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.sensor-observation-row[data-state="ok"] {
+  border-left-color: #78d5c8;
+}
+
+.sensor-observation-row[data-state="warning"] {
+  border-left-color: #f3b36b;
+}
+
+.sensor-observation-row[data-state="error"] {
+  border-left-color: #ff7f93;
+}
+
+.sensor-observation-row[data-state="paused"],
+.sensor-observation-row[data-state="unknown"],
+.sensor-observation-row[data-state="disabled"] {
+  border-left-color: #6f7786;
+}
+
+.sensor-observation-row:hover {
+  background: var(--matmon-surface);
+}
+
+.sensor-observation-name,
+.sensor-observation-side .sensor-channel-value {
+  font-variant-numeric: tabular-nums;
+}
+
 .sensor-channel-row[data-default="true"] {
   box-shadow: 0 0 0 1px rgba(95, 141, 255, 0.1);
 }

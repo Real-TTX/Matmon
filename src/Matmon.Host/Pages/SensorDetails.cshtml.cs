@@ -712,8 +712,10 @@ public sealed class SensorDetailsModel : PageModel
     {
         var displayScale = scale ?? SensorUnitScale.Identity(fallbackUnit);
 
+        // history is oldest-first; show the most recent runs at the TOP (newest-first), not the bottom.
         return history
-            .TakeLast(12)
+            .TakeLast(50)
+            .Reverse()
             .Select(observation =>
             {
                 var defaultValue = SensorHistoryAnalytics.GetDefaultValue(observation, defaultChannelKey);
