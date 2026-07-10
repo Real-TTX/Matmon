@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Matmon.Host.Pages;
 
@@ -36,6 +37,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly MonitoringInheritanceResolver _resolver = new();
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly ILicenseService _licenseService;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public WorkspaceModel(
         IMonitoringWorkspaceStore workspaceStore,
@@ -43,7 +45,8 @@ public sealed class WorkspaceModel : PageModel
         IDashboardSnapshotProvider dashboardSnapshotProvider,
         ISensorExecutionService sensorExecutionService,
         MatmonRuntimeOptions runtimeOptions,
-        ILicenseService licenseService)
+        ILicenseService licenseService,
+        IServiceScopeFactory scopeFactory)
     {
         _workspaceStore = workspaceStore;
         _probeRegistry = probeRegistry;
@@ -51,6 +54,7 @@ public sealed class WorkspaceModel : PageModel
         _sensorExecutionService = sensorExecutionService;
         _runtimeOptions = runtimeOptions;
         _licenseService = licenseService;
+        _scopeFactory = scopeFactory;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -414,6 +418,89 @@ public sealed class WorkspaceModel : PageModel
             ErrorMessage = ex.Message;
             LoadViewState(populateEditorValues: false);
             return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostRunSensor(Guid sensorId, string? returnUrl)
+    {
+        try
+        {
+            if (_workspaceStore.FindElement(sensorId) is not SensorElement sensor)
+            {
+                throw new InvalidOperationException("Selected element is not a sensor.");
+            }
+
+            var result = await _sensorExecutionService.ExecuteNowAsync(sensorId, cancellationToken: HttpContext.RequestAborted);
+            StatusMessage = $"Ran '{sensor.Name}': {FormatSensorStateLabel(result.State)} - {result.Duration.TotalMilliseconds:0.#} ms"
+                + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}");
+            return RedirectAfterAction(returnUrl, "/Monitoring", null);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostRunElementSensors(Guid elementId, string? returnUrl)
+    {
+        try
+        {
+            var element = _workspaceStore.GetAllElements().FirstOrDefault(candidate => candidate.Id == elementId)
+                ?? throw new InvalidOperationException("Element not found.");
+
+            var sensorIds = EnumerateDescendantSensorIds(element).ToArray();
+            if (sensorIds.Length == 0)
+            {
+                StatusMessage = $"No sensors under '{element.Name}'.";
+                return RedirectAfterAction(returnUrl, "/Monitoring", null);
+            }
+
+            // A poll can take seconds (timeouts / slow targets), so run the whole subtree in the BACKGROUND with
+            // its own DI scope and return immediately - awaiting a full subtree would hang the request/UI. The
+            // fresh observations land just like the polling loop's; the tree reflects them on its next refresh.
+            var ids = sensorIds;
+            var scopeFactory = _scopeFactory;
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var executor = scope.ServiceProvider.GetRequiredService<ISensorExecutionService>();
+                foreach (var id in ids)
+                {
+                    try { await executor.ExecuteNowAsync(id); }
+                    catch { /* one failing sensor must not abort the rest of the batch */ }
+                }
+            });
+
+            StatusMessage = $"Running {sensorIds.Length} sensor{(sensorIds.Length == 1 ? string.Empty : "s")} under '{element.Name}' now…";
+            return RedirectAfterAction(returnUrl, "/Monitoring", null);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
+    private static IEnumerable<Guid> EnumerateDescendantSensorIds(MonitoringElement element)
+    {
+        if (element is SensorElement sensor)
+        {
+            yield return sensor.Id;
+            yield break;
+        }
+
+        if (element is MonitoringContainerElement container)
+        {
+            foreach (var child in container.Children)
+            {
+                foreach (var id in EnumerateDescendantSensorIds(child))
+                {
+                    yield return id;
+                }
+            }
         }
     }
 

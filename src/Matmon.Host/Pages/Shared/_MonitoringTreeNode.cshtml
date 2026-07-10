@@ -92,6 +92,10 @@
                         <span>Actions</span>
                     </summary>
                     <div class="workspace-action-menu-panel">
+                        <form method="post" asp-page-handler="RunSensor" asp-route-sensorId="@Model.Id" asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
+                            <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Run now</span></button>
+                        </form>
+                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
                         <a class="workspace-action-menu-link" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
                         <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
                         <button type="button" class="workspace-action-menu-link" data-tree-move-start>
@@ -267,6 +271,9 @@
                                 </form>
                             }
                             <div class="workspace-action-menu-separator" aria-hidden="true"></div>
+                            <form method="post" asp-page-handler="RunElementSensors" asp-route-elementId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Run all</span></button>
+                            </form>
                             <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
                                 <input type="hidden" name="elementId" value="@Model.Id" />
                                 <input type="hidden" name="paused" value="true" />
@@ -393,6 +400,10 @@
                                         <span>Actions</span>
                                     </summary>
                                     <div class="workspace-action-menu-panel">
+                                        <form method="post" asp-page-handler="RunSensor" asp-route-sensorId="@sensor.Id" asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
+                                            <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Run now</span></button>
+                                        </form>
+                                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
                                         <a class="workspace-action-menu-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
                                         <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
                                         <button type="button" class="workspace-action-menu-link" data-tree-move-start>
