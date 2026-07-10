@@ -323,7 +323,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             SensorElement sensorElement => GetSensorNodeSeverity(
                 inheritedSeverity,
                 sensorElement,
-                TryGetLatestSensorObservation(sensorHistoryMap, sensorElement.Id)),
+                TryGetLatestSensorObservation(sensorHistoryMap, sensorElement.Id),
+                EffectiveStaleAfter(_resolver.Resolve(lineage, templates), sensorElement.SensorTypeKey)),
             _ => inheritedSeverity
         };
 
@@ -379,7 +380,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             ? TryGetLatestSensorObservation(sensorHistoryMap, observedSensor.Id)
             : null;
         var sensorPresentation = element is SensorElement presentationSensor
-            ? BuildSensorPresentation(presentationSensor, sensorObservation)
+            ? BuildSensorPresentation(presentationSensor, sensorObservation, EffectiveStaleAfter(effectiveSettings, presentationSensor.SensorTypeKey))
             : null;
         var stateKey = sensorPresentation?.StateKey ?? MonitoringStatePresentation.Key(state);
         var stateLabel = sensorPresentation?.StateLabel ?? MonitoringStatePresentation.Label(state);
@@ -525,7 +526,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var unit = GetSensorUnit(sensor.SensorTypeKey);
         var observations = TryGetSensorObservations(sensorHistoryMap, sensor.Id);
         var latestObservation = observations.Count == 0 ? null : observations[^1];
-        var display = BuildSensorPresentation(sensor, latestObservation, defaultChannelKey);
+        var display = BuildSensorPresentation(sensor, latestObservation, EffectiveStaleAfter(effectiveSettings, sensor.SensorTypeKey), defaultChannelKey);
         var isHighlighted = effectiveSettings.Highlight == true;
         var sensorTypeLabel = sensorDefinitions.TryGetValue(sensor.SensorTypeKey, out var sensorDefinition)
             ? sensorDefinition.DisplayName
@@ -573,9 +574,25 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             : null;
     }
 
+    // A reading is "overdue" only past ~2x the sensor's OWN effective cadence (its configured interval, else the
+    // per-type default) - NOT the type default alone. Using the type default made a slow-polling sensor (e.g. a
+    // ping set to every 2 min) flip grey after the 30 s ping type-default window and flap green<->grey between
+    // its real polls. Floored so the fastest sensors don't flap on normal poll jitter.
+    private static TimeSpan EffectiveStaleAfter(MonitoringSettings settings, string sensorTypeKey)
+    {
+        var interval = settings.PollingInterval is { } configured && configured > TimeSpan.Zero
+            ? configured
+            : settings.PollingSchedule is { Mode: MonitoringScheduleMode.Every, EverySeconds: { } every } && every > 0
+                ? TimeSpan.FromSeconds(every)
+                : SensorScheduleDefaults.Resolve(sensorTypeKey);
+        var staleAfter = interval * 2;
+        return staleAfter < TimeSpan.FromSeconds(90) ? TimeSpan.FromSeconds(90) : staleAfter;
+    }
+
     private static SensorDisplaySnapshot BuildSensorPresentation(
         SensorElement sensor,
         SensorObservation? latestObservation,
+        TimeSpan staleAfter,
         string? defaultChannelKey = null)
     {
         if (sensor.IsPaused)
@@ -600,10 +617,9 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                 null);
         }
 
-        // Overdue run → Unknown: if the last reading is well past this sensor type's cadence (a paused folder
+        // Overdue run → Unknown: if the last reading is well past this sensor's OWN cadence (a paused folder
         // was resumed, or the node was down), the old value no longer reflects reality. It flips back to its
         // real state as soon as the catch-up poll writes a fresh observation.
-        var staleAfter = SensorScheduleDefaults.Resolve(sensor.SensorTypeKey) * 2;
         if (DateTimeOffset.UtcNow - latestObservation.TimestampUtc > staleAfter)
         {
             return new SensorDisplaySnapshot(
@@ -672,7 +688,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
     private static MonitoringSeverity GetSensorNodeSeverity(
         MonitoringSeverity inheritedSeverity,
         SensorElement sensor,
-        SensorObservation? latestObservation)
+        SensorObservation? latestObservation,
+        TimeSpan staleAfter)
     {
         if (sensor.IsPaused || latestObservation is null)
         {
@@ -681,7 +698,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
         // Overdue run → treat as Unknown (contributes no severity), matching the sensor's own Unknown display,
         // so a stale reading (e.g. after a paused folder resumes) doesn't keep the tree coloured on old data.
-        if (DateTimeOffset.UtcNow - latestObservation.TimestampUtc > SensorScheduleDefaults.Resolve(sensor.SensorTypeKey) * 2)
+        if (DateTimeOffset.UtcNow - latestObservation.TimestampUtc > staleAfter)
         {
             return inheritedSeverity;
         }
