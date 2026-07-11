@@ -13046,6 +13046,67 @@ button.workspace-action-menu-link {
 .alerts-action-ack:hover { color: var(--matmon-success); border-color: var(--matmon-success); }
 .alerts-action + .alerts-action { margin-left: 0.3rem; }
 
+/* Mute action: a <details> disclosure; summary reuses .alerts-action, the panel drops the duration choices. */
+.alerts-mute { position: relative; display: inline-block; }
+.alerts-action + .alerts-mute, .alerts-mute + .alerts-action { margin-left: 0.3rem; }
+.alerts-mute > summary { list-style: none; }
+.alerts-mute > summary::-webkit-details-marker { display: none; }
+.alerts-mute[open] > summary { color: var(--matmon-text); border-color: var(--matmon-accent); }
+.alerts-mute-menu {
+  position: absolute;
+  right: 0;
+  z-index: 30;
+  margin-top: 0.3rem;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 8px;
+  background: var(--matmon-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  text-align: left;
+}
+.alerts-mute-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--matmon-muted);
+  padding: 0.2rem 0.4rem;
+}
+.alerts-mute-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.34rem 0.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--matmon-text);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.alerts-mute-option:hover { background: var(--matmon-surface-soft); }
+
+/* Muted-elements panel */
+.alerts-muted-list { display: flex; flex-direction: column; gap: 0.3rem; }
+.alerts-muted-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 8px;
+  background: var(--matmon-surface);
+}
+.alerts-muted-el { display: grid; gap: 0.05rem; margin-right: auto; min-width: 0; }
+.alerts-muted-name { font-weight: 650; font-size: 0.85rem; }
+.alerts-muted-path { color: var(--matmon-muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alerts-muted-scope { color: var(--matmon-muted); font-size: 0.74rem; white-space: nowrap; }
+.alerts-muted-row form { margin: 0; }
+
 .alerts-pager {
   display: flex;
   align-items: center;

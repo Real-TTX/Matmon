@@ -1,9 +1,11 @@
 @page "/Alerts"
 @model WorkspaceModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore Store
 @{
     ViewData["Title"] = "Alerts";
     var returnUrl = Request.Path + Request.QueryString;
     var allAlerts = Model.View.Alerts;
+    var activeMutes = Store.GetActiveAlertMutes();
 
     // Render every active alert, but cap the resolved history we render into the DOM - the client-side
     // table would otherwise materialise thousands of <tr> (a real instance had ~1000+ resolved alerts,
@@ -128,6 +130,32 @@
         </div>
     </section>
 
+    @if (activeMutes.Count > 0)
+    {
+        <section class="panel panel-stack workspace-panel alerts-muted-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("bell")<span>Muted</span></h2>
+                <span class="panel-hint">@activeMutes.Count element@(activeMutes.Count == 1 ? string.Empty : "s") won't alarm</span>
+            </div>
+            <div class="alerts-muted-list">
+                @foreach (var muted in activeMutes)
+                {
+                    <div class="alerts-muted-row">
+                        <span class="alerts-muted-el">
+                            <span class="alerts-muted-name">@muted.ElementName</span>
+                            <span class="alerts-muted-path">@muted.ElementPath</span>
+                        </span>
+                        <span class="alerts-muted-scope">@(muted.IsPermanent ? "until un-muted" : $"until {muted.MutedUntilUtc!.Value.ToDisplay().ToString("g")}")</span>
+                        <form method="post" asp-page-handler="UnmuteAlert" asp-route-returnUrl="@returnUrl">
+                            <input type="hidden" name="elementId" value="@muted.ElementId" />
+                            <button type="submit" class="workspace-action-link alerts-unmute">@MatmonIcons.Render("bell")<span>Un-mute</span></button>
+                        </form>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
     <section class="panel panel-stack workspace-panel">
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("warning")<span>Alerts</span></h2>
@@ -212,6 +240,19 @@
                                             name="alertId" value="@alert.Id"
                                             formaction="@Url.Page("/Alerts", "AcknowledgeAlert")"
                                             onclick="return confirm('Acknowledge this alert?');">@MatmonIcons.Render("check")</button>
+                                }
+                                @if (alert.IsActive)
+                                {
+                                    <details class="alerts-mute">
+                                        <summary class="alerts-action" title="Mute - acknowledge and stop it re-opening">@MatmonIcons.Render("bell")</summary>
+                                        <div class="alerts-mute-menu">
+                                            <span class="alerts-mute-title">Mute &amp; stop re-opening</span>
+                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):perm" formaction="@Url.Page("/Alerts", "MuteAlert")">Until I un-mute</button>
+                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):1h" formaction="@Url.Page("/Alerts", "MuteAlert")">For 1 hour</button>
+                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):24h" formaction="@Url.Page("/Alerts", "MuteAlert")">For 24 hours</button>
+                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):7d" formaction="@Url.Page("/Alerts", "MuteAlert")">For 7 days</button>
+                                        </div>
+                                    </details>
                                 }
                             </td>
                         </tr>

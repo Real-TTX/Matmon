@@ -1019,7 +1019,122 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Mute = acknowledge + suppress: resolve the element's currently-active alert(s) to history now,
+    /// and record a mute so future problem observations don't raise/re-open an alert (nor fire notifications)
+    /// until it lifts. <paramref name="duration"/> null = permanent (until a manual un-mute).</summary>
+    public void MuteElementAlerts(Guid elementId, TimeSpan? duration, string? mutedBy)
+    {
+        lock (_gate)
+        {
+            _document.AlertMutes ??= [];
+            var now = DateTimeOffset.UtcNow;
+            var until = duration.HasValue ? now + duration.Value : (DateTimeOffset?)null;
+            var by = string.IsNullOrWhiteSpace(mutedBy) ? null : mutedBy.Trim();
 
+            var existing = _document.AlertMutes.FirstOrDefault(mute => mute.ElementId == elementId);
+            if (existing is null)
+            {
+                existing = new AlertMute { ElementId = elementId };
+                _document.AlertMutes.Add(existing);
+            }
+
+            existing.MutedAtUtc = now;
+            existing.MutedUntilUtc = until;
+            existing.MutedBy = by;
+
+            var scope = until is null ? "permanently" : $"until {until.Value.ToDisplay():g}";
+            var elementName = FindElementInternal(elementId)?.Name ?? string.Empty;
+
+            // Clear the current episode to history so it leaves the active list (the mute keeps it from coming back).
+            ResolveAlertsForElement(elementId, now, $"Muted {scope}{(by is null ? string.Empty : $" by {by}")}");
+
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = now,
+                Kind = MonitoringEventKind.AlertMuted,
+                ElementId = elementId,
+                ElementName = elementName,
+                Message = $"Alerts muted {scope}{(by is null ? string.Empty : $" by {by}")}"
+            });
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    public bool UnmuteElement(Guid elementId, string? by)
+    {
+        lock (_gate)
+        {
+            _document.AlertMutes ??= [];
+            if (_document.AlertMutes.RemoveAll(mute => mute.ElementId == elementId) == 0)
+            {
+                return false;
+            }
+
+            var trimmedBy = string.IsNullOrWhiteSpace(by) ? null : by.Trim();
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                Kind = MonitoringEventKind.AlertUnmuted,
+                ElementId = elementId,
+                ElementName = FindElementInternal(elementId)?.Name ?? string.Empty,
+                Message = $"Alerts un-muted{(trimmedBy is null ? string.Empty : $" by {trimmedBy}")}"
+            });
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    /// <summary>The currently-muted elements (expired mutes are pruned), each with its resolved name/path for the UI.</summary>
+    public IReadOnlyList<AlertMuteInfo> GetActiveAlertMutes()
+    {
+        lock (_gate)
+        {
+            _document.AlertMutes ??= [];
+            var now = DateTimeOffset.UtcNow;
+            if (_document.AlertMutes.RemoveAll(mute => !mute.IsActiveAt(now)) > 0)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+
+            return _document.AlertMutes
+                .Select(mute =>
+                {
+                    var element = FindElementInternal(mute.ElementId);
+                    return new AlertMuteInfo(
+                        mute.ElementId,
+                        element?.Name ?? "(deleted element)",
+                        element is null ? string.Empty : GetElementPath(element),
+                        mute.MutedUntilUtc,
+                        mute.IsPermanent,
+                        mute.MutedBy);
+                })
+                .OrderBy(mute => mute.ElementName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
+
+    /// <summary>Under <c>_gate</c>: is this element's alerting currently muted? Prunes an expired mute in passing.</summary>
+    private bool IsElementMutedLocked(Guid elementId, DateTimeOffset now)
+    {
+        if (_document.AlertMutes is not { Count: > 0 })
+        {
+            return false;
+        }
+
+        var mute = _document.AlertMutes.FirstOrDefault(candidate => candidate.ElementId == elementId);
+        if (mute is null)
+        {
+            return false;
+        }
+
+        if (mute.IsActiveAt(now))
+        {
+            return true;
+        }
+
+        _document.AlertMutes.Remove(mute);
+        return false;
+    }
 
     private static bool ShouldCleanupHistory(StorageCleanupScope scope)
     {
@@ -1901,6 +2016,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
             foreach (var candidate in activeAlertList)
             {
+                // Muted element: suppress - don't raise (nor keep) an active alert for it while the mute holds.
+                if (IsElementMutedLocked(candidate.ElementId, now))
+                {
+                    continue;
+                }
+
                 var existing = _document.Alerts.FirstOrDefault(alert => alert.IsActive && alert.ElementId == candidate.ElementId);
                 if (existing is null)
                 {
@@ -2648,6 +2769,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         lock (_gate)
         {
             _document.Alerts ??= [];
+            _document.AlertMutes ??= [];
         }
     }
 
@@ -3496,6 +3618,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             return;
         }
 
+        // Muted element: the operator worked it off and asked not to be re-alarmed - don't raise/re-open
+        // (and so fire no notification) until the mute lifts. Mute already cleared any active episode.
+        if (IsElementMutedLocked(sensorId, timestampUtc))
+        {
+            return;
+        }
+
         var sensor = FindElementInternal(sensorId) as SensorElement;
         if (sensor is null)
         {
@@ -3787,6 +3916,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public List<NotificationRule> NotificationRules { get; set; } = [];
 
         public List<MonitoringAlert> Alerts { get; set; } = [];
+
+        public List<AlertMute> AlertMutes { get; set; } = [];
 
         public List<WorkspaceBackupJob> BackupJobs { get; set; } = [];
 

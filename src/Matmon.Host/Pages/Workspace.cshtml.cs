@@ -1090,6 +1090,58 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    // Mute = acknowledge + stop re-opening. The button carries "{elementId}:{duration}" (duration = perm|1h|24h|7d)
+    // because it rides inside the shared alerts form and a submit button can only send one name/value pair.
+    public IActionResult OnPostMuteAlert(string mute, string? returnUrl)
+    {
+        try
+        {
+            var parts = (mute ?? string.Empty).Split(':', 2);
+            if (parts.Length != 2 || !Guid.TryParse(parts[0], out var elementId))
+            {
+                throw new InvalidOperationException("Invalid mute request.");
+            }
+
+            TimeSpan? duration = parts[1] switch
+            {
+                "perm" => null,
+                "1h" => TimeSpan.FromHours(1),
+                "24h" => TimeSpan.FromHours(24),
+                "7d" => TimeSpan.FromDays(7),
+                _ => throw new InvalidOperationException("Unknown mute duration.")
+            };
+
+            _workspaceStore.MuteElementAlerts(elementId, duration, User.Identity?.Name);
+            StatusMessage = duration is null
+                ? "Alert muted - it won't re-open until you un-mute it."
+                : $"Alert muted for {parts[1]} - it won't re-open in that window.";
+            return RedirectAfterAction(returnUrl, "/Alerts");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
+    public IActionResult OnPostUnmuteAlert(Guid elementId, string? returnUrl)
+    {
+        try
+        {
+            StatusMessage = _workspaceStore.UnmuteElement(elementId, User.Identity?.Name)
+                ? "Alert un-muted - it can alarm again."
+                : "That element was not muted.";
+            return RedirectAfterAction(returnUrl, "/Alerts");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            LoadViewState(populateEditorValues: false);
+            return Page();
+        }
+    }
+
     public IActionResult OnPostCreateNotificationSender()
     {
         NotificationSender? createdSender = null;

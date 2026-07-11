@@ -138,6 +138,15 @@ public interface IMonitoringWorkspaceStore
 
     bool AcknowledgeAlert(Guid alertId, string? acknowledgedBy = null);
 
+    /// <summary>Mute an element's alerting (acknowledge + suppress re-opening). Null <paramref name="duration"/> = permanent.</summary>
+    void MuteElementAlerts(Guid elementId, TimeSpan? duration, string? mutedBy);
+
+    /// <summary>Lift an element's mute so it can alarm again. Returns false when it wasn't muted.</summary>
+    bool UnmuteElement(Guid elementId, string? by);
+
+    /// <summary>The currently-muted elements (expired mutes pruned), for the Alerts page.</summary>
+    IReadOnlyList<AlertMuteInfo> GetActiveAlertMutes();
+
     /// <summary>Cheap counts of the persisted active alerts (open vs. acknowledged, plus the error/warning severity split) - no snapshot clone.</summary>
     (int Open, int Acknowledged, int Error, int Warning) GetActiveAlertCounts();
 
@@ -310,6 +319,15 @@ public interface IMonitoringWorkspaceStore
 
     void Save();
 }
+
+/// <summary>A currently-muted element for the Alerts page (name/path resolved, timing for display).</summary>
+public sealed record AlertMuteInfo(
+    Guid ElementId,
+    string ElementName,
+    string ElementPath,
+    DateTimeOffset? MutedUntilUtc,
+    bool IsPermanent,
+    string? MutedBy);
 
 public enum StorageCleanupScope
 {

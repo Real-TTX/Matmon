@@ -12,7 +12,9 @@ public enum MonitoringEventKind
     AlertAcknowledged = 7,
     AlertResolved = 8,
     Paused = 9,
-    Resumed = 10
+    Resumed = 10,
+    AlertMuted = 11,
+    AlertUnmuted = 12
 }
 
 public sealed class MonitoringEvent
