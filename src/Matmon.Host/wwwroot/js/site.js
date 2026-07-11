@@ -67,12 +67,14 @@ function initializeAlertsTable() {
   const prevBtn = root.querySelector("[data-alerts-prev]");
   const nextBtn = root.querySelector("[data-alerts-next]");
   const pageSizeSelect = root.querySelector("[data-alerts-page-size]");
+  const timeSelect = root.querySelector("[data-alerts-time]");
 
   let filter = root.dataset.initialFilter || "all";
   let query = "";
   let page = 1;
   let pageSize = pageSizeSelect ? Number(pageSizeSelect.value) || 50 : 50;
   let sortMode = sortSelect ? sortSelect.value : "default";
+  let timeRange = timeSelect ? timeSelect.value : "all";
 
   // Sorting reorders the actual rows in the DOM (re-append) so the visible page shows them in order;
   // "default" restores the server's order (active first, newest last-seen) - which is also what the
@@ -119,6 +121,24 @@ function initializeAlertsTable() {
 
   const matchesSearch = (row) => !query || (row.dataset.search || "").includes(query);
 
+  // Time filter on the alert's AGE (first seen), so "older than 7 days" catches long-standing/chronic
+  // problems, not just stale last-activity. data-first is Unix ms, directly comparable to Date.now().
+  const matchesTime = (row) => {
+    if (timeRange === "all") { return true; }
+    const first = Number(row.dataset.first || 0);
+    if (!first) { return true; }
+    const age = Date.now() - first;
+    const day = 86400000;
+    switch (timeRange) {
+      case "24h": return age <= day;
+      case "7d": return age <= 7 * day;
+      case "30d": return age <= 30 * day;
+      case "older-24h": return age > day;
+      case "older-7d": return age > 7 * day;
+      default: return true;
+    }
+  };
+
   const updateSelection = () => {
     const checked = root.querySelectorAll("[data-alerts-check]:checked").length;
     if (selectedCountEl) {
@@ -142,7 +162,7 @@ function initializeAlertsTable() {
   };
 
   const apply = () => {
-    const matched = rows.filter((row) => matchesFilter(row) && matchesSearch(row));
+    const matched = rows.filter((row) => matchesFilter(row) && matchesSearch(row) && matchesTime(row));
     const total = matched.length;
     const pageCount = Math.max(1, Math.ceil(total / pageSize));
     page = Math.min(Math.max(1, page), pageCount);
@@ -212,6 +232,14 @@ function initializeAlertsTable() {
   if (pageSizeSelect) {
     pageSizeSelect.addEventListener("change", () => {
       pageSize = Number(pageSizeSelect.value) || 50;
+      page = 1;
+      apply();
+    });
+  }
+
+  if (timeSelect) {
+    timeSelect.addEventListener("change", () => {
+      timeRange = timeSelect.value;
       page = 1;
       apply();
     });
