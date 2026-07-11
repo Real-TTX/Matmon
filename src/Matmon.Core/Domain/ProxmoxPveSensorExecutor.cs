@@ -776,6 +776,19 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                     "Use an API user like 'root@pam' and a separate token name like 'monitoring', then paste the token secret.");
             }
 
+            // A 403 is a PRIVILEGE gap, not bad credentials: the token authenticated fine but lacks the right for
+            // this endpoint. Node hardware endpoints (disks/SMART) need Sys.Audit on the node, which cluster/VM/
+            // storage rollups don't - so those sensors succeed with the same token while this one 403s. Turn the
+            // raw "Permission check failed" into something actionable.
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                throw new InvalidOperationException(
+                    $"Proxmox denied '{uri.AbsolutePath}' for token '{tokenId}' (403 - the token is valid but lacks the privilege). " +
+                    "Disk/SMART needs 'Sys.Audit' on the node: give the token the built-in PVEAuditor role at path '/' with Propagate on " +
+                    "(Datacenter -> Permissions -> Add -> API Token Permission), and if the token has 'Privilege Separation' enabled assign the role to the TOKEN, not just its user. " +
+                    "Cluster/VM/storage sensors need fewer rights, which is why they work with the same token.");
+            }
+
             throw new InvalidOperationException($"Proxmox API request to '{uri}' failed with {(int)response.StatusCode} {response.ReasonPhrase}: {statusText}");
         }
 
