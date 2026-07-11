@@ -841,6 +841,12 @@
                         <span role="cell">
                             @{
                                 var hasLocalPw = Model.HasLocalPassword(user);
+                                // Deleting a cloud-linked account only clears the LOCAL shadow: the cloud owns
+                                // membership, and the account is re-created on the next SSO/tunnel access while
+                                // they are still a member. Make the confirm say so (apostrophe-free for the JS string).
+                                var deleteConfirm = user.CloudLinked
+                                    ? $"Delete {user.Username}? This clears only the LOCAL account. If they are still a member of this instance in Matmon.Cloud it is re-created on their next cloud sign-in - to fully revoke access, remove them in the cloud (Instance members)."
+                                    : $"Delete user {user.Username}?";
                             }
                             <strong>@user.Username</strong>
                             <small>@user.Id</small>
@@ -851,7 +857,7 @@
                             }
                             @if (user.CloudLinked)
                             {
-                                <span class="account-role-chip" title="Can sign in via Matmon.Cloud (SSO / tunnel)">Cloud</span>
+                                <span class="account-role-chip" title="Signs in via Matmon.Cloud (SSO / tunnel). Access is governed by cloud membership - remove them in the cloud to revoke; deleting here only clears the local copy.">Cloud</span>
                             }
                             @if (!hasLocalPw && !user.CloudLinked)
                             {
@@ -878,7 +884,7 @@
                                     @MatmonIcons.Render("pencil")
                                     <span>Edit</span>
                                 </a>
-                                <form method="post" asp-page-handler="DeleteUser" asp-route-userId="@user.Id" onsubmit="return confirm('Delete user @user.Username?');">
+                                <form method="post" asp-page-handler="DeleteUser" asp-route-userId="@user.Id" onsubmit="return confirm('@deleteConfirm');">
                                     <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
                                 </form>
                             }
