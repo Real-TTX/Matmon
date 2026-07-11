@@ -2344,6 +2344,11 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   box-shadow: 0 0 0 3px rgba(255, 127, 147, 0.13);
 }
 
+.dashboard-status-dot[data-tone="paused"] {
+  background: #6b8caf;
+  box-shadow: 0 0 0 3px rgba(107, 140, 175, 0.15);
+}
+
 .monitoring-controls {
   padding: 0.8rem 0.85rem;
 }
@@ -4228,7 +4233,7 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
 .state-pill[data-state="paused"],
 .graph-state[data-state="paused"],
 .probe-state span[data-state="paused"] {
-  background: rgba(124, 142, 171, 0.22);
+  background: rgba(107, 140, 175, 0.26);
 }
 
 .state-pill[data-state="unknown"],

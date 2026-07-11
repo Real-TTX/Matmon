@@ -284,6 +284,7 @@ else
         (Model.Snapshot.WarningSensorCount, "#f3b36b"),
         (Model.Snapshot.AcknowledgedSensorCount, "#5f8dff"),
         (Model.Snapshot.ErrorSensorCount, "#ff7f93"),
+        (Model.Snapshot.PausedSensorCount, "#6b8caf"),
         (Model.Snapshot.OtherSensorCount, "#7c8eab"));
 
 <section class="dashboard-shell dashboard-home-shell">
@@ -376,6 +377,12 @@ else
                 <span>Error</span>
                 <strong data-role="status-error-count">@Model.Snapshot.ErrorSensorCount</strong>
                 <small data-role="status-error-percent">@FormatPercent(Model.Snapshot.ErrorSensorCount, sensorStatusTotal)</small>
+            </a>
+            <a class="dashboard-status-legend-item @(Model.Snapshot.PausedSensorCount == 0 ? "is-hidden" : string.Empty)" data-dashboard-status-item="paused" asp-page="/Paused">
+                <span class="dashboard-status-dot" data-tone="paused"></span>
+                <span>Paused</span>
+                <strong data-role="status-paused-count">@Model.Snapshot.PausedSensorCount</strong>
+                <small data-role="status-paused-percent">@FormatPercent(Model.Snapshot.PausedSensorCount, sensorStatusTotal)</small>
             </a>
             <a class="dashboard-status-legend-item @(Model.Snapshot.OtherSensorCount == 0 ? "is-hidden" : string.Empty)" data-dashboard-status-item="other" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
                 <span class="dashboard-status-dot" data-tone="other"></span>

@@ -4029,7 +4029,7 @@ function renderDashboardStatusChart(snapshot) {
       setDashboardStatusText(chart, `status-${item.key}-percent`, formatDashboardStatusPercent(item.count, counts.total));
 
       const row = chart.querySelector(`[data-dashboard-status-item="${item.key}"]`);
-      if (row && item.key === "other") {
+      if (row && (item.key === "other" || item.key === "paused")) {
         row.classList.toggle("is-hidden", item.count <= 0);
       }
     });
@@ -4041,10 +4041,11 @@ function getDashboardStatusCounts(snapshot) {
   const warning = Math.max(0, Number(snapshot.warningSensorCount ?? 0));
   const ack = Math.max(0, Number(snapshot.acknowledgedSensorCount ?? snapshot.acknowledgedAlertCount ?? 0));
   const error = Math.max(0, Number(snapshot.errorSensorCount ?? 0));
+  const paused = Math.max(0, Number(snapshot.pausedSensorCount ?? 0));
   const otherFromSnapshot = snapshot.otherSensorCount == null ? null : Math.max(0, Number(snapshot.otherSensorCount));
   const healthyFromSnapshot = snapshot.healthySensorCount == null ? null : Math.max(0, Number(snapshot.healthySensorCount));
-  const other = otherFromSnapshot ?? Math.max(0, total - warning - ack - error - (healthyFromSnapshot ?? 0));
-  const healthy = healthyFromSnapshot ?? Math.max(0, total - warning - ack - error - other);
+  const other = otherFromSnapshot ?? Math.max(0, total - warning - ack - error - paused - (healthyFromSnapshot ?? 0));
+  const healthy = healthyFromSnapshot ?? Math.max(0, total - warning - ack - error - paused - other);
 
   return {
     total,
@@ -4053,6 +4054,7 @@ function getDashboardStatusCounts(snapshot) {
       { key: "warning", count: warning, color: "#f3b36b" },
       { key: "ack", count: ack, color: "#5f8dff" },
       { key: "error", count: error, color: "#ff7f93" },
+      { key: "paused", count: paused, color: "#6b8caf" },
       { key: "other", count: other, color: "#7c8eab" }
     ]
   };

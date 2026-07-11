@@ -153,7 +153,9 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var warningSensorCount = telemetrySeries.Count(series => IsDashboardState(series.StateKey, "warning") && !acknowledgedSensorIds.Contains(series.SensorId));
         var acknowledgedSensorCount = telemetrySeries.Count(series => acknowledgedSensorIds.Contains(series.SensorId));
         var errorSensorCount = telemetrySeries.Count(series => IsDashboardState(series.StateKey, "error") && !acknowledgedSensorIds.Contains(series.SensorId));
-        var otherSensorCount = Math.Max(0, counters.Sensors - healthySensorCount - warningSensorCount - acknowledgedSensorCount - errorSensorCount);
+        // Paused has its own dashboard bucket now, so exclude it from "Other" - which is then only the genuine
+        // leftovers (Unknown / overdue / disabled), and the legend hides it when that's zero.
+        var otherSensorCount = Math.Max(0, counters.Sensors - healthySensorCount - warningSensorCount - acknowledgedSensorCount - errorSensorCount - pausedSensorCount);
         var highlightedTelemetrySeries = telemetrySeries
             .Where(series => series.IsHighlighted)
             .OrderByDescending(series => GetDashboardSeriesSortRank(series.StateKey))

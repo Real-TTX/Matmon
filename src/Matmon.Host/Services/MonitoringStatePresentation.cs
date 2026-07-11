@@ -13,7 +13,9 @@ public static class MonitoringStatePresentation
 {
     public const string PausedKey = "paused";
     public const string PausedLabel = "Paused";
-    public const string PausedColor = "#6f7786";
+    // Paused is a deliberate, benign state - give it a calm steel blue so it reads as "intentionally off",
+    // clearly apart from the neutral grey of Unknown/No-data (and from the vivid Ack blue).
+    public const string PausedColor = "#6b8caf";
     public const string UnknownKey = "unknown";
     public const string UnknownLabel = "No data";
     public const string UnknownColor = "#6f7786";
