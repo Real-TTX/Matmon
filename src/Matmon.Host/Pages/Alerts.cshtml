@@ -20,6 +20,7 @@
         "error" => "error",
         "warning" => "warning",
         "ack" or "acknowledged" => "ack",
+        "recovered" => "recovered",
         "paused" => "paused",
         "history" or "resolved" => "history",
         _ => "all"
@@ -32,6 +33,7 @@
     var errorAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase));
     var warningAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase));
     var acknowledgedAlertCount = allAlerts.Count(a => a.IsActive && a.IsAcknowledged);
+    var recoveredAlertCount = allAlerts.Count(a => a.IsActive && a.IsRecovered);
     var pausedAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
     var activeAlertCount = allAlerts.Count(a => a.IsActive);
     var resolvedAlertCount = allAlerts.Count(a => !a.IsActive);
@@ -42,6 +44,7 @@
         "error" => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase),
         "warning" => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "warning", StringComparison.OrdinalIgnoreCase),
         "ack" => a.IsActive && a.IsAcknowledged,
+        "recovered" => a.IsActive && a.IsRecovered,
         "paused" => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase),
         "history" => !a.IsActive,
         _ => a.IsActive
@@ -79,6 +82,7 @@
             <a class="workspace-tab alert-filter-tab @TabClass("error")" data-alert-filter="error" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><span>Error</span><strong>@errorAlertCount</strong></a>
             <a class="workspace-tab alert-filter-tab @TabClass("warning")" data-alert-filter="warning" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><span>Warning</span><strong>@warningAlertCount</strong></a>
             <a class="workspace-tab alert-filter-tab @TabClass("ack")" data-alert-filter="ack" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><span>Ack</span><strong>@acknowledgedAlertCount</strong></a>
+            <a class="workspace-tab alert-filter-tab @TabClass("recovered")" data-alert-filter="recovered" asp-page="/Alerts" asp-route-alertFilter="recovered" data-tone="ok"><span>Recovered</span><strong>@recoveredAlertCount</strong></a>
             <a class="workspace-tab alert-filter-tab @TabClass("history")" data-alert-filter="history" asp-page="/Alerts" asp-route-alertFilter="history"><span>History</span><strong>@resolvedAlertCount</strong></a>
             @if (pausedAlertCount > 0 || alertFilter == "paused")
             {
@@ -148,6 +152,7 @@
                             hidden="@(initialVisibleIds.Contains(alert.Id) ? null : "hidden")"
                             data-active="@alert.IsActive.ToString().ToLowerInvariant()"
                             data-ack="@alert.IsAcknowledged.ToString().ToLowerInvariant()"
+                            data-recovered="@alert.IsRecovered.ToString().ToLowerInvariant()"
                             data-state="@alert.StateKey"
                             data-search="@($"{alert.ElementName} {alert.ElementPath} {alert.Message}".ToLowerInvariant())"
                             data-first="@alert.FirstSeenSortKey"

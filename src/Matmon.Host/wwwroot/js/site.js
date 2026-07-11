@@ -110,6 +110,7 @@ function initializeAlertsTable() {
       case "error": return active && !ack && state === "error";
       case "warning": return active && !ack && state === "warning";
       case "ack": return active && ack;
+      case "recovered": return active && row.dataset.recovered === "true";
       case "paused": return active && state === "paused";
       case "history": return !active;
       default: return active; // "all" = every active alert
