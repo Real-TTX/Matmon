@@ -527,6 +527,18 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var observations = TryGetSensorObservations(sensorHistoryMap, sensor.Id);
         var latestObservation = observations.Count == 0 ? null : observations[^1];
         var display = BuildSensorPresentation(sensor, latestObservation, EffectiveStaleAfter(effectiveSettings, sensor.SensorTypeKey), defaultChannelKey);
+        // Humanize the current value exactly like the sensor-detail view + notifications: take the latest
+        // observation's DEFAULT channel unit (the per-type fallback only when the channel has none) and auto-scale
+        // (e.g. SNMP uptime seconds -> days). The tree, the dashboard cards and the live /api/dashboard refresh all
+        // read the series' CurrentValue/Unit, so before this they showed the raw number (raw seconds) in the tree.
+        var defaultChannel = latestObservation?.Channels.FirstOrDefault(channel =>
+                channel.IsDefault ||
+                (!string.IsNullOrWhiteSpace(defaultChannelKey) &&
+                 string.Equals(channel.Key, defaultChannelKey, StringComparison.OrdinalIgnoreCase)))
+            ?? latestObservation?.Channels.FirstOrDefault();
+        var rawUnit = string.IsNullOrWhiteSpace(defaultChannel?.Unit) ? unit : defaultChannel!.Unit;
+        var measurementKind = defaultChannel?.MeasurementKind ?? SensorUnitConverter.GuessMeasurementKind(rawUnit);
+        var currentValueDisplay = SensorUnitConverter.Format(display.CurrentValue, rawUnit, measurementKind);
         var isHighlighted = effectiveSettings.Highlight == true;
         var sensorTypeLabel = sensorDefinitions.TryGetValue(sensor.SensorTypeKey, out var sensorDefinition)
             ? sensorDefinition.DisplayName
@@ -545,9 +557,9 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             SensorTargetResolver.Resolve(sensor, lineage),
             title,
             description,
-            unit,
+            currentValueDisplay.Unit,
             display.State,
-            display.CurrentValue,
+            currentValueDisplay.Value,
             display.StateColor,
             isHighlighted,
             points,
