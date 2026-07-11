@@ -226,11 +226,11 @@
                                     ? 0
                                     : result.OpenPortsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
                                 var sensorCount = result.SuggestedSensors.Count;
-                                // Pre-select a host when it has any recommended sensor. Under the rank-based rule every host
-                                // with at least one suggestion has one (Ping, a platform-health sensor, or its single best
-                                // other), so this matches the per-sensor recommended logic below and never greys out a host
-                                // whose recommended-but-low-confidence sensor (e.g. linux-ssh-health) is pre-checked.
-                                var anyRecommended = sensorCount > 0;
+                                // Pre-select a host only when it has at least one NEW sensor to add. A host that already
+                                // exists and whose suggested sensors are all already present (or that has no suggestions)
+                                // starts unchecked/greyed - importing it would be a no-op. Under the rank-based rule every
+                                // host with a new suggestion has a recommended one, so this matches the per-sensor logic below.
+                                var anyRecommended = result.SuggestedSensors.Any(sensor => !sensor.AlreadyExists);
                                 var searchText = $"{result.Address} {result.HostName} {result.OpenPortsText} {result.SnmpSummary} {result.Message} {string.Join(' ', result.SuggestedSensors.Select(sensor => $"{sensor.SensorTypeKey} {sensor.Name} {sensor.Target} {sensor.Reason}"))}";
                                 var hostChecked = hostScopedImport || (hasImportSelection ? selectedHostAddresses.Contains(result.Address) : anyRecommended);
                                 var expanded = sensorCount > 0;
@@ -264,6 +264,10 @@
                                                 <span class="discovery-node-sub">@result.HostName</span>
                                             }
                                         </span>
+                                        @if (!string.IsNullOrWhiteSpace(result.ExistingHostName))
+                                        {
+                                            <span class="discovery-node-exists" title="Host already exists as '@result.ExistingHostName' — it won't be created again; only the new sensors below are added.">@MatmonIcons.Render("check")<span>Exists</span></span>
+                                        }
                                         <span class="discovery-node-facts">
                                             @if (result.PingAlive)
                                             {
@@ -304,7 +308,9 @@
                                                     var key = $"{result.Address}|{suggestion.SensorTypeKey}|{suggestion.Target}|{suggestion.Name}";
                                                     var rec = SensorDiscoveryImportance.IsRecommended(suggestion.SensorTypeKey)
                                                         || (!hasPlatformHealth && string.Equals(suggestion.SensorTypeKey, bestOtherType, StringComparison.OrdinalIgnoreCase));
-                                                    var chk = hasImportSelection ? selectedSuggestionKeys.Contains(key) : rec;
+                                                    // An already-present sensor is never pre-selected (import would skip it); an explicit
+                                                    // re-render selection is still honoured so the user can override.
+                                                    var chk = hasImportSelection ? selectedSuggestionKeys.Contains(key) : (rec && !suggestion.AlreadyExists);
                                                     return (Suggestion: suggestion, Key: key, Recommended: rec, Checked: chk, Extra: !rec && !chk);
                                                 })
                                                 .OrderByDescending(item => SensorDiscoveryImportance.Rank(item.Suggestion.SensorTypeKey))
@@ -314,7 +320,7 @@
                                             <div class="discovery-node-sensors">
                                                 @foreach (var item in orderedSensors)
                                                 {
-                                                    <label class="discovery-sensor@(item.Extra ? " is-extra" : string.Empty)" data-discovery-suggestion-key="@item.Key" data-discovery-recommended="@(item.Recommended ? "true" : "false")">
+                                                    <label class="discovery-sensor@(item.Extra ? " is-extra" : string.Empty)@(item.Suggestion.AlreadyExists ? " is-present" : string.Empty)" data-discovery-suggestion-key="@item.Key" data-discovery-recommended="@(item.Recommended ? "true" : "false")">
                                                         <input type="checkbox" name="SelectedSuggestionKeys" value="@item.Key" data-discovery-sensor-check checked="@item.Checked" />
                                                         <span class="tree-kind" data-kind="sensor">@MatmonIcons.Render("sensor")</span>
                                                         <span class="sensor-chip">@item.Suggestion.SensorTypeKey</span>
@@ -324,11 +330,18 @@
                                                             <span class="discovery-sensor-target">@item.Suggestion.Target</span>
                                                         }
                                                         <span class="discovery-sensor-spacer"></span>
-                                                        @if (item.Recommended)
+                                                        @if (item.Suggestion.AlreadyExists)
                                                         {
-                                                            <span class="discovery-sensor-badge">Recommended</span>
+                                                            <span class="discovery-sensor-exists" title="Already monitored on this host — it won't be added again.">@MatmonIcons.Render("check")<span>Already added</span></span>
                                                         }
-                                                        <span class="state-pill" data-state="@(item.Recommended ? "ok" : "warning")">@item.Suggestion.Confidence%</span>
+                                                        else
+                                                        {
+                                                            @if (item.Recommended)
+                                                            {
+                                                                <span class="discovery-sensor-badge">Recommended</span>
+                                                            }
+                                                            <span class="state-pill" data-state="@(item.Recommended ? "ok" : "warning")">@item.Suggestion.Confidence%</span>
+                                                        }
                                                     </label>
                                                 }
                                                 @if (extraCount > 0)

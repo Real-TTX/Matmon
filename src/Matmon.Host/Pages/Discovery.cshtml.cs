@@ -269,6 +269,8 @@ public sealed class DiscoveryModel : PageModel
         var probeReportedNetworks = ResolveProbeReportedNetworks(scopeProbe);
         var subnetSuggestions = BuildSubnetSuggestions(knownHostAddresses, probeReportedNetworks, includeLocal: scopeProbe?.ParentId is null);
 
+        AnnotateExistingElements(job);
+
         View = new DiscoveryPageViewModel(
             probes.Select(probe => new SelectListItem(
                 $"{probe.Name} ({probe.ProbeId})",
@@ -280,6 +282,49 @@ public sealed class DiscoveryModel : PageModel
             job,
             subnetSuggestions,
             knownHostAddresses.Count);
+    }
+
+    /// <summary>Mark discovered hosts/sensors that already exist under the import probe, so the create assistant can
+    /// show that a host won't be recreated (only its missing sensors are added). Mirrors the exact reuse logic of
+    /// <see cref="OnPostCreateSelected"/>: a host-scoped job attaches every result to its scope host; otherwise a
+    /// host is matched by address. Display-only - it never changes what gets created.</summary>
+    private void AnnotateExistingElements(DiscoveryJobSnapshot? job)
+    {
+        if (Results.Count == 0)
+        {
+            return;
+        }
+
+        ProbeElement probe;
+        try
+        {
+            probe = ResolveProbe(Input.ProbeElementId);
+        }
+        catch (InvalidOperationException)
+        {
+            return; // probe gone - nothing to annotate against
+        }
+
+        var scopeHost = job is not null &&
+            job.Request.ScopeKind == MonitoringElementKind.Host &&
+            job.Request.ScopeElementId is Guid scopeId
+                ? _workspaceStore.FindElement(scopeId) as HostElement
+                : null;
+
+        foreach (var result in Results)
+        {
+            var host = scopeHost ?? FindHostByAddress(probe, result.Address);
+            if (host is null)
+            {
+                continue;
+            }
+
+            result.ExistingHostName = host.Name;
+            foreach (var suggestion in result.SuggestedSensors)
+            {
+                suggestion.AlreadyExists = HasSuggestedSensor(host, suggestion, DeserializeSettings(suggestion.SettingsJson));
+            }
+        }
     }
 
     private DiscoveryResultInput[] BuildSelectedResultsFromJob(
@@ -1003,6 +1048,10 @@ public sealed class DiscoveryResultInput
 
     public string Message { get; set; } = string.Empty;
 
+    /// <summary>Display-only (set in LoadView): the name of an already-existing host under the import probe with
+    /// this address. Non-null = the host won't be recreated on import, only its missing sensors are added.</summary>
+    public string? ExistingHostName { get; set; }
+
     public List<DiscoverySensorSuggestionInput> SuggestedSensors { get; set; } = [];
 }
 
@@ -1021,6 +1070,10 @@ public sealed class DiscoverySensorSuggestionInput
     public int Confidence { get; set; }
 
     public string SettingsJson { get; set; } = string.Empty;
+
+    /// <summary>Display-only (set in LoadView): this exact sensor already exists on the matched host, so import
+    /// would skip it. Rendered with a green "Already added" check + not pre-selected.</summary>
+    public bool AlreadyExists { get; set; }
 }
 
 public sealed record DiscoveryPageViewModel(

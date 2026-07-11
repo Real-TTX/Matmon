@@ -8702,6 +8702,33 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   white-space: nowrap;
 }
 
+/* "Exists" / "Already added" markers: the host is reused (not recreated) and the sensor is
+   already monitored, so both read as a green check the import will skip. */
+.discovery-node-exists,
+.discovery-sensor-exists {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.14rem 0.45rem;
+  border-radius: 6px;
+  background: var(--matmon-surface-soft);
+  color: var(--matmon-ok, #22c55e);
+  font-size: 0.68rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.discovery-node-exists svg,
+.discovery-sensor-exists svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+/* An already-present sensor row reads as done, not actionable. */
+.discovery-sensor.is-present {
+  opacity: 0.72;
+}
+
 /* Non-recommended ("extra") sensors stay collapsed per host until the "+N more" toggle is used,
    the All preset checks them, or the user checks one (kept visible via :has). */
 .discovery-sensor.is-extra {
