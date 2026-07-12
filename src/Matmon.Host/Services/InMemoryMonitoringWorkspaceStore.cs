@@ -3034,13 +3034,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         var sensor = EnumerateElements(_document.RootProbe)
             .OfType<SensorElement>()
             .FirstOrDefault(candidate =>
-                string.Equals(candidate.SensorTypeKey, ProxmoxPveSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.SensorTypeKey, ProxmoxNodeHealthSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(candidate.Target, sensorTarget, StringComparison.OrdinalIgnoreCase));
 
         if (sensor is null)
         {
-            sensor = new SensorElement(sensorName, ProxmoxPveSensorExecutor.Definition.Key, sensorTarget)
+            sensor = new SensorElement(sensorName, ProxmoxNodeHealthSensorExecutor.Definition.Key, sensorTarget)
             {
                 Description = "Proxmox node health monitor"
             };
@@ -3048,7 +3048,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
 
         sensor.ParentId = _document.RootProbe.Id;
-        sensor.SensorTypeKey = ProxmoxPveSensorExecutor.Definition.Key;
+        sensor.SensorTypeKey = ProxmoxNodeHealthSensorExecutor.Definition.Key;
         sensor.Target = sensorTarget;
 
         if (template is not null && !sensor.AppliedTemplateIds.Contains(template.Id))

@@ -542,7 +542,9 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     services.AddTransient<ISensorExecutor, SynologyUpdateSensorExecutor>();
     services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
     services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
-    services.AddTransient<ISensorExecutor, ProxmoxPveSensorExecutor>();
+    // NB: ProxmoxPveSensorExecutor is intentionally NOT registered as a selectable type - the legacy scope-based
+    // "proxmox" type was retired in favour of proxmox-health / proxmox-node-health, which instantiate it directly
+    // as the shared REST/auth engine.
     services.AddTransient<ISensorExecutor, ProxmoxHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxNodeHealthSensorExecutor>();
     services.AddTransient<ISensorExecutor, ProxmoxDiskSensorExecutor>();
@@ -568,7 +570,6 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     services.AddTransient<ISensorExecutor, NtpSensorExecutor>();
     services.AddTransient<ISensorExecutor, DockerContainerSensorExecutor>();
     services.AddTransient<ISensorExecutor, BackupJobSensorExecutor>();
-    services.AddTransient<ISensorExecutor, DiskSmartSensorExecutor>();
 
     // Probe heartbeat/health report the probe's OWN state (need probe infra) and are meaningless as cloud
     // sensors - the stateless Executor mode skips them so its executor set resolves without that plumbing.

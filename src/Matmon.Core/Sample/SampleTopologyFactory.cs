@@ -64,23 +64,21 @@ public static class SampleTopologyFactory
         {
             Name = "Proxmox PVE Cluster",
             TargetKind = MonitoringTemplateScope.Sensor,
-            SensorTypeKey = ProxmoxPveSensorExecutor.Definition.Key,
+            SensorTypeKey = ProxmoxHealthSensorExecutor.Definition.Key,
             ParentTemplateId = proxmoxHostDefaults.Id
         };
         proxmoxClusterSensor.Settings.PollingInterval = TimeSpan.FromSeconds(20);
         proxmoxClusterSensor.Settings.Timeout = TimeSpan.FromSeconds(10);
-        proxmoxClusterSensor.Settings.Parameters["pve.scope"] = "cluster";
 
         var proxmoxNodeSensor = new MonitoringTemplate
         {
             Name = "Proxmox PVE Node",
             TargetKind = MonitoringTemplateScope.Sensor,
-            SensorTypeKey = ProxmoxPveSensorExecutor.Definition.Key,
+            SensorTypeKey = ProxmoxNodeHealthSensorExecutor.Definition.Key,
             ParentTemplateId = proxmoxHostDefaults.Id
         };
         proxmoxNodeSensor.Settings.PollingInterval = TimeSpan.FromSeconds(20);
         proxmoxNodeSensor.Settings.Timeout = TimeSpan.FromSeconds(10);
-        proxmoxNodeSensor.Settings.Parameters["pve.scope"] = "node";
 
         var fastPingSensor = new MonitoringTemplate
         {
@@ -220,7 +218,8 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
             SynologyNasSensorExecutor.Definition,
             SnmpInterfaceSensorExecutor.Definition,
             UpsSnmpSensorExecutor.Definition,
-            ProxmoxPveSensorExecutor.Definition,
+            ProxmoxHealthSensorExecutor.Definition,
+            ProxmoxNodeHealthSensorExecutor.Definition,
             UnifiHealthSensorExecutor.Definition,
             PowerShellRemoteSensorExecutor.Definition,
             WindowsServiceSensorExecutor.Definition,
@@ -234,7 +233,6 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
             NtpSensorExecutor.Definition,
             DockerContainerSensorExecutor.Definition,
             BackupJobSensorExecutor.Definition,
-            DiskSmartSensorExecutor.Definition,
             ProbeHeartbeatSensorExecutor.Definition
         };
 

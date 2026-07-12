@@ -55,7 +55,6 @@ public static class SensorExecutionLoadRanking
         ["synology"] = Heavy,
         ["synology-health"] = Heavy,
         ["synology-disk"] = Heavy,
-        ["disk-smart"] = Heavy,
         ["windows-disk"] = Heavy,
         ["linux-disk"] = Heavy,
     };

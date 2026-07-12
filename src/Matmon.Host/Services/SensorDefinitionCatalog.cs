@@ -19,7 +19,6 @@ public static class SensorDefinitionCatalog
         SynologyUpdateSensorExecutor.Definition,
         SnmpInterfaceSensorExecutor.Definition,
         UpsSnmpSensorExecutor.Definition,
-        ProxmoxPveSensorExecutor.Definition,
         ProxmoxHealthSensorExecutor.Definition,
         ProxmoxNodeHealthSensorExecutor.Definition,
         ProxmoxDiskSensorExecutor.Definition,
@@ -45,7 +44,6 @@ public static class SensorDefinitionCatalog
         NtpSensorExecutor.Definition,
         DockerContainerSensorExecutor.Definition,
         BackupJobSensorExecutor.Definition,
-        DiskSmartSensorExecutor.Definition,
         ProbeHeartbeatSensorExecutor.Definition,
         ProbeHealthSensorExecutor.Definition,
         MatmonUpdateSensorExecutor.Definition

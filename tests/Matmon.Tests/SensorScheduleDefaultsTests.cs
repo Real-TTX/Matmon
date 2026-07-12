@@ -25,7 +25,6 @@ public sealed class SensorScheduleDefaultsTests
     }
 
     [Theory]
-    [InlineData("disk-smart")]
     [InlineData("synology-disk")]
     [InlineData("windows-disk")]
     [InlineData("linux-disk")]

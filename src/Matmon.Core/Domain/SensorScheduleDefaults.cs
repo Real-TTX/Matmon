@@ -30,7 +30,6 @@ public static class SensorScheduleDefaults
 
         // Slow-changing hardware/health: SMART attributes and backup outcomes barely move between
         // polls, so 6 h keeps the noise/overhead down while still catching failures within hours.
-        ["disk-smart"] = SixHours,
         ["synology-disk"] = SixHours,
         ["windows-disk"] = SixHours,
         ["linux-disk"] = SixHours,

@@ -59,7 +59,6 @@ public static class SensorTelemetryProfiles
         ["windows-disk"] = Responsive,
         ["linux-disk"] = Responsive,
         ["proxmox-disk"] = Responsive,
-        ["disk-smart"] = Responsive,
 
         // Availability / up-down style.
         ["tcp-port"] = Availability,

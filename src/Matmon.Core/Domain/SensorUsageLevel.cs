@@ -33,7 +33,6 @@ public static class SensorUsageCatalog
             ["linux-ssh-health"] = SensorUsageLevel.Moderate,
             ["docker-container"] = SensorUsageLevel.Moderate,
             ["backup-job"] = SensorUsageLevel.Moderate,
-            ["disk-smart"] = SensorUsageLevel.Moderate,
             ["unifi-health"] = SensorUsageLevel.Moderate,
             ["probe-health"] = SensorUsageLevel.Moderate,
 
