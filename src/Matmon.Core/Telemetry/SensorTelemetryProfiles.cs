@@ -48,6 +48,8 @@ public static class SensorTelemetryProfiles
         ["snmp-interface"] = Responsive,
         ["ups-snmp"] = Responsive,
         ["mssql"] = Responsive,
+        ["postgres"] = Responsive,
+        ["mysql"] = Responsive,
         ["proxmox"] = Responsive,
         ["proxmox-health"] = Responsive,
         ["proxmox-node-health"] = Responsive,

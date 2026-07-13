@@ -37,6 +37,8 @@ public static class SensorUsageCatalog
             ["probe-health"] = SensorUsageLevel.Moderate,
 
             ["mssql"] = SensorUsageLevel.High,
+            ["postgres"] = SensorUsageLevel.High,
+            ["mysql"] = SensorUsageLevel.High,
             ["proxmox-pve"] = SensorUsageLevel.High,
             ["powershell-remote"] = SensorUsageLevel.High
         };

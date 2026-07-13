@@ -721,6 +721,14 @@ public sealed class MonitoringSettings
                 yield return ("mssql.username", user);
                 yield return ("mssql.password", pass);
                 break;
+            case MonitoringCredentialKind.PostgreSql:
+                yield return ("postgres.username", user);
+                yield return ("postgres.password", pass);
+                break;
+            case MonitoringCredentialKind.MySql:
+                yield return ("mysql.username", user);
+                yield return ("mysql.password", pass);
+                break;
             case MonitoringCredentialKind.Unifi:
                 yield return ("unifi.apiKey", string.IsNullOrWhiteSpace(token) ? pass : token);
                 yield return ("unifi.username", user);

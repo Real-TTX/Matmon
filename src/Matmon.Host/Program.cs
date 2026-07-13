@@ -588,6 +588,8 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     services.AddTransient<ISensorExecutor, SslCertificateSensorExecutor>();
     services.AddTransient<ISensorExecutor, CertificateChainSensorExecutor>();
     services.AddTransient<ISensorExecutor, MssqlSensorExecutor>();
+    services.AddTransient<ISensorExecutor, PostgreSqlSensorExecutor>();
+    services.AddTransient<ISensorExecutor, MySqlSensorExecutor>();
     services.AddTransient<ISensorExecutor, TcpPortSensorExecutor>();
     services.AddTransient<ISensorExecutor, DnsSensorExecutor>();
     services.AddTransient<ISensorExecutor, NtpSensorExecutor>();

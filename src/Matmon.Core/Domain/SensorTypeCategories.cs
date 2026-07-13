@@ -69,6 +69,8 @@ public static class SensorTypeCategories
         ["backup-job"] = "Storage",
 
         ["mssql"] = "Databases",
+        ["postgres"] = "Databases",
+        ["mysql"] = "Databases",
 
         ["probe-heartbeat"] = "Probe",
         ["probe-health"] = "Probe",

@@ -41,6 +41,8 @@ public static class SensorExecutionLoadRanking
         ["snmp-interface"] = Heavy,
         ["ups-snmp"] = Heavy,
         ["mssql"] = Heavy,
+        ["postgres"] = Heavy,
+        ["mysql"] = Heavy,
         ["powershell"] = Heavy,
         ["local-script"] = Heavy,
         ["local-program"] = Heavy,

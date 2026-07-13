@@ -11,7 +11,9 @@ public enum MonitoringCredentialKind
     Proxmox = 4,
     Snmp = 5,
     SqlServer = 6,
-    Unifi = 7
+    Unifi = 7,
+    PostgreSql = 8,
+    MySql = 9
 }
 
 public sealed class MonitoringCredentialBundle

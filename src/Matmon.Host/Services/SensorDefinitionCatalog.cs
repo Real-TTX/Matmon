@@ -39,6 +39,8 @@ public static class SensorDefinitionCatalog
         SslCertificateSensorExecutor.Definition,
         CertificateChainSensorExecutor.Definition,
         MssqlSensorExecutor.Definition,
+        PostgreSqlSensorExecutor.Definition,
+        MySqlSensorExecutor.Definition,
         TcpPortSensorExecutor.Definition,
         DnsSensorExecutor.Definition,
         NtpSensorExecutor.Definition,
