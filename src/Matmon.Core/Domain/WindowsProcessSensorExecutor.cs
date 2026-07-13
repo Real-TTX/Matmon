@@ -8,7 +8,7 @@ public sealed class WindowsProcessSensorExecutor : ISensorExecutor
     {
         Key = "windows-process",
         DisplayName = "Windows Process",
-        Description = "Checks Windows process count and resource usage over WinRM.",
+        Description = "Checks that a named Windows process is running (instance count) and its CPU / memory usage, over WinRM.",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [

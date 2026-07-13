@@ -12,7 +12,7 @@ public sealed class PingSensorExecutor : ISensorExecutor
     {
         Key = "ping",
         DisplayName = "Ping",
-        Description = "ICMP reachability and latency",
+        Description = "Checks host reachability and round-trip latency via ICMP echo (ping).",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [

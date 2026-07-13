@@ -8,7 +8,7 @@ public sealed class WindowsServiceSensorExecutor : ISensorExecutor
     {
         Key = "windows-service",
         DisplayName = "Windows Service",
-        Description = "Checks a Windows service over WinRM.",
+        Description = "Checks whether a named Windows service exists and is in its expected state (running/stopped) over WinRM.",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [

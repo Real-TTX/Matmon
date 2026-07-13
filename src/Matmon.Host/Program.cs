@@ -330,6 +330,29 @@ app.MapGet("/api/mode", () => Results.Ok(new
     mode = runtimeOptions.Mode.ToString().ToLowerInvariant()
 })).AllowAnonymous();
 
+// Public, anonymous catalog of the built-in sensor TYPES (metadata only - no secrets, no workspace data):
+// key, name, description, category + whether/what credentials it needs. Lets the marketing site (and anyone)
+// show "what Matmon can monitor" without logging in. Same shipped list on every instance.
+app.MapGet("/api/sensor-types", () => Results.Ok(new
+{
+    generatedUtc = DateTimeOffset.UtcNow,
+    version = Matmon.Host.Services.MatmonVersion.Current,
+    sensorTypes = SensorDefinitionCatalog.BuiltIns
+        .Select(definition => new
+        {
+            key = definition.Key,
+            name = definition.DisplayName,
+            description = definition.Description,
+            category = SensorTypeCategories.Resolve(definition.Key),
+            credentialKinds = definition.CredentialKinds.Select(kind => kind.ToString()).ToArray(),
+            needsCredentials = definition.CredentialKinds.Count > 0,
+            parameterCount = definition.Parameters.Count
+        })
+        .OrderBy(type => SensorTypeCategories.OrderIndex(type.category))
+        .ThenBy(type => type.name, StringComparer.OrdinalIgnoreCase)
+        .ToArray()
+})).AllowAnonymous();
+
 if (runtimeOptions.Mode == AppMode.Primary)
 {
     app.MapGet("/api/dashboard", (IDashboardSnapshotProvider provider) =>
