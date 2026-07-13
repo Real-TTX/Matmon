@@ -8,7 +8,7 @@ public sealed class HttpSensorExecutor : ISensorExecutor
     {
         Key = "http",
         DisplayName = "HTTP",
-        Description = "HTTP status and response time",
+        Description = "Lightweight HTTP check - status code and response time (headers only, body not read). For body/content match and Regex/JSON/XML extraction use HTTP Advanced.",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [

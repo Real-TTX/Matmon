@@ -18,7 +18,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
     {
         Key = "local-script",
         DisplayName = "Local Script",
-        Description = "Run a PowerShell or shell script on the Matmon host/probe itself and extract numeric channels from JSON, XML, regex or text output.",
+        Description = "Run an inline PowerShell or shell script you write here, on the Matmon host/probe itself, and extract numeric channels from JSON, XML, regex or text output. To run an existing allow-listed executable by path instead, use Local Program.",
         ChannelMode = SensorChannelMode.Dynamic,
         Parameters =
         [

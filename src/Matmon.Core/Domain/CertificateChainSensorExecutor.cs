@@ -11,8 +11,8 @@ public sealed class CertificateChainSensorExecutor : ISensorExecutor
     public static SensorDefinition Definition { get; } = new()
     {
         Key = "certificate-chain",
-        DisplayName = "Certificate Chain",
-        Description = "Checks TLS certificate chain, hostname match and remaining lifetime.",
+        DisplayName = "SSL Certificate Chain",
+        Description = "Verifies the full TLS chain of trust (chain build + errors), hostname match and remaining lifetime. For a simple leaf expiry check use SSL Certificate (Expiry).",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [

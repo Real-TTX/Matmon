@@ -13,7 +13,7 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
     {
         Key = "http-advanced",
         DisplayName = "HTTP Advanced",
-        Description = "HTTP check with body validation and Regex, JSON or XML channel extraction.",
+        Description = "HTTP check that downloads the response body (up to 8 MB) for text match and Regex/JSON/XML channel extraction. For a lightweight up/latency check use HTTP.",
         ChannelMode = SensorChannelMode.Dynamic,
         Parameters =
         [

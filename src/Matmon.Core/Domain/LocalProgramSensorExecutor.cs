@@ -19,7 +19,7 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
     {
         Key = "local-program",
         DisplayName = "Local Program",
-        Description = "Run a local executable (by path) on the Matmon host/probe and read numeric channels from its output. The path must be allowed via the Matmon__AllowedProgramPaths setting.",
+        Description = "Run an existing local executable by path on the Matmon host/probe and read numeric channels from its output; the path must be allow-listed via Matmon__AllowedProgramPaths. For an inline script you write here, use Local Script.",
         ChannelMode = SensorChannelMode.Dynamic,
         Parameters =
         [
