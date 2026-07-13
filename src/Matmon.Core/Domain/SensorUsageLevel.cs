@@ -32,7 +32,7 @@ public static class SensorUsageCatalog
             ["windows-process"] = SensorUsageLevel.Moderate,
             ["linux-ssh-health"] = SensorUsageLevel.Moderate,
             ["docker-container"] = SensorUsageLevel.Moderate,
-            ["backup-job"] = SensorUsageLevel.Moderate,
+            ["windows-eventlog"] = SensorUsageLevel.Moderate,
             ["unifi-health"] = SensorUsageLevel.Moderate,
             ["probe-health"] = SensorUsageLevel.Moderate,
 

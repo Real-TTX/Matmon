@@ -232,7 +232,7 @@ $cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage
             DnsSensorExecutor.Definition,
             NtpSensorExecutor.Definition,
             DockerContainerSensorExecutor.Definition,
-            BackupJobSensorExecutor.Definition,
+            WindowsEventLogSensorExecutor.Definition,
             ProbeHeartbeatSensorExecutor.Definition
         };
 

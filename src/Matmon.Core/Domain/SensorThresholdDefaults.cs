@@ -132,10 +132,6 @@ public static class SensorThresholdDefaults
         new("unifi-health", "onlineRatio", "critical", ThresholdDirection.Below, 80),
 
         // ── Backup job / disk SMART / probe heartbeat ─────────────────────────────────────────
-        new("backup-job", "ageHours", "warning", ThresholdDirection.Above, 26),
-        new("backup-job", "ageHours", "critical", ThresholdDirection.Above, 48),
-        new("backup-job", "failedEvents", "warning", ThresholdDirection.Above, 0),
-        new("backup-job", "failedEvents", "critical", ThresholdDirection.Above, 2),
         new("probe-heartbeat", "ageSeconds", "warning", ThresholdDirection.Above, 30),
         new("probe-heartbeat", "ageSeconds", "critical", ThresholdDirection.Above, 60),
     ];

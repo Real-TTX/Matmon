@@ -29,7 +29,6 @@ public sealed class SensorScheduleDefaultsTests
     [InlineData("windows-disk")]
     [InlineData("linux-disk")]
     [InlineData("proxmox-disk")]
-    [InlineData("backup-job")]
     public void Slow_changing_infra_polls_every_six_hours(string key)
     {
         Assert.Equal(TimeSpan.FromHours(6), SensorScheduleDefaults.Resolve(key));

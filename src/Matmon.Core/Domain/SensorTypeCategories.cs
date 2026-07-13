@@ -66,7 +66,7 @@ public static class SensorTypeCategories
         ["unifi-health"] = "Virtualization & NAS",
         ["docker-container"] = "Virtualization & NAS",
 
-        ["backup-job"] = "Storage",
+        ["windows-eventlog"] = "Windows",
 
         ["mssql"] = "Databases",
         ["postgres"] = "Databases",

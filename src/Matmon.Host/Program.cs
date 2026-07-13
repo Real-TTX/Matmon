@@ -594,7 +594,7 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     services.AddTransient<ISensorExecutor, DnsSensorExecutor>();
     services.AddTransient<ISensorExecutor, NtpSensorExecutor>();
     services.AddTransient<ISensorExecutor, DockerContainerSensorExecutor>();
-    services.AddTransient<ISensorExecutor, BackupJobSensorExecutor>();
+    services.AddTransient<ISensorExecutor, WindowsEventLogSensorExecutor>();
 
     // Probe heartbeat/health report the probe's OWN state (need probe infra) and are meaningless as cloud
     // sensors - the stateless Executor mode skips them so its executor set resolves without that plumbing.

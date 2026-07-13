@@ -30,7 +30,7 @@ public static class SensorExecutionLoadRanking
         ["docker-container"] = Moderate,
         ["windows-service"] = Moderate,
         ["windows-process"] = Moderate,
-        ["backup-job"] = Moderate,
+        ["windows-eventlog"] = Moderate,
         ["unifi-health"] = Moderate,
         ["windows-update"] = Moderate,
         ["linux-update"] = Moderate,

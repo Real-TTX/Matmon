@@ -34,7 +34,6 @@ public static class SensorScheduleDefaults
         ["windows-disk"] = SixHours,
         ["linux-disk"] = SixHours,
         ["proxmox-disk"] = SixHours,
-        ["backup-job"] = SixHours,
         // The cloud recomputes update-availability each heartbeat; a 6 h poll surfaces it without churn.
         ["matmon-update"] = SixHours,
 
