@@ -734,6 +734,14 @@ public sealed class MonitoringSettings
                 yield return ("unifi.username", user);
                 yield return ("unifi.password", pass);
                 break;
+            case MonitoringCredentialKind.Mail:
+                // A single Generic bundle covers the common self-loop case (one mailbox sends to itself):
+                // the same username/password serve both the SMTP send and IMAP receive legs.
+                yield return ("mail.smtpUsername", user);
+                yield return ("mail.smtpPassword", pass);
+                yield return ("mail.imapUsername", user);
+                yield return ("mail.imapPassword", pass);
+                break;
         }
     }
 

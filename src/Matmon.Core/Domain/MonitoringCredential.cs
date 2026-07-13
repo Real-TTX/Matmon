@@ -13,7 +13,8 @@ public enum MonitoringCredentialKind
     SqlServer = 6,
     Unifi = 7,
     PostgreSql = 8,
-    MySql = 9
+    MySql = 9,
+    Mail = 10
 }
 
 public sealed class MonitoringCredentialBundle

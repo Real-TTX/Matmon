@@ -35,6 +35,7 @@ public static class SensorTypeCategories
         ["snmp"] = "Network",
         ["snmp-interface"] = "Network",
         ["ups-snmp"] = "Network",
+        ["mail-health"] = "Network",
 
         ["ssl-certificate"] = "Certificates",
         ["certificate-chain"] = "Certificates",

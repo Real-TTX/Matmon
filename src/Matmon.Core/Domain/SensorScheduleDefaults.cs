@@ -43,6 +43,10 @@ public static class SensorScheduleDefaults
         ["synology-update"] = OncePerDay,
         ["ssl-certificate"] = OncePerDay,
         ["certificate-chain"] = OncePerDay,
+
+        // Mail round-trip: a send + receive probe every 15 min balances freshness against mail-server
+        // load; the sensor's tolerance parameter (default 15 min) governs the actual alarm window.
+        ["mail-health"] = TimeSpan.FromMinutes(15),
     };
 
     public static TimeSpan Resolve(string? sensorTypeKey)

@@ -42,7 +42,8 @@ public sealed class ProbeSensorAssignmentProvider
                     SensorTargetResolver.Resolve(sensor, lineage),
                     sensor.IsPaused,
                     settings,
-                    latestObservation?.TimestampUtc);
+                    latestObservation?.TimestampUtc,
+                    latestObservation);
             })
             .ToArray();
 

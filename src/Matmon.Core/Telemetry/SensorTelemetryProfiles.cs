@@ -73,6 +73,7 @@ public static class SensorTelemetryProfiles
         ["linux-ssh-health"] = Availability,
         ["powershell"] = Availability,
         ["windows-eventlog"] = Responsive,
+        ["mail-health"] = Responsive,
         ["windows-update"] = Availability,
         ["linux-update"] = Availability,
         ["synology-update"] = Availability,

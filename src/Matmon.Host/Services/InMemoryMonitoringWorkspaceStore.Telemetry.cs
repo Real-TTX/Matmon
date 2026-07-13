@@ -94,6 +94,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return _telemetry.GetLatestObservations();
     }
 
+    public SensorObservation? GetLatestObservation(Guid sensorId)
+    {
+        // O(1) cache read (thread-safe in the repo); no _gate needed - the polling hot path calls this
+        // per execution to feed SensorExecutionContext.PreviousObservation.
+        return _telemetry.GetLatestObservation(sensorId);
+    }
+
     public IReadOnlyDictionary<Guid, int> GetSensorObservationCounts()
     {
         return _telemetry.GetObservationCountsBySensor();

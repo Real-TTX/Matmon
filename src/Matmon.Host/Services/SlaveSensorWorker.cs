@@ -199,7 +199,12 @@ public sealed class SlaveSensorWorker : BackgroundService
         try
         {
             var result = await executor.ExecuteAsync(
-                new SensorExecutionContext(assignment.SensorTypeKey, assignment.Target, assignment.Settings),
+                new SensorExecutionContext(
+                    assignment.SensorTypeKey,
+                    assignment.Target,
+                    assignment.Settings,
+                    assignment.SensorId,
+                    assignment.LastObservation),
                 cancellationToken);
             result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(assignment.Settings, result);
 

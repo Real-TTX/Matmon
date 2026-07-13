@@ -600,6 +600,11 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     // sensors - the stateless Executor mode skips them so its executor set resolves without that plumbing.
     if (includeProbeSensors)
     {
+        // Mail Health correlates each run with the previous one (round-trip verification), so it relies on
+        // SensorExecutionContext.PreviousObservation - available on the Primary + Secondary probe paths but
+        // not in the stateless cloud Executor. Registered here so it is offered on instances/probes only.
+        services.AddTransient<ISensorExecutor, MailHealthSensorExecutor>();
+
         services.AddTransient<ProbeHeartbeatSensorExecutor>();
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHeartbeatSensorExecutor>());
         services.AddTransient<ProbeHealthSensorExecutor>();

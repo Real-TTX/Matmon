@@ -4221,6 +4221,12 @@ public sealed class WorkspaceModel : PageModel
                     ApplyCredentialSecretField(values, "generic.password", bundle.GenericPassword, existing);
                     ApplyCredentialSecretField(values, "generic.token", bundle.GenericToken, existing);
                     break;
+                case MonitoringCredentialKind.Mail:
+                    ApplyCredentialBundleField(values, "mail.smtpUsername", bundle.MailSmtpUsername);
+                    ApplyCredentialSecretField(values, "mail.smtpPassword", bundle.MailSmtpPassword, existing);
+                    ApplyCredentialBundleField(values, "mail.imapUsername", bundle.MailImapUsername);
+                    ApplyCredentialSecretField(values, "mail.imapPassword", bundle.MailImapPassword, existing);
+                    break;
             }
 
             if (string.IsNullOrWhiteSpace(bundle.Name) && values.Count == 0)
@@ -4362,6 +4368,10 @@ public sealed class WorkspaceModel : PageModel
                 GenericUsername = ReadCredentialField(credential.Values, "generic.username"),
                 GenericPassword = ReadCredentialField(credential.Values, "generic.password"),
                 GenericToken = ReadCredentialField(credential.Values, "generic.token"),
+                MailSmtpUsername = ReadCredentialField(credential.Values, "mail.smtpUsername"),
+                MailSmtpPassword = ReadCredentialField(credential.Values, "mail.smtpPassword"),
+                MailImapUsername = ReadCredentialField(credential.Values, "mail.imapUsername"),
+                MailImapPassword = ReadCredentialField(credential.Values, "mail.imapPassword"),
                 ValuesText = string.Join(
                     Environment.NewLine,
                     credential.Values
@@ -4394,7 +4404,11 @@ public sealed class WorkspaceModel : PageModel
             || key.Equals("unifi.apiKey", StringComparison.OrdinalIgnoreCase)
             || key.Equals("generic.username", StringComparison.OrdinalIgnoreCase)
             || key.Equals("generic.password", StringComparison.OrdinalIgnoreCase)
-            || key.Equals("generic.token", StringComparison.OrdinalIgnoreCase);
+            || key.Equals("generic.token", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("mail.smtpUsername", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("mail.smtpPassword", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("mail.imapUsername", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("mail.imapPassword", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ReadCredentialField(IReadOnlyDictionary<string, string> values, string key)
@@ -7509,6 +7523,14 @@ public sealed class WorkspaceCredentialBundleInput
     public string? GenericPassword { get; set; }
 
     public string? GenericToken { get; set; }
+
+    public string? MailSmtpUsername { get; set; }
+
+    public string? MailSmtpPassword { get; set; }
+
+    public string? MailImapUsername { get; set; }
+
+    public string? MailImapPassword { get; set; }
 
     public string ValuesText { get; set; } = string.Empty;
 

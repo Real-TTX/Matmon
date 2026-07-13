@@ -32,6 +32,7 @@ public static class SensorExecutionLoadRanking
         ["windows-process"] = Moderate,
         ["windows-eventlog"] = Moderate,
         ["unifi-health"] = Moderate,
+        ["mail-health"] = Moderate,
         ["windows-update"] = Moderate,
         ["linux-update"] = Moderate,
         ["synology-update"] = Moderate,

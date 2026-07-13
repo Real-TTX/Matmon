@@ -16,7 +16,10 @@ public sealed record ProbeSensorAssignment(
     string Target,
     bool IsPaused,
     MonitoringSettings Settings,
-    DateTimeOffset? LastObservationUtc);
+    DateTimeOffset? LastObservationUtc,
+    // The full previous observation, so stateful sensors (Mail Health) can correlate runs on a
+    // remote probe. Nullable + defaulted so older probes/payloads stay compatible.
+    SensorObservation? LastObservation = null);
 
 public sealed record ProbeSensorObservationBatch(
     IReadOnlyList<ProbeSensorObservationReport> Observations);

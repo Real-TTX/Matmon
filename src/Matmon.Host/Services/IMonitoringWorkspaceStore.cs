@@ -164,6 +164,9 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyDictionary<Guid, SensorObservation> GetLatestSensorObservations();
 
+    /// <summary>The single most recent observation for a sensor (O(1) cache read), or null.</summary>
+    SensorObservation? GetLatestObservation(Guid sensorId);
+
     /// <summary>Actual stored raw-observation count per sensor (the "log length").</summary>
     IReadOnlyDictionary<Guid, int> GetSensorObservationCounts();
 

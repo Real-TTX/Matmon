@@ -131,6 +131,11 @@ public static class SensorThresholdDefaults
         new("unifi-health", "onlineRatio", "warning", ThresholdDirection.Below, 100),
         new("unifi-health", "onlineRatio", "critical", ThresholdDirection.Below, 80),
 
+        // ── Mail round-trip (seconds) ─────────────────────────────────────────────────────────
+        // "Slow but delivered" warning; hard non-delivery is Critical from the sensor's own logic
+        // (governed by the tolerance parameter), so only a warning threshold is seeded here.
+        new("mail-health", "roundTripSeconds", "warning", ThresholdDirection.Above, 300),
+
         // ── Backup job / disk SMART / probe heartbeat ─────────────────────────────────────────
         new("probe-heartbeat", "ageSeconds", "warning", ThresholdDirection.Above, 30),
         new("probe-heartbeat", "ageSeconds", "critical", ThresholdDirection.Above, 60),

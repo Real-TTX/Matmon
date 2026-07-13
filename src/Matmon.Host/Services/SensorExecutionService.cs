@@ -137,7 +137,12 @@ public sealed class SensorExecutionService : ISensorExecutionService
         bool recordObservation,
         CancellationToken cancellationToken)
     {
-        var context = new SensorExecutionContext(sensorTypeKey, target, settings);
+        // Feed the previous observation in so stateful sensors (e.g. Mail Health) can correlate runs.
+        // O(1) cache lookup; only the polling path has a sensorId (transient/preview passes null).
+        var previousObservation = sensorId is Guid previousId
+            ? _workspaceStore.GetLatestObservation(previousId)
+            : null;
+        var context = new SensorExecutionContext(sensorTypeKey, target, settings, sensorId, previousObservation);
         var result = await executor.ExecuteAsync(context, cancellationToken);
         result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(settings, result);
 

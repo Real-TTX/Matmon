@@ -46,6 +46,7 @@ public static class SensorDefinitionCatalog
         NtpSensorExecutor.Definition,
         DockerContainerSensorExecutor.Definition,
         WindowsEventLogSensorExecutor.Definition,
+        MailHealthSensorExecutor.Definition,
         ProbeHeartbeatSensorExecutor.Definition,
         ProbeHealthSensorExecutor.Definition,
         MatmonUpdateSensorExecutor.Definition

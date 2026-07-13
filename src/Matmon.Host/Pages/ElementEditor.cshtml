@@ -434,6 +434,28 @@
                                                     </label>
                                                 </div>
                                             </div>
+
+                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="mail" hidden="@(credential.Kind == MonitoringCredentialKind.Mail ? null : "hidden")">
+                                                <div class="workspace-inline-note">Mail Health - the SMTP (send) and IMAP (receive) accounts. Both are stored encrypted at rest.</div>
+                                                <div class="sensor-threshold-grid">
+                                                    <label>
+                                                        <span>SMTP username</span>
+                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailSmtpUsername" class="form-control workspace-input" placeholder="monitor@account-a" />
+                                                    </label>
+                                                    <label>
+                                                        <span>SMTP password</span>
+                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailSmtpPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                    </label>
+                                                    <label>
+                                                        <span>IMAP username</span>
+                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailImapUsername" class="form-control workspace-input" placeholder="mailbox@account-b" />
+                                                    </label>
+                                                    <label>
+                                                        <span>IMAP password</span>
+                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailImapPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
+                                                    </label>
+                                                </div>
+                                            </div>
                                         </div>
                                             </div>
                                             <div class="credential-modal-foot">

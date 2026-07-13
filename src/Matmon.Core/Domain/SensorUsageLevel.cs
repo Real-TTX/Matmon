@@ -34,6 +34,7 @@ public static class SensorUsageCatalog
             ["docker-container"] = SensorUsageLevel.Moderate,
             ["windows-eventlog"] = SensorUsageLevel.Moderate,
             ["unifi-health"] = SensorUsageLevel.Moderate,
+            ["mail-health"] = SensorUsageLevel.Moderate,
             ["probe-health"] = SensorUsageLevel.Moderate,
 
             ["mssql"] = SensorUsageLevel.High,
