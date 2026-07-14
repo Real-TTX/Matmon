@@ -30,17 +30,34 @@ public sealed class AuditReportPdfBuilder
 
     private static void ComposeHeader(IContainer container, SummaryReportData data)
     {
-        container.Column(column =>
+        container.Column(outer =>
         {
-            column.Item().Text("Monitoring Audit Report").FontSize(20).Bold().FontColor(Colors.Blue.Darken2);
-            column.Item().Text(data.WorkspaceName).FontSize(13).SemiBold();
-            column.Item().PaddingTop(2).Text(text =>
+            outer.Item().Row(row =>
             {
-                text.Span("Period: ").FontColor(Colors.Grey.Darken1);
-                text.Span($"{data.FromUtc.ToDisplay():g} – {data.ToUtc.ToDisplay():g}");
-                text.Span($"    Generated: {DateTimeOffset.Now:g}").FontColor(Colors.Grey.Medium);
+                row.RelativeItem().Column(column =>
+                {
+                    column.Item().Text("Monitoring Audit Report").FontSize(20).Bold().FontColor(Colors.Blue.Darken2);
+                    column.Item().Text(data.WorkspaceName).FontSize(13).SemiBold();
+                    if (data.Partner?.PartnerName is { Length: > 0 } partnerName)
+                    {
+                        column.Item().Text($"Managed by {partnerName}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    }
+                    column.Item().PaddingTop(2).Text(text =>
+                    {
+                        text.Span("Period: ").FontColor(Colors.Grey.Darken1);
+                        text.Span($"{data.FromUtc.ToDisplay():g} – {data.ToUtc.ToDisplay():g}");
+                        text.Span($"    Generated: {DateTimeOffset.Now:g}").FontColor(Colors.Grey.Medium);
+                    });
+                });
+
+                // Reseller co-branding: partner logo top-right, when present.
+                if (data.Partner?.LogoPng is { Length: > 0 } logo)
+                {
+                    row.ConstantItem(150).AlignTop().AlignRight().Height(44).Image(logo).FitHeight();
+                }
             });
-            column.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+
+            outer.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
         });
     }
 

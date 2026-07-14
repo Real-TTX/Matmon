@@ -272,6 +272,19 @@ public sealed class CloudConnectionService : BackgroundService
                 return;
             }
 
+            byte[]? logo = null;
+            if (!string.IsNullOrWhiteSpace(payload.LogoBase64))
+            {
+                try
+                {
+                    logo = Convert.FromBase64String(payload.LogoBase64);
+                }
+                catch (FormatException)
+                {
+                    logo = null;
+                }
+            }
+
             _workspaceStore.SetServicePartnerInfo(payload.HasPartner
                 ? new ServicePartnerInfo
                 {
@@ -280,6 +293,9 @@ public sealed class CloudConnectionService : BackgroundService
                     ContactEmail = payload.ContactEmail,
                     ContactPhone = payload.ContactPhone,
                     CanManage = payload.CanManage,
+                    ContactUrl = payload.ContactUrl,
+                    BrandColor = payload.BrandColorHex,
+                    LogoPng = logo,
                 }
                 : null);
         }
@@ -293,7 +309,16 @@ public sealed class CloudConnectionService : BackgroundService
         }
     }
 
-    private sealed record ServicePartnerResponse(bool HasPartner, string? Name, string? ContactEmail, string? ContactPhone, bool CanManage);
+    private sealed record ServicePartnerResponse(
+        bool HasPartner,
+        string? Name,
+        string? ContactEmail,
+        string? ContactPhone,
+        bool CanManage,
+        string? ContactUrl = null,
+        string? BrandColorHex = null,
+        string? LogoContentType = null,
+        string? LogoBase64 = null);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

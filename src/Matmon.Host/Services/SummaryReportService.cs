@@ -98,6 +98,11 @@ public sealed class SummaryReportDataCollector
                 monitoringEvent.Message))
             .ToArray();
 
+        var partner = _workspaceStore.GetServicePartnerInfo();
+        var branding = partner is { HasPartner: true }
+            ? new SummaryReportBranding(partner.Name, partner.LogoPng, partner.BrandColor, partner.ContactUrl)
+            : null;
+
         return new SummaryReportData(
             workspaceName,
             fromUtc,
@@ -110,7 +115,8 @@ public sealed class SummaryReportDataCollector
             errorCount,
             warningCount,
             lowestUptime,
-            recentEvents);
+            recentEvents,
+            branding);
     }
 
     private static string? ResolveUnit(SensorObservation? observation)

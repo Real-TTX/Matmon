@@ -30,7 +30,11 @@ public sealed record SummaryReportData(
     int ErrorSensorCount,
     int WarningSensorCount,
     IReadOnlyList<SummaryReportSensorLine> LowestUptime,
-    IReadOnlyList<SummaryReportEventLine> RecentEvents);
+    IReadOnlyList<SummaryReportEventLine> RecentEvents,
+    SummaryReportBranding? Partner = null);
+
+/// <summary>Optional reseller co-branding stamped onto the report (logo + "Managed by" line).</summary>
+public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? BrandColor, string? ContactUrl);
 
 public sealed record SummaryReport(string Subject, string TextBody, string HtmlBody);
 
@@ -90,6 +94,22 @@ public static class SummaryReportBuilder
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#111827;max-width:720px;\">");
         sb.Append($"<h2 style=\"margin:0 0 4px 0;\">{Enc(data.WorkspaceName)} - summary report</h2>");
         sb.Append($"<div style=\"color:#6b7280;margin-bottom:16px;\">{Enc(period)}</div>");
+
+        if (data.Partner is { } brand && (brand.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(brand.PartnerName)))
+        {
+            sb.Append("<div style=\"margin:0 0 16px;\">");
+            if (brand.LogoPng is { Length: > 0 } logo)
+            {
+                sb.Append($"<img src=\"data:image/png;base64,{Convert.ToBase64String(logo)}\" alt=\"{Enc(brand.PartnerName)}\" style=\"max-height:44px;max-width:220px;display:block;\" />");
+            }
+
+            if (!string.IsNullOrWhiteSpace(brand.PartnerName))
+            {
+                sb.Append($"<div style=\"color:#6b7280;font-size:13px;margin-top:6px;\">Managed by {Enc(brand.PartnerName)}</div>");
+            }
+
+            sb.Append("</div>");
+        }
 
         sb.Append("<div style=\"display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;\">");
         sb.Append(Card("Probes", data.ProbeCount.ToString(CultureInfo.InvariantCulture), "#374151"));

@@ -16,6 +16,16 @@ public sealed class ServicePartnerInfo
     /// <summary>Customer consent: whether the managing partner may access/operate this instance.</summary>
     public bool CanManage { get; set; }
 
+    // --- Co-branding (cached so it survives the cloud being offline; shown in the Cloud tab + reports) ---
+    /// <summary>Partner support/contact link (distinct from a marketing website).</summary>
+    public string? ContactUrl { get; set; }
+
+    /// <summary>Brand accent colour as #RRGGBB (already validated cloud-side).</summary>
+    public string? BrandColor { get; set; }
+
+    /// <summary>Partner logo as raw PNG bytes; embedded directly into the UI, the PDF and the e-mail report.</summary>
+    public byte[]? LogoPng { get; set; }
+
     public ServicePartnerInfo Clone() => new()
     {
         HasPartner = HasPartner,
@@ -23,6 +33,9 @@ public sealed class ServicePartnerInfo
         ContactEmail = ContactEmail,
         ContactPhone = ContactPhone,
         CanManage = CanManage,
+        ContactUrl = ContactUrl,
+        BrandColor = BrandColor,
+        LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
     };
 
     public bool ValueEquals(ServicePartnerInfo? other) =>
@@ -31,5 +44,18 @@ public sealed class ServicePartnerInfo
         && CanManage == other.CanManage
         && string.Equals(Name, other.Name, StringComparison.Ordinal)
         && string.Equals(ContactEmail, other.ContactEmail, StringComparison.Ordinal)
-        && string.Equals(ContactPhone, other.ContactPhone, StringComparison.Ordinal);
+        && string.Equals(ContactPhone, other.ContactPhone, StringComparison.Ordinal)
+        && string.Equals(ContactUrl, other.ContactUrl, StringComparison.Ordinal)
+        && string.Equals(BrandColor, other.BrandColor, StringComparison.Ordinal)
+        && LogosEqual(LogoPng, other.LogoPng);
+
+    private static bool LogosEqual(byte[]? a, byte[]? b)
+    {
+        if (a is null || b is null)
+        {
+            return a is null && b is null;
+        }
+
+        return a.AsSpan().SequenceEqual(b);
+    }
 }
