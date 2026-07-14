@@ -287,6 +287,51 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             $"Restored {restoredCount} section(s) from '{fileName}'.");
     }
 
+    /// <summary>Builds a backup package in memory and returns its bytes - the exact same JSON the file-based
+    /// backup writes, so it stays download-compatible with the upload/restore UI. Used to push a snapshot to
+    /// the cloud without a disk artifact.</summary>
+    public byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null)
+    {
+        lock (_gate)
+        {
+            var job = new WorkspaceBackupJob
+            {
+                Name = "cloud",
+                Sections = sections == WorkspaceBackupSection.None ? WorkspaceBackupSection.All : sections
+            };
+            var package = CreateBackupPackageLocked(job, _document, reason);
+            return JsonSerializer.SerializeToUtf8Bytes(package, FileSerializerOptions);
+        }
+    }
+
+    /// <summary>Restores from an in-memory backup blob (e.g. downloaded from the cloud) - same effect as
+    /// <see cref="RestoreBackupSnapshot"/> but without touching disk.</summary>
+    public WorkspaceBackupRestoreResult RestoreBackupBytes(byte[] blob, WorkspaceBackupSection sections)
+    {
+        if (blob is null || blob.Length == 0)
+        {
+            throw new ArgumentException("Backup content is required.", nameof(blob));
+        }
+
+        if (sections == WorkspaceBackupSection.None)
+        {
+            throw new ArgumentException("At least one restore section must be selected.", nameof(sections));
+        }
+
+        var package = JsonSerializer.Deserialize<WorkspaceBackupPackage>(blob, FileSerializerOptions)
+            ?? throw new InvalidOperationException("The backup could not be read.");
+
+        lock (_gate)
+        {
+            HydrateCredentialBundles(package.Document);
+            ApplyBackupSections(_document, package.Document, sections);
+            QueueSave(SavePriority.Configuration);
+        }
+
+        var restoredCount = CountSelectedSections(sections);
+        return new WorkspaceBackupRestoreResult("cloud", sections, restoredCount, $"Restored {restoredCount} section(s) from the cloud backup.");
+    }
+
     private void EnsureBackupJobsCollection()
     {
         _document.BackupJobs ??= [];

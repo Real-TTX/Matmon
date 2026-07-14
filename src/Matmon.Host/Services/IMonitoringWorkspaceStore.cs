@@ -210,6 +210,12 @@ public interface IMonitoringWorkspaceStore
 
     WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections);
 
+    /// <summary>Serialize a backup package to bytes in memory (for uploading to the cloud), no disk artifact.</summary>
+    byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null);
+
+    /// <summary>Restore from an in-memory backup blob (e.g. downloaded from the cloud).</summary>
+    WorkspaceBackupRestoreResult RestoreBackupBytes(byte[] blob, WorkspaceBackupSection sections);
+
     ProbeElement CreateProbe(Guid? parentId, string name, string? description);
 
     FolderElement CreateFolder(Guid parentId, string name, string? description);

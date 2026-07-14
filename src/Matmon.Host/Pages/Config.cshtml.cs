@@ -102,6 +102,14 @@ public class ConfigModel : PageModel
 
     public IReadOnlyList<WorkspaceBackupSnapshotInfo> BackupSnapshots { get; private set; } = [];
 
+    /// <summary>Config backups stored in Matmon.Cloud for this instance (loaded best-effort on the Backup tab).</summary>
+    public IReadOnlyList<CloudBackupView> CloudBackups { get; private set; } = [];
+
+    /// <summary>True when the cloud backup list was successfully fetched (distinguishes "empty" from "offline").</summary>
+    public bool CloudBackupsAvailable { get; private set; }
+
+    public sealed record CloudBackupView(Guid Id, DateTimeOffset CreatedUtc, string Label, string Version, long SizeBytes);
+
     public StorageTelemetryOverview StorageTelemetry { get; private set; } = new(0, 0, 0);
 
     public IReadOnlyList<SelectListItem> StorageCleanupScopeOptions { get; private set; } = [];
@@ -128,7 +136,7 @@ public class ConfigModel : PageModel
 
     public string ActiveTab => NormalizeTab(Tab);
 
-    public IActionResult OnGet()
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         if (InstallProbeId.HasValue)
         {
@@ -141,6 +149,11 @@ public class ConfigModel : PageModel
         }
 
         LoadView();
+        if (MatmonSecurity.IsAdmin(User) && IsActiveTab("backup"))
+        {
+            await LoadCloudBackupsAsync(cancellationToken);
+        }
+
         return Page();
     }
 
@@ -379,6 +392,152 @@ public class ConfigModel : PageModel
 
     /// <summary>Set the customer's consent for the managing service partner to access this instance. Posts the
     /// change to Matmon.Cloud (the authority); the next heartbeat re-syncs it. Admin-only.</summary>
+    // Cloud config backup = everything except the bulky telemetry sections.
+    private const WorkspaceBackupSection CloudConfigSections =
+        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics);
+
+    private (string? Url, string? InstanceId, string? Token) ResolveCloud()
+    {
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        var token = _workspaceStore.GetCloudConnectionToken();
+        var url = (settings.Configured ? settings.Url : _runtimeOptions.CloudUrl)?.Trim().TrimEnd('/');
+        var instanceId = settings.Configured ? settings.InstanceId : _runtimeOptions.CloudInstanceId;
+        return string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(instanceId) || string.IsNullOrWhiteSpace(token)
+            ? (null, null, null)
+            : (url, instanceId, token);
+    }
+
+    private async Task LoadCloudBackupsAsync(CancellationToken cancellationToken)
+    {
+        var (url, instanceId, token) = ResolveCloud();
+        if (url is null || instanceId is null || token is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(4));
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{url}/api/instances/{instanceId}/backups");
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cts.Token);
+            if (response.IsSuccessStatusCode)
+            {
+                CloudBackups = await response.Content.ReadFromJsonAsync<List<CloudBackupView>>(cts.Token) ?? [];
+                CloudBackupsAvailable = true;
+            }
+        }
+        catch (Exception)
+        {
+            // Best-effort: leave the list empty if the cloud is unreachable.
+        }
+    }
+
+    public async Task<IActionResult> OnPostCloudBackupNowAsync(CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var (url, instanceId, token) = ResolveCloud();
+        if (url is null || instanceId is null || token is null)
+        {
+            ErrorMessage = "Not connected to Matmon.Cloud.";
+            return RedirectToPage(new { tab = "backup" });
+        }
+
+        try
+        {
+            var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup");
+            var label = Uri.EscapeDataString($"Config {DateTimeOffset.Now:yyyy-MM-dd HH:mm}");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/instances/{instanceId}/backups?label={label}")
+            {
+                Content = new ByteArrayContent(bytes)
+            };
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                StatusMessage = "Configuration backed up to Matmon.Cloud.";
+            }
+            else
+            {
+                ErrorMessage = $"Matmon.Cloud rejected the backup ({(int)response.StatusCode}).";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Could not reach Matmon.Cloud: {ex.Message}";
+        }
+
+        return RedirectToPage(new { tab = "backup" });
+    }
+
+    public async Task<IActionResult> OnPostCloudRestoreBackupAsync(Guid backupId, CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var (url, instanceId, token) = ResolveCloud();
+        if (url is null || instanceId is null || token is null)
+        {
+            ErrorMessage = "Not connected to Matmon.Cloud.";
+            return RedirectToPage(new { tab = "backup" });
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{url}/api/instances/{instanceId}/backups/{backupId}");
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var response = await CloudHttp.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorMessage = $"Could not download the backup ({(int)response.StatusCode}).";
+                return RedirectToPage(new { tab = "backup" });
+            }
+
+            var blob = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            var result = _workspaceStore.RestoreBackupBytes(blob, CloudConfigSections);
+            StatusMessage = result.Message;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Restore from cloud failed: {ex.Message}";
+        }
+
+        return RedirectToPage(new { tab = "backup" });
+    }
+
+    public async Task<IActionResult> OnPostCloudDeleteBackupAsync(Guid backupId, CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var (url, instanceId, token) = ResolveCloud();
+        if (url is not null && instanceId is not null && token is not null)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Delete, $"{url}/api/instances/{instanceId}/backups/{backupId}");
+                request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+                using var response = await CloudHttp.SendAsync(request, cancellationToken);
+                StatusMessage = response.IsSuccessStatusCode ? "Cloud backup deleted." : $"Delete failed ({(int)response.StatusCode}).";
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Delete failed: {ex.Message}";
+            }
+        }
+
+        return RedirectToPage(new { tab = "backup" });
+    }
+
     public async Task<IActionResult> OnPostServicePartnerConsentAsync(bool canManage, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))

@@ -512,6 +512,60 @@
 
             <section class="panel config-block">
                 <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Cloud backup</span></h2>
+                    @if (Model.CloudBackupsAvailable)
+                    {
+                        <span class="panel-hint">@Model.CloudBackups.Count in cloud</span>
+                    }
+                </div>
+                <div style="padding:14px 18px;">
+                    @if (Model.CloudSettings?.Configured == true || Model.CloudBackupsAvailable)
+                    {
+                        <p class="workspace-hint" style="margin:0 0 12px;max-width:640px;">Store this instance's configuration (topology, sensors, templates, notifications, maps, users) in Matmon.Cloud for disaster recovery or re-provisioning. Telemetry is excluded; the newest 10 are kept. Secrets restore only on the same instance.</p>
+                        <form method="post" asp-page-handler="CloudBackupNow" style="margin-bottom:14px;">
+                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Back up to cloud now</span></button>
+                        </form>
+                        @if (Model.CloudBackups.Count == 0)
+                        {
+                            <div class="empty-state">@(Model.CloudBackupsAvailable ? "No cloud backups yet." : "Cloud backups are currently unavailable (cloud offline?).")</div>
+                        }
+                        else
+                        {
+                            <div class="system-table" role="table" aria-label="Cloud backups">
+                                <div class="system-table-row system-table-head" role="row">
+                                    <span role="columnheader">Backup</span>
+                                    <span role="columnheader">Created</span>
+                                    <span role="columnheader">Size</span>
+                                    <span role="columnheader">Actions</span>
+                                </div>
+                                @foreach (var cloudBackup in Model.CloudBackups)
+                                {
+                                    <div class="system-table-row" role="row">
+                                        <span role="cell">@cloudBackup.Label</span>
+                                        <span role="cell">@cloudBackup.CreatedUtc.ToLocalTime().ToString("g")</span>
+                                        <span role="cell">@($"{cloudBackup.SizeBytes / 1024.0:0.#} KB")</span>
+                                        <span role="cell" style="display:flex;gap:8px;flex-wrap:wrap;">
+                                            <form method="post" asp-page-handler="CloudRestoreBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Restore this cloud backup? It overwrites the current configuration.');">
+                                                <button type="submit" class="workspace-secondary-submit">Restore</button>
+                                            </form>
+                                            <form method="post" asp-page-handler="CloudDeleteBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Delete this cloud backup?');">
+                                                <button type="submit" class="workspace-danger-submit">Delete</button>
+                                            </form>
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="empty-state">Connect this instance to Matmon.Cloud (System → Cloud) to store backups off-site.</div>
+                    }
+                </div>
+            </section>
+
+            <section class="panel config-block">
+                <div class="panel-header">
                     <h2 class="section-title">@MatmonIcons.Render("folder")<span>Snapshots</span></h2>
                     <span class="panel-hint">@Model.BackupSnapshots.Count files</span>
                 </div>
