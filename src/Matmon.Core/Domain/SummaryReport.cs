@@ -34,7 +34,7 @@ public sealed record SummaryReportData(
     SummaryReportBranding? Partner = null);
 
 /// <summary>Optional reseller co-branding stamped onto the report (logo + "Managed by" line).</summary>
-public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? BrandColor, string? ContactUrl);
+public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl);
 
 public sealed record SummaryReport(string Subject, string TextBody, string HtmlBody);
 
@@ -100,7 +100,8 @@ public static class SummaryReportBuilder
             sb.Append("<div style=\"margin:0 0 16px;\">");
             if (brand.LogoPng is { Length: > 0 } logo)
             {
-                sb.Append($"<img src=\"data:image/png;base64,{Convert.ToBase64String(logo)}\" alt=\"{Enc(brand.PartnerName)}\" style=\"max-height:44px;max-width:220px;display:block;\" />");
+                var mime = string.IsNullOrWhiteSpace(brand.LogoContentType) ? "image/png" : brand.LogoContentType;
+                sb.Append($"<img src=\"data:{mime};base64,{Convert.ToBase64String(logo)}\" alt=\"{Enc(brand.PartnerName)}\" style=\"max-height:44px;max-width:220px;display:block;\" />");
             }
 
             if (!string.IsNullOrWhiteSpace(brand.PartnerName))

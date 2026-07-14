@@ -392,9 +392,39 @@ public class ConfigModel : PageModel
 
     /// <summary>Set the customer's consent for the managing service partner to access this instance. Posts the
     /// change to Matmon.Cloud (the authority); the next heartbeat re-syncs it. Admin-only.</summary>
-    // Cloud config backup = everything except the bulky telemetry sections.
+    // Cloud config backup = everything except the bulky telemetry sections AND Users. Users are excluded so a
+    // cross-instance / DR restore can never overwrite the local accounts and lock out the admin doing the restore.
     private const WorkspaceBackupSection CloudConfigSections =
-        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics);
+        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users);
+
+    /// <summary>True only for a well-formed #RRGGBB colour - used to re-validate the cloud-supplied brand colour
+    /// on the instance before it is injected into inline CSS.</summary>
+    public static bool IsHexColor(string? value)
+    {
+        if (value is not { Length: 7 } || value[0] != '#')
+        {
+            return false;
+        }
+
+        for (var i = 1; i < value.Length; i++)
+        {
+            if (!Uri.IsHexDigit(value[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>The cloud-supplied contact URL only when it is a safe absolute http/https link, else null
+    /// (defends against a javascript: scheme becoming a stored-XSS link).</summary>
+    public static string? SafeContactUrl(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? value
+            : null;
 
     private (string? Url, string? InstanceId, string? Token) ResolveCloud()
     {

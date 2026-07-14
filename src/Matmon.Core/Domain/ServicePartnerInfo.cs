@@ -23,8 +23,11 @@ public sealed class ServicePartnerInfo
     /// <summary>Brand accent colour as #RRGGBB (already validated cloud-side).</summary>
     public string? BrandColor { get; set; }
 
-    /// <summary>Partner logo as raw PNG bytes; embedded directly into the UI, the PDF and the e-mail report.</summary>
+    /// <summary>Partner logo bytes (PNG or JPEG); embedded directly into the UI, the PDF and the e-mail report.</summary>
     public byte[]? LogoPng { get; set; }
+
+    /// <summary>MIME type of <see cref="LogoPng"/> (image/png or image/jpeg) so the data: URI declares the truth.</summary>
+    public string? LogoContentType { get; set; }
 
     public ServicePartnerInfo Clone() => new()
     {
@@ -36,6 +39,7 @@ public sealed class ServicePartnerInfo
         ContactUrl = ContactUrl,
         BrandColor = BrandColor,
         LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
+        LogoContentType = LogoContentType,
     };
 
     public bool ValueEquals(ServicePartnerInfo? other) =>
@@ -47,6 +51,7 @@ public sealed class ServicePartnerInfo
         && string.Equals(ContactPhone, other.ContactPhone, StringComparison.Ordinal)
         && string.Equals(ContactUrl, other.ContactUrl, StringComparison.Ordinal)
         && string.Equals(BrandColor, other.BrandColor, StringComparison.Ordinal)
+        && string.Equals(LogoContentType, other.LogoContentType, StringComparison.Ordinal)
         && LogosEqual(LogoPng, other.LogoPng);
 
     private static bool LogosEqual(byte[]? a, byte[]? b)

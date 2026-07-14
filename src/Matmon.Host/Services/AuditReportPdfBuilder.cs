@@ -50,8 +50,10 @@ public sealed class AuditReportPdfBuilder
                     });
                 });
 
-                // Reseller co-branding: partner logo top-right, when present.
-                if (data.Partner?.LogoPng is { Length: > 0 } logo)
+                // Reseller co-branding: partner logo top-right, when present. Guard on real PNG/JPEG magic bytes -
+                // QuestPDF/SkiaSharp is raster-only and would throw at GeneratePdf() on an SVG/other, taking down
+                // the whole report. A non-raster logo simply degrades to no-logo.
+                if (data.Partner?.LogoPng is { Length: > 0 } logo && IsRasterImage(logo))
                 {
                     row.ConstantItem(150).AlignTop().AlignRight().Height(44).Image(logo).FitHeight();
                 }
@@ -59,6 +61,18 @@ public sealed class AuditReportPdfBuilder
 
             outer.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
         });
+    }
+
+    private static bool IsRasterImage(byte[] bytes)
+    {
+        if (bytes.Length >= 8 &&
+            bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 &&
+            bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A)
+        {
+            return true; // PNG
+        }
+
+        return bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF; // JPEG
     }
 
     private static void ComposeContent(IContainer container, SummaryReportData data)

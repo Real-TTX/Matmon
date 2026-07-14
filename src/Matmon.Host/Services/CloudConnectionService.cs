@@ -217,8 +217,16 @@ public sealed class CloudConnectionService : BackgroundService
         catch { /* older cloud without the fields, or a non-JSON body - ignore */ }
 
         await FetchLicenseAsync(client, instanceId, token, cancellationToken);
-        await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
+
+        // Service-partner (incl. the co-branding logo) rarely changes but the logo can be sizeable, so don't
+        // pull it every heartbeat - fetch on the first beat then roughly every 10th (~10 min at the default cadence).
+        if (_servicePartnerTick++ % 10 == 0)
+        {
+            await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
+        }
     }
+
+    private int _servicePartnerTick;
 
     private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable);
 
@@ -296,6 +304,7 @@ public sealed class CloudConnectionService : BackgroundService
                     ContactUrl = payload.ContactUrl,
                     BrandColor = payload.BrandColorHex,
                     LogoPng = logo,
+                    LogoContentType = string.IsNullOrWhiteSpace(payload.LogoContentType) ? "image/png" : payload.LogoContentType,
                 }
                 : null);
         }

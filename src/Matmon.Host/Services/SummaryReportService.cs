@@ -100,7 +100,7 @@ public sealed class SummaryReportDataCollector
 
         var partner = _workspaceStore.GetServicePartnerInfo();
         var branding = partner is { HasPartner: true }
-            ? new SummaryReportBranding(partner.Name, partner.LogoPng, partner.BrandColor, partner.ContactUrl)
+            ? new SummaryReportBranding(partner.Name, partner.LogoPng, partner.LogoContentType, partner.BrandColor, partner.ContactUrl)
             : null;
 
         return new SummaryReportData(

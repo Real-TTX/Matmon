@@ -850,18 +850,22 @@
                 <span class="panel-hint">@sp.Name</span>
             </div>
             <div style="padding:16px 18px;">
-                @if (sp.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(sp.ContactUrl))
+                @{
+                    var safeContactUrl = ConfigModel.SafeContactUrl(sp.ContactUrl);
+                    var brandColorStyle = ConfigModel.IsHexColor(sp.BrandColor) ? $"color:{sp.BrandColor};" : "";
+                }
+                @if (sp.LogoPng is { Length: > 0 } || safeContactUrl is not null)
                 {
                     <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--matmon-border);flex-wrap:wrap;">
                         @if (sp.LogoPng is { Length: > 0 } logo)
                         {
-                            <img src="data:image/png;base64,@Convert.ToBase64String(logo)" alt="@sp.Name logo" style="max-height:48px;max-width:200px;" />
+                            <img src="data:@(string.IsNullOrWhiteSpace(sp.LogoContentType) ? "image/png" : sp.LogoContentType);base64,@Convert.ToBase64String(logo)" alt="@sp.Name logo" style="max-height:48px;max-width:200px;" />
                         }
                         <div>
-                            <div style="font-weight:600;@(string.IsNullOrWhiteSpace(sp.BrandColor) ? "" : $"color:{sp.BrandColor};")">Managed by @sp.Name</div>
-                            @if (!string.IsNullOrWhiteSpace(sp.ContactUrl))
+                            <div style="font-weight:600;@brandColorStyle">Managed by @sp.Name</div>
+                            @if (safeContactUrl is not null)
                             {
-                                <a href="@sp.ContactUrl" target="_blank" rel="noopener">Support &amp; contact</a>
+                                <a href="@safeContactUrl" target="_blank" rel="noopener noreferrer">Support &amp; contact</a>
                             }
                         </div>
                     </div>
