@@ -2536,7 +2536,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     rule.SenderId = ResolveSenderIdForRule(rule.ChannelKind);
                 }
 
-                if (rule.ReceiverId is null || _document.NotificationReceivers.All(receiver => receiver.Id != rule.ReceiverId))
+                // A built-in (virtual) receiver like "All users" is not in NotificationReceivers, so guard it
+                // explicitly - otherwise the fixup would clobber every rule that targets it on each load.
+                if (rule.ReceiverId is null ||
+                    (!NotificationReceiverDefaults.IsBuiltIn(rule.ReceiverId) &&
+                        _document.NotificationReceivers.All(receiver => receiver.Id != rule.ReceiverId)))
                 {
                     rule.ReceiverId = ResolveReceiverIdForRule(rule.ChannelKind, rule.Recipient);
                 }
@@ -2544,6 +2548,33 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 SynchronizeLegacyRuleFields(rule);
             }
         }
+    }
+
+    // Seeds one "works out of the box" rule on a fresh install so the instance alerts as soon as e-mail is
+    // configured: all sensors, Warning + Critical, to every user's address (built-in "All users" receiver),
+    // with NO fixed sender - it falls back to the workspace default SMTP, so it stays inert until an admin
+    // sets up SMTP (or points it at the Cloud sender) and then delivers automatically without editing the rule.
+    private void SeedDefaultNotificationRuleLocked()
+    {
+        _document.NotificationRules ??= [];
+        if (_document.NotificationRules.Count > 0)
+        {
+            return;
+        }
+
+        _document.NotificationRules.Add(new NotificationRule
+        {
+            Name = "Default alerts",
+            Enabled = true,
+            ChannelKind = NotificationChannelKind.Email,
+            SenderId = null,
+            ReceiverId = NotificationReceiverDefaults.AllUsersReceiverId,
+            TargetElementId = null,
+            IncludeDescendants = true,
+            TriggerStates = { SensorState.Warning, SensorState.Critical },
+            CooldownMinutes = 15,
+            Threshold = 5
+        });
     }
 
     private void EnsureDefaultUsers()
@@ -2586,6 +2617,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             UpdatedUtc = now
         });
         _document.SetupCompletedUtc = now;
+        SeedDefaultNotificationRuleLocked();
     }
 
     public bool IsSetupRequired()
@@ -2631,6 +2663,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             };
             _document.Users.Add(admin);
             _document.SetupCompletedUtc = now;
+            SeedDefaultNotificationRuleLocked();
             QueueSave(SavePriority.Configuration);
             return CloneUser(admin);
         }
