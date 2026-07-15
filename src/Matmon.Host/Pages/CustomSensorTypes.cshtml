@@ -47,7 +47,7 @@
                         <span role="cell">@type.ScriptOutputFormat</span>
                         <span role="cell" style="display:flex;gap:8px;flex-wrap:wrap;">
                             <a class="workspace-secondary-submit" asp-page="/CustomSensorTypes" asp-route-key="@type.Key">Edit</a>
-                            <form method="post" asp-page-handler="Delete" asp-route-key="@type.Key" onsubmit="return confirm('Delete custom sensor type &quot;@type.DisplayName&quot;? Sensors using it must be removed first.');">
+                            <form method="post" asp-page-handler="Delete" asp-route-key="@type.Key" onsubmit="return confirm('Delete this custom sensor type? Sensors using it must be removed first.');">
                                 <button type="submit" class="workspace-danger-submit">Delete</button>
                             </form>
                         </span>
