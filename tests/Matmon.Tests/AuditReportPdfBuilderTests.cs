@@ -47,4 +47,37 @@ public class AuditReportPdfBuilderTests
         Assert.True(pdf.Length > 100);
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
     }
+
+    // A real, minimal 1x1 PNG so the logo branch actually decodes through QuestPDF/SkiaSharp.
+    private static readonly byte[] OnePxPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+
+    [Fact]
+    public void Build_with_partner_branding_stays_a_valid_pdf()
+    {
+        var data = Sample(withRows: true) with
+        {
+            Partner = new SummaryReportBranding("ACME MSP", OnePxPng, "image/png", "#AABBCC", "https://acme.example/support")
+        };
+
+        var pdf = new AuditReportPdfBuilder().Build(data);
+
+        Assert.True(pdf.Length > 500);
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
+    }
+
+    [Fact]
+    public void Build_skips_a_non_raster_logo_without_crashing()
+    {
+        // A non-PNG/JPEG logo must be dropped by the magic-byte guard - handing an SVG/garbage blob to the
+        // raster-only renderer would throw at GeneratePdf() and take down the whole report.
+        var data = Sample(withRows: false) with
+        {
+            Partner = new SummaryReportBranding("ACME", [0x00, 0x01, 0x02, 0x03], "image/svg+xml", "#AABBCC", null)
+        };
+
+        var pdf = new AuditReportPdfBuilder().Build(data);
+
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
+    }
 }

@@ -57,6 +57,24 @@ public static class SummaryReportBuilder
         sb.AppendLine($"{data.WorkspaceName} - summary report");
         sb.AppendLine(period);
         sb.AppendLine();
+
+        if (data.Partner is { } brand)
+        {
+            var contactUrl = BrandingSafety.SafeContactUrl(brand.ContactUrl);
+            if (!string.IsNullOrWhiteSpace(brand.PartnerName))
+            {
+                sb.AppendLine($"Managed by {brand.PartnerName}");
+            }
+            if (contactUrl is not null)
+            {
+                sb.AppendLine($"Support: {contactUrl}");
+            }
+            if (!string.IsNullOrWhiteSpace(brand.PartnerName) || contactUrl is not null)
+            {
+                sb.AppendLine();
+            }
+        }
+
         sb.AppendLine($"Probes: {data.ProbeCount}   Sensors: {data.SensorCount} ({data.PausedSensorCount} paused)");
         sb.AppendLine($"Now: {data.ErrorSensorCount} error / {data.WarningSensorCount} warning");
         sb.AppendLine($"Alerts: {data.ActiveAlertCount} active ({data.AcknowledgedAlertCount} acknowledged)");
@@ -90,12 +108,18 @@ public static class SummaryReportBuilder
 
     private static string BuildHtml(SummaryReportData data, string period)
     {
+        // Reseller co-branding: accent the heading in the partner's colour and surface the support link
+        // (both re-validated - #RRGGBB / absolute http(s) - so a garbage cached value can't inject CSS or a
+        // javascript: href). Semantic state colours below stay fixed; only the brand accent is partner-driven.
+        var accent = BrandingSafety.SafeHexColor(data.Partner?.BrandColor);
+        var contactUrl = BrandingSafety.SafeContactUrl(data.Partner?.ContactUrl);
+
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#111827;max-width:720px;\">");
-        sb.Append($"<h2 style=\"margin:0 0 4px 0;\">{Enc(data.WorkspaceName)} - summary report</h2>");
+        sb.Append($"<h2 style=\"margin:0 0 4px 0;color:{accent ?? "#111827"};\">{Enc(data.WorkspaceName)} - summary report</h2>");
         sb.Append($"<div style=\"color:#6b7280;margin-bottom:16px;\">{Enc(period)}</div>");
 
-        if (data.Partner is { } brand && (brand.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(brand.PartnerName)))
+        if (data.Partner is { } brand && (brand.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(brand.PartnerName) || contactUrl is not null))
         {
             sb.Append("<div style=\"margin:0 0 16px;\">");
             if (brand.LogoPng is { Length: > 0 } logo)
@@ -107,6 +131,11 @@ public static class SummaryReportBuilder
             if (!string.IsNullOrWhiteSpace(brand.PartnerName))
             {
                 sb.Append($"<div style=\"color:#6b7280;font-size:13px;margin-top:6px;\">Managed by {Enc(brand.PartnerName)}</div>");
+            }
+
+            if (contactUrl is not null)
+            {
+                sb.Append($"<div style=\"font-size:13px;margin-top:2px;\"><a href=\"{Enc(contactUrl)}\" style=\"color:{accent ?? "#295cff"};\">{Enc(contactUrl)}</a></div>");
             }
 
             sb.Append("</div>");

@@ -398,33 +398,12 @@ public class ConfigModel : PageModel
         WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users);
 
     /// <summary>True only for a well-formed #RRGGBB colour - used to re-validate the cloud-supplied brand colour
-    /// on the instance before it is injected into inline CSS.</summary>
-    public static bool IsHexColor(string? value)
-    {
-        if (value is not { Length: 7 } || value[0] != '#')
-        {
-            return false;
-        }
-
-        for (var i = 1; i < value.Length; i++)
-        {
-            if (!Uri.IsHexDigit(value[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    /// on the instance before it is injected into inline CSS. Shared guard in <see cref="Matmon.Core.Domain.BrandingSafety"/>.</summary>
+    public static bool IsHexColor(string? value) => Matmon.Core.Domain.BrandingSafety.SafeHexColor(value) is not null;
 
     /// <summary>The cloud-supplied contact URL only when it is a safe absolute http/https link, else null
     /// (defends against a javascript: scheme becoming a stored-XSS link).</summary>
-    public static string? SafeContactUrl(string? value) =>
-        !string.IsNullOrWhiteSpace(value)
-        && Uri.TryCreate(value, UriKind.Absolute, out var uri)
-        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-            ? value
-            : null;
+    public static string? SafeContactUrl(string? value) => Matmon.Core.Domain.BrandingSafety.SafeContactUrl(value);
 
     private (string? Url, string? InstanceId, string? Token) ResolveCloud()
     {

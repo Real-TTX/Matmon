@@ -1445,6 +1445,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             _document.CloudSettings.ProtectedToken = null;
             _document.CloudSettings.Configured = true;
             _document.Cloud = new CloudConnectionState { LastStatus = "disconnected" };
+            // Drop any cached managing-partner branding: once unlinked there is no cloud left to send
+            // HasPartner=false, so without this the stale logo/name/colour would render in the UI + reports forever.
+            _document.ServicePartner = null;
             QueueSave(SavePriority.Configuration);
         }
     }
@@ -1523,6 +1526,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         lock (_gate)
         {
             return _document.ServicePartner?.Clone();
+        }
+    }
+
+    /// <summary>Just the partner brand accent colour (no logo clone) - the per-page layout reads this on every
+    /// render to re-theme the app, so it must stay cheap (avoids cloning the potentially ~256KB logo bytes).</summary>
+    public string? GetServicePartnerBrandColor()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true } partner ? partner.BrandColor : null;
         }
     }
 

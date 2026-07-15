@@ -124,4 +124,41 @@ public class SummaryReportBuilderTests
         Assert.DoesNotContain("A<b>C", report.HtmlBody);
         Assert.Contains("A&lt;b&gt;C", report.HtmlBody);
     }
+
+    private static SummaryReportData Branded(SummaryReportBranding partner) => new(
+        "HQ", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 0, 0, 0, 0, 0, 0, 0, [], [], partner);
+
+    [Fact]
+    public void Build_stamps_partner_branding_into_html_and_text()
+    {
+        var data = Branded(new SummaryReportBranding(
+            "ACME MSP", [0x89, 0x50, 0x4E, 0x47], "image/png", "#AABBCC", "https://acme.example/support"));
+
+        var report = SummaryReportBuilder.Build(data);
+
+        // HTML: accent on the heading, "Managed by", the support link + the inline logo data URI.
+        Assert.Contains("#AABBCC", report.HtmlBody);
+        Assert.Contains("Managed by ACME MSP", report.HtmlBody);
+        Assert.Contains("https://acme.example/support", report.HtmlBody);
+        Assert.Contains("data:image/png;base64,", report.HtmlBody);
+
+        // Text body carries the attribution (logo cannot appear in plain text).
+        Assert.Contains("Managed by ACME MSP", report.TextBody);
+        Assert.Contains("Support: https://acme.example/support", report.TextBody);
+    }
+
+    [Fact]
+    public void Build_drops_unsafe_partner_colour_and_url()
+    {
+        var data = Branded(new SummaryReportBranding(
+            "Evil", null, null, "#zz00; background:url(x)", "javascript:alert(1)"));
+
+        var report = SummaryReportBuilder.Build(data);
+
+        Assert.DoesNotContain("javascript:", report.HtmlBody);
+        Assert.DoesNotContain("background:url", report.HtmlBody);
+        Assert.DoesNotContain("#zz00", report.HtmlBody);
+        Assert.DoesNotContain("Support:", report.TextBody);   // unsafe url is not surfaced
+        Assert.Contains("Managed by Evil", report.TextBody);   // the (encoded) name still shows
+    }
 }

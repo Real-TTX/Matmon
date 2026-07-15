@@ -283,6 +283,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The managing service partner (name/contact + consent) cached from the cloud; null if none fetched.</summary>
     ServicePartnerInfo? GetServicePartnerInfo();
 
+    /// <summary>Just the partner brand accent colour (no logo clone), for the per-render layout accent override.</summary>
+    string? GetServicePartnerBrandColor();
+
     /// <summary>Caches the cloud-reported service partner + consent.</summary>
     void SetServicePartnerInfo(ServicePartnerInfo? info);
 

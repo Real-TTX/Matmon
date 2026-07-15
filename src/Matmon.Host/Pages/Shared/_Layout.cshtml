@@ -2,6 +2,7 @@
 @inject Matmon.Host.Services.MatmonRuntimeOptions RuntimeOptions
 @inject Matmon.Host.Services.IDashboardSnapshotProvider DashboardSnapshotProvider
 @inject Matmon.Host.Services.CloudUpdateState CloudUpdate
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     // Embedded mode: when reached through the Matmon.Cloud "embed" tunnel, render the page chromeless
     // (no own sidebar / mobile nav) so the cloud console can show a single menu around the iframe.
@@ -36,6 +37,21 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/Matmon.Host.styles.css" asp-append-version="true" />
+    @{
+        // Reseller co-branding: re-theme the whole app to the managing partner's accent colour. Cheap accessor
+        // (no logo clone) + render-time re-validation to #RRGGBB, so a garbage/malicious cached value can never
+        // reach inline CSS. Overrides both themes with !important so it wins over the site.css :root/light rules.
+        // (--matmon-accent-2 is defined but never read via var() anywhere, so only --matmon-accent is overridden.)
+        var partnerAccent = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerBrandColor());
+    }
+    @if (partnerAccent is not null)
+    {
+        <style>
+            :root, html[data-theme="light"], html[data-theme="dark"] {
+                --matmon-accent: @partnerAccent !important;
+            }
+        </style>
+    }
     @if (embedded)
     {
         <style>

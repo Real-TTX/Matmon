@@ -30,17 +30,26 @@ public sealed class AuditReportPdfBuilder
 
     private static void ComposeHeader(IContainer container, SummaryReportData data)
     {
+        // Reseller co-branding: accent the title in the partner's colour (re-validated to #RRGGBB, so a garbage
+        // cached value can't reach QuestPDF's colour parser) and surface the partner support link under the name.
+        var accent = BrandingSafety.SafeHexColor(data.Partner?.BrandColor) ?? Colors.Blue.Darken2;
+        var contactUrl = BrandingSafety.SafeContactUrl(data.Partner?.ContactUrl);
+
         container.Column(outer =>
         {
             outer.Item().Row(row =>
             {
                 row.RelativeItem().Column(column =>
                 {
-                    column.Item().Text("Monitoring Audit Report").FontSize(20).Bold().FontColor(Colors.Blue.Darken2);
+                    column.Item().Text("Monitoring Audit Report").FontSize(20).Bold().FontColor(accent);
                     column.Item().Text(data.WorkspaceName).FontSize(13).SemiBold();
                     if (data.Partner?.PartnerName is { Length: > 0 } partnerName)
                     {
                         column.Item().Text($"Managed by {partnerName}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    }
+                    if (contactUrl is not null)
+                    {
+                        column.Item().Text(text => text.Hyperlink(contactUrl, contactUrl).FontSize(9).FontColor(accent));
                     }
                     column.Item().PaddingTop(2).Text(text =>
                     {

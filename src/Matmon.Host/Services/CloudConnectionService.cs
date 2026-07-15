@@ -66,6 +66,12 @@ public sealed class CloudConnectionService : BackgroundService
 
                 if (!link.Enabled)
                 {
+                    // Keep cached partner branding cleared while the link is down. DisconnectCloud() nulls it, but a
+                    // heartbeat + FetchServicePartnerAsync already in flight when the operator disconnects can re-cache
+                    // it a moment later; this idempotent re-clear runs on the next (now-disabled) cycle, after that
+                    // late write, and closes the window (also purges any pre-fix stale cache on a disconnected start).
+                    _workspaceStore.SetServicePartnerInfo(null);
+
                     if (client is not null)
                     {
                         client.Dispose();
