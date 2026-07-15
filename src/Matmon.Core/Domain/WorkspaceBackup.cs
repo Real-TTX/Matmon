@@ -18,6 +18,24 @@ public enum WorkspaceBackupSection
     All = Topology | Templates | SensorDefinitions | Notifications | Maps | Users | Alerts | SensorHistory | Events | Statistics | BackupJobs
 }
 
+/// <summary>Where a scheduled backup job writes its snapshot: a local disk file (default) or a push to the
+/// linked Matmon.Cloud (off-site config backup - config sections only, cloud enforces its own retention).</summary>
+public enum BackupDestination
+{
+    Local = 0,
+    Cloud = 1
+}
+
+/// <summary>Well-known section masks shared across the cloud-backup paths (Config tab, scheduler, wizard restore).</summary>
+public static class WorkspaceBackupSections
+{
+    /// <summary>The section set pushed to / restored from the cloud: everything EXCEPT the bulky telemetry
+    /// sections AND local Users. Users are excluded so a cross-instance / DR restore can never overwrite the
+    /// local accounts and lock out the admin doing the restore.</summary>
+    public const WorkspaceBackupSection CloudConfig =
+        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users);
+}
+
 public sealed class WorkspaceBackupJob
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -31,6 +49,11 @@ public sealed class WorkspaceBackupJob
     public MonitoringSchedule Schedule { get; set; } = new();
 
     public WorkspaceBackupSection Sections { get; set; } = WorkspaceBackupSection.All;
+
+    /// <summary>Local disk (default) or a push to the linked Matmon.Cloud. A cloud job always sends the
+    /// config-only section set (no telemetry, no local users) regardless of <see cref="Sections"/>, and the
+    /// cloud keeps its own newest-N retention.</summary>
+    public BackupDestination Destination { get; set; } = BackupDestination.Local;
 
     public int RetentionCount { get; set; } = 10;
 
@@ -56,6 +79,7 @@ public sealed class WorkspaceBackupJob
             Enabled = Enabled,
             Schedule = Schedule.Clone(),
             Sections = Sections,
+            Destination = Destination,
             RetentionCount = RetentionCount,
             LastRunUtc = LastRunUtc,
             NextRunUtc = NextRunUtc,

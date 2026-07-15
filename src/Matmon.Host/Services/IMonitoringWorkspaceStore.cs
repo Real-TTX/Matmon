@@ -208,6 +208,10 @@ public interface IMonitoringWorkspaceStore
 
     WorkspaceBackupSnapshotInfo RunBackupJob(Guid jobId, string? reason = null);
 
+    /// <summary>Record the outcome of a Cloud-destination backup job run (the push is done by the scheduler; the
+    /// store just advances the schedule + stamps status). No local snapshot is written.</summary>
+    void RecordCloudBackupJobRun(Guid jobId, bool success, string message, long? bytes);
+
     WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections);
 
     /// <summary>Serialize a backup package to bytes in memory (for uploading to the cloud), no disk artifact.

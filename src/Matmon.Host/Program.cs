@@ -201,6 +201,10 @@ builder.Services.AddSingleton<LoginCodeStore>();
 // layout reads it) even though only the Primary's CloudConnectionService writes it.
 builder.Services.AddSingleton<CloudUpdateState>();
 
+// Talks to Matmon.Cloud's backup endpoints (push/list/download/delete + account-scoped restore). Shared by the
+// Config Backup tab, the backup scheduler and the setup wizard, so registered globally.
+builder.Services.AddSingleton<CloudBackupClient>();
+
 if (runtimeOptions.Mode == AppMode.Primary)
 {
     builder.Services.AddHostedService<SensorPollingService>();

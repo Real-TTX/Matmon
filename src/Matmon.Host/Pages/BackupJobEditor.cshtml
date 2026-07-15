@@ -42,6 +42,13 @@
                         <textarea asp-for="Input.Description" class="form-control workspace-textarea" rows="3"></textarea>
                     </label>
                     <label class="workspace-field">
+                        <span>Destination</span>
+                        <select asp-for="Input.Destination" class="form-select workspace-select" data-backup-destination>
+                            <option value="Local">Local disk</option>
+                            <option value="Cloud" disabled="@(!Model.CloudConnected)">Matmon.Cloud (off-site)@(Model.CloudConnected ? "" : " – connect first")</option>
+                        </select>
+                    </label>
+                    <label class="workspace-field" data-local-only>
                         <span>Retention count</span>
                         <input asp-for="Input.RetentionCount" type="number" min="1" max="100" class="form-control workspace-input" />
                     </label>
@@ -83,7 +90,11 @@
             </section>
         </div>
 
-        <section class="panel config-block">
+        <p class="panel-hint" data-cloud-note hidden style="margin:4px 2px 0;">
+            Cloud backups store <strong>configuration only</strong> (no telemetry, no local user accounts) and Matmon.Cloud keeps the newest 10 automatically - so the sections and retention above don't apply. Restore one on any of your instances during setup.
+        </p>
+
+        <section class="panel config-block" data-local-only>
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("folder")<span>Sections</span></h2>
                 <span class="panel-hint">what gets stored in the backup</span>
@@ -159,6 +170,21 @@
 
             modeSelect.addEventListener('change', updateVisibility);
             updateVisibility();
+
+            // Destination toggle: a Cloud job stores config only (no section picker / retention) - hide the
+            // local-only controls and show the cloud note.
+            const destSelect = document.querySelector('[data-backup-destination]');
+            if (destSelect) {
+                const localOnly = document.querySelectorAll('[data-local-only]');
+                const cloudNote = document.querySelector('[data-cloud-note]');
+                const syncDest = () => {
+                    const isCloud = destSelect.value === 'Cloud';
+                    localOnly.forEach(el => { el.hidden = isCloud; });
+                    if (cloudNote) { cloudNote.hidden = !isCloud; }
+                };
+                destSelect.addEventListener('change', syncDest);
+                syncDest();
+            }
         })();
     </script>
 }

@@ -9,15 +9,18 @@ public sealed class BackupSchedulerService : BackgroundService
 
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly CloudBackupClient _cloudBackups;
     private readonly ILogger<BackupSchedulerService> _logger;
 
     public BackupSchedulerService(
         IMonitoringWorkspaceStore workspaceStore,
         MatmonRuntimeOptions runtimeOptions,
+        CloudBackupClient cloudBackups,
         ILogger<BackupSchedulerService> logger)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
+        _cloudBackups = cloudBackups;
         _logger = logger;
     }
 
@@ -37,7 +40,7 @@ public sealed class BackupSchedulerService : BackgroundService
         }
     }
 
-    private Task RunOnceAsync(CancellationToken stoppingToken)
+    private async Task RunOnceAsync(CancellationToken stoppingToken)
     {
         var now = DateTimeOffset.UtcNow;
         var jobs = _workspaceStore.GetBackupJobs()
@@ -50,6 +53,12 @@ public sealed class BackupSchedulerService : BackgroundService
             if (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+
+            if (job.Destination == BackupDestination.Cloud)
+            {
+                await RunCloudJobAsync(job, stoppingToken);
+                continue;
             }
 
             try
@@ -65,7 +74,32 @@ public sealed class BackupSchedulerService : BackgroundService
                 _logger.LogWarning(ex, "Scheduled backup job {BackupJobName} failed", job.Name);
             }
         }
+    }
 
-        return Task.CompletedTask;
+    // A Cloud-destination job pushes the config-only snapshot to Matmon.Cloud (the store does no networking, so
+    // the HTTP lives here) and records the run + advances the schedule via the store. Cloud enforces its own
+    // newest-N retention, so RetentionCount is not applied here.
+    private async Task RunCloudJobAsync(WorkspaceBackupJob job, CancellationToken stoppingToken)
+    {
+        if (!_cloudBackups.IsConnected)
+        {
+            _workspaceStore.RecordCloudBackupJobRun(job.Id, success: false, "Not connected to Matmon.Cloud.", null);
+            _logger.LogWarning("Cloud backup job {BackupJobName} skipped: not connected to Matmon.Cloud", job.Name);
+            return;
+        }
+
+        try
+        {
+            var bytes = _workspaceStore.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "Scheduled cloud backup.");
+            var label = $"{job.Name} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}";
+            await _cloudBackups.PushAsync(bytes, label, stoppingToken);
+            _workspaceStore.RecordCloudBackupJobRun(job.Id, success: true, "Backed up to Matmon.Cloud.", bytes.LongLength);
+            _logger.LogInformation("Cloud backup job {BackupJobName} pushed {Bytes} bytes to Matmon.Cloud", job.Name, bytes.LongLength);
+        }
+        catch (Exception ex)
+        {
+            _workspaceStore.RecordCloudBackupJobRun(job.Id, success: false, ex.Message, null);
+            _logger.LogWarning(ex, "Cloud backup job {BackupJobName} failed", job.Name);
+        }
     }
 }

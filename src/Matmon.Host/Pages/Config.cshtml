@@ -455,8 +455,12 @@
 
                                 <div class="backup-job-card-meta">
                                     <div class="backup-job-card-meta-item">
+                                        <span>Destination</span>
+                                        <strong>@(job.Destination == BackupDestination.Cloud ? "Matmon.Cloud (off-site)" : "Local disk")</strong>
+                                    </div>
+                                    <div class="backup-job-card-meta-item">
                                         <span>Sections</span>
-                                        <strong>@ConfigModel.FormatBackupSections(job.Sections)</strong>
+                                        <strong>@(job.Destination == BackupDestination.Cloud ? "Config only (off-site)" : ConfigModel.FormatBackupSections(job.Sections))</strong>
                                     </div>
                                     <div class="backup-job-card-meta-item">
                                         <span>Next run</span>

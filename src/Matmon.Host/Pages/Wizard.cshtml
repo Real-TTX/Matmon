@@ -9,6 +9,7 @@
     {
         ("welcome", "spark", "Welcome"),
         ("cloud", "cloud", "Cloud & license"),
+        ("restore", "download", "Restore"),
         ("notifications", "bell", "Notifications"),
         ("structure", "folder", "Structure & networks"),
         ("discovery", "search", "Devices & probes"),
@@ -91,6 +92,46 @@
                                 <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("check")<span>Apply license</span></button>
                             </form>
                         </details>
+                    }
+                    break;
+
+                case "restore":
+                    <h2 class="section-title">@MatmonIcons.Render("download")<span>Restore from a cloud backup</span></h2>
+                    @if (!Model.CloudConnected)
+                    {
+                        <p>Restoring a previous configuration needs the cloud link. <a href="@StepUrl("cloud")">Connect to Matmon.Cloud</a> first, or skip this step if you're setting up fresh.</p>
+                    }
+                    else if (!Model.AccountBackupsAvailable)
+                    {
+                        <p class="setup-wizard-muted">@MatmonIcons.Render("cloud") Couldn't reach Matmon.Cloud to list your backups right now. Skip this step - you can always restore later from <a href="/Config?tab=backup" target="_blank" rel="noopener">System → Cloud → Backup ↗</a>.</p>
+                    }
+                    else if (Model.AccountBackups.Count == 0)
+                    {
+                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") No backups on your cloud account yet. Nothing to restore - carry on setting up. (Once any of your instances stores a cloud backup, it'll appear here for disaster recovery.)</p>
+                    }
+                    else
+                    {
+                        <p>Bring this fresh instance back from a backup on your cloud account - handy when you're re-installing a dead instance. Only the <strong>configuration</strong> is restored (no telemetry, and your new admin account is kept).</p>
+                        <ul class="setup-wizard-tree">
+                            @foreach (var backup in Model.AccountBackups)
+                            {
+                                var encrypted = backup.Label.Contains("(encrypted)", StringComparison.OrdinalIgnoreCase);
+                                <li class="setup-wizard-restore-item">
+                                    <form method="post" asp-page-handler="RestoreFromCloud" class="setup-wizard-form" onsubmit="return confirm('Restore this backup? It overwrites the current configuration (your admin account is kept).');">
+                                        <input type="hidden" name="backupId" value="@backup.Id" />
+                                        <div class="setup-wizard-restore-head">
+                                            @MatmonIcons.Render("cloud")
+                                            <span><strong>@backup.InstanceName</strong> · @backup.CreatedUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC · @backup.Label</span>
+                                        </div>
+                                        @if (encrypted)
+                                        {
+                                            <label class="workspace-field"><span>Passphrase</span><input type="password" name="passphrase" class="workspace-input" placeholder="Required - this backup is encrypted" autocomplete="off" /></label>
+                                        }
+                                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("download")<span>Restore this backup</span></button>
+                                    </form>
+                                </li>
+                            }
+                        </ul>
                     }
                     break;
 

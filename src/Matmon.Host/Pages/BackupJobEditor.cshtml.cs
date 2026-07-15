@@ -11,11 +11,16 @@ namespace Matmon.Host.Pages;
 public class BackupJobEditorModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly CloudBackupClient _cloudBackups;
 
-    public BackupJobEditorModel(IMonitoringWorkspaceStore workspaceStore)
+    public BackupJobEditorModel(IMonitoringWorkspaceStore workspaceStore, CloudBackupClient cloudBackups)
     {
         _workspaceStore = workspaceStore;
+        _cloudBackups = cloudBackups;
     }
+
+    /// <summary>True when this instance is linked to Matmon.Cloud - only then is the Cloud destination usable.</summary>
+    public bool CloudConnected { get; private set; }
 
     [BindProperty(SupportsGet = true)]
     public Guid? JobId { get; set; }
@@ -62,6 +67,8 @@ public class BackupJobEditorModel : PageModel
             return Forbid();
         }
 
+        CloudConnected = _cloudBackups.IsConnected;
+
         if (JobId is Guid jobId)
         {
             var job = _workspaceStore.FindBackupJob(jobId);
@@ -88,6 +95,8 @@ public class BackupJobEditorModel : PageModel
             return Forbid();
         }
 
+        CloudConnected = _cloudBackups.IsConnected;
+
         if (!ModelState.IsValid)
         {
             return Page();
@@ -105,6 +114,7 @@ public class BackupJobEditorModel : PageModel
                 existing.Enabled = Input.Enabled;
                 existing.Schedule = schedule;
                 existing.Sections = sections;
+                existing.Destination = Input.Destination;
                 existing.RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100);
                 _workspaceStore.UpdateBackupJob(existing);
                 StatusMessage = $"Backup job '{existing.Name}' updated.";
@@ -118,6 +128,7 @@ public class BackupJobEditorModel : PageModel
                     Enabled = Input.Enabled,
                     Schedule = schedule,
                     Sections = sections,
+                    Destination = Input.Destination,
                     RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100)
                 });
                 StatusMessage = $"Backup job '{created.Name}' created.";
@@ -167,6 +178,7 @@ public class BackupJobEditorModel : PageModel
             Name = job.Name,
             Description = job.Description,
             Enabled = job.Enabled,
+            Destination = job.Destination,
             RetentionCount = job.RetentionCount,
             ScheduleMode = mode,
             EveryHours = Math.Max(1, (int)Math.Ceiling((job.Schedule.EverySeconds ?? 3600) / 3600.0)),
@@ -240,6 +252,8 @@ public sealed class BackupJobEditorInput
     public string? Description { get; set; }
 
     public bool Enabled { get; set; } = true;
+
+    public BackupDestination Destination { get; set; } = BackupDestination.Local;
 
     public int RetentionCount { get; set; } = 10;
 

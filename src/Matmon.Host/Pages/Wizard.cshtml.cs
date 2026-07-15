@@ -16,27 +16,31 @@ public class WizardModel : PageModel
     private readonly DiscoveryJobStore _discoveryJobs;
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly ILicenseService _licenseService;
+    private readonly CloudBackupClient _cloudBackups;
 
     public WizardModel(
         IMonitoringWorkspaceStore workspaceStore,
         DiscoveryJobStore discoveryJobs,
         NetworkDiscoveryService discoveryService,
-        ILicenseService licenseService)
+        ILicenseService licenseService,
+        CloudBackupClient cloudBackups)
     {
         _workspaceStore = workspaceStore;
         _discoveryJobs = discoveryJobs;
         _discoveryService = discoveryService;
         _licenseService = licenseService;
+        _cloudBackups = cloudBackups;
     }
 
     // Reworked flow: the cloud decision comes first (it determines whether SMTP + a manual license are even
     // needed), then the merged setup steps. "welcome"/"done" bookend the optional action steps.
     //   cloud          - connect to Matmon.Cloud (+ license note, offline-notify)
+    //   restore        - optional: restore this fresh instance from a backup on your cloud account (DR)
     //   notifications  - alert delivery: via the cloud relay when connected, else local SMTP
     //   structure      - folder tree + the networks to monitor (merged)
     //   discovery      - scan those networks + add remote probes (merged)
     //   twofactor      - secure the admin account (TOTP)
-    public static readonly string[] StepOrder = ["welcome", "cloud", "notifications", "structure", "discovery", "twofactor", "done"];
+    public static readonly string[] StepOrder = ["welcome", "cloud", "restore", "notifications", "structure", "discovery", "twofactor", "done"];
 
     /// <summary>Suggested starter folder tree (one level of children), created under the primary node.</summary>
     public static readonly (string Name, string[] Children)[] StarterTree =
@@ -82,6 +86,13 @@ public class WizardModel : PageModel
 
     /// <summary>Whether this instance is already linked to Matmon.Cloud.</summary>
     public bool CloudConnected { get; private set; }
+
+    /// <summary>Restore step: backups available on this instance's cloud account (its own + sibling instances),
+    /// the pool a fresh instance can restore from. Empty when the account has none.</summary>
+    public IReadOnlyList<CloudBackupClient.CloudAccountBackupItem> AccountBackups { get; private set; } = [];
+
+    /// <summary>True once the account-backup list was successfully fetched (distinguishes "none" from "offline").</summary>
+    public bool AccountBackupsAvailable { get; private set; }
 
     /// <summary>Whether alerts are being relayed through Matmon.Cloud (so local SMTP isn't needed).</summary>
     public bool CloudRelayEnabled { get; private set; }
@@ -130,10 +141,18 @@ public class WizardModel : PageModel
 
     public string? NextStep => StepIndex < StepOrder.Length - 1 ? StepOrder[StepIndex + 1] : null;
 
-    public void OnGet(string? step)
+    public async Task OnGetAsync(string? step, CancellationToken cancellationToken)
     {
         PrimaryUrl = $"{Request.Scheme}://{Request.Host}";
         Load(step);
+
+        // The restore step lists the account's cloud backups (async, so fetched here rather than in Load()).
+        if (Step == "restore" && CloudConnected)
+        {
+            var backups = await _cloudBackups.ListAccountAsync(cancellationToken);
+            AccountBackups = backups ?? [];
+            AccountBackupsAvailable = backups is not null;
+        }
     }
 
     public IActionResult OnPostCreateStructure()
@@ -318,6 +337,36 @@ public class WizardModel : PageModel
         return RedirectToPage(new { step = "cloud" });
     }
 
+    /// <summary>Restore step: pull a backup from this instance's cloud account (its own or a sibling instance's)
+    /// and apply the config sections. Users are excluded from the set, so the just-created admin survives.</summary>
+    public async Task<IActionResult> OnPostRestoreFromCloudAsync(Guid backupId, string? passphrase, CancellationToken cancellationToken)
+    {
+        if (!_cloudBackups.IsConnected)
+        {
+            StatusMessage = "Connect to Matmon.Cloud first (previous step) to restore a backup.";
+            return RedirectToPage(new { step = "restore" });
+        }
+
+        try
+        {
+            var blob = await _cloudBackups.DownloadAccountAsync(backupId, cancellationToken);
+            if (blob is null)
+            {
+                ErrorMessage = "Could not download that backup from Matmon.Cloud.";
+                return RedirectToPage(new { step = "restore" });
+            }
+
+            var result = _workspaceStore.RestoreBackupBytes(blob, WorkspaceBackupSections.CloudConfig, string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim());
+            StatusMessage = result.Message;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Restore failed: {ex.Message}";
+        }
+
+        return RedirectToPage(new { step = "restore" });
+    }
+
     /// <summary>2FA step: begin TOTP enrollment (generate + store a secret, show its QR). 2FA stays OFF until a
     /// code confirms it.</summary>
     public IActionResult OnPostStartTotp()
@@ -391,6 +440,13 @@ public class WizardModel : PageModel
             SuggestedInstanceName = PrimaryNode()?.Name ?? Environment.MachineName;
             License = _licenseService.Current;
             CloudManagesLicense = CloudConnected;
+        }
+
+        if (Step == "restore")
+        {
+            var cloud = _workspaceStore.GetCloudConnectionSettings();
+            CloudConnected = cloud.Enabled && cloud.HasToken;
+            // The backup list itself is fetched in OnGetAsync (async).
         }
 
         if (Step == "notifications")

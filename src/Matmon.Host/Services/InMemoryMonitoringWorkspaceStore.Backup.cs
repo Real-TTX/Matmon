@@ -83,6 +83,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             existing.Enabled = job.Enabled;
             existing.Schedule = job.Schedule?.Clone() ?? new MonitoringSchedule();
             existing.Sections = job.Sections == WorkspaceBackupSection.None ? WorkspaceBackupSection.All : job.Sections;
+            existing.Destination = job.Destination;
             existing.RetentionCount = Math.Clamp(job.RetentionCount, 1, 100);
             existing.LastRunUtc = job.LastRunUtc;
             existing.NextRunUtc = CalculateNextRunUtc(existing, DateTimeOffset.UtcNow);
@@ -254,6 +255,31 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 QueueSave(SavePriority.Configuration);
                 throw;
             }
+        }
+    }
+
+    /// <summary>Records the outcome of a Cloud-destination backup job run (the HTTP push itself is done by the
+    /// scheduler via <c>CloudBackupClient</c>, since the store does no networking). Advances the schedule the same
+    /// way <see cref="RunBackupJob"/> does and stamps Last* status - no disk snapshot is written for a cloud job.</summary>
+    public void RecordCloudBackupJobRun(Guid jobId, bool success, string message, long? bytes)
+    {
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var job = _document.BackupJobs.FirstOrDefault(candidate => candidate.Id == jobId);
+            if (job is null)
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            job.LastRunUtc = now;
+            job.NextRunUtc = CalculateNextRunUtc(job, now);
+            job.LastStatus = success ? "ok" : "error";
+            job.LastMessage = string.IsNullOrWhiteSpace(message) ? (success ? "Backed up to Matmon.Cloud." : "Cloud backup failed.") : message.Trim();
+            job.LastSnapshotFileName = null; // no local artifact for a cloud push
+            job.LastSnapshotBytes = success ? bytes : null;
+            QueueSave(SavePriority.Configuration);
         }
     }
 
