@@ -2359,8 +2359,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         sensor.Settings.Timeout ??= TimeSpan.FromSeconds(3);
     }
 
-    private void HydrateCredentialBundles(WorkspaceDocument document)
+    // The protector defaults to the instance-bound DataProtection key; a passphrase-derived protector is passed
+    // when (un)sealing a PORTABLE cloud backup so its secrets round-trip across instances (see CreateBackupBytes).
+    private void HydrateCredentialBundles(WorkspaceDocument document, IDataProtector? protector = null)
     {
+        var secretProtector = protector ?? _credentialProtector;
         foreach (var settings in EnumerateSettings(document))
         {
             foreach (var credential in settings.Credentials)
@@ -2372,7 +2375,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
                 try
                 {
-                    var payload = _credentialProtector.Unprotect(credential.ProtectedValues);
+                    var payload = secretProtector.Unprotect(credential.ProtectedValues);
                     var values = JsonSerializer.Deserialize<Dictionary<string, string>>(payload, FileSerializerOptions);
                     credential.Values = values is null
                         ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -2390,7 +2393,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             }
         }
 
-        HydrateNotificationSecrets(document);
+        HydrateNotificationSecrets(document, secretProtector);
     }
 
     // ---- Notification secrets (SMTP passwords, webhook secrets) are DataProtection-encrypted at rest ----
@@ -2422,8 +2425,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    private void HydrateNotificationSecrets(WorkspaceDocument document)
+    private void HydrateNotificationSecrets(WorkspaceDocument document, IDataProtector? protector = null)
     {
+        var secretProtector = protector ?? _credentialProtector;
         foreach (var slot in EnumerateNotificationSecrets(document))
         {
             var cipher = slot.GetCipher();
@@ -2437,7 +2441,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
             try
             {
-                slot.SetPlain(_credentialProtector.Unprotect(cipher));
+                slot.SetPlain(secretProtector.Unprotect(cipher));
                 slot.SetFailed(false);
             }
             catch (Exception ex)
@@ -2449,8 +2453,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    private void ProtectNotificationSecrets(WorkspaceDocument document)
+    private void ProtectNotificationSecrets(WorkspaceDocument document, IDataProtector? protector = null)
     {
+        var secretProtector = protector ?? _credentialProtector;
         foreach (var slot in EnumerateNotificationSecrets(document))
         {
             if (slot.GetFailed())
@@ -2467,7 +2472,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
             try
             {
-                slot.SetCipher(_credentialProtector.Protect(plain));
+                slot.SetCipher(secretProtector.Protect(plain));
                 slot.SetPlain(null); // never serialize the plaintext; hydrate restores it after the write
             }
             catch (Exception ex)
@@ -2477,8 +2482,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    private void ProtectCredentialBundles(WorkspaceDocument document)
+    private void ProtectCredentialBundles(WorkspaceDocument document, IDataProtector? protector = null)
     {
+        var secretProtector = protector ?? _credentialProtector;
         foreach (var settings in EnumerateSettings(document))
         {
             foreach (var credential in settings.Credentials)
@@ -2493,7 +2499,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 try
                 {
                     var payload = JsonSerializer.Serialize(credential.Values, FileSerializerOptions);
-                    credential.ProtectedValues = _credentialProtector.Protect(payload);
+                    credential.ProtectedValues = secretProtector.Protect(payload);
                 }
                 catch (Exception ex)
                 {
@@ -2502,7 +2508,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             }
         }
 
-        ProtectNotificationSecrets(document);
+        ProtectNotificationSecrets(document, secretProtector);
     }
 
     private static IEnumerable<MonitoringSettings> EnumerateSettings(WorkspaceDocument document)

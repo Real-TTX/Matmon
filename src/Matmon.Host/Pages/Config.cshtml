@@ -521,10 +521,12 @@
                 <div style="padding:14px 18px;">
                     @if (Model.CloudSettings?.Configured == true || Model.CloudBackupsAvailable)
                     {
-                        <p class="workspace-hint" style="margin:0 0 12px;max-width:640px;">Store this instance's configuration (topology, sensors, templates, notifications, maps, users) in Matmon.Cloud for disaster recovery or re-provisioning. Telemetry is excluded; the newest 10 are kept. Secrets restore only on the same instance.</p>
-                        <form method="post" asp-page-handler="CloudBackupNow" style="margin-bottom:14px;">
+                        <p class="workspace-hint" style="margin:0 0 12px;max-width:640px;">Store this instance's configuration (topology, sensors, templates, notifications, maps) in Matmon.Cloud for disaster recovery or re-provisioning. Telemetry and local users are excluded; the newest 10 are kept. <strong>Set a passphrase</strong> to make the backup <strong>portable</strong> - its credentials then restore onto <em>any</em> instance that has the passphrase; without one, secrets restore only on this same instance.</p>
+                        <form method="post" asp-page-handler="CloudBackupNow" style="margin-bottom:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <input type="password" name="passphrase" class="workspace-input" placeholder="Optional passphrase (portable secrets)" autocomplete="new-password" style="max-width:340px;" />
                             <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Back up to cloud now</span></button>
                         </form>
+                        <p class="workspace-hint" style="margin:0 0 14px;max-width:640px;font-size:.8rem;">Keep the passphrase safe - it cannot be recovered, and without it the credentials in a portable backup can't be restored.</p>
                         @if (Model.CloudBackups.Count == 0)
                         {
                             <div class="empty-state">@(Model.CloudBackupsAvailable ? "No cloud backups yet." : "Cloud backups are currently unavailable (cloud offline?).")</div>
@@ -545,7 +547,8 @@
                                         <span role="cell">@cloudBackup.CreatedUtc.ToLocalTime().ToString("g")</span>
                                         <span role="cell">@($"{cloudBackup.SizeBytes / 1024.0:0.#} KB")</span>
                                         <span role="cell" style="display:flex;gap:8px;flex-wrap:wrap;">
-                                            <form method="post" asp-page-handler="CloudRestoreBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Restore this cloud backup? It overwrites the current configuration.');">
+                                            <form method="post" asp-page-handler="CloudRestoreBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Restore this cloud backup? It overwrites the current configuration.');" style="display:flex;gap:6px;align-items:center;">
+                                                <input type="password" name="passphrase" class="workspace-input" placeholder="Passphrase (if encrypted)" autocomplete="off" style="max-width:180px;" />
                                                 <button type="submit" class="workspace-secondary-submit">Restore</button>
                                             </form>
                                             <form method="post" asp-page-handler="CloudDeleteBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Delete this cloud backup?');">

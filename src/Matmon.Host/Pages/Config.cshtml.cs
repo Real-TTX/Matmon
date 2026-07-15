@@ -443,7 +443,7 @@ public class ConfigModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostCloudBackupNowAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCloudBackupNowAsync(string? passphrase, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -459,8 +459,9 @@ public class ConfigModel : PageModel
 
         try
         {
-            var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup");
-            var label = Uri.EscapeDataString($"Config {DateTimeOffset.Now:yyyy-MM-dd HH:mm}");
+            var portable = !string.IsNullOrWhiteSpace(passphrase);
+            var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup", portable ? passphrase!.Trim() : null);
+            var label = Uri.EscapeDataString($"Config {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(portable ? " (encrypted)" : "")}");
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/instances/{instanceId}/backups?label={label}")
             {
                 Content = new ByteArrayContent(bytes)
@@ -484,7 +485,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "backup" });
     }
 
-    public async Task<IActionResult> OnPostCloudRestoreBackupAsync(Guid backupId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCloudRestoreBackupAsync(Guid backupId, string? passphrase, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -510,7 +511,7 @@ public class ConfigModel : PageModel
             }
 
             var blob = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-            var result = _workspaceStore.RestoreBackupBytes(blob, CloudConfigSections);
+            var result = _workspaceStore.RestoreBackupBytes(blob, CloudConfigSections, string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim());
             StatusMessage = result.Message;
         }
         catch (Exception ex)

@@ -210,11 +210,13 @@ public interface IMonitoringWorkspaceStore
 
     WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections);
 
-    /// <summary>Serialize a backup package to bytes in memory (for uploading to the cloud), no disk artifact.</summary>
-    byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null);
+    /// <summary>Serialize a backup package to bytes in memory (for uploading to the cloud), no disk artifact.
+    /// A non-empty <paramref name="passphrase"/> seals the secrets with a portable key so they restore on any instance.</summary>
+    byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null);
 
-    /// <summary>Restore from an in-memory backup blob (e.g. downloaded from the cloud).</summary>
-    WorkspaceBackupRestoreResult RestoreBackupBytes(byte[] blob, WorkspaceBackupSection sections);
+    /// <summary>Restore from an in-memory backup blob (e.g. downloaded from the cloud). A passphrase is required
+    /// when the backup was sealed portable; it recovers the credentials, which are then re-encrypted locally.</summary>
+    WorkspaceBackupRestoreResult RestoreBackupBytes(byte[] blob, WorkspaceBackupSection sections, string? passphrase = null);
 
     ProbeElement CreateProbe(Guid? parentId, string name, string? description);
 
