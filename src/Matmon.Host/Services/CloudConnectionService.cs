@@ -43,6 +43,15 @@ public sealed class CloudConnectionService : BackgroundService
             return;
         }
 
+        // Dev/preview: seed a dummy managing partner so co-branding is visible without a real cloud link, and
+        // skip the cloud loop entirely (so its disabled-branch clear can't wipe the seeded branding). Off in prod.
+        if (_runtimeOptions.DemoServicePartner)
+        {
+            _workspaceStore.SetServicePartnerInfo(DemoServicePartnerSeed.Build());
+            _logger.LogWarning("Matmon__DemoServicePartner is on: seeded a DUMMY service partner for co-branding preview (no real cloud link).");
+            return;
+        }
+
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);

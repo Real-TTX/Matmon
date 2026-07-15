@@ -66,6 +66,24 @@ public class AuditReportPdfBuilderTests
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
     }
 
+    // A wide (120x16, 7.5:1) PNG - a real partner logo is usually wide. At a fixed header height a wide logo
+    // scaled by height alone overflows the column width and threw a QuestPDF layout exception; this pins the fix.
+    private static readonly byte[] WidePng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAHgAAAAQCAYAAADdw7vlAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABESURBVFhH7dExEQAgEMCw14U2LKMBdiTkOmTp2tnr3LjmD7E0GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdg3AMZuMAeQjztiwAAAABJRU5ErkJggg==");
+
+    [Fact]
+    public void Build_with_a_wide_partner_logo_stays_a_valid_pdf()
+    {
+        var data = Sample(withRows: true) with
+        {
+            Partner = new SummaryReportBranding("Very Wide Partner Co", WidePng, "image/png", "#7C3AED", "https://partner.example/support")
+        };
+
+        var pdf = new AuditReportPdfBuilder().Build(data);
+
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
+    }
+
     [Fact]
     public void Build_skips_a_non_raster_logo_without_crashing()
     {

@@ -61,6 +61,11 @@ public sealed class MatmonRuntimeOptions
 
     public bool CreateStarterMap { get; set; }
 
+    /// <summary>Dev/preview only (<c>Matmon__DemoServicePartner</c>): seed a dummy managing service partner
+    /// (logo + accent + contact) so co-branding is visible on this instance - login/sidebar/app-accent/reports -
+    /// without a real Matmon.Cloud link. Mutually exclusive with a real cloud link (short-circuits the cloud loop).</summary>
+    public bool DemoServicePartner { get; set; }
+
     /// <summary>
     /// When set (e.g. via <c>Matmon__UnifiCloudApiKey</c>), the primary auto-provisions a
     /// "UniFi Cloud" health sensor on startup using this Site Manager API key. The key is

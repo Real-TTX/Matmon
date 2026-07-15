@@ -64,7 +64,9 @@ public sealed class AuditReportPdfBuilder
                 // the whole report. A non-raster logo simply degrades to no-logo.
                 if (data.Partner?.LogoPng is { Length: > 0 } logo && IsRasterImage(logo))
                 {
-                    row.ConstantItem(150).AlignTop().AlignRight().Height(44).Image(logo).FitHeight();
+                    // Fit inside a fixed box (both width + height) preserving aspect - FitHeight alone lets a
+                    // wide logo overflow the column width and throws a QuestPDF layout exception.
+                    row.ConstantItem(170).AlignTop().AlignRight().Height(46).Image(logo).FitArea();
                 }
             });
 
