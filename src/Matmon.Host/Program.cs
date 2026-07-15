@@ -346,6 +346,21 @@ app.MapGet("/api/branding/logo", (IMonitoringWorkspaceStore store) =>
     return Results.File(logo.Value.Bytes, logo.Value.ContentType, entityTag: etag);
 }).AllowAnonymous();
 
+// The partner small logo, served as the instance favicon + mobile-header mark (white-label). Same anonymous,
+// ETag-cached pattern as the main logo; 404 when there's no small logo / branding is suppressed.
+app.MapGet("/api/branding/favicon", (IMonitoringWorkspaceStore store) =>
+{
+    var icon = store.GetServicePartnerSmallLogo();
+    if (icon is null)
+    {
+        return Results.NotFound();
+    }
+
+    var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
+        "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(icon.Value.Bytes))[..16] + "\"");
+    return Results.File(icon.Value.Bytes, icon.Value.ContentType, entityTag: etag);
+}).AllowAnonymous();
+
 // Public, anonymous catalog of the built-in sensor TYPES (metadata only - no secrets, no workspace data):
 // key, name, description, category + whether/what credentials it needs. Lets the marketing site (and anyone)
 // show "what Matmon can monitor" without logging in. Same shipped list on every instance.

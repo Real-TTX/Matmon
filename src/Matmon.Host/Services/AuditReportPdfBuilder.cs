@@ -47,6 +47,10 @@ public sealed class AuditReportPdfBuilder
                     {
                         column.Item().Text($"Managed by {partnerName}").FontSize(9).FontColor(Colors.Grey.Darken1);
                     }
+                    if (data.Partner?.Slogan is { Length: > 0 } slogan)
+                    {
+                        column.Item().Text(slogan).FontSize(9).Italic().FontColor(Colors.Grey.Darken1);
+                    }
                     if (contactUrl is not null)
                     {
                         column.Item().Text(text => text.Hyperlink(contactUrl, contactUrl).FontSize(9).FontColor(accent));

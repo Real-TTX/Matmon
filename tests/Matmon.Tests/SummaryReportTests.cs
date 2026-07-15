@@ -132,13 +132,15 @@ public class SummaryReportBuilderTests
     public void Build_stamps_partner_branding_into_html_and_text()
     {
         var data = Branded(new SummaryReportBranding(
-            "ACME MSP", [0x89, 0x50, 0x4E, 0x47], "image/png", "#AABBCC", "https://acme.example/support"));
+            "ACME MSP", [0x89, 0x50, 0x4E, 0x47], "image/png", "#AABBCC", "https://acme.example/support",
+            ProductName: "ACME Monitor", Slogan: "Watch everything."));
 
         var report = SummaryReportBuilder.Build(data);
 
-        // HTML: accent on the heading, "Managed by", the support link + the inline logo data URI.
+        // HTML: accent on the heading, "Managed by", slogan, the support link + the inline logo data URI.
         Assert.Contains("#AABBCC", report.HtmlBody);
         Assert.Contains("Managed by ACME MSP", report.HtmlBody);
+        Assert.Contains("Watch everything.", report.HtmlBody);
         Assert.Contains("https://acme.example/support", report.HtmlBody);
         Assert.Contains("data:image/png;base64,", report.HtmlBody);
 

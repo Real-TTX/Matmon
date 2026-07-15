@@ -110,6 +110,47 @@ public sealed class CloudBrandingStoreTests : IDisposable
         Assert.Null(store.GetServicePartnerProductName());
     }
 
+    [Fact]
+    public void White_label_v2_accessors_reflect_the_partner_and_are_hidden_when_suppressed()
+    {
+        using var telemetry = new SqliteTelemetryRepository(_dbPath);
+        using var store = NewStore(telemetry);
+
+        var partner = Partner();
+        partner.Slogan = "Secure IT.";
+        partner.BrandColorSecondary = "#5476FF";
+        partner.SidebarStyle = 1;
+        partner.SmallLogoPng = [9, 8, 7];
+        partner.SmallLogoContentType = "image/png";
+        store.SetServicePartnerInfo(partner);
+
+        Assert.Equal("Secure IT.", store.GetServicePartnerSlogan());
+        Assert.Equal("#5476FF", store.GetServicePartnerSecondaryColor());
+        Assert.Equal(1, store.GetServicePartnerSidebarStyle());
+        Assert.True(store.GetServicePartnerHasSmallLogo());
+        var small = store.GetServicePartnerSmallLogo();
+        Assert.NotNull(small);
+        Assert.Equal(new byte[] { 9, 8, 7 }, small!.Value.Bytes);
+        Assert.Equal("image/png", small.Value.ContentType);
+
+        // Customer opt-out hides every white-label visual (slogan/secondary accent/small logo), and the
+        // sidebar style falls back to the default (0 = logo top).
+        var suppressed = Partner();
+        suppressed.Slogan = "Secure IT.";
+        suppressed.BrandColorSecondary = "#5476FF";
+        suppressed.SidebarStyle = 1;
+        suppressed.SmallLogoPng = [9, 8, 7];
+        suppressed.SmallLogoContentType = "image/png";
+        suppressed.BrandingSuppressed = true;
+        store.SetServicePartnerInfo(suppressed);
+
+        Assert.Null(store.GetServicePartnerSlogan());
+        Assert.Null(store.GetServicePartnerSecondaryColor());
+        Assert.Equal(0, store.GetServicePartnerSidebarStyle());
+        Assert.False(store.GetServicePartnerHasSmallLogo());
+        Assert.Null(store.GetServicePartnerSmallLogo());
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }

@@ -16,6 +16,7 @@ internal static class DemoServicePartnerSeed
         var color = Trim(options.DemoServicePartnerColor) ?? "#7C3AED";
         var contactUrl = Trim(options.DemoServicePartnerContactUrl) ?? "https://acme-msp.example/support";
         var (logo, logoType) = ResolveLogo(options.DemoServicePartnerLogoPath);
+        var (smallLogo, smallLogoType) = ResolveOptionalLogo(options.DemoServicePartnerSmallLogoPath);
 
         return new ServicePartnerInfo
         {
@@ -27,11 +28,29 @@ internal static class DemoServicePartnerSeed
             BrandingSuppressed = false,
             ProductName = productName,
             LogoIsOem = options.DemoServicePartnerOemLogo,
+            Slogan = Trim(options.DemoServicePartnerSlogan),
+            SidebarStyle = options.DemoServicePartnerSidebarStyle is 1 ? 1 : 0,
             ContactUrl = contactUrl,
             BrandColor = color,
+            BrandColorSecondary = Trim(options.DemoServicePartnerSecondaryColor),
             LogoContentType = logoType,
             LogoPng = logo,
+            SmallLogoPng = smallLogo,
+            SmallLogoContentType = smallLogoType,
         };
+    }
+
+    // Optional small logo (favicon): null when no path/file configured (no baked fallback, unlike the main logo).
+    private static (byte[]? Bytes, string? ContentType) ResolveOptionalLogo(string? path)
+    {
+        var trimmed = Trim(path);
+        if (trimmed is null || !File.Exists(trimmed))
+        {
+            return (null, null);
+        }
+        var bytes = File.ReadAllBytes(trimmed);
+        var isJpeg = trimmed.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase);
+        return (bytes, isJpeg ? "image/jpeg" : "image/png");
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

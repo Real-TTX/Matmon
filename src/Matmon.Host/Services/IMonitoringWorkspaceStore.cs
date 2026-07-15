@@ -300,6 +300,21 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Whether the partner logo is an OEM lockup (show alone; don't stack the product name beneath it).</summary>
     bool GetServicePartnerLogoIsOem();
 
+    /// <summary>White-label slogan (no logo clone), or null.</summary>
+    string? GetServicePartnerSlogan();
+
+    /// <summary>Partner secondary accent colour (no logo clone), or null.</summary>
+    string? GetServicePartnerSecondaryColor();
+
+    /// <summary>Partner sidebar layout (0 = logo top/name below, 1 = logo left/name right); 0 when none.</summary>
+    int GetServicePartnerSidebarStyle();
+
+    /// <summary>Whether a partner small logo (favicon) is available (no clone).</summary>
+    bool GetServicePartnerHasSmallLogo();
+
+    /// <summary>The partner small-logo bytes + MIME for the favicon endpoint, or null when suppressed / none.</summary>
+    (byte[] Bytes, string ContentType)? GetServicePartnerSmallLogo();
+
     /// <summary>The partner logo bytes + MIME for the branding-logo endpoint, or null when suppressed / none.</summary>
     (byte[] Bytes, string ContentType)? GetServicePartnerLogo();
 

@@ -35,7 +35,7 @@ public sealed record SummaryReportData(
 
 /// <summary>Optional reseller co-branding stamped onto the report (logo + "Managed by" line). <see cref="ProductName"/>
 /// is the white-label product name that replaces "Matmon" in the report footer (a "powered by Matmon" note stays).</summary>
-public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl, string? ProductName = null);
+public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl, string? ProductName = null, string? Slogan = null);
 
 public sealed record SummaryReport(string Subject, string TextBody, string HtmlBody);
 
@@ -132,6 +132,11 @@ public static class SummaryReportBuilder
             if (!string.IsNullOrWhiteSpace(brand.PartnerName))
             {
                 sb.Append($"<div style=\"color:#6b7280;font-size:13px;margin-top:6px;\">Managed by {Enc(brand.PartnerName)}</div>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(brand.Slogan))
+            {
+                sb.Append($"<div style=\"color:#6b7280;font-size:12px;font-style:italic;margin-top:2px;\">{Enc(brand.Slogan)}</div>");
             }
 
             if (contactUrl is not null)

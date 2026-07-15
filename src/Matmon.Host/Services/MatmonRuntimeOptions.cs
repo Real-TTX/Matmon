@@ -76,6 +76,12 @@ public sealed class MatmonRuntimeOptions
     public string? DemoServicePartnerLogoPath { get; set; }
     /// <summary>Demo: treat the logo as a complete OEM lockup (show it alone, no product-name text beneath).</summary>
     public bool DemoServicePartnerOemLogo { get; set; }
+    public string? DemoServicePartnerSlogan { get; set; }
+    public string? DemoServicePartnerSecondaryColor { get; set; }
+    /// <summary>Path to a small square PNG/JPEG for the demo favicon + mobile header.</summary>
+    public string? DemoServicePartnerSmallLogoPath { get; set; }
+    /// <summary>Demo sidebar style: 0 = logo top / name below, 1 = logo left / name right.</summary>
+    public int DemoServicePartnerSidebarStyle { get; set; }
 
     /// <summary>
     /// When set (e.g. via <c>Matmon__UnifiCloudApiKey</c>), the primary auto-provisions a

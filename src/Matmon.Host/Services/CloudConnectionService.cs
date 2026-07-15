@@ -307,19 +307,6 @@ public sealed class CloudConnectionService : BackgroundService
                 return;
             }
 
-            byte[]? logo = null;
-            if (!string.IsNullOrWhiteSpace(payload.LogoBase64))
-            {
-                try
-                {
-                    logo = Convert.FromBase64String(payload.LogoBase64);
-                }
-                catch (FormatException)
-                {
-                    logo = null;
-                }
-            }
-
             _workspaceStore.SetServicePartnerInfo(payload.HasPartner
                 ? new ServicePartnerInfo
                 {
@@ -331,10 +318,15 @@ public sealed class CloudConnectionService : BackgroundService
                     BrandingSuppressed = payload.BrandingSuppressed,
                     ProductName = payload.ProductName,
                     LogoIsOem = payload.LogoIsOem,
+                    Slogan = payload.Slogan,
+                    SidebarStyle = payload.SidebarStyle,
                     ContactUrl = payload.ContactUrl,
                     BrandColor = payload.BrandColorHex,
-                    LogoPng = logo,
+                    BrandColorSecondary = payload.BrandColorSecondaryHex,
+                    LogoPng = DecodeBase64(payload.LogoBase64),
                     LogoContentType = string.IsNullOrWhiteSpace(payload.LogoContentType) ? "image/png" : payload.LogoContentType,
+                    SmallLogoPng = DecodeBase64(payload.SmallLogoBase64),
+                    SmallLogoContentType = string.IsNullOrWhiteSpace(payload.SmallLogoContentType) ? "image/png" : payload.SmallLogoContentType,
                 }
                 : null);
 
@@ -351,6 +343,16 @@ public sealed class CloudConnectionService : BackgroundService
         }
     }
 
+    private static byte[]? DecodeBase64(string? base64)
+    {
+        if (string.IsNullOrWhiteSpace(base64))
+        {
+            return null;
+        }
+        try { return Convert.FromBase64String(base64); }
+        catch (FormatException) { return null; }
+    }
+
     private sealed record ServicePartnerResponse(
         bool HasPartner,
         string? Name,
@@ -363,7 +365,12 @@ public sealed class CloudConnectionService : BackgroundService
         string? LogoBase64 = null,
         bool BrandingSuppressed = false,
         string? ProductName = null,
-        bool LogoIsOem = false);
+        bool LogoIsOem = false,
+        string? BrandColorSecondaryHex = null,
+        string? Slogan = null,
+        int SidebarStyle = 0,
+        string? SmallLogoContentType = null,
+        string? SmallLogoBase64 = null);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

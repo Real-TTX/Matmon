@@ -15,6 +15,13 @@ public class ServicePartnerInfoTests
         BrandColor = "#AABBCC",
         LogoPng = [1, 2, 3, 4],
         LogoContentType = "image/png",
+        ProductName = "ACME Monitor",
+        LogoIsOem = false,
+        Slogan = "Secure IT.",
+        BrandColorSecondary = "#5476FF",
+        SidebarStyle = 1,
+        SmallLogoPng = [9, 8, 7],
+        SmallLogoContentType = "image/png",
     };
 
     [Fact]
@@ -54,12 +61,28 @@ public class ServicePartnerInfoTests
         Assert.False(a.ValueEquals(b));
     }
 
+    [Fact]
+    public void Clone_deep_copies_the_small_logo_bytes()
+    {
+        var original = Sample();
+        var clone = original.Clone();
+
+        clone.SmallLogoPng![0] = 42;
+
+        Assert.Equal(9, original.SmallLogoPng![0]);
+        Assert.NotSame(original.SmallLogoPng, clone.SmallLogoPng);
+    }
+
     [Theory]
     [InlineData("brand")]
     [InlineData("url")]
     [InlineData("name")]
     [InlineData("consent")]
     [InlineData("suppressed")]
+    [InlineData("slogan")]
+    [InlineData("secondary")]
+    [InlineData("sidebarStyle")]
+    [InlineData("smallLogo")]
     public void ValueEquals_detects_scalar_field_changes(string field)
     {
         var a = Sample();
@@ -71,6 +94,10 @@ public class ServicePartnerInfoTests
             case "name": b.Name = "Other"; break;
             case "consent": b.CanManage = false; break;
             case "suppressed": b.BrandingSuppressed = true; break;
+            case "slogan": b.Slogan = "Other tagline"; break;
+            case "secondary": b.BrandColorSecondary = "#000000"; break;
+            case "sidebarStyle": b.SidebarStyle = 0; break;
+            case "smallLogo": b.SmallLogoPng = [9, 8, 6]; break;
         }
 
         Assert.False(a.ValueEquals(b));

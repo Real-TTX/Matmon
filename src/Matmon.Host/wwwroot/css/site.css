@@ -496,6 +496,7 @@ body.is-sidebar-open {
   border: 1px solid var(--matmon-border);
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--matmon-accent) 18%, transparent), transparent 22rem),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--matmon-accent-2, var(--matmon-accent)) 14%, transparent), transparent 20rem),
     var(--matmon-surface);
 }
 

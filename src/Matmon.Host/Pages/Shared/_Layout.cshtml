@@ -13,13 +13,23 @@
     var partnerName = WorkspaceStore.GetServicePartnerName();
     var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
     var partnerIsOem = WorkspaceStore.GetServicePartnerLogoIsOem();
+    var partnerSlogan = WorkspaceStore.GetServicePartnerSlogan();
+    var partnerSidebarStyle = WorkspaceStore.GetServicePartnerSidebarStyle();
+    var partnerHasSmallLogo = WorkspaceStore.GetServicePartnerHasSmallLogo();
 }
 <html lang="de" data-embedded="@(embedded ? "1" : "0")">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - @brandName</title>
-    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    @if (partnerHasSmallLogo)
+    {
+        <link rel="icon" href="/api/branding/favicon" />
+    }
+    else
+    {
+        <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    }
     <script>
         (() => {
             const storageKey = "matmon-theme";
@@ -47,14 +57,15 @@
         // Reseller co-branding: re-theme the whole app to the managing partner's accent colour. Cheap accessor
         // (no logo clone) + render-time re-validation to #RRGGBB, so a garbage/malicious cached value can never
         // reach inline CSS. Overrides both themes with !important so it wins over the site.css :root/light rules.
-        // (--matmon-accent-2 is defined but never read via var() anywhere, so only --matmon-accent is overridden.)
         var partnerAccent = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerBrandColor());
+        var partnerAccent2 = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerSecondaryColor());
     }
     @if (partnerAccent is not null)
     {
         <style>
             :root, html[data-theme="light"], html[data-theme="dark"] {
                 --matmon-accent: @partnerAccent !important;
+                --matmon-accent-2: @(partnerAccent2 ?? $"color-mix(in srgb, {partnerAccent} 58%, #ffffff)") !important;
             }
         </style>
     }
@@ -166,10 +177,13 @@
                     aria-label="Open navigation menu">
                 @MatmonIcons.Render("menu")
             </button>
-            <img class="mobile-nav-logo" src="/favicon.svg" alt="" aria-hidden="true" />
+            @* The mobile slot is a fixed 1.35rem square: only ever put a square asset in it (the partner favicon
+               or the Matmon glyph) - the wide main logo would be stretched/distorted, and an OEM wide-lockup here
+               would also duplicate the product name printed below. So the name text stays with a square icon. *@
+            <img class="mobile-nav-logo" src="@(partnerHasSmallLogo ? "/api/branding/favicon" : "/favicon.svg")" alt="" aria-hidden="true" />
             <div class="mobile-nav-copy">
-                <span class="mobile-nav-brand">MATMON</span>
-                <strong>@(ViewData["Title"]?.ToString() ?? "Matmon")</strong>
+                <span class="mobile-nav-brand">@(partnerProductName ?? "MATMON")</span>
+                <strong>@(ViewData["Title"]?.ToString() ?? brandName)</strong>
             </div>
         </div>
 
@@ -178,14 +192,21 @@
                 <div class="sidebar-brand-block">
                     @if (partnerProductName is not null)
                     {
-                        <a class="brand" asp-area="" asp-page="/Index" style="flex-direction:column;align-items:flex-start;gap:6px;text-transform:none;letter-spacing:normal;font-size:1rem;">
+                        var isRow = partnerSidebarStyle == 1;
+                        <a class="brand" asp-area="" asp-page="/Index" style="@(isRow ? "flex-direction:row;align-items:center;gap:10px;" : "flex-direction:column;align-items:flex-start;gap:6px;")text-transform:none;letter-spacing:normal;font-size:1rem;">
                             @if (partnerHasLogo)
                             {
-                                <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:44px;max-width:100%;width:auto;height:auto;object-fit:contain;" />
+                                <img src="/api/branding/logo" alt="@partnerProductName" style="@(isRow ? "max-height:40px;width:auto;" : "max-height:44px;max-width:100%;width:auto;")height:auto;object-fit:contain;" />
                             }
                             @if (!(partnerHasLogo && partnerIsOem))
                             {
-                                <span>@partnerProductName</span>
+                                <span style="display:flex;flex-direction:column;gap:2px;line-height:1.15;">
+                                    <span>@partnerProductName</span>
+                                    @if (!string.IsNullOrWhiteSpace(partnerSlogan))
+                                    {
+                                        <span style="font-size:.7rem;font-weight:400;opacity:.7;">@partnerSlogan</span>
+                                    }
+                                </span>
                             }
                         </a>
                     }

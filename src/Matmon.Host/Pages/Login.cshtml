@@ -35,6 +35,10 @@
                 {
                     <span style="font-weight:700;font-size:1.05rem;">@partner.ProductName</span>
                 }
+                @if (!string.IsNullOrWhiteSpace(partner.Slogan))
+                {
+                    <span style="color:var(--matmon-muted);font-size:0.85rem;text-align:center;">@partner.Slogan</span>
+                }
                 @if (!string.IsNullOrWhiteSpace(partner.Name))
                 {
                     <span style="color:var(--matmon-muted);font-size:0.85rem;">Managed by @partner.Name</span>

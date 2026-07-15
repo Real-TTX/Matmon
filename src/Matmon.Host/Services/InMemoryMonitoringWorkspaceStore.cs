@@ -1581,6 +1581,56 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>White-label slogan (no logo clone), shown beneath the product name; null when suppressed/none.</summary>
+    public string? GetServicePartnerSlogan()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false } partner
+                && !string.IsNullOrWhiteSpace(partner.Slogan)
+                    ? partner.Slogan
+                    : null;
+        }
+    }
+
+    /// <summary>The partner secondary accent colour (no logo clone), or null.</summary>
+    public string? GetServicePartnerSecondaryColor()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false } partner ? partner.BrandColorSecondary : null;
+        }
+    }
+
+    /// <summary>The partner sidebar layout (0 = logo top / name below, 1 = logo left / name right); 0 when none.</summary>
+    public int GetServicePartnerSidebarStyle()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false } partner ? partner.SidebarStyle : 0;
+        }
+    }
+
+    /// <summary>Whether a partner small logo (favicon) is available to render (no clone).</summary>
+    public bool GetServicePartnerHasSmallLogo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, SmallLogoPng.Length: > 0 };
+        }
+    }
+
+    /// <summary>The partner small-logo bytes + MIME (cloned once) for the favicon endpoint; null when suppressed / none.</summary>
+    public (byte[] Bytes, string ContentType)? GetServicePartnerSmallLogo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, SmallLogoPng: { Length: > 0 } small } partner
+                ? ((byte[])small.Clone(), string.IsNullOrWhiteSpace(partner.SmallLogoContentType) ? "image/png" : partner.SmallLogoContentType)
+                : null;
+        }
+    }
+
     /// <summary>The partner logo bytes + MIME (cloned once) for the branding-logo endpoint; null when suppressed
     /// or none. Served via a cached endpoint rather than inlined so the prominently-shown logo isn't re-sent per page.</summary>
     public (byte[] Bytes, string ContentType)? GetServicePartnerLogo()

@@ -41,6 +41,22 @@ public sealed class ServicePartnerInfo
     /// <summary>MIME type of <see cref="LogoPng"/> (image/png or image/jpeg) so the data: URI declares the truth.</summary>
     public string? LogoContentType { get; set; }
 
+    // --- White-label extras (v2) ---
+    /// <summary>Slogan/tagline shown beneath the product name (sidebar, login, reports). White-label only.</summary>
+    public string? Slogan { get; set; }
+
+    /// <summary>Secondary brand accent as #RRGGBB (drives hover/gradient states); null = derived from the primary.</summary>
+    public string? BrandColorSecondary { get; set; }
+
+    /// <summary>Small square logo bytes used as this instance's favicon + mobile header. White-label only.</summary>
+    public byte[]? SmallLogoPng { get; set; }
+
+    /// <summary>MIME type of <see cref="SmallLogoPng"/>.</summary>
+    public string? SmallLogoContentType { get; set; }
+
+    /// <summary>Sidebar brand layout: 0 = logo top / name below (default), 1 = logo left / name right.</summary>
+    public int SidebarStyle { get; set; }
+
     public ServicePartnerInfo Clone() => new()
     {
         HasPartner = HasPartner,
@@ -55,6 +71,11 @@ public sealed class ServicePartnerInfo
         BrandColor = BrandColor,
         LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
         LogoContentType = LogoContentType,
+        Slogan = Slogan,
+        BrandColorSecondary = BrandColorSecondary,
+        SmallLogoPng = SmallLogoPng is null ? null : (byte[])SmallLogoPng.Clone(),
+        SmallLogoContentType = SmallLogoContentType,
+        SidebarStyle = SidebarStyle,
     };
 
     public bool ValueEquals(ServicePartnerInfo? other) =>
@@ -63,14 +84,19 @@ public sealed class ServicePartnerInfo
         && CanManage == other.CanManage
         && BrandingSuppressed == other.BrandingSuppressed
         && LogoIsOem == other.LogoIsOem
+        && SidebarStyle == other.SidebarStyle
         && string.Equals(ProductName, other.ProductName, StringComparison.Ordinal)
+        && string.Equals(Slogan, other.Slogan, StringComparison.Ordinal)
         && string.Equals(Name, other.Name, StringComparison.Ordinal)
         && string.Equals(ContactEmail, other.ContactEmail, StringComparison.Ordinal)
         && string.Equals(ContactPhone, other.ContactPhone, StringComparison.Ordinal)
         && string.Equals(ContactUrl, other.ContactUrl, StringComparison.Ordinal)
         && string.Equals(BrandColor, other.BrandColor, StringComparison.Ordinal)
+        && string.Equals(BrandColorSecondary, other.BrandColorSecondary, StringComparison.Ordinal)
         && string.Equals(LogoContentType, other.LogoContentType, StringComparison.Ordinal)
-        && LogosEqual(LogoPng, other.LogoPng);
+        && string.Equals(SmallLogoContentType, other.SmallLogoContentType, StringComparison.Ordinal)
+        && LogosEqual(LogoPng, other.LogoPng)
+        && LogosEqual(SmallLogoPng, other.SmallLogoPng);
 
     private static bool LogosEqual(byte[]? a, byte[]? b)
     {

@@ -4,6 +4,8 @@
     var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
     var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
     var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var partnerHasSmallLogo = WorkspaceStore.GetServicePartnerHasSmallLogo();
+    // (The slogan on the sign-in screen is rendered by Login.cshtml itself, not by this layout.)
 }
 @* white-label topbar: show the logo at a natural size (no cramped icon-slot squeeze); the product name lives in the card + title *@
 <!DOCTYPE html>
@@ -12,6 +14,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - @brandName</title>
+    @if (partnerHasSmallLogo)
+    {
+        <link rel="icon" href="/api/branding/favicon" />
+    }
+    else
+    {
+        <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    }
     <script>
         (() => {
             const storageKey = "matmon-theme";
@@ -35,12 +45,14 @@
         // Reseller co-branding: re-theme the anonymous pages (login/setup) to the managing partner's accent,
         // re-validated to #RRGGBB (see _Layout for the authed shell). Only --matmon-accent is consumed via var().
         var partnerAccent = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerBrandColor());
+        var partnerAccent2 = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerSecondaryColor());
     }
     @if (partnerAccent is not null)
     {
         <style>
             :root, html[data-theme="light"], html[data-theme="dark"] {
                 --matmon-accent: @partnerAccent !important;
+                --matmon-accent-2: @(partnerAccent2 ?? $"color-mix(in srgb, {partnerAccent} 58%, #ffffff)") !important;
             }
         </style>
     }
