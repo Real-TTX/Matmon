@@ -11,6 +11,7 @@
     var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
     var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
     var partnerName = WorkspaceStore.GetServicePartnerName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
 }
 <html lang="de" data-embedded="@(embedded ? "1" : "0")">
 <head>
@@ -177,7 +178,14 @@
                     <a class="brand" asp-area="" asp-page="/Index">
                         @if (partnerProductName is not null)
                         {
-                            <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:30px;max-width:150px;" />
+                            @if (partnerHasLogo)
+                            {
+                                <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:30px;max-width:150px;" />
+                            }
+                            else
+                            {
+                                @MatmonIcons.Render("monitoring")
+                            }
                             <span>@partnerProductName</span>
                         }
                         else

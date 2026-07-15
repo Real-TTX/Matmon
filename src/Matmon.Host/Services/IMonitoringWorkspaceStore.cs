@@ -294,6 +294,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>White-label product name (no logo clone), or null; when set it replaces "Matmon" in the sidebar/login/title.</summary>
     string? GetServicePartnerProductName();
 
+    /// <summary>Whether a partner logo is available (no clone), so the layout only emits the logo img when one exists.</summary>
+    bool GetServicePartnerHasLogo();
+
     /// <summary>The partner logo bytes + MIME for the branding-logo endpoint, or null when suppressed / none.</summary>
     (byte[] Bytes, string ContentType)? GetServicePartnerLogo();
 

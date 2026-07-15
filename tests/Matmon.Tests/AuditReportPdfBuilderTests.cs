@@ -57,7 +57,7 @@ public class AuditReportPdfBuilderTests
     {
         var data = Sample(withRows: true) with
         {
-            Partner = new SummaryReportBranding("ACME MSP", OnePxPng, "image/png", "#AABBCC", "https://acme.example/support")
+            Partner = new SummaryReportBranding("ACME MSP", OnePxPng, "image/png", "#AABBCC", "https://acme.example/support", "ACME Monitor")
         };
 
         var pdf = new AuditReportPdfBuilder().Build(data);

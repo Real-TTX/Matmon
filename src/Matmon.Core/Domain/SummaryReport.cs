@@ -33,8 +33,9 @@ public sealed record SummaryReportData(
     IReadOnlyList<SummaryReportEventLine> RecentEvents,
     SummaryReportBranding? Partner = null);
 
-/// <summary>Optional reseller co-branding stamped onto the report (logo + "Managed by" line).</summary>
-public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl);
+/// <summary>Optional reseller co-branding stamped onto the report (logo + "Managed by" line). <see cref="ProductName"/>
+/// is the white-label product name that replaces "Matmon" in the report footer (a "powered by Matmon" note stays).</summary>
+public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl, string? ProductName = null);
 
 public sealed record SummaryReport(string Subject, string TextBody, string HtmlBody);
 

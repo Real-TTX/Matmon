@@ -3,6 +3,7 @@
     // White-label: a managing partner's product name replaces "Matmon" on the anonymous pages (login/setup) too.
     var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
     var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
 }
 <!DOCTYPE html>
 <html lang="de">
@@ -49,7 +50,14 @@
             <a class="brand anonymous-brand" asp-area="" asp-page="/Index">
                 @if (partnerProductName is not null)
                 {
-                    <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:28px;max-width:150px;" />
+                    @if (partnerHasLogo)
+                    {
+                        <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:28px;max-width:150px;" />
+                    }
+                    else
+                    {
+                        @MatmonIcons.Render("monitoring")
+                    }
                     <span>@partnerProductName</span>
                 }
                 else
@@ -68,6 +76,10 @@
         <main class="anonymous-main container-fluid px-2 py-2 @(ViewData["AnonymousMainExtraClass"]?.ToString())">
             @RenderBody()
         </main>
+        @if (partnerProductName is not null)
+        {
+            <div style="text-align:center;opacity:.55;font-size:.68rem;padding:10px 0 4px;">powered by Matmon</div>
+        }
     </div>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

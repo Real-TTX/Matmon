@@ -1562,6 +1562,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Whether a partner logo is available to render (no clone) - so the layout only emits the logo
+    /// &lt;img&gt; when one actually exists, avoiding a broken-image icon when a product name is set without a logo.</summary>
+    public bool GetServicePartnerHasLogo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, LogoPng.Length: > 0 };
+        }
+    }
+
     /// <summary>The partner logo bytes + MIME (cloned once) for the branding-logo endpoint; null when suppressed
     /// or none. Served via a cached endpoint rather than inlined so the prominently-shown logo isn't re-sent per page.</summary>
     public (byte[] Bytes, string ContentType)? GetServicePartnerLogo()
