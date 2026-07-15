@@ -274,6 +274,12 @@
                         }
                     </div>
 
+                    @{ var partnerName = WorkspaceStore.GetServicePartnerName(); }
+                    @if (!string.IsNullOrWhiteSpace(partnerName))
+                    {
+                        <div class="sidebar-version" style="opacity:.85;font-size:.72rem;">Managed by @partnerName</div>
+                    }
+
                     <a class="sidebar-version" asp-area="" asp-page="/About" title="@(CloudUpdate.UpdateAvailable ? $"A newer Matmon build is available{(CloudUpdate.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : "About Matmon")">
                         <span class="sidebar-version-brand">Matmon</span>
                         <span class="sidebar-version-tag">@Matmon.Host.Services.MatmonVersion.Current</span>

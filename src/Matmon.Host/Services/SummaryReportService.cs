@@ -99,7 +99,7 @@ public sealed class SummaryReportDataCollector
             .ToArray();
 
         var partner = _workspaceStore.GetServicePartnerInfo();
-        var branding = partner is { HasPartner: true }
+        var branding = partner is { HasPartner: true, BrandingSuppressed: false }
             ? new SummaryReportBranding(partner.Name, partner.LogoPng, partner.LogoContentType, partner.BrandColor, partner.ContactUrl)
             : null;
 

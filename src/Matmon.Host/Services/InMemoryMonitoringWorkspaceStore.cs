@@ -1535,7 +1535,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     {
         lock (_gate)
         {
-            return _document.ServicePartner is { HasPartner: true } partner ? partner.BrandColor : null;
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false } partner ? partner.BrandColor : null;
+        }
+    }
+
+    /// <summary>Just the managing partner's display name (no logo clone) - for the per-render sidebar "Managed by" line.
+    /// Null when branding is suppressed (the relationship stays; only the visual brand is hidden).</summary>
+    public string? GetServicePartnerName()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false } partner ? partner.Name : null;
         }
     }
 

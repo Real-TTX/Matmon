@@ -59,6 +59,7 @@ public class ServicePartnerInfoTests
     [InlineData("url")]
     [InlineData("name")]
     [InlineData("consent")]
+    [InlineData("suppressed")]
     public void ValueEquals_detects_scalar_field_changes(string field)
     {
         var a = Sample();
@@ -69,6 +70,7 @@ public class ServicePartnerInfoTests
             case "url": b.ContactUrl = "https://other.example"; break;
             case "name": b.Name = "Other"; break;
             case "consent": b.CanManage = false; break;
+            case "suppressed": b.BrandingSuppressed = true; break;
         }
 
         Assert.False(a.ValueEquals(b));

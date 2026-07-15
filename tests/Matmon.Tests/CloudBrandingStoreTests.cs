@@ -74,6 +74,23 @@ public sealed class CloudBrandingStoreTests : IDisposable
         Assert.Null(store.GetServicePartnerBrandColor());
     }
 
+    [Fact]
+    public void Branding_suppressed_keeps_the_relationship_but_hides_the_visual_brand()
+    {
+        using var telemetry = new SqliteTelemetryRepository(_dbPath);
+        using var store = NewStore(telemetry);
+
+        var partner = Partner();
+        partner.BrandingSuppressed = true;
+        store.SetServicePartnerInfo(partner);
+
+        // The relationship + consent tab must survive (customer can still see/revoke management), but the
+        // per-render brand accessors (app accent + sidebar "Managed by") report nothing.
+        Assert.True(store.GetServicePartnerInfo()?.HasPartner);
+        Assert.Null(store.GetServicePartnerBrandColor());
+        Assert.Null(store.GetServicePartnerName());
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }

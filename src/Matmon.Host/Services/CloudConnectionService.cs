@@ -71,6 +71,7 @@ public sealed class CloudConnectionService : BackgroundService
                     // it a moment later; this idempotent re-clear runs on the next (now-disabled) cycle, after that
                     // late write, and closes the window (also purges any pre-fix stale cache on a disconnected start).
                     _workspaceStore.SetServicePartnerInfo(null);
+                    _servicePartnerETag = null; // force a full re-fetch on the next connect
 
                     if (client is not null)
                     {
@@ -233,6 +234,9 @@ public sealed class CloudConnectionService : BackgroundService
     }
 
     private int _servicePartnerTick;
+    // Last service-partner ETag, so the periodic re-fetch can send If-None-Match and 304 instead of
+    // re-downloading the ~256KB logo. In-memory only (a restart just costs one full re-fetch).
+    private string? _servicePartnerETag;
 
     private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable);
 
@@ -274,7 +278,15 @@ public sealed class CloudConnectionService : BackgroundService
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"api/instances/{instanceId}/service-partner");
             request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            if (_servicePartnerETag is not null)
+            {
+                request.Headers.TryAddWithoutValidation("If-None-Match", _servicePartnerETag);
+            }
             using var response = await client.SendAsync(request, cancellationToken);
+            if ((int)response.StatusCode == 304)
+            {
+                return; // unchanged since the last fetch - keep the cached branding, skip the logo transfer
+            }
             if (!response.IsSuccessStatusCode)
             {
                 return;
@@ -307,12 +319,16 @@ public sealed class CloudConnectionService : BackgroundService
                     ContactEmail = payload.ContactEmail,
                     ContactPhone = payload.ContactPhone,
                     CanManage = payload.CanManage,
+                    BrandingSuppressed = payload.BrandingSuppressed,
                     ContactUrl = payload.ContactUrl,
                     BrandColor = payload.BrandColorHex,
                     LogoPng = logo,
                     LogoContentType = string.IsNullOrWhiteSpace(payload.LogoContentType) ? "image/png" : payload.LogoContentType,
                 }
                 : null);
+
+            // Remember the ETag so the next (cadenced) fetch can 304 instead of re-downloading the logo.
+            _servicePartnerETag = response.Headers.ETag?.ToString();
         }
         catch (OperationCanceledException)
         {
@@ -333,7 +349,8 @@ public sealed class CloudConnectionService : BackgroundService
         string? ContactUrl = null,
         string? BrandColorHex = null,
         string? LogoContentType = null,
-        string? LogoBase64 = null);
+        string? LogoBase64 = null,
+        bool BrandingSuppressed = false);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

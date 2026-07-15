@@ -1,9 +1,15 @@
 @page "/login"
 @model LoginModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Login";
     ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
+
+    // Reseller co-branding on the sign-in card: the managing partner's logo + "Managed by" (mime clamped to a
+    // raster type; the accent is applied by _AnonymousLayout). Absent when unmanaged or the customer opted out.
+    var partner = WorkspaceStore.GetServicePartnerInfo();
+    var partnerLogoMime = string.Equals(partner?.LogoContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase) ? "image/jpeg" : "image/png";
 }
 
 <section class="dashboard-shell auth-shell auth-shell-login">
@@ -18,6 +24,20 @@
         <div class="panel-header">
             <h2 class="section-title">@MatmonIcons.Render("spark")<span>Access</span></h2>
         </div>
+
+        @if (partner is { HasPartner: true, BrandingSuppressed: false } && (partner.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(partner.Name)))
+        {
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0 16px;">
+                @if (partner.LogoPng is { Length: > 0 } logo)
+                {
+                    <img src="data:@partnerLogoMime;base64,@Convert.ToBase64String(logo)" alt="@partner.Name" style="max-height:48px;max-width:220px;" />
+                }
+                @if (!string.IsNullOrWhiteSpace(partner.Name))
+                {
+                    <span style="color:var(--matmon-muted);font-size:0.85rem;">Managed by @partner.Name</span>
+                }
+            </div>
+        }
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
         {

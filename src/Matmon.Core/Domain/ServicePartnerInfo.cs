@@ -16,6 +16,10 @@ public sealed class ServicePartnerInfo
     /// <summary>Customer consent: whether the managing partner may access/operate this instance.</summary>
     public bool CanManage { get; set; }
 
+    /// <summary>Customer opt-out of visual co-branding: when true the logo/accent/"Managed by" are suppressed on
+    /// the UI + reports, but the relationship (<see cref="HasPartner"/>) + consent tab stay so consent is revocable.</summary>
+    public bool BrandingSuppressed { get; set; }
+
     // --- Co-branding (cached so it survives the cloud being offline; shown in the Cloud tab + reports) ---
     /// <summary>Partner support/contact link (distinct from a marketing website).</summary>
     public string? ContactUrl { get; set; }
@@ -36,6 +40,7 @@ public sealed class ServicePartnerInfo
         ContactEmail = ContactEmail,
         ContactPhone = ContactPhone,
         CanManage = CanManage,
+        BrandingSuppressed = BrandingSuppressed,
         ContactUrl = ContactUrl,
         BrandColor = BrandColor,
         LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
@@ -46,6 +51,7 @@ public sealed class ServicePartnerInfo
         other is not null
         && HasPartner == other.HasPartner
         && CanManage == other.CanManage
+        && BrandingSuppressed == other.BrandingSuppressed
         && string.Equals(Name, other.Name, StringComparison.Ordinal)
         && string.Equals(ContactEmail, other.ContactEmail, StringComparison.Ordinal)
         && string.Equals(ContactPhone, other.ContactPhone, StringComparison.Ordinal)

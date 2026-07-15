@@ -286,6 +286,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Just the partner brand accent colour (no logo clone), for the per-render layout accent override.</summary>
     string? GetServicePartnerBrandColor();
 
+    /// <summary>Just the managing partner's display name (no logo clone), for the per-render sidebar "Managed by" line.</summary>
+    string? GetServicePartnerName();
+
     /// <summary>Caches the cloud-reported service partner + consent.</summary>
     void SetServicePartnerInfo(ServicePartnerInfo? info);
 

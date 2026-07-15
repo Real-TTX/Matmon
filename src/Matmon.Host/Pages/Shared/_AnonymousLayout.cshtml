@@ -1,3 +1,4 @@
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -23,6 +24,19 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/Matmon.Host.styles.css" asp-append-version="true" />
+    @{
+        // Reseller co-branding: re-theme the anonymous pages (login/setup) to the managing partner's accent,
+        // re-validated to #RRGGBB (see _Layout for the authed shell). Only --matmon-accent is consumed via var().
+        var partnerAccent = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerBrandColor());
+    }
+    @if (partnerAccent is not null)
+    {
+        <style>
+            :root, html[data-theme="light"], html[data-theme="dark"] {
+                --matmon-accent: @partnerAccent !important;
+            }
+        </style>
+    }
 </head>
 <body class="matmon-shell matmon-anonymous-shell">
     <div class="anonymous-shell">
