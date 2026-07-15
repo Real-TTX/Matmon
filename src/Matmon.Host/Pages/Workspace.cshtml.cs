@@ -5061,7 +5061,7 @@ public sealed class WorkspaceModel : PageModel
             .ToDictionary(name => name, name => new SelectListGroup { Name = name }, StringComparer.OrdinalIgnoreCase);
 
         return definitions
-            .Select(definition => (definition, category: SensorTypeCategories.Resolve(definition.Key)))
+            .Select(definition => (definition, category: definition.IsCustomScript ? SensorTypeCategories.Custom : SensorTypeCategories.Resolve(definition.Key)))
             .OrderBy(item => SensorTypeCategories.OrderIndex(item.category))
             .ThenBy(item => item.definition.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Select(item => new SelectListItem(

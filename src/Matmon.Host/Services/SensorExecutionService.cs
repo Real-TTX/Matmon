@@ -39,11 +39,6 @@ public sealed class SensorExecutionService : ISensorExecutionService
             return pausedResult;
         }
 
-        if (!_executors.TryGetValue(plan.SensorTypeKey, out var executor))
-        {
-            throw new InvalidOperationException($"No executor is registered for sensor type '{plan.SensorTypeKey}'.");
-        }
-
         ApplySensorCredentialDefaults(effectiveSettings, plan.SensorTypeKey, _workspaceStore.GetSensorDefinitions());
 
         if (effectiveSettings.Enabled == false)
@@ -53,11 +48,13 @@ public sealed class SensorExecutionService : ISensorExecutionService
             return disabledResult;
         }
 
+        var (executor, executionSettings) = ResolveExecutorAndSettings(plan.SensorTypeKey, effectiveSettings);
+
         return await ExecuteCoreAsync(
             executor,
             plan.SensorTypeKey,
             plan.Target,
-            effectiveSettings,
+            executionSettings,
             plan.SensorId,
             recordObservation: true,
             cancellationToken);
@@ -70,11 +67,12 @@ public sealed class SensorExecutionService : ISensorExecutionService
         CancellationToken cancellationToken = default)
     {
         ApplySensorCredentialDefaults(settings, sensorTypeKey, _workspaceStore.GetSensorDefinitions());
+        var (executor, executionSettings) = ResolveExecutorAndSettings(sensorTypeKey, settings.Clone());
         return ExecuteCoreAsync(
-            ResolveExecutor(sensorTypeKey),
+            executor,
             sensorTypeKey,
             target,
-            settings.Clone(),
+            executionSettings,
             sensorId: null,
             recordObservation: false,
             cancellationToken);
@@ -103,11 +101,32 @@ public sealed class SensorExecutionService : ISensorExecutionService
         }
     }
 
-    private ISensorExecutor ResolveExecutor(string sensorTypeKey)
+    // Resolves the executor for a type key. Built-in types map directly; a custom (admin-authored) script type
+    // is data-defined in the workspace, so it has no registered executor - it is routed to the Local Script
+    // engine with the type's script injected into a CLONE of the settings (instance settings stay untouched).
+    private (ISensorExecutor Executor, MonitoringSettings Settings) ResolveExecutorAndSettings(string sensorTypeKey, MonitoringSettings settings)
     {
         if (_executors.TryGetValue(sensorTypeKey, out var executor))
         {
-            return executor;
+            return (executor, settings);
+        }
+
+        var definition = _workspaceStore.GetSensorDefinitions().FirstOrDefault(candidate =>
+            candidate.IsCustomScript
+            && !string.IsNullOrWhiteSpace(candidate.ScriptBody)
+            && string.Equals(candidate.Key, sensorTypeKey, StringComparison.OrdinalIgnoreCase));
+        if (definition is not null && _executors.TryGetValue(LocalScriptSensorExecutor.Definition.Key, out var scriptEngine))
+        {
+            var injected = settings.Clone();
+            injected.Parameters["script"] = definition.ScriptBody!;
+            injected.Parameters["local.shell"] = string.IsNullOrWhiteSpace(definition.ScriptLanguage) ? "pwsh" : definition.ScriptLanguage!;
+            injected.Parameters["outputFormat"] = string.IsNullOrWhiteSpace(definition.ScriptOutputFormat) ? "auto" : definition.ScriptOutputFormat!;
+            if (!string.IsNullOrWhiteSpace(definition.ScriptRegexPattern))
+            {
+                injected.Parameters["regexPattern"] = definition.ScriptRegexPattern!;
+            }
+
+            return (scriptEngine, injected);
         }
 
         throw new InvalidOperationException($"No executor is registered for sensor type '{sensorTypeKey}'.");

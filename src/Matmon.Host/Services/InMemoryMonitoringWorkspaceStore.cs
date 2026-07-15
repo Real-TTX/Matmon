@@ -885,6 +885,157 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    // --- Custom (admin-authored) script sensor types ------------------------------------------------
+
+    public IReadOnlyList<SensorDefinition> GetCustomSensorTypes()
+    {
+        lock (_gate)
+        {
+            return _document.SensorDefinitions.Where(d => d.IsCustomScript).Select(CloneSensorDefinition).ToArray();
+        }
+    }
+
+    public SensorDefinition? GetCustomSensorType(string key)
+    {
+        lock (_gate)
+        {
+            var def = _document.SensorDefinitions.FirstOrDefault(d => d.IsCustomScript && string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase));
+            return def is null ? null : CloneSensorDefinition(def);
+        }
+    }
+
+    public SensorDefinition CreateCustomSensorType(string name, string? description, string? language, string? outputFormat, string scriptBody, string? regexPattern)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new InvalidOperationException("A name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(scriptBody))
+        {
+            throw new InvalidOperationException("A script is required.");
+        }
+
+        lock (_gate)
+        {
+            var key = BuildCustomSensorTypeKey(name);
+            if (SensorDefinitionCatalog.BuiltIns.Any(b => string.Equals(b.Key, key, StringComparison.OrdinalIgnoreCase)) ||
+                _document.SensorDefinitions.Any(d => string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("A custom sensor type with this name already exists.");
+            }
+
+            var definition = BuildCustomSensorDefinition(key, name, description, language, outputFormat, scriptBody, regexPattern);
+            _document.SensorDefinitions.Add(definition);
+            QueueSave(SavePriority.Configuration);
+            return CloneSensorDefinition(definition);
+        }
+    }
+
+    public SensorDefinition? UpdateCustomSensorType(string key, string name, string? description, string? language, string? outputFormat, string scriptBody, string? regexPattern)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new InvalidOperationException("A name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(scriptBody))
+        {
+            throw new InvalidOperationException("A script is required.");
+        }
+
+        lock (_gate)
+        {
+            var index = _document.SensorDefinitions.FindIndex(d => d.IsCustomScript && string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                return null;
+            }
+
+            var updated = BuildCustomSensorDefinition(_document.SensorDefinitions[index].Key, name, description, language, outputFormat, scriptBody, regexPattern);
+            _document.SensorDefinitions[index] = updated;
+            QueueSave(SavePriority.Configuration);
+            return CloneSensorDefinition(updated);
+        }
+    }
+
+    public bool DeleteCustomSensorType(string key)
+    {
+        lock (_gate)
+        {
+            var def = _document.SensorDefinitions.FirstOrDefault(d => d.IsCustomScript && string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase));
+            if (def is null)
+            {
+                return false;
+            }
+
+            if (EnumerateAllSensors().Any(sensor => string.Equals(sensor.SensorTypeKey, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("This sensor type is in use by one or more sensors. Delete or change those sensors first.");
+            }
+
+            _document.SensorDefinitions.Remove(def);
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    private static SensorDefinition BuildCustomSensorDefinition(string key, string name, string? description, string? language, string? outputFormat, string scriptBody, string? regexPattern)
+    {
+        var format = NormalizeScriptOutputFormat(outputFormat);
+        return new SensorDefinition
+        {
+            Key = key,
+            DisplayName = name.Trim(),
+            Description = string.IsNullOrWhiteSpace(description) ? string.Empty : description.Trim(),
+            ChannelMode = SensorChannelMode.Dynamic,
+            IsCustomScript = true,
+            ScriptBody = scriptBody,
+            ScriptLanguage = NormalizeScriptLanguage(language),
+            ScriptOutputFormat = format,
+            ScriptRegexPattern = format == "regex" && !string.IsNullOrWhiteSpace(regexPattern) ? regexPattern.Trim() : null,
+            Parameters = []
+        };
+    }
+
+    private static string NormalizeScriptLanguage(string? language) =>
+        (language?.Trim().ToLowerInvariant()) switch { "bash" => "bash", "sh" => "sh", _ => "pwsh" };
+
+    private static string NormalizeScriptOutputFormat(string? outputFormat) =>
+        (outputFormat?.Trim().ToLowerInvariant()) switch { "json" => "json", "xml" => "xml", "regex" => "regex", "text" => "text", _ => "auto" };
+
+    private static string BuildCustomSensorTypeKey(string name)
+    {
+        var slug = new string(name.Trim().ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
+        while (slug.Contains("--", StringComparison.Ordinal))
+        {
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        }
+
+        slug = slug.Trim('-');
+        return "custom:" + (string.IsNullOrEmpty(slug) ? Guid.NewGuid().ToString("N")[..8] : slug);
+    }
+
+    private IEnumerable<SensorElement> EnumerateAllSensors()
+    {
+        var stack = new Stack<MonitoringContainerElement>();
+        stack.Push(_document.RootProbe);
+        while (stack.Count > 0)
+        {
+            foreach (var child in stack.Pop().Children)
+            {
+                if (child is SensorElement sensor)
+                {
+                    yield return sensor;
+                }
+                else if (child is MonitoringContainerElement container)
+                {
+                    stack.Push(container);
+                }
+            }
+        }
+    }
+
     public NotificationSender? FindNotificationSender(Guid id)
     {
         lock (_gate)
@@ -3742,6 +3893,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             Description = source.Description,
             UsageLevel = source.UsageLevel ?? SensorUsageCatalog.Resolve(source.Key),
             ChannelMode = source.ChannelMode,
+            IsCustomScript = source.IsCustomScript,
+            ScriptBody = source.ScriptBody,
+            ScriptLanguage = source.ScriptLanguage,
+            ScriptOutputFormat = source.ScriptOutputFormat,
+            ScriptRegexPattern = source.ScriptRegexPattern,
             Parameters = source.Parameters.Select(parameter => new SensorParameterDefinition
             {
                 Key = parameter.Key,
