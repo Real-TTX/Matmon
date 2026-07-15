@@ -60,13 +60,12 @@
         var dashboardActive = string.Equals(currentPath, "/", StringComparison.OrdinalIgnoreCase);
         var probesActive = PathStarts("/probes") || PathStarts("/system/probes") || PathStarts("/monitoring/probe");
         var templatesActive = PathStarts("/templates") || PathStarts("/monitoring/template");
-        var customTypesActive = PathStarts("/monitoring/sensor-types");
         var mapsActive = PathStarts("/maps");
         var notificationsActive = PathStarts("/notifications");
         var eventsActive = PathStarts("/events");
         var discoveryActive = PathStarts("/discovery");
         var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/backup");
-        var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive && !customTypesActive;
+        var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive;
         string Active(bool on) => on ? "is-active" : string.Empty;
         var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
         var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
@@ -197,10 +196,6 @@
                             <a asp-area="" asp-page="/Discovery" class="topnav-link @Active(discoveryActive)">Discovery</a>
                             <a asp-area="" asp-page="/Maps" class="topnav-link @Active(mapsActive)">Maps</a>
                             <a asp-area="" asp-page="/Templates" class="topnav-link @Active(templatesActive)">Templates</a>
-                            @if (isAdmin)
-                            {
-                                <a asp-area="" asp-page="/CustomSensorTypes" class="topnav-link @Active(customTypesActive)">Custom types</a>
-                            }
                             <a asp-area="" asp-page="/Notifications" class="topnav-link @Active(notificationsActive)">Notifications</a>
                             <a asp-area="" asp-page="/Events" class="topnav-link @Active(eventsActive)">Events</a>
                             @if (isAdmin)

@@ -185,7 +185,6 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/SensorAssistant", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ElementEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/TemplateEditor", MatmonSecurity.AdminPolicy);
-    options.Conventions.AuthorizePage("/CustomSensorTypes", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationRuleEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationSenderEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationReceiverEditor", MatmonSecurity.AdminPolicy);

@@ -21,12 +21,8 @@ public static class SensorTypeCategories
         "Storage",
         "Databases",
         "Probe",
-        Custom,
         Other
     ];
-
-    /// <summary>Category for admin-authored custom script sensor types.</summary>
-    public const string Custom = "Custom";
 
     private static readonly IReadOnlyDictionary<string, string> ByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {

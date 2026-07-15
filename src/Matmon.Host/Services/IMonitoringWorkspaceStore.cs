@@ -124,13 +124,6 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The sensor-definition catalog (lightweight; avoids cloning the whole workspace).</summary>
     IReadOnlyList<SensorDefinition> GetSensorDefinitions();
 
-    // Custom (admin-authored) script sensor types.
-    IReadOnlyList<SensorDefinition> GetCustomSensorTypes();
-    SensorDefinition? GetCustomSensorType(string key);
-    SensorDefinition CreateCustomSensorType(string name, string? description, string? language, string? outputFormat, string scriptBody, string? regexPattern);
-    SensorDefinition? UpdateCustomSensorType(string key, string name, string? description, string? language, string? outputFormat, string scriptBody, string? regexPattern);
-    bool DeleteCustomSensorType(string key);
-
     /// <summary>
     /// A fully detached workspace snapshot with a deep-cloned element tree and templates - for
     /// consumers (the dashboard) that walk the whole tree and must not race concurrent edits.
