@@ -5,6 +5,7 @@
     var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
     var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
 }
+@* white-label topbar: show the logo at a natural size (no cramped icon-slot squeeze); the product name lives in the card + title *@
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -52,13 +53,12 @@
                 {
                     @if (partnerHasLogo)
                     {
-                        <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:28px;max-width:150px;" />
+                        <img src="/api/branding/logo" alt="@partnerProductName" style="height:32px;width:auto;max-width:240px;object-fit:contain;" />
                     }
                     else
                     {
-                        @MatmonIcons.Render("monitoring")
+                        <span>@partnerProductName</span>
                     }
-                    <span>@partnerProductName</span>
                 }
                 else
                 {

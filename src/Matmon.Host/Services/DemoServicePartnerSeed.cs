@@ -26,6 +26,7 @@ internal static class DemoServicePartnerSeed
             CanManage = true,
             BrandingSuppressed = false,
             ProductName = productName,
+            LogoIsOem = options.DemoServicePartnerOemLogo,
             ContactUrl = contactUrl,
             BrandColor = color,
             LogoContentType = logoType,

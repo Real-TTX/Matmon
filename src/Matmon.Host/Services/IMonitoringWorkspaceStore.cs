@@ -297,6 +297,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Whether a partner logo is available (no clone), so the layout only emits the logo img when one exists.</summary>
     bool GetServicePartnerHasLogo();
 
+    /// <summary>Whether the partner logo is an OEM lockup (show alone; don't stack the product name beneath it).</summary>
+    bool GetServicePartnerLogoIsOem();
+
     /// <summary>The partner logo bytes + MIME for the branding-logo endpoint, or null when suppressed / none.</summary>
     (byte[] Bytes, string ContentType)? GetServicePartnerLogo();
 

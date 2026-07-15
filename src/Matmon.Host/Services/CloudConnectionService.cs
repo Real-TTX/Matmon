@@ -330,6 +330,7 @@ public sealed class CloudConnectionService : BackgroundService
                     CanManage = payload.CanManage,
                     BrandingSuppressed = payload.BrandingSuppressed,
                     ProductName = payload.ProductName,
+                    LogoIsOem = payload.LogoIsOem,
                     ContactUrl = payload.ContactUrl,
                     BrandColor = payload.BrandColorHex,
                     LogoPng = logo,
@@ -361,7 +362,8 @@ public sealed class CloudConnectionService : BackgroundService
         string? LogoContentType = null,
         string? LogoBase64 = null,
         bool BrandingSuppressed = false,
-        string? ProductName = null);
+        string? ProductName = null,
+        bool LogoIsOem = false);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

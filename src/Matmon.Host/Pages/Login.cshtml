@@ -6,10 +6,9 @@
     ViewData["Title"] = "Login";
     ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
 
-    // Reseller co-branding on the sign-in card: the managing partner's logo + "Managed by" (mime clamped to a
-    // raster type; the accent is applied by _AnonymousLayout). Absent when unmanaged or the customer opted out.
+    // Reseller co-branding / white-label on the sign-in card: the managing partner's logo (served via the
+    // cached /api/branding/logo endpoint) + product name + "Managed by". Absent when unmanaged or opted out.
     var partner = WorkspaceStore.GetServicePartnerInfo();
-    var partnerLogoMime = string.Equals(partner?.LogoContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase) ? "image/jpeg" : "image/png";
 }
 
 <section class="dashboard-shell auth-shell auth-shell-login">
@@ -25,12 +24,16 @@
             <h2 class="section-title">@MatmonIcons.Render("spark")<span>Access</span></h2>
         </div>
 
-        @if (partner is { HasPartner: true, BrandingSuppressed: false } && (partner.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(partner.Name)))
+        @if (partner is { HasPartner: true, BrandingSuppressed: false } && (partner.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(partner.Name) || !string.IsNullOrWhiteSpace(partner.ProductName)))
         {
-            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0 16px;">
-                @if (partner.LogoPng is { Length: > 0 } logo)
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0 18px;">
+                @if (partner.LogoPng is { Length: > 0 })
                 {
-                    <img src="data:@partnerLogoMime;base64,@Convert.ToBase64String(logo)" alt="@partner.Name" style="max-height:48px;max-width:220px;" />
+                    <img src="/api/branding/logo" alt="@(partner.ProductName ?? partner.Name)" style="max-height:72px;max-width:100%;width:auto;height:auto;object-fit:contain;" />
+                }
+                @if (!string.IsNullOrWhiteSpace(partner.ProductName) && !(partner.LogoPng is { Length: > 0 } && partner.LogoIsOem))
+                {
+                    <span style="font-weight:700;font-size:1.05rem;">@partner.ProductName</span>
                 }
                 @if (!string.IsNullOrWhiteSpace(partner.Name))
                 {

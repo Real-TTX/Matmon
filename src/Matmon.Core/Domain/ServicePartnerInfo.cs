@@ -24,6 +24,10 @@ public sealed class ServicePartnerInfo
     /// replace the "Matmon" brand in the sidebar, login and page title. Null = plain co-branding (Matmon stays).</summary>
     public string? ProductName { get; set; }
 
+    /// <summary>True when the partner logo is a complete OEM brand lockup (already includes the product name), so
+    /// the brand shows the logo alone; false shows the logo with the product name stacked beneath it.</summary>
+    public bool LogoIsOem { get; set; }
+
     // --- Co-branding (cached so it survives the cloud being offline; shown in the Cloud tab + reports) ---
     /// <summary>Partner support/contact link (distinct from a marketing website).</summary>
     public string? ContactUrl { get; set; }
@@ -46,6 +50,7 @@ public sealed class ServicePartnerInfo
         CanManage = CanManage,
         BrandingSuppressed = BrandingSuppressed,
         ProductName = ProductName,
+        LogoIsOem = LogoIsOem,
         ContactUrl = ContactUrl,
         BrandColor = BrandColor,
         LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
@@ -57,6 +62,7 @@ public sealed class ServicePartnerInfo
         && HasPartner == other.HasPartner
         && CanManage == other.CanManage
         && BrandingSuppressed == other.BrandingSuppressed
+        && LogoIsOem == other.LogoIsOem
         && string.Equals(ProductName, other.ProductName, StringComparison.Ordinal)
         && string.Equals(Name, other.Name, StringComparison.Ordinal)
         && string.Equals(ContactEmail, other.ContactEmail, StringComparison.Ordinal)

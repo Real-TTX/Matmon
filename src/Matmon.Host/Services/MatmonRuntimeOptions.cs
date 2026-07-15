@@ -74,6 +74,8 @@ public sealed class MatmonRuntimeOptions
     public string? DemoServicePartnerContactUrl { get; set; }
     /// <summary>Path (absolute or relative to the content root) to a PNG/JPEG logo file for the demo partner.</summary>
     public string? DemoServicePartnerLogoPath { get; set; }
+    /// <summary>Demo: treat the logo as a complete OEM lockup (show it alone, no product-name text beneath).</summary>
+    public bool DemoServicePartnerOemLogo { get; set; }
 
     /// <summary>
     /// When set (e.g. via <c>Matmon__UnifiCloudApiKey</c>), the primary auto-provisions a

@@ -1572,6 +1572,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Whether the partner logo is a complete OEM lockup (show it alone; don't stack the product name beneath).</summary>
+    public bool GetServicePartnerLogoIsOem()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, LogoIsOem: true };
+        }
+    }
+
     /// <summary>The partner logo bytes + MIME (cloned once) for the branding-logo endpoint; null when suppressed
     /// or none. Served via a cached endpoint rather than inlined so the prominently-shown logo isn't re-sent per page.</summary>
     public (byte[] Bytes, string ContentType)? GetServicePartnerLogo()

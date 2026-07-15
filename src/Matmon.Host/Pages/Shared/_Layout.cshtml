@@ -12,6 +12,7 @@
     var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
     var partnerName = WorkspaceStore.GetServicePartnerName();
     var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var partnerIsOem = WorkspaceStore.GetServicePartnerLogoIsOem();
 }
 <html lang="de" data-embedded="@(embedded ? "1" : "0")">
 <head>
@@ -175,25 +176,26 @@
         <aside class="topbar app-sidebar" id="app-sidebar">
             <div class="container-fluid px-2 py-2 sidebar-inner">
                 <div class="sidebar-brand-block">
-                    <a class="brand" asp-area="" asp-page="/Index">
-                        @if (partnerProductName is not null)
-                        {
+                    @if (partnerProductName is not null)
+                    {
+                        <a class="brand" asp-area="" asp-page="/Index" style="flex-direction:column;align-items:flex-start;gap:6px;text-transform:none;letter-spacing:normal;font-size:1rem;">
                             @if (partnerHasLogo)
                             {
-                                <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:30px;max-width:150px;" />
+                                <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:44px;max-width:100%;width:auto;height:auto;object-fit:contain;" />
                             }
-                            else
+                            @if (!(partnerHasLogo && partnerIsOem))
                             {
-                                @MatmonIcons.Render("monitoring")
+                                <span>@partnerProductName</span>
                             }
-                            <span>@partnerProductName</span>
-                        }
-                        else
-                        {
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="brand" asp-area="" asp-page="/Index">
                             @MatmonIcons.Render("monitoring")
                             <span>MATMON</span>
-                        }
-                    </a>
+                        </a>
+                    }
                     <div class="brand-note">@(partnerProductName is not null && !string.IsNullOrWhiteSpace(partnerName) ? $"Managed by {partnerName}" : (isSecondaryMode ? "Secondary probe node" : "Lightweight monitoring"))</div>
                 </div>
 
