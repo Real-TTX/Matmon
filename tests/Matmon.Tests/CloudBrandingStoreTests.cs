@@ -91,6 +91,25 @@ public sealed class CloudBrandingStoreTests : IDisposable
         Assert.Null(store.GetServicePartnerName());
     }
 
+    [Fact]
+    public void GetServicePartnerProductName_reflects_white_label_and_suppression()
+    {
+        using var telemetry = new SqliteTelemetryRepository(_dbPath);
+        using var store = NewStore(telemetry);
+
+        var partner = Partner();
+        partner.ProductName = "FeuSys Monitoring";
+        store.SetServicePartnerInfo(partner);
+        Assert.Equal("FeuSys Monitoring", store.GetServicePartnerProductName());
+
+        // Branding opt-out hides the white-label product name too (the relationship stays).
+        var suppressed = Partner();
+        suppressed.ProductName = "FeuSys Monitoring";
+        suppressed.BrandingSuppressed = true;
+        store.SetServicePartnerInfo(suppressed);
+        Assert.Null(store.GetServicePartnerProductName());
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }

@@ -20,6 +20,10 @@ public sealed class ServicePartnerInfo
     /// the UI + reports, but the relationship (<see cref="HasPartner"/>) + consent tab stay so consent is revocable.</summary>
     public bool BrandingSuppressed { get; set; }
 
+    /// <summary>White-label product name: when set (and branding not suppressed), the partner's logo + this name
+    /// replace the "Matmon" brand in the sidebar, login and page title. Null = plain co-branding (Matmon stays).</summary>
+    public string? ProductName { get; set; }
+
     // --- Co-branding (cached so it survives the cloud being offline; shown in the Cloud tab + reports) ---
     /// <summary>Partner support/contact link (distinct from a marketing website).</summary>
     public string? ContactUrl { get; set; }
@@ -41,6 +45,7 @@ public sealed class ServicePartnerInfo
         ContactPhone = ContactPhone,
         CanManage = CanManage,
         BrandingSuppressed = BrandingSuppressed,
+        ProductName = ProductName,
         ContactUrl = ContactUrl,
         BrandColor = BrandColor,
         LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
@@ -52,6 +57,7 @@ public sealed class ServicePartnerInfo
         && HasPartner == other.HasPartner
         && CanManage == other.CanManage
         && BrandingSuppressed == other.BrandingSuppressed
+        && string.Equals(ProductName, other.ProductName, StringComparison.Ordinal)
         && string.Equals(Name, other.Name, StringComparison.Ordinal)
         && string.Equals(ContactEmail, other.ContactEmail, StringComparison.Ordinal)
         && string.Equals(ContactPhone, other.ContactPhone, StringComparison.Ordinal)

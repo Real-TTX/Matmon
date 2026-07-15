@@ -7,12 +7,16 @@
     // Embedded mode: when reached through the Matmon.Cloud "embed" tunnel, render the page chromeless
     // (no own sidebar / mobile nav) so the cloud console can show a single menu around the iframe.
     var embedded = string.Equals(Context.Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
+    // White-label: a managing partner can set a product name that replaces "Matmon" in the brand + title.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
+    var partnerName = WorkspaceStore.GetServicePartnerName();
 }
 <html lang="de" data-embedded="@(embedded ? "1" : "0")">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Matmon</title>
+    <title>@ViewData["Title"] - @brandName</title>
     <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
     <script>
         (() => {
@@ -171,10 +175,18 @@
             <div class="container-fluid px-2 py-2 sidebar-inner">
                 <div class="sidebar-brand-block">
                     <a class="brand" asp-area="" asp-page="/Index">
-                        @MatmonIcons.Render("monitoring")
-                        <span>MATMON</span>
+                        @if (partnerProductName is not null)
+                        {
+                            <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:30px;max-width:150px;" />
+                            <span>@partnerProductName</span>
+                        }
+                        else
+                        {
+                            @MatmonIcons.Render("monitoring")
+                            <span>MATMON</span>
+                        }
                     </a>
-                    <div class="brand-note">@(isSecondaryMode ? "Secondary probe node" : "Lightweight monitoring")</div>
+                    <div class="brand-note">@(partnerProductName is not null && !string.IsNullOrWhiteSpace(partnerName) ? $"Managed by {partnerName}" : (isSecondaryMode ? "Secondary probe node" : "Lightweight monitoring"))</div>
                 </div>
 
                 @if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
@@ -274,20 +286,23 @@
                         }
                     </div>
 
-                    @{ var partnerName = WorkspaceStore.GetServicePartnerName(); }
-                    @if (!string.IsNullOrWhiteSpace(partnerName))
+                    @if (!string.IsNullOrWhiteSpace(partnerName) && partnerProductName is null)
                     {
                         <div class="sidebar-version" style="opacity:.85;font-size:.72rem;">Managed by @partnerName</div>
                     }
 
-                    <a class="sidebar-version" asp-area="" asp-page="/About" title="@(CloudUpdate.UpdateAvailable ? $"A newer Matmon build is available{(CloudUpdate.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : "About Matmon")">
-                        <span class="sidebar-version-brand">Matmon</span>
+                    <a class="sidebar-version" asp-area="" asp-page="/About" title="@(CloudUpdate.UpdateAvailable ? $"A newer build is available{(CloudUpdate.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : $"About {brandName}")">
+                        <span class="sidebar-version-brand">@brandName</span>
                         <span class="sidebar-version-tag">@Matmon.Host.Services.MatmonVersion.Current</span>
                         @if (CloudUpdate.UpdateAvailable)
                         {
                             <span class="sidebar-version-tag" style="background:rgba(95,141,255,.18);color:var(--matmon-accent,#5f8dff);font-weight:700;">Update</span>
                         }
                     </a>
+                    @if (partnerProductName is not null)
+                    {
+                        <div class="sidebar-version" style="opacity:.55;font-size:.66rem;">powered by Matmon</div>
+                    }
                 </div>
             </div>
         </aside>

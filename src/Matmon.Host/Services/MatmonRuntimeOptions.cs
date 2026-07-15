@@ -66,6 +66,15 @@ public sealed class MatmonRuntimeOptions
     /// without a real Matmon.Cloud link. Mutually exclusive with a real cloud link (short-circuits the cloud loop).</summary>
     public bool DemoServicePartner { get; set; }
 
+    // Optional overrides for the demo partner (so a real third-party brand can be previewed LOCALLY without
+    // committing its logo/name into the repo/images). All fall back to a generic built-in placeholder.
+    public string? DemoServicePartnerName { get; set; }
+    public string? DemoServicePartnerProductName { get; set; }
+    public string? DemoServicePartnerColor { get; set; }
+    public string? DemoServicePartnerContactUrl { get; set; }
+    /// <summary>Path (absolute or relative to the content root) to a PNG/JPEG logo file for the demo partner.</summary>
+    public string? DemoServicePartnerLogoPath { get; set; }
+
     /// <summary>
     /// When set (e.g. via <c>Matmon__UnifiCloudApiKey</c>), the primary auto-provisions a
     /// "UniFi Cloud" health sensor on startup using this Site Manager API key. The key is

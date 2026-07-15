@@ -330,6 +330,22 @@ app.MapGet("/api/mode", () => Results.Ok(new
     mode = runtimeOptions.Mode.ToString().ToLowerInvariant()
 })).AllowAnonymous();
 
+// The managing partner's co-branding logo, served (not inlined) so the prominently-shown logo - sidebar on
+// every page + the login card - is browser-cached instead of re-sent with each page. Anonymous (login needs it);
+// 404 when there is no partner logo or the customer suppressed branding. ETag drives conditional 304s.
+app.MapGet("/api/branding/logo", (IMonitoringWorkspaceStore store) =>
+{
+    var logo = store.GetServicePartnerLogo();
+    if (logo is null)
+    {
+        return Results.NotFound();
+    }
+
+    var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
+        "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(logo.Value.Bytes))[..16] + "\"");
+    return Results.File(logo.Value.Bytes, logo.Value.ContentType, entityTag: etag);
+}).AllowAnonymous();
+
 // Public, anonymous catalog of the built-in sensor TYPES (metadata only - no secrets, no workspace data):
 // key, name, description, category + whether/what credentials it needs. Lets the marketing site (and anyone)
 // show "what Matmon can monitor" without logging in. Same shipped list on every instance.

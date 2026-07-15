@@ -7,19 +7,48 @@ namespace Matmon.Host.Services;
 /// instance without a real Matmon.Cloud link. Off in production (the flag defaults false).</summary>
 internal static class DemoServicePartnerSeed
 {
-    public static ServicePartnerInfo Build() => new()
+    public static ServicePartnerInfo Build(MatmonRuntimeOptions options)
     {
-        HasPartner = true,
-        Name = "ACME Managed Services",
-        ContactEmail = "support@acme-msp.example",
-        ContactPhone = "+49 30 1234567",
-        CanManage = true,
-        BrandingSuppressed = false,
-        ContactUrl = "https://acme-msp.example/support",
-        BrandColor = "#7C3AED",
-        LogoContentType = "image/png",
-        LogoPng = Convert.FromBase64String(LogoBase64),
-    };
+        // Identity + brand from optional env overrides (so a real third-party brand can be previewed LOCALLY
+        // without committing its logo/name), else a generic built-in placeholder that demos white-label too.
+        var name = Trim(options.DemoServicePartnerName) ?? "ACME Managed Services";
+        var productName = Trim(options.DemoServicePartnerProductName) ?? "ACME Monitor";
+        var color = Trim(options.DemoServicePartnerColor) ?? "#7C3AED";
+        var contactUrl = Trim(options.DemoServicePartnerContactUrl) ?? "https://acme-msp.example/support";
+        var (logo, logoType) = ResolveLogo(options.DemoServicePartnerLogoPath);
+
+        return new ServicePartnerInfo
+        {
+            HasPartner = true,
+            Name = name,
+            ContactEmail = "support@acme-msp.example",
+            ContactPhone = "+49 30 1234567",
+            CanManage = true,
+            BrandingSuppressed = false,
+            ProductName = productName,
+            ContactUrl = contactUrl,
+            BrandColor = color,
+            LogoContentType = logoType,
+            LogoPng = logo,
+        };
+    }
+
+    private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // A configured logo file (absolute or relative to the working dir) wins; else the baked placeholder badge.
+    private static (byte[] Logo, string ContentType) ResolveLogo(string? path)
+    {
+        var trimmed = Trim(path);
+        if (trimmed is not null && File.Exists(trimmed))
+        {
+            var bytes = File.ReadAllBytes(trimmed);
+            var isJpeg = trimmed.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                || trimmed.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase);
+            return (bytes, isJpeg ? "image/jpeg" : "image/png");
+        }
+
+        return (Convert.FromBase64String(LogoBase64), "image/png");
+    }
 
     // A small embedded PNG (purple "ACME MSP" badge) so the demo logo needs no container fonts or cloud fetch.
     private const string LogoBase64 =

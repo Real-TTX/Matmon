@@ -47,7 +47,7 @@ public sealed class CloudConnectionService : BackgroundService
         // skip the cloud loop entirely (so its disabled-branch clear can't wipe the seeded branding). Off in prod.
         if (_runtimeOptions.DemoServicePartner)
         {
-            _workspaceStore.SetServicePartnerInfo(DemoServicePartnerSeed.Build());
+            _workspaceStore.SetServicePartnerInfo(DemoServicePartnerSeed.Build(_runtimeOptions));
             _logger.LogWarning("Matmon__DemoServicePartner is on: seeded a DUMMY service partner for co-branding preview (no real cloud link).");
             return;
         }
@@ -329,6 +329,7 @@ public sealed class CloudConnectionService : BackgroundService
                     ContactPhone = payload.ContactPhone,
                     CanManage = payload.CanManage,
                     BrandingSuppressed = payload.BrandingSuppressed,
+                    ProductName = payload.ProductName,
                     ContactUrl = payload.ContactUrl,
                     BrandColor = payload.BrandColorHex,
                     LogoPng = logo,
@@ -359,7 +360,8 @@ public sealed class CloudConnectionService : BackgroundService
         string? BrandColorHex = null,
         string? LogoContentType = null,
         string? LogoBase64 = null,
-        bool BrandingSuppressed = false);
+        bool BrandingSuppressed = false,
+        string? ProductName = null);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

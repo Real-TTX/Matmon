@@ -1,10 +1,15 @@
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
+@{
+    // White-label: a managing partner's product name replaces "Matmon" on the anonymous pages (login/setup) too.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
+}
 <!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Matmon</title>
+    <title>@ViewData["Title"] - @brandName</title>
     <script>
         (() => {
             const storageKey = "matmon-theme";
@@ -42,8 +47,16 @@
     <div class="anonymous-shell">
         <header class="anonymous-topbar">
             <a class="brand anonymous-brand" asp-area="" asp-page="/Index">
-                @MatmonIcons.Render("monitoring")
-                <span>MATMON</span>
+                @if (partnerProductName is not null)
+                {
+                    <img src="/api/branding/logo" alt="@partnerProductName" style="max-height:28px;max-width:150px;" />
+                    <span>@partnerProductName</span>
+                }
+                else
+                {
+                    @MatmonIcons.Render("monitoring")
+                    <span>MATMON</span>
+                }
             </a>
             <button type="button" class="sidebar-icon-button topnav-theme-toggle anonymous-theme-toggle" data-theme-toggle title="Toggle theme">
                 <span class="theme-toggle-icon theme-toggle-icon-light-target">@MatmonIcons.Render("sun")</span>

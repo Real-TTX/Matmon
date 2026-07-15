@@ -1549,6 +1549,31 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>White-label product name (no logo clone) - when set, the partner's brand replaces "Matmon" in the
+    /// sidebar/login/title. Null unless a partner set one and branding isn't suppressed.</summary>
+    public string? GetServicePartnerProductName()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false } partner
+                && !string.IsNullOrWhiteSpace(partner.ProductName)
+                    ? partner.ProductName
+                    : null;
+        }
+    }
+
+    /// <summary>The partner logo bytes + MIME (cloned once) for the branding-logo endpoint; null when suppressed
+    /// or none. Served via a cached endpoint rather than inlined so the prominently-shown logo isn't re-sent per page.</summary>
+    public (byte[] Bytes, string ContentType)? GetServicePartnerLogo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, LogoPng: { Length: > 0 } logo } partner
+                ? ((byte[])logo.Clone(), string.IsNullOrWhiteSpace(partner.LogoContentType) ? "image/png" : partner.LogoContentType)
+                : null;
+        }
+    }
+
     /// <summary>Caches the cloud-reported service partner + consent. Only saves on change.</summary>
     public void SetServicePartnerInfo(ServicePartnerInfo? info)
     {

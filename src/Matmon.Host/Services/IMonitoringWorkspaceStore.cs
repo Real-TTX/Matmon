@@ -291,6 +291,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Just the managing partner's display name (no logo clone), for the per-render sidebar "Managed by" line.</summary>
     string? GetServicePartnerName();
 
+    /// <summary>White-label product name (no logo clone), or null; when set it replaces "Matmon" in the sidebar/login/title.</summary>
+    string? GetServicePartnerProductName();
+
+    /// <summary>The partner logo bytes + MIME for the branding-logo endpoint, or null when suppressed / none.</summary>
+    (byte[] Bytes, string ContentType)? GetServicePartnerLogo();
+
     /// <summary>Caches the cloud-reported service partner + consent.</summary>
     void SetServicePartnerInfo(ServicePartnerInfo? info);
 
