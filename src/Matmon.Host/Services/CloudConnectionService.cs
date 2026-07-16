@@ -234,16 +234,13 @@ public sealed class CloudConnectionService : BackgroundService
 
         await FetchLicenseAsync(client, instanceId, token, cancellationToken);
 
-        // Service-partner (incl. the co-branding logo) rarely changes but the logo can be sizeable, so don't
-        // pull it every heartbeat - fetch on the first beat then roughly every 10th (~10 min at the default cadence).
-        if (_servicePartnerTick++ % 10 == 0)
-        {
-            await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
-        }
+        // Service-partner (branding + consent) is fetched EVERY heartbeat: the ETag below turns an unchanged
+        // response into a ~zero-byte 304, so partner branding/consent changes propagate within one beat (~60s)
+        // instead of the old 1-in-10 sampling (~10 min) that made the cloud toggles look broken.
+        await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
     }
 
-    private int _servicePartnerTick;
-    // Last service-partner ETag, so the periodic re-fetch can send If-None-Match and 304 instead of
+    // Last service-partner ETag, so the per-beat re-fetch can send If-None-Match and 304 instead of
     // re-downloading the ~256KB logo. In-memory only (a restart just costs one full re-fetch).
     private string? _servicePartnerETag;
 
@@ -307,6 +304,15 @@ public sealed class CloudConnectionService : BackgroundService
                 return;
             }
 
+            // Defense-in-depth at CACHE time (the last unvalidated cloud channel): only genuine PNG/JPEG bytes
+            // are stored, and the served MIME comes from the magic bytes, NEVER from the payload - the cached
+            // logo is served same-origin + anonymously (/api/branding/logo|favicon), so a script-bearing SVG
+            // with a spoofed content type from a compromised cloud would otherwise be stored XSS.
+            var logoBytes = DecodeBase64(payload.LogoBase64);
+            var logoType = BrandingSafety.DetectRasterContentType(logoBytes);
+            var smallLogoBytes = DecodeBase64(payload.SmallLogoBase64);
+            var smallLogoType = BrandingSafety.DetectRasterContentType(smallLogoBytes);
+
             _workspaceStore.SetServicePartnerInfo(payload.HasPartner
                 ? new ServicePartnerInfo
                 {
@@ -323,10 +329,10 @@ public sealed class CloudConnectionService : BackgroundService
                     ContactUrl = payload.ContactUrl,
                     BrandColor = payload.BrandColorHex,
                     BrandColorSecondary = payload.BrandColorSecondaryHex,
-                    LogoPng = DecodeBase64(payload.LogoBase64),
-                    LogoContentType = string.IsNullOrWhiteSpace(payload.LogoContentType) ? "image/png" : payload.LogoContentType,
-                    SmallLogoPng = DecodeBase64(payload.SmallLogoBase64),
-                    SmallLogoContentType = string.IsNullOrWhiteSpace(payload.SmallLogoContentType) ? "image/png" : payload.SmallLogoContentType,
+                    LogoPng = logoType is null ? null : logoBytes,
+                    LogoContentType = logoType,
+                    SmallLogoPng = smallLogoType is null ? null : smallLogoBytes,
+                    SmallLogoContentType = smallLogoType,
                 }
                 : null);
 

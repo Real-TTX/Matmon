@@ -337,7 +337,7 @@ app.MapGet("/api/mode", () => Results.Ok(new
 // The managing partner's co-branding logo, served (not inlined) so the prominently-shown logo - sidebar on
 // every page + the login card - is browser-cached instead of re-sent with each page. Anonymous (login needs it);
 // 404 when there is no partner logo or the customer suppressed branding. ETag drives conditional 304s.
-app.MapGet("/api/branding/logo", (IMonitoringWorkspaceStore store) =>
+app.MapGet("/api/branding/logo", (HttpContext http, IMonitoringWorkspaceStore store) =>
 {
     var logo = store.GetServicePartnerLogo();
     if (logo is null)
@@ -345,6 +345,9 @@ app.MapGet("/api/branding/logo", (IMonitoringWorkspaceStore store) =>
         return Results.NotFound();
     }
 
+    // Belt-and-braces alongside the cache-time magic-byte validation: never let a browser sniff the
+    // cloud-supplied bytes into something executable on this origin.
+    http.Response.Headers["X-Content-Type-Options"] = "nosniff";
     var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
         "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(logo.Value.Bytes))[..16] + "\"");
     return Results.File(logo.Value.Bytes, logo.Value.ContentType, entityTag: etag);
@@ -352,7 +355,7 @@ app.MapGet("/api/branding/logo", (IMonitoringWorkspaceStore store) =>
 
 // The partner small logo, served as the instance favicon + mobile-header mark (white-label). Same anonymous,
 // ETag-cached pattern as the main logo; 404 when there's no small logo / branding is suppressed.
-app.MapGet("/api/branding/favicon", (IMonitoringWorkspaceStore store) =>
+app.MapGet("/api/branding/favicon", (HttpContext http, IMonitoringWorkspaceStore store) =>
 {
     var icon = store.GetServicePartnerSmallLogo();
     if (icon is null)
@@ -360,6 +363,7 @@ app.MapGet("/api/branding/favicon", (IMonitoringWorkspaceStore store) =>
         return Results.NotFound();
     }
 
+    http.Response.Headers["X-Content-Type-Options"] = "nosniff";
     var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
         "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(icon.Value.Bytes))[..16] + "\"");
     return Results.File(icon.Value.Bytes, icon.Value.ContentType, entityTag: etag);
