@@ -5,61 +5,24 @@
     var channelKey = Model.Channel.ToLowerInvariant();
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">@MatmonIcons.Render("monitoring")<h1>About Matmon</h1></div>
-        <span class="panel-hint">@Model.Version <span class="about-channel-badge" data-channel="@channelKey">@Model.Channel</span></span>
+<section class="dashboard-shell about-page">
+    <div class="about-hero">
+        <span class="about-hero-mark">@MatmonIcons.Render("monitoring")</span>
+        <div class="about-hero-copy">
+            <span class="about-hero-kicker">About</span>
+            <h1>Matmon</h1>
+            <p>Lightweight, self-hosted network monitoring.</p>
+            <div class="about-version-row">
+                <span class="about-version-tag">@Model.Version</span>
+                <span class="about-channel-badge" data-channel="@channelKey">@Model.Channel</span>
+            </div>
+        </div>
     </div>
 
-    <div class="config-grid">
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("settings")<span>Runtime</span></h2>
-            </div>
-            <dl class="config-list">
-                <div class="config-row"><dt>Version</dt><dd>@Model.Version</dd></div>
-                <div class="config-row"><dt>Channel</dt><dd>@Model.Channel</dd></div>
-                <div class="config-row"><dt>Mode</dt><dd>@Model.Mode</dd></div>
-                <div class="config-row"><dt>Framework</dt><dd>@Model.RuntimeVersion</dd></div>
-                <div class="config-row"><dt>Platform</dt><dd>@Model.OperatingSystem</dd></div>
-                <div class="config-row"><dt>Architecture</dt><dd>@Model.Architecture</dd></div>
-            </dl>
-        </section>
-
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("list")<span>Project</span></h2>
-            </div>
-            <div style="padding:14px 18px;">
-                <p class="workspace-inline-note" style="margin:0 0 12px;">
-                    Matmon runs a tree of probes, hosts and sensors, polls them on a schedule and keeps raw detail
-                    plus downsampled long-term statistics. It supports primary/secondary probes for monitoring behind
-                    firewalls, public wallboard maps and a flexible alerting pipeline.
-                </p>
-                <span class="account-role-chip">@MatmonIcons.Render("key")<span>Proprietary · self-hostable</span></span>
-            </div>
-        </section>
-
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Endpoints</span></h2>
-                <span class="panel-hint">anonymous health</span>
-            </div>
-            <dl class="config-list">
-                <div class="config-row"><dt>Health</dt><dd><a href="/healthz" target="_blank" rel="noopener">/healthz</a></dd></div>
-                <div class="config-row"><dt>Mode API</dt><dd><a href="/api/mode" target="_blank" rel="noopener">/api/mode</a></dd></div>
-            </dl>
-        </section>
-
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Versioning</span></h2>
-            </div>
-            <ul class="about-channel-list">
-                <li><span class="about-channel-badge" data-channel="release">Release</span> <code>0.x.&lt;build&gt;-&lt;date&gt;</code> - tagged <code>latest</code> on <code>main</code>.</li>
-                <li><span class="about-channel-badge" data-channel="nightly">Nightly</span> <code>nightly-&lt;build&gt;-&lt;date&gt;</code> - tagged <code>nightly</code> on <code>dev</code>.</li>
-                <li><span class="about-channel-badge" data-channel="local">Local</span> <code>local-&lt;date&gt;</code> - any build without a baked-in version.</li>
-            </ul>
-        </section>
+    <div class="about-meta">
+        <a class="about-link" href="https://matmon.eu" target="_blank" rel="noopener">
+            @MatmonIcons.Render("signal")<span>matmon.eu</span>
+        </a>
+        <span class="about-copyright">© @Model.Year Matmon · All rights reserved</span>
     </div>
 </section>
