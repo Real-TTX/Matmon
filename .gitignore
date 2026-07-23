@@ -17,3 +17,6 @@ matmon-data/
 cookies.txt
 tmp/
 docker-compose.override.yml
+
+# Claude Code local config (machine-specific paths / dev launch profiles)
+.claude/
