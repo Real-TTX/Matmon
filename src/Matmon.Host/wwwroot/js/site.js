@@ -2385,21 +2385,62 @@ function initializeCredentialEditors() {
       );
       empty.hidden = anyVisible;
     };
-    const closeModal = (row) => {
+    const hideModal = (row) => {
       const modal = row.querySelector("[data-credential-modal]");
       if (modal) {
         modal.hidden = true;
       }
-      syncSummary(row);
-      // A row with no name is treated as "no entry" - collapse it back out of the list.
-      const nameInput = row.querySelector("input[name$='.Name']");
-      if (nameInput && nameInput.value.trim() === "") {
-        row.hidden = true;
-      }
-      updateEmptyState();
       if (!section.querySelector("[data-credential-modal]:not([hidden])")) {
         document.body.classList.remove("credential-modal-open");
       }
+    };
+    // Reset every visible field in the row (used when a newly-added credential is cancelled), so the pre-rendered
+    // slot goes back to "empty" and is reusable for the next Add - and its blank Name makes the server ignore it.
+    const clearRow = (row) => {
+      row.querySelectorAll("input, select, textarea").forEach((el) => {
+        if (el.type === "hidden") {
+          return; // keep structural hidden inputs (index, IsDeleted)
+        }
+        if (el.type === "checkbox" || el.type === "radio") {
+          el.checked = false;
+        } else if (el.tagName === "SELECT") {
+          el.selectedIndex = 0;
+        } else {
+          el.value = "";
+        }
+      });
+      updateCredentialPanels(row);
+    };
+    // Cancel a NEW (pending) credential: discard it entirely - clear + collapse the row so no record is created.
+    const discardRow = (row) => {
+      clearRow(row);
+      row.hidden = true;
+      delete row.dataset.credentialPending;
+      hideModal(row);
+      syncSummary(row);
+      updateEmptyState();
+    };
+    // Save/Done: keep the row (unless it's a still-blank new one, which is discarded so Add+Done makes no ghost).
+    const commitRow = (row) => {
+      const nameInput = row.querySelector("input[name$='.Name']");
+      if (row.dataset.credentialPending === "true" && nameInput && nameInput.value.trim() === "") {
+        discardRow(row);
+        return;
+      }
+      delete row.dataset.credentialPending;
+      hideModal(row);
+      syncSummary(row);
+      updateEmptyState();
+    };
+    // X / backdrop = cancel: a pending (new) row is discarded; editing an existing one just closes (edits kept).
+    const cancelModal = (row) => {
+      if (row.dataset.credentialPending === "true") {
+        discardRow(row);
+        return;
+      }
+      hideModal(row);
+      syncSummary(row);
+      updateEmptyState();
     };
 
     section.querySelectorAll("[data-credential-row]").forEach((row) => updateCredentialPanels(row));
@@ -2416,6 +2457,9 @@ function initializeCredentialEditors() {
           return;
         }
 
+        // Newly added = "pending": until the user hits Done it stays a discardable draft (Cancel/X removes it),
+        // so pressing Add alone never leaves a record behind.
+        hiddenRow.dataset.credentialPending = "true";
         hiddenRow.hidden = false;
         updateCredentialPanels(hiddenRow);
         syncSummary(hiddenRow);
@@ -2445,11 +2489,22 @@ function initializeCredentialEditors() {
       });
     });
 
+    // X (top-right) = cancel: discards a pending new credential, otherwise just closes.
     section.querySelectorAll("[data-credential-modal-close]").forEach((button) => {
       button.addEventListener("click", () => {
         const row = button.closest("[data-credential-row]");
         if (row) {
-          closeModal(row);
+          cancelModal(row);
+        }
+      });
+    });
+
+    // Done (bottom) = save/keep the credential.
+    section.querySelectorAll("[data-credential-modal-save]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = button.closest("[data-credential-row]");
+        if (row) {
+          commitRow(row);
         }
       });
     });
@@ -2461,7 +2516,7 @@ function initializeCredentialEditors() {
         }
         const row = modal.closest("[data-credential-row]");
         if (row) {
-          closeModal(row);
+          cancelModal(row);
         }
       });
     });
