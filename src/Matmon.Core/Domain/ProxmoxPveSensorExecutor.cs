@@ -465,6 +465,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
     private static SensorExecutionResult BuildNodeOverviewFallbackResult(MonitoringSettings settings, ResourceSnapshot resourceSnapshot, string nodeName, Stopwatch watch)
     {
         var channels = BuildNodeFallbackChannels(resourceSnapshot).ToList();
+        AppendGuestChannels(channels, resourceSnapshot, nodeName); // per-VM/CT even on the limited-permission fallback
         var state = !resourceSnapshot.SelectedNodeOnline
             ? SensorState.Critical
             : resourceSnapshot.NodeOfflineCount > 0

@@ -73,6 +73,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureDefaultTemplates();
         MigrateAppliedTemplatesToCopies();
         MigrateSslCertificateThresholds();
+        MigrateRetiredProxmoxSensors();
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
         if (_runtimeOptions.ProvisionLocalDockerProbe)
         {
@@ -3175,6 +3176,41 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         sensor.ParentId = _document.RootProbe.Id;
         sensor.Settings.Parameters["unifi.mode"] = "cloud";
         sensor.Settings.Parameters["unifi.apiKey"] = apiKey;
+    }
+
+    /// <summary>The legacy scope-based <c>proxmox</c> sensor type was retired (split into <c>proxmox-health</c>
+    /// + <c>proxmox-node-health</c>), so a workspace that still holds one fails with "No executor is registered
+    /// for sensor type 'proxmox'". Rewrite any leftover <c>proxmox</c> sensor/template to the right replacement -
+    /// <c>pve.scope=cluster</c> → cluster health, otherwise the per-node type. Idempotent (no-op once migrated).</summary>
+    private void MigrateRetiredProxmoxSensors()
+    {
+        const string legacyKey = "proxmox";
+
+        static string Replacement(MonitoringSettings settings) =>
+            settings.Parameters.TryGetValue("pve.scope", out var scope) && string.Equals(scope, "cluster", StringComparison.OrdinalIgnoreCase)
+                ? ProxmoxHealthSensorExecutor.Definition.Key
+                : ProxmoxNodeHealthSensorExecutor.Definition.Key;
+
+        var changed = false;
+
+        foreach (var sensor in EnumerateElements(_document.RootProbe).OfType<SensorElement>()
+            .Where(candidate => string.Equals(candidate.SensorTypeKey, legacyKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            sensor.SensorTypeKey = Replacement(sensor.Settings);
+            changed = true;
+        }
+
+        foreach (var template in _document.Templates
+            .Where(candidate => string.Equals(candidate.SensorTypeKey, legacyKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            template.SensorTypeKey = Replacement(template.Settings);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            QueueSave(SavePriority.Configuration);
+        }
     }
 
     private void EnsureDefaultProxmoxSensor()
