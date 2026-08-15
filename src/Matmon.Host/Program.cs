@@ -92,6 +92,11 @@ builder.Services.AddSingleton(authOptions);
 builder.Services.AddDataProtection()
     .SetApplicationName("Matmon")
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionDirectory));
+// Distinct TempData cookie name so it never collides with Matmon.Cloud's over the Full-Access tunnel (both are
+// served on the same cloud origin there): otherwise each app tries to decrypt the other's default-named temp-data
+// cookie with the wrong DataProtection key and logs a permanent "temp data cookie could not be loaded" warning.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.CookieTempDataProviderOptions>(
+    options => options.Cookie.Name = ".Matmon.TempData");
 builder.Services.AddHttpClient();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
