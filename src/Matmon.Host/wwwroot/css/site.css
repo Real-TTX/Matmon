@@ -11400,8 +11400,9 @@ body.credential-modal-open {
 
 .sensor-threshold-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.45rem 0.7rem;
+  align-items: end;
 }
 
 .sensor-threshold-rule {
@@ -11410,38 +11411,66 @@ body.credential-modal-open {
   gap: 0.35rem;
 }
 
-.sensor-threshold-grid > label:nth-child(2) > span,
-.sensor-threshold-grid > label:nth-child(3) > span {
+/* Warn/Alarm condition block with an explicit enable switch (vs the old "leave the value blank" trick). */
+.sensor-threshold-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.sensor-threshold-channel > span {
+  color: var(--matmon-muted);
+  font-size: 0.8rem;
+}
+
+.sensor-threshold-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.32rem;
+  gap: 0.5rem;
   font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
 }
 
-.sensor-threshold-grid > label:nth-child(2) > span::before,
-.sensor-threshold-grid > label:nth-child(3) > span::before {
-  content: "";
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
+.sensor-threshold-field--warning .sensor-threshold-toggle { color: var(--matmon-warning); }
+.sensor-threshold-field--critical .sensor-threshold-toggle { color: var(--matmon-danger); }
+
+.sensor-threshold-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 2.05rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: var(--matmon-border);
+  position: relative;
+  cursor: pointer;
   flex: 0 0 auto;
+  margin: 0;
+  transition: background 0.15s ease;
 }
 
-.sensor-threshold-grid > label:nth-child(2) > span {
-  color: var(--matmon-warning);
+.sensor-threshold-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.15rem - 4px);
+  height: calc(1.15rem - 4px);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
 }
 
-.sensor-threshold-grid > label:nth-child(2) > span::before {
-  background: var(--matmon-warning);
-}
+.sensor-threshold-switch:checked::after { transform: translateX(0.9rem); }
+.sensor-threshold-field--warning .sensor-threshold-switch:checked { background: var(--matmon-warning); }
+.sensor-threshold-field--critical .sensor-threshold-switch:checked { background: var(--matmon-danger); }
+.sensor-threshold-switch:focus-visible { outline: 2px solid var(--matmon-accent); outline-offset: 2px; }
 
-.sensor-threshold-grid > label:nth-child(3) > span {
-  color: var(--matmon-danger);
-}
-
-.sensor-threshold-grid > label:nth-child(3) > span::before {
-  background: var(--matmon-danger);
-}
+/* Disabled condition: dim the (natively-disabled) inputs so "off" reads at a glance. */
+.sensor-threshold-field.is-disabled .sensor-threshold-rule { opacity: 0.4; }
 
 .sensor-threshold-actions {
   display: flex;

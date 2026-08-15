@@ -78,24 +78,37 @@
                     else
                     {
                         <div class="sensor-threshold-grid">
-                            <label>
-                                <span>Channel</span>
-                                <input asp-for="SensorChannelThresholdFields[i].ChannelKey" class="form-control workspace-input" placeholder="latency" readonly="@(hasFixedChannels ? "readonly" : null)" />
-                            </label>
-                            <label>
-                                <span>Warning</span>
+                            @if (!hasFixedChannels)
+                            {
+                                <label class="sensor-threshold-channel">
+                                    <span>Channel</span>
+                                    <input asp-for="SensorChannelThresholdFields[i].ChannelKey" class="form-control workspace-input" placeholder="latency" />
+                                </label>
+                            }
+                            else
+                            {
+                                <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
+                            }
+                            <div class="sensor-threshold-field sensor-threshold-field--warning" data-threshold-rule>
+                                <label class="sensor-threshold-toggle">
+                                    <input type="checkbox" class="sensor-threshold-switch" data-threshold-enable />
+                                    <span>Warn if</span>
+                                </label>
                                 <div class="sensor-threshold-rule">
                                     <select asp-for="SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                    <input asp-for="SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" />
+                                    <input asp-for="SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" data-threshold-value />
                                 </div>
-                            </label>
-                            <label>
-                                <span>Critical</span>
+                            </div>
+                            <div class="sensor-threshold-field sensor-threshold-field--critical" data-threshold-rule>
+                                <label class="sensor-threshold-toggle">
+                                    <input type="checkbox" class="sensor-threshold-switch" data-threshold-enable />
+                                    <span>Alarm if</span>
+                                </label>
                                 <div class="sensor-threshold-rule">
                                     <select asp-for="SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                    <input asp-for="SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" />
+                                    <input asp-for="SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" data-threshold-value />
                                 </div>
-                            </label>
+                            </div>
                         </div>
                     }
 

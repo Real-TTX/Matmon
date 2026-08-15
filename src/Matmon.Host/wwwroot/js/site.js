@@ -2273,6 +2273,43 @@ function initializeThresholdEditors() {
 
     refreshDefaultState();
 
+    // Per-rule enable/disable (Warn if / Alarm if): the toggle is on iff a value is set. Turning it off clears the
+    // value + disables the inputs (a disabled/empty field posts nothing -> the server stores "no threshold"), so
+    // enabling/disabling a condition is explicit instead of the unintuitive "leave the value blank".
+    const syncRule = (rule) => {
+      const toggle = rule.querySelector("[data-threshold-enable]");
+      const value = rule.querySelector("[data-threshold-value]");
+      const select = rule.querySelector("select");
+      if (!toggle || !value) {
+        return;
+      }
+      const on = toggle.checked;
+      value.disabled = !on;
+      if (select) {
+        select.disabled = !on;
+      }
+      rule.classList.toggle("is-enabled", on);
+      rule.classList.toggle("is-disabled", !on);
+    };
+    section.querySelectorAll("[data-threshold-rule]").forEach((rule) => {
+      const toggle = rule.querySelector("[data-threshold-enable]");
+      const value = rule.querySelector("[data-threshold-value]");
+      if (!toggle || !value) {
+        return;
+      }
+      toggle.checked = value.value.trim() !== "";
+      syncRule(rule);
+      toggle.addEventListener("change", () => {
+        if (!toggle.checked) {
+          value.value = "";
+        }
+        syncRule(rule);
+        if (toggle.checked && typeof value.focus === "function") {
+          value.focus();
+        }
+      });
+    });
+
     section.querySelectorAll("[data-threshold-add]").forEach((button) => {
       button.addEventListener("click", () => {
         const hiddenRow = section.querySelector("[data-threshold-row][hidden]:not([data-threshold-deleted='true'])");
