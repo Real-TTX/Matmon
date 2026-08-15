@@ -53,7 +53,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                 Key = "pve.tokenId",
                 Label = "Token ID",
                 Kind = SensorParameterKind.Text,
-                Description = "Full Proxmox API token ID, exactly as shown in the Proxmox UI, e.g. root@pam!monitoring.",
+                Description = "Full Proxmox API token ID, exactly as shown in the Proxmox UI, e.g. root@pam!monitoring. The token needs the PVEAuditor role on path / (Datacenter → Permissions → Add → API Token Permission) - a privilege-separated token has NO rights by default, so without it VMs/containers show as 0.",
                 Required = true,
                 Placeholder = "root@pam!monitoring",
                 CredentialKind = MonitoringCredentialKind.Proxmox
@@ -280,7 +280,13 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         {
             var nodeStatus = await ReadApiDataAsync(client, new Uri(apiBaseUri, $"nodes/{Uri.EscapeDataString(nodeName)}/status"), authHeader, apiUser, tokenId, cancellationToken);
 
-            var statusText = TryReadString(nodeStatus, "status", out var status) ? status : "unknown";
+            // NB: /nodes/{node}/status has NO top-level "status" (online/offline) field - that only exists in the
+            // node list / cluster/resources. A successful response here means the node answered, i.e. it IS online,
+            // so default to "online" (a truly-down node throws above and lands on the fallback path). The old
+            // "unknown" fallback made the sensor permanently Critical even with every channel healthy.
+            var statusText = TryReadString(nodeStatus, "status", out var status) && !string.IsNullOrWhiteSpace(status)
+                ? status
+                : "online";
             var cpuPercent = TryReadDouble(nodeStatus, "cpu", out var cpu) ? cpu * 100.0 : 0;
             var memoryPercent = TryReadPercent(nodeStatus, "mem", "maxmem", out var memory) ? memory : 0;
             var swapPercent = TryReadPercent(nodeStatus, "swap", "maxswap", out var swap) ? swap : 0;
