@@ -203,6 +203,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             };
 
             channels.AddRange(BuildResourceChannels(resourceSnapshot));
+            AppendGuestChannels(channels, resourceSnapshot, null); // all VMs/CTs across the cluster: which run + CPU/RAM
 
             var state = !quorate
                 ? SensorState.Critical
@@ -228,6 +229,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         catch (InvalidOperationException ex) when (IsPermissionDenied(ex))
         {
             var channels = BuildResourceChannels(resourceSnapshot).ToList();
+            AppendGuestChannels(channels, resourceSnapshot, null); // per-VM/CT even without cluster/status access
             var defaultKey = resourceSnapshot.NodeCount > 0 ? "onlineNodes" : "resourcesTotal";
             var defaultValue = resourceSnapshot.NodeCount > 0 ? resourceSnapshot.NodeOnlineCount : resourceSnapshot.VisibleResourceCount;
             var state = resourceSnapshot.NodeCount == 0
@@ -625,8 +627,23 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
     /// opt out of per channel.</summary>
     private static void AppendGuestChannels(List<SensorChannelValue> channels, ResourceSnapshot snapshot, string? nodeName)
     {
-        foreach (var guest in snapshot.Guests
-            .Where(candidate => string.IsNullOrWhiteSpace(nodeName) || string.Equals(candidate.Node, nodeName, StringComparison.OrdinalIgnoreCase))
+        if (snapshot.Guests.Count == 0)
+        {
+            return;
+        }
+
+        // Filter to the requested node; but node-name resolution can miss (IP/FQDN target, casing, a single-node
+        // host reported under a different name) - rather than show nothing, fall back to ALL guests so the user
+        // still sees them (the label carries the guest name; multi-node over-inclusion is the lesser evil vs empty).
+        IReadOnlyList<GuestInfo> matching = string.IsNullOrWhiteSpace(nodeName)
+            ? snapshot.Guests
+            : snapshot.Guests.Where(candidate => string.Equals(candidate.Node, nodeName, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (matching.Count == 0)
+        {
+            matching = snapshot.Guests;
+        }
+
+        foreach (var guest in matching
             .OrderBy(candidate => candidate.Kind, StringComparer.Ordinal)
             .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase))
         {

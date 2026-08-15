@@ -11,8 +11,8 @@ public sealed class ProxmoxHealthSensorExecutor : ISensorExecutor
     {
         Key = "proxmox-health",
         DisplayName = "Proxmox Health",
-        Description = "Cluster-wide Proxmox health via the REST API: quorum, nodes online, and VM / container / storage rollups.",
-        ChannelMode = SensorChannelMode.Fixed,
+        Description = "Cluster-wide Proxmox health via the REST API: quorum, nodes online, VM / container / storage rollups, plus a dynamic per-VM/CT channel set (up + CPU% + RAM%) across the cluster.",
+        ChannelMode = SensorChannelMode.Dynamic,
         Parameters = ProxmoxPveSensorExecutor.Definition.Parameters
             .Where(parameter => !string.Equals(parameter.Key, "pve.scope", StringComparison.OrdinalIgnoreCase))
             .ToArray()
