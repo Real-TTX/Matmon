@@ -204,15 +204,37 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
             throw new InvalidOperationException("ssh host and username must not start with '-'");
         }
 
-        var startInfo = new ProcessStartInfo("ssh")
+        // Password auth (ssh.password set) is driven through `sshpass -e`, which feeds the password to ssh via the
+        // SSHPASS env var - never on the command line (ps-visible) - because plain ssh with BatchMode can't do
+        // passwords. Without a password we keep BatchMode=yes so key/agent auth fails fast instead of hanging on a
+        // prompt. (sshpass is installed in the Docker image.)
+        var hasPassword = MonitoringSettings.TryReadParameter(settings, "ssh.password", out var password) && !string.IsNullOrEmpty(password);
+
+        var startInfo = new ProcessStartInfo(hasPassword ? "sshpass" : "ssh")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        startInfo.ArgumentList.Add("-o");
-        startInfo.ArgumentList.Add("BatchMode=yes");
+        if (hasPassword)
+        {
+            startInfo.Environment["SSHPASS"] = password;
+            startInfo.ArgumentList.Add("-e");
+            startInfo.ArgumentList.Add("ssh");
+            // Force password auth so ssh doesn't try (and hang/fail on) keys or an agent first.
+            startInfo.ArgumentList.Add("-o");
+            startInfo.ArgumentList.Add("PubkeyAuthentication=no");
+            startInfo.ArgumentList.Add("-o");
+            startInfo.ArgumentList.Add("PreferredAuthentications=password");
+            startInfo.ArgumentList.Add("-o");
+            startInfo.ArgumentList.Add("NumberOfPasswordPrompts=1");
+        }
+        else
+        {
+            startInfo.ArgumentList.Add("-o");
+            startInfo.ArgumentList.Add("BatchMode=yes");
+        }
         startInfo.ArgumentList.Add("-o");
         startInfo.ArgumentList.Add("StrictHostKeyChecking=accept-new");
         startInfo.ArgumentList.Add("-o");
@@ -220,6 +242,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         startInfo.ArgumentList.Add("-p");
         startInfo.ArgumentList.Add(Math.Clamp(port, 1, 65535).ToString(CultureInfo.InvariantCulture));
 
+        // A key still applies when no password is set (or if both are given, password wins via PubkeyAuthentication=no above).
         if (MonitoringSettings.TryReadParameter(settings, "ssh.identityFile", out var identityFile) &&
             !string.IsNullOrWhiteSpace(identityFile))
         {

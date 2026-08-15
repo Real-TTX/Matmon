@@ -11,8 +11,8 @@ public sealed class ProxmoxNodeHealthSensorExecutor : ISensorExecutor
     {
         Key = "proxmox-node-health",
         DisplayName = "Proxmox Node Health",
-        Description = "Per-node Proxmox health via the REST API: CPU, memory and disk usage plus VM / container online / offline counts. Uses the first visible node when none is given.",
-        ChannelMode = SensorChannelMode.Fixed,
+        Description = "Per-node Proxmox health via the REST API: CPU, memory and disk usage, VM / container online / offline counts, plus a dynamic per-VM/CT channel set (up + CPU% + RAM%) for the guests on the node. Uses the first visible node when none is given.",
+        ChannelMode = SensorChannelMode.Dynamic,
         Parameters = BuildParameters()
     };
 

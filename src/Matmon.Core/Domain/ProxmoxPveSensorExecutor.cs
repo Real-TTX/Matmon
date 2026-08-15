@@ -339,6 +339,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             });
 
             channels.AddRange(BuildResourceChannels(resourceSnapshot));
+            AppendGuestChannels(channels, resourceSnapshot, nodeName); // per-VM/CT: which ones run + their CPU/RAM
 
             var state = string.Equals(statusText, "online", StringComparison.OrdinalIgnoreCase)
                 ? SensorState.Healthy
@@ -507,6 +508,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         var storageCount = 0;
         var storageOnlineCount = 0;
         var storageOfflineCount = 0;
+        var guests = new List<GuestInfo>();
 
         if (resources.ValueKind == JsonValueKind.Array)
         {
@@ -547,6 +549,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                         {
                             qemuStoppedCount++;
                         }
+                        guests.Add(ReadGuest("vm", entry, status));
                         break;
                     case "lxc":
                         lxcCount++;
@@ -558,6 +561,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                         {
                             lxcStoppedCount++;
                         }
+                        guests.Add(ReadGuest("ct", entry, status));
                         break;
                     case "storage":
                         storageCount++;
@@ -593,7 +597,44 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             lxcStoppedCount,
             storageCount,
             storageOnlineCount,
-            storageOfflineCount);
+            storageOfflineCount,
+            guests);
+    }
+
+    /// <summary>Reads one VM/container entry from cluster/resources into a <see cref="GuestInfo"/> (vmid, name,
+    /// node, running-state + live CPU/RAM %). CPU/RAM are 0 for a stopped guest.</summary>
+    private static GuestInfo ReadGuest(string kind, JsonElement entry, string status)
+    {
+        var id = TryReadString(entry, "vmid", out var rawId) && !string.IsNullOrWhiteSpace(rawId)
+            ? rawId.Trim()
+            : (TryReadDouble(entry, "vmid", out var numId) ? ((long)numId).ToString(CultureInfo.InvariantCulture) : "?");
+        var name = TryReadString(entry, "name", out var rawName) && !string.IsNullOrWhiteSpace(rawName)
+            ? rawName.Trim()
+            : $"{kind}{id}";
+        var node = TryReadString(entry, "node", out var rawNode) ? rawNode.Trim() : string.Empty;
+        var running = IsGuestRunning(status);
+        var cpu = running && TryReadDouble(entry, "cpu", out var cpuFraction) ? cpuFraction * 100.0 : 0;
+        var mem = running && TryReadPercent(entry, "mem", "maxmem", out var memPercent) ? memPercent : 0;
+        return new GuestInfo(kind, id, name, node, running, cpu, mem);
+    }
+
+    /// <summary>Per-guest dynamic channels for the VMs/containers on <paramref name="nodeName"/> (null = all):
+    /// running (1/0), CPU % and RAM % - so the node sensor shows WHICH VMs run, not just how many. Keys are
+    /// <c>vm.&lt;vmid&gt;.up/.cpu/.mem</c> (or <c>ct.</c>); the VM name is the label. Booleans/gauges the user can
+    /// opt out of per channel.</summary>
+    private static void AppendGuestChannels(List<SensorChannelValue> channels, ResourceSnapshot snapshot, string? nodeName)
+    {
+        foreach (var guest in snapshot.Guests
+            .Where(candidate => string.IsNullOrWhiteSpace(nodeName) || string.Equals(candidate.Node, nodeName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(candidate => candidate.Kind, StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var prefix = $"{guest.Kind}.{guest.Id}";
+            var label = $"{(guest.Kind == "vm" ? "VM" : "CT")} {guest.Name}";
+            channels.Add(new SensorChannelValue { Key = $"{prefix}.up", Label = $"{label} up", Value = guest.Running ? 1 : 0 });
+            channels.Add(new SensorChannelValue { Key = $"{prefix}.cpu", Label = $"{label} CPU", Value = Round(guest.CpuPercent), Unit = "%" });
+            channels.Add(new SensorChannelValue { Key = $"{prefix}.mem", Label = $"{label} RAM", Value = Round(guest.MemPercent), Unit = "%" });
+        }
     }
 
     private static IEnumerable<SensorChannelValue> BuildResourceChannels(ResourceSnapshot snapshot)
@@ -724,7 +765,11 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         int LxcStoppedCount,
         int StorageCount,
         int StorageOnlineCount,
-        int StorageOfflineCount);
+        int StorageOfflineCount,
+        IReadOnlyList<GuestInfo> Guests);
+
+    /// <summary>One VM/container from the cluster/resources list, for the per-guest dynamic channels.</summary>
+    private sealed record GuestInfo(string Kind, string Id, string Name, string Node, bool Running, double CpuPercent, double MemPercent);
 
     internal static string BuildAuthorizationHeader(string user, string tokenId, string tokenSecret)
     {
