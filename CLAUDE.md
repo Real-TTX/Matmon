@@ -21,7 +21,7 @@ Two projects under `src/`:
 
 - **`Matmon.Core`** - framework-free domain. `Domain/` holds the monitoring model, the `ISensorExecutor` implementations, inheritance/threshold/schedule logic, notifications. `Sample/` holds the default sample topology (`SampleTopologyFactory`).
 - **`Matmon.Host`** - the web app.
-  - `Program.cs` - startup, cookie auth, authorization policies, minimal APIs (probe heartbeat/assignments/observations/discovery), sensor-executor DI registration, mode-dependent hosted services.
+  - `Program.cs` - startup, cookie auth, authorization policies, minimal APIs (probe heartbeat/assignments/observations/discovery), sensor-executor DI registration, mode-dependent hosted services. Also wires an **in-app log viewer**: a bounded in-memory ring buffer (`Services/InMemoryLogStore`, ~2000 lines) fed by an `ILoggerProvider` (`Services/RingBufferLoggerProvider`, added via `builder.Logging.AddProvider`) and shown on the admin-only **`/Logs`** page (level filter + search + live 4s auto-refresh via a JSON page handler; process-local, resets on restart - a UI-side `docker logs --tail`, not an audit trail). Mirrored in Matmon.Cloud at `/admin/logs`.
   - `Services/` - persistence, polling, probe registry, dashboard/config providers, backup scheduler, slave (secondary) workers.
   - `Pages/` - Razor Pages UI (`.cshtml` + `.cshtml.cs`). Shared layout in `Pages/Shared/_Layout.cshtml`.
   - `wwwroot/` - `css/site.css` (large, ~9k lines), `js/site.js`, Bootstrap 5 + jQuery under `lib/`.

@@ -1,0 +1,159 @@
+@page
+@model Matmon.Host.Pages.LogsModel
+@{
+    ViewData["Title"] = "Logs";
+}
+
+<div class="page-header">
+    <div class="page-title"><h1>Logs</h1></div>
+</div>
+
+<section class="panel panel-stack monitoring-controls">
+    <div class="monitoring-filter-bar">
+        <label class="monitoring-filter-field">
+            <span>Level</span>
+            <select id="logLevel" class="form-select workspace-select">
+                <option value="Trace" selected="@(Model.Level == "Trace")">All</option>
+                <option value="Debug" selected="@(Model.Level == "Debug")">Debug &amp; up</option>
+                <option value="Information" selected="@(Model.Level is null or "Information")">Info &amp; up</option>
+                <option value="Warning" selected="@(Model.Level == "Warning")">Warning &amp; up</option>
+                <option value="Error" selected="@(Model.Level == "Error")">Error &amp; up</option>
+                <option value="Critical" selected="@(Model.Level == "Critical")">Critical only</option>
+            </select>
+        </label>
+        <label class="monitoring-filter-field" style="flex:1 1 16rem;">
+            <span>Search</span>
+            <input id="logSearch" class="workspace-input" value="@Model.Q" placeholder="message or source…" autocomplete="off" />
+        </label>
+        <label class="monitoring-filter-field monitoring-filter-inline">
+            <span>Live</span>
+            <input type="checkbox" id="logLive" checked />
+        </label>
+        <div class="monitoring-filter-actions">
+            <button type="button" id="logRefresh" class="workspace-secondary-submit">Refresh</button>
+            <form method="post" asp-page-handler="Clear" style="display:inline;" onsubmit="return confirm('Clear the in-memory log buffer?');">
+                <input type="hidden" name="Level" value="@Model.Level" />
+                <input type="hidden" name="Q" value="@Model.Q" />
+                <button type="submit" class="workspace-danger-submit">Clear</button>
+            </form>
+        </div>
+    </div>
+</section>
+
+<div class="panel workspace-panel">
+    <div class="panel-header">
+        <h2 class="section-title"><span>Application log</span></h2>
+        <span class="panel-count"><span id="logCount">0</span> lines · buffer @Model.Capacity</span>
+    </div>
+    <div class="log-viewport">
+        <table class="log-table">
+            <thead>
+                <tr><th class="log-col-time">Time</th><th class="log-col-lvl">Level</th><th class="log-col-src">Source</th><th>Message</th></tr>
+            </thead>
+            <tbody id="logRows"></tbody>
+        </table>
+        <p id="logEmpty" class="panel-hint" style="padding:14px 16px;" hidden>No log lines match.</p>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var rows = document.getElementById("logRows");
+        var empty = document.getElementById("logEmpty");
+        var count = document.getElementById("logCount");
+        var levelSel = document.getElementById("logLevel");
+        var search = document.getElementById("logSearch");
+        var live = document.getElementById("logLive");
+        var refreshBtn = document.getElementById("logRefresh");
+        var timer = null;
+
+        function shortSource(cat) {
+            if (!cat) { return ""; }
+            var i = cat.lastIndexOf(".");
+            return i >= 0 ? cat.slice(i + 1) : cat;
+        }
+        function fmtTime(iso) {
+            var d = new Date(iso);
+            if (isNaN(d)) { return iso; }
+            return d.toLocaleTimeString(undefined, { hour12: false }) +
+                "." + String(d.getMilliseconds()).padStart(3, "0");
+        }
+
+        function render(items) {
+            rows.textContent = "";
+            if (!items.length) { empty.hidden = false; count.textContent = "0"; return; }
+            empty.hidden = true;
+            count.textContent = items.length;
+            var frag = document.createDocumentFragment();
+            items.forEach(function (e) {
+                var tr = document.createElement("tr");
+                tr.className = "log-row";
+
+                var tdT = document.createElement("td");
+                tdT.className = "log-time";
+                tdT.textContent = fmtTime(e.ts);
+                tdT.title = e.ts;
+
+                var tdL = document.createElement("td");
+                var badge = document.createElement("span");
+                badge.className = "log-lvl log-lvl-" + (e.level || "").toLowerCase();
+                badge.textContent = e.level;
+                tdL.appendChild(badge);
+
+                var tdS = document.createElement("td");
+                tdS.className = "log-source";
+                tdS.textContent = shortSource(e.category);
+                tdS.title = e.category;
+
+                var tdM = document.createElement("td");
+                tdM.className = "log-msg";
+                var msg = document.createElement("div");
+                msg.textContent = e.message;
+                tdM.appendChild(msg);
+                if (e.exception) {
+                    var det = document.createElement("details");
+                    det.className = "log-exc";
+                    var sum = document.createElement("summary");
+                    sum.textContent = "Exception";
+                    var pre = document.createElement("pre");
+                    pre.textContent = e.exception;
+                    det.appendChild(sum);
+                    det.appendChild(pre);
+                    tdM.appendChild(det);
+                }
+
+                tr.appendChild(tdT);
+                tr.appendChild(tdL);
+                tr.appendChild(tdS);
+                tr.appendChild(tdM);
+                frag.appendChild(tr);
+            });
+            rows.appendChild(frag);
+        }
+
+        function load() {
+            var params = new URLSearchParams({ handler: "Data", level: levelSel.value, q: search.value });
+            fetch("?" + params.toString(), { headers: { "X-Requested-With": "fetch" } })
+                .then(function (r) { return r.ok ? r.json() : { items: [] }; })
+                .then(function (d) { render(d.items || []); })
+                .catch(function () { /* keep the last view on a transient error */ });
+        }
+
+        function schedule() {
+            if (timer) { clearInterval(timer); timer = null; }
+            if (live.checked) { timer = setInterval(load, 4000); }
+        }
+
+        levelSel.addEventListener("change", load);
+        var searchDebounce;
+        search.addEventListener("input", function () {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(load, 250);
+        });
+        refreshBtn.addEventListener("click", load);
+        live.addEventListener("change", schedule);
+
+        load();
+        schedule();
+    })();
+</script>

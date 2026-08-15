@@ -98,6 +98,7 @@
         var eventsActive = PathStarts("/events");
         var discoveryActive = PathStarts("/discovery");
         var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/backup");
+        var logsActive = PathStarts("/logs");
         var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive;
         string Active(bool on) => on ? "is-active" : string.Empty;
         var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
@@ -260,6 +261,7 @@
                             @if (isAdmin)
                             {
                                 <a asp-area="" asp-page="/Config" class="topnav-link @Active(systemActive)">System</a>
+                                <a asp-area="" asp-page="/Logs" class="topnav-link @Active(logsActive)">Logs</a>
                             }
                         }
                     }

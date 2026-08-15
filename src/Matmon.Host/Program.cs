@@ -20,6 +20,12 @@ var runtimeOptions = builder.Configuration.GetSection("Matmon").Get<MatmonRuntim
 runtimeOptions.ProbeId ??= Environment.MachineName;
 runtimeOptions.ProbeName ??= Environment.MachineName;
 
+// In-app log viewer: tee every log line into a bounded in-memory ring buffer that the admin "Logs" page reads,
+// so operators can see recent logs (heartbeat/cloud/sensor errors) in the UI instead of shelling into docker logs.
+var logStore = new InMemoryLogStore(2000);
+builder.Services.AddSingleton(logStore);
+builder.Logging.AddProvider(new RingBufferLoggerProvider(logStore));
+
 // --- Executor run-mode: a stateless sensor-executor service. No workspace, telemetry, auth-cookie, UI or
 //     background loops - just the sensor executors behind a token-authed HTTP API that Matmon.Cloud calls to
 //     run cloud sensors. Returns early so none of the stateful Primary/Secondary wiring below is touched. ---
@@ -190,6 +196,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/NotificationReceiverEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/BackupJobEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/BackupRestore", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/Logs", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the

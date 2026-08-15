@@ -13227,3 +13227,84 @@ button.workspace-action-menu-link {
 .alerts-row[data-ack="true"][data-state="error"] td:first-child {
   border-image-source: linear-gradient(to bottom, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
 }
+
+/* ---- In-app log viewer (/Logs) ---- */
+.monitoring-filter-inline { flex: 0 0 auto; }
+.monitoring-filter-inline > span { display: block; }
+.monitoring-filter-actions { display: flex; gap: 8px; align-items: end; margin-left: auto; }
+.log-viewport { overflow-x: auto; }
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.log-table thead th {
+  text-align: left;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--matmon-muted);
+  font-weight: 700;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--matmon-border);
+  position: sticky;
+  top: 0;
+  background: var(--matmon-surface);
+  z-index: 1;
+}
+.log-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--matmon-border-soft, rgba(127,127,127,.14));
+  vertical-align: top;
+}
+.log-col-time { width: 7.5rem; }
+.log-col-lvl { width: 6.5rem; }
+.log-col-src { width: 12rem; }
+.log-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--matmon-muted);
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+}
+.log-source {
+  color: var(--matmon-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12rem;
+}
+.log-msg { word-break: break-word; }
+.log-msg > div { white-space: pre-wrap; }
+.log-lvl {
+  display: inline-block;
+  min-width: 4.6rem;
+  text-align: center;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--matmon-surface-soft);
+  color: var(--matmon-muted);
+}
+.log-lvl-warning { background: rgba(234, 179, 8, 0.16); color: #b78500; }
+.log-lvl-error, .log-lvl-critical { background: rgba(239, 68, 68, 0.16); color: #dc2626; }
+.log-lvl-information { background: rgba(59, 130, 246, 0.14); color: var(--matmon-accent, #3b82f6); }
+.log-lvl-debug, .log-lvl-trace { background: var(--matmon-surface-soft); color: var(--matmon-muted); }
+html[data-theme="dark"] .log-lvl-warning { color: #fbbf24; }
+html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critical { color: #f87171; }
+.log-exc { margin-top: 4px; }
+.log-exc summary { cursor: pointer; color: var(--matmon-accent, #3b82f6); font-size: 0.74rem; }
+.log-exc pre {
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  background: var(--matmon-surface-soft);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.panel-count { color: var(--matmon-muted); font-size: 0.78rem; }
