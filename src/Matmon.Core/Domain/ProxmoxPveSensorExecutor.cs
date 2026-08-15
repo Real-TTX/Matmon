@@ -211,11 +211,11 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                     ? SensorState.Warning
                     : SensorState.Healthy;
 
-            var message = !quorate
+            var message = (!quorate
                 ? "cluster is not quorate"
                 : resourceSnapshot.NodeOfflineCount > 0
                     ? $"{resourceSnapshot.NodeOnlineCount}/{resourceSnapshot.NodeCount} nodes online"
-                    : $"cluster healthy ({resourceSnapshot.NodeOnlineCount} nodes online)";
+                    : $"cluster healthy ({resourceSnapshot.NodeOnlineCount} nodes online)") + GuestVisibilityHint(resourceSnapshot);
 
             var result = state switch
             {
@@ -347,9 +347,9 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                 ? SensorState.Healthy
                 : SensorState.Critical;
 
-            var message = string.Equals(statusText, "online", StringComparison.OrdinalIgnoreCase)
+            var message = (string.Equals(statusText, "online", StringComparison.OrdinalIgnoreCase)
                 ? $"node {nodeName} is online"
-                : $"node {nodeName} is {statusText}";
+                : $"node {nodeName} is {statusText}") + GuestVisibilityHint(resourceSnapshot);
 
             var result = state switch
             {
@@ -625,6 +625,14 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
     /// running (1/0), CPU % and RAM % - so the node sensor shows WHICH VMs run, not just how many. Keys are
     /// <c>vm.&lt;vmid&gt;.up/.cpu/.mem</c> (or <c>ct.</c>); the VM name is the label. Booleans/gauges the user can
     /// opt out of per channel.</summary>
+    /// <summary>When the API answered and nodes are visible but NOT a single VM/container is, the token almost
+    /// certainly lacks VM.Audit (a privilege-separated API token has empty rights by default) - surface that in
+    /// the sensor message so a 0-VMs result isn't a silent black box.</summary>
+    private static string GuestVisibilityHint(ResourceSnapshot snapshot) =>
+        snapshot.QemuCount == 0 && snapshot.LxcCount == 0 && snapshot.NodeOnlineCount > 0
+            ? " · no VMs/containers visible - grant the API token VM.Audit on / (role PVEAuditor)"
+            : string.Empty;
+
     private static void AppendGuestChannels(List<SensorChannelValue> channels, ResourceSnapshot snapshot, string? nodeName)
     {
         if (snapshot.Guests.Count == 0)
