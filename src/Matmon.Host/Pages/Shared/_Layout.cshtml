@@ -165,6 +165,7 @@
             embedNav.Add(new { label = "Notifications", path = "Notifications" });
             embedNav.Add(new { label = "Events", path = "Events" });
             if (isAdmin) { embedNav.Add(new { label = "System", path = "Config" }); }
+            if (isAdmin) { embedNav.Add(new { label = "Logs", path = "Logs" }); }
         }
         <script type="application/json" id="matmon-embed-nav">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(embedNav))</script>
     }
