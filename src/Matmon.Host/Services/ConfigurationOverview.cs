@@ -30,4 +30,5 @@ public sealed record SystemProbeOverview(
     string? OperatingSystem = null,
     string? Host = null,
     IReadOnlyList<string>? Networks = null,
-    string? Version = null);
+    string? Version = null,
+    string? DuplicateWarning = null);

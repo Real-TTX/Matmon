@@ -4865,6 +4865,23 @@ body.element-picker-open {
   word-break: break-word;
 }
 
+/* Duplicate-probe warning: two processes on one probe id - loud enough to notice, inline with the probe meta. */
+.system-probe-duplicate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+  color: var(--matmon-warning);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.system-probe-duplicate svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+}
+
 .system-probe-subnets {
   display: flex;
   flex-wrap: wrap;

@@ -56,6 +56,10 @@
                             {
                                 <small class="system-probe-os">@probe.Version</small>
                             }
+                            @if (!string.IsNullOrWhiteSpace(probe.DuplicateWarning))
+                            {
+                                <small class="system-probe-duplicate" title="Two processes share this probe id, so every other sensor result comes from the other one.">@MatmonIcons.Render("warning") Duplicate probe: @probe.DuplicateWarning</small>
+                            }
                             @if (probe.Networks is { Count: > 0 })
                             {
                                 <span class="system-probe-subnets">

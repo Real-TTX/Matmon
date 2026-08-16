@@ -105,7 +105,8 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                     networks,
                     // Build version: the primary reports its own; a secondary's rides on the heartbeat. Makes an
                     // out-of-date (or duplicate old) probe container visible at a glance on the Probes page.
-                    isRoot ? MatmonVersion.Current : liveProbe?.Version);
+                    isRoot ? MatmonVersion.Current : liveProbe?.Version,
+                    isRoot ? null : liveProbe?.DuplicateWarning);
             })
             .ToArray();
     }
