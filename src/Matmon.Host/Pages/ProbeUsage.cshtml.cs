@@ -8,6 +8,7 @@ using Matmon.Host.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Matmon.Host.Ui;
 
 namespace Matmon.Host.Pages;
 
@@ -95,7 +96,7 @@ public sealed class ProbeUsageModel : PageModel
         var probeStatuses = _probeRegistry.GetAll().ToDictionary(snapshot => snapshot.ProbeId, StringComparer.OrdinalIgnoreCase);
         var now = DateTimeOffset.UtcNow;
         var recentCutoff = now - TimeSpan.FromHours(1);
-        var lineage = BuildLineage(probe, elementsById);
+        var lineage = MonitoringTopology.BuildLineage(probe, elementsById);
         var path = string.Join(" / ", lineage.Select(element => element.Name));
         var isPrimary = probe.ParentId is null ||
             string.Equals(probe.ProbeId, "primary", StringComparison.OrdinalIgnoreCase) ||
@@ -111,9 +112,9 @@ public sealed class ProbeUsageModel : PageModel
         var sensorRows = new List<ProbeUsageSensorRow>();
         var estimatedRetainedBytesTotal = 0d;
 
-        foreach (var sensor in EnumerateDescendants(probe).OfType<SensorElement>())
+        foreach (var sensor in MonitoringTopology.EnumerateDescendants(probe).OfType<SensorElement>())
         {
-            var sensorLineage = BuildLineage(sensor, elementsById);
+            var sensorLineage = MonitoringTopology.BuildLineage(sensor, elementsById);
             var effectiveSettings = _resolver.Resolve(sensorLineage, templateMap);
             var definition = sensorDefinitions.TryGetValue(sensor.SensorTypeKey, out var sensorDefinition)
                 ? sensorDefinition
@@ -121,7 +122,7 @@ public sealed class ProbeUsageModel : PageModel
             var usageLevel = definition?.UsageLevel ?? SensorUsageCatalog.Resolve(sensor.SensorTypeKey);
             var history = recentHistory.TryGetValue(sensor.Id, out var observations)
                 ? observations
-                : Array.Empty<SensorObservation>();
+                : [];
             history = history
                 .Where(observation => observation.TimestampUtc >= recentCutoff)
                 .ToArray();
@@ -132,7 +133,7 @@ public sealed class ProbeUsageModel : PageModel
                 ? SensorState.Paused
                 : latestObservation?.State ?? SensorState.Unknown;
 
-            var scheduleSummary = FormatScheduleSummary(effectiveSettings, SensorScheduleDefaults.Resolve(sensor.SensorTypeKey));
+            var scheduleSummary = MonitoringDisplay.FormatScheduleSummary(effectiveSettings, SensorScheduleDefaults.Resolve(sensor.SensorTypeKey));
             var estimatedRunsPerDay = EstimateExecutionsPerDay(effectiveSettings, sensor.SensorTypeKey);
             var averageBytes = EstimateAverageObservationBytes(history, latestObservation);
             var estimatedBytesPerHour = averageBytes * estimatedRunsPerDay / 24d;
@@ -187,7 +188,7 @@ public sealed class ProbeUsageModel : PageModel
                 scheduleSummary,
                 latestObservation is null ? "-" : latestObservation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm"),
                 history.Length.ToString(CultureInfo.InvariantCulture),
-                averageDuration.HasValue ? FormatDuration(TimeSpan.FromMilliseconds(averageDuration.Value)) : "-",
+                averageDuration.HasValue ? MonitoringDisplay.FormatDuration(TimeSpan.FromMilliseconds(averageDuration.Value)) : "-",
                 estimatedBytesPerHour,
                 estimatedBytesPerDay,
                 storage.FormatBytes((long)Math.Round(estimatedBytesPerHour)),
@@ -424,77 +425,6 @@ public sealed class ProbeUsageModel : PageModel
         var json = JsonSerializer.Serialize(observation, JsonOptions);
         return Encoding.UTF8.GetByteCount(json);
     }
-
-    private static string FormatScheduleSummary(MonitoringSettings settings, TimeSpan defaultInterval)
-    {
-        if (settings.PollingSchedule is not null)
-        {
-            return settings.PollingSchedule.Summary();
-        }
-
-        if (settings.PollingInterval is TimeSpan interval)
-        {
-            return $"every {MonitoringSchedule.FormatDuration(interval)}";
-        }
-
-        // No explicit schedule anywhere → the poller uses the per-type default; show that, not the 15s floor.
-        return $"every {MonitoringSchedule.FormatDuration(defaultInterval)}";
-    }
-
-    private static string FormatDuration(TimeSpan duration)
-    {
-        if (duration.TotalMilliseconds < 1000)
-        {
-            return $"{duration.TotalMilliseconds:0.#} ms";
-        }
-
-        if (duration.TotalSeconds < 60)
-        {
-            return $"{duration.TotalSeconds:0.#} s";
-        }
-
-        return duration.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
-    }
-
-    private static IReadOnlyList<MonitoringElement> BuildLineage(
-        MonitoringElement element,
-        IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
-    {
-        var lineage = new List<MonitoringElement>();
-        var current = element;
-
-        while (true)
-        {
-            lineage.Add(current);
-
-            if (current.ParentId is not Guid parentId || !elementsById.TryGetValue(parentId, out var parent))
-            {
-                break;
-            }
-
-            current = parent;
-        }
-
-        lineage.Reverse();
-        return lineage;
-    }
-
-    private static IEnumerable<MonitoringElement> EnumerateDescendants(MonitoringContainerElement parent)
-    {
-        foreach (var child in parent.Children)
-        {
-            yield return child;
-
-            if (child is MonitoringContainerElement container)
-            {
-                foreach (var descendant in EnumerateDescendants(container))
-                {
-                    yield return descendant;
-                }
-            }
-        }
-    }
-
     private static string NormalizeViewMode(string? value)
     {
         return string.Equals(value?.Trim(), "table", StringComparison.OrdinalIgnoreCase) ? "table" : "grouped";

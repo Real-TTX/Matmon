@@ -3094,35 +3094,6 @@ function discoveryRowMatches(row, search, serviceFilter) {
   }
 }
 
-function compareDiscoveryRows(left, right, sortKey, direction) {
-  const multiplier = direction === "desc" ? -1 : 1;
-  let result = 0;
-
-  switch (sortKey) {
-    case "host":
-      result = compareText(left.dataset.discoveryHost || "", right.dataset.discoveryHost || "");
-      break;
-    case "ping":
-      result = compareNumber(readDiscoveryNumber(left.dataset.discoveryPingMs, Number.POSITIVE_INFINITY), readDiscoveryNumber(right.dataset.discoveryPingMs, Number.POSITIVE_INFINITY));
-      break;
-    case "ports":
-      result = compareNumber(Number(left.dataset.discoveryPortCount || "0"), Number(right.dataset.discoveryPortCount || "0"));
-      break;
-    case "sensors":
-      result = compareNumber(Number(left.dataset.discoverySensorCount || "0"), Number(right.dataset.discoverySensorCount || "0"));
-      break;
-    default:
-      result = compareDiscoveryAddress(left.dataset.discoveryAddress || "", right.dataset.discoveryAddress || "");
-      break;
-  }
-
-  if (result === 0) {
-    result = compareDiscoveryAddress(left.dataset.discoveryAddress || "", right.dataset.discoveryAddress || "");
-  }
-
-  return result * multiplier;
-}
-
 function readDiscoveryNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;

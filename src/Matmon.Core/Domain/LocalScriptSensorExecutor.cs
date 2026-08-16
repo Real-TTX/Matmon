@@ -254,7 +254,7 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
         startInfo.Environment["MATMON_HOST"] = target;
         startInfo.Environment["MATMON_SENSOR_TYPE"] = context.SensorTypeKey ?? string.Empty;
 
-        if (!MonitoringSettings.TryResolveCredentialBundle(context.Settings, Array.Empty<MonitoringCredentialKind>(), out var credential) ||
+        if (!MonitoringSettings.TryResolveCredentialBundle(context.Settings, [], out var credential) ||
             credential is null)
         {
             return;

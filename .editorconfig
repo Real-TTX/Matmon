@@ -1,0 +1,42 @@
+# Codifies the existing house style (the codebase is already ~100% consistent with these rules).
+# Severity is warning, never error, so the build cannot break on style.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{cs,csx}]
+indent_size = 4
+
+# File-scoped namespaces (241/241 files already comply)
+csharp_style_namespace_declarations = file_scoped:warning
+
+# var everywhere (~98% of locals already use it)
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Pattern-based null checks: `is null` / `is not null` (the codebase has zero `== null`)
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+csharp_style_prefer_null_check_over_type_check = true:suggestion
+
+# Collection expressions for empty/simple initialisation (`[]` won over Array.Empty/new List)
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+
+# Misc house style
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_prefer_braces = true:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_sort_system_directives_first = true
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.{js,css,cshtml}]
+indent_size = 2
+# Razor files mix C# (4-space) and markup; leave indent unenforced there.
+[*.cshtml]
+indent_size = unset

@@ -1081,7 +1081,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var discoverySession = new SnmpV3Session(config, Array.Empty<byte>(), 0, 0, Array.Empty<byte>(), Array.Empty<byte>());
+        var discoverySession = new SnmpV3Session(config, [], 0, 0, [], []);
         var exchange = SendV3Request(
             target,
             port,
@@ -1113,9 +1113,9 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         var requestId = RandomNumberGenerator.GetInt32(1, int.MaxValue);
         var privacyParameters = securityLevel == SnmpSecurityLevel.AuthPriv
             ? RandomNumberGenerator.GetBytes(8)
-            : Array.Empty<byte>();
+            : [];
         var authParameters = securityLevel == SnmpSecurityLevel.NoAuthNoPriv
-            ? Array.Empty<byte>()
+            ? []
             : new byte[12];
         var scopedPdu = BuildV3ScopedPdu(session.EngineId, session.Config.ContextName, pduType, requestId, oids);
         var dataBytes = BuildV3DataBytes(scopedPdu, securityLevel, session, privacyParameters);
@@ -1254,11 +1254,11 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         int engineTime)
     {
         var authKey = config.AuthProtocol == SnmpV3AuthProtocol.None
-            ? Array.Empty<byte>()
+            ? []
             : DeriveLocalizedKey(config.AuthPassword, engineId, config.AuthProtocol);
         var privSourcePassword = string.IsNullOrWhiteSpace(config.PrivPassword) ? config.AuthPassword : config.PrivPassword;
         var privKey = config.PrivProtocol == SnmpV3PrivProtocol.None
-            ? Array.Empty<byte>()
+            ? []
             : DeriveLocalizedKey(privSourcePassword, engineId, config.AuthProtocol);
 
         return new SnmpV3Session(
@@ -1472,7 +1472,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         {
             SnmpV3AuthProtocol.Md5 => ComputeHmacMD5(key, message),
             SnmpV3AuthProtocol.Sha1 => ComputeHmacSHA1(key, message),
-            SnmpV3AuthProtocol.None => Array.Empty<byte>(),
+            SnmpV3AuthProtocol.None => [],
             _ => throw new InvalidOperationException("Unsupported SNMP v3 authentication protocol.")
         };
     }
@@ -1511,7 +1511,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         var passBytes = Encoding.UTF8.GetBytes(passphrase);
         if (passBytes.Length == 0)
         {
-            return Array.Empty<byte>();
+            return [];
         }
 
         using var hash = IncrementalHash.CreateHash(algorithmName);

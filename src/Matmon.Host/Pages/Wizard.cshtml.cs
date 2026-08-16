@@ -147,7 +147,7 @@ public class WizardModel : PageModel
         Load(step);
 
         // The restore step lists the account's cloud backups (async, so fetched here rather than in Load()).
-        if (Step == "restore" && CloudConnected)
+        if (string.Equals(Step, "restore", StringComparison.OrdinalIgnoreCase) && CloudConnected)
         {
             var backups = await _cloudBackups.ListAccountAsync(cancellationToken);
             AccountBackups = backups ?? [];
@@ -432,7 +432,7 @@ public class WizardModel : PageModel
             Step = "welcome";
         }
 
-        if (Step == "cloud")
+        if (string.Equals(Step, "cloud", StringComparison.OrdinalIgnoreCase))
         {
             var cloud = _workspaceStore.GetCloudConnectionSettings();
             CloudConnected = cloud.Enabled && cloud.HasToken;
@@ -442,14 +442,14 @@ public class WizardModel : PageModel
             CloudManagesLicense = CloudConnected;
         }
 
-        if (Step == "restore")
+        if (string.Equals(Step, "restore", StringComparison.OrdinalIgnoreCase))
         {
             var cloud = _workspaceStore.GetCloudConnectionSettings();
             CloudConnected = cloud.Enabled && cloud.HasToken;
             // The backup list itself is fetched in OnGetAsync (async).
         }
 
-        if (Step == "notifications")
+        if (string.Equals(Step, "notifications", StringComparison.OrdinalIgnoreCase))
         {
             var cloud = _workspaceStore.GetCloudConnectionSettings();
             CloudConnected = cloud.Enabled && cloud.HasToken;
@@ -457,7 +457,7 @@ public class WizardModel : PageModel
             EmailConfigured = _workspaceStore.HasEmailNotifications();
         }
 
-        if (Step == "structure")
+        if (string.Equals(Step, "structure", StringComparison.OrdinalIgnoreCase))
         {
             var root = PrimaryNode();
             var folders = _workspaceStore.GetAllElements().OfType<FolderElement>().ToList();
@@ -493,7 +493,7 @@ public class WizardModel : PageModel
                 .ToArray();
         }
 
-        if (Step == "discovery")
+        if (string.Equals(Step, "discovery", StringComparison.OrdinalIgnoreCase))
         {
             ConfiguredSubnets = _workspaceStore.GetPrimaryProbeSubnets();
             RemoteProbes = _workspaceStore.GetAllElements()
@@ -503,7 +503,7 @@ public class WizardModel : PageModel
                 .ToArray();
         }
 
-        if (Step == "twofactor")
+        if (string.Equals(Step, "twofactor", StringComparison.OrdinalIgnoreCase))
         {
             TwoFactorEnabled = _workspaceStore.FindUser(UserId)?.TwoFactorEnabled ?? false;
         }

@@ -144,7 +144,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         // counts as Ack, not as an Error/Warning in the status (mirrors the Alerts page buckets).
         var errorAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged && alert.State != SensorState.Warning && alert.State != SensorState.Paused);
         var warningAlertCount = workspace.Alerts.Count(alert => alert.IsActive && !alert.IsAcknowledged && alert.State == SensorState.Warning);
-        var pausedSensorCount = EnumerateElements(workspace.RootProbe).OfType<SensorElement>().Count(sensor => sensor.IsPaused);
+        var pausedSensorCount = MonitoringTopology.EnumerateSelfAndDescendants(workspace.RootProbe).OfType<SensorElement>().Count(sensor => sensor.IsPaused);
         var acknowledgedSensorIds = workspace.Alerts
             .Where(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementKind == MonitoringElementKind.Sensor)
             .Select(alert => alert.ElementId)
@@ -200,7 +200,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var probeHealthMap = new Dictionary<Guid, ProbeHealthSnapshot>();
         var heartbeatWindowSeconds = Math.Clamp(_runtimeOptions.HeartbeatIntervalSeconds, 5, 300);
 
-        foreach (var probe in EnumerateElements(root).OfType<ProbeElement>())
+        foreach (var probe in MonitoringTopology.EnumerateSelfAndDescendants(root).OfType<ProbeElement>())
         {
             if (probe.ParentId is null)
             {
@@ -576,7 +576,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
     {
         return sensorHistoryMap.TryGetValue(sensorId, out var observations)
             ? observations
-            : Array.Empty<SensorObservation>();
+            : [];
     }
 
     private static SensorObservation? TryGetLatestSensorObservation(
@@ -859,25 +859,6 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
         return string.IsNullOrWhiteSpace(sensor.Target) ? $"{target} (inherited)" : target;
     }
-
-    private static IEnumerable<MonitoringElement> EnumerateElements(MonitoringElement element)
-    {
-        yield return element;
-
-        if (element is not MonitoringContainerElement container)
-        {
-            yield break;
-        }
-
-        foreach (var child in container.Children)
-        {
-            foreach (var nested in EnumerateElements(child))
-            {
-                yield return nested;
-            }
-        }
-    }
-
     private sealed record SensorDisplaySnapshot(
         SensorState State,
         string StateKey,

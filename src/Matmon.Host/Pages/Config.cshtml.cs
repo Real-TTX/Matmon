@@ -820,10 +820,7 @@ public class ConfigModel : PageModel
             : "-";
     }
 
-    public static string FormatCount(long value)
-    {
-        return value.ToString("N0", CultureInfo.CurrentCulture);
-    }
+    public static string FormatCount(long value) => Ui.MonitoringDisplay.FormatCount(value);
 
     public bool IsCurrentUser(MatmonUser user)
     {

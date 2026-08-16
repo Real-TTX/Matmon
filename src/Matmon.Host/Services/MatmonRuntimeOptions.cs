@@ -12,13 +12,6 @@ public sealed class MatmonRuntimeOptions
 
     public string? PrimaryUrl { get; set; }
 
-    [Obsolete("Use PrimaryUrl instead.")]
-    public string? MasterUrl
-    {
-        get => PrimaryUrl;
-        set => PrimaryUrl = value;
-    }
-
     public int HeartbeatIntervalSeconds { get; set; } = 30;
 
     /// <summary>

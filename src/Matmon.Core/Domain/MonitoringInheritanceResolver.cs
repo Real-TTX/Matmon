@@ -53,7 +53,9 @@ public sealed class MonitoringInheritanceResolver
         }
     }
 
-    private static IEnumerable<MonitoringTemplate> ResolveTemplateChain(
+    /// <summary>The template's inheritance chain root-first (parent … template). Public because the template
+    /// editor/impact views need the same walk (previously reimplemented in the page model).</summary>
+    public static IEnumerable<MonitoringTemplate> ResolveTemplateChain(
         Guid templateId,
         IReadOnlyDictionary<Guid, MonitoringTemplate> templates)
     {

@@ -22,12 +22,12 @@ public sealed class ProbeSensorAssignmentProvider
         var definitionMap = snapshot.SensorDefinitions.ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
         var latestBySensorId = _workspaceStore.GetLatestSensorObservations();
 
-        var sensors = EnumerateDescendants(probe)
+        var sensors = MonitoringTopology.EnumerateDescendants(probe)
             .OfType<SensorElement>()
             .Where(sensor => !string.Equals(sensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
             .Select(sensor =>
             {
-                var lineage = BuildLineage(sensor, elementsById);
+                var lineage = MonitoringTopology.BuildLineage(sensor, elementsById);
                 var settings = _resolver.Resolve(lineage, templateMap);
                 ApplySensorCredentialDefaults(settings, sensor.SensorTypeKey, definitionMap);
                 settings.Credentials.Clear();
@@ -71,7 +71,7 @@ public sealed class ProbeSensorAssignmentProvider
             return false;
         }
 
-        var foundSensor = EnumerateDescendants(foundProbe)
+        var foundSensor = MonitoringTopology.EnumerateDescendants(foundProbe)
             .OfType<SensorElement>()
             .FirstOrDefault(candidate => candidate.Id == sensorId);
         if (foundSensor is null ||
@@ -83,7 +83,7 @@ public sealed class ProbeSensorAssignmentProvider
         var snapshot = _workspaceStore.Workspace;
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
-        var lineage = BuildLineage(foundSensor, elementsById);
+        var lineage = MonitoringTopology.BuildLineage(foundSensor, elementsById);
 
         probe = foundProbe;
         sensor = foundSensor;
@@ -99,45 +99,6 @@ public sealed class ProbeSensorAssignmentProvider
         if (definitionMap.TryGetValue(sensorTypeKey, out var definition))
         {
             MonitoringSettings.ApplyCredentialValuesForKinds(settings, definition.CredentialKinds);
-        }
-    }
-
-    private static IReadOnlyList<MonitoringElement> BuildLineage(
-        MonitoringElement element,
-        IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
-    {
-        var lineage = new List<MonitoringElement>();
-        var current = element;
-
-        while (true)
-        {
-            lineage.Add(current);
-
-            if (current.ParentId is not Guid parentId || !elementsById.TryGetValue(parentId, out var parent))
-            {
-                break;
-            }
-
-            current = parent;
-        }
-
-        lineage.Reverse();
-        return lineage;
-    }
-
-    private static IEnumerable<MonitoringElement> EnumerateDescendants(MonitoringContainerElement parent)
-    {
-        foreach (var child in parent.Children)
-        {
-            yield return child;
-
-            if (child is MonitoringContainerElement container)
-            {
-                foreach (var descendant in EnumerateDescendants(container))
-                {
-                    yield return descendant;
-                }
-            }
         }
     }
 }

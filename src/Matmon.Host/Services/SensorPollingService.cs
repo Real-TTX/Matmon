@@ -76,7 +76,7 @@ public sealed class SensorPollingService : BackgroundService
                 continue;
             }
 
-            var lineage = BuildLineage(sensor, elementsById);
+            var lineage = MonitoringTopology.BuildLineage(sensor, elementsById);
             var effectiveSettings = _resolver.Resolve(lineage, templateMap);
             if (effectiveSettings.Enabled == false)
             {
@@ -148,35 +148,6 @@ public sealed class SensorPollingService : BackgroundService
 
         _logger.LogInformation("Polled {Count} sensors ({Workers} workers)", due.Count, workers);
     }
-
-    private static IReadOnlyList<MonitoringElement> BuildLineage(
-        MonitoringElement element,
-        IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
-    {
-        var lineage = new List<MonitoringElement>();
-        var current = element;
-
-        while (true)
-        {
-            lineage.Add(current);
-
-            if (current.ParentId is not Guid parentId)
-            {
-                break;
-            }
-
-            if (!elementsById.TryGetValue(parentId, out var parent))
-            {
-                break;
-            }
-
-            current = parent;
-        }
-
-        lineage.Reverse();
-        return lineage;
-    }
-
     private static bool IsLocalSensor(
         MonitoringElement element,
         IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
@@ -187,7 +158,7 @@ public sealed class SensorPollingService : BackgroundService
             return true;
         }
 
-        var lineage = BuildLineage(element, elementsById);
+        var lineage = MonitoringTopology.BuildLineage(element, elementsById);
         var probeAncestor = lineage.OfType<ProbeElement>().LastOrDefault();
         return probeAncestor is not null && probeAncestor.ParentId is null;
     }

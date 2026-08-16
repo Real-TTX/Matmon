@@ -39,7 +39,7 @@ public sealed class MapDisplayProvider
             .Select(slide => new MapDisplaySlideViewModel(slide.Id, slide.Name, BuildTiles(slide.Tiles)))
             .ToArray();
 
-        var firstTiles = slides.Length > 0 ? slides[0].Tiles : Array.Empty<MapDisplayTileViewModel>();
+        var firstTiles = slides.Length > 0 ? slides[0].Tiles : [];
         return new MapDisplayViewModel(map, firstTiles, slides);
     }
 

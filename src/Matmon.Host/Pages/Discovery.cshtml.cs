@@ -584,33 +584,9 @@ public sealed class DiscoveryModel : PageModel
         var snapshot = _workspaceStore.Workspace;
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(candidate => candidate.Id);
         var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
-        var lineage = BuildLineage(element, elementsById);
+        var lineage = MonitoringTopology.BuildLineage(element, elementsById);
         return _resolver.Resolve(lineage, templateMap);
     }
-
-    private static IReadOnlyList<MonitoringElement> BuildLineage(
-        MonitoringElement element,
-        IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
-    {
-        var lineage = new List<MonitoringElement>();
-        var current = element;
-
-        while (true)
-        {
-            lineage.Add(current);
-            if (current.ParentId is not Guid parentId ||
-                !elementsById.TryGetValue(parentId, out var parent))
-            {
-                break;
-            }
-
-            current = parent;
-        }
-
-        lineage.Reverse();
-        return lineage;
-    }
-
     private void StartLocalDiscovery(DiscoveryJobSnapshot job)
     {
         _ = Task.Run(async () =>

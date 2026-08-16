@@ -80,7 +80,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     {
         if (maxCount is <= 0)
         {
-            return Array.Empty<SensorObservation>();
+            return [];
         }
 
         var cutoffUtc = window is { } requestedWindow && requestedWindow > TimeSpan.Zero

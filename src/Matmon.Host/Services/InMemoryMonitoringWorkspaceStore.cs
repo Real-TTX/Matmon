@@ -523,69 +523,6 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    public MonitoringMap CreateMap(
-        string name,
-        string? description,
-        int columns,
-        int rows,
-        MonitoringMapDisplayPreset displayPreset,
-        IReadOnlyList<MonitoringMapTile> tiles)
-    {
-        lock (_gate)
-        {
-            EnsureDefaultMaps();
-            var now = DateTimeOffset.UtcNow;
-            var map = new MonitoringMap
-            {
-                Name = NormalizeMapName(name),
-                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-                Columns = Math.Clamp(columns, 4, 24),
-                Rows = Math.Clamp(rows, 3, 16),
-                DisplayPreset = displayPreset,
-                PublicToken = CreateToken(),
-                CreatedUtc = now,
-                UpdatedUtc = now,
-                Tiles = NormalizeMapTiles(tiles, Math.Clamp(columns, 4, 24), Math.Clamp(rows, 3, 16)).ToList()
-            };
-
-            _document.Maps.Add(map);
-            QueueSave(SavePriority.Configuration);
-            return CloneMap(map);
-        }
-    }
-
-    public bool UpdateMap(
-        Guid mapId,
-        string name,
-        string? description,
-        int columns,
-        int rows,
-        MonitoringMapDisplayPreset displayPreset,
-        IReadOnlyList<MonitoringMapTile> tiles)
-    {
-        lock (_gate)
-        {
-            EnsureDefaultMaps();
-            var map = _document.Maps.FirstOrDefault(candidate => candidate.Id == mapId);
-            if (map is null)
-            {
-                return false;
-            }
-
-            var normalizedColumns = Math.Clamp(columns, 4, 24);
-            var normalizedRows = Math.Clamp(rows, 3, 16);
-            map.Name = NormalizeMapName(name);
-            map.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
-            map.Columns = normalizedColumns;
-            map.Rows = normalizedRows;
-            map.DisplayPreset = displayPreset;
-            map.Tiles = NormalizeMapTiles(tiles, normalizedColumns, normalizedRows).ToList();
-            map.UpdatedUtc = DateTimeOffset.UtcNow;
-            QueueSave(SavePriority.Configuration);
-            return true;
-        }
-    }
-
     public MonitoringMap CreateMapWithSlides(
         string name,
         string? description,
@@ -3580,23 +3517,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    private static IEnumerable<MonitoringElement> EnumerateElements(MonitoringElement element)
-    {
-        yield return element;
-
-        if (element is not MonitoringContainerElement container)
-        {
-            yield break;
-        }
-
-        foreach (var child in container.Children)
-        {
-            foreach (var nested in EnumerateElements(child))
-            {
-                yield return nested;
-            }
-        }
-    }
+    // Thin delegator kept because ~29 call sites across the store partials use the short name.
+    private static IEnumerable<MonitoringElement> EnumerateElements(MonitoringElement element) =>
+        MonitoringTopology.EnumerateSelfAndDescendants(element);
 
     private string GenerateUniqueProbeId(string name)
     {

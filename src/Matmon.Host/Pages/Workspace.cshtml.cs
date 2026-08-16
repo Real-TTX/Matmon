@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
+using Matmon.Host.Ui;
 
 namespace Matmon.Host.Pages;
 
@@ -164,7 +165,7 @@ public sealed class WorkspaceModel : PageModel
             }
 
             var probe = _workspaceStore.CreateProbe(NewProbe.ParentId, NewProbe.Name, NewProbe.Description);
-            StatusMessage = $"Probe '{probe.Name}' angelegt. Install script is ready.";
+            StatusMessage = $"Probe '{probe.Name}' created. The install script is ready.";
             var backUrl = GetSafeReturnUrl("/Config?tab=probes");
             return RedirectToPage("/ProbeInstall", new { probeId = probe.Id, returnUrl = backUrl });
         }
@@ -181,7 +182,7 @@ public sealed class WorkspaceModel : PageModel
         try
         {
             var folder = _workspaceStore.CreateFolder(RequireParentId(NewFolder.ParentId, "Folder"), NewFolder.Name, NewFolder.Description);
-            StatusMessage = $"Folder '{folder.Name}' angelegt.";
+            StatusMessage = $"Folder '{folder.Name}' created.";
             return RedirectAfterAction(ReturnUrl, "/Monitoring");
         }
         catch (Exception ex)
@@ -197,7 +198,7 @@ public sealed class WorkspaceModel : PageModel
         try
         {
             var host = _workspaceStore.CreateHost(RequireParentId(NewHost.ParentId, "Host"), NewHost.Name, NewHost.Address, NewHost.Description);
-            StatusMessage = $"Host '{host.Name}' angelegt.";
+            StatusMessage = $"Host '{host.Name}' created.";
             return RedirectAfterAction(ReturnUrl, "/Monitoring");
         }
         catch (Exception ex)
@@ -250,7 +251,7 @@ public sealed class WorkspaceModel : PageModel
                 }
             });
 
-            StatusMessage = $"Sensor '{sensor.Name}' angelegt.";
+            StatusMessage = $"Sensor '{sensor.Name}' created.";
             return RedirectAfterAction(ReturnUrl, "/Monitoring");
         }
         catch (Exception ex)
@@ -724,7 +725,7 @@ public sealed class WorkspaceModel : PageModel
 
             _workspaceStore.Save();
 
-            StatusMessage = $"Template '{template.Name}' angelegt.";
+            StatusMessage = $"Template '{template.Name}' created.";
             return RedirectToPage("/TemplateEditor", new { selectedTemplateId = template.Id, returnUrl = ReturnUrl });
         }
         catch (Exception ex)
@@ -745,7 +746,7 @@ public sealed class WorkspaceModel : PageModel
             ApplyNotificationRuleEditor(createdRule, NewNotificationRule);
             SynchronizeNotificationRuleLegacyFields(createdRule);
             _workspaceStore.Save();
-            StatusMessage = $"Notification rule '{createdRule.Name}' angelegt.";
+            StatusMessage = $"Notification rule '{createdRule.Name}' created.";
             return RedirectAfterAction(ReturnUrl, "/Notifications");
         }
         catch (Exception ex)
@@ -774,7 +775,7 @@ public sealed class WorkspaceModel : PageModel
         {
             if (ElementEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Element ausgewählt.");
+                throw new InvalidOperationException("No element selected.");
             }
 
             var credentialIssueCount = 0;
@@ -792,12 +793,12 @@ public sealed class WorkspaceModel : PageModel
 
             if (!found)
             {
-                throw new InvalidOperationException("Element nicht gefunden.");
+                throw new InvalidOperationException("Element not found.");
             }
 
             StatusMessage = credentialIssueCount == 0
-                ? $"{elementKind} '{elementName}' gespeichert."
-                : $"{elementKind} '{elementName}' gespeichert. {credentialIssueCount} credential issue{(credentialIssueCount == 1 ? string.Empty : "s")} found.";
+                ? $"{elementKind} '{elementName}' saved."
+                : $"{elementKind} '{elementName}' saved. {credentialIssueCount} credential issue{(credentialIssueCount == 1 ? string.Empty : "s")} found.";
             return RedirectToPage(new { selectedId = ElementEditor.Id, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -813,7 +814,7 @@ public sealed class WorkspaceModel : PageModel
         try
         {
             var element = _workspaceStore.FindElement(ElementEditor.Id)
-                ?? throw new InvalidOperationException("Element nicht gefunden.");
+                ?? throw new InvalidOperationException("Element not found.");
 
             if (element.TemplateOriginId is not Guid originId)
             {
@@ -821,7 +822,7 @@ public sealed class WorkspaceModel : PageModel
             }
 
             var template = _workspaceStore.FindTemplate(originId)
-                ?? throw new InvalidOperationException("Das Herkunfts-Template existiert nicht mehr.");
+                ?? throw new InvalidOperationException("The origin template no longer exists.");
 
             _workspaceStore.UpdateElement(element.Id, e => ApplyTemplateCopy(e, template, elementWins: false));
             StatusMessage = $"'{element.Name}' aus Template '{template.Name}' wiederhergestellt.";
@@ -840,14 +841,14 @@ public sealed class WorkspaceModel : PageModel
         try
         {
             var element = _workspaceStore.FindElement(ElementEditor.Id)
-                ?? throw new InvalidOperationException("Element nicht gefunden.");
+                ?? throw new InvalidOperationException("Element not found.");
 
             if (!_workspaceStore.UpdateElement(element.Id, e => e.TemplateOriginId = null))
             {
-                throw new InvalidOperationException("Element nicht gefunden.");
+                throw new InvalidOperationException("Element not found.");
             }
 
-            StatusMessage = $"Template-Herkunft von '{element.Name}' gelöst.";
+            StatusMessage = $"Template origin detached from '{element.Name}'.";
             return RedirectToPage(new { selectedId = element.Id, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -864,19 +865,19 @@ public sealed class WorkspaceModel : PageModel
         {
             if (ElementEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Probe-Element ausgewählt.");
+                throw new InvalidOperationException("No probe element selected.");
             }
 
             var element = _workspaceStore.FindElement(ElementEditor.Id)
-                ?? throw new InvalidOperationException("Element nicht gefunden.");
+                ?? throw new InvalidOperationException("Element not found.");
 
             if (element is not ProbeElement probe)
             {
-                throw new InvalidOperationException("Token kann nur bei Probes rotiert werden.");
+                throw new InvalidOperationException("Tokens can only be rotated on probes.");
             }
 
             _workspaceStore.RotateProbeToken(probe.Id);
-            StatusMessage = $"Token für '{probe.Name}' rotiert.";
+            StatusMessage = $"Token for '{probe.Name}' rotated.";
             return RedirectToPage(new { selectedId = probe.Id, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -893,18 +894,18 @@ public sealed class WorkspaceModel : PageModel
         {
             if (ElementEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Element ausgewählt.");
+                throw new InvalidOperationException("No element selected.");
             }
 
             var element = _workspaceStore.FindElement(ElementEditor.Id)
-                ?? throw new InvalidOperationException("Element nicht gefunden.");
+                ?? throw new InvalidOperationException("Element not found.");
 
             if (!_workspaceStore.DeleteElement(element.Id))
             {
-                throw new InvalidOperationException("Element konnte nicht gelöscht werden.");
+                throw new InvalidOperationException("The element could not be deleted.");
             }
 
-            StatusMessage = $"Element '{element.Name}' gelöscht.";
+            StatusMessage = $"Element '{element.Name}' deleted.";
             if (element is MonitoringElement monitoringElement)
             {
                 return RedirectToPage("/Monitoring", new
@@ -935,11 +936,11 @@ public sealed class WorkspaceModel : PageModel
         {
             if (TemplateEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Template ausgewählt.");
+                throw new InvalidOperationException("No template selected.");
             }
 
             var template = _workspaceStore.FindTemplate(TemplateEditor.Id)
-                ?? throw new InvalidOperationException("Template nicht gefunden.");
+                ?? throw new InvalidOperationException("Template not found.");
             var templateMap = _workspaceStore.Workspace.Templates.ToDictionary(candidate => candidate.Id);
             var impactedSensors = BuildTemplateImpactRows(_workspaceStore.Workspace.RootProbe, template, templateMap).Count;
 
@@ -951,8 +952,8 @@ public sealed class WorkspaceModel : PageModel
             });
 
             StatusMessage = impactedSensors == 0
-                ? $"Template '{templateName}' gespeichert. Keine Sensoren betroffen."
-                : $"Template '{templateName}' gespeichert. {impactedSensors} Sensor{(impactedSensors == 1 ? string.Empty : "en")} betroffen.";
+                ? $"Template '{templateName}' saved. No sensors affected."
+                : $"Template '{templateName}' saved. {impactedSensors} sensor{(impactedSensors == 1 ? string.Empty : "s")} affected.";
             return RedirectToPage(new { selectedId = SelectedId, selectedTemplateId = TemplateEditor.Id });
         }
         catch (Exception ex)
@@ -969,18 +970,18 @@ public sealed class WorkspaceModel : PageModel
         {
             if (TemplateEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Template ausgewählt.");
+                throw new InvalidOperationException("No template selected.");
             }
 
             var template = _workspaceStore.FindTemplate(TemplateEditor.Id)
-                ?? throw new InvalidOperationException("Template nicht gefunden.");
+                ?? throw new InvalidOperationException("Template not found.");
 
             if (!_workspaceStore.DeleteTemplate(template.Id))
             {
-                throw new InvalidOperationException("Template konnte nicht gelöscht werden.");
+                throw new InvalidOperationException("The template could not be deleted.");
             }
 
-            StatusMessage = $"Template '{template.Name}' gelöscht.";
+            StatusMessage = $"Template '{template.Name}' deleted.";
             return RedirectToPage(new { selectedId = SelectedId });
         }
         catch (Exception ex)
@@ -997,16 +998,16 @@ public sealed class WorkspaceModel : PageModel
         {
             if (NotificationRuleEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Notification Rule ausgewählt.");
+                throw new InvalidOperationException("No notification rule selected.");
             }
 
             var rule = _workspaceStore.FindNotificationRule(NotificationRuleEditor.Id)
-                ?? throw new InvalidOperationException("Notification Rule nicht gefunden.");
+                ?? throw new InvalidOperationException("Notification rule not found.");
 
             ApplyNotificationRuleEditor(rule, NotificationRuleEditor);
             SynchronizeNotificationRuleLegacyFields(rule);
             _workspaceStore.Save();
-            StatusMessage = $"Notification Rule '{rule.Name}' gespeichert.";
+            StatusMessage = $"Notification rule '{rule.Name}' saved.";
             return RedirectToPage(new { selectedNotificationRuleId = rule.Id, selectedId = SelectedId, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -1023,18 +1024,18 @@ public sealed class WorkspaceModel : PageModel
         {
             if (NotificationRuleEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Notification Rule ausgewählt.");
+                throw new InvalidOperationException("No notification rule selected.");
             }
 
             var rule = _workspaceStore.FindNotificationRule(NotificationRuleEditor.Id)
-                ?? throw new InvalidOperationException("Notification Rule nicht gefunden.");
+                ?? throw new InvalidOperationException("Notification rule not found.");
 
             if (!_workspaceStore.DeleteNotificationRule(rule.Id))
             {
-                throw new InvalidOperationException("Notification Rule konnte nicht gelöscht werden.");
+                throw new InvalidOperationException("The notification rule could not be deleted.");
             }
 
-            StatusMessage = $"Notification Rule '{rule.Name}' gelöscht.";
+            StatusMessage = $"Notification rule '{rule.Name}' deleted.";
             return RedirectToPage(new { selectedId = SelectedId, selectedTemplateId = SelectedTemplateId });
         }
         catch (Exception ex)
@@ -1151,7 +1152,7 @@ public sealed class WorkspaceModel : PageModel
             createdSender = _workspaceStore.CreateNotificationSender(NewNotificationSender.Name);
             ApplyNotificationSenderEditor(createdSender, NewNotificationSender);
             _workspaceStore.Save();
-            StatusMessage = $"Notification sender '{createdSender.Name}' angelegt.";
+            StatusMessage = $"Notification sender '{createdSender.Name}' created.";
             return RedirectAfterAction(ReturnUrl, "/NotificationSettings");
         }
         catch (Exception ex)
@@ -1180,15 +1181,15 @@ public sealed class WorkspaceModel : PageModel
         {
             if (NotificationSenderEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Notification Sender ausgewählt.");
+                throw new InvalidOperationException("No notification sender selected.");
             }
 
             var sender = _workspaceStore.FindNotificationSender(NotificationSenderEditor.Id)
-                ?? throw new InvalidOperationException("Notification Sender nicht gefunden.");
+                ?? throw new InvalidOperationException("Notification sender not found.");
 
             ApplyNotificationSenderEditor(sender, NotificationSenderEditor);
             _workspaceStore.Save();
-            StatusMessage = $"Notification Sender '{sender.Name}' gespeichert.";
+            StatusMessage = $"Notification sender '{sender.Name}' saved.";
             return RedirectToPage(new { selectedNotificationSenderId = sender.Id, selectedId = SelectedId, selectedTemplateId = SelectedTemplateId, selectedNotificationRuleId = SelectedNotificationRuleId });
         }
         catch (Exception ex)
@@ -1205,11 +1206,11 @@ public sealed class WorkspaceModel : PageModel
         {
             if (NotificationSenderEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Notification Sender ausgewählt.");
+                throw new InvalidOperationException("No notification sender selected.");
             }
 
             var sender = _workspaceStore.FindNotificationSender(NotificationSenderEditor.Id)
-                ?? throw new InvalidOperationException("Notification Sender nicht gefunden.");
+                ?? throw new InvalidOperationException("Notification sender not found.");
 
             // A sender in use can't be deleted - tell the user which rules to repoint first (the store just
             // returns false otherwise, which reads as a mysterious "can't delete").
@@ -1222,10 +1223,10 @@ public sealed class WorkspaceModel : PageModel
 
             if (!_workspaceStore.DeleteNotificationSender(sender.Id))
             {
-                throw new InvalidOperationException("Notification Sender konnte nicht gelöscht werden.");
+                throw new InvalidOperationException("The notification sender could not be deleted.");
             }
 
-            StatusMessage = $"Notification Sender '{sender.Name}' gelöscht.";
+            StatusMessage = $"Notification sender '{sender.Name}' deleted.";
             return RedirectToPage(new { selectedId = SelectedId, selectedTemplateId = SelectedTemplateId, selectedNotificationRuleId = SelectedNotificationRuleId });
         }
         catch (Exception ex)
@@ -1245,7 +1246,7 @@ public sealed class WorkspaceModel : PageModel
             createdReceiver = _workspaceStore.CreateNotificationReceiver(NewNotificationReceiver.Name);
             ApplyNotificationReceiverEditor(createdReceiver, NewNotificationReceiver);
             _workspaceStore.Save();
-            StatusMessage = $"Notification receiver '{createdReceiver.Name}' angelegt.";
+            StatusMessage = $"Notification receiver '{createdReceiver.Name}' created.";
             return RedirectAfterAction(ReturnUrl, "/NotificationReceivers");
         }
         catch (Exception ex)
@@ -1274,15 +1275,15 @@ public sealed class WorkspaceModel : PageModel
         {
             if (NotificationReceiverEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Notification Receiver ausgewählt.");
+                throw new InvalidOperationException("No notification receiver selected.");
             }
 
             var receiver = _workspaceStore.FindNotificationReceiver(NotificationReceiverEditor.Id)
-                ?? throw new InvalidOperationException("Notification Receiver nicht gefunden.");
+                ?? throw new InvalidOperationException("Notification receiver not found.");
 
             ApplyNotificationReceiverEditor(receiver, NotificationReceiverEditor);
             _workspaceStore.Save();
-            StatusMessage = $"Notification Receiver '{receiver.Name}' gespeichert.";
+            StatusMessage = $"Notification receiver '{receiver.Name}' saved.";
             return RedirectToPage(new { selectedNotificationReceiverId = receiver.Id, selectedId = SelectedId, selectedTemplateId = SelectedTemplateId, selectedNotificationRuleId = SelectedNotificationRuleId });
         }
         catch (Exception ex)
@@ -1299,18 +1300,18 @@ public sealed class WorkspaceModel : PageModel
         {
             if (NotificationReceiverEditor.Id == Guid.Empty)
             {
-                throw new InvalidOperationException("Kein Notification Receiver ausgewählt.");
+                throw new InvalidOperationException("No notification receiver selected.");
             }
 
             var receiver = _workspaceStore.FindNotificationReceiver(NotificationReceiverEditor.Id)
-                ?? throw new InvalidOperationException("Notification Receiver nicht gefunden.");
+                ?? throw new InvalidOperationException("Notification receiver not found.");
 
             if (!_workspaceStore.DeleteNotificationReceiver(receiver.Id))
             {
-                throw new InvalidOperationException("Notification Receiver konnte nicht gelöscht werden.");
+                throw new InvalidOperationException("The notification receiver could not be deleted.");
             }
 
-            StatusMessage = $"Notification Receiver '{receiver.Name}' gelöscht.";
+            StatusMessage = $"Notification receiver '{receiver.Name}' deleted.";
             return RedirectToPage(new { selectedId = SelectedId, selectedTemplateId = SelectedTemplateId, selectedNotificationRuleId = SelectedNotificationRuleId });
         }
         catch (Exception ex)
@@ -1679,7 +1680,7 @@ public sealed class WorkspaceModel : PageModel
             createCredentialSettings.Credentials,
             sensorDefinition?.CredentialKinds ?? [],
             NewSensor.SelectedCredentialId);
-        NewSensor.ScheduleInheritedLabel = FormatScheduleSummary(createCredentialSettings, SensorScheduleDefaults.Resolve(NewSensor.SensorTypeKey));
+        NewSensor.ScheduleInheritedLabel = MonitoringDisplay.FormatScheduleSummary(createCredentialSettings, SensorScheduleDefaults.Resolve(NewSensor.SensorTypeKey));
 
         PopulateSensorParameterEditor(NewSensor, snapshot.SensorDefinitions);
         PopulateSensorThresholdEditor(NewSensor, snapshot, latestSensorObservations);
@@ -2348,7 +2349,7 @@ public sealed class WorkspaceModel : PageModel
         var triggerStateList = (triggerStates ?? Enumerable.Empty<SensorState>()).Distinct().ToList();
         if (triggerStateList.Count == 0)
         {
-            throw new InvalidOperationException("Mindestens ein Trigger-State muss ausgewählt werden.");
+            throw new InvalidOperationException("At least one trigger state must be selected.");
         }
 
         rule.Name = string.IsNullOrWhiteSpace(name) ? "Notification rule" : name.Trim();
@@ -3234,7 +3235,7 @@ public sealed class WorkspaceModel : PageModel
         var field = new WorkspaceSensorChannelThresholdFieldInput
         {
             ChannelKey = channelKey,
-            ChannelLabel = string.IsNullOrWhiteSpace(channelLabel) ? HumanizeChannelKey(channelKey) : channelLabel,
+            ChannelLabel = string.IsNullOrWhiteSpace(channelLabel) ? MonitoringDisplay.HumanizeChannelKey(channelKey) : channelLabel,
             Unit = unit,
             IsVirtual = isVirtual || (currentField?.IsVirtual ?? false),
             IsDefault = currentField?.IsDefault
@@ -3371,7 +3372,7 @@ public sealed class WorkspaceModel : PageModel
         row = new WorkspaceSensorChannelThresholdFieldInput
         {
             ChannelKey = channelKey,
-            ChannelLabel = HumanizeChannelKey(channelKey)
+            ChannelLabel = MonitoringDisplay.HumanizeChannelKey(channelKey)
         };
         rows[channelKey] = row;
         return row;
@@ -3638,39 +3639,6 @@ public sealed class WorkspaceModel : PageModel
     {
         return value.ToString("0.###", CultureInfo.InvariantCulture);
     }
-
-    private static string HumanizeChannelKey(string channelKey)
-    {
-        if (string.IsNullOrWhiteSpace(channelKey))
-        {
-            return "Channel";
-        }
-
-        var normalized = channelKey.Trim()
-            .Replace('_', ' ')
-            .Replace('-', ' ')
-            .Replace('.', ' ')
-            .Replace('/', ' ')
-            .Replace(':', ' ');
-
-        var builder = new List<char>(normalized.Length + 8);
-        for (var index = 0; index < normalized.Length; index++)
-        {
-            var current = normalized[index];
-            if (index > 0 &&
-                char.IsLower(normalized[index - 1]) &&
-                char.IsUpper(current))
-            {
-                builder.Add(' ');
-            }
-
-            builder.Add(current);
-        }
-
-        var text = new string(builder.ToArray()).Trim();
-        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(text.ToLowerInvariant());
-    }
-
     private static string NormalizeSensorParameterValue(SensorParameterDefinition parameter, string rawValue)
     {
         return parameter.Kind switch
@@ -3846,7 +3814,7 @@ public sealed class WorkspaceModel : PageModel
         {
             if (!_workspaceStore.MoveElement(element.Id, selectedParentId.Value))
             {
-                throw new InvalidOperationException("Parent konnte nicht geaendert werden.");
+                throw new InvalidOperationException("The parent could not be changed.");
             }
 
             parentChanged = true;
@@ -4641,7 +4609,7 @@ public sealed class WorkspaceModel : PageModel
     private MonitoringSettings ResolveTemplateInheritedSettings(MonitoringTemplate template)
     {
         var templates = _workspaceStore.Workspace.Templates.ToDictionary(candidate => candidate.Id);
-        var chain = ResolveTemplateChain(template.Id, templates).ToList();
+        var chain = MonitoringInheritanceResolver.ResolveTemplateChain(template.Id, templates).ToList();
         if (chain.Count <= 1)
         {
             return new MonitoringSettings();
@@ -5518,7 +5486,7 @@ public sealed class WorkspaceModel : PageModel
             daysOfWeek,
             dayOfMonth,
             time,
-            FormatScheduleSummary(effectiveSettings, defaultInterval));
+            MonitoringDisplay.FormatScheduleSummary(effectiveSettings, defaultInterval));
     }
 
     private static (string Mode, int? EveryValue, string EveryUnit, DayOfWeek? DayOfWeek, int? DayOfMonth, string? Time)
@@ -5584,25 +5552,6 @@ public sealed class WorkspaceModel : PageModel
 
         return ("every", safeSeconds, "seconds", DayOfWeek.Monday, 1, "00:00");
     }
-
-    private static string FormatScheduleSummary(MonitoringSettings settings, TimeSpan defaultInterval)
-    {
-        if (settings.PollingSchedule is not null)
-        {
-            return settings.PollingSchedule.Summary();
-        }
-
-        if (settings.PollingInterval is TimeSpan interval)
-        {
-            return $"every {MonitoringSchedule.FormatDuration(interval)}";
-        }
-
-        // Nothing set on the sensor or any ancestor → the poller falls back to the per-type default
-        // (SensorScheduleDefaults). Surface THAT here, not the bare 15s floor, so the editor shows the
-        // real effective cadence (e.g. "every 5 min" / "every 30 s") instead of looking unset.
-        return $"every {MonitoringSchedule.FormatDuration(defaultInterval)}";
-    }
-
     private static string FormatScheduleTime(TimeSpan? time)
     {
         return (time ?? TimeSpan.Zero).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
@@ -5684,7 +5633,7 @@ public sealed class WorkspaceModel : PageModel
             FolderElement => new[] { MonitoringElementKind.Probe, MonitoringElementKind.Folder },
             HostElement => new[] { MonitoringElementKind.Probe, MonitoringElementKind.Folder },
             SensorElement => new[] { MonitoringElementKind.Probe, MonitoringElementKind.Folder, MonitoringElementKind.Host },
-            _ => Array.Empty<MonitoringElementKind>()
+            _ => []
         };
 
         if (selectedElement is ProbeElement { ParentId: null })
@@ -6364,32 +6313,8 @@ public sealed class WorkspaceModel : PageModel
         IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap)
     {
         return appliedTemplateIds.Any(appliedTemplateId =>
-            ResolveTemplateChain(appliedTemplateId, templateMap).Any(template => template.Id == templateId));
+            MonitoringInheritanceResolver.ResolveTemplateChain(appliedTemplateId, templateMap).Any(template => template.Id == templateId));
     }
-
-    private static IEnumerable<MonitoringTemplate> ResolveTemplateChain(Guid templateId, IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap)
-    {
-        var stack = new Stack<MonitoringTemplate>();
-        var visited = new HashSet<Guid>();
-        var currentId = templateId;
-
-        while (templateMap.TryGetValue(currentId, out var current) && visited.Add(currentId))
-        {
-            stack.Push(current);
-            if (current.ParentTemplateId is not Guid parentId)
-            {
-                break;
-            }
-
-            currentId = parentId;
-        }
-
-        while (stack.Count > 0)
-        {
-            yield return stack.Pop();
-        }
-    }
-
     private string BuildProbeBootstrapSnippet(string? probeId, string probeName, string? probeToken)
     {
         if (string.IsNullOrWhiteSpace(probeId))
@@ -6558,7 +6483,7 @@ Matmon__WorkspacePath={_runtimeOptions.WorkspacePath}
     {
         if (parentIndex < 0 || parentIndex >= nodes.Count)
         {
-            return Array.Empty<WorkspaceNodeRow>();
+            return [];
         }
 
         var parentDepth = nodes[parentIndex].Depth;

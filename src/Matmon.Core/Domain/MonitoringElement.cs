@@ -39,9 +39,11 @@ public abstract class MonitoringElement
     public Guid? TemplateOriginId { get; set; }
 
     /// <summary>
-    /// Legacy live-inheritance links. No longer populated - templates are copied now. Kept so old
-    /// workspaces still deserialize; <c>MigrateAppliedTemplatesToCopies</c> bakes any remaining links
-    /// into <see cref="Settings"/> on load and clears this list.
+    /// Legacy live-inheritance links - templates are copied now (see <see cref="TemplateOriginId"/>). Kept so
+    /// old workspaces still deserialize; <c>MigrateAppliedTemplatesToCopies</c> bakes any remaining links into
+    /// <see cref="Settings"/> on load and clears this list. Still written by TRANSIENT compute paths (the
+    /// editors build throw-away sensors to preview effective settings) and by the opt-in demo/sample seeders;
+    /// persisted elements should carry only <see cref="TemplateOriginId"/>.
     /// </summary>
     public List<Guid> AppliedTemplateIds { get; set; } = [];
 

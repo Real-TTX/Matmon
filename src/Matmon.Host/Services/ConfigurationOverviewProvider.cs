@@ -80,8 +80,8 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                         ? new ProbeSystemInfo(
                             string.IsNullOrWhiteSpace(liveProbe.OperatingSystem) ? "-" : liveProbe.OperatingSystem!,
                             string.IsNullOrWhiteSpace(liveProbe.Host) ? "-" : liveProbe.Host!,
-                            liveProbe.Networks ?? Array.Empty<string>())
-                        : new ProbeSystemInfo("-", "-", Array.Empty<string>());
+                            liveProbe.Networks ?? [])
+                        : new ProbeSystemInfo("-", "-", []);
 
                 // Admin-configured subnets first (what you want this probe to scan), then the
                 // auto-detected interfaces it reported.

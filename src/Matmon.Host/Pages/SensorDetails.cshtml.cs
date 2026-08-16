@@ -4,6 +4,7 @@ using Matmon.Host.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Matmon.Host.Ui;
 
 namespace Matmon.Host.Pages;
 
@@ -109,7 +110,7 @@ public sealed class SensorDetailsModel : PageModel
         }
 
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
-        var lineage = BuildLineage(sensor, elementsById);
+        var lineage = MonitoringTopology.BuildLineage(sensor, elementsById);
         var templateMap = workspace.Templates.ToDictionary(template => template.Id);
         var effectiveSettings = _resolver.Resolve(lineage, templateMap);
         var sensorDefinition = workspace.SensorDefinitions.FirstOrDefault(def =>
@@ -151,7 +152,7 @@ public sealed class SensorDetailsModel : PageModel
             .Select(tag => new SensorTagChip(tag, !MonitoringTagResolver.HasTag(ownTags, tag)))
             .ToArray();
         var defaultChannelLabel = defaultChannel is null
-            ? (string.IsNullOrWhiteSpace(defaultChannelKey) ? "Default" : HumanizeChannelKey(defaultChannelKey))
+            ? (string.IsNullOrWhiteSpace(defaultChannelKey) ? "Default" : MonitoringDisplay.HumanizeChannelKey(defaultChannelKey))
             : string.IsNullOrWhiteSpace(defaultChannel.Label) ? defaultChannel.Key : defaultChannel.Label;
         var executionProbe = FormatExecutionProbe(latestObservation);
         var statisticsBuckets = _workspaceStore.GetSensorStatistics(sensor.Id);
@@ -182,7 +183,7 @@ public sealed class SensorDetailsModel : PageModel
             unit,
             currentValue.HasValue ? currentDisplay.Text : "-",
             latestObservation is null ? null : latestObservation.TimestampUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
-            latestObservation is null ? null : FormatDuration(latestObservation.Duration),
+            latestObservation is null ? null : MonitoringDisplay.FormatDuration(latestObservation.Duration),
             windows,
             selectedWindow,
             BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey, effectiveSettings),
@@ -300,7 +301,7 @@ public sealed class SensorDetailsModel : PageModel
         string LabelFor(string key) =>
             string.Equals(key, primaryKey, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(defaultChannelLabel)
                 ? defaultChannelLabel
-                : labels.TryGetValue(key, out var label) ? label : HumanizeChannelKey(key);
+                : labels.TryGetValue(key, out var label) ? label : MonitoringDisplay.HumanizeChannelKey(key);
 
         var channelOptions = channelKeys
             .Select(key => new SensorStatisticsChannelOption(key, LabelFor(key), string.Equals(key, selectedKey, StringComparison.OrdinalIgnoreCase)))
@@ -730,7 +731,7 @@ public sealed class SensorDetailsModel : PageModel
                     MonitoringStatePresentation.Label(observation.State),
                     defaultValue.HasValue ? display.Text : "-",
                     display.Unit,
-                    FormatDuration(observation.Duration),
+                    MonitoringDisplay.FormatDuration(observation.Duration),
                     observation.Message,
                     FormatExecutionProbe(observation),
                     channelCount);
@@ -779,30 +780,6 @@ public sealed class SensorDetailsModel : PageModel
 
         return $"{observation.ExecutedByProbeName} ({observation.ExecutedByProbeId})";
     }
-
-    private static IReadOnlyList<MonitoringElement> BuildLineage(
-        MonitoringElement element,
-        IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
-    {
-        var lineage = new List<MonitoringElement>();
-        var current = element;
-
-        while (true)
-        {
-            lineage.Add(current);
-
-            if (current.ParentId is not Guid parentId || !elementsById.TryGetValue(parentId, out var parent))
-            {
-                break;
-            }
-
-            current = parent;
-        }
-
-        lineage.Reverse();
-        return lineage;
-    }
-
     private static string NormalizeWindowKey(string? window)
     {
         return window?.Trim().ToLowerInvariant() switch
@@ -851,59 +828,11 @@ public sealed class SensorDetailsModel : PageModel
             _ => string.Empty
         };
     }
-
-    private static string FormatDuration(TimeSpan duration)
-    {
-        if (duration.TotalMilliseconds < 1000)
-        {
-            return $"{duration.TotalMilliseconds:0.#} ms";
-        }
-
-        if (duration.TotalSeconds < 60)
-        {
-            return $"{duration.TotalSeconds:0.#} s";
-        }
-
-        return duration.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
-    }
-
     private static string FormatValue(double? value)
     {
         return value.HasValue
             ? value.Value.ToString("0.###", CultureInfo.InvariantCulture)
             : "-";
-    }
-
-    private static string HumanizeChannelKey(string channelKey)
-    {
-        if (string.IsNullOrWhiteSpace(channelKey))
-        {
-            return "Channel";
-        }
-
-        var normalized = channelKey.Trim()
-            .Replace('_', ' ')
-            .Replace('-', ' ')
-            .Replace('.', ' ')
-            .Replace('/', ' ')
-            .Replace(':', ' ');
-
-        var builder = new List<char>(normalized.Length + 8);
-        for (var index = 0; index < normalized.Length; index++)
-        {
-            var current = normalized[index];
-            if (index > 0 &&
-                char.IsLower(normalized[index - 1]) &&
-                char.IsUpper(current))
-            {
-                builder.Add(' ');
-            }
-
-            builder.Add(current);
-        }
-
-        var text = new string(builder.ToArray()).Trim();
-        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(text.ToLowerInvariant());
     }
 }
 

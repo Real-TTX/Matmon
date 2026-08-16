@@ -123,10 +123,7 @@ public class BackupRestoreModel : PageModel
         return BackupSectionCatalog.Format(sections);
     }
 
-    public static string FormatCount(int value)
-    {
-        return value.ToString("N0");
-    }
+    public static string FormatCount(int value) => Ui.MonitoringDisplay.FormatCount(value);
 
     public static int CountSections(WorkspaceBackupSection sections)
     {

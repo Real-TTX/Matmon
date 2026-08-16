@@ -71,10 +71,6 @@ public interface IMonitoringWorkspaceStore
 
     MonitoringMap? FindMapByPublicToken(string publicToken);
 
-    MonitoringMap CreateMap(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapTile> tiles);
-
-    bool UpdateMap(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, IReadOnlyList<MonitoringMapTile> tiles);
-
     MonitoringMap CreateMapWithSlides(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int aspectRatioWidth, int aspectRatioHeight, MonitoringMapWallboardFit wallboardFit, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
 
     bool UpdateMapWithSlides(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int aspectRatioWidth, int aspectRatioHeight, MonitoringMapWallboardFit wallboardFit, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);

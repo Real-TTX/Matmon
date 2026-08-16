@@ -341,7 +341,7 @@ public sealed class UnifiHealthSensorExecutor : ISensorExecutor
     {
         var items = element.ValueKind == JsonValueKind.Array
             ? element.EnumerateArray().ToArray()
-            : element.ValueKind == JsonValueKind.Object ? [element] : Array.Empty<JsonElement>();
+            : element.ValueKind == JsonValueKind.Object ? [element] : [];
 
         var total = 0;
         var online = 0;
