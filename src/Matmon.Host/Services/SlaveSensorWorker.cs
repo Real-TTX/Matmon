@@ -131,18 +131,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             // Same per-sensor-type fallback cadence the primary's SensorPollingService uses, instead of
             // a flat 15s, so a secondary polls slow-changing sensors (disks, updates) at a sane rate.
             var fallbackInterval = SensorScheduleDefaults.Resolve(assignment.SensorTypeKey);
-            upcomingExecutions.Add(new SlaveProbeUpcomingExecution(
-                assignment.SensorId,
-                assignment.Name,
-                assignment.Path,
-                assignment.SensorTypeKey,
-                MonitoringScheduleCalculator.GetNextDueUtc(
-                    assignment.Settings,
-                    lastExecutedUtc,
-                    now,
-                    fallbackInterval),
-                lastExecutedUtc,
-                BuildScheduleSummary(assignment.Settings)));
+            upcomingExecutions.Add(BuildUpcomingExecution(assignment, lastExecutedUtc, now, fallbackInterval));
 
             if (!MonitoringScheduleCalculator.IsDue(assignment.Settings, lastExecutedUtc, now, fallbackInterval))
             {
@@ -164,16 +153,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             _lastExecutedUtc[assignment.SensorId] = executedUtc;
         }
 
-        // Drop last-run bookkeeping for sensors no longer assigned, so the dictionary can't grow
-        // unbounded as sensors are added and removed over the probe's lifetime.
-        if (_lastExecutedUtc.Count > assignments.Sensors.Count)
-        {
-            var assignedIds = assignments.Sensors.Select(sensor => sensor.SensorId).ToHashSet();
-            foreach (var staleId in _lastExecutedUtc.Keys.Where(id => !assignedIds.Contains(id)).ToArray())
-            {
-                _lastExecutedUtc.Remove(staleId);
-            }
-        }
+        PruneStaleLastExecuted(assignments.Sensors);
 
         _runtimeState.UpdateUpcomingExecutions(upcomingExecutions);
 
@@ -183,6 +163,42 @@ public sealed class SlaveSensorWorker : BackgroundService
         }
 
         await PostResultsAsync(client, probeId, reports, pendingResults, cancellationToken);
+    }
+
+    private static SlaveProbeUpcomingExecution BuildUpcomingExecution(
+        ProbeSensorAssignment assignment,
+        DateTimeOffset? lastExecutedUtc,
+        DateTimeOffset now,
+        TimeSpan fallbackInterval)
+    {
+        return new SlaveProbeUpcomingExecution(
+            assignment.SensorId,
+            assignment.Name,
+            assignment.Path,
+            assignment.SensorTypeKey,
+            MonitoringScheduleCalculator.GetNextDueUtc(
+                assignment.Settings,
+                lastExecutedUtc,
+                now,
+                fallbackInterval),
+            lastExecutedUtc,
+            BuildScheduleSummary(assignment.Settings));
+    }
+
+    /// <summary>Drops last-run bookkeeping for sensors no longer assigned, so the dictionary can't grow
+    /// unbounded as sensors are added and removed over the probe's lifetime.</summary>
+    private void PruneStaleLastExecuted(IReadOnlyList<ProbeSensorAssignment> assignments)
+    {
+        if (_lastExecutedUtc.Count <= assignments.Count)
+        {
+            return;
+        }
+
+        var assignedIds = assignments.Select(sensor => sensor.SensorId).ToHashSet();
+        foreach (var staleId in _lastExecutedUtc.Keys.Where(id => !assignedIds.Contains(id)).ToArray())
+        {
+            _lastExecutedUtc.Remove(staleId);
+        }
     }
 
     private async ValueTask<SensorExecutionResult> ExecuteAssignmentAsync(
@@ -267,73 +283,91 @@ public sealed class SlaveSensorWorker : BackgroundService
         foreach (var job in assignments.Jobs)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            await RunDiscoveryJobAsync(client, probeId, job, cancellationToken);
+        }
+    }
 
-            try
-            {
-                var lastReportedScannedHosts = 0;
-                var hosts = await _discoveryService.DiscoverAsync(
-                    new NetworkDiscoveryRequest(job.JobId, job.Network, job.Options),
-                    async (host, token) =>
-                    {
-                        await PostDiscoveryResultsAsync(
-                            client,
-                            probeId,
-                            [new ProbeDiscoveryJobResult(job.JobId, [host], null, IsComplete: false)],
-                            token);
-                    },
-                    cancellationToken,
-                    async (progress, token) =>
-                    {
-                        var reportEvery = Math.Max(progress.TotalHosts / 100, 1);
-                        var shouldReport =
-                            progress.ScannedHosts >= progress.TotalHosts ||
-                            progress.ScannedHosts - Volatile.Read(ref lastReportedScannedHosts) >= reportEvery;
-                        if (!shouldReport)
-                        {
-                            return;
-                        }
+    /// <summary>Runs one assigned discovery job: streams every found host to the primary as it appears, reports
+    /// scan progress, and always closes the job out (complete, cancelled by the primary, or failed).</summary>
+    private async Task RunDiscoveryJobAsync(
+        HttpClient client,
+        string probeId,
+        ProbeDiscoveryJobAssignment job,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var lastReportedScannedHosts = 0;
 
-                        var previous = Interlocked.Exchange(ref lastReportedScannedHosts, progress.ScannedHosts);
-                        if (previous >= progress.ScannedHosts)
-                        {
-                            return;
-                        }
-
-                        await PostDiscoveryResultsAsync(
-                            client,
-                            probeId,
-                            [new ProbeDiscoveryJobResult(
-                                job.JobId,
-                                [],
-                                null,
-                                IsComplete: false,
-                                progress.ScannedHosts,
-                                progress.TotalHosts)],
-                            token);
-                    });
-                await PostDiscoveryResultsAsync(
-                    client,
-                    probeId,
-                    [new ProbeDiscoveryJobResult(job.JobId, [], null, IsComplete: true)],
-                    cancellationToken);
-                _runtimeState.RecordExecution(
-                    $"Discovery {job.Network}",
-                    $"{hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} discovered",
-                    success: true);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                _runtimeState.RecordExecution($"Discovery {job.Network}", "cancelled by primary", success: true);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            async ValueTask ReportHostAsync(NetworkDiscoveryResult host, CancellationToken token)
             {
                 await PostDiscoveryResultsAsync(
                     client,
                     probeId,
-                    [new ProbeDiscoveryJobResult(job.JobId, [], ex.Message, IsComplete: true)],
-                    cancellationToken);
-                _runtimeState.RecordExecution($"Discovery {job.Network}", ex.Message, success: false);
+                    [new ProbeDiscoveryJobResult(job.JobId, [host], null, IsComplete: false)],
+                    token);
             }
+
+            // Progress is reported at most ~1% of the scan range at a time (and always on the final host), so a
+            // large subnet doesn't flood the primary with progress posts.
+            async ValueTask ReportProgressAsync(NetworkDiscoveryProgress progress, CancellationToken token)
+            {
+                var reportEvery = Math.Max(progress.TotalHosts / 100, 1);
+                var shouldReport =
+                    progress.ScannedHosts >= progress.TotalHosts ||
+                    progress.ScannedHosts - Volatile.Read(ref lastReportedScannedHosts) >= reportEvery;
+                if (!shouldReport)
+                {
+                    return;
+                }
+
+                // Discovery workers report concurrently, so drop an out-of-order (already superseded) count.
+                var previous = Interlocked.Exchange(ref lastReportedScannedHosts, progress.ScannedHosts);
+                if (previous >= progress.ScannedHosts)
+                {
+                    return;
+                }
+
+                await PostDiscoveryResultsAsync(
+                    client,
+                    probeId,
+                    [new ProbeDiscoveryJobResult(
+                        job.JobId,
+                        [],
+                        null,
+                        IsComplete: false,
+                        progress.ScannedHosts,
+                        progress.TotalHosts)],
+                    token);
+            }
+
+            var hosts = await _discoveryService.DiscoverAsync(
+                new NetworkDiscoveryRequest(job.JobId, job.Network, job.Options),
+                ReportHostAsync,
+                cancellationToken,
+                ReportProgressAsync);
+            await PostDiscoveryResultsAsync(
+                client,
+                probeId,
+                [new ProbeDiscoveryJobResult(job.JobId, [], null, IsComplete: true)],
+                cancellationToken);
+            _runtimeState.RecordExecution(
+                $"Discovery {job.Network}",
+                $"{hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} discovered",
+                success: true);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _runtimeState.RecordExecution($"Discovery {job.Network}", "cancelled by primary", success: true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await PostDiscoveryResultsAsync(
+                client,
+                probeId,
+                [new ProbeDiscoveryJobResult(job.JobId, [], ex.Message, IsComplete: true)],
+                cancellationToken);
+            _runtimeState.RecordExecution($"Discovery {job.Network}", ex.Message, success: false);
         }
     }
 

@@ -3077,9 +3077,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         sensor.SensorTypeKey = PowerShellRemoteSensorExecutor.Definition.Key;
         sensor.Target = sensorTarget;
 
-        if (template is not null && !sensor.AppliedTemplateIds.Contains(template.Id))
+        if (template is not null)
         {
-            sensor.AppliedTemplateIds.Add(template.Id);
+            ApplyTemplateOriginCopy(sensor, template);
         }
 
         sensor.Settings.Highlight = true;
@@ -3180,9 +3180,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         sensor.SensorTypeKey = ProxmoxNodeHealthSensorExecutor.Definition.Key;
         sensor.Target = sensorTarget;
 
-        if (template is not null && !sensor.AppliedTemplateIds.Contains(template.Id))
+        if (template is not null)
         {
-            sensor.AppliedTemplateIds.Add(template.Id);
+            ApplyTemplateOriginCopy(sensor, template);
         }
 
         if (sensor.Settings.Parameters.TryGetValue("payloadSize", out var legacyScope) &&
@@ -3199,6 +3199,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             sensor.Settings.Parameters.Remove("payloadSize");
         }
 
+        // Last-resort defaults: these run after the template copy on purpose, so a template that carries its
+        // own API user/token keeps them instead of being overwritten with the demo values.
         if (!sensor.Settings.Parameters.ContainsKey("pve.user"))
         {
             sensor.Settings.Parameters["pve.user"] = "root@pam";
@@ -3476,6 +3478,23 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
 
         QueueSave(SavePriority.Configuration);
+    }
+
+    /// <summary>
+    /// Links a provisioned element to a template the copy + origin way: the template's resolved values are
+    /// baked into the element's own settings (the element's own values win) and the template is recorded as
+    /// the origin. Invariant: a persisted element carries <see cref="MonitoringElement.TemplateOriginId"/>
+    /// only - the legacy AppliedTemplateIds list must stay empty, because the provisioners run AFTER
+    /// <see cref="MigrateAppliedTemplatesToCopies"/> and would otherwise re-add on every boot a link the
+    /// migration has already baked in.
+    /// </summary>
+    private void ApplyTemplateOriginCopy(MonitoringElement element, MonitoringTemplate template)
+    {
+        var templateMap = _document.Templates.ToDictionary(candidate => candidate.Id);
+        var baked = new MonitoringInheritanceResolver().ResolveTemplate(template, templateMap);
+        baked.ApplyFrom(element.Settings);
+        element.Settings = baked;
+        element.TemplateOriginId = template.Id;
     }
 
     /// <summary>

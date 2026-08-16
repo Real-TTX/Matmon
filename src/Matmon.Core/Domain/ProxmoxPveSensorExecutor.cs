@@ -6,6 +6,14 @@ namespace Matmon.Core.Domain;
 
 public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
 {
+    /// <summary>Channel key + label per load-average window, in the order Proxmox reports them.</summary>
+    private static readonly (string Key, string Label)[] LoadAverageLabels =
+    [
+        ("load1", "Load 1m"),
+        ("load5", "Load 5m"),
+        ("load15", "Load 15m")
+    ];
+
     public static SensorDefinition Definition { get; } = new SensorDefinition
     {
         Key = "proxmox",
@@ -217,17 +225,12 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                     ? $"{resourceSnapshot.NodeOnlineCount}/{resourceSnapshot.NodeCount} nodes online"
                     : $"cluster healthy ({resourceSnapshot.NodeOnlineCount} nodes online)") + GuestVisibilityHint(resourceSnapshot);
 
-            var result = state switch
-            {
-                SensorState.Critical => SensorExecutionResult.Critical(watch.Elapsed, message, quorate ? 1 : 0, "quorum", channels),
-                SensorState.Warning => SensorExecutionResult.Warning(watch.Elapsed, message, quorate ? 1 : 0, "quorum", channels),
-                _ => SensorExecutionResult.Healthy(watch.Elapsed, message, quorate ? 1 : 0, "quorum", channels)
-            };
-
-            return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
+            return BuildResult(settings, watch, state, message, quorate ? 1 : 0, "quorum", channels);
         }
         catch (InvalidOperationException ex) when (IsPermissionDenied(ex))
         {
+            // Without cluster/status there is no quorum reading, so the rollup falls back to what
+            // cluster/resources still shows: node counts (or the bare resource count on an empty cluster).
             var channels = BuildResourceChannels(resourceSnapshot).ToList();
             AppendGuestChannels(channels, resourceSnapshot, null); // per-VM/CT even without cluster/status access
             var defaultKey = resourceSnapshot.NodeCount > 0 ? "onlineNodes" : "resourcesTotal";
@@ -244,15 +247,29 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                     ? $"{resourceSnapshot.NodeOnlineCount}/{resourceSnapshot.NodeCount} visible nodes online"
                     : $"cluster resources healthy ({resourceSnapshot.NodeOnlineCount} visible nodes online)";
 
-            var result = state switch
-            {
-                SensorState.Critical => SensorExecutionResult.Critical(watch.Elapsed, message, defaultValue, defaultKey, channels),
-                SensorState.Warning => SensorExecutionResult.Warning(watch.Elapsed, message, defaultValue, defaultKey, channels),
-                _ => SensorExecutionResult.Healthy(watch.Elapsed, message, defaultValue, defaultKey, channels)
-            };
-
-            return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
+            return BuildResult(settings, watch, state, message, defaultValue, defaultKey, channels);
         }
+    }
+
+    /// <summary>The shared tail of every Proxmox result: pick the result flavour by state and run the user's
+    /// channel thresholds over it. Callers differ only in the message and the default channel/value.</summary>
+    private static SensorExecutionResult BuildResult(
+        MonitoringSettings settings,
+        Stopwatch watch,
+        SensorState state,
+        string message,
+        double defaultValue,
+        string defaultKey,
+        IReadOnlyList<SensorChannelValue> channels)
+    {
+        var result = state switch
+        {
+            SensorState.Critical => SensorExecutionResult.Critical(watch.Elapsed, message, defaultValue, defaultKey, channels),
+            SensorState.Warning => SensorExecutionResult.Warning(watch.Elapsed, message, defaultValue, defaultKey, channels),
+            _ => SensorExecutionResult.Healthy(watch.Elapsed, message, defaultValue, defaultKey, channels)
+        };
+
+        return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
     }
 
     private static async ValueTask<SensorExecutionResult> ExecuteNodeAsync(
@@ -291,64 +308,8 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                 ? status
                 : "online";
             var cpuPercent = TryReadDouble(nodeStatus, "cpu", out var cpu) ? cpu * 100.0 : 0;
-            var memoryPercent = TryReadPercent(nodeStatus, "mem", "maxmem", out var memory) ? memory : 0;
-            var swapPercent = TryReadPercent(nodeStatus, "swap", "maxswap", out var swap) ? swap : 0;
-            var rootfsPercent = TryReadPercent(nodeStatus, "rootfs", "maxrootfs", out var rootfs) ? rootfs : 0;
-            var uptimeHours = TryReadDouble(nodeStatus, "uptime", out var uptimeSeconds) ? uptimeSeconds / 3600.0 : 0;
 
-            var loadValues = TryReadLoadAverage(nodeStatus);
-            var channels = new List<SensorChannelValue>
-            {
-                new()
-                {
-                    Key = "cpu",
-                    Label = "CPU",
-                    Value = Round(cpuPercent),
-                    Unit = "%",
-                    IsDefault = true
-                },
-                new()
-                {
-                    Key = "memory",
-                    Label = "Memory",
-                    Value = Round(memoryPercent),
-                    Unit = "%"
-                },
-                new()
-                {
-                    Key = "swap",
-                    Label = "Swap",
-                    Value = Round(swapPercent),
-                    Unit = "%"
-                }
-            };
-
-            if (TryReadPercent(nodeStatus, "rootfs", "maxrootfs", out var parsedRootFs))
-            {
-                channels.Add(new SensorChannelValue
-                {
-                    Key = "rootfs",
-                    Label = "Root FS",
-                    Value = Round(parsedRootFs),
-                    Unit = "%"
-                });
-            }
-
-            channels.AddRange(loadValues.Select(pair => new SensorChannelValue
-            {
-                Key = pair.Key,
-                Label = pair.Label,
-                Value = Round(pair.Value)
-            }));
-
-            channels.Add(new SensorChannelValue
-            {
-                Key = "uptimeHours",
-                Label = "Uptime",
-                Value = Round(uptimeHours),
-                Unit = "h"
-            });
-
+            var channels = BuildNodeStatusChannels(nodeStatus, cpuPercent);
             channels.AddRange(BuildResourceChannels(resourceSnapshot));
             AppendGuestChannels(channels, resourceSnapshot, nodeName); // per-VM/CT: which ones run + their CPU/RAM
 
@@ -360,18 +321,75 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                 ? $"node {nodeName} is online"
                 : $"node {nodeName} is {statusText}") + GuestVisibilityHint(resourceSnapshot);
 
-            var result = state switch
-            {
-                SensorState.Critical => SensorExecutionResult.Critical(watch.Elapsed, message, Round(cpuPercent), "cpu", channels),
-                _ => SensorExecutionResult.Healthy(watch.Elapsed, message, Round(cpuPercent), "cpu", channels)
-            };
-
-            return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
+            return BuildResult(settings, watch, state, message, Round(cpuPercent), "cpu", channels);
         }
         catch (InvalidOperationException ex) when (IsPermissionDenied(ex))
         {
             return BuildNodeOverviewFallbackResult(settings, resourceSnapshot, nodeName, watch);
         }
+    }
+
+    /// <summary>The node's own /nodes/{node}/status channels, in the order the user sees them: CPU (the default
+    /// channel), memory, swap, root FS (only when the node reports it), load averages, uptime.</summary>
+    private static List<SensorChannelValue> BuildNodeStatusChannels(JsonElement nodeStatus, double cpuPercent)
+    {
+        var memoryPercent = TryReadPercent(nodeStatus, "mem", "maxmem", out var memory) ? memory : 0;
+        var swapPercent = TryReadPercent(nodeStatus, "swap", "maxswap", out var swap) ? swap : 0;
+        var uptimeHours = TryReadDouble(nodeStatus, "uptime", out var uptimeSeconds) ? uptimeSeconds / 3600.0 : 0;
+
+        var channels = new List<SensorChannelValue>
+        {
+            new()
+            {
+                Key = "cpu",
+                Label = "CPU",
+                Value = Round(cpuPercent),
+                Unit = "%",
+                IsDefault = true
+            },
+            new()
+            {
+                Key = "memory",
+                Label = "Memory",
+                Value = Round(memoryPercent),
+                Unit = "%"
+            },
+            new()
+            {
+                Key = "swap",
+                Label = "Swap",
+                Value = Round(swapPercent),
+                Unit = "%"
+            }
+        };
+
+        if (TryReadPercent(nodeStatus, "rootfs", "maxrootfs", out var parsedRootFs))
+        {
+            channels.Add(new SensorChannelValue
+            {
+                Key = "rootfs",
+                Label = "Root FS",
+                Value = Round(parsedRootFs),
+                Unit = "%"
+            });
+        }
+
+        channels.AddRange(TryReadLoadAverage(nodeStatus).Select(pair => new SensorChannelValue
+        {
+            Key = pair.Key,
+            Label = pair.Label,
+            Value = Round(pair.Value)
+        }));
+
+        channels.Add(new SensorChannelValue
+        {
+            Key = "uptimeHours",
+            Label = "Uptime",
+            Value = Round(uptimeHours),
+            Unit = "h"
+        });
+
+        return channels;
     }
 
     internal static HttpClient CreateHttpClient(bool verifySsl)
@@ -494,14 +512,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
                 ? $"{resourceSnapshot.NodeOnlineCount}/{resourceSnapshot.NodeCount} nodes online"
                 : $"node {nodeName} is online";
 
-        var result = state switch
-        {
-            SensorState.Critical => SensorExecutionResult.Critical(watch.Elapsed, message, resourceSnapshot.SelectedNodeOnline ? 1 : 0, "nodeOnline", channels),
-            SensorState.Warning => SensorExecutionResult.Warning(watch.Elapsed, message, resourceSnapshot.SelectedNodeOnline ? 1 : 0, "nodeOnline", channels),
-            _ => SensorExecutionResult.Healthy(watch.Elapsed, message, resourceSnapshot.SelectedNodeOnline ? 1 : 0, "nodeOnline", channels)
-        };
-
-        return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
+        return BuildResult(settings, watch, state, message, resourceSnapshot.SelectedNodeOnline ? 1 : 0, "nodeOnline", channels);
     }
 
     private static bool IsPermissionDenied(Exception exception)
@@ -527,71 +538,57 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         var storageOfflineCount = 0;
         var guests = new List<GuestInfo>();
 
-        if (resources.ValueKind == JsonValueKind.Array)
+        // A non-array payload (empty/limited-permission response) means nothing is visible - the counters
+        // below then all stay at zero, which the callers already handle.
+        if (resources.ValueKind != JsonValueKind.Array)
         {
-            foreach (var entry in resources.EnumerateArray())
+            return new ResourceSnapshot(0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, guests);
+        }
+
+        foreach (var entry in resources.EnumerateArray())
+        {
+            totalVisibleResources++;
+
+            var type = TryReadString(entry, "type", out var rawType)
+                ? rawType.Trim().ToLowerInvariant()
+                : string.Empty;
+            var status = TryReadString(entry, "status", out var rawStatus)
+                ? rawStatus.Trim().ToLowerInvariant()
+                : string.Empty;
+
+            switch (type)
             {
-                totalVisibleResources++;
+                case "node":
+                    nodeCount++;
+                    if (IsNodeOnline(status))
+                    {
+                        nodeOnlineCount++;
+                    }
 
-                var type = TryReadString(entry, "type", out var rawType)
-                    ? rawType.Trim().ToLowerInvariant()
-                    : string.Empty;
-                var status = TryReadString(entry, "status", out var rawStatus)
-                    ? rawStatus.Trim().ToLowerInvariant()
-                    : string.Empty;
-
-                switch (type)
-                {
-                    case "node":
-                        nodeCount++;
-                        if (IsNodeOnline(status))
-                        {
-                            nodeOnlineCount++;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(selectedNode) &&
-                            TryReadString(entry, "node", out var nodeName) &&
-                            string.Equals(nodeName, selectedNode, StringComparison.OrdinalIgnoreCase))
-                        {
-                            selectedNodeOnline = IsNodeOnline(status);
-                        }
-                        break;
-                    case "qemu":
-                        qemuCount++;
-                        if (IsGuestRunning(status))
-                        {
-                            qemuRunningCount++;
-                        }
-                        else
-                        {
-                            qemuStoppedCount++;
-                        }
-                        guests.Add(ReadGuest("vm", entry, status));
-                        break;
-                    case "lxc":
-                        lxcCount++;
-                        if (IsGuestRunning(status))
-                        {
-                            lxcRunningCount++;
-                        }
-                        else
-                        {
-                            lxcStoppedCount++;
-                        }
-                        guests.Add(ReadGuest("ct", entry, status));
-                        break;
-                    case "storage":
-                        storageCount++;
-                        if (IsStorageOnline(status))
-                        {
-                            storageOnlineCount++;
-                        }
-                        else
-                        {
-                            storageOfflineCount++;
-                        }
-                        break;
-                }
+                    if (!string.IsNullOrWhiteSpace(selectedNode) &&
+                        TryReadString(entry, "node", out var nodeName) &&
+                        string.Equals(nodeName, selectedNode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        selectedNodeOnline = IsNodeOnline(status);
+                    }
+                    break;
+                case "qemu":
+                    CountGuest("vm", entry, status, guests, ref qemuCount, ref qemuRunningCount, ref qemuStoppedCount);
+                    break;
+                case "lxc":
+                    CountGuest("ct", entry, status, guests, ref lxcCount, ref lxcRunningCount, ref lxcStoppedCount);
+                    break;
+                case "storage":
+                    storageCount++;
+                    if (IsStorageOnline(status))
+                    {
+                        storageOnlineCount++;
+                    }
+                    else
+                    {
+                        storageOfflineCount++;
+                    }
+                    break;
             }
         }
 
@@ -616,6 +613,30 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             storageOnlineCount,
             storageOfflineCount,
             guests);
+    }
+
+    /// <summary>Folds one guest entry into the per-kind counters and the guest list - VMs (qemu) and containers
+    /// (lxc) are counted identically, they only differ in the <paramref name="kind"/> tag carried on the guest.</summary>
+    private static void CountGuest(
+        string kind,
+        JsonElement entry,
+        string status,
+        List<GuestInfo> guests,
+        ref int total,
+        ref int running,
+        ref int stopped)
+    {
+        total++;
+        if (IsGuestRunning(status))
+        {
+            running++;
+        }
+        else
+        {
+            stopped++;
+        }
+
+        guests.Add(ReadGuest(kind, entry, status));
     }
 
     /// <summary>Reads one VM/container entry from cluster/resources into a <see cref="GuestInfo"/> (vmid, name,
@@ -953,25 +974,12 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             .Select(value => value!.Value)
             .ToArray();
 
-        if (parts.Length == 0)
-        {
-            return [];
-        }
-
+        // Proxmox reports "1m, 5m, 15m"; a shorter list is tolerated (only the reported windows are emitted),
+        // anything beyond the three known windows is ignored.
         var items = new List<(string Key, string Label, double Value)>(parts.Length);
-        if (parts.Length > 0)
+        for (var index = 0; index < Math.Min(parts.Length, LoadAverageLabels.Length); index++)
         {
-            items.Add(("load1", "Load 1m", parts[0]));
-        }
-
-        if (parts.Length > 1)
-        {
-            items.Add(("load5", "Load 5m", parts[1]));
-        }
-
-        if (parts.Length > 2)
-        {
-            items.Add(("load15", "Load 15m", parts[2]));
+            items.Add((LoadAverageLabels[index].Key, LoadAverageLabels[index].Label, parts[index]));
         }
 
         return items;

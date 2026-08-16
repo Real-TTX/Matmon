@@ -818,7 +818,7 @@ public sealed class WorkspaceModel : PageModel
 
             if (element.TemplateOriginId is not Guid originId)
             {
-                throw new InvalidOperationException("Dieses Element hat kein Herkunfts-Template.");
+                throw new InvalidOperationException("This element has no origin template.");
             }
 
             var template = _workspaceStore.FindTemplate(originId)
@@ -1712,8 +1712,10 @@ public sealed class WorkspaceModel : PageModel
         elementEditor.TargetPlaceholder = string.Equals(elementEditor.Kind, "Sensor", StringComparison.OrdinalIgnoreCase)
             ? BuildTargetPlaceholder(elementEditor.ParentId)
             : null;
+        // Copy model: the origin is the selection, not the legacy live-inheritance list (which the
+        // load-time migration always empties). Matches how BuildElementEditor seeds the options.
         elementEditor.TemplateOptions = snapshot.Templates
-            .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), elementEditor.AppliedTemplateIds.Contains(template.Id)))
+            .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), elementEditor.TemplateOriginId == template.Id))
             .ToList();
         elementEditor.SensorTypeOptions = BuildSensorTypeOptions(snapshot.SensorDefinitions, elementEditor.SensorTypeKey);
 

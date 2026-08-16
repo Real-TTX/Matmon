@@ -62,53 +62,70 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             .OfType<ProbeElement>()
             .OrderBy(probe => probe.ParentId.HasValue ? 1 : 0)
             .ThenBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(probe =>
-            {
-                var isRoot = !probe.ParentId.HasValue;
-                liveProbeMap.TryGetValue(probe.ProbeId, out var liveProbe);
-                var state = ResolveProbeState(isRoot, liveProbe, now, heartbeatGrace);
-                var role = isRoot ? "Primary" : "Secondary";
-                var message = isRoot
-                    ? "local primary probe"
-                    : liveProbe?.Message ?? "waiting for probe heartbeat";
-
-                // System "full sync": the local primary reports itself; a secondary reports OS /
-                // host / subnets through its heartbeat snapshot.
-                var system = isRoot
-                    ? ProbeSystemInfoProvider.Collect()
-                    : liveProbe is not null
-                        ? new ProbeSystemInfo(
-                            string.IsNullOrWhiteSpace(liveProbe.OperatingSystem) ? "-" : liveProbe.OperatingSystem!,
-                            string.IsNullOrWhiteSpace(liveProbe.Host) ? "-" : liveProbe.Host!,
-                            liveProbe.Networks ?? [])
-                        : new ProbeSystemInfo("-", "-", []);
-
-                // Admin-configured subnets first (what you want this probe to scan), then the
-                // auto-detected interfaces it reported.
-                var networks = probe.Subnets
-                    .Concat(system.Networks)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-
-                return new SystemProbeOverview(
-                    probe.Id,
-                    string.IsNullOrWhiteSpace(probe.ProbeId) ? "-" : probe.ProbeId,
-                    probe.Name,
-                    role,
-                    state,
-                    message,
-                    isRoot ? null : liveProbe?.LastSeenUtc,
-                    isRoot ? null : probe.EnrollmentToken,
-                    CountSensors(probe),
-                    system.OperatingSystem,
-                    system.Host,
-                    networks,
-                    // Build version: the primary reports its own; a secondary's rides on the heartbeat. Makes an
-                    // out-of-date (or duplicate old) probe container visible at a glance on the Probes page.
-                    isRoot ? MatmonVersion.Current : liveProbe?.Version,
-                    isRoot ? null : liveProbe?.DuplicateWarning);
-            })
+            .Select(probe => BuildProbeRow(probe, liveProbeMap, now, heartbeatGrace))
             .ToArray();
+    }
+
+    private static SystemProbeOverview BuildProbeRow(
+        ProbeElement probe,
+        IReadOnlyDictionary<string, ProbeStatusSnapshot> liveProbeMap,
+        DateTimeOffset now,
+        TimeSpan heartbeatGrace)
+    {
+        var isRoot = !probe.ParentId.HasValue;
+        liveProbeMap.TryGetValue(probe.ProbeId, out var liveProbe);
+        var state = ResolveProbeState(isRoot, liveProbe, now, heartbeatGrace);
+        var role = isRoot ? "Primary" : "Secondary";
+        var message = isRoot
+            ? "local primary probe"
+            : liveProbe?.Message ?? "waiting for probe heartbeat";
+
+        var system = ResolveSystemInfo(isRoot, liveProbe);
+
+        // Admin-configured subnets first (what you want this probe to scan), then the
+        // auto-detected interfaces it reported.
+        var networks = probe.Subnets
+            .Concat(system.Networks)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new SystemProbeOverview(
+            probe.Id,
+            string.IsNullOrWhiteSpace(probe.ProbeId) ? "-" : probe.ProbeId,
+            probe.Name,
+            role,
+            state,
+            message,
+            isRoot ? null : liveProbe?.LastSeenUtc,
+            isRoot ? null : probe.EnrollmentToken,
+            CountSensors(probe),
+            system.OperatingSystem,
+            system.Host,
+            networks,
+            // Build version: the primary reports its own; a secondary's rides on the heartbeat. Makes an
+            // out-of-date (or duplicate old) probe container visible at a glance on the Probes page.
+            isRoot ? MatmonVersion.Current : liveProbe?.Version,
+            isRoot ? null : liveProbe?.DuplicateWarning);
+    }
+
+    /// <summary>System "full sync": the local primary reports itself; a secondary reports OS / host /
+    /// subnets through its heartbeat snapshot (placeholders until the first beat arrives).</summary>
+    private static ProbeSystemInfo ResolveSystemInfo(bool isRoot, ProbeStatusSnapshot? liveProbe)
+    {
+        if (isRoot)
+        {
+            return ProbeSystemInfoProvider.Collect();
+        }
+
+        if (liveProbe is null)
+        {
+            return new ProbeSystemInfo("-", "-", []);
+        }
+
+        return new ProbeSystemInfo(
+            string.IsNullOrWhiteSpace(liveProbe.OperatingSystem) ? "-" : liveProbe.OperatingSystem!,
+            string.IsNullOrWhiteSpace(liveProbe.Host) ? "-" : liveProbe.Host!,
+            liveProbe.Networks ?? []);
     }
 
     private static string ResolveProbeState(

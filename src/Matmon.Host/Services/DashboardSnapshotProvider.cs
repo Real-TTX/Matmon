@@ -392,11 +392,16 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                 ? probeNodeHealth.Message
                 : null);
         var isHighlighted = element is SensorElement && effectiveSettings.Highlight == true;
-        var templateNames = element.AppliedTemplateIds
-            .Select(templateId => templates.TryGetValue(templateId, out var template)
-                ? template.Name
-                : templateId.ToString("N")[..8])
-            .ToArray();
+        // Copy model: an element carries the template it was created/restored from, not a live list.
+        // Reading AppliedTemplateIds here always yielded "no template" - the load-time migration empties it.
+        var templateNames = element.TemplateOriginId is Guid templateOriginId
+            ? new[]
+            {
+                templates.TryGetValue(templateOriginId, out var originTemplate)
+                    ? originTemplate.Name
+                    : templateOriginId.ToString("N")[..8]
+            }
+            : [];
 
         nodes.Add(new DashboardNodeViewModel(
             element.Id,
