@@ -29,4 +29,5 @@ public sealed record SystemProbeOverview(
     int SensorCount,
     string? OperatingSystem = null,
     string? Host = null,
-    IReadOnlyList<string>? Networks = null);
+    IReadOnlyList<string>? Networks = null,
+    string? Version = null);

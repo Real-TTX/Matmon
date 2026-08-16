@@ -50,7 +50,11 @@
                             <small>@probe.ProbeId</small>
                             @if (!string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-")
                             {
-                                <small class="system-probe-os">@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")</small>
+                                <small class="system-probe-os">@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")@(string.IsNullOrWhiteSpace(probe.Version) ? string.Empty : $" · {probe.Version}")</small>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(probe.Version))
+                            {
+                                <small class="system-probe-os">@probe.Version</small>
                             }
                             @if (probe.Networks is { Count: > 0 })
                             {

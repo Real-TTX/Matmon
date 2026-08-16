@@ -17,7 +17,8 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             request.Message,
             request.OperatingSystem,
             request.Host,
-            request.Networks);
+            request.Networks,
+            request.AgentVersion);
 
         _probes[request.ProbeId] = snapshot;
         return snapshot;

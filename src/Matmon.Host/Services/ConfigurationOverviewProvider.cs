@@ -102,7 +102,10 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
                     CountSensors(probe),
                     system.OperatingSystem,
                     system.Host,
-                    networks);
+                    networks,
+                    // Build version: the primary reports its own; a secondary's rides on the heartbeat. Makes an
+                    // out-of-date (or duplicate old) probe container visible at a glance on the Probes page.
+                    isRoot ? MatmonVersion.Current : liveProbe?.Version);
             })
             .ToArray();
     }

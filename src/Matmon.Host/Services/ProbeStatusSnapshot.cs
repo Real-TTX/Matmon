@@ -8,4 +8,5 @@ public sealed record ProbeStatusSnapshot(
     string? Message = null,
     string? OperatingSystem = null,
     string? Host = null,
-    IReadOnlyList<string>? Networks = null);
+    IReadOnlyList<string>? Networks = null,
+    string? Version = null);

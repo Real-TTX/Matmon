@@ -85,7 +85,7 @@ public sealed class SlaveHeartbeatService : BackgroundService
             probeName,
             probeToken,
             "secondary heartbeat",
-            Environment.Version.ToString(),
+            MatmonVersion.Current,
             system.OperatingSystem,
             system.Host,
             system.Networks);
