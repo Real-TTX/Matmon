@@ -272,9 +272,12 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             ? configuredNode.Trim()
             : target;
 
-        var resourceSnapshot = BuildResourceSnapshot(await ReadApiDataAsync(client, new Uri(apiBaseUri, "cluster/resources"), authHeader, apiUser, tokenId, cancellationToken), ResolveNodeName(nodeHint));
+        // Resolve the node name FIRST (from the /nodes overview), then build the resource snapshot against that
+        // resolved name - previously the snapshot filtered on the raw hint while the status call used the resolved
+        // name, so the two could disagree (an IP/FQDN hint matches no guest/node in cluster/resources).
         var nodeOverview = await ReadApiDataAsync(client, new Uri(apiBaseUri, "nodes"), authHeader, apiUser, tokenId, cancellationToken);
         var nodeName = ResolveNodeNameFromOverview(nodeOverview, nodeHint);
+        var resourceSnapshot = BuildResourceSnapshot(await ReadApiDataAsync(client, new Uri(apiBaseUri, "cluster/resources"), authHeader, apiUser, tokenId, cancellationToken), nodeName);
 
         try
         {
@@ -440,30 +443,35 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
     private static string ResolveNodeNameFromOverview(JsonElement nodeOverview, string target)
     {
         var normalizedTarget = ResolveNodeName(target);
+        // An FQDN target ("milla-pve.fritz.box") never equals the bare PVE node name ("milla-pve") - also try
+        // the first DNS label so the common hostname-as-target setup still picks the right node.
+        var firstLabel = normalizedTarget.Split('.')[0];
 
         if (nodeOverview.ValueKind == JsonValueKind.Array)
         {
-            var firstNodeName = string.Empty;
-
+            var nodeNames = new List<string>();
             foreach (var entry in nodeOverview.EnumerateArray())
             {
                 if (TryReadString(entry, "node", out var nodeName) && !string.IsNullOrWhiteSpace(nodeName))
                 {
-                    if (string.Equals(nodeName, normalizedTarget, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return nodeName;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(firstNodeName))
-                    {
-                        firstNodeName = nodeName;
-                    }
+                    nodeNames.Add(nodeName);
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(firstNodeName))
+            var match = nodeNames.FirstOrDefault(name => string.Equals(name, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+                ?? nodeNames.FirstOrDefault(name => string.Equals(name, firstLabel, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
             {
-                return firstNodeName;
+                return match;
+            }
+
+            // Nothing matched (IP target, mismatched hostname): pick DETERMINISTICALLY. The PVE API does not
+            // guarantee a stable /nodes order, so "take the first entry" could alternate between calls - on a
+            // multi-node cluster that made every other poll query a DIFFERENT node (alternating healthy/error
+            // results). Sorting guarantees the same node is chosen on every run.
+            if (nodeNames.Count > 0)
+            {
+                return nodeNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).First();
             }
         }
 
