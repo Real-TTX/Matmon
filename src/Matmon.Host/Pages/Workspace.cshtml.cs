@@ -1120,32 +1120,5 @@ Matmon__WorkspacePath={_runtimeOptions.WorkspacePath}
             ?? SensorChannelMode.Dynamic;
     }
 
-    public IReadOnlyList<WorkspaceNodeRow> GetDirectSensorChildren(IReadOnlyList<WorkspaceNodeRow> nodes, int parentIndex)
-    {
-        if (parentIndex < 0 || parentIndex >= nodes.Count)
-        {
-            return [];
-        }
-
-        var parentDepth = nodes[parentIndex].Depth;
-        var directSensors = new List<WorkspaceNodeRow>();
-
-        for (var index = parentIndex + 1; index < nodes.Count; index++)
-        {
-            var candidate = nodes[index];
-
-            if (candidate.Depth <= parentDepth)
-            {
-                break;
-            }
-
-            if (candidate.Depth == parentDepth + 1 && candidate.Kind == MonitoringElementKind.Sensor)
-            {
-                directSensors.Add(candidate);
-            }
-        }
-
-        return directSensors;
-    }
 }
 
