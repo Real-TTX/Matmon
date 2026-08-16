@@ -331,10 +331,10 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
 
     /// <summary>The node's own /nodes/{node}/status channels, in the order the user sees them: CPU (the default
     /// channel), memory, swap, root FS (only when the node reports it), load averages, uptime.</summary>
-    private static List<SensorChannelValue> BuildNodeStatusChannels(JsonElement nodeStatus, double cpuPercent)
+    public static List<SensorChannelValue> BuildNodeStatusChannels(JsonElement nodeStatus, double cpuPercent)
     {
-        var memoryPercent = TryReadPercent(nodeStatus, "mem", "maxmem", out var memory) ? memory : 0;
-        var swapPercent = TryReadPercent(nodeStatus, "swap", "maxswap", out var swap) ? swap : 0;
+        var memoryPercent = TryReadUsagePercent(nodeStatus, "memory", "mem", "maxmem", out var memory) ? memory : 0;
+        var swapPercent = TryReadUsagePercent(nodeStatus, "swap", "swap", "maxswap", out var swap) ? swap : 0;
         var uptimeHours = TryReadDouble(nodeStatus, "uptime", out var uptimeSeconds) ? uptimeSeconds / 3600.0 : 0;
 
         var channels = new List<SensorChannelValue>
@@ -363,7 +363,7 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
             }
         };
 
-        if (TryReadPercent(nodeStatus, "rootfs", "maxrootfs", out var parsedRootFs))
+        if (TryReadUsagePercent(nodeStatus, "rootfs", "rootfs", "maxrootfs", out var parsedRootFs))
         {
             channels.Add(new SensorChannelValue
             {
@@ -941,6 +941,31 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         return false;
     }
 
+    /// <summary>
+    /// Proxmox reports a used/total pair in two different shapes and the node sensor sees both:
+    /// <c>/nodes/{node}/status</c> nests it as an object (<c>"memory": { "used": …, "total": … }</c>), while
+    /// <c>/cluster/resources</c> and the node list use a flat pair (<c>mem</c> / <c>maxmem</c>). Reading only
+    /// the flat pair silently yielded 0 % for memory and swap and dropped the root-FS channel entirely, since
+    /// the keys simply do not exist on the status payload. Accept either shape, nested first.
+    /// </summary>
+    private static bool TryReadUsagePercent(
+        JsonElement element,
+        string nestedKey,
+        string valueKey,
+        string maxKey,
+        out double percent)
+    {
+        if (element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(nestedKey, out var nested) &&
+            nested.ValueKind == JsonValueKind.Object &&
+            TryReadPercent(nested, "used", "total", out percent))
+        {
+            return true;
+        }
+
+        return TryReadPercent(element, valueKey, maxKey, out percent);
+    }
+
     private static bool TryReadPercent(
         JsonElement element,
         string valueKey,
@@ -961,29 +986,65 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
 
     private static IReadOnlyList<(string Key, string Label, double Value)> TryReadLoadAverage(JsonElement element)
     {
-        if (!TryReadString(element, "loadavg", out var rawLoadAvg) ||
-            string.IsNullOrWhiteSpace(rawLoadAvg))
-        {
-            return [];
-        }
-
-        var parts = rawLoadAvg
-            .Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(part => double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : (double?)null)
-            .Where(value => value is not null)
-            .Select(value => value!.Value)
-            .ToArray();
+        var parts = ReadLoadAverageValues(element);
 
         // Proxmox reports "1m, 5m, 15m"; a shorter list is tolerated (only the reported windows are emitted),
         // anything beyond the three known windows is ignored.
-        var items = new List<(string Key, string Label, double Value)>(parts.Length);
-        for (var index = 0; index < Math.Min(parts.Length, LoadAverageLabels.Length); index++)
+        var items = new List<(string Key, string Label, double Value)>(parts.Count);
+        for (var index = 0; index < Math.Min(parts.Count, LoadAverageLabels.Length); index++)
         {
             items.Add((LoadAverageLabels[index].Key, LoadAverageLabels[index].Label, parts[index]));
         }
 
         return items;
     }
+
+    /// <summary>
+    /// Load averages arrive in two shapes too: <c>/nodes/{node}/status</c> returns a JSON ARRAY
+    /// (<c>["0.50","0.40","0.30"]</c>), other payloads a single comma-separated string. Reading the array as a
+    /// string handed back its raw JSON text, brackets and quotes included, so every parse failed and the load
+    /// channels silently never appeared on the node sensor.
+    /// </summary>
+    private static IReadOnlyList<double> ReadLoadAverageValues(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty("loadavg", out var loadAvg))
+        {
+            return [];
+        }
+
+        if (loadAvg.ValueKind == JsonValueKind.Array)
+        {
+            return
+            [
+                .. loadAvg.EnumerateArray()
+                    .Select(TryReadLoadValue)
+                    .Where(value => value is not null)
+                    .Select(value => value!.Value)
+            ];
+        }
+
+        if (loadAvg.ValueKind != JsonValueKind.String)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. (loadAvg.GetString() ?? string.Empty)
+                .Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(part => double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : (double?)null)
+                .Where(value => value is not null)
+                .Select(value => value!.Value)
+        ];
+    }
+
+    private static double? TryReadLoadValue(JsonElement entry) => entry.ValueKind switch
+    {
+        JsonValueKind.Number when entry.TryGetDouble(out var number) => number,
+        JsonValueKind.String when double.TryParse(entry.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) => parsed,
+        _ => null
+    };
 
     private static bool TryReadString(JsonElement element, string propertyName, out string value)
     {
