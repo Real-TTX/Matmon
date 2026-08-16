@@ -7,6 +7,19 @@ namespace Matmon.Host.Services;
 /// two never drift.</summary>
 public static class SensorDefinitionCatalog
 {
+    /// <summary>
+    /// Types that were removed from the product. Dropping them from <see cref="BuiltIns"/> is not enough: the
+    /// catalog is merged into the workspace on load and unknown definitions are kept, so a retired type written
+    /// once into workspace.json stayed selectable forever - and picking it produced "No executor is registered
+    /// for sensor type '…'" at the first poll. They are pruned on load instead, but only while no element still
+    /// uses them, so an existing sensor keeps rendering until it has been migrated away.
+    /// </summary>
+    public static IReadOnlySet<string> Retired { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "proxmox",    // superseded by proxmox-health / proxmox-node-health
+        "backup-job"  // superseded by windows-eventlog
+    };
+
     public static IReadOnlyList<SensorDefinition> BuiltIns { get; } =
     [
         PingSensorExecutor.Definition,

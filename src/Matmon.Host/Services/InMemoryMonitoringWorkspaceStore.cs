@@ -69,11 +69,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         _document = LoadDocument();
         HydrateCredentialBundles(_document);
         MigrateDocumentTelemetryIntoRepository();
+        // Rewrite retired sensor types before the catalog is rebuilt: the catalog only prunes a retired
+        // definition once nothing references it, so migrating first drops it in the same startup.
+        MigrateRetiredProxmoxSensors();
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
         MigrateAppliedTemplatesToCopies();
         MigrateSslCertificateThresholds();
-        MigrateRetiredProxmoxSensors();
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
         if (_runtimeOptions.ProvisionLocalDockerProbe)
         {
@@ -2883,9 +2885,22 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 addedKeys.Add(builtIn.Key);
             }
 
+            // A retired type lingers in older workspaces and would still be offered in the create dropdown even
+            // though no executor can run it. Keep it only while a sensor still references it, so nothing breaks
+            // before that sensor has been migrated away.
+            var typesInUse = MonitoringTopology.EnumerateSelfAndDescendants(_document.RootProbe)
+                .OfType<SensorElement>()
+                .Select(sensor => sensor.SensorTypeKey)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             foreach (var definition in _document.SensorDefinitions)
             {
                 if (addedKeys.Contains(definition.Key))
+                {
+                    continue;
+                }
+
+                if (SensorDefinitionCatalog.Retired.Contains(definition.Key) && !typesInUse.Contains(definition.Key))
                 {
                     continue;
                 }
