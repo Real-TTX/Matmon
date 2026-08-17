@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Matmon.Core.Domain;
 
@@ -7,7 +8,11 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
 {
     private const string SystemMibRoot = "1.3.6.1.4.1.6574.1";
     private const string DiskTableRoot = "1.3.6.1.4.1.6574.2.1.1";
+    // The Synology RAID table is the STORAGE POOL (RAID group), not the volume. Volumes (/volume1, /volume2, …)
+    // are filesystems and live in the standard HOST-RESOURCES-MIB hrStorageTable that DSM's net-snmp exposes.
+    // Free space per volume must come from there - reading only the RAID table reported the pool's free space.
     private const string RaidTableRoot = "1.3.6.1.4.1.6574.3.1.1";
+    private const string HrStorageRoot = "1.3.6.1.2.1.25.2.3.1";
     // CPU and memory load are not in the Synology MIB - they come from the standard UCD-SNMP-MIB
     // that DSM's net-snmp exposes: ssCpu* under 2021.11, memory (KB) under 2021.4.
     private const string CpuMibRoot = "1.3.6.1.4.1.2021.11";
@@ -18,7 +23,8 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         Key = "synology-health",
         DisplayName = "Synology Health",
         Description = "Checks Synology health, disk, RAID, CPU and memory metrics via SNMP.",
-        ChannelMode = SensorChannelMode.Fixed,
+        // Dynamic: the storage channel set grows with the number of volumes and storage pools on the NAS.
+        ChannelMode = SensorChannelMode.Dynamic,
         Parameters = BuildParameters()
     };
 
@@ -104,6 +110,13 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
                 timeout,
                 cancellationToken);
 
+            var hrStorageItems = await SnmpSensorExecutor.DiscoverAsync(
+                context.Target,
+                context.Settings,
+                HrStorageRoot,
+                timeout,
+                cancellationToken);
+
             var cpuItems = await SnmpSensorExecutor.DiscoverAsync(
                 context.Target,
                 context.Settings,
@@ -127,12 +140,13 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             var system = ParseSystemSnapshot(systemItems, cpuItems, memoryItems);
             var disks = ParseDiskSnapshots(diskItems);
             var raids = ParseRaidSnapshots(raidItems);
+            var volumes = ParseVolumeSnapshots(hrStorageItems);
             var primaryRaid = SelectPrimaryRaid(raids);
-            var channels = BuildChannels(system, disks, raids, primaryRaid);
+            var channels = BuildChannels(system, disks, raids, volumes, primaryRaid);
             var issues = BuildIssues(system, disks, raids);
             var state = DetermineState(system, disks, raids);
             var modelPrefix = string.IsNullOrWhiteSpace(system.ModelName) ? string.Empty : $"{system.ModelName.Trim()} - ";
-            var message = BuildMessage(modelPrefix, state, system, disks, raids, primaryRaid, issues);
+            var message = BuildMessage(modelPrefix, state, system, disks, raids, volumes, primaryRaid, issues);
             var defaultChannel = channels.FirstOrDefault(channel => channel.Key.Equals("cpuUtilization", StringComparison.OrdinalIgnoreCase))
                 ?? channels.FirstOrDefault(channel => channel.Value.HasValue)
                 ?? channels.First();
@@ -296,9 +310,68 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
                     ReadNumeric(columns, 3),
                     ReadNumeric(columns, 7),
                     ReadNumeric(columns, 4),
-                    ReadNumeric(columns, 5));
+                    ReadNumeric(columns, 5),
+                    ReadTextColumn(columns, 2));
             })
             .ToArray();
+    }
+
+    // hrStorageDescr for a Synology volume is "/volume1", "/volume2", … - only these numbered internal volumes
+    // are treated as volumes (USB / system mounts are ignored).
+    private static readonly Regex VolumeDescrPattern = new(@"^/volume(\d+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Reads volumes from the HOST-RESOURCES-MIB hrStorageTable: total = size × allocationUnits,
+    /// free = (size − used) × allocationUnits. (SNMP reports these as 32-bit counters, so a very large volume can
+    /// wrap at the agent - the same limitation the Synology RAID counters have; we surface what the agent reports.)
+    /// Public for unit testing without a live NAS.
+    /// </summary>
+    public static IReadOnlyList<SynologyVolumeSnapshot> ParseVolumeSnapshots(IReadOnlyList<SnmpDiscoveryItem> items)
+    {
+        var rows = BuildTableRows(items, HrStorageRoot);
+        var volumes = new List<SynologyVolumeSnapshot>();
+
+        foreach (var row in rows)
+        {
+            var columns = row.Value;
+            var descr = ReadTextColumn(columns, 3);
+            if (string.IsNullOrWhiteSpace(descr))
+            {
+                continue;
+            }
+
+            var match = VolumeDescrPattern.Match(descr.Trim());
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var number = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+            var unit = ReadNumeric(columns, 4);   // hrStorageAllocationUnits (bytes per unit)
+            var size = ReadNumeric(columns, 5);    // hrStorageSize (in allocation units)
+            var used = ReadNumeric(columns, 6);    // hrStorageUsed (in allocation units)
+            if (!unit.HasValue || unit.Value <= 0 || !size.HasValue)
+            {
+                continue;
+            }
+
+            var totalBytes = size.Value * unit.Value;
+            double? freeBytes = used.HasValue ? Math.Max(0d, (size.Value - used.Value) * unit.Value) : null;
+            volumes.Add(new SynologyVolumeSnapshot(number, $"Volume {number}", freeBytes, totalBytes));
+        }
+
+        return volumes.OrderBy(volume => volume.Index).ToArray();
+    }
+
+    /// <summary>Volume 1 is the DSM default; fall back to the lowest-numbered volume that is present.</summary>
+    public static SynologyVolumeSnapshot? SelectPrimaryVolume(IReadOnlyList<SynologyVolumeSnapshot> volumes)
+    {
+        return volumes.OrderBy(volume => volume.Index).FirstOrDefault();
+    }
+
+    private static string? ReadTextColumn(Dictionary<int, SnmpDiscoveryItem> columns, int column)
+    {
+        return columns.TryGetValue(column, out var item) ? item.Value : null;
     }
 
     private static Dictionary<int, Dictionary<int, SnmpDiscoveryItem>> BuildTableRows(
@@ -422,6 +495,7 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         SynologySystemSnapshot system,
         IReadOnlyList<SynologyDiskSnapshot> disks,
         IReadOnlyList<SynologyRaidSnapshot> raids,
+        IReadOnlyList<SynologyVolumeSnapshot> volumes,
         SynologyRaidSnapshot? primaryRaid)
     {
         var diskTotal = disks.Count;
@@ -461,14 +535,19 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             raidWarning++;
         }
 
-        var storageFreeBytes = primaryRaid?.FreeBytes;
-        var storageTotalBytes = primaryRaid?.TotalBytes;
+        // The default storage reading is Volume 1 (the first volume). Fall back to the primary storage pool only
+        // when no volume is reported (older DSM / hrStorage missing), so the channel keeps working. Per-volume and
+        // per-pool channels are appended below, so both a NAS's volumes AND its pools are visible and thresholdable.
+        var primaryVolume = SelectPrimaryVolume(volumes);
+        var storageFreeBytes = primaryVolume?.FreeBytes ?? primaryRaid?.FreeBytes;
+        var storageTotalBytes = primaryVolume?.TotalBytes ?? primaryRaid?.TotalBytes;
         double? storageFreePercent = storageFreeBytes.HasValue && storageTotalBytes.HasValue && storageTotalBytes.Value > 0
             ? Math.Max(0d, Math.Min(100d, storageFreeBytes.Value / storageTotalBytes.Value * 100d))
             : (double?)null;
         double? storageUsedPercent = storageFreePercent.HasValue
             ? 100d - storageFreePercent.Value
             : (double?)null;
+        var storageScopeLabel = primaryVolume?.DisplayName ?? "Storage";
 
         var channels = new List<SensorChannelValue>
         {
@@ -605,34 +684,73 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             new()
             {
                 Key = "storageFreePercent",
-                Label = "Storage free",
+                Label = $"{storageScopeLabel} free",
                 Value = storageFreePercent,
                 Unit = "%"
             },
             new()
             {
                 Key = "storageFreeBytes",
-                Label = "Storage free bytes",
+                Label = $"{storageScopeLabel} free bytes",
                 Value = storageFreeBytes,
                 Unit = "B"
             },
             new()
             {
                 Key = "storageTotalBytes",
-                Label = "Storage total",
+                Label = $"{storageScopeLabel} total",
                 Value = storageTotalBytes,
                 Unit = "B"
             },
             new()
             {
                 Key = "storageUsedPercent",
-                Label = "Storage used",
+                Label = $"{storageScopeLabel} used",
                 Value = storageUsedPercent,
                 Unit = "%"
             }
         };
 
+        // Per-volume channels for the remaining volumes (Volume 1 is already the default storage* set above),
+        // and per-pool channels for every storage pool. This is the "show both" the pool/volume split needs;
+        // free % is logged, the byte totals opt out of statistics by default to keep telemetry lean.
+        foreach (var volume in volumes)
+        {
+            if (primaryVolume is not null && volume.Index == primaryVolume.Index)
+            {
+                continue;
+            }
+
+            AppendStorageEntityChannels(channels, $"volume.{volume.Index}", volume.DisplayName, volume.FreeBytes, volume.TotalBytes);
+        }
+
+        for (var index = 0; index < raids.Count; index++)
+        {
+            var pool = raids[index];
+            var poolLabel = string.IsNullOrWhiteSpace(pool.Name) ? $"Pool {index + 1}" : pool.Name!.Trim();
+            AppendStorageEntityChannels(channels, $"pool.{pool.Index}", poolLabel, pool.FreeBytes, pool.TotalBytes);
+        }
+
         return channels;
+    }
+
+    /// <summary>Appends free %, free bytes, total bytes and used % channels for one volume or pool.</summary>
+    private static void AppendStorageEntityChannels(
+        List<SensorChannelValue> channels,
+        string keyPrefix,
+        string label,
+        double? freeBytes,
+        double? totalBytes)
+    {
+        double? freePercent = freeBytes.HasValue && totalBytes.HasValue && totalBytes.Value > 0
+            ? Math.Max(0d, Math.Min(100d, freeBytes.Value / totalBytes.Value * 100d))
+            : null;
+        double? usedPercent = freePercent.HasValue ? 100d - freePercent.Value : null;
+
+        channels.Add(new SensorChannelValue { Key = $"{keyPrefix}.freePercent", Label = $"{label} free", Value = freePercent, Unit = "%" });
+        channels.Add(new SensorChannelValue { Key = $"{keyPrefix}.freeBytes", Label = $"{label} free bytes", Value = freeBytes, Unit = "B", LogByDefault = false });
+        channels.Add(new SensorChannelValue { Key = $"{keyPrefix}.totalBytes", Label = $"{label} total", Value = totalBytes, Unit = "B", LogByDefault = false });
+        channels.Add(new SensorChannelValue { Key = $"{keyPrefix}.usedPercent", Label = $"{label} used", Value = usedPercent, Unit = "%", LogByDefault = false });
     }
 
     private static double? ToBinaryValue(bool? value)
@@ -730,13 +848,20 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         SynologySystemSnapshot system,
         IReadOnlyList<SynologyDiskSnapshot> disks,
         IReadOnlyList<SynologyRaidSnapshot> raids,
+        IReadOnlyList<SynologyVolumeSnapshot> volumes,
         SynologyRaidSnapshot? primaryRaid,
         IReadOnlyList<string> issues)
     {
         var cpuText = system.CpuUtilization.HasValue ? $"{system.CpuUtilization.Value:0.#}%" : "-";
         var memoryText = system.MemoryUtilization.HasValue ? $"{system.MemoryUtilization.Value:0.#}%" : "-";
-        var storageText = primaryRaid is not null && primaryRaid.FreeBytes.HasValue && primaryRaid.TotalBytes.HasValue && primaryRaid.TotalBytes.Value > 0
-            ? $"{(primaryRaid.FreeBytes.Value / primaryRaid.TotalBytes.Value * 100d):0.#}% free"
+        // Prefer the default volume (Volume 1) for the summary; fall back to the storage pool only when no volume
+        // is reported.
+        var primaryVolume = SelectPrimaryVolume(volumes);
+        var storageFreeBytes = primaryVolume?.FreeBytes ?? primaryRaid?.FreeBytes;
+        var storageTotalBytes = primaryVolume?.TotalBytes ?? primaryRaid?.TotalBytes;
+        var storageScope = primaryVolume?.DisplayName ?? (primaryRaid is not null ? "pool" : "storage");
+        var storageText = storageFreeBytes.HasValue && storageTotalBytes.HasValue && storageTotalBytes.Value > 0
+            ? $"{storageScope} {(storageFreeBytes.Value / storageTotalBytes.Value * 100d):0.#}% free"
             : "storage n/a";
 
         var statusText = state switch
@@ -842,6 +967,13 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         int Index,
         double? StatusCode,
         double? SummaryCode,
+        double? FreeBytes,
+        double? TotalBytes,
+        string? Name);
+
+    public sealed record SynologyVolumeSnapshot(
+        int Index,
+        string DisplayName,
         double? FreeBytes,
         double? TotalBytes);
 }
