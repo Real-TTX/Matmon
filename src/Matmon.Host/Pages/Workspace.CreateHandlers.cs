@@ -164,6 +164,33 @@ public sealed partial class WorkspaceModel
             var previousSelections = GetSelectedSnmpWalkOids(NewSensor.SnmpWalkItems);
             var discoverySettings = BuildTransientSensorExecutionSettings(NewSensor);
             var discoveryTarget = ResolveEffectiveSensorTarget(NewSensor);
+
+            // An SNMP walk must run from the probe that can actually reach the target. If the selected
+            // parent lives under a remote probe, queue the discovery there and let the client poll for the
+            // OIDs; otherwise walk in-process as before.
+            var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(NewSensor.ParentId ?? Guid.Empty);
+            if (owningProbeId is not null)
+            {
+                _assignmentProvider.MakeSettingsProbeReady(discoverySettings, NewSensor.SensorTypeKey);
+                // The DTO has no root-OID field, so carry it through the settings for the probe.
+                discoverySettings.Parameters[ProbeRunJobParameters.SnmpDiscoverRootOid] = rootOid;
+                var job = _onDemandRunStore.Create(
+                    owningProbeId,
+                    sensorId: null,
+                    NewSensor.SensorTypeKey,
+                    discoveryTarget,
+                    discoverySettings,
+                    recordObservation: false,
+                    ProbeRunJobKind.SnmpDiscover);
+                RemoteSnmpDiscoverJobId = job.Id;
+                RemoteRunProbeName = _workspaceStore.FindProbeByProbeId(owningProbeId)?.Name ?? owningProbeId;
+
+                StatusMessage = $"Discovering OIDs on probe '{RemoteRunProbeName}'… the results will appear shortly.";
+                LoadViewState(populateEditorValues: false);
+                ModelState.Clear();
+                return Page();
+            }
+
             var discovered = await SnmpSensorExecutor.DiscoverAsync(
                 discoveryTarget,
                 discoverySettings,

@@ -12290,3 +12290,12 @@ html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critica
 }
 
 .panel-count { color: var(--matmon-muted); font-size: 0.78rem; }
+
+/* Remote-probe on-demand run preview (async Test / SNMP discover routed to a remote probe). */
+.remote-run-preview { margin-top: 0.75rem; padding: 0.75rem 0.9rem; border: 1px solid var(--matmon-border); border-radius: 0.6rem; background: var(--matmon-surface-2, rgba(127,127,127,0.06)); font-size: 0.85rem; }
+.remote-run-preview-status { color: var(--matmon-muted); }
+.remote-run-preview-channels, .remote-run-preview-oids { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.remote-run-preview-channels li { display: flex; justify-content: space-between; gap: 1rem; }
+.remote-run-preview-oids li { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.remote-run-preview-oids code { font-size: 0.78rem; }
+.remote-run-preview-oids em { color: var(--matmon-muted); font-style: normal; font-size: 0.75rem; }

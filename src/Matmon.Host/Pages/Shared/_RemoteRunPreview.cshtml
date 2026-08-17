@@ -1,0 +1,19 @@
+@model WorkspaceModel
+@*
+    When a "Test" or SNMP-discover is routed to a remote probe the run is asynchronous: the primary only
+    queued a run job. This container carries the job id so site.js (initializeRemoteRunPreviews) can poll
+    GET /api/run-jobs/{id} and render the channel preview / discovered OIDs once the probe reports back.
+    The local (in-process) path is fully synchronous and renders nothing here.
+*@
+@if (Model.RemoteTestJobId is Guid testJobId)
+{
+    <div class="remote-run-preview" data-remote-run-job="@testJobId" data-remote-run-kind="sensor" data-remote-run-probe="@Model.RemoteRunProbeName" role="status" aria-live="polite">
+        <span class="remote-run-preview-status">Testing on probe @Model.RemoteRunProbeName…</span>
+    </div>
+}
+@if (Model.RemoteSnmpDiscoverJobId is Guid snmpJobId)
+{
+    <div class="remote-run-preview" data-remote-run-job="@snmpJobId" data-remote-run-kind="snmp" data-remote-run-probe="@Model.RemoteRunProbeName" role="status" aria-live="polite">
+        <span class="remote-run-preview-status">Discovering OIDs on probe @Model.RemoteRunProbeName…</span>
+    </div>
+}

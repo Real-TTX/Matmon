@@ -64,6 +64,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             try
             {
                 await SyncAssignmentsAsync(client, probeId, stoppingToken);
+                await SyncRunJobsAsync(client, probeId, stoppingToken);
                 await SyncDiscoveryJobsAsync(client, probeId, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -260,6 +261,121 @@ public sealed class SlaveSensorWorker : BackgroundService
         {
             var message = $"{reports.Count} result{(reports.Count == 1 ? string.Empty : "s")} transfer failed: {ex.Message}";
             _runtimeState.RecordResultPost(reports.Count, message, success: false, pendingResults);
+        }
+    }
+
+    /// <summary>Pulls on-demand run jobs the primary queued for this probe (a "Run now"/"Test"/"Run subtree"
+    /// or an SNMP-discover on a sensor that lives under this remote probe), runs each locally and posts the
+    /// results back. Tolerates a missing endpoint (older primary) silently so the loop keeps running.</summary>
+    private async Task SyncRunJobsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/probes/{Uri.EscapeDataString(probeId)}/run-jobs");
+        AddProbeToken(request);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var assignments = await response.Content.ReadFromJsonAsync<ProbeRunJobAssignmentsResponse>(JsonOptions, cancellationToken);
+        if (assignments is null || assignments.Jobs.Count == 0)
+        {
+            return;
+        }
+
+        var results = new List<ProbeRunJobResult>(assignments.Jobs.Count);
+        foreach (var job in assignments.Jobs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(await RunOnDemandJobAsync(job, cancellationToken));
+        }
+
+        await PostRunJobResultsAsync(client, probeId, results, cancellationToken);
+    }
+
+    private async Task<ProbeRunJobResult> RunOnDemandJobAsync(ProbeRunJobAssignment job, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (job.Kind == ProbeRunJobKind.SnmpDiscover)
+            {
+                // The DTO has no root-OID field, so the primary smuggled it through the settings.
+                var rootOid = job.Settings.Parameters.TryGetValue(ProbeRunJobParameters.SnmpDiscoverRootOid, out var configuredRoot)
+                    && !string.IsNullOrWhiteSpace(configuredRoot)
+                    ? configuredRoot.Trim()
+                    : "1.3.6.1.2.1";
+                var oids = await SnmpSensorExecutor.DiscoverAsync(
+                    job.Target,
+                    job.Settings,
+                    rootOid,
+                    job.Settings.Timeout ?? TimeSpan.FromSeconds(5),
+                    cancellationToken);
+                return new ProbeRunJobResult(job.JobId, null, oids, null, DateTimeOffset.UtcNow);
+            }
+
+            if (!_executors.TryGetValue(job.SensorTypeKey, out var executor))
+            {
+                return new ProbeRunJobResult(
+                    job.JobId,
+                    SensorExecutionResult.Critical(TimeSpan.Zero, $"No executor is registered for sensor type '{job.SensorTypeKey}'."),
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow);
+            }
+
+            // Same execution path as a scheduled assignment (see ExecuteAssignmentAsync), including the
+            // default-channel selection. No previous observation is threaded through for an on-demand run.
+            var result = await executor.ExecuteAsync(
+                new SensorExecutionContext(
+                    job.SensorTypeKey,
+                    job.Target,
+                    job.Settings,
+                    job.SensorId,
+                    previousObservation: null),
+                cancellationToken);
+            result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(job.Settings, result);
+            return new ProbeRunJobResult(job.JobId, result, null, null, DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return job.Kind == ProbeRunJobKind.SnmpDiscover
+                ? new ProbeRunJobResult(job.JobId, null, null, ex.Message, DateTimeOffset.UtcNow)
+                : new ProbeRunJobResult(job.JobId, SensorExecutionResult.Critical(TimeSpan.Zero, ex.Message), null, null, DateTimeOffset.UtcNow);
+        }
+    }
+
+    private async Task PostRunJobResultsAsync(
+        HttpClient client,
+        string probeId,
+        IReadOnlyList<ProbeRunJobResult> results,
+        CancellationToken cancellationToken)
+    {
+        if (results.Count == 0)
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/probes/{Uri.EscapeDataString(probeId)}/run-jobs/results")
+        {
+            Content = JsonContent.Create(new ProbeRunJobResultBatch(results), options: JsonOptions)
+        };
+        AddProbeToken(request);
+
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            _runtimeState.RecordResultPost(
+                results.Count,
+                $"{results.Count} on-demand result{(results.Count == 1 ? string.Empty : "s")} posted: {(int)response.StatusCode} {response.ReasonPhrase}",
+                response.IsSuccessStatusCode);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _runtimeState.RecordResultPost(
+                results.Count,
+                $"{results.Count} on-demand result{(results.Count == 1 ? string.Empty : "s")} transfer failed: {ex.Message}",
+                success: false);
         }
     }
 

@@ -530,6 +530,11 @@
 
                     <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate class="d-none" data-sensor-preview-submit>Preview</button>
                 </div>
+
+                @if (isSensor)
+                {
+                    <partial name="_RemoteRunPreview" model="Model" />
+                }
             </form>
 
             @if (isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase))

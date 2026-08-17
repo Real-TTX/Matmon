@@ -20,7 +20,10 @@ public sealed partial class WorkspaceModel
     {
         try
         {
-            SensorExecutionResult result;
+            // A "Test" is a transient run (never recorded). If the sensor's parent lives under a remote
+            // probe, queue it as a run job on that probe and let the client poll for the result; otherwise
+            // run it in-process and render the channel preview synchronously as before.
+            SensorExecutionResult? result;
 
             if (ElementEditor.Id != Guid.Empty)
             {
@@ -29,18 +32,28 @@ public sealed partial class WorkspaceModel
                     throw new InvalidOperationException("Selected element is not a sensor.");
                 }
 
+                var sensorTypeKey = ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey;
                 var executionSettings = BuildTransientSensorExecutionSettings(ElementEditor);
                 var executionTarget = ResolveEffectiveSensorTarget(ElementEditor, sensor);
-                result = await _sensorExecutionService.ExecuteTransientAsync(ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey, executionTarget, executionSettings, HttpContext.RequestAborted);
+                var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(ElementEditor.ParentId ?? sensor.ParentId ?? Guid.Empty);
 
-                var previewState = BuildSensorThresholdEditorState(
-                    ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey,
-                    GetSensorChannelMode(ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey),
-                    executionSettings,
-                    ElementEditor.SensorChannelThresholdFields,
-                    result.Channels);
-                ElementEditor.SensorChannelThresholdFields = previewState.Fields;
-                ElementEditor.SensorChannelThresholdVisibleCount = previewState.VisibleCount;
+                if (owningProbeId is not null)
+                {
+                    QueueRemoteTest(owningProbeId, sensor.Id, sensorTypeKey, executionTarget, executionSettings);
+                    result = null;
+                }
+                else
+                {
+                    result = await _sensorExecutionService.ExecuteTransientAsync(sensorTypeKey, executionTarget, executionSettings, HttpContext.RequestAborted);
+                    var previewState = BuildSensorThresholdEditorState(
+                        sensorTypeKey,
+                        GetSensorChannelMode(sensorTypeKey),
+                        executionSettings,
+                        ElementEditor.SensorChannelThresholdFields,
+                        result.Channels);
+                    ElementEditor.SensorChannelThresholdFields = previewState.Fields;
+                    ElementEditor.SensorChannelThresholdVisibleCount = previewState.VisibleCount;
+                }
             }
             else
             {
@@ -48,20 +61,32 @@ public sealed partial class WorkspaceModel
                 ApplySnmpWalkSelectionsToParameters(NewSensor);
                 var executionSettings = BuildTransientSensorExecutionSettings(NewSensor);
                 var executionTarget = ResolveEffectiveSensorTarget(NewSensor);
-                result = await _sensorExecutionService.ExecuteTransientAsync(NewSensor.SensorTypeKey, executionTarget, executionSettings, HttpContext.RequestAborted);
+                var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(NewSensor.ParentId ?? Guid.Empty);
 
-                var previewState = BuildSensorThresholdEditorState(
-                    NewSensor.SensorTypeKey,
-                    GetSensorChannelMode(NewSensor.SensorTypeKey),
-                    executionSettings,
-                    NewSensor.SensorChannelThresholdFields,
-                    result.Channels);
-                NewSensor.SensorChannelThresholdFields = previewState.Fields;
-                NewSensor.SensorChannelThresholdVisibleCount = previewState.VisibleCount;
+                if (owningProbeId is not null)
+                {
+                    // A not-yet-saved sensor has no id; the probe runs it purely transiently.
+                    QueueRemoteTest(owningProbeId, null, NewSensor.SensorTypeKey, executionTarget, executionSettings);
+                    result = null;
+                }
+                else
+                {
+                    result = await _sensorExecutionService.ExecuteTransientAsync(NewSensor.SensorTypeKey, executionTarget, executionSettings, HttpContext.RequestAborted);
+                    var previewState = BuildSensorThresholdEditorState(
+                        NewSensor.SensorTypeKey,
+                        GetSensorChannelMode(NewSensor.SensorTypeKey),
+                        executionSettings,
+                        NewSensor.SensorChannelThresholdFields,
+                        result.Channels);
+                    NewSensor.SensorChannelThresholdFields = previewState.Fields;
+                    NewSensor.SensorChannelThresholdVisibleCount = previewState.VisibleCount;
+                }
             }
 
-            StatusMessage = $"Test: {FormatSensorStateLabel(result.State)} - check {result.Duration.TotalMilliseconds:0.#} ms"
-                + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}");
+            StatusMessage = result is not null
+                ? $"Test: {FormatSensorStateLabel(result.State)} - check {result.Duration.TotalMilliseconds:0.#} ms"
+                    + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}")
+                : $"Testing on probe '{RemoteRunProbeName}'… the result will appear shortly.";
 
             LoadViewState(populateEditorValues: false);
             return Page();
@@ -72,6 +97,23 @@ public sealed partial class WorkspaceModel
             LoadViewState(populateEditorValues: false);
             return Page();
         }
+    }
+
+    // Queues a transient (non-recording) sensor test on a remote probe and exposes the job id + probe name
+    // to the view so the client can poll GET /api/run-jobs/{id} for the channel preview.
+    private void QueueRemoteTest(string owningProbeId, Guid? sensorId, string sensorTypeKey, string target, MonitoringSettings settings)
+    {
+        _assignmentProvider.MakeSettingsProbeReady(settings, sensorTypeKey);
+        var job = _onDemandRunStore.Create(
+            owningProbeId,
+            sensorId,
+            sensorTypeKey,
+            target,
+            settings,
+            recordObservation: false,
+            ProbeRunJobKind.Sensor);
+        RemoteTestJobId = job.Id;
+        RemoteRunProbeName = _workspaceStore.FindProbeByProbeId(owningProbeId)?.Name ?? owningProbeId;
     }
 
     public IActionResult OnPostToggleSensorPause(Guid sensorId, string? returnUrl)
@@ -107,9 +149,25 @@ public sealed partial class WorkspaceModel
                 throw new InvalidOperationException("Selected element is not a sensor.");
             }
 
-            var result = await _sensorExecutionService.ExecuteNowAsync(sensorId, cancellationToken: HttpContext.RequestAborted);
-            StatusMessage = $"Ran '{sensor.Name}': {FormatSensorStateLabel(result.State)} - {result.Duration.TotalMilliseconds:0.#} ms"
-                + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}");
+            // Route to the owning remote probe if the sensor lives under one; local sensors keep the
+            // synchronous in-process fast path.
+            var routing = await RouteSavedSensorRunAsync(sensorId, wait: true, HttpContext.RequestAborted);
+            if (routing.Outcome == RemoteRunOutcome.Local)
+            {
+                var result = await _sensorExecutionService.ExecuteNowAsync(sensorId, cancellationToken: HttpContext.RequestAborted);
+                StatusMessage = $"Ran '{sensor.Name}': {FormatSensorStateLabel(result.State)} - {result.Duration.TotalMilliseconds:0.#} ms"
+                    + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}");
+            }
+            else if (routing is { Outcome: RemoteRunOutcome.Completed, Result: { } remoteResult })
+            {
+                StatusMessage = $"Ran '{sensor.Name}' on probe '{routing.ProbeName}': {FormatSensorStateLabel(remoteResult.State)} - {remoteResult.Duration.TotalMilliseconds:0.#} ms"
+                    + (string.IsNullOrWhiteSpace(remoteResult.Message) ? string.Empty : $" - {remoteResult.Message}");
+            }
+            else
+            {
+                StatusMessage = BuildQueuedOnProbeMessage(sensor.Name, routing.ProbeName);
+            }
+
             return RedirectAfterAction(returnUrl, "/Monitoring", null);
         }
         catch (Exception ex)
@@ -134,23 +192,54 @@ public sealed partial class WorkspaceModel
                 return RedirectAfterAction(returnUrl, "/Monitoring", null);
             }
 
-            // A poll can take seconds (timeouts / slow targets), so run the whole subtree in the BACKGROUND with
-            // its own DI scope and return immediately - awaiting a full subtree would hang the request/UI. The
-            // fresh observations land just like the polling loop's; the tree reflects them on its next refresh.
-            var ids = sensorIds;
-            var scopeFactory = _scopeFactory;
-            _ = Task.Run(async () =>
+            // Split the subtree: sensors on remote probes are enqueued as fire-and-forget run jobs (they
+            // execute on their probe), local sensors keep running in the in-process background loop.
+            var localIds = new List<Guid>();
+            var remoteCount = 0;
+            foreach (var id in sensorIds)
             {
-                using var scope = scopeFactory.CreateScope();
-                var executor = scope.ServiceProvider.GetRequiredService<ISensorExecutionService>();
-                foreach (var id in ids)
+                if (_assignmentProvider.TryBuildProbeReadyRun(id, out var owningProbeId, out var sensorTypeKey, out var target, out var settings)
+                    && owningProbeId is not null)
                 {
-                    try { await executor.ExecuteNowAsync(id); }
-                    catch { /* one failing sensor must not abort the rest of the batch */ }
+                    _onDemandRunStore.Create(
+                        owningProbeId,
+                        id,
+                        sensorTypeKey,
+                        target,
+                        settings,
+                        recordObservation: true,
+                        ProbeRunJobKind.Sensor);
+                    remoteCount++;
                 }
-            });
+                else
+                {
+                    localIds.Add(id);
+                }
+            }
 
-            StatusMessage = $"Running {sensorIds.Length} sensor{(sensorIds.Length == 1 ? string.Empty : "s")} under '{element.Name}' now…";
+            // A poll can take seconds (timeouts / slow targets), so run the local sensors in the BACKGROUND
+            // with their own DI scope and return immediately - awaiting a full subtree would hang the
+            // request/UI. The fresh observations land just like the polling loop's; the tree reflects them
+            // on its next refresh. Remote results land via the probe's next sync.
+            if (localIds.Count > 0)
+            {
+                var ids = localIds.ToArray();
+                var scopeFactory = _scopeFactory;
+                _ = Task.Run(async () =>
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var executor = scope.ServiceProvider.GetRequiredService<ISensorExecutionService>();
+                    foreach (var id in ids)
+                    {
+                        try { await executor.ExecuteNowAsync(id); }
+                        catch { /* one failing sensor must not abort the rest of the batch */ }
+                    }
+                });
+            }
+
+            StatusMessage = remoteCount > 0
+                ? $"Queued {remoteCount} sensor{(remoteCount == 1 ? string.Empty : "s")} on remote probes; ran {localIds.Count} locally."
+                : $"Running {localIds.Count} sensor{(localIds.Count == 1 ? string.Empty : "s")} under '{element.Name}' now…";
             return RedirectAfterAction(returnUrl, "/Monitoring", null);
         }
         catch (Exception ex)

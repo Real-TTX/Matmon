@@ -275,6 +275,7 @@
                 <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create</span></button>
                 <button type="submit" asp-page-handler="RunSensorNow" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Analyze</span></button>
             </div>
+            <partial name="_RemoteRunPreview" model="Model" />
             <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate class="d-none" data-sensor-preview-submit>Preview</button>
         </form>
     </section>

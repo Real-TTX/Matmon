@@ -25,6 +25,8 @@ public sealed partial class WorkspaceModel : PageModel
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly ILicenseService _licenseService;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ProbeSensorAssignmentProvider _assignmentProvider;
+    private readonly IOnDemandRunStore _onDemandRunStore;
 
     public WorkspaceModel(
         IMonitoringWorkspaceStore workspaceStore,
@@ -33,7 +35,9 @@ public sealed partial class WorkspaceModel : PageModel
         ISensorExecutionService sensorExecutionService,
         MatmonRuntimeOptions runtimeOptions,
         ILicenseService licenseService,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        ProbeSensorAssignmentProvider assignmentProvider,
+        IOnDemandRunStore onDemandRunStore)
     {
         _workspaceStore = workspaceStore;
         _probeRegistry = probeRegistry;
@@ -42,6 +46,8 @@ public sealed partial class WorkspaceModel : PageModel
         _runtimeOptions = runtimeOptions;
         _licenseService = licenseService;
         _scopeFactory = scopeFactory;
+        _assignmentProvider = assignmentProvider;
+        _onDemandRunStore = onDemandRunStore;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -130,6 +136,14 @@ public sealed partial class WorkspaceModel : PageModel
 
     [TempData]
     public string? ErrorMessage { get; set; }
+
+    // When a "Test" or SNMP-discover is routed to a remote probe, the run is async: the page re-renders
+    // carrying the job id (+ probe name) so the client can poll GET /api/run-jobs/{id} for the result.
+    public Guid? RemoteTestJobId { get; private set; }
+
+    public Guid? RemoteSnmpDiscoverJobId { get; private set; }
+
+    public string? RemoteRunProbeName { get; private set; }
 
     public WorkspacePageViewModel View { get; private set; } = default!;
 

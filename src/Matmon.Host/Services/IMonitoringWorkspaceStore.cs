@@ -121,6 +121,13 @@ public interface IMonitoringWorkspaceStore
     IReadOnlyList<SensorDefinition> GetSensorDefinitions();
 
     /// <summary>
+    /// Walks an element's lineage to its owning <see cref="ProbeElement"/> and returns that probe's id
+    /// when it is a REMOTE probe (has a parent), or null for the local primary root / unknown element.
+    /// Used to route an on-demand run for a not-yet-saved sensor by its selected parent.
+    /// </summary>
+    string? ResolveOwningRemoteProbeId(Guid elementId);
+
+    /// <summary>
     /// A fully detached workspace snapshot with a deep-cloned element tree and templates - for
     /// consumers (the dashboard) that walk the whole tree and must not race concurrent edits.
     /// </summary>

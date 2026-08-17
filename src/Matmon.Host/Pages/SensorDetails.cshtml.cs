@@ -13,14 +13,20 @@ public sealed class SensorDetailsModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly ISensorExecutionService _sensorExecutionService;
+    private readonly ProbeSensorAssignmentProvider _assignmentProvider;
+    private readonly IOnDemandRunStore _onDemandRunStore;
     private readonly MonitoringInheritanceResolver _resolver = new();
 
     public SensorDetailsModel(
         IMonitoringWorkspaceStore workspaceStore,
-        ISensorExecutionService sensorExecutionService)
+        ISensorExecutionService sensorExecutionService,
+        ProbeSensorAssignmentProvider assignmentProvider,
+        IOnDemandRunStore onDemandRunStore)
     {
         _workspaceStore = workspaceStore;
         _sensorExecutionService = sensorExecutionService;
+        _assignmentProvider = assignmentProvider;
+        _onDemandRunStore = onDemandRunStore;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -63,6 +69,27 @@ public sealed class SensorDetailsModel : PageModel
     {
         try
         {
+            // Route to the owning remote probe if the sensor lives under one; local sensors run in-process.
+            if (_assignmentProvider.TryBuildProbeReadyRun(SensorId, out var owningProbeId, out var sensorTypeKey, out var target, out var settings)
+                && owningProbeId is not null)
+            {
+                var probeName = _workspaceStore.FindProbeByProbeId(owningProbeId)?.Name ?? owningProbeId;
+                var job = _onDemandRunStore.Create(
+                    owningProbeId,
+                    SensorId,
+                    sensorTypeKey,
+                    target,
+                    settings,
+                    recordObservation: true,
+                    ProbeRunJobKind.Sensor);
+                var completed = await _onDemandRunStore.WaitForCompletionAsync(job.Id, TimeSpan.FromSeconds(12), HttpContext.RequestAborted);
+                StatusMessage = completed?.Result is { } remoteResult
+                    ? $"Run now on probe '{probeName}': {MonitoringStatePresentation.Label(remoteResult.State)} - check {remoteResult.Duration.TotalMilliseconds:0.#} ms"
+                        + (string.IsNullOrWhiteSpace(remoteResult.Message) ? string.Empty : $" - {remoteResult.Message}")
+                    : $"Queued on probe '{probeName}' - the result will appear shortly (the probe syncs every ~5s).";
+                return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window) });
+            }
+
             var result = await _sensorExecutionService.ExecuteNowAsync(SensorId, cancellationToken: HttpContext.RequestAborted);
             StatusMessage = $"Run now: {MonitoringStatePresentation.Label(result.State)} - check {result.Duration.TotalMilliseconds:0.#} ms"
                 + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}");

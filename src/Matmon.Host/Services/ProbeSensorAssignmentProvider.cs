@@ -91,6 +91,64 @@ public sealed class ProbeSensorAssignmentProvider
         return true;
     }
 
+    /// <summary>
+    /// Resolves a saved sensor into a probe-ready run: its effective (inherited) settings and target,
+    /// with credential VALUES inlined and the bundles stripped, so the owning probe can run it standalone
+    /// - exactly the shape <see cref="BuildAssignments"/> produces. <paramref name="owningProbeId"/> is the
+    /// remote probe's id when the sensor lives under one, or null for the local primary root. Returns false
+    /// when the id is not a sensor.
+    /// </summary>
+    public bool TryBuildProbeReadyRun(
+        Guid sensorId,
+        out string? owningProbeId,
+        out string sensorTypeKey,
+        out string target,
+        out MonitoringSettings settings)
+    {
+        owningProbeId = null;
+        sensorTypeKey = string.Empty;
+        target = string.Empty;
+        settings = null!;
+
+        var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
+        if (!elementsById.TryGetValue(sensorId, out var element) || element is not SensorElement sensor)
+        {
+            return false;
+        }
+
+        var snapshot = _workspaceStore.Workspace;
+        var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
+        var definitionMap = snapshot.SensorDefinitions.ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
+        var lineage = MonitoringTopology.BuildLineage(sensor, elementsById);
+
+        sensorTypeKey = sensor.SensorTypeKey;
+        settings = _resolver.Resolve(lineage, templateMap);
+        ApplySensorCredentialDefaults(settings, sensorTypeKey, definitionMap);
+        settings.Credentials.Clear();
+        settings.SelectedCredentialId = null;
+        target = SensorTargetResolver.Resolve(sensor, lineage);
+
+        // The nearest ProbeElement in the lineage owns the sensor; a probe with no parent is the local
+        // primary root (runs in-process), any other probe is remote (must run there).
+        var probe = lineage.OfType<ProbeElement>().LastOrDefault();
+        owningProbeId = probe is { ParentId: not null } ? probe.ProbeId : null;
+        return true;
+    }
+
+    /// <summary>
+    /// Turns already-resolved settings into the standalone shape a probe needs: inlines the credential
+    /// values for the sensor type's kinds and clears the bundle references. Used by the "Test" / SNMP
+    /// discover paths, which start from transient form settings rather than a saved sensor.
+    /// </summary>
+    public void MakeSettingsProbeReady(MonitoringSettings settings, string sensorTypeKey)
+    {
+        var definitionMap = _workspaceStore.Workspace.SensorDefinitions
+            .ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
+        ApplySensorCredentialDefaults(settings, sensorTypeKey, definitionMap);
+        settings.Credentials.Clear();
+        settings.SelectedCredentialId = null;
+    }
+
     private static void ApplySensorCredentialDefaults(
         MonitoringSettings settings,
         string sensorTypeKey,

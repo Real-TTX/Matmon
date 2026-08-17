@@ -129,6 +129,7 @@ builder.Services.AddSingleton<SlaveProbeRuntimeState>();
 builder.Services.AddSingleton<ProbeSensorAssignmentProvider>();
 builder.Services.AddSingleton<NetworkDiscoveryService>();
 builder.Services.AddSingleton<DiscoveryJobStore>();
+builder.Services.AddSingleton<IOnDemandRunStore, OnDemandRunStore>();
 builder.Services.AddSingleton<MapDisplayProvider>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -443,6 +444,25 @@ if (runtimeOptions.Mode == AppMode.Primary)
             job.Results));
     });
 
+    // UI poll for an on-demand run routed to a remote probe (a "Test" or SNMP-discover preview). Mirrors
+    // the accessibility of GET /api/discovery-jobs/{jobId} (authenticated user, no probe token).
+    app.MapGet("/api/run-jobs/{jobId:guid}", (Guid jobId, IOnDemandRunStore onDemandRunStore) =>
+    {
+        var job = onDemandRunStore.TryGet(jobId);
+        if (job is null)
+        {
+            return Results.NotFound();
+        }
+
+        return Results.Ok(new RunJobStatusResponse(
+            job.Id,
+            job.Status,
+            OnDemandRunStatus.IsFinished(job.Status),
+            job.Result,
+            job.Oids,
+            job.Error));
+    });
+
     app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore) =>
     {
         if (string.IsNullOrWhiteSpace(request.ProbeId) || string.IsNullOrWhiteSpace(request.ProbeName))
@@ -578,6 +598,76 @@ if (runtimeOptions.Mode == AppMode.Primary)
         }
 
         return Results.Ok(new ProbeDiscoveryJobResultPostResponse(recorded, cancelled));
+    }).AllowAnonymous();
+
+    // A remote probe pulls its queued on-demand runs here (Pending -> Running), same token auth as the
+    // sensor-assignment/discovery endpoints.
+    app.MapGet("/api/probes/{probeId}/run-jobs", (
+        string probeId,
+        HttpRequest request,
+        IMonitoringWorkspaceStore workspaceStore,
+        IOnDemandRunStore onDemandRunStore) =>
+    {
+        if (!workspaceStore.TryValidateProbe(probeId, ReadProbeToken(request)))
+        {
+            return Results.Unauthorized();
+        }
+
+        var jobs = onDemandRunStore.TakePending(probeId)
+            .Select(job => new ProbeRunJobAssignment(
+                job.Id,
+                job.SensorId,
+                job.SensorTypeKey,
+                job.Target,
+                job.Settings,
+                job.RecordObservation,
+                job.Kind))
+            .ToArray();
+        return Results.Ok(new ProbeRunJobAssignmentsResponse(jobs));
+    }).AllowAnonymous();
+
+    app.MapPost("/api/probes/{probeId}/run-jobs/results", (
+        string probeId,
+        ProbeRunJobResultBatch batch,
+        HttpRequest request,
+        IMonitoringWorkspaceStore workspaceStore,
+        ProbeSensorAssignmentProvider assignmentProvider,
+        IOnDemandRunStore onDemandRunStore) =>
+    {
+        if (!workspaceStore.TryValidateProbe(probeId, ReadProbeToken(request)))
+        {
+            return Results.Unauthorized();
+        }
+
+        var recorded = 0;
+        foreach (var result in batch.Results)
+        {
+            // Complete() returns true only for the transition that actually finishes the job, so recording is
+            // idempotent: a duplicate JobId (re-POSTed batch, repeated id) can never write the observation twice.
+            var job = onDemandRunStore.TryGet(result.JobId);
+            if (!onDemandRunStore.Complete(result.JobId, result.Result, result.DiscoveredOids, result.Error))
+            {
+                continue;
+            }
+
+            // Only a run that asked to be recorded becomes a real observation, and only via the same
+            // server-side re-resolve path as POST /observations - never trust the settings the probe echoed.
+            if (job is { RecordObservation: true, SensorId: Guid sensorId } &&
+                result.Result is not null &&
+                assignmentProvider.TryBuildRecordingContext(probeId, sensorId, out var probe, out _, out var settings))
+            {
+                workspaceStore.RecordSensorObservation(
+                    sensorId,
+                    result.Result,
+                    result.TimestampUtc,
+                    settings,
+                    probe.ProbeId,
+                    probe.Name);
+                recorded++;
+            }
+        }
+
+        return Results.Ok(new { recorded });
     }).AllowAnonymous();
 }
 

@@ -40,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeTagInputs();
   initializeTagOverflow();
   initializeAlertsTable();
+  initializeRemoteRunPreviews();
 });
 
 // Alerts table: client-side filter tabs + search + paging + row selection, all over the full set
@@ -4400,4 +4401,104 @@ function defaultStateLabel(state) {
   }
 
   return capitalize(state);
+}
+
+// A "Test" or SNMP-discover that was routed to a remote probe runs asynchronously (the primary only
+// queued a run job). Each preview container carries the job id; poll GET /api/run-jobs/{id} until it
+// completes, then render a compact channel preview / discovered-OID list. Progressive enhancement and
+// dependency-free; the local (in-process) path renders no container and is untouched.
+function initializeRemoteRunPreviews() {
+  const containers = document.querySelectorAll("[data-remote-run-job]");
+  containers.forEach((container) => pollRemoteRunPreview(container));
+}
+
+function pollRemoteRunPreview(container) {
+  const jobId = container.dataset.remoteRunJob;
+  if (!jobId) {
+    return;
+  }
+
+  const kind = container.dataset.remoteRunKind || "sensor";
+  const probeName = container.dataset.remoteRunProbe || "the probe";
+  const statusElement = container.querySelector(".remote-run-preview-status");
+  const deadline = Date.now() + 30000; // give up after ~30s; the result still lands on the probe sync
+
+  const tick = async () => {
+    try {
+      const response = await fetch(`/api/run-jobs/${encodeURIComponent(jobId)}`, {
+        headers: { Accept: "application/json" }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        redirectToLogin();
+        return;
+      }
+
+      if (response.ok) {
+        const job = await response.json();
+        if (job.isComplete) {
+          renderRemoteRunResult(container, kind, job);
+          return;
+        }
+      }
+    } catch {
+      // Transient network error - keep polling until the deadline.
+    }
+
+    if (Date.now() >= deadline) {
+      if (statusElement) {
+        statusElement.textContent = `Still running on probe ${probeName}… the result will appear on the sensor once the probe syncs.`;
+      }
+      return;
+    }
+
+    window.setTimeout(tick, 1500);
+  };
+
+  window.setTimeout(tick, 1500);
+}
+
+function renderRemoteRunResult(container, kind, job) {
+  if (job.error) {
+    container.innerHTML = `<span class="remote-run-preview-status">Run failed on probe: ${escapeHtml(job.error)}</span>`;
+    return;
+  }
+
+  if (kind === "snmp") {
+    const oids = Array.isArray(job.discoveredOids) ? job.discoveredOids : [];
+    if (oids.length === 0) {
+      container.innerHTML = `<span class="remote-run-preview-status">No OIDs discovered.</span>`;
+      return;
+    }
+
+    const rows = oids
+      .map((item) => `<li><code>${escapeHtml(item.oid || "")}</code> <span>${escapeHtml(item.value || "")}</span> <em>${escapeHtml(item.syntax || "")}</em></li>`)
+      .join("");
+    container.innerHTML =
+      `<div class="remote-run-preview-status">Discovered ${oids.length} OID${oids.length === 1 ? "" : "s"} on the probe. Re-open the editor after saving to pick channels.</div>` +
+      `<ul class="remote-run-preview-oids">${rows}</ul>`;
+    return;
+  }
+
+  const result = job.result;
+  if (!result) {
+    container.innerHTML = `<span class="remote-run-preview-status">The probe reported no result.</span>`;
+    return;
+  }
+
+  const state = escapeHtml(String(result.state || "Unknown"));
+  const message = result.message ? ` - ${escapeHtml(result.message)}` : "";
+  const channels = Array.isArray(result.channels) ? result.channels : [];
+  const channelRows = channels
+    .map((channel) => {
+      const label = escapeHtml(channel.label || channel.key || "");
+      const value = channel.value === null || channel.value === undefined ? "-" : escapeHtml(String(channel.value));
+      const unit = channel.unit ? ` ${escapeHtml(channel.unit)}` : "";
+      return `<li><span>${label}</span><strong>${value}${unit}</strong></li>`;
+    })
+    .join("");
+
+  container.innerHTML =
+    `<div class="remote-run-preview-status">Test on probe: <strong>${state}</strong>${message}</div>` +
+    (channelRows ? `<ul class="remote-run-preview-channels">${channelRows}</ul>` : "");
 }

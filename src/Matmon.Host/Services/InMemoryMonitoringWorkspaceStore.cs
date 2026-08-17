@@ -815,6 +815,25 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>
+    /// Walks an element's lineage to its owning probe under <c>_gate</c> and returns that probe's id when it
+    /// is a REMOTE probe (has a parent). Null for the local primary root or an unknown element. Lets the
+    /// create/test paths route an on-demand run for a not-yet-saved sensor by its selected parent.
+    /// </summary>
+    public string? ResolveOwningRemoteProbeId(Guid elementId)
+    {
+        lock (_gate)
+        {
+            if (FindElementInternal(elementId) is not { } element)
+            {
+                return null;
+            }
+
+            var probe = BuildLineage(element).OfType<ProbeElement>().LastOrDefault();
+            return probe is { ParentId: not null } ? probe.ProbeId : null;
+        }
+    }
+
     /// <summary>The sensor-definition catalog. Entries are an immutable catalog (rebuilt on load, not
     /// mutated at runtime), so this is a lightweight accessor that avoids cloning the whole workspace.</summary>
     public IReadOnlyList<SensorDefinition> GetSensorDefinitions()
