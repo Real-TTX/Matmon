@@ -400,13 +400,13 @@
                                     : $"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsFrom={row.DrillFrom}&StatsTo={row.DrillTo}&StatsGroup={row.DrillGroup}&StatsChannel={stats.SelectedChannelKey}";
                                 <tr data-state="@row.StateKey" class="@(drillHref is null ? null : "is-clickable")" data-href="@drillHref" title="@(drillHref is null ? null : $"Drill into {row.PeriodText}")">
                                     <td>@row.PeriodText@if (drillHref is not null) {<span class="sensor-statistics-drill">›</span>}</td>
-                                    <td class="is-strong">@row.AverageText</td>
-                                    <td>@row.MinimumText</td>
-                                    <td>@row.MaximumText</td>
-                                    <td>@row.LowPercentileText</td>
-                                    <td>@row.HighPercentileText</td>
-                                    <td>@(row.UptimeText ?? "-")</td>
-                                    <td>@row.SampleCount</td>
+                                    <td class="is-strong" data-label="Avg">@row.AverageText</td>
+                                    <td data-label="Min">@row.MinimumText</td>
+                                    <td data-label="Max">@row.MaximumText</td>
+                                    <td data-label="1 %">@row.LowPercentileText</td>
+                                    <td data-label="99 %">@row.HighPercentileText</td>
+                                    <td data-label="OK %">@(row.UptimeText ?? "-")</td>
+                                    <td data-label="Checks">@row.SampleCount</td>
                                 </tr>
                             }
                         </tbody>

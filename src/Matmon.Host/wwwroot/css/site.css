@@ -11710,22 +11710,33 @@ button.workspace-action-menu-link {
     width: auto;
   }
 
+  /* Summary tiles: two compact columns (24h / 7d / 30d …) instead of a tall stack of full-width cards. */
   .sensor-stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
   }
 
-  .sensor-window-head {
-    align-items: flex-start;
-  }
-
-  .sensor-window-figure {
+  .sensor-window-card {
+    padding: 0.55rem 0.6rem;
     gap: 0.3rem;
   }
 
+  .sensor-window-head {
+    align-items: center;
+  }
+
+  .sensor-window-figure {
+    gap: 0.25rem;
+  }
+
+  /* Keep MIN/MAX and Checks/Latest on one line each - a compact tile, not a column of labels. */
   .sensor-window-summary,
   .sensor-window-mini {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.15rem 0.6rem;
   }
 
   .sensor-window-tabs {
@@ -11740,8 +11751,120 @@ button.workspace-action-menu-link {
     flex: 0 0 auto;
   }
 
+  /* Statistics controls: each field is its own full-width row so nothing is half-cut or crammed. */
+  .sensor-statistics-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sensor-statistics-field {
+    width: 100%;
+  }
+
+  .sensor-statistics-field input,
+  .sensor-statistics-field select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sensor-statistics-actions {
+    width: 100%;
+  }
+
+  .sensor-statistics-actions .workspace-secondary-submit {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* The 8-column statistics table is unreadable on a phone. Turn every period row into a card of
+     label -> value lines (headers hidden, data-label drives the labels). */
+  .sensor-statistics-scroll {
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .sensor-statistics-table,
+  .sensor-statistics-table tbody,
+  .sensor-statistics-table tr,
+  .sensor-statistics-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .sensor-statistics-table thead {
+    display: none;
+  }
+
+  .sensor-statistics-table tr {
+    margin-bottom: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--matmon-border);
+    border-radius: 8px;
+    background: var(--matmon-surface);
+  }
+
+  .sensor-statistics-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.18rem 0;
+    border: 0;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .sensor-statistics-table td::before {
+    content: attr(data-label);
+    color: var(--matmon-muted);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .sensor-statistics-table td:first-child {
+    justify-content: flex-start;
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--matmon-border) 55%, transparent);
+    color: var(--matmon-foreground);
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .sensor-statistics-table td:first-child::before {
+    content: none;
+  }
+
+  /* Keep the card-title separator on the last card too (overrides the desktop last-row rule). */
+  .sensor-statistics-table tbody tr:last-child td:first-child {
+    border-bottom: 1px solid color-mix(in srgb, var(--matmon-border) 55%, transparent);
+  }
+
+  .sensor-statistics-table tr[data-state="warning"] {
+    border-left: 3px solid var(--matmon-warning);
+  }
+
+  .sensor-statistics-table tr[data-state="critical"] {
+    border-left: 3px solid var(--matmon-danger);
+  }
+
+  /* History rows keep the timestamp/message on the left and the reading on the right (value emphasised),
+     mirroring the channel cards - not a left-aligned stack. */
   .sensor-observation-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.7rem;
+  }
+
+  .sensor-observation-row .sensor-observation-side {
+    justify-items: end;
+    text-align: right;
+  }
+
+  .sensor-observation-row .sensor-channel-value {
+    font-size: 1.3rem;
+    line-height: 1.05;
   }
 
   .sensor-threshold-grid,
