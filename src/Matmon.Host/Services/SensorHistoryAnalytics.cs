@@ -1,3 +1,4 @@
+using System.Globalization;
 using Matmon.Core.Domain;
 
 namespace Matmon.Host.Services;
@@ -207,14 +208,18 @@ public static class SensorHistoryAnalytics
             coords[0] = (width / 2d, coords[0].Y);
         }
 
-        var line = string.Join(" ", coords.Select((point, index) => $"{(index == 0 ? "M" : "L")} {point.X:0.##} {point.Y:0.##}"));
+        // SVG paths must use '.' as the decimal separator regardless of server culture - formatting with the
+        // current (e.g. German) culture emits "55,05", which makes the path unparseable and the graph vanish.
+        static string F(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+        var line = string.Join(" ", coords.Select((point, index) => $"{(index == 0 ? "M" : "L")} {F(point.X)} {F(point.Y)}"));
         var areaSegments = new List<string>
         {
-            $"M 0 {height:0.##}",
-            $"L {coords[0].X:0.##} {coords[0].Y:0.##}"
+            $"M 0 {F(height)}",
+            $"L {F(coords[0].X)} {F(coords[0].Y)}"
         };
-        areaSegments.AddRange(coords.Skip(1).Select(point => $"L {point.X:0.##} {point.Y:0.##}"));
-        areaSegments.Add($"L {width:0.##} {height:0.##}");
+        areaSegments.AddRange(coords.Skip(1).Select(point => $"L {F(point.X)} {F(point.Y)}"));
+        areaSegments.Add($"L {F(width)} {F(height)}");
         areaSegments.Add("Z");
         var area = string.Join(" ", areaSegments);
 
