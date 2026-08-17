@@ -41,7 +41,30 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeTagOverflow();
   initializeAlertsTable();
   initializeRemoteRunPreviews();
+  initializeRunLoadingIndicator();
 });
+
+// Show a spinner on the button that triggered a run/test/discover. These POST synchronously (a remote run
+// waits up to ~12s for the probe to report back), so without feedback the button looks dead. Matched by the
+// handler in the submit target's formaction / the form action, so it covers Run now, Run sensor, Run subtree,
+// Test and SNMP discover without marking each button. The spinner clears when the page reloads after the POST.
+function initializeRunLoadingIndicator() {
+  document.addEventListener("submit", (event) => {
+    const button = event.submitter;
+    if (!button || button.classList.contains("is-loading")) {
+      return;
+    }
+
+    const action = button.getAttribute("formaction") || event.target.getAttribute("action") || "";
+    if (!/[?&]handler=(Run|DiscoverSnmp)/i.test(action) && !button.hasAttribute("data-loading-button")) {
+      return;
+    }
+
+    // Add the class after the submit is dispatched so the button's name/value is still sent with the form.
+    button.classList.add("is-loading");
+    button.setAttribute("aria-busy", "true");
+  });
+}
 
 // Alerts table: client-side filter tabs + search + paging + row selection, all over the full set
 // of rows the server rendered (active + resolved history). Keeps it instant regardless of count;

@@ -10608,6 +10608,41 @@ body.credential-modal-open {
   height: 0.9rem;
 }
 
+/* Loading state for run/test/discover buttons: lock the button and swap its leading icon for a spinner
+   (added by site.js on submit; cleared when the page reloads after the POST). A remote run waits for the
+   probe, so this is the only signal the click registered. */
+.workspace-submit.is-loading,
+.workspace-secondary-submit.is-loading,
+.workspace-action-link.is-loading {
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.workspace-submit.is-loading > .ui-icon,
+.workspace-secondary-submit.is-loading > .ui-icon,
+.workspace-action-link.is-loading > .ui-icon {
+  display: none;
+}
+
+.workspace-submit.is-loading::before,
+.workspace-secondary-submit.is-loading::before,
+.workspace-action-link.is-loading::before {
+  content: "";
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: matmon-spin 0.6s linear infinite;
+}
+
+@keyframes matmon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .workspace-secondary-submit,
 .workspace-action-link {
   background: var(--matmon-surface-soft);
