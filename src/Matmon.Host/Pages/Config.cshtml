@@ -701,13 +701,12 @@
                 @if (linkActive)
                 {
                     @* Connected: connection identity is locked (disconnect to change). Only the display name is editable. *@
-                    <table style="width:100%;border-collapse:collapse;max-width:640px;">
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);width:160px;">Cloud URL</th>
-                            <td style="padding:8px 10px;">@(Model.CloudUrl ?? "–")</td></tr>
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Instance id</th><td style="padding:8px 10px;">@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</td></tr>
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Status</th><td style="padding:8px 10px;color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</td></tr>
-                        <tr><th style="text-align:left;padding:8px 10px;color:var(--matmon-muted);">Last heartbeat</th><td style="padding:8px 10px;">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</td></tr>
-                    </table>
+                    <dl class="config-list" style="max-width:640px;">
+                        <div class="config-row"><dt>Cloud URL</dt><dd>@(Model.CloudUrl ?? "–")</dd></div>
+                        <div class="config-row"><dt>Instance id</dt><dd>@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</dd></div>
+                        <div class="config-row"><dt>Status</dt><dd style="color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</dd></div>
+                        <div class="config-row"><dt>Last heartbeat</dt><dd>@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</dd></div>
+                    </dl>
                     <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;">
                         <label class="workspace-field">
                             <span>Cloud display name</span>

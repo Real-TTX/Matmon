@@ -6291,6 +6291,9 @@ body.element-picker-open {
 
 .config-row dd {
   text-align: right;
+  /* Long unbreakable values (a deep workspace path, a primary URL, a 36-char instance GUID) must wrap
+     instead of forcing the column - and therefore the whole page - wider than a phone viewport. */
+  overflow-wrap: anywhere;
 }
 
 .config-code {
@@ -11162,6 +11165,13 @@ button.workspace-action-menu-link {
     font-size: 16px;
   }
 
+  /* Plain textareas also want >=16px to avoid iOS focus-zoom. The script-editor textarea is excluded
+     (it is a transparent overlay over a highlighted <pre> sized at 0.9rem - matching font sizes keeps
+     the caret aligned), so target every workspace textarea that is NOT the code editor. */
+  .workspace-textarea:not([data-script-editor]) {
+    font-size: 16px;
+  }
+
   .page-header,
   .panel-header,
   .graph-card-head,
@@ -11996,12 +12006,26 @@ button.workspace-action-menu-link {
     text-align: left;
   }
 
+  /* Once the tree row is a single column, a long unbroken sensor name or target (a URL, a dotted FQDN with
+     no spaces) would otherwise set the column min-content wider than the viewport and force page scroll. */
+  .tree-name,
+  .tree-details,
+  .tree-meta {
+    overflow-wrap: anywhere;
+  }
+
   .graph-card-head,
   .config-row dd {
     text-align: left;
   }
 
   .workspace-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Setup/Wizard + the shared SMTP form use a fixed 2-col grid; collapse it to one column on phones so the
+     Cloud-URL / SMTP-host / e-mail inputs get full width instead of two cramped ~150px cells. */
+  .setup-wizard-grid {
     grid-template-columns: 1fr;
   }
 
@@ -12134,6 +12158,19 @@ button.workspace-action-menu-link {
 
   .system-table-row > span {
     white-space: normal;
+  }
+
+  /* The user table's 5-col template is scoped to `.system-user-table .system-table-row` (specificity 0,2,0),
+     which the single-class `.system-table-row { grid-template-columns: 1fr }` above cannot override. Stack it
+     with an equally specific selector (mirrors the probe-row collapse), else its ~44rem of fixed track minimums
+     overflow the phone viewport into page-level horizontal scroll. */
+  .system-user-table .system-table-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .system-user-actions {
+    justify-content: flex-start;
   }
 }
 
