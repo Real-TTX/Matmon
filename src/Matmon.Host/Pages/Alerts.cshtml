@@ -211,10 +211,10 @@
                                     <span class="alerts-element-path">@alert.ElementPath</span>
                                 </span>
                             </td>
-                            <td class="alerts-col-message"><span title="@alert.Message">@alert.Message</span></td>
-                            <td class="alerts-col-time">@alert.FirstSeen</td>
-                            <td class="alerts-col-time">@(alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt))</td>
-                            <td class="alerts-col-status">
+                            <td class="alerts-col-message" data-label="Message"><span title="@alert.Message">@alert.Message</span></td>
+                            <td class="alerts-col-time" data-label="First seen">@alert.FirstSeen</td>
+                            <td class="alerts-col-time" data-label="Last seen">@(alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt))</td>
+                            <td class="alerts-col-status" data-label="Status">
                                 @if (!alert.IsActive)
                                 {
                                     <span class="state-pill" data-state="ok">Resolved</span>

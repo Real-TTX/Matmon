@@ -11145,6 +11145,12 @@ button.workspace-action-menu-link {
     padding-bottom: 0.35rem;
   }
 
+  /* Grid items default to min-width:auto, so a wide child (a table, a long token) blows the whole content column
+     past the viewport. Clamp every dashboard-shell grid item to its track so nothing can force sideways scroll. */
+  .dashboard-shell > * {
+    min-width: 0;
+  }
+
   /* Comfortable touch targets for form controls, and >=16px text so iOS Safari does not zoom in on focus.
      Textareas are excluded so the code-editor overlay (transparent textarea over a highlighted <pre>) stays aligned. */
   input.form-control,
@@ -12471,6 +12477,146 @@ button.workspace-action-menu-link {
 }
 .alerts-row[data-ack="true"][data-state="error"] td:first-child {
   border-image-source: linear-gradient(to bottom, var(--matmon-danger) 0 50%, var(--matmon-ack) 50% 100%);
+}
+
+/* Phones: the 8-column alerts table (min-width 880) blew the whole content column wide. Turn every alert into a
+   card - severity + element as the header, the rest as label -> value rows, actions as a button row. */
+@media (max-width: 767.98px) {
+  .alerts-table-wrap {
+    overflow-x: visible;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .alerts-table {
+    min-width: 0;
+  }
+
+  .alerts-table,
+  .alerts-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .alerts-table thead {
+    display: none;
+  }
+
+  .alerts-row {
+    display: block;
+    position: relative;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--matmon-border);
+    border-radius: 8px;
+    background: var(--matmon-surface);
+  }
+
+  /* State accent moves from the first cell to the whole card. */
+  .alerts-row td:first-child {
+    border-left: 0;
+  }
+
+  .alerts-row[data-state="error"] {
+    border-left: 3px solid var(--matmon-danger);
+  }
+
+  .alerts-row[data-state="warning"] {
+    border-left: 3px solid var(--matmon-warning);
+  }
+
+  .alerts-row[data-active="false"] {
+    border-left: 3px solid var(--matmon-success);
+  }
+
+  .alerts-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: baseline;
+    padding: 0.16rem 0;
+    border: 0;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .alerts-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: var(--matmon-muted);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  /* Select checkbox: top-right corner of the card. */
+  .alerts-table td.alerts-col-check {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.55rem;
+    width: auto;
+    padding: 0;
+  }
+
+  .alerts-table td.alerts-col-check::before {
+    content: none;
+  }
+
+  /* Severity pill: header line (leave room for the checkbox). */
+  .alerts-table td.alerts-col-state {
+    justify-content: flex-start;
+    margin-bottom: 0.25rem;
+    padding-right: 2rem;
+  }
+
+  .alerts-table td.alerts-col-state::before {
+    content: none;
+  }
+
+  /* Element: full-width title, separated from the detail rows. */
+  .alerts-table tbody td.alerts-col-element {
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--matmon-border) 55%, transparent);
+    text-align: left;
+  }
+
+  .alerts-table td.alerts-col-element::before {
+    content: none;
+  }
+
+  /* Message: wraps fully instead of a clamped ellipsis. */
+  .alerts-table td.alerts-col-message {
+    max-width: none;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .alerts-table td.alerts-col-message span {
+    display: block;
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    /* Long unbreakable tokens (e.g. a CLIXML error blob with no spaces) must still wrap. */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Actions: a left-aligned wrapping row of icon buttons. */
+  .alerts-table td.alerts-col-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+    text-align: left;
+  }
+
+  .alerts-table td.alerts-col-actions::before {
+    content: none;
+  }
 }
 
 /* ---- In-app log viewer (/Logs) ---- */
