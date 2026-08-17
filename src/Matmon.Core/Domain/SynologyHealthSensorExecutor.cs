@@ -289,13 +289,42 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             .Select(row =>
             {
                 var columns = row.Value;
+                // Two DIFFERENT enums, do not conflate them: diskHealthStatus (col 13, DSM 7+) is 1 ok / 2 warn /
+                // 3-4 critical, while diskStatus (col 5) is 1-2 ok / 3 warn / 4-5 critical. Falling back col 13 to
+                // col 5 graded a healthy "Initialized" disk (diskStatus 2) as a health warning - a false alarm.
                 return new SynologyDiskSnapshot(
                     row.Key,
-                    ReadNumeric(columns, 13) ?? ReadNumeric(columns, 5),
+                    ReadNumeric(columns, 13),
                     ReadNumeric(columns, 5));
             })
             .ToArray();
     }
+
+    /// <summary>0 healthy / 1 warning / 2 critical for one disk. diskStatus 1-2 are both healthy (2 =
+    /// "Initialized"), 3 = not initialized (warning), 4-5 = failed/crashed; diskHealthStatus 2 = warning,
+    /// 3-4 = critical. A missing health column (older DSM) is treated as OK, not as a warning. Mirrors the
+    /// detailed synology-disk sensor so the two never disagree.</summary>
+    private static int DiskSeverity(SynologyDiskSnapshot disk)
+    {
+        var status = disk.StatusCode.HasValue ? (int)Math.Round(disk.StatusCode.Value) : 1;
+        var health = disk.HealthCode.HasValue ? (int)Math.Round(disk.HealthCode.Value) : 0;
+
+        if (status is 4 or 5 || health is 3 or 4)
+        {
+            return 2;
+        }
+
+        if (status == 3 || health == 2)
+        {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    /// <summary>Test seam: 0 healthy / 1 warning / 2 critical from the raw diskStatus + diskHealthStatus codes.</summary>
+    public static int ClassifyDisk(double? diskStatus, double? diskHealthStatus) =>
+        DiskSeverity(new SynologyDiskSnapshot(0, diskHealthStatus, diskStatus));
 
     private static IReadOnlyList<SynologyRaidSnapshot> ParseRaidSnapshots(IReadOnlyList<SnmpDiscoveryItem> items)
     {
@@ -499,9 +528,9 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         SynologyRaidSnapshot? primaryRaid)
     {
         var diskTotal = disks.Count;
-        var diskHealthy = disks.Count(disk => disk.HealthCode is 1 or null && disk.StatusCode is 1 or null);
-        var diskWarning = disks.Count(disk => disk.HealthCode is 2 || disk.StatusCode is 2);
-        var diskCritical = disks.Count(disk => disk.HealthCode is 3 || disk.StatusCode is 3 or 4 or 5);
+        var diskHealthy = disks.Count(disk => DiskSeverity(disk) == 0);
+        var diskWarning = disks.Count(disk => DiskSeverity(disk) == 1);
+        var diskCritical = disks.Count(disk => DiskSeverity(disk) == 2);
         var diskFailing = disks.Count(disk => disk.HealthCode is 4);
 
         var raidTotal = raids.Count;
@@ -768,13 +797,13 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             system.SystemFanStatusOk == false ||
             system.CpuFanStatusOk == false ||
             system.ThermalStatusOk == false ||
-            disks.Any(disk => disk.HealthCode is 4 or 3 || disk.StatusCode is 4 or 5) ||
+            disks.Any(disk => DiskSeverity(disk) == 2) ||
             raids.Any(raid => IsRaidCrashed(raid.SummaryCode, raid.StatusCode)))
         {
             return SensorState.Critical;
         }
 
-        if (disks.Any(disk => disk.HealthCode is 2 || disk.StatusCode is 2 || disk.StatusCode is 3) ||
+        if (disks.Any(disk => DiskSeverity(disk) == 1) ||
             raids.Any(raid => IsRaidDegraded(raid.SummaryCode, raid.StatusCode) || IsRaidWarning(raid.SummaryCode, raid.StatusCode)))
         {
             return SensorState.Warning;
@@ -815,13 +844,13 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             issues.Add("thermal status failed");
         }
 
-        var failingDisks = disks.Count(disk => disk.HealthCode is 4 or 3 || disk.StatusCode is 4 or 5);
+        var failingDisks = disks.Count(disk => DiskSeverity(disk) == 2);
         if (failingDisks > 0)
         {
             issues.Add($"{failingDisks} failing disk{(failingDisks == 1 ? string.Empty : "s")}");
         }
 
-        var warningDisks = disks.Count(disk => disk.HealthCode is 2 || disk.StatusCode is 2 or 3);
+        var warningDisks = disks.Count(disk => DiskSeverity(disk) == 1);
         if (warningDisks > 0)
         {
             issues.Add($"{warningDisks} warning disk{(warningDisks == 1 ? string.Empty : "s")}");
