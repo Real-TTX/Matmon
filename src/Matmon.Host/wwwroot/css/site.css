@@ -11145,6 +11145,17 @@ button.workspace-action-menu-link {
     padding-bottom: 0.35rem;
   }
 
+  /* Comfortable touch targets for form controls, and >=16px text so iOS Safari does not zoom in on focus.
+     Textareas are excluded so the code-editor overlay (transparent textarea over a highlighted <pre>) stays aligned. */
+  input.form-control,
+  select.form-select,
+  .workspace-input,
+  .workspace-select,
+  input.tag-input-field {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
   .page-header,
   .panel-header,
   .graph-card-head,
