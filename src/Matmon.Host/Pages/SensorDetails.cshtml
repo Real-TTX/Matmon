@@ -86,23 +86,23 @@
                 }
             </div>
             <div class="workspace-row-actions sensor-header-actions">
-                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.SensorId" asp-route-returnUrl="@Model.CurrentUrl">
+                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.SensorId" asp-route-returnUrl="@Model.CurrentUrl" title="Edit" aria-label="Edit">
                     @MatmonIcons.Render("pencil")
                     <span>Edit</span>
                 </a>
                 <form method="post" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
-                    <button type="submit" class="workspace-secondary-submit">
+                    <button type="submit" class="workspace-secondary-submit" title="Run now" aria-label="Run now">
                         @MatmonIcons.Render("spark")
                         <span>Run now</span>
                     </button>
                 </form>
                 <form method="post" asp-page-handler="ToggleSensorPause" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
-                    <button type="submit" class="workspace-secondary-submit">
+                    <button type="submit" class="workspace-secondary-submit" title="@(Model.View.IsPaused ? "Resume" : "Pause")" aria-label="@(Model.View.IsPaused ? "Resume" : "Pause")">
                         @MatmonIcons.Render(Model.View.IsPaused ? "play" : "pause")
                         <span>@(Model.View.IsPaused ? "Resume" : "Pause")</span>
                     </button>
                 </form>
-                <a class="workspace-action-link" asp-page="/Monitoring">
+                <a class="workspace-action-link" asp-page="/Monitoring" title="Back to monitoring" aria-label="Back to monitoring">
                     @MatmonIcons.Render("arrow-left")
                     <span>Back</span>
                 </a>

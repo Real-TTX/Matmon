@@ -11665,24 +11665,49 @@ button.workspace-action-menu-link {
     gap: 0.45rem;
   }
 
+  /* Actions sit side by side as compact ICON buttons (labels hidden, aria-label kept) instead of a stack of
+     full-width bars - modern and thumb-friendly. Forms are display:contents so their button joins the row. */
   .sensor-header-actions {
     width: 100%;
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: flex-start;
+    gap: 0.4rem;
   }
 
-  .sensor-header-actions > * {
-    width: 100%;
+  .sensor-header-actions form {
+    display: contents;
   }
 
+  .sensor-header-actions .workspace-action-link,
+  .sensor-header-actions .workspace-secondary-submit {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .sensor-header-actions .workspace-action-link span,
+  .sensor-header-actions .workspace-secondary-submit span {
+    display: none;
+  }
+
+  .sensor-header-actions .ui-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  /* Meta chips flow as a wrapping row, not a column of full-width bars. */
   .sensor-meta {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .sensor-chip {
-    width: 100%;
+    width: auto;
   }
 
   .sensor-stats-grid {
