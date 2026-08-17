@@ -86,8 +86,10 @@ a {
   position: relative;
 }
 
+/* The mobile nav is an overlay; lock the page behind it so you can't scroll the content through the open menu.
+   is-sidebar-open is only ever set at mobile widths (site.js gates on the media query), so this never affects desktop. */
 body.is-sidebar-open {
-  overflow: auto;
+  overflow: hidden;
 }
 
 .app-shell {
@@ -745,6 +747,18 @@ body.is-sidebar-open {
 
   .app-shell.is-sidebar-open .topbar {
     display: block;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(70vw, 360px);
+    max-width: 70vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    z-index: 1000;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.4);
   }
 
   .sidebar-inner {
@@ -776,6 +790,15 @@ body.is-sidebar-open {
 
   .sidebar-backdrop {
     display: none;
+  }
+
+  /* Dim + capture taps behind the open menu (tap to close, handled in site.js). */
+  .app-shell.is-sidebar-open .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(15, 23, 42, 0.5);
   }
 
   .mobile-nav-bar {
@@ -10960,8 +10983,22 @@ button.workspace-action-menu-link {
     transform: none;
   }
 
+  /* Open menu is a fixed overlay pinned to the left, full viewport height, scrolling within itself - so the
+     page content behind it can't scroll through and the menu always covers the screen. */
   .app-shell.is-sidebar-open .topbar {
     display: block;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(86vw, 340px);
+    max-width: 86vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    z-index: 1000;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.4);
   }
 
   .sidebar-inner {
@@ -11023,6 +11060,15 @@ button.workspace-action-menu-link {
 
   .sidebar-backdrop {
     display: none;
+  }
+
+  /* Dim + capture taps behind the open menu (tap to close, handled in site.js). */
+  .app-shell.is-sidebar-open .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(15, 23, 42, 0.5);
   }
 
   .mobile-nav-bar {
@@ -11658,7 +11704,6 @@ button.workspace-action-menu-link {
     flex: 0 0 auto;
   }
 
-  .sensor-channel-row,
   .sensor-observation-row {
     grid-template-columns: 1fr;
   }
@@ -11672,10 +11717,34 @@ button.workspace-action-menu-link {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sensor-channel-side,
   .sensor-observation-side {
     justify-items: start;
     text-align: left;
+  }
+
+  /* Channel cards on phones: keep the label on the left and make the READING the hero on the right, big and
+     right-aligned, so a value is legible at a glance instead of small under a bold label. */
+  .sensor-channel-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.7rem;
+  }
+
+  .sensor-channel-row .sensor-channel-side {
+    justify-items: end;
+    text-align: right;
+  }
+
+  .sensor-channel-row .sensor-channel-value {
+    font-size: 1.5rem;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The gauge/meter is decorative next to a big number on a narrow screen - drop it to keep the row compact. */
+  .sensor-channel-row .sensor-channel-meter,
+  .sensor-channel-row .sensor-channel-gauge {
+    display: none;
   }
 
   .sensor-channel-actions {
