@@ -23,9 +23,19 @@ public class SynologyDiskHealthTests
     }
 
     [Fact]
-    public void Not_initialized_disk_is_a_warning()
+    public void Not_initialized_disk_is_not_a_fault()
     {
-        Assert.Equal(1, SynologyHealthSensorExecutor.ClassifyDisk(diskStatus: 3, diskHealthStatus: null));
+        // diskStatus 3 = NotInitialized: a disk not assigned to a pool - a new/unused disk, a hot spare, or an
+        // SSD/NVMe cache device. DSM does not warn about it, so neither do we.
+        Assert.Equal(0, SynologyHealthSensorExecutor.ClassifyDisk(diskStatus: 3, diskHealthStatus: null));
+    }
+
+    [Fact]
+    public void Nvme_cache_disk_reporting_not_initialized_stays_healthy()
+    {
+        // The reported false alarm: 2 HDDs in a pool + 2 NVMe as SSD cache; the cache disks report diskStatus 3
+        // and no SMART-health column, and must not be counted as warnings.
+        Assert.Equal(0, SynologyHealthSensorExecutor.ClassifyDisk(diskStatus: 3, diskHealthStatus: null));
     }
 
     [Theory]

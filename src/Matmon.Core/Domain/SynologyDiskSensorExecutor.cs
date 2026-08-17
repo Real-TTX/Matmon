@@ -16,7 +16,7 @@ public sealed class SynologyDiskSensorExecutor : ISensorExecutor
     // synoDisk columns we read.
     private const int ColName = 2;        // diskID, e.g. "Disk 1"
     private const int ColModel = 3;       // diskModel
-    private const int ColStatus = 5;      // diskStatus: 1/2 ok, 3 warn, 4/5 critical
+    private const int ColStatus = 5;      // diskStatus: 1-3 not a fault (3 = NotInitialized/cache/spare), 4/5 critical
     private const int ColTemperature = 6; // diskTemperature (°C)
     private const int ColHealth = 13;     // diskHealthStatus (DSM 7+): 1 ok, 2 warn, 3/4 critical
 
@@ -224,7 +224,10 @@ public sealed class SynologyDiskSensorExecutor : ISensorExecutor
         return channels;
     }
 
-    /// <summary>0 healthy / 1 warning / 2 critical for a single disk.</summary>
+    /// <summary>0 healthy / 1 warning / 2 critical for a single disk. Health comes from diskHealthStatus (SMART:
+    /// 2 warn, 3-4 critical) plus a failed/crashed diskStatus (4-5). diskStatus 1-3 are all "not a fault":
+    /// 1 Normal, 2 Initialized, 3 NotInitialized - a disk not assigned to a pool (new/unused, hot spare, or an
+    /// SSD/NVMe cache device), which DSM does not warn about.</summary>
     private static int DiskSeverity(DiskSnapshot disk)
     {
         var status = disk.StatusCode.HasValue ? (int)Math.Round(disk.StatusCode.Value) : 1;
@@ -235,7 +238,7 @@ public sealed class SynologyDiskSensorExecutor : ISensorExecutor
             return 2;
         }
 
-        if (status == 3 || health == 2)
+        if (health == 2)
         {
             return 1;
         }

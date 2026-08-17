@@ -289,21 +289,25 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             .Select(row =>
             {
                 var columns = row.Value;
-                // Two DIFFERENT enums, do not conflate them: diskHealthStatus (col 13, DSM 7+) is 1 ok / 2 warn /
-                // 3-4 critical, while diskStatus (col 5) is 1-2 ok / 3 warn / 4-5 critical. Falling back col 13 to
-                // col 5 graded a healthy "Initialized" disk (diskStatus 2) as a health warning - a false alarm.
+                // Two DIFFERENT enums, do not conflate them: diskHealthStatus (col 13, DSM 7+) is the SMART health
+                // (1 ok / 2 warn / 3-4 critical), while diskStatus (col 5) is an allocation state (1 Normal /
+                // 2 Initialized / 3 NotInitialized / 4-5 failed). Falling back col 13 to col 5 graded a healthy
+                // "Initialized" disk (diskStatus 2) as a health warning - a false alarm.
                 return new SynologyDiskSnapshot(
                     row.Key,
                     ReadNumeric(columns, 13),
-                    ReadNumeric(columns, 5));
+                    ReadNumeric(columns, 5),
+                    ReadTextColumn(columns, 2)?.Trim());
             })
             .ToArray();
     }
 
-    /// <summary>0 healthy / 1 warning / 2 critical for one disk. diskStatus 1-2 are both healthy (2 =
-    /// "Initialized"), 3 = not initialized (warning), 4-5 = failed/crashed; diskHealthStatus 2 = warning,
-    /// 3-4 = critical. A missing health column (older DSM) is treated as OK, not as a warning. Mirrors the
-    /// detailed synology-disk sensor so the two never disagree.</summary>
+    /// <summary>0 healthy / 1 warning / 2 critical for one disk. Health is driven by diskHealthStatus (the SMART
+    /// health: 2 = warning, 3-4 = critical) plus a failed/crashed diskStatus (4-5 = critical). diskStatus 1-3 are
+    /// all treated as NOT a fault: 1 = Normal, 2 = Initialized, and 3 = NotInitialized - a disk that is present but
+    /// not assigned to a storage pool (a new/unused disk, a hot spare, or an SSD/NVMe cache device). DSM does not
+    /// raise a health warning for that, so neither do we. A missing health column (older DSM) counts as OK.
+    /// Mirrors the detailed synology-disk sensor so the two never disagree.</summary>
     private static int DiskSeverity(SynologyDiskSnapshot disk)
     {
         var status = disk.StatusCode.HasValue ? (int)Math.Round(disk.StatusCode.Value) : 1;
@@ -314,7 +318,7 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             return 2;
         }
 
-        if (status == 3 || health == 2)
+        if (health == 2)
         {
             return 1;
         }
@@ -844,16 +848,16 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
             issues.Add("thermal status failed");
         }
 
-        var failingDisks = disks.Count(disk => DiskSeverity(disk) == 2);
-        if (failingDisks > 0)
+        var failingDisks = disks.Where(disk => DiskSeverity(disk) == 2).ToArray();
+        if (failingDisks.Length > 0)
         {
-            issues.Add($"{failingDisks} failing disk{(failingDisks == 1 ? string.Empty : "s")}");
+            issues.Add($"{failingDisks.Length} failing disk{(failingDisks.Length == 1 ? string.Empty : "s")} ({DescribeDisks(failingDisks)})");
         }
 
-        var warningDisks = disks.Count(disk => DiskSeverity(disk) == 1);
-        if (warningDisks > 0)
+        var warningDisks = disks.Where(disk => DiskSeverity(disk) == 1).ToArray();
+        if (warningDisks.Length > 0)
         {
-            issues.Add($"{warningDisks} warning disk{(warningDisks == 1 ? string.Empty : "s")}");
+            issues.Add($"{warningDisks.Length} warning disk{(warningDisks.Length == 1 ? string.Empty : "s")} ({DescribeDisks(warningDisks)})");
         }
 
         var crashedRaids = raids.Count(raid => IsRaidCrashed(raid.SummaryCode, raid.StatusCode));
@@ -869,6 +873,19 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
         }
 
         return issues;
+    }
+
+    /// <summary>Names the flagged disks with their raw diskStatus / diskHealthStatus codes, so a wrong
+    /// classification is diagnosable straight from the sensor message instead of needing an SNMP walk.</summary>
+    private static string DescribeDisks(IReadOnlyList<SynologyDiskSnapshot> disks)
+    {
+        return string.Join(", ", disks.Select(disk =>
+        {
+            var name = string.IsNullOrWhiteSpace(disk.Name) ? $"Disk {disk.Index}" : disk.Name!.Trim();
+            var status = disk.StatusCode.HasValue ? ((int)Math.Round(disk.StatusCode.Value)).ToString(CultureInfo.InvariantCulture) : "?";
+            var health = disk.HealthCode.HasValue ? ((int)Math.Round(disk.HealthCode.Value)).ToString(CultureInfo.InvariantCulture) : "-";
+            return $"{name}: status {status}, health {health}";
+        }));
     }
 
     private static string BuildMessage(
@@ -990,7 +1007,8 @@ public sealed class SynologyHealthSensorExecutor : ISensorExecutor
     private sealed record SynologyDiskSnapshot(
         int Index,
         double? HealthCode,
-        double? StatusCode);
+        double? StatusCode,
+        string? Name = null);
 
     private sealed record SynologyRaidSnapshot(
         int Index,
