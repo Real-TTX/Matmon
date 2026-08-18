@@ -89,6 +89,10 @@ public class ConfigModel : PageModel
     [BindProperty]
     public string? CloudRenameName { get; set; }
 
+    /// <summary>Cloud heartbeat cadence (seconds) the admin can set in System → Cloud. Blank = env/default.</summary>
+    [BindProperty]
+    public int? CloudHeartbeatSeconds { get; set; }
+
     [BindProperty]
     public CloudConnectInput CloudConnect { get; set; } = new();
 
@@ -798,6 +802,22 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
+    public IActionResult OnPostCloudBeat()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        // Blank or <=0 clears the override (env/default fallback); otherwise store it (the store floors at 15s).
+        var seconds = CloudHeartbeatSeconds is > 0 ? CloudHeartbeatSeconds : null;
+        _workspaceStore.SetCloudHeartbeatInterval(seconds);
+        StatusMessage = seconds is { } value
+            ? $"Cloud heartbeat interval set to {Math.Max(15, value)}s."
+            : "Cloud heartbeat interval reset to the default.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
     public bool IsActiveTab(string tab)
     {
         return string.Equals(ActiveTab, tab, StringComparison.OrdinalIgnoreCase);
@@ -893,6 +913,7 @@ public class ConfigModel : PageModel
         {
             CloudRelay.RelayAlerts = CloudSettings.RelayAlerts;
             CloudFullAccess = CloudSettings.FullAccessEnabled;
+            CloudHeartbeatSeconds = CloudSettings.CloudHeartbeatIntervalSeconds ?? _runtimeOptions.CloudHeartbeatIntervalSeconds;
         }
 
         BackupJobs = _workspaceStore.GetBackupJobs();

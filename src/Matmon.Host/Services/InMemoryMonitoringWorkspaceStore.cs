@@ -1456,6 +1456,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Set the cloud heartbeat cadence (seconds); null clears the override. Floored at 15s.</summary>
+    public void SetCloudHeartbeatInterval(int? seconds)
+    {
+        lock (_gate)
+        {
+            _document.CloudSettings.CloudHeartbeatIntervalSeconds = seconds is { } value ? Math.Max(15, value) : null;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public string? GetLicenseToken()
     {
         lock (_gate)

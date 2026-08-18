@@ -283,6 +283,10 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Enable/disable Full Access (the outbound UI tunnel).</summary>
     void SetCloudFullAccess(bool enabled);
 
+    /// <summary>Set the cloud heartbeat cadence (seconds); null clears the override (env/default fallback).
+    /// Values below the 15s floor are raised to 15.</summary>
+    void SetCloudHeartbeatInterval(int? seconds);
+
     /// <summary>The last cloud-issued license token (verified offline); null if none.</summary>
     string? GetLicenseToken();
 

@@ -63,7 +63,6 @@ public sealed class CloudConnectionService : BackgroundService
 
         HttpClient? client = null;
         string? clientBaseUrl = null;
-        var heartbeatInterval = TimeSpan.FromSeconds(Math.Max(15, _runtimeOptions.CloudHeartbeatIntervalSeconds));
         var lastHeartbeat = DateTimeOffset.MinValue;
 
         using var timer = new PeriodicTimer(PollInterval);
@@ -108,12 +107,13 @@ public sealed class CloudConnectionService : BackgroundService
                     _logger.LogInformation("Matmon.Cloud link enabled -> {Url} (instance {InstanceId})", link.BaseUrl, link.InstanceId);
                 }
 
-                if (DateTimeOffset.UtcNow - lastHeartbeat >= heartbeatInterval)
+                // The cadence is re-read from the resolved link each tick, so a UI change takes effect live.
+                if (DateTimeOffset.UtcNow - lastHeartbeat >= TimeSpan.FromSeconds(link.IntervalSeconds))
                 {
                     lastHeartbeat = DateTimeOffset.UtcNow;
                     try
                     {
-                        await SendHeartbeatAsync(client, link.BaseUrl!, link.InstanceId!.Value, link.Token!, stoppingToken);
+                        await SendHeartbeatAsync(client, link.BaseUrl!, link.InstanceId!.Value, link.Token!, link.IntervalSeconds, stoppingToken);
                     }
                     catch (OperationCanceledException)
                     {
@@ -149,6 +149,7 @@ public sealed class CloudConnectionService : BackgroundService
         string? instanceIdRaw;
         string? token;
         bool enabled;
+        int? intervalOverride = null;
 
         if (settings.Configured)
         {
@@ -156,6 +157,7 @@ public sealed class CloudConnectionService : BackgroundService
             url = settings.Url;
             instanceIdRaw = settings.InstanceId;
             token = enabled ? _workspaceStore.GetCloudConnectionToken() : null;
+            intervalOverride = settings.CloudHeartbeatIntervalSeconds;
         }
         else
         {
@@ -164,6 +166,9 @@ public sealed class CloudConnectionService : BackgroundService
             token = _runtimeOptions.CloudInstanceToken;
             enabled = !string.IsNullOrWhiteSpace(url);
         }
+
+        // Effective heartbeat cadence: the UI override wins over the env/default fallback; floored at 15s.
+        var intervalSeconds = Math.Max(15, intervalOverride ?? _runtimeOptions.CloudHeartbeatIntervalSeconds);
 
         if (!enabled || string.IsNullOrWhiteSpace(url))
         {
@@ -182,16 +187,28 @@ public sealed class CloudConnectionService : BackgroundService
             return ResolvedLink.Off(baseUrl, "not configured (missing instance id/token)");
         }
 
-        return new ResolvedLink(true, baseUrl, baseUri, instanceId, token.Trim(), null);
+        return new ResolvedLink(true, baseUrl, baseUri, instanceId, token.Trim(), null, intervalSeconds);
     }
 
-    private async Task SendHeartbeatAsync(HttpClient client, string baseUrl, Guid instanceId, string token, CancellationToken cancellationToken)
+    private async Task SendHeartbeatAsync(HttpClient client, string baseUrl, Guid instanceId, string token, int intervalSeconds, CancellationToken cancellationToken)
     {
-        var allElements = _workspaceStore.GetAllElements();
-        var sensorCount = allElements.OfType<SensorElement>().Count();
-        var probeCount = allElements.OfType<ProbeElement>().Count();
-        var mapCount = _workspaceStore.GetMaps().Count;
-        var (openAlerts, ackAlerts, errorAlerts, warningAlerts) = _workspaceStore.GetActiveAlertCounts();
+        // The aggregate metadata is optional (dead-man-switch only needs the beat itself). Never let a failure
+        // gathering it abort the heartbeat - a healthy instance must not read as "offline" because a metrics
+        // query threw. Fall back to nulls and still post the beat (which refreshes the cloud's online window).
+        int? sensorCount = null, probeCount = null, mapCount = null;
+        int? openAlerts = null, ackAlerts = null, errorAlerts = null, warningAlerts = null;
+        try
+        {
+            var allElements = _workspaceStore.GetAllElements();
+            sensorCount = allElements.OfType<SensorElement>().Count();
+            probeCount = allElements.OfType<ProbeElement>().Count();
+            mapCount = _workspaceStore.GetMaps().Count;
+            (openAlerts, ackAlerts, errorAlerts, warningAlerts) = _workspaceStore.GetActiveAlertCounts();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to gather heartbeat metadata; sending a minimal beat");
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"api/instances/{instanceId}/heartbeat")
         {
@@ -206,7 +223,8 @@ public sealed class CloudConnectionService : BackgroundService
                 ackAlerts,
                 probeCount,
                 mapCount,
-                ProtocolVersion))
+                ProtocolVersion,
+                intervalSeconds))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
@@ -396,7 +414,7 @@ public sealed class CloudConnectionService : BackgroundService
         });
     }
 
-    private sealed record ResolvedLink(bool Enabled, string? BaseUrl, Uri? BaseUri, Guid? InstanceId, string? Token, string? Status)
+    private sealed record ResolvedLink(bool Enabled, string? BaseUrl, Uri? BaseUri, Guid? InstanceId, string? Token, string? Status, int IntervalSeconds = 30)
     {
         public static ResolvedLink Off(string? baseUrl, string? status) => new(false, baseUrl, null, null, null, status);
     }
@@ -407,5 +425,6 @@ public sealed class CloudConnectionService : BackgroundService
 
     private sealed record CloudHeartbeatRequest(
         string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts,
-        int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount, int? ProtocolVersion);
+        int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount, int? ProtocolVersion,
+        int? HeartbeatIntervalSeconds);
 }

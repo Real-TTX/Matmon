@@ -713,7 +713,15 @@
                             <input asp-for="CloudRenameName" class="workspace-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
                         </label>
                         <button type="submit" class="workspace-submit">Update name</button>
-                        <p class="workspace-inline-note" style="margin-top:8px;">The only setting editable while connected - sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
+                        <p class="workspace-inline-note" style="margin-top:8px;">Sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
+                    </form>
+                    <form method="post" asp-page-handler="CloudBeat" class="workspace-form" style="margin-top:16px;">
+                        <label class="workspace-field">
+                            <span>Heartbeat interval (seconds)</span>
+                            <input asp-for="CloudHeartbeatSeconds" type="number" min="15" step="5" class="workspace-input" style="max-width:160px;" />
+                        </label>
+                        <button type="submit" class="workspace-submit">Update interval</button>
+                        <p class="workspace-inline-note" style="margin-top:8px;">How often this instance checks in with the cloud (min 15s, default 30s). The cloud derives its offline grace from this value, so any cadence is safe - a slower beat just means the cloud notices an outage a little later.</p>
                     </form>
                     <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
                         <button type="submit" class="workspace-danger-submit">Disconnect</button>

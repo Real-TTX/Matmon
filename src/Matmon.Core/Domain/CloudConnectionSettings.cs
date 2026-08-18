@@ -33,6 +33,11 @@ public sealed class CloudConnectionSettings
     /// <summary>Full Access: keep an outbound tunnel open so the UI is operable through the cloud.</summary>
     public bool FullAccessEnabled { get; set; }
 
+    /// <summary>How often (seconds) this instance heartbeats to the cloud. Null = use the env/default fallback
+    /// (<c>Matmon__CloudHeartbeatIntervalSeconds</c>, default 30). Floored at 15s. The instance reports its effective
+    /// interval in every heartbeat so the cloud derives its offline grace from it - any cadence is safe.</summary>
+    public int? CloudHeartbeatIntervalSeconds { get; set; }
+
     /// <summary>Whether a token is stored (for display; not persisted).</summary>
     [JsonIgnore]
     public bool HasToken => !string.IsNullOrEmpty(ProtectedToken);
@@ -45,6 +50,7 @@ public sealed class CloudConnectionSettings
         Enabled = Enabled,
         Configured = Configured,
         RelayAlerts = RelayAlerts,
-        FullAccessEnabled = FullAccessEnabled
+        FullAccessEnabled = FullAccessEnabled,
+        CloudHeartbeatIntervalSeconds = CloudHeartbeatIntervalSeconds
     };
 }
