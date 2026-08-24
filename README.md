@@ -1,269 +1,281 @@
+<div align="center">
+
+<img src="src/Matmon.Host/wwwroot/favicon.svg" width="76" alt="Matmon" />
+
 # Matmon
 
-Matmon is a lightweight monitoring platform built with ASP.NET Core, C# and Docker.
+**Lightweight network & infrastructure monitoring — self-hosted, in one container.**
 
-It is designed as a compact, self-hosted alternative to classic monitoring tools: simple enough to run at home or in a small business network, but structured around probes, hosts, sensors, templates, alerts and notification rules.
+Probes, hosts, sensors, templates, per-channel thresholds, alerts, notifications and maps.
+One primary, optional remote probes behind NAT, no cloud required.
 
-## Features
+</div>
 
-- Docker-first deployment
-- ASP.NET Core backend with a web-based UI
-- Primary / secondary probe architecture
-- Probe, folder, host and sensor tree
-- Inherited settings, templates and credentials
-- Sensor templates for reusable monitoring setups
-- Channel-based sensor values with per-channel thresholds
-- Dynamic sensor parameter fields based on sensor type
-- Alerts with acknowledgement state
-- Event log and sensor history
-- Dark and bright UI themes
-- Local and remote probe execution
-- GitHub Actions Docker image build
+![The Matmon dashboard: sensor status, highlights and live sensors](docs/images/dashboard.png)
 
-## Sensor Types
+---
 
-Matmon currently includes sensor support for:
+## What this is about
 
-- Ping
-- HTTP
-- SNMP
-- Synology NAS
-- Proxmox PVE
-- PowerShell / Windows Health
-- SSL Certificate
-- MSSQL Query
-- TCP Port Check
-- Probe Heartbeat
-- Probe Health
+Matmon is a compact, self-hosted alternative to the classic monitoring suites — small enough to
+run at home or in a small-business network, but built around the same ideas: a tree of **probes →
+hosts → sensors**, settings and credentials that **inherit** down the tree, **templates** for
+reusable setups, **per-channel thresholds**, alerts that **persist until acknowledged**, and
+notifications that actually get delivered. It runs as a single container; remote probes are
+optional and connect outbound, so they work behind firewalls and NAT.
 
-## Architecture
+## At a glance
 
-Matmon uses a primary / secondary model.
+**Monitoring model**
+- A tree of **probes, folders, hosts and sensors**; settings, schedules and credentials **inherit**
+  from parents, and a sensor overrides only what differs
+- **Templates** (copy + origin, with "restore from template"), free-form **tags** that cascade, and
+  a searchable element picker everywhere a target is chosen
+- **Per-channel thresholds** with sensible built-in defaults, and **schedules** (every N, daily,
+  weekly on several days, monthly) with a live "next runs" preview
+- Accurate **downsampled statistics** per channel (avg / min / max / percentiles / uptime), kept in
+  an embedded SQLite store
 
-The primary instance owns the UI, configuration, alerts, history and global state. Secondary probes connect outbound to the primary, receive assigned sensor work and report results back. This allows remote probes to run behind firewalls or NAT without exposing inbound ports.
+**Sensors** (a selection)
+- Reachability & web: **Ping, HTTP(S), TCP port, DNS, NTP, SSL certificate** (+ chain)
+- Platforms: **Synology, Proxmox** (cluster + per-node), **VMware/vSphere, UniFi**, Windows /
+  Linux (SSH) / **health & disk & update** sensors
+- Data & services: **MSSQL, PostgreSQL, MySQL/MariaDB, Docker, Windows Event Log, Mail round-trip**
+- Scripting: **PowerShell Remote, Local Script, Local Program** (allow-listed)
 
-Core structure:
+**Alerts & notifications**
+- Alerts are **Alerta-style**: they stay until acknowledged, with **mute** (timed or permanent) and
+  a recovery state
+- **E-mail** delivery with anti-spam throttling and recovery mails, a **scheduled summary report**
+  and a customer-ready **PDF audit report**
+- Optional **cloud alert relay** as just another notification sender
 
-- `Probe`: execution node, local or remote
-- `Folder`: organizational grouping with inheritable settings
-- `Host`: monitored device or endpoint
-- `Sensor`: actual check, such as ping, SNMP, HTTP or PowerShell
+**Operations**
+- **Remote probes** connect outbound to the primary — no inbound ports at the remote site
+- **Maps / wallboards** with tiles that roll up sensor state (element- or tag-targeted)
+- **Dark & light** themes, a mobile-responsive UI, users with **Viewer / User / Admin** roles and
+  optional two-factor sign-in
+- Optional **Matmon.Cloud** link for an off-site dead-man-switch, config backup, remote access and
+  licensing — entirely opt-in; empty means fully offline
 
-Settings can be inherited from parents and templates. Sensors can override only the fields that differ from inherited defaults.
+## Screenshots
 
-## Quick Start
+### The monitoring tree
 
-Start the local primary and sample secondary probe:
+![The monitoring tree with probes, hosts and sensors](docs/images/monitoring.png)
 
-```bash
-docker compose up --build
+Everything under one tree. State, tags and inherited settings are visible at a glance, and the
+search box matches names, targets and tags.
+
+### A sensor in detail
+
+![Sensor detail: channels, summaries and history](docs/images/sensor-detail.png)
+
+Each sensor breaks down into **channels** with their own thresholds and visuals, rolling
+**1h / 1d / 1w** summaries, and a history graph. Actions (run now, pause, edit) sit in one row.
+
+### Alerts
+
+![The alerts list with severity, element and actions](docs/images/alerts.png)
+
+Filter by state, search, acknowledge or mute. Alerts persist until someone acts on them, so a
+short outage in the night is still waiting in the morning.
+
+### Maps & wallboards
+
+![A map with status tiles](docs/images/map.png)
+
+Lay out tiles that aggregate the worst state of a sensor, folder, probe or tag — and open a map
+full-screen as a public wallboard for a TV.
+
+### Dark theme
+
+| Dashboard | Sensor detail |
+|---|---|
+| ![Dashboard in dark mode](docs/images/dashboard-dark.png) | ![Sensor detail in dark mode](docs/images/sensor-detail-dark.png) |
+
+### On a phone
+
+| Monitoring | Sensor detail |
+|---|---|
+| ![Monitoring on a phone](docs/images/mobile-monitoring.png) | ![Sensor detail on a phone](docs/images/mobile-sensor.png) |
+
+## Quick start
+
+Ready-made images are published to the GitHub Container Registry:
+
+| Tag | Built from | Use it for |
+|---|---|---|
+| `ghcr.io/real-ttx/matmon:latest` | `main` | releases |
+| `ghcr.io/real-ttx/matmon:nightly` | `dev` | the newest features |
+
+### 1. Just run it
+
+Copy this into `docker-compose.yml` and start it — nothing else needed:
+
+```yaml
+services:
+  matmon:
+    image: ghcr.io/real-ttx/matmon:latest
+    container_name: matmon
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    volumes:
+      - matmon-data:/app/data
+
+volumes:
+  matmon-data:
 ```
-
-Open the web UI:
-
-```text
-http://localhost:8099
-```
-
-Default login:
-
-```text
-Username: admin
-Password: admin
-```
-
-The local secondary probe is exposed on:
-
-```text
-http://localhost:8100
-```
-
-## Configuration
-
-Matmon is configured through environment variables.
-
-Common settings:
-
-```text
-Matmon__Mode=Primary|Secondary
-Matmon__WorkspacePath=data/workspace.json
-Matmon__Auth__Username=admin
-Matmon__Auth__Password=admin
-Matmon__HeartbeatIntervalSeconds=30
-Matmon__SeedSampleData=false
-Matmon__ProvisionLocalDockerProbe=false
-Matmon__ProvisionDemoSensors=false
-Matmon__AutoCreateProbeSystemSensors=false
-Matmon__CreateStarterMap=false
-```
-
-Secondary probe settings:
-
-```text
-Matmon__Mode=Secondary
-Matmon__ProbeId=probe-01
-Matmon__ProbeName=Remote Probe 01
-Matmon__ProbeToken=probe-01-token
-Matmon__PrimaryUrl=http://primary:8099
-```
-
-Runtime data is stored in `data/`.
-
-The workspace file is generated automatically on first start if it does not exist. Runtime files such as `workspace.json`, backups, data protection keys and temporary files are not intended to be committed to Git.
-
-New primary installations are plain by default: no hosts, sensors, demo probes or starter maps are created unless one of the explicit seed/provisioning flags is enabled. Existing Docker volumes keep their stored workspace, so remove or rename the volume if you want a truly fresh installation.
-
-## Docker
-
-The included `docker-compose.yml` starts:
-
-- `primary` on port `8099`
-- `probe-01` on port `8100`
-
-Build manually:
-
-```bash
-docker compose build
-```
-
-Run detached:
 
 ```bash
 docker compose up -d
 ```
 
-Stop:
+Open **http://localhost:8099** — on first start a short **setup wizard** creates your admin
+account (health check: `/healthz`). Everything Matmon keeps lives in the single `matmon-data`
+volume, so an update is just `docker compose pull && docker compose up -d`.
+
+Without Compose:
 
 ```bash
-docker compose down
+docker run -d --name matmon -p 8099:8099 -v matmon-data:/app/data \
+  ghcr.io/real-ttx/matmon:latest
 ```
 
-## Portable Primary Deployment
+### 2. Add a remote probe
 
-For a real primary installation on any Docker host, use the primary-only compose file. It pulls the published image from GitHub Container Registry:
+A remote probe (secondary) runs the same image in `Secondary` mode and connects **outbound** to
+the primary, so it needs no inbound port at the remote site. Give it a unique id + token and point
+it at your primary:
 
-```bash
-cp .env.master.example .env.master
-docker compose --env-file .env.master -f docker-compose.master.yml pull
-docker compose --env-file .env.master -f docker-compose.master.yml up -d
+```yaml
+  probe:
+    image: ghcr.io/real-ttx/matmon:latest
+    container_name: matmon-probe
+    restart: unless-stopped
+    environment:
+      Matmon__Mode: Secondary
+      Matmon__ProbeId: probe-01
+      Matmon__ProbeName: Remote Probe 01
+      Matmon__ProbeToken: change-me-to-a-secret
+      Matmon__PrimaryUrl: http://your-primary-host:8099
 ```
 
-Open Matmon from another device in the same network:
+The probe then appears in the tree; assign sensors to it and it executes them from its own network.
 
-```text
-http://<docker-host-ip>:8099
-```
+### 3. From source
 
-The portable compose uses `ghcr.io/real-ttx/matmon:latest`, binds the web UI to `0.0.0.0:8099` by default, stores runtime data in the Docker volume `matmon-data`, and maps `host.docker.internal` to the Docker host gateway. In normal bridge mode, the container can reach the LAN through the Docker host, which is the most portable setup across Linux, Windows and macOS Docker hosts.
-
-The portable primary compose sets all sample/demo flags to `false`, so pulling a newer image does not create demo sensors. To reset an existing installation, stop the container and remove the named Docker volume:
-
-```bash
-docker compose --env-file .env.master -f docker-compose.master.yml down
-docker volume rm matmon-data
-```
-
-On Linux only, you can alternatively run Matmon in the host network namespace:
-
-```bash
-cp .env.master.example .env.master
-docker compose --env-file .env.master -f docker-compose.master.host-network.yml pull
-docker compose --env-file .env.master -f docker-compose.master.host-network.yml up -d
-```
-
-Host networking makes Matmon behave more like a native process on the Docker host, but it is not portable to Docker Desktop. Use the normal `docker-compose.master.yml` unless you specifically need host networking.
-
-To build from a local checkout instead of pulling GHCR:
-
-```bash
-docker compose --env-file .env.master -f docker-compose.master.yml -f docker-compose.master.build.yml up -d --build
-```
-
-### Caddy Reverse Proxy
-
-If Caddy runs directly on the Docker host and Matmon exposes port `8099`:
-
-```caddyfile
-matmon.example.com {
-    reverse_proxy 127.0.0.1:8099
-}
-```
-
-If Caddy runs in Docker, `127.0.0.1` is the Caddy container, not the Docker host. Prefer putting Caddy on the `matmon` Docker network and proxying to the service name:
-
-```caddyfile
-matmon.example.com {
-    reverse_proxy matmon-primary:8099
-}
-```
-
-For the Linux host-network compose, a Dockerized Caddy container must proxy to the Docker host gateway instead:
-
-```caddyfile
-matmon.example.com {
-    reverse_proxy host.docker.internal:8099
-}
-```
-
-In that case the Caddy container also needs `host.docker.internal:host-gateway` configured as an extra host.
-
-## GitHub Actions
-
-The repository includes a Docker build and publish workflow:
-
-```text
-.github/workflows/docker-image.yml
-```
-
-The workflow runs on:
-
-- `push`
-- `pull_request`
-- `workflow_dispatch`
-
-Pull requests only build the image. Pushes publish to GitHub Container Registry using the repository name, for example `ghcr.io/real-ttx/matmon:latest` on the default branch.
-
-## Development
-
-Requirements:
-
-- .NET 10 SDK
-- Docker Desktop or another Docker-compatible runtime
-
-Build the solution:
-
-```bash
-dotnet build Matmon.slnx
-```
-
-Run locally with hot reload (rebuilds and reloads on every change, served at http://localhost:5084):
-
-```powershell
-./scripts/dev.ps1
-```
-
-This wraps `dotnet watch run` for `src/Matmon.Host`. Keep it running in a terminal - Razor and CSS/JS changes refresh live, C# changes trigger a quick rebuild and restart, so the browser always shows the current code.
-
-Run locally through Docker:
+The repository's `docker-compose.yml` also carries a `build:` section, so you can build the image
+locally instead of pulling it:
 
 ```bash
 docker compose up -d --build
 ```
 
-Important code locations:
+For a full development stack (primary + a sample probe, workspace bind-mounted to `./data`) use the
+dev compose:
 
-- `src/Matmon.Host/Program.cs`: application startup, auth, APIs and runtime mode
-- `src/Matmon.Host/Services`: polling, probes, persistence and dashboard services
-- `src/Matmon.Host/Pages`: Razor Pages web UI
-- `src/Matmon.Core/Domain`: sensor definitions, executors and monitoring domain model
-- `src/Matmon.Core/Sample`: default sample topology
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+#   primary → http://localhost:8099   sample probe → http://localhost:8100
+```
 
-## Status
+## Configuration
 
-Matmon is under active development. The current focus is building a practical, visual monitoring experience with configurable sensors, templates, inherited credentials, remote probes, alert acknowledgement and scalable history handling.
+Matmon is configured **in the UI** — the environment only carries a few bootstrap settings, and all
+of them are optional:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `Matmon__Mode` | `Primary` | `Primary`, `Secondary` (remote probe) or `Executor` |
+| `TZ` | – | Time zone for timestamps |
+| `Matmon__Auth__Username` / `Matmon__Auth__Password` | – | Pre-provision an admin and skip the setup wizard |
+| `Matmon__CloudHeartbeatIntervalSeconds` | `30` | How often the primary checks in with Matmon.Cloud (if linked) |
+| `Matmon__AllowedProgramPaths` | – | Allow-list for the *Local Program* sensor (`;`-separated) |
+| `Matmon__WorkspacePath` | `data/workspace.json` | Where state is stored (inside `/app/data`) |
+
+Secondary probes additionally take `Matmon__ProbeId`, `Matmon__ProbeName`, `Matmon__ProbeToken`
+and `Matmon__PrimaryUrl` (see the remote-probe example above). The Matmon.Cloud link is set up in
+**System → Cloud** in the UI, not through the environment.
+
+### The `/app/data` volume
+
+Everything Matmon owns lives under one directory — one volume to back up or move:
+
+```
+/app/data
+├─ workspace.json          topology, templates, notifications, maps, users, settings
+├─ telemetry.db            SQLite: observations, events, statistics (WAL)
+├─ dataprotection-keys/    encryption keys (credentials + secrets at rest)
+└─ backups/                local config backups
+```
+
+> **Upgrading from the old three-volume layout?** Earlier compose files split this into
+> `matmon-data`, `matmon-backups` and `matmon-keys`. That still works — keep those mounts — but a
+> fresh install only needs the single `matmon-data:/app/data`. To consolidate, copy the contents of
+> the old `-backups`/`-keys` volumes into `backups/` and `dataprotection-keys/` under the data
+> volume before switching (keep the keys, or credentials stored on that instance become unreadable).
+
+### Backup, restore & moving to a new host
+
+Matmon can back up its **configuration** to a local file or push it off-site to Matmon.Cloud
+(System → Config → Backup, or a scheduled backup job). A config backup contains the full
+**topology** (probes, folders, hosts, sensors), **templates**, **notifications** and **maps** — but
+**not** telemetry and **not** the local user accounts (so a restore can never lock you out).
+
+Secrets (credentials, tokens) are encrypted with the instance's own keys. Restoring on the **same**
+instance recovers them as-is; restoring on a **different** instance recovers the configuration but
+drops the secrets — unless you set a **passphrase** when creating the backup, which re-seals the
+secrets so they travel with it.
+
+**Moving the primary to a new host:** install Matmon there, restore the config backup (a passphrase
+backup brings the credentials too), then re-point each **remote probe** at the new primary by
+updating its `Matmon__PrimaryUrl` (and keeping its `ProbeId`/`ProbeToken`) — the probes themselves
+come back with the restored topology.
+
+## Architecture
+
+Matmon runs in one of three modes (`Matmon__Mode`):
+
+- **Primary** owns the UI, configuration, alerts, history and global state, and runs the polling
+  loop for its local sensors.
+- **Secondary** is a remote probe: it connects **outbound** to the primary, pulls the sensor work
+  assigned to it, executes it from its own network and posts results back — no inbound ports.
+- **Executor** is a stateless sensor-runner used by Matmon.Cloud's cloud sensors (no UI, no state).
+
+Elements form a tree — `Probe → Folder → Host → Sensor` — where settings, schedules and credentials
+inherit from parents and templates, and any element overrides only the fields that differ.
+
+## Development
+
+Requirements: **.NET 10 SDK** and Docker.
+
+```bash
+dotnet build Matmon.slnx                    # build (note: .slnx, not .sln)
+dotnet test tests/Matmon.Tests/Matmon.Tests.csproj   # unit tests
+./scripts/dev.ps1                           # dotnet watch run → http://localhost:5084
+docker compose -f docker-compose.dev.yml up -d --build   # full container stack
+```
+
+Key locations: `src/Matmon.Host/Program.cs` (startup, auth, APIs, modes),
+`src/Matmon.Host/Services` (polling, probes, persistence, dashboard), `src/Matmon.Host/Pages`
+(Razor Pages UI), `src/Matmon.Core/Domain` (domain model, sensor executors).
+
+## Branches & versioning
+
+| Branch | Purpose | Version |
+|---|---|---|
+| `main` | Release (`:latest`) | `0.<minor>.<build>-<yyyyMMdd>` |
+| `dev` | Development (`:nightly`) | `nightly-<build>-<yyyyMMdd>` |
+| local | – | `local-<yyyyMMdd>` |
+
+The base version lives in [`VERSION`](VERSION); CI bakes the build number into the image and shows
+it in the sidebar footer (linking to `/About`). Images are published to the GitHub Container
+Registry.
 
 ## License
 
-Matmon is **proprietary** software - see the [LICENSE](LICENSE). Commercial use is
-governed by the applicable Matmon product plan (Free / Business / Enterprise).
-Bundled third-party components keep their own licenses.
+Matmon is **proprietary** software — see the [LICENSE](LICENSE). Commercial use is governed by the
+applicable Matmon product plan (Free / Business / Enterprise). Bundled third-party components keep
+their own licenses.
