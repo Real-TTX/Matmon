@@ -21,18 +21,24 @@ public sealed class DiscoveryModel : PageModel
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly DiscoveryJobStore _discoveryJobs;
     private readonly IProbeRegistry _probeRegistry;
+    private readonly ILicenseService _licenseService;
     private readonly MonitoringInheritanceResolver _resolver = new();
+
+    // Set when a discovery apply hits the license sensor limit mid-run, so the status message can say so.
+    private string? _licenseLimitReason;
 
     public DiscoveryModel(
         IMonitoringWorkspaceStore workspaceStore,
         NetworkDiscoveryService discoveryService,
         DiscoveryJobStore discoveryJobs,
-        IProbeRegistry probeRegistry)
+        IProbeRegistry probeRegistry,
+        ILicenseService licenseService)
     {
         _workspaceStore = workspaceStore;
         _discoveryService = discoveryService;
         _discoveryJobs = discoveryJobs;
         _probeRegistry = probeRegistry;
+        _licenseService = licenseService;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -214,6 +220,10 @@ public sealed class DiscoveryModel : PageModel
             }
 
             StatusMessage = $"Discovery import done: {createdHosts} host{(createdHosts == 1 ? string.Empty : "s")} created, {reusedHosts} reused, {createdSensors} sensor{(createdSensors == 1 ? string.Empty : "s")} added.";
+            if (_licenseLimitReason is not null)
+            {
+                StatusMessage += $" {_licenseLimitReason} Some selected sensors were not created.";
+            }
             return RedirectToPage("/Monitoring");
         }
         catch (Exception ex)
@@ -709,6 +719,14 @@ public sealed class DiscoveryModel : PageModel
             if (HasSuggestedSensor(host, suggestion, settings))
             {
                 continue;
+            }
+
+            // Enforce the license sensor limit here too - discovery apply used to call the store directly and
+            // bypass it. Stop applying once the limit is hit and surface how many were created (partial apply).
+            if (!_licenseService.CanAddSensor(out var licenseReason))
+            {
+                _licenseLimitReason = licenseReason;
+                break;
             }
 
             var name = string.IsNullOrWhiteSpace(suggestion.Name)

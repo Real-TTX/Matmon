@@ -266,6 +266,14 @@ public class WizardModel : PageModel
             return RedirectToPage(new { step = "discovery" });
         }
 
+        // Enforce the license probe limit here too - the manual create handler checks it, but the wizard used to
+        // call the store directly and bypass it.
+        if (!_licenseService.CanAddProbe(out var licenseReason))
+        {
+            StatusMessage = licenseReason;
+            return RedirectToPage(new { step = "discovery" });
+        }
+
         var probe = _workspaceStore.CreateProbe(root.Id, string.IsNullOrWhiteSpace(name) ? "Remote probe" : name.Trim(), null);
         StatusMessage = $"Created remote probe '{probe.Name}'. Deploy it with the command below.";
         return RedirectToPage(new { step = "discovery" });
