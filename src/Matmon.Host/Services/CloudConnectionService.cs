@@ -115,7 +115,12 @@ public sealed class CloudConnectionService : BackgroundService
                     {
                         await SendHeartbeatAsync(client, link.BaseUrl!, link.InstanceId!.Value, link.Token!, link.IntervalSeconds, stoppingToken);
                     }
-                    catch (OperationCanceledException)
+                    // Only a real shutdown ends the loop. An HttpClient timeout throws TaskCanceledException
+                    // (an OperationCanceledException) whose token is NOT stoppingToken - catching that here used
+                    // to break the loop, so ONE slow beat stopped all heartbeats until a restart (the instance
+                    // then read "offline" in the cloud forever while still showing its last "ok"). Treat a
+                    // timeout as a failed beat and retry on the next tick.
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
                         break;
                     }
@@ -126,12 +131,13 @@ public sealed class CloudConnectionService : BackgroundService
                     }
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
+                // Includes a stray HttpClient-timeout OperationCanceledException - log + keep ticking.
                 _logger.LogWarning(ex, "Matmon.Cloud tick failed (will retry)");
             }
         }

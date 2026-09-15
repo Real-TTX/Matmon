@@ -57,12 +57,13 @@ public sealed class NotificationDispatchService : BackgroundService
                 DrainEvents();
                 await ProcessPendingAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
+                // Includes a network-send timeout (TaskCanceledException) - log + keep the dispatch loop alive.
                 _logger.LogError(ex, "Notification dispatch tick failed");
             }
         }

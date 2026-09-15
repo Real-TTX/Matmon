@@ -389,12 +389,13 @@ public sealed class ReportSchedulerService : BackgroundService
                     _workspaceStore.MarkSummaryReportSent(DateTimeOffset.UtcNow);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
+                // Includes a network-send timeout (TaskCanceledException) - log + keep the scheduler alive.
                 _logger.LogError(ex, "Summary report scheduler tick failed");
             }
         }

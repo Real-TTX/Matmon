@@ -103,7 +103,15 @@ public sealed class SlaveHeartbeatService : BackgroundService
 
             _runtimeState.RecordHeartbeat(success: true, "heartbeat accepted by primary");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // A real shutdown propagates (it ends the service cleanly). An HttpClient timeout also throws an
+        // OperationCanceledException (TaskCanceledException) but with a different token - that must NOT escape
+        // this un-wrapped loop call, or one slow beat kills the probe's heartbeat loop and it reads offline in
+        // the primary until a restart. Treat a timeout as a failed beat and let the loop retry.
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
         {
             _runtimeState.RecordHeartbeat(success: false, ex.Message);
             _logger.LogWarning(ex, "Heartbeat from {ProbeId} failed", probeId);
