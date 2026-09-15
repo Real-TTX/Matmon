@@ -33,6 +33,20 @@ public sealed class MatmonRuntimeOptions
 
     public string? ProbeToken { get; set; }
 
+    /// <summary>
+    /// Secondary store-and-forward: when the primary is unreachable, the probe keeps executing its
+    /// <b>cached</b> assignments on schedule and buffers the observations, then flushes them (oldest first,
+    /// with their original timestamps) once the link returns. This caps how far back the buffer is kept -
+    /// observations older than this are dropped. Default 7 days; <b>0 disables buffering</b> (unsent results
+    /// are dropped immediately, the pre-buffer behaviour). Set via <c>Matmon__OfflineBufferRetentionDays</c>.
+    /// The buffer is in memory, so it survives a primary outage while the probe keeps running (not a probe restart).
+    /// </summary>
+    public int OfflineBufferRetentionDays { get; set; } = 7;
+
+    /// <summary>Hard cap on buffered observations (RAM safety for a long outage); the oldest are dropped past it.
+    /// Set via <c>Matmon__OfflineBufferMaxObservations</c>. Default 100000; ≤0 = no count cap (retention only).</summary>
+    public int OfflineBufferMaxObservations { get; set; } = 100_000;
+
     /// <summary>Shared secret that authenticates callers of the Executor run-mode's <c>/api/execute</c> and
     /// <c>/api/sensor-catalog</c> (<c>Matmon__ExecutorToken</c>). Only relevant when <see cref="Mode"/> is
     /// <see cref="AppMode.Executor"/>; empty = the endpoints reject everything (locked).</summary>

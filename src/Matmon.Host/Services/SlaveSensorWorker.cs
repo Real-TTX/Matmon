@@ -20,6 +20,10 @@ public sealed class SlaveSensorWorker : BackgroundService
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly ILogger<SlaveSensorWorker> _logger;
     private readonly Dictionary<Guid, DateTimeOffset> _lastExecutedUtc = new();
+    // Store-and-forward: the last assignments received from the primary (so the probe keeps executing on
+    // schedule while the primary is unreachable) + the observations produced meanwhile (flushed on reconnect).
+    private ProbeSensorAssignmentsResponse? _cachedAssignments;
+    private readonly OfflineObservationBuffer _buffer = new();
 
     public SlaveSensorWorker(
         IHttpClientFactory httpClientFactory,
@@ -90,28 +94,14 @@ public sealed class SlaveSensorWorker : BackgroundService
 
     private async Task SyncAssignmentsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/probes/{Uri.EscapeDataString(probeId)}/assignments");
-        AddProbeToken(request);
-
-        using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            var message = $"assignment sync returned {(int)response.StatusCode} {response.ReasonPhrase}";
-            _runtimeState.RecordAssignmentSync(0, message, success: false);
-            return;
-        }
-
-        var assignments = await response.Content.ReadFromJsonAsync<ProbeSensorAssignmentsResponse>(JsonOptions, cancellationToken);
+        // Live assignments when the primary is reachable, else the last-known set - so the probe keeps
+        // executing on schedule through a primary outage (store-and-forward).
+        var assignments = await FetchAssignmentsOrCacheAsync(client, probeId, cancellationToken);
         if (assignments is null)
         {
-            _runtimeState.RecordAssignmentSync(0, "assignment response was empty", success: false);
+            // Never received assignments (and offline now) - nothing to run yet.
             return;
         }
-
-        _runtimeState.RecordAssignmentSync(
-            assignments.Sensors.Count,
-            $"{assignments.Sensors.Count} sensor assignment{(assignments.Sensors.Count == 1 ? string.Empty : "s")} received",
-            success: true);
 
         var reports = new List<ProbeSensorObservationReport>();
         var pendingResults = new List<SlaveProbePendingResult>();
@@ -158,12 +148,155 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         _runtimeState.UpdateUpcomingExecutions(upcomingExecutions);
 
-        if (reports.Count == 0)
+        // Buffering disabled (retention <= 0): the pre-buffer behaviour - post this tick's results, drop on failure.
+        if (_runtimeOptions.OfflineBufferRetentionDays <= 0)
+        {
+            if (reports.Count > 0)
+            {
+                await PostResultsAsync(client, probeId, reports, pendingResults, cancellationToken);
+            }
+
+            return;
+        }
+
+        // Store-and-forward: buffer this tick's results, trim to the retention window, then try to flush the
+        // whole backlog (oldest first). Reports carry their real execution timestamp, so a reconnect backfills
+        // the history at the times the checks actually ran - not "now".
+        _buffer.AddRange(reports);
+        var dropped = _buffer.Prune(
+            now,
+            TimeSpan.FromDays(_runtimeOptions.OfflineBufferRetentionDays),
+            _runtimeOptions.OfflineBufferMaxObservations);
+        if (dropped > 0)
+        {
+            _logger.LogWarning(
+                "Offline buffer dropped {Dropped} observation(s) past the {Days}-day retention on probe {ProbeId}",
+                dropped, _runtimeOptions.OfflineBufferRetentionDays, probeId);
+        }
+
+        await FlushBufferAsync(client, probeId, pendingResults, cancellationToken);
+    }
+
+    /// <summary>Gets live assignments from the primary and refreshes the cache; on any failure falls back to the
+    /// last cached set (so scheduling continues through an outage). Null only when we have never reached the primary.</summary>
+    private async Task<ProbeSensorAssignmentsResponse?> FetchAssignmentsOrCacheAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/probes/{Uri.EscapeDataString(probeId)}/assignments");
+            AddProbeToken(request);
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return FallBackToCachedAssignments($"assignment sync returned {(int)response.StatusCode} {response.ReasonPhrase}");
+            }
+
+            var assignments = await response.Content.ReadFromJsonAsync<ProbeSensorAssignmentsResponse>(JsonOptions, cancellationToken);
+            if (assignments is null)
+            {
+                return FallBackToCachedAssignments("assignment response was empty");
+            }
+
+            _cachedAssignments = assignments;
+            _runtimeState.RecordAssignmentSync(
+                assignments.Sensors.Count,
+                $"{assignments.Sensors.Count} sensor assignment{(assignments.Sensors.Count == 1 ? string.Empty : "s")} received",
+                success: true);
+            return assignments;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return FallBackToCachedAssignments(ex.Message);
+        }
+    }
+
+    private ProbeSensorAssignmentsResponse? FallBackToCachedAssignments(string reason)
+    {
+        if (_cachedAssignments is { } cached)
+        {
+            _runtimeState.RecordAssignmentSync(
+                cached.Sensors.Count,
+                $"primary unreachable ({reason}) - running {cached.Sensors.Count} cached assignment(s), buffering results",
+                success: false);
+            return cached;
+        }
+
+        _runtimeState.RecordAssignmentSync(0, reason, success: false);
+        return null;
+    }
+
+    /// <summary>Drains the offline buffer to the primary oldest-first in chunks; stops at the first failed chunk
+    /// (still offline) and keeps the remainder for the next tick. When connected the buffer is normally empty and
+    /// this posts just the current tick's results.</summary>
+    private async Task FlushBufferAsync(
+        HttpClient client,
+        string probeId,
+        IReadOnlyList<SlaveProbePendingResult> tickResults,
+        CancellationToken cancellationToken)
+    {
+        if (_buffer.Count == 0)
         {
             return;
         }
 
-        await PostResultsAsync(client, probeId, reports, pendingResults, cancellationToken);
+        const int chunkSize = 500;
+        var flushed = 0;
+        var offline = false;
+        while (_buffer.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var chunk = _buffer.PeekOldest(chunkSize);
+            if (!await TryPostReportsAsync(client, probeId, chunk, cancellationToken))
+            {
+                offline = true;
+                break;
+            }
+
+            _buffer.RemoveOldest(chunk.Count);
+            flushed += chunk.Count;
+        }
+
+        if (offline)
+        {
+            _runtimeState.RecordResultPost(
+                _buffer.Count,
+                $"primary unreachable - {_buffer.Count} observation(s) buffered (retention {_runtimeOptions.OfflineBufferRetentionDays}d)",
+                success: false,
+                tickResults);
+        }
+        else if (flushed > 0)
+        {
+            var backfilled = flushed > tickResults.Count;
+            _runtimeState.RecordResultPost(
+                flushed,
+                $"{flushed} result{(flushed == 1 ? string.Empty : "s")} posted{(backfilled ? " (incl. buffered offline data)" : string.Empty)}",
+                success: true,
+                tickResults);
+        }
+    }
+
+    private async Task<bool> TryPostReportsAsync(
+        HttpClient client,
+        string probeId,
+        IReadOnlyList<ProbeSensorObservationReport> reports,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/probes/{Uri.EscapeDataString(probeId)}/observations")
+            {
+                Content = JsonContent.Create(new ProbeSensorObservationBatch(reports), options: JsonOptions)
+            };
+            AddProbeToken(request);
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     private static SlaveProbeUpcomingExecution BuildUpcomingExecution(
