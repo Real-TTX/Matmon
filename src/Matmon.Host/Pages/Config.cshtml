@@ -705,7 +705,8 @@
                         <div class="config-row"><dt>Cloud URL</dt><dd>@(Model.CloudUrl ?? "–")</dd></div>
                         <div class="config-row"><dt>Instance id</dt><dd>@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</dd></div>
                         <div class="config-row"><dt>Status</dt><dd style="color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</dd></div>
-                        <div class="config-row"><dt>Last heartbeat</dt><dd>@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</dd></div>
+                        <div class="config-row"><dt>Last heartbeat</dt><dd>@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)@(Model.HeartbeatStale ? " ⚠ link degraded — no recent successful heartbeat" : "")</dd></div>
+                        <div class="config-row"><dt>Full Access</dt><dd style="color:@Model.TunnelStatusColor;">@Model.TunnelStatusText</dd></div>
                     </dl>
                     <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;">
                         <label class="workspace-field">

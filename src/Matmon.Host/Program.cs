@@ -208,6 +208,9 @@ builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvi
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the
 // auto-login middleware (trusts the cloud's identity assertion only when this secret accompanies it).
 builder.Services.AddSingleton<TunnelAuthSecret>();
+// Live Full Access tunnel status (connected/last-error/served), surfaced on System → Cloud. Registered globally
+// (the Config page reads it) even though only the Primary's TunnelClient writes it.
+builder.Services.AddSingleton<TunnelState>();
 builder.Services.AddSingleton<Pending2faCookie>();
 builder.Services.AddSingleton<LoginCodeStore>();
 // Holds the "newer build available" signal the cloud returns on each heartbeat. Registered globally (the

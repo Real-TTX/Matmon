@@ -29,6 +29,7 @@ public class ConfigModel : PageModel
     private readonly IDataProtectionProvider _dataProtection;
 
     private readonly CloudBackupClient _cloudBackups;
+    private readonly TunnelState _tunnelState;
 
     public ConfigModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
@@ -36,7 +37,8 @@ public class ConfigModel : PageModel
         MatmonRuntimeOptions runtimeOptions,
         ILicenseService licenseService,
         IDataProtectionProvider dataProtection,
-        CloudBackupClient cloudBackups)
+        CloudBackupClient cloudBackups,
+        TunnelState tunnelState)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
@@ -44,6 +46,7 @@ public class ConfigModel : PageModel
         _licenseService = licenseService;
         _dataProtection = dataProtection;
         _cloudBackups = cloudBackups;
+        _tunnelState = tunnelState;
     }
 
     public CloudConnectionState CloudConnection { get; private set; } = new();
@@ -69,6 +72,27 @@ public class ConfigModel : PageModel
 
     /// <summary>The managing service partner (from the cloud), shown on the Service partner tab; null if none.</summary>
     public ServicePartnerInfo? ServicePartnerInfo { get; private set; }
+
+    /// <summary>Live Full Access tunnel status (connected/last-error/served), shown on the Cloud tab.</summary>
+    public TunnelStatusSnapshot TunnelStatus { get; private set; } = new(false, false, null, null, null, 0, 0, null);
+
+    /// <summary>Human-readable Full Access status line for the Cloud tab.</summary>
+    public string TunnelStatusText => !TunnelStatus.Enabled
+        ? "Off"
+        : TunnelStatus.Connected
+            ? (TunnelStatus.ConnectedSinceUtc is { } since ? $"Connected since {FormatDateTime(since)}" : "Connected")
+            : string.IsNullOrWhiteSpace(TunnelStatus.LastError)
+                ? "Not connected (retrying…)"
+                : $"Not connected — {TunnelStatus.LastError} (retrying…)";
+
+    /// <summary>Colour token for <see cref="TunnelStatusText"/>.</summary>
+    public string TunnelStatusColor => !TunnelStatus.Enabled
+        ? "var(--matmon-muted)"
+        : TunnelStatus.Connected ? "var(--matmon-success)" : "var(--matmon-warning)";
+
+    /// <summary>Heartbeat staleness: true when the last successful beat is older than ~3x the configured cadence,
+    /// so the Cloud tab can warn "link degraded" even while the loop is technically running.</summary>
+    public bool HeartbeatStale { get; private set; }
 
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
@@ -920,6 +944,11 @@ public class ConfigModel : PageModel
         DisplayTimeZoneId = _workspaceStore.GetDisplayTimeZoneId();
         TimeZoneItems = TimeZoneOptions.Build(DisplayTimeZoneId, "Server local");
         ServicePartnerInfo = _workspaceStore.GetServicePartnerInfo();
+        TunnelStatus = _tunnelState.Snapshot();
+        // Heartbeat staleness: warn once the last successful beat is older than ~3x the configured cadence.
+        var beatSeconds = Math.Max(15, CloudSettings.CloudHeartbeatIntervalSeconds ?? _runtimeOptions.CloudHeartbeatIntervalSeconds);
+        HeartbeatStale = CloudLinkActive && CloudConnection.LastHeartbeatUtc is { } lastBeat
+            && DateTimeOffset.UtcNow - lastBeat > TimeSpan.FromSeconds(beatSeconds * 3);
         // Effective values shown in the form: UI settings once configured, else the env bootstrap.
         CloudUrl = CloudSettings.Configured ? CloudSettings.Url : _runtimeOptions.CloudUrl;
         CloudUrlConfigured = !string.IsNullOrWhiteSpace(CloudUrl);

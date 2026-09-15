@@ -1351,8 +1351,19 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         ArgumentNullException.ThrowIfNull(state);
         lock (_gate)
         {
-            _document.Cloud = state.Clone();
-            QueueSave(SavePriority.Configuration);
+            var previous = _document.Cloud;
+            _document.Cloud = state.Clone(); // keep the live status/heartbeat in memory for the Config page
+            // Only PERSIST when a durable field changed (the link identity). LastStatus/LastHeartbeatUtc change
+            // every heartbeat (~30s) and are purely decorative after a restart (the next beat refreshes them), so
+            // saving them each beat pointlessly re-serialised the whole workspace.json + re-protected every secret.
+            var identityChanged =
+                previous is null
+                || previous.InstanceId != state.InstanceId
+                || !string.Equals(previous.CloudUrl, state.CloudUrl, StringComparison.Ordinal);
+            if (identityChanged)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
         }
     }
 
@@ -1484,6 +1495,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     }
 
     /// <summary>Caches the cloud-issued license token (for offline validation). Only saves on change.</summary>
+    // The cloud re-signs the license token every heartbeat (its iss/expiry are stamped with UtcNow), so the string
+    // differs each beat even when the actual plan is unchanged. Keep the freshest token in memory always (offline
+    // validation uses it), but only PERSIST it occasionally - otherwise every ~30s heartbeat rewrote the whole
+    // workspace.json (re-protecting every secret). A persisted token up to this old is still valid (14-day lease),
+    // so a restart validates fine until the next beat refreshes it.
+    private DateTimeOffset? _lastLicenseTokenPersistUtc;
+    private static readonly TimeSpan LicenseTokenPersistInterval = TimeSpan.FromHours(6);
+
     public void SetLicenseToken(string? token)
     {
         lock (_gate)
@@ -1493,8 +1512,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 return;
             }
 
-            _document.LicenseToken = token;
-            QueueSave(SavePriority.Configuration);
+            var hadNone = string.IsNullOrEmpty(_document.LicenseToken);
+            _document.LicenseToken = token; // always keep the live token fresh for offline validation
+            var now = DateTimeOffset.UtcNow;
+            // Persist on a real transition (first token / cleared) or at most once per interval - not every beat.
+            if (hadNone || string.IsNullOrEmpty(token)
+                || _lastLicenseTokenPersistUtc is null
+                || now - _lastLicenseTokenPersistUtc.Value >= LicenseTokenPersistInterval)
+            {
+                _lastLicenseTokenPersistUtc = now;
+                QueueSave(SavePriority.Configuration);
+            }
         }
     }
 

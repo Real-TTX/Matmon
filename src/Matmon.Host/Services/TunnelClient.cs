@@ -18,11 +18,17 @@ public sealed class TunnelClient : BackgroundService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    // A single replayed response is fully buffered + base64'd into one WebSocket frame, and the cloud tears the
+    // whole tunnel down past 32 MB/message - so cap the response here and return 413 instead, so one large download
+    // through Full Access (e.g. a backup snapshot) can't disconnect every console user of the instance.
+    private const long MaxReplayBodyBytes = 20L * 1024 * 1024;
+
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly IServer _server;
     private readonly ILogger<TunnelClient> _logger;
     private readonly TunnelAuthSecret _tunnelSecret;
+    private readonly TunnelState _tunnelState;
     // Decompress the local response so the tunnel always carries plain bytes: the cloud rewrites text
     // bodies and the browser gets a decodable stream (the static-asset handler otherwise returns brotli/gzip
     // that, once Content-Encoding is dropped in transit, the browser can't decode → "CSS doesn't load").
@@ -41,13 +47,15 @@ public sealed class TunnelClient : BackgroundService
         MatmonRuntimeOptions runtimeOptions,
         IServer server,
         ILogger<TunnelClient> logger,
-        TunnelAuthSecret tunnelSecret)
+        TunnelAuthSecret tunnelSecret,
+        TunnelState tunnelState)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
         _server = server;
         _logger = logger;
         _tunnelSecret = tunnelSecret;
+        _tunnelState = tunnelState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -61,6 +69,7 @@ public sealed class TunnelClient : BackgroundService
         {
             var settings = _workspaceStore.GetCloudConnectionSettings();
             var token = _workspaceStore.GetCloudConnectionToken();
+            _tunnelState.SetEnabled(settings.FullAccessEnabled && settings.Enabled);
             var ready = settings.FullAccessEnabled && settings.Enabled &&
                 !string.IsNullOrWhiteSpace(settings.Url) && !string.IsNullOrWhiteSpace(settings.InstanceId) && !string.IsNullOrWhiteSpace(token);
 
@@ -73,6 +82,8 @@ public sealed class TunnelClient : BackgroundService
             try
             {
                 await RunTunnelAsync(settings.Url!, settings.InstanceId!, token!, stoppingToken);
+                // A clean return (settings changed / orderly close) is not a failure - reset the backoff.
+                _tunnelState.MarkDisconnected(null, failure: false);
             }
             catch (OperationCanceledException)
             {
@@ -80,11 +91,49 @@ public sealed class TunnelClient : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Full Access tunnel dropped; reconnecting");
+                var reason = DescribeConnectFailure(ex);
+                _tunnelState.MarkDisconnected(reason, failure: true);
+                var failures = _tunnelState.ConsecutiveFailures;
+                // First failure at Information, escalate to Warning once it clearly isn't a blip - so an admin who
+                // enabled Full Access but sees "not connected" in the cloud has something to diagnose with (a proxy
+                // that drops WS upgrades, or a 401/403 handshake) instead of silence at Debug.
+                if (failures >= 3)
+                {
+                    _logger.LogWarning(ex, "Full Access tunnel failing ({Reason}); {Failures} attempts in a row", reason, failures);
+                }
+                else
+                {
+                    _logger.LogInformation("Full Access tunnel dropped ({Reason}); reconnecting", reason);
+                }
             }
 
-            await DelayAsync(TimeSpan.FromSeconds(5), stoppingToken);
+            // Exponential backoff with jitter (5→10→20→40→60s cap), reset once a connection succeeds. A tight 5s
+            // retry against a cloud that keeps refusing the handshake (401/403, proxy) is just noise.
+            await DelayAsync(BackoffFor(_tunnelState.ConsecutiveFailures), stoppingToken);
         }
+    }
+
+    private static TimeSpan BackoffFor(int consecutiveFailures)
+    {
+        if (consecutiveFailures <= 0)
+        {
+            return TimeSpan.FromSeconds(5);
+        }
+        var seconds = Math.Min(60, 5 * Math.Pow(2, Math.Min(consecutiveFailures - 1, 4))); // 5,10,20,40,60
+        var jitter = (Environment.TickCount64 % 1000) / 1000.0; // 0..1s, no RNG dependency
+        return TimeSpan.FromSeconds(seconds) + TimeSpan.FromSeconds(jitter);
+    }
+
+    private static string DescribeConnectFailure(Exception ex)
+    {
+        if (ex is WebSocketException wse)
+        {
+            // The upgrade's HTTP status (when the cloud refused the handshake) is the most useful signal.
+            return wse.Message.Contains("401") ? "cloud refused the tunnel: unauthorized (check the instance token)"
+                : wse.Message.Contains("403") ? "cloud refused the tunnel: Full Access not licensed / instance blocked"
+                : $"connection error: {wse.Message}";
+        }
+        return ex.Message;
     }
 
     private async Task RunTunnelAsync(string cloudUrl, string instanceId, string token, CancellationToken stoppingToken)
@@ -102,7 +151,13 @@ public sealed class TunnelClient : BackgroundService
 
         using var socket = new ClientWebSocket();
         socket.Options.SetRequestHeader("X-Matmon-Instance-Token", token);
+        // Detect a silently half-open tunnel (NAT table flush, LB/cloud restart without a FIN) in ~20-40s instead
+        // of waiting for TCP retransmits to exhaust (many minutes). The cloud sets a matching keep-alive.
+        socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+        socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
+        _tunnelState.MarkAttempt();
         await socket.ConnectAsync(uri, ct);
+        _tunnelState.MarkConnected();
         _logger.LogInformation("Full Access tunnel connected -> {Uri}", uri);
 
         // Watchdog: close the tunnel as soon as it should no longer be open (Full Access off, cloud
@@ -188,10 +243,11 @@ public sealed class TunnelClient : BackgroundService
         try
         {
             response = await ReplayAsync(request, cancellationToken);
+            _tunnelState.MarkRequestServed();
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Full Access replay failed for {Path}", request.Path);
+            _logger.LogInformation(ex, "Full Access replay failed for {Path}", request.Path);
             response = new TunnelResponse(request.Id, 502, new(), Convert.ToBase64String("Full Access replay failed."u8.ToArray()));
         }
 
@@ -261,7 +317,15 @@ public sealed class TunnelClient : BackgroundService
         // auto-login middleware may trust the cloud's X-Matmon-Cloud-User identity assertion carried above.
         message.Headers.TryAddWithoutValidation(TunnelAutoLogin.TunnelAuthHeader, _tunnelSecret.Value);
 
-        using var reply = await _local.SendAsync(message, HttpCompletionOption.ResponseContentRead, cancellationToken);
+        using var reply = await _local.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        // Cap the response before buffering it: one over-large frame would tear the whole tunnel down for every
+        // console user of this instance. Refuse early (declared length) or while reading (chunked/unknown length).
+        if (reply.Content.Headers.ContentLength is > MaxReplayBodyBytes)
+        {
+            return TooLargeResponse(request.Id);
+        }
+
         var selfBase = SelfBaseUrl();
         var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var header in reply.Headers)
@@ -277,8 +341,41 @@ public sealed class TunnelClient : BackgroundService
             headers[header.Key] = header.Value.ToArray();
         }
 
-        var body = await reply.Content.ReadAsByteArrayAsync(cancellationToken);
+        var body = await ReadCappedAsync(reply.Content, cancellationToken);
+        if (body is null)
+        {
+            return TooLargeResponse(request.Id);
+        }
         return new TunnelResponse(request.Id, (int)reply.StatusCode, headers, body.Length == 0 ? null : Convert.ToBase64String(body));
+    }
+
+    /// <summary>Reads the response body but aborts (returns null) once it exceeds <see cref="MaxReplayBodyBytes"/>,
+    /// so a chunked/unknown-length response can't be buffered without bound.</summary>
+    private static async Task<byte[]?> ReadCappedAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[64 * 1024];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+        {
+            if (buffer.Length + read > MaxReplayBodyBytes)
+            {
+                return null;
+            }
+            buffer.Write(chunk, 0, read);
+        }
+        return buffer.ToArray();
+    }
+
+    private static TunnelResponse TooLargeResponse(string requestId)
+    {
+        var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Content-Type"] = ["text/plain; charset=utf-8"]
+        };
+        return new TunnelResponse(requestId, 413, headers,
+            Convert.ToBase64String("This response is too large for Full Access. Download it directly on the instance."u8.ToArray()));
     }
 
     private static string StripSelfBase(string location, string selfBase)
