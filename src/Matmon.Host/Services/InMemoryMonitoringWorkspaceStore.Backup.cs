@@ -468,6 +468,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             var documentJson = JsonSerializer.Serialize(document, FileSerializerOptions);
             var documentClone = JsonSerializer.Deserialize<WorkspaceDocument>(documentJson, FileSerializerOptions)
                 ?? CreatePlainWorkspaceDocument();
+            StripUnselectedSections(documentClone, job.Sections);
 
             // Telemetry lives in the repository; pull the selected sections into the snapshot.
             if (job.Sections.HasFlag(WorkspaceBackupSection.SensorHistory))
@@ -500,6 +501,66 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         {
             HydrateCredentialBundles(document);
         }
+    }
+
+    /// <summary>A package carries ONLY the sections it was created for. The live document is serialised whole (so the
+    /// clone is a faithful snapshot), then everything outside the mask is emptied. Without this a "config-only" cloud
+    /// backup still shipped every user + password hash, the cloud-link token and the license token - the "Users are
+    /// excluded" promise held only on the restore side. Instance-bound state (cloud link identity/status, license
+    /// token, cached partner branding) is never part of any section: it is meaningless - or harmful - on another
+    /// instance and is always dropped.</summary>
+    private void StripUnselectedSections(WorkspaceDocument document, WorkspaceBackupSection sections)
+    {
+        if (!sections.HasFlag(WorkspaceBackupSection.Topology))
+        {
+            document.RootProbe = CreatePlainWorkspaceDocument().RootProbe;
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.Templates))
+        {
+            document.Templates = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.SensorDefinitions))
+        {
+            document.SensorDefinitions = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.Notifications))
+        {
+            document.NotificationConfiguration = new();
+            document.NotificationSenders = [];
+            document.NotificationReceivers = [];
+            document.NotificationRules = [];
+            document.SummaryReport = new();
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.Maps))
+        {
+            document.Maps = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.Users))
+        {
+            document.Users = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.Alerts))
+        {
+            document.Alerts = [];
+            document.AlertMutes = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
+        {
+            document.BackupJobs = [];
+        }
+
+        // Bound to THIS instance (its DataProtection ring / its cloud identity) - never travels.
+        document.CloudSettings = new();
+        document.Cloud = new();
+        document.LicenseToken = null;
+        document.ServicePartner = null;
     }
 
     private static string BuildBackupFileName(WorkspaceBackupJob job, DateTimeOffset createdUtc, Guid packageId)

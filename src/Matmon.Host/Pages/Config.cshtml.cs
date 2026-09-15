@@ -698,6 +698,24 @@ public class ConfigModel : PageModel
                 return RedirectToPage(new { tab = "cloud" });
             }
 
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                ErrorMessage = "Your Matmon.Cloud account uses two-factor authentication, which this password-only path can't complete - use Connect (browser sign-in) above instead.";
+                return RedirectToPage(new { tab = "cloud" });
+            }
+
+            if (response.StatusCode == HttpStatusCode.Conflict)
+            {
+                ErrorMessage = "An instance with this name is already connected to your cloud account (or was deactivated by its administrator) - choose a different name, or stop the other instance first.";
+                return RedirectToPage(new { tab = "cloud" });
+            }
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                ErrorMessage = "Too many sign-in attempts - wait a minute and try again.";
+                return RedirectToPage(new { tab = "cloud" });
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 ErrorMessage = $"Cloud provisioning failed ({(int)response.StatusCode}).";

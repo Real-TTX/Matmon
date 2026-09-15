@@ -216,7 +216,22 @@ public sealed class TunnelClient : BackgroundService
 
     private async Task<TunnelResponse> ReplayAsync(TunnelRequest request, CancellationToken cancellationToken)
     {
-        var target = new Uri(new Uri(SelfBaseUrl()), request.Path);
+        // Only ever replay against OURSELVES. A network-path ("//evil.com/x") or absolute reference resolved against
+        // the self base would dial a third party - carrying the operator's cookies, the identity assertion and our
+        // tunnel secret (which then forges Admin auto-logins here). The cloud normalises paths too; this is the
+        // instance-side guard, since the instance is what actually dials out.
+        var path = string.IsNullOrEmpty(request.Path) ? "/" : request.Path;
+        var self = new Uri(SelfBaseUrl());
+        if (path.StartsWith("//", StringComparison.Ordinal)
+            || path.StartsWith("/\\", StringComparison.Ordinal)
+            || path.Contains("://", StringComparison.Ordinal)
+            || !Uri.TryCreate(self, path, out var target)
+            || !string.Equals(target.Host, self.Host, StringComparison.OrdinalIgnoreCase)
+            || target.Port != self.Port)
+        {
+            return new TunnelResponse(request.Id, 400, new(), Convert.ToBase64String("Invalid Full Access path."u8.ToArray()));
+        }
+
         using var message = new HttpRequestMessage(new HttpMethod(request.Method), target);
 
         if (!string.IsNullOrEmpty(request.Body))
