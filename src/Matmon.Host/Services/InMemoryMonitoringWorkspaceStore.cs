@@ -1513,7 +1513,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private DateTimeOffset? _lastLicenseTokenPersistUtc;
     private static readonly TimeSpan LicenseTokenPersistInterval = TimeSpan.FromHours(6);
 
-    public void SetLicenseToken(string? token)
+    public void SetLicenseToken(string? token, bool persistImmediately = false)
     {
         lock (_gate)
         {
@@ -1525,8 +1525,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             var hadNone = string.IsNullOrEmpty(_document.LicenseToken);
             _document.LicenseToken = token; // always keep the live token fresh for offline validation
             var now = DateTimeOffset.UtcNow;
-            // Persist on a real transition (first token / cleared) or at most once per interval - not every beat.
-            if (hadNone || string.IsNullOrEmpty(token)
+            // Persist on a real transition (first token / cleared), on an explicit manual set (offline token paste),
+            // or at most once per interval - NOT every heartbeat (the cloud re-signs the token each beat).
+            if (persistImmediately || hadNone || string.IsNullOrEmpty(token)
                 || _lastLicenseTokenPersistUtc is null
                 || now - _lastLicenseTokenPersistUtc.Value >= LicenseTokenPersistInterval)
             {

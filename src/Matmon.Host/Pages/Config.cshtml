@@ -761,6 +761,11 @@
                             <label class="workspace-field"><span>Instance token</span><input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="token from the cloud UI" /></label>
                             <button type="submit" class="workspace-submit">Connect with token</button>
                         </form>
+                        <form method="post" asp-page-handler="CloudOfflineToken" class="workspace-form" style="margin-top:16px;">
+                            <p class="workspace-inline-note" style="margin-top:0;">Offline / air-gapped: paste a long-lived license token a platform admin issued for this instance (cloud Admin → the instance → Offline token). No network needed - it is verified locally. A connected instance's licence is cloud-managed and would overwrite this.</p>
+                            <label class="workspace-field"><span>Offline license token</span><textarea asp-for="OfflineLicenseToken" class="workspace-input" rows="4" style="font-family:monospace;font-size:0.78rem;" placeholder="paste the token issued in the cloud"></textarea></label>
+                            <button type="submit" class="workspace-submit">Apply offline license</button>
+                        </form>
                     </details>
 
                     @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)

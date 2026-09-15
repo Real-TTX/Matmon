@@ -291,7 +291,7 @@ public interface IMonitoringWorkspaceStore
     string? GetLicenseToken();
 
     /// <summary>Caches the cloud-issued license token.</summary>
-    void SetLicenseToken(string? token);
+    void SetLicenseToken(string? token, bool persistImmediately = false);
 
     /// <summary>The managing service partner (name/contact + consent) cached from the cloud; null if none fetched.</summary>
     ServicePartnerInfo? GetServicePartnerInfo();

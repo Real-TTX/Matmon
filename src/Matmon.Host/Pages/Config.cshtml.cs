@@ -333,6 +333,43 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "backup" });
     }
 
+    /// <summary>A pasted OFFLINE license token (issued by a platform admin for an air-gapped instance).</summary>
+    [BindProperty] public string? OfflineLicenseToken { get; set; }
+
+    /// <summary>Apply a manually-pasted offline license token: verify it offline against the baked public key and,
+    /// if valid + not expired, store it (persisted immediately). For an air-gapped instance that never connects to
+    /// the cloud; a connected instance's token is cloud-managed and would be overwritten on the next heartbeat.</summary>
+    public IActionResult OnPostCloudOfflineToken()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var token = (OfflineLicenseToken ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            ErrorMessage = "Paste the offline license token first.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        var info = LicenseCrypto.Verify(token, LicensePublicKey.Spki);
+        if (info is null)
+        {
+            ErrorMessage = "That license token is not valid (signature check failed). Copy it exactly as issued.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+        if (info.IsExpired(DateTimeOffset.UtcNow))
+        {
+            ErrorMessage = "That license token has already expired. Ask your provider to issue a fresh one.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        _workspaceStore.SetLicenseToken(token, persistImmediately: true);
+        StatusMessage = $"Offline license applied: {info.DisplayName}.";
+        return RedirectToPage(new { tab = "cloud" });
+    }
+
     public IActionResult OnPostCloudConnect()
     {
         if (!MatmonSecurity.IsAdmin(User))
