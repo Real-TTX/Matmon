@@ -1423,6 +1423,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             _document.CloudSettings.Enabled = false;
             _document.CloudSettings.ProtectedToken = null;
             _document.CloudSettings.Configured = true;
+            // Turn off the cloud-dependent features so they can't silently fail once unlinked: relay rules would
+            // otherwise keep selecting the "Matmon Cloud" sender and drop every alert (only a log warning), and
+            // Full Access would keep trying to open a tunnel with no token. Re-enable them after reconnecting.
+            _document.CloudSettings.RelayAlerts = false;
+            _document.CloudSettings.FullAccessEnabled = false;
+            var cloudSender = _document.NotificationSenders.FirstOrDefault(sender => sender.Kind == NotificationEndpointKind.Cloud);
+            if (cloudSender is not null)
+            {
+                cloudSender.Enabled = false; // keep the sender so rules keep their reference for a later reconnect
+            }
             _document.Cloud = new CloudConnectionState { LastStatus = "disconnected" };
             // Drop any cached managing-partner branding: once unlinked there is no cloud left to send
             // HasPartner=false, so without this the stale logo/name/colour would render in the UI + reports forever.
