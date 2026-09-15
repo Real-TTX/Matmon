@@ -237,8 +237,20 @@ public sealed class CloudConnectionService : BackgroundService
         using var response = await client.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            RecordStatus(baseUrl, instanceId, "unauthorized (check the instance token)", heartbeatOk: false, force: true);
+            RecordStatus(baseUrl, instanceId, "unauthorized (check the instance token, or reconnect)", heartbeatOk: false, force: true);
             _logger.LogWarning("Matmon.Cloud rejected the instance token");
+            return;
+        }
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            // The token is genuine but the cloud has blocked the instance - a deliberate lock, not a bad token.
+            // Keep beating (retry) so the instance recovers the moment the administrator reactivates it.
+            var reason = await ReadForbiddenReasonAsync(response, cancellationToken);
+            var status = reason == "instance_deleted"
+                ? "deleted in the cloud (contact your provider)"
+                : "deactivated by the cloud administrator";
+            RecordStatus(baseUrl, instanceId, status, heartbeatOk: false, force: true);
+            _logger.LogWarning("Matmon.Cloud blocked this instance ({Reason})", reason ?? "deactivated");
             return;
         }
 
@@ -269,6 +281,21 @@ public sealed class CloudConnectionService : BackgroundService
     private string? _servicePartnerETag;
 
     private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable);
+
+    private sealed record ForbiddenBody(string? Error);
+
+    /// <summary>Reads the <c>{ "error": "instance_deactivated" | "instance_deleted" }</c> body the cloud returns on
+    /// a 403 heartbeat, so the UI can explain the block. Tolerates an older cloud with an empty/non-JSON body.</summary>
+    private static async Task<string?> ReadForbiddenReasonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<ForbiddenBody>(cancellationToken);
+            return body?.Error;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+    }
 
     /// <summary>Pulls the signed license token from the cloud and caches it for offline validation.</summary>
     private async Task FetchLicenseAsync(HttpClient client, Guid instanceId, string token, CancellationToken cancellationToken)

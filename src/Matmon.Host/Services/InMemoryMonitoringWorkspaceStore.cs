@@ -273,6 +273,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 // local password if it has one, so it can show as both "Local" and "Cloud".
                 existing.CloudLinked = true;
                 existing.LastLoginUtc = DateTimeOffset.UtcNow;
+                // Propagate the cloud-asserted role for SSO-ONLY accounts (cloud-linked, no local password): the
+                // cloud is their authority, so a demotion there (e.g. Owner->Viewer) must take effect on the
+                // instance. An account that also has a LOCAL password keeps its locally-managed role - the cloud
+                // must not silently re-grant/revoke a role an instance admin set by hand.
+                if (string.IsNullOrWhiteSpace(existing.PasswordHash) && existing.Role != role)
+                {
+                    existing.Role = role;
+                    existing.UpdatedUtc = DateTimeOffset.UtcNow;
+                }
                 QueueSave(SavePriority.Configuration);
                 return CloneUser(existing);
             }
