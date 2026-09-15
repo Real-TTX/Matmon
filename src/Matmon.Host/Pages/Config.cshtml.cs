@@ -695,6 +695,11 @@ public class ConfigModel : PageModel
             ErrorMessage = "The cloud URL is not a valid address.";
             return RedirectToPage(new { tab = "cloud" });
         }
+        if (!CloudUrlPolicy.IsPlainHttpAllowed(cloudUri))
+        {
+            ErrorMessage = "Use https for a public cloud address - a plain-http link would send the sign-in over the network unencrypted.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
 
         var nonce = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(24));
         var verifier = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(32));
@@ -744,9 +749,14 @@ public class ConfigModel : PageModel
             return RedirectToPage(new { tab = "cloud" });
         }
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var provisionUri))
         {
             ErrorMessage = "The cloud URL is not a valid address.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+        if (!CloudUrlPolicy.IsPlainHttpAllowed(provisionUri))
+        {
+            ErrorMessage = "Use https for a public cloud address - your password would be sent over the network unencrypted.";
             return RedirectToPage(new { tab = "cloud" });
         }
 
