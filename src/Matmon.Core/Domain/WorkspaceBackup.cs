@@ -132,7 +132,17 @@ public sealed record WorkspaceBackupRestoreResult(
     string FileName,
     WorkspaceBackupSection RestoredSections,
     int RestoredCount,
-    string Message)
+    string Message,
+    int Probes = 0,
+    int Sensors = 0,
+    int Templates = 0,
+    int Rules = 0,
+    int Users = 0,
+    IReadOnlyList<string>? DroppedSecrets = null)
 {
     public bool Success => RestoredCount > 0;
+
+    /// <summary>Credential bundles / notification secrets that could not be decrypted on restore (e.g. a
+    /// cross-instance restore with no portable passphrase) and were therefore dropped - the user must re-enter them.</summary>
+    public IReadOnlyList<string> DroppedSecretsOrEmpty => DroppedSecrets ?? [];
 }

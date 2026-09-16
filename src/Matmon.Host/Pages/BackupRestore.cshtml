@@ -125,6 +125,11 @@
                 </section>
             </div>
 
+            <label class="workspace-field" style="max-width:420px;margin-top:12px;">
+                <span>Passphrase <span style="color:var(--matmon-muted);font-weight:400;">(only for an encrypted/portable backup)</span></span>
+                <input asp-for="Passphrase" type="password" class="workspace-input" autocomplete="off" placeholder="leave blank for a normal backup" />
+            </label>
+
             <div asp-validation-summary="All" class="workspace-inline-note"></div>
 
             <div class="page-actions workspace-toolbar">

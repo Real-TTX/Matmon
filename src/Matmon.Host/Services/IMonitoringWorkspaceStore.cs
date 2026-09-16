@@ -215,7 +215,7 @@ public interface IMonitoringWorkspaceStore
     /// store just advances the schedule + stamps status). No local snapshot is written.</summary>
     void RecordCloudBackupJobRun(Guid jobId, bool success, string message, long? bytes);
 
-    WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections);
+    WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections, string? passphrase = null);
 
     /// <summary>Serialize a backup package to bytes in memory (for uploading to the cloud), no disk artifact.
     /// A non-empty <paramref name="passphrase"/> seals the secrets with a portable key so they restore on any instance.</summary>

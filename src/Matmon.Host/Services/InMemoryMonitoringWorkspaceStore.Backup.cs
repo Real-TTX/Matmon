@@ -283,7 +283,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
-    public WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections)
+    public WorkspaceBackupRestoreResult RestoreBackupSnapshot(string fileName, WorkspaceBackupSection sections, string? passphrase = null)
     {
         if (string.IsNullOrWhiteSpace(fileName))
         {
@@ -298,26 +298,30 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         var path = ResolveBackupFilePath(fileName);
         var package = TryLoadBackupPackage(path) ?? throw new InvalidOperationException("Backup file could not be read.");
 
+        // Honour a portable (passphrase-sealed) package on the FILE restore path too - previously it always used the
+        // instance protector, so a portable .matmonbak imported here dropped every credential behind a "success".
+        var secretProtector = ResolveSecretProtector(package, passphrase);
+
         lock (_gate)
         {
-            HydrateCredentialBundles(package.Document);
-            ApplyBackupSections(_document, package.Document, sections);
-            QueueSave(SavePriority.Configuration);
+            return ApplyRestoreLocked(package, sections, secretProtector, fileName);
         }
-
-        var restoredCount = CountSelectedSections(sections);
-        return new WorkspaceBackupRestoreResult(
-            fileName,
-            sections,
-            restoredCount,
-            $"Restored {restoredCount} section(s) from '{fileName}'.");
     }
 
     /// <summary>Builds a backup package in memory and returns its bytes - the exact same JSON the file-based
     /// backup writes, so it stays download-compatible with the upload/restore UI. Used to push a snapshot to
     /// the cloud without a disk artifact.</summary>
+    /// <summary>Minimum length for a portable-backup passphrase - it derives the AES key that seals every stored
+    /// credential, so a trivially short one is brute-forceable offline against the package's verifier.</summary>
+    public const int MinPortablePassphraseLength = 12;
+
     public byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null)
     {
+        if (!string.IsNullOrEmpty(passphrase) && passphrase.Length < MinPortablePassphraseLength)
+        {
+            throw new ArgumentException($"The backup passphrase must be at least {MinPortablePassphraseLength} characters.", nameof(passphrase));
+        }
+
         lock (_gate)
         {
             var job = new WorkspaceBackupJob
@@ -364,65 +368,137 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         var package = JsonSerializer.Deserialize<WorkspaceBackupPackage>(blob, FileSerializerOptions)
             ?? throw new InvalidOperationException("The backup could not be read.");
 
-        // A portable (passphrase-sealed) backup needs the passphrase to recover its secrets; the passphrase key
-        // unseals the snapshot to plaintext, then the normal save re-protects everything with THIS instance's key.
-        IDataProtector? secretProtector = null;
-        if (package.SecretsPortable)
-        {
-            if (string.IsNullOrEmpty(passphrase))
-            {
-                throw new InvalidOperationException("This backup is passphrase-protected. Enter the passphrase to restore it.");
-            }
-
-            // The package fields are untrusted (they come off the wire). Validate them BEFORE deriving the key,
-            // so a corrupt/tampered package fails with a clean message and can't turn PBKDF2 into a CPU DoS via a
-            // huge iteration count. All of this still runs before the lock, so nothing is ever partially applied.
-            if (package.SecretsIterations is < 1 or > MaxPortableSecretsPbkdf2Iterations
-                || string.IsNullOrEmpty(package.SecretsSalt)
-                || string.IsNullOrEmpty(package.SecretsVerifier))
-            {
-                throw new InvalidOperationException("This backup is not a valid portable backup (corrupt metadata).");
-            }
-
-            byte[] salt;
-            try
-            {
-                salt = Convert.FromBase64String(package.SecretsSalt);
-            }
-            catch (FormatException)
-            {
-                throw new InvalidOperationException("This backup is not a valid portable backup (corrupt metadata).");
-            }
-
-            var portable = new PassphraseSecretProtector(passphrase, salt, package.SecretsIterations);
-
-            // Verify the passphrase up front so a wrong one is rejected cleanly (rather than silently producing
-            // undecryptable credentials that then get dropped).
-            try
-            {
-                var check = Encoding.UTF8.GetString(portable.Unprotect(Convert.FromBase64String(package.SecretsVerifier)));
-                if (!string.Equals(check, PortableSecretsVerifierPlaintext, StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException("Incorrect passphrase.");
-                }
-            }
-            catch (Exception ex) when (ex is not InvalidOperationException)
-            {
-                throw new InvalidOperationException("Incorrect passphrase.");
-            }
-
-            secretProtector = portable;
-        }
+        var secretProtector = ResolveSecretProtector(package, passphrase);
 
         lock (_gate)
         {
-            HydrateCredentialBundles(package.Document, secretProtector);
-            ApplyBackupSections(_document, package.Document, sections);
-            QueueSave(SavePriority.Configuration);
+            return ApplyRestoreLocked(package, sections, secretProtector, "cloud");
+        }
+    }
+
+    /// <summary>Resolves the protector used to unseal a package's secrets: the passphrase-derived key for a portable
+    /// package (validated up front so a wrong passphrase / corrupt metadata fails cleanly rather than silently
+    /// dropping credentials), else null = the instance DataProtection ring. Runs BEFORE the lock, so a bad passphrase
+    /// never partially applies a restore.</summary>
+    private IDataProtector? ResolveSecretProtector(WorkspaceBackupPackage package, string? passphrase)
+    {
+        if (!package.SecretsPortable)
+        {
+            return null; // instance DP ring (only round-trips on the same instance)
         }
 
+        if (string.IsNullOrEmpty(passphrase))
+        {
+            throw new InvalidOperationException("This backup is passphrase-protected. Enter the passphrase to restore it.");
+        }
+
+        // The package fields are untrusted (they come off the wire / disk). Validate them BEFORE deriving the key,
+        // so corrupt/tampered metadata fails cleanly and can't turn PBKDF2 into a CPU DoS via a huge iteration count.
+        if (package.SecretsIterations is < 1 or > MaxPortableSecretsPbkdf2Iterations
+            || string.IsNullOrEmpty(package.SecretsSalt)
+            || string.IsNullOrEmpty(package.SecretsVerifier))
+        {
+            throw new InvalidOperationException("This backup is not a valid portable backup (corrupt metadata).");
+        }
+
+        byte[] salt;
+        try
+        {
+            salt = Convert.FromBase64String(package.SecretsSalt);
+        }
+        catch (FormatException)
+        {
+            throw new InvalidOperationException("This backup is not a valid portable backup (corrupt metadata).");
+        }
+
+        var portable = new PassphraseSecretProtector(passphrase, salt, package.SecretsIterations);
+
+        // Verify the passphrase up front so a wrong one is rejected cleanly (rather than silently producing
+        // undecryptable credentials that then get dropped).
+        try
+        {
+            var check = Encoding.UTF8.GetString(portable.Unprotect(Convert.FromBase64String(package.SecretsVerifier)));
+            if (!string.Equals(check, PortableSecretsVerifierPlaintext, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Incorrect passphrase.");
+            }
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException("Incorrect passphrase.");
+        }
+
+        return portable;
+    }
+
+    /// <summary>Shared restore body (must hold <c>_gate</c>): hydrate the package's secrets, swap in the selected
+    /// sections, re-run the load-time normalisers so an older backup's catalog/invariants are re-established without
+    /// a restart, then report counts + any credentials that could not be decrypted (dropped).</summary>
+    private WorkspaceBackupRestoreResult ApplyRestoreLocked(WorkspaceBackupPackage package, WorkspaceBackupSection sections, IDataProtector? secretProtector, string fileName)
+    {
+        HydrateCredentialBundles(package.Document, secretProtector);
+        ApplyBackupSections(_document, package.Document, sections);
+        NormalizeAfterRestoreLocked();
+        QueueSave(SavePriority.Configuration);
+
         var restoredCount = CountSelectedSections(sections);
-        return new WorkspaceBackupRestoreResult("cloud", sections, restoredCount, $"Restored {restoredCount} section(s) from the cloud backup.");
+        var elements = _document.RootProbe is null
+            ? new List<MonitoringElement>()
+            : EnumerateElements(_document.RootProbe).ToList();
+        var probes = elements.OfType<ProbeElement>().Count();
+        var sensors = elements.OfType<SensorElement>().Count();
+        var templates = _document.Templates?.Count ?? 0;
+        var rules = _document.NotificationRules?.Count ?? 0;
+        var users = _document.Users?.Count ?? 0;
+        var dropped = CollectDroppedSecretNames(_document);
+
+        var message = $"Restored {restoredCount} section(s): {probes} probe(s), {sensors} sensor(s), {templates} template(s), {rules} rule(s).";
+        if (dropped.Count > 0)
+        {
+            message += $" {dropped.Count} credential(s) could not be decrypted and were dropped - re-enter them.";
+        }
+
+        return new WorkspaceBackupRestoreResult(fileName, sections, restoredCount, message, probes, sensors, templates, rules, users, dropped);
+    }
+
+    /// <summary>Credential bundles + notification secrets that failed to decrypt on this restore (dropped, must be
+    /// re-entered). Scans the live document after the sections were applied.</summary>
+    private List<string> CollectDroppedSecretNames(WorkspaceDocument document)
+    {
+        var names = new List<string>();
+        foreach (var settings in EnumerateSettings(document))
+        {
+            foreach (var credential in settings.Credentials)
+            {
+                if (credential.HydrationFailed)
+                {
+                    names.Add(string.IsNullOrWhiteSpace(credential.Name) ? $"credential {credential.Id:N}" : $"credential '{credential.Name}'");
+                }
+            }
+        }
+        foreach (var slot in EnumerateNotificationSecrets(document))
+        {
+            if (slot.GetFailed())
+            {
+                names.Add("notification secret");
+            }
+        }
+        return names;
+    }
+
+    /// <summary>Re-runs the safe subset of the load-time normalisers after a restore so a restored (possibly older)
+    /// topology/catalog/template set is migrated + its invariants re-established immediately, not only on the next
+    /// boot. Must hold <c>_gate</c>. Deliberately skips one-time + demo/provision seeders.</summary>
+    private void NormalizeAfterRestoreLocked()
+    {
+        MigrateRetiredProxmoxSensors();
+        EnsureSensorDefinitionCatalog();
+        EnsureDefaultTemplates();
+        MigrateAppliedTemplatesToCopies();
+        MigrateSslCertificateThresholds();
+        EnsureDefaultNotificationConfiguration();
+        EnsureDefaultAlertCollection();
+        EnsureBackupJobsCollection();
     }
 
     private void EnsureBackupJobsCollection()

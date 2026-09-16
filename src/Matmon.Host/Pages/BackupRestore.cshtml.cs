@@ -24,6 +24,11 @@ public class BackupRestoreModel : PageModel
     [BindProperty]
     public BackupRestoreInput Input { get; set; } = new();
 
+    /// <summary>Optional passphrase for an encrypted (portable) backup - required only if this snapshot was created
+    /// with one; ignored for a plain snapshot.</summary>
+    [BindProperty]
+    public string? Passphrase { get; set; }
+
     public WorkspaceBackupSnapshotDetails? SnapshotDetails { get; private set; }
 
     public WorkspaceBackupSnapshotInfo? Snapshot => SnapshotDetails?.Snapshot;
@@ -70,7 +75,7 @@ public class BackupRestoreModel : PageModel
 
         try
         {
-            var result = _workspaceStore.RestoreBackupSnapshot(FileName!, Input.Sections.ToSections(defaultToAll: false));
+            var result = _workspaceStore.RestoreBackupSnapshot(FileName!, Input.Sections.ToSections(defaultToAll: false), Passphrase);
             StatusMessage = result.Message;
             return RedirectToConfig();
         }
