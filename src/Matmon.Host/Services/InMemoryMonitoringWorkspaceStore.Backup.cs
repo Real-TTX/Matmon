@@ -85,6 +85,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             existing.Sections = job.Sections == WorkspaceBackupSection.None ? WorkspaceBackupSection.All : job.Sections;
             existing.Destination = job.Destination;
             existing.RetentionCount = Math.Clamp(job.RetentionCount, 1, 100);
+            // Blank passphrase field = keep the stored one (never prefilled in the editor, like credential secrets);
+            // a new value replaces it and is re-encrypted on save. (Clearing = set Destination to Local, unused.)
+            if (!string.IsNullOrEmpty(job.Passphrase))
+            {
+                existing.Passphrase = job.Passphrase;
+                existing.ProtectedPassphrase = null;
+                existing.PassphraseHydrationFailed = false;
+            }
             existing.LastRunUtc = job.LastRunUtc;
             existing.NextRunUtc = CalculateNextRunUtc(existing, DateTimeOffset.UtcNow);
             existing.LastStatus = job.LastStatus?.Trim();

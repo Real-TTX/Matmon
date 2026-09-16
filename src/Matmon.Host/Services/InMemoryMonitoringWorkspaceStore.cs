@@ -2534,6 +2534,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 () => receiver.Secret, v => receiver.Secret = v, () => receiver.ProtectedSecret, v => receiver.ProtectedSecret = v,
                 () => receiver.SecretHydrationFailed, v => receiver.SecretHydrationFailed = v);
         }
+        // Backup-job passphrases (for portable scheduled cloud backups) ride the same DP protect/hydrate lifecycle.
+        foreach (var job in document.BackupJobs ?? [])
+        {
+            yield return new SecretSlot(
+                () => job.Passphrase, v => job.Passphrase = v, () => job.ProtectedPassphrase, v => job.ProtectedPassphrase = v,
+                () => job.PassphraseHydrationFailed, v => job.PassphraseHydrationFailed = v);
+        }
     }
 
     private void HydrateNotificationSecrets(WorkspaceDocument document, IDataProtector? protector = null)

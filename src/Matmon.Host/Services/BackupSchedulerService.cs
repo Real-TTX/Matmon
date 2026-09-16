@@ -90,8 +90,11 @@ public sealed class BackupSchedulerService : BackgroundService
 
         try
         {
-            var bytes = _workspaceStore.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "Scheduled cloud backup.");
-            var label = $"{job.Name} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}";
+            // A passphrase makes the pushed snapshot PORTABLE (recoverable on a different instance). Mark the label
+            // "(encrypted)" so the restore/wizard UI knows to ask for the passphrase.
+            var passphrase = string.IsNullOrEmpty(job.Passphrase) ? null : job.Passphrase;
+            var bytes = _workspaceStore.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "Scheduled cloud backup.", passphrase);
+            var label = $"{job.Name} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(passphrase is null ? "" : " (encrypted)")}";
             await _cloudBackups.PushAsync(bytes, label, stoppingToken);
             _workspaceStore.RecordCloudBackupJobRun(job.Id, success: true, "Backed up to Matmon.Cloud.", bytes.LongLength);
             _logger.LogInformation("Cloud backup job {BackupJobName} pushed {Bytes} bytes to Matmon.Cloud", job.Name, bytes.LongLength);

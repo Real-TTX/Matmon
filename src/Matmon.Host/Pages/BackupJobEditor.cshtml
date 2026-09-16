@@ -52,6 +52,10 @@
                         <span>Retention count</span>
                         <input asp-for="Input.RetentionCount" type="number" min="1" max="100" class="form-control workspace-input" />
                     </label>
+                    <label class="workspace-field" data-cloud-only hidden>
+                        <span>Passphrase <span style="color:var(--matmon-muted);font-weight:400;">(optional, makes it portable)</span></span>
+                        <input asp-for="Input.Passphrase" type="password" class="form-control workspace-input" autocomplete="new-password" minlength="12" placeholder="@(Model.JobId is null ? "min. 12 chars" : "leave blank to keep the current one")" />
+                    </label>
                     <label class="workspace-check">
                         <input asp-for="Input.Enabled" type="checkbox" />
                         <span>Enabled</span>
@@ -176,10 +180,12 @@
             const destSelect = document.querySelector('[data-backup-destination]');
             if (destSelect) {
                 const localOnly = document.querySelectorAll('[data-local-only]');
+                const cloudOnly = document.querySelectorAll('[data-cloud-only]');
                 const cloudNote = document.querySelector('[data-cloud-note]');
                 const syncDest = () => {
                     const isCloud = destSelect.value === 'Cloud';
                     localOnly.forEach(el => { el.hidden = isCloud; });
+                    cloudOnly.forEach(el => { el.hidden = !isCloud; });
                     if (cloudNote) { cloudNote.hidden = !isCloud; }
                 };
                 destSelect.addEventListener('change', syncDest);

@@ -116,6 +116,7 @@ public class BackupJobEditorModel : PageModel
                 existing.Sections = sections;
                 existing.Destination = Input.Destination;
                 existing.RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100);
+                existing.Passphrase = Input.Destination == BackupDestination.Cloud ? Input.Passphrase : null; // blank = keep stored (UpdateBackupJob)
                 _workspaceStore.UpdateBackupJob(existing);
                 StatusMessage = $"Backup job '{existing.Name}' updated.";
             }
@@ -129,6 +130,7 @@ public class BackupJobEditorModel : PageModel
                     Schedule = schedule,
                     Sections = sections,
                     Destination = Input.Destination,
+                    Passphrase = Input.Destination == BackupDestination.Cloud ? Input.Passphrase : null,
                     RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100)
                 });
                 StatusMessage = $"Backup job '{created.Name}' created.";
@@ -254,6 +256,10 @@ public sealed class BackupJobEditorInput
     public bool Enabled { get; set; } = true;
 
     public BackupDestination Destination { get; set; } = BackupDestination.Local;
+
+    /// <summary>Optional passphrase for a CLOUD job: makes the pushed snapshot portable (restorable on a different
+    /// instance). Never prefilled; blank on save = keep the stored one.</summary>
+    public string? Passphrase { get; set; }
 
     public int RetentionCount { get; set; } = 10;
 

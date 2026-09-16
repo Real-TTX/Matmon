@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Matmon.Core.Domain;
 
 [Flags]
@@ -57,6 +59,20 @@ public sealed class WorkspaceBackupJob
 
     public int RetentionCount { get; set; } = 10;
 
+    /// <summary>Optional passphrase for a CLOUD job so its pushed snapshot is portable (recoverable on a DIFFERENT
+    /// instance). Plaintext is transient and DataProtection-encrypted at rest into <see cref="ProtectedPassphrase"/>
+    /// (never written to workspace.json in the clear), mirroring the notification-secret lifecycle.</summary>
+    [JsonIgnore]
+    public string? Passphrase { get; set; }
+
+    /// <summary>DataProtection ciphertext of <see cref="Passphrase"/> (the persisted form).</summary>
+    public string? ProtectedPassphrase { get; set; }
+
+    /// <summary>Set when the stored <see cref="ProtectedPassphrase"/> could not be decrypted on load (e.g. missing
+    /// DP keys) so a save doesn't overwrite the ciphertext with an empty value.</summary>
+    [JsonIgnore]
+    public bool PassphraseHydrationFailed { get; set; }
+
     public DateTimeOffset? LastRunUtc { get; set; }
 
     public DateTimeOffset? NextRunUtc { get; set; }
@@ -81,6 +97,9 @@ public sealed class WorkspaceBackupJob
             Sections = Sections,
             Destination = Destination,
             RetentionCount = RetentionCount,
+            Passphrase = Passphrase,
+            ProtectedPassphrase = ProtectedPassphrase,
+            PassphraseHydrationFailed = PassphraseHydrationFailed,
             LastRunUtc = LastRunUtc,
             NextRunUtc = NextRunUtc,
             LastStatus = LastStatus,
