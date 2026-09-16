@@ -28,7 +28,7 @@ public class CloudClaimModel : PageModel
         _dataProtection = dataProtection;
     }
 
-    public async Task<IActionResult> OnGetAsync(string? code, string? state, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnGetAsync(string? code, string? state, string? error, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -38,6 +38,13 @@ public class CloudClaimModel : PageModel
         // Always clear the one-shot cookie, whatever the outcome.
         var cookie = Request.Cookies[CloudClaimFlow.CookieName];
         Response.Cookies.Delete(CloudClaimFlow.CookieName);
+
+        // The cloud consent page sends ?error=access_denied when the user hits Cancel there - report it cleanly
+        // (the pending claim is already dropped by deleting the cookie above).
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return Fail("Connection cancelled in the cloud. Nothing was changed.");
+        }
 
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(cookie))
         {

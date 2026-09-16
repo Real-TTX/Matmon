@@ -94,6 +94,14 @@ public class ConfigModel : PageModel
     /// so the Cloud tab can warn "link degraded" even while the loop is technically running.</summary>
     public bool HeartbeatStale { get; private set; }
 
+    /// <summary>The cloud rejected this instance's token (disconnected in the cloud / rotated) - offer Reconnect.</summary>
+    public bool CloudStatusUnauthorized =>
+        (CloudConnection.LastStatus ?? "").Contains("unauthorized", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A platform admin deactivated the instance - reconnecting can't lift it; contact the provider.</summary>
+    public bool CloudStatusDeactivated =>
+        (CloudConnection.LastStatus ?? "").Contains("deactivated", StringComparison.OrdinalIgnoreCase);
+
     public LicenseInfo License { get; private set; } = LicenseInfo.Fallback();
 
     /// <summary>Whether a license token is currently cached (cloud-issued or manually applied) - drives the Clear action.</summary>
@@ -667,6 +675,31 @@ public class ConfigModel : PageModel
             // Cloud unreachable or any error: the local disconnect still proceeds; the cloud will time the
             // instance out (~150s) as a fallback. A deliberate disconnect must never fail on the cloud round-trip.
         }
+    }
+
+    /// <summary>Recover from a cloud-side sever ("unauthorized" - the cloud rotated/revoked this instance's token):
+    /// drop the dead link locally, then re-enter the claim flow with the same cloud URL + name so the admin gets a
+    /// fresh token in one click. A same-name reconnect reuses the existing cloud instance (see CreateAsync).</summary>
+    public IActionResult OnPostCloudReconnect()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        var url = string.IsNullOrWhiteSpace(settings.Url) ? _runtimeOptions.CloudUrl : settings.Url;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            ErrorMessage = "No cloud URL to reconnect to - use Connect instead.";
+            return RedirectToPage(new { tab = "cloud" });
+        }
+
+        var name = _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
+        _workspaceStore.DisconnectCloud(); // drop the dead token/link before re-claiming
+        CloudProvision.Url = url;
+        CloudProvision.Name = name;
+        return OnPostCloudClaim(null); // starts the PKCE claim + redirects to the cloud consent page
     }
 
     /// <summary>

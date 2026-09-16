@@ -708,6 +708,22 @@
                         <div class="config-row"><dt>Last heartbeat</dt><dd>@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)@(Model.HeartbeatStale ? " ⚠ link degraded — no recent successful heartbeat" : "")</dd></div>
                         <div class="config-row"><dt>Full Access</dt><dd style="color:@Model.TunnelStatusColor;">@Model.TunnelStatusText</dd></div>
                     </dl>
+                    @if (Model.CloudStatusUnauthorized || Model.CloudStatusDeactivated)
+                    {
+                        <div class="workspace-banner workspace-banner-warning" style="margin-top:14px;">
+                            @if (Model.CloudStatusDeactivated)
+                            {
+                                <span>This instance was <strong>deactivated by the cloud administrator</strong>. Contact your provider to reactivate it - reconnecting won't lift an admin deactivation.</span>
+                            }
+                            else
+                            {
+                                <span>Matmon.Cloud no longer accepts this instance's token (it was disconnected in the cloud, or the token was rotated). <strong>Reconnect</strong> to link it again with a fresh token.</span>
+                                <form method="post" asp-page-handler="CloudReconnect" style="margin-top:10px;">
+                                    <button type="submit" class="workspace-submit">Disconnect &amp; reconnect</button>
+                                </form>
+                            }
+                        </div>
+                    }
                     <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;">
                         <label class="workspace-field">
                             <span>Cloud display name</span>
