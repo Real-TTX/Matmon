@@ -95,7 +95,7 @@ public sealed class BackupSchedulerService : BackgroundService
             var passphrase = string.IsNullOrEmpty(job.Passphrase) ? null : job.Passphrase;
             var bytes = _workspaceStore.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "Scheduled cloud backup.", passphrase);
             var label = $"{job.Name} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(passphrase is null ? "" : " (encrypted)")}";
-            await _cloudBackups.PushAsync(bytes, label, stoppingToken);
+            await _cloudBackups.PushAsync(bytes, label, stoppingToken, scheduled: true, encrypted: passphrase is not null);
             _workspaceStore.RecordCloudBackupJobRun(job.Id, success: true, "Backed up to Matmon.Cloud.", bytes.LongLength);
             _logger.LogInformation("Cloud backup job {BackupJobName} pushed {Bytes} bytes to Matmon.Cloud", job.Name, bytes.LongLength);
         }

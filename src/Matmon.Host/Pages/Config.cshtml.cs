@@ -500,7 +500,7 @@ public class ConfigModel : PageModel
             var portable = !string.IsNullOrWhiteSpace(passphrase);
             var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup", portable ? passphrase!.Trim() : null);
             var label = $"Config {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(portable ? " (encrypted)" : "")}";
-            await _cloudBackups.PushAsync(bytes, label, cancellationToken);
+            await _cloudBackups.PushAsync(bytes, label, cancellationToken, scheduled: false, encrypted: portable);
             StatusMessage = "Configuration backed up to Matmon.Cloud.";
         }
         catch (Exception ex)

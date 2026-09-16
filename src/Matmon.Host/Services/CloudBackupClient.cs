@@ -60,7 +60,7 @@ public sealed class CloudBackupClient
 
     /// <summary>Push a config snapshot (already-built bytes) to the cloud. Throws if not connected or the cloud
     /// rejects it - callers record the failure. Returns the new backup id.</summary>
-    public async Task<Guid> PushAsync(byte[] bytes, string label, CancellationToken cancellationToken)
+    public async Task<Guid> PushAsync(byte[] bytes, string label, CancellationToken cancellationToken, bool scheduled = false, bool encrypted = false)
     {
         var (url, instanceId, token) = Resolve();
         if (url is null || instanceId is null || token is null)
@@ -68,7 +68,10 @@ public sealed class CloudBackupClient
             throw new InvalidOperationException("Not connected to Matmon.Cloud.");
         }
 
-        using var request = BuildRequest(HttpMethod.Post, url, instanceId, token, $"/backups?label={Uri.EscapeDataString(label)}", new ByteArrayContent(bytes));
+        // kind + encrypted let the cloud retain manual vs scheduled separately and let the restore UI know a
+        // passphrase is needed. Older clouds ignore the extra query params.
+        var query = $"/backups?label={Uri.EscapeDataString(label)}&kind={(scheduled ? "scheduled" : "manual")}&encrypted={(encrypted ? "true" : "false")}";
+        using var request = BuildRequest(HttpMethod.Post, url, instanceId, token, query, new ByteArrayContent(bytes));
         using var response = await Http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<PushResult>(cancellationToken);
