@@ -63,11 +63,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 });
             }
 
-            SyncSensorAlertFromObservation(sensorId, result, timestampUtc);
+            // Observations + events live in SQLite (already appended above); the ONLY workspace.json state the poll
+            // path touches is _document.Alerts. So only re-save when the alert sync actually changed something -
+            // a healthy poll, or an active alert whose only change is its LastSeenUtc, no longer churns the file.
+            var alertsChanged = SyncSensorAlertFromObservation(sensorId, result, timestampUtc);
             // Statistics roll-up and telemetry retention run out-of-band in
             // RunTelemetryMaintenance (driven by StatisticsRollupService) so the
             // polling hot path only appends the raw observation and event.
-            QueueSave(SavePriority.Telemetry);
+            if (alertsChanged)
+            {
+                QueueSave(SavePriority.Telemetry);
+            }
         }
     }
 

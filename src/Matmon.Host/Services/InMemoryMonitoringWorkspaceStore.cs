@@ -3808,14 +3808,19 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     /// but an unacknowledged alert is only flagged recovered and stays active so it
     /// remains visible until someone acknowledges it.
     /// </summary>
-    private void MarkAlertsRecoveredForElement(Guid elementId, DateTimeOffset recoveredAt)
+    /// <summary>Returns true when it made a persist-worthy change to <c>_document.Alerts</c> (so the caller only
+    /// re-saves workspace.json when something actually changed - a healthy poll of a sensor with no active alert
+    /// changes nothing and must not churn the file).</summary>
+    private bool MarkAlertsRecoveredForElement(Guid elementId, DateTimeOffset recoveredAt)
     {
+        var changed = false;
         foreach (var alert in _document.Alerts.Where(alert => alert.IsActive && alert.ElementId == elementId))
         {
             if (alert.IsAcknowledged)
             {
                 alert.RecoveredUtc ??= recoveredAt;
                 alert.ResolvedUtc = recoveredAt;
+                changed = true;
                 AddEvent(new MonitoringEvent
                 {
                     TimestampUtc = recoveredAt,
@@ -3834,34 +3839,39 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             {
                 // Condition cleared but nobody has acknowledged it yet - keep it open.
                 alert.RecoveredUtc = recoveredAt;
+                changed = true;
                 _notificationSink?.Enqueue(new AlertNotificationEvent(
                     alert.Id, alert.ElementId, SensorState.Healthy, "Condition cleared", recoveredAt, NotificationTransition.Recovered));
             }
         }
+        return changed;
     }
 
-    private void SyncSensorAlertFromObservation(
+    /// <summary>Returns true when it made a persist-worthy change to <c>_document.Alerts</c>. A re-confirmed active
+    /// alert whose only change is <c>LastSeenUtc</c> (same state + message + identity) returns FALSE: the timestamp
+    /// is decorative (recomputed on the next poll) so it must not force a workspace.json rewrite every poll. The
+    /// caller (<c>RecordSensorObservation</c>) only saves when this is true.</summary>
+    private bool SyncSensorAlertFromObservation(
         Guid sensorId,
         SensorExecutionResult result,
         DateTimeOffset timestampUtc)
     {
         if (result.State is not (SensorState.Warning or SensorState.Critical))
         {
-            MarkAlertsRecoveredForElement(sensorId, timestampUtc);
-            return;
+            return MarkAlertsRecoveredForElement(sensorId, timestampUtc);
         }
 
         // Muted element: the operator worked it off and asked not to be re-alarmed - don't raise/re-open
         // (and so fire no notification) until the mute lifts. Mute already cleared any active episode.
         if (IsElementMutedLocked(sensorId, timestampUtc))
         {
-            return;
+            return false;
         }
 
         var sensor = FindElementInternal(sensorId) as SensorElement;
         if (sensor is null)
         {
-            return;
+            return false;
         }
 
         var path = GetElementPath(sensor);
@@ -3900,8 +3910,18 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             // rendering and SMTP delivery happen off this hot path in NotificationDispatchService.
             _notificationSink?.Enqueue(new AlertNotificationEvent(
                 raised.Id, raised.ElementId, raised.State, message, timestampUtc, NotificationTransition.Raised));
-            return;
+            return true; // a new alert is persist-worthy
         }
+
+        // Material change = anything the persisted alert should reflect (state / message / identity / a re-alarm).
+        // A pure LastSeenUtc touch is NOT material - it must not re-save workspace.json every poll.
+        var reAlarm = existing.RecoveredUtc is not null;
+        var material = reAlarm
+            || existing.State != result.State
+            || !string.Equals(existing.Message, message, StringComparison.Ordinal)
+            || existing.ElementKind != sensor.Kind
+            || !string.Equals(existing.ElementName, sensor.Name, StringComparison.Ordinal)
+            || !string.Equals(existing.ElementPath, path, StringComparison.Ordinal);
 
         existing.ElementKind = sensor.Kind;
         existing.ElementName = sensor.Name;
@@ -3914,12 +3934,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         // episode and notify - otherwise the re-fire is silent AND, because the notification episode stays
         // closed, the *next* recovery is dropped too. The dispatcher applies the per-rule cooldown, so a
         // flapping sensor still can't spam. (No enqueue while it stays continuously active - only on the flip.)
-        if (existing.RecoveredUtc is not null)
+        if (reAlarm)
         {
             existing.RecoveredUtc = null;
             _notificationSink?.Enqueue(new AlertNotificationEvent(
                 existing.Id, existing.ElementId, result.State, message, timestampUtc, NotificationTransition.Raised));
         }
+
+        return material;
     }
 
     private static JsonSerializerOptions CreateSerializerOptions()
