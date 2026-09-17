@@ -198,17 +198,18 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         try
         {
             var clusterStatus = await ReadApiDataAsync(client, new Uri(apiBaseUri, "cluster/status"), authHeader, apiUser, tokenId, cancellationToken);
-            var quorate = TryReadQuorate(clusterStatus, out var quorateValue) && quorateValue;
-            var channels = new List<SensorChannelValue>
+
+            // A standalone PVE host (not joined to a cluster) reports NO "quorate" field - quorum is
+            // meaningless there, so treat it as healthy, don't emit the Quorum channel, and never go
+            // Critical for it. Only a real cluster that has genuinely LOST quorum (quorate = 0) is Critical.
+            var hasQuorum = TryReadQuorate(clusterStatus, out var quorateValue);
+            var quorate = !hasQuorum || quorateValue;
+
+            var channels = new List<SensorChannelValue>();
+            if (hasQuorum)
             {
-                new()
-                {
-                    Key = "quorum",
-                    Label = "Quorum",
-                    Value = quorate ? 1 : 0,
-                    IsDefault = true
-                }
-            };
+                channels.Add(new SensorChannelValue { Key = "quorum", Label = "Quorum", Value = quorate ? 1 : 0, IsDefault = true });
+            }
 
             channels.AddRange(BuildResourceChannels(resourceSnapshot));
             AppendGuestChannels(channels, resourceSnapshot, null); // all VMs/CTs across the cluster: which run + CPU/RAM
@@ -221,11 +222,20 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
 
             var message = (!quorate
                 ? "cluster is not quorate"
-                : resourceSnapshot.NodeOfflineCount > 0
-                    ? $"{resourceSnapshot.NodeOnlineCount}/{resourceSnapshot.NodeCount} nodes online"
-                    : $"cluster healthy ({resourceSnapshot.NodeOnlineCount} nodes online)") + GuestVisibilityHint(resourceSnapshot);
+                : hasQuorum
+                    ? (resourceSnapshot.NodeOfflineCount > 0
+                        ? $"{resourceSnapshot.NodeOnlineCount}/{resourceSnapshot.NodeCount} nodes online"
+                        : $"cluster healthy ({resourceSnapshot.NodeOnlineCount} nodes online)")
+                    : "standalone node - no cluster") + GuestVisibilityHint(resourceSnapshot);
 
-            return BuildResult(settings, watch, state, message, quorate ? 1 : 0, "quorum", channels);
+            // Default channel: quorum on a real cluster; otherwise the node-online count (or the bare
+            // resource count) so a standalone host still has a sensible default metric.
+            var defaultKey = hasQuorum ? "quorum" : (resourceSnapshot.NodeCount > 0 ? "onlineNodes" : "resourcesTotal");
+            var defaultValue = hasQuorum
+                ? (quorate ? 1 : 0)
+                : (resourceSnapshot.NodeCount > 0 ? resourceSnapshot.NodeOnlineCount : resourceSnapshot.VisibleResourceCount);
+
+            return BuildResult(settings, watch, state, message, defaultValue, defaultKey, channels);
         }
         catch (InvalidOperationException ex) when (IsPermissionDenied(ex))
         {
@@ -907,7 +917,11 @@ public sealed class ProxmoxPveSensorExecutor : ISensorExecutor
         return data.Clone();
     }
 
-    private static bool TryReadQuorate(JsonElement element, out bool quorate)
+    /// <summary>Reads the cluster quorum from a <c>/cluster/status</c> payload. Returns <c>true</c> only when a
+    /// <c>quorate</c> field is actually present (a real cluster), with <paramref name="quorate"/> set to its value;
+    /// returns <c>false</c> when there is no quorum info at all - a standalone (non-clustered) PVE host - which the
+    /// caller must treat as healthy, NOT as "not quorate". (Public for unit testing.)</summary>
+    public static bool TryReadQuorate(JsonElement element, out bool quorate)
     {
         if (TryReadBool(element, "quorate", out quorate))
         {
