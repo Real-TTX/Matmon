@@ -3,179 +3,57 @@
 @{
     Layout = null;
     var display = Model.Display!;
-    ViewData["Title"] = display.Map.Name;
-    var aspect = display.Map.EffectiveAspect();
-    var mapFit = display.Map.WallboardFit.ToString().ToLowerInvariant();
-    var paginationMode = display.Map.PaginationMode;
-    var showPagination = display.Slides.Count > 1 && paginationMode != MonitoringMapPaginationMode.Hidden;
-    var navModeClass = paginationMode switch
-    {
-        MonitoringMapPaginationMode.OverlayAlways => "is-overlay",
-        MonitoringMapPaginationMode.OverlayOnActivity => "is-overlay is-auto-hide",
-        _ => string.Empty
-    };
+    var map = display.Map;
+    ViewData["Title"] = map.Name;
+    var showPagination = display.Slides.Count > 1 && map.PaginationMode != MonitoringMapPaginationMode.Hidden;
 }
-
 <!doctype html>
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    @* Reloads the whole page every 30s so a structural change (a new/removed tile, slide, etc.) always
+       reaches the wallboard even without the (still-todo, Phase C) live-JSON in-place patch. *@
     <meta http-equiv="refresh" content="30" />
-    <title>@display.Map.Name - Matmon</title>
+    <title>@map.Name - Matmon</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body class="public-map-body">
     <main class="public-map-shell">
-        <header class="public-map-header">
-            <div class="public-map-headline">
-                <span class="public-map-brand">Matmon Map</span>
-                <h1>@display.Map.Name</h1>
-                <p>@(string.IsNullOrWhiteSpace(display.Map.Description) ? "Live monitoring wallboard" : display.Map.Description)</p>
+        <div class="map-stage"
+             data-map-stage
+             data-map-fit="@map.WallboardFit.ToString().ToLowerInvariant()"
+             style="--map-w: @map.LogicalWidth; --map-h: @map.LogicalHeight;">
+            <div class="map-carousel" data-map-carousel data-map-carousel-autoplay data-map-carousel-interval="@map.AutoRotateSeconds">
+                @for (var slideIndex = 0; slideIndex < display.Slides.Count; slideIndex++)
+                {
+                    var slide = display.Slides[slideIndex];
+                    var slideModel = new MapSlideRenderModel
+                    {
+                        Slide = slide.Slide,
+                        Map = map,
+                        SlideIndex = slideIndex,
+                        Tiles = slide.Tiles.Select(tile => MapTileRenderModel.FromDisplay(tile)).ToArray()
+                    };
+                    <partial name="_MapSlide" model="slideModel" />
+                }
             </div>
-            <div class="public-map-meta" title="Page reloads every 30 s - the time shows the data is current">
-                <span class="public-map-meta-brand">Matmon</span>
-                <span>@Matmon.Host.Services.MatmonVersion.Current</span>
-                <span class="public-map-meta-time">@MatmonIcons.Render("clock")<span>@DateTimeOffset.Now.ToString("dd.MM.yyyy HH:mm:ss")</span></span>
-            </div>
-        </header>
-
-        <div class="public-map-stage" data-map-pagination="@paginationMode.ToString().ToLowerInvariant()" data-map-fit="@mapFit">
-        <div class="map-carousel public-map-carousel" data-map-carousel data-map-carousel-autoplay data-map-carousel-interval="@display.Map.AutoRotateSeconds">
-            @for (var slideIndex = 0; slideIndex < display.Slides.Count; slideIndex++)
+            @if (showPagination)
             {
-                var slide = display.Slides[slideIndex];
-                <section class="map-canvas public-map-canvas map-carousel-slide" data-map-slide data-slide-index="@slideIndex" hidden="@(slideIndex == 0 ? null : "hidden")" style="--map-columns: @display.Map.Columns; --map-rows: @display.Map.Rows; --map-display-width: @aspect.Width; --map-display-height: @aspect.Height;">
-            @foreach (var tile in slide.Tiles)
-            {
-                <article class="map-tile map-tile-display@(tile.Tile.ShowCard ? "" : " is-plain")" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" data-tile-h="@tile.Tile.Height" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
-                    @if (tile.Tile.ShowTitle || tile.Tile.ShowStateBadge)
-                    {
-                        <div class="map-tile-head">
-                            <span class="map-tile-icon">@MatmonIcons.Render(tile.IconKey)</span>
-                            @if (tile.Tile.ShowTitle)
-                            {
-                                <strong>@(string.IsNullOrWhiteSpace(tile.Tile.Title) ? (tile.Element?.Name ?? tile.KindLabel) : tile.Tile.Title)</strong>
-                            }
-                            @if (tile.Tile.ShowStateBadge)
-                            {
-                                <span class="state-pill" data-state="@tile.StateKey">@tile.StateLabel</span>
-                            }
-                        </div>
-                    }
-
-                    @if (tile.Tile.Kind == MonitoringMapTileKind.Graph)
-                    {
-                        <div class="map-tile-graph-frame">
-                            @if (!string.IsNullOrWhiteSpace(tile.GraphLinePath))
-                            {
-                                <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-                                    @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Area && !string.IsNullOrWhiteSpace(tile.GraphAreaPath))
-                                    {
-                                        <path class="map-graph-area" d="@tile.GraphAreaPath"></path>
-                                    }
-                                    @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Bars && !string.IsNullOrWhiteSpace(tile.GraphBarPath))
-                                    {
-                                        <path class="map-graph-bars" d="@tile.GraphBarPath"></path>
-                                    }
-                                    else
-                                    {
-                                        <path class="map-graph-line" d="@tile.GraphLinePath"></path>
-                                    }
-                                </svg>
-                            }
-                            else
-                            {
-                                <span>No graph data yet</span>
-                            }
-                        </div>
-                    }
-
-                    @if (tile.ProgressPercent.HasValue && tile.EffectiveVisualType == MonitoringMapTileVisualType.Gauge)
-                    {
-                        <div class="map-tile-gauge" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
-                            <span>
-                                <strong>@FormatProgressLabel(tile.ProgressPercent)</strong>
-                                <small>@tile.ProgressLabel</small>
-                            </span>
-                        </div>
-                    }
-                    else if (tile.ProgressPercent.HasValue && tile.EffectiveVisualType == MonitoringMapTileVisualType.ProgressBar)
-                    {
-                        <div class="map-tile-progress-wrap">
-                            <div class="map-tile-progress" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
-                                <span></span>
-                            </div>
-                            <small>@tile.ProgressLabel</small>
-                        </div>
-                    }
-
-                    @if (!string.IsNullOrWhiteSpace(tile.Value) && tile.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
-                    {
-                        <div class="map-tile-value">@tile.Value</div>
-                    }
-
-                    <p>@tile.Subtitle</p>
-                    <small>
-                        @tile.KindLabel
-                        @if (tile.Tile.ShowElementName && tile.Element is not null)
+                <div class="map-carousel-nav" data-map-carousel-nav>
+                    <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
+                    <div class="map-carousel-dots">
+                        @for (var dot = 0; dot < display.Slides.Count; dot++)
                         {
-                            <text> - @tile.Element.Name</text>
+                            <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@display.Slides[dot].Slide.Name</button>
                         }
-                    </small>
-                </article>
-            }
-                </section>
-            }
-        </div>
-        @if (showPagination)
-        {
-            <div class="map-carousel-nav public-map-carousel-nav @navModeClass" data-map-carousel-nav>
-                <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
-                <div class="map-carousel-dots">
-                    @for (var dot = 0; dot < display.Slides.Count; dot++)
-                    {
-                        <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@display.Slides[dot].Name</button>
-                    }
+                    </div>
+                    <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
                 </div>
-                <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
-            </div>
-        }
+            }
         </div>
     </main>
+    <script src="~/js/site.js" asp-append-version="true"></script>
 </body>
 </html>
-
-@functions {
-    private static string TileStyle(MonitoringMapTile tile)
-    {
-        var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(tile.BackgroundColor))
-        {
-            parts.Add($"--map-tile-custom-bg: {tile.BackgroundColor}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(tile.AccentColor))
-        {
-            parts.Add($"--map-tile-custom-accent: {tile.AccentColor}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(tile.TextColor))
-        {
-            parts.Add($"--map-tile-custom-text: {tile.TextColor}");
-        }
-
-        return parts.Count == 0 ? string.Empty : string.Join("; ", parts) + ";";
-    }
-
-    private static string FormatProgressPercent(double? value)
-    {
-        return Math.Clamp(value.GetValueOrDefault(), 0, 100)
-            .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatProgressLabel(double? value)
-    {
-        return $"{Math.Clamp(value.GetValueOrDefault(), 0, 100):0.#}%";
-    }
-}

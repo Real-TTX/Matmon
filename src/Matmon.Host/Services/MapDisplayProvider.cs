@@ -36,7 +36,7 @@ public sealed class MapDisplayProvider
             .ToArray();
 
         var slides = map.EffectiveSlides()
-            .Select(slide => new MapDisplaySlideViewModel(slide.Id, slide.Name, BuildTiles(slide.Tiles)))
+            .Select(slide => new MapDisplaySlideViewModel(slide, BuildTiles(slide.Tiles)))
             .ToArray();
 
         var firstTiles = slides.Length > 0 ? slides[0].Tiles : [];
@@ -412,9 +412,10 @@ public sealed record MapDisplayViewModel(
     IReadOnlyList<MapDisplayTileViewModel> Tiles,
     IReadOnlyList<MapDisplaySlideViewModel> Slides);
 
+/// <summary>Carries the domain <see cref="MonitoringMapSlide"/> itself (not just Id/Name) so a view can render
+/// its Title/Subtitle/BackgroundColor/DurationSeconds header without a second lookup.</summary>
 public sealed record MapDisplaySlideViewModel(
-    Guid Id,
-    string Name,
+    MonitoringMapSlide Slide,
     IReadOnlyList<MapDisplayTileViewModel> Tiles);
 
 public sealed record MapDisplayTileViewModel(

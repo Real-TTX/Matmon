@@ -71,9 +71,12 @@ public interface IMonitoringWorkspaceStore
 
     MonitoringMap? FindMapByPublicToken(string publicToken);
 
-    MonitoringMap CreateMapWithSlides(string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int aspectRatioWidth, int aspectRatioHeight, MonitoringMapWallboardFit wallboardFit, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
+    /// <summary>Creates a map from a draft (Name/Description/aspect/fit/rotate/pagination/PublicEnabled/
+    /// ShowSlideHeaders/Slides are read from it; Id/PublicToken/CreatedUtc/UpdatedUtc are assigned by the store).</summary>
+    MonitoringMap CreateMap(MonitoringMap draft);
 
-    bool UpdateMapWithSlides(Guid mapId, string name, string? description, int columns, int rows, MonitoringMapDisplayPreset displayPreset, int aspectRatioWidth, int aspectRatioHeight, MonitoringMapWallboardFit wallboardFit, int autoRotateSeconds, MonitoringMapPaginationMode paginationMode, IReadOnlyList<MonitoringMapSlide> slides);
+    /// <summary>Applies a draft's editable fields onto the existing map with id <paramref name="mapId"/> - see <see cref="CreateMap"/>.</summary>
+    bool UpdateMap(Guid mapId, MonitoringMap draft);
 
     string RotateMapPublicToken(Guid mapId);
 

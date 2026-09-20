@@ -1,5 +1,6 @@
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -17,29 +18,18 @@ public sealed class MapEditorModel : PageModel
         _displayProvider = displayProvider;
     }
 
-    /// <summary>Live display view-models for the SAVED tiles, keyed by tile id. Lets the designer render each
-    /// tile's real state / value / graph (dimmed) underneath the edit chrome, so designing is WYSIWYG.</summary>
-    public IReadOnlyDictionary<Guid, MapDisplayTileViewModel> TilePreviews { get; private set; } =
-        new Dictionary<Guid, MapDisplayTileViewModel>();
-
     [BindProperty(SupportsGet = true)]
     public Guid? MapId { get; set; }
 
     [BindProperty]
     public MapEditorInput Input { get; set; } = new();
 
-    public IReadOnlyList<SelectListItem> ElementOptions { get; private set; } = [];
-
     public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> TilePickerOptions { get; private set; } = [];
 
-    public IReadOnlyList<SelectListItem> TileKindOptions { get; } =
-    [
-        new("State", MonitoringMapTileKind.Element.ToString()),
-        new("Value", MonitoringMapTileKind.Value.ToString()),
-        new("Graph", MonitoringMapTileKind.Graph.ToString()),
-        new("Summary", MonitoringMapTileKind.Status.ToString()),
-        new("Text", MonitoringMapTileKind.Text.ToString())
-    ];
+    /// <summary>Designer render models for the CURRENT tiles, index-aligned with <see cref="MapEditorInput.Tiles"/>
+    /// - combines each bound tile's own position/appearance with its live display data (state/value/graph) when
+    /// one is already resolvable, so the designer shows the real tile instead of a hand-built mock.</summary>
+    public IReadOnlyList<MapTileRenderModel> TileRenderModels { get; private set; } = [];
 
     public IReadOnlyList<SelectListItem> GraphTypeOptions { get; } =
     [
@@ -49,15 +39,12 @@ public sealed class MapEditorModel : PageModel
         new("Smooth", MonitoringMapTileGraphType.Smooth.ToString())
     ];
 
-    public IReadOnlyList<SelectListItem> VisualTypeOptions { get; } =
-    [
-        new("Auto (from sensor)", MonitoringMapTileVisualType.Auto.ToString()),
-        new("Card", MonitoringMapTileVisualType.Card.ToString()),
-        new("Progress bar", MonitoringMapTileVisualType.ProgressBar.ToString()),
-        new("Gauge", MonitoringMapTileVisualType.Gauge.ToString())
-    ];
-
     public IReadOnlyList<MonitoringMapDisplayPresetInfo> DisplayPresetOptions { get; } = MonitoringMapDisplayPresetCatalog.All;
+
+    /// <summary>The single <see cref="MonitoringMapTileConstraints"/> table serialized for the designer's JS
+    /// (a <c>&lt;script type="application/json" data-map-constraints&gt;</c> block) - replaces a second,
+    /// hand-duplicated JS table that could silently drift from the Core one.</summary>
+    public IReadOnlyDictionary<string, object> TileConstraintsJson { get; } = BuildTileConstraintsJson();
 
     public bool IsCreateMode => !Input.Id.HasValue || Input.Id.Value == Guid.Empty;
 
@@ -87,45 +74,41 @@ public sealed class MapEditorModel : PageModel
             value = vm.Value,
             hasValue = !string.IsNullOrWhiteSpace(vm.Value),
             stateKey = vm.StateKey,
+            stateLabel = vm.StateLabel,
             subtitle = vm.Subtitle,
             progressPercent = vm.ProgressPercent,
+            progressLabel = vm.ProgressLabel,
             graphLinePath = vm.GraphLinePath
         });
-    }
-
-    public IActionResult OnPostAddTile()
-    {
-        Input.Tiles.Add(new MapTileInput
-        {
-            Id = Guid.NewGuid(),
-            SlideId = Input.Slides.FirstOrDefault()?.Id ?? Guid.Empty,
-            Kind = MonitoringMapTileKind.Element,
-            Title = $"Tile {Input.Tiles.Count + 1}",
-            X = 1,
-            Y = Math.Clamp(Input.Tiles.Count + 1, 1, Math.Max(Input.Rows, 1)),
-            Width = 3,
-            Height = 2
-        });
-
-        LoadElementOptions();
-        return Page();
     }
 
     public IActionResult OnPostSave()
     {
         try
         {
-            var slides = BuildSlidesFromInput();
+            var draft = new MonitoringMap
+            {
+                Name = Input.Name,
+                Description = Input.Description,
+                AspectRatioWidth = Input.AspectRatioWidth,
+                AspectRatioHeight = Input.AspectRatioHeight,
+                WallboardFit = Input.WallboardFit,
+                AutoRotateSeconds = Input.AutoRotateSeconds,
+                PaginationMode = Input.PaginationMode,
+                PublicEnabled = Input.PublicEnabled,
+                ShowSlideHeaders = Input.ShowSlideHeaders,
+                Slides = BuildSlidesFromInput().ToList()
+            };
 
             var mapId = Input.Id ?? Guid.Empty;
             MonitoringMap map;
             if (mapId == Guid.Empty)
             {
-                map = _workspaceStore.CreateMapWithSlides(Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AspectRatioWidth, Input.AspectRatioHeight, Input.WallboardFit, Input.AutoRotateSeconds, Input.PaginationMode, slides);
+                map = _workspaceStore.CreateMap(draft);
             }
             else
             {
-                if (!_workspaceStore.UpdateMapWithSlides(mapId, Input.Name, Input.Description, Input.Columns, Input.Rows, Input.DisplayPreset, Input.AspectRatioWidth, Input.AspectRatioHeight, Input.WallboardFit, Input.AutoRotateSeconds, Input.PaginationMode, slides))
+                if (!_workspaceStore.UpdateMap(mapId, draft))
                 {
                     return NotFound();
                 }
@@ -164,6 +147,11 @@ public sealed class MapEditorModel : PageModel
             {
                 Id = def.Id,
                 Name = def.Name,
+                Title = def.Title,
+                Subtitle = def.Subtitle,
+                DurationSeconds = def.DurationSeconds,
+                BackgroundColor = def.BackgroundColor,
+                ShowHeader = def.ShowHeader,
                 Tiles = Input.Tiles
                     .Where(tile => !tile.IsDeleted)
                     .Where(tile => (validIds.Contains(tile.SlideId) ? tile.SlideId : firstId) == def.Id)
@@ -219,15 +207,23 @@ public sealed class MapEditorModel : PageModel
                 Id = map.Id,
                 Name = map.Name,
                 Description = map.Description,
-                Columns = map.Columns,
-                Rows = map.Rows,
-                DisplayPreset = map.DisplayPreset,
-                AspectRatioWidth = map.AspectRatioWidth > 0 ? map.AspectRatioWidth : (map.DisplayPreset == MonitoringMapDisplayPreset.Ultrawide3440x1440 ? 21 : 16),
+                AspectRatioWidth = map.AspectRatioWidth > 0 ? map.AspectRatioWidth : 16,
                 AspectRatioHeight = map.AspectRatioHeight > 0 ? map.AspectRatioHeight : 9,
                 WallboardFit = map.WallboardFit,
                 AutoRotateSeconds = map.AutoRotateSeconds,
                 PaginationMode = map.PaginationMode,
-                Slides = slides.Select(slide => new MapSlideInput { Id = slide.Id, Name = slide.Name }).ToList(),
+                PublicEnabled = map.PublicEnabled,
+                ShowSlideHeaders = map.ShowSlideHeaders,
+                Slides = slides.Select(slide => new MapSlideInput
+                {
+                    Id = slide.Id,
+                    Name = slide.Name,
+                    Title = slide.Title,
+                    Subtitle = slide.Subtitle,
+                    DurationSeconds = slide.DurationSeconds,
+                    BackgroundColor = slide.BackgroundColor,
+                    ShowHeader = slide.ShowHeader
+                }).ToList(),
                 Tiles = slides.SelectMany(slide => slide.Tiles.Select(tile => new MapTileInput
                 {
                     Id = tile.Id,
@@ -257,22 +253,28 @@ public sealed class MapEditorModel : PageModel
             };
 
             var display = _displayProvider.Build(map);
-            TilePreviews = display.Tiles
+            var previewsByTileId = display.Tiles
                 .Where(vm => vm.Tile.Id != Guid.Empty)
                 .GroupBy(vm => vm.Tile.Id)
                 .ToDictionary(group => group.Key, group => group.First());
+
+            TileRenderModels = Input.Tiles.Select((tileInput, index) =>
+            {
+                var domainTile = ToTile(tileInput);
+                return previewsByTileId.TryGetValue(tileInput.Id, out var preview)
+                    ? MapTileRenderModel.FromDisplay(preview, editable: true, index: index, slideId: tileInput.SlideId, tileOverride: domainTile)
+                    : MapTileRenderModel.Placeholder(domainTile, index, tileInput.SlideId);
+            }).ToArray();
         }
         else
         {
             var defaultSlideId = Guid.NewGuid();
+            var defaultTileId = Guid.NewGuid();
             Input = new MapEditorInput
             {
                 Id = null,
                 Name = "New Map",
                 Description = "Wall display for the office.",
-                Columns = 12,
-                Rows = 8,
-                DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
                 AutoRotateSeconds = 12,
                 PaginationMode = MonitoringMapPaginationMode.Below,
                 Slides = [new MapSlideInput { Id = defaultSlideId, Name = "Slide 1" }],
@@ -280,17 +282,20 @@ public sealed class MapEditorModel : PageModel
                 [
                     new MapTileInput
                     {
-                        Id = Guid.NewGuid(),
+                        Id = defaultTileId,
                         SlideId = defaultSlideId,
                         Kind = MonitoringMapTileKind.Status,
                         Title = "Status",
-                        X = 1,
-                        Y = 1,
-                        Width = 4,
-                        Height = 2
+                        X = 24,
+                        Y = 24,
+                        Width = 400,
+                        Height = 200
                     }
                 ]
             };
+
+            TileRenderModels = Input.Tiles.Select((tileInput, index) =>
+                MapTileRenderModel.Placeholder(ToTile(tileInput), index, tileInput.SlideId)).ToArray();
         }
 
         LoadElementOptions();
@@ -298,36 +303,21 @@ public sealed class MapEditorModel : PageModel
 
     private void LoadElementOptions()
     {
-        ElementOptions = _workspaceStore.GetAllElements()
-            .OrderBy(element => BuildPath(element), StringComparer.OrdinalIgnoreCase)
-            .Select(element => new SelectListItem(
-                $"{BuildPath(element)} ({element.Kind})",
-                element.Id.ToString()))
-            .Prepend(new SelectListItem("No element", string.Empty))
-            .ToArray();
-
         var root = _workspaceStore.GetAllElements().FirstOrDefault(element => element.ParentId is null);
         TilePickerOptions = Matmon.Host.Ui.ElementPickerOptions.Build(root);
     }
 
-    private string BuildPath(MonitoringElement element)
+    private static IReadOnlyDictionary<string, object> BuildTileConstraintsJson()
     {
-        var all = _workspaceStore.GetAllElements().ToDictionary(candidate => candidate.Id);
-        var parts = new List<string>();
-        var current = element;
-        while (true)
+        var dict = new Dictionary<string, object>();
+        foreach (var kind in Enum.GetValues<MonitoringMapTileKind>())
         {
-            parts.Add(current.Name);
-            if (current.ParentId is not Guid parentId || !all.TryGetValue(parentId, out var parent))
-            {
-                break;
-            }
-
-            current = parent;
+            var (minWidth, minHeight, defaultWidth, defaultHeight) = MonitoringMapTileConstraints.For(kind);
+            dict[kind.ToString()] = new { minWidth, minHeight, defaultWidth, defaultHeight };
         }
 
-        parts.Reverse();
-        return string.Join(" / ", parts);
+        dict["snapGrid"] = MonitoringMapTileConstraints.SnapGrid;
+        return dict;
     }
 }
 
@@ -339,12 +329,6 @@ public sealed class MapEditorInput
 
     public string? Description { get; set; }
 
-    public int Columns { get; set; } = 12;
-
-    public int Rows { get; set; } = 8;
-
-    public MonitoringMapDisplayPreset DisplayPreset { get; set; } = MonitoringMapDisplayPreset.FullHd1080;
-
     public int AspectRatioWidth { get; set; } = 16;
 
     public int AspectRatioHeight { get; set; } = 9;
@@ -354,6 +338,12 @@ public sealed class MapEditorInput
     public int AutoRotateSeconds { get; set; } = 12;
 
     public MonitoringMapPaginationMode PaginationMode { get; set; } = MonitoringMapPaginationMode.Below;
+
+    /// <summary>Round-trips unchanged through save (no visible toggle yet - that is Phase D's public-link
+    /// opt-in/copy/QR UI); a hidden form field carries it so editing a map never silently resets it.</summary>
+    public bool PublicEnabled { get; set; }
+
+    public bool ShowSlideHeaders { get; set; } = true;
 
     public List<MapTileInput> Tiles { get; set; } = [];
 
@@ -365,6 +355,17 @@ public sealed class MapSlideInput
     public Guid Id { get; set; }
 
     public string Name { get; set; } = "Slide";
+
+    /// <summary>Round-trips unchanged through save - no editing UI yet (Phase B's slide-properties panel).</summary>
+    public string? Title { get; set; }
+
+    public string? Subtitle { get; set; }
+
+    public int? DurationSeconds { get; set; }
+
+    public string? BackgroundColor { get; set; }
+
+    public bool ShowHeader { get; set; } = true;
 }
 
 public sealed class MapTileInput
@@ -387,13 +388,14 @@ public sealed class MapTileInput
 
     public string? Text { get; set; }
 
-    public int X { get; set; } = 1;
+    /// <summary>Logical px - see <see cref="MonitoringMap.LogicalWidth"/>.</summary>
+    public int X { get; set; }
 
-    public int Y { get; set; } = 1;
+    public int Y { get; set; }
 
-    public int Width { get; set; } = 3;
+    public int Width { get; set; } = 320;
 
-    public int Height { get; set; } = 2;
+    public int Height { get; set; } = 160;
 
     public string? BackgroundColor { get; set; }
 

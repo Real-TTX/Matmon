@@ -507,6 +507,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         EnsureDefaultNotificationConfiguration();
         EnsureDefaultAlertCollection();
         EnsureBackupJobsCollection();
+        // A restored backup can reintroduce v0 (grid-cell) map geometry - e.g. an old export, or one that
+        // was never opened since v1 shipped - so re-run the same migration a normal load would apply.
+        _document.Maps ??= [];
+        MigrateMapLayouts();
     }
 
     private void EnsureBackupJobsCollection()

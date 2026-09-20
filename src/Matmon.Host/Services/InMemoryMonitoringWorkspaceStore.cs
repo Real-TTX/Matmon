@@ -529,49 +529,25 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             EnsureDefaultMaps();
             var normalizedToken = publicToken.Trim();
             var map = _document.Maps.FirstOrDefault(candidate =>
+                candidate.PublicEnabled &&
                 string.Equals(candidate.PublicToken, normalizedToken, StringComparison.OrdinalIgnoreCase));
             return map is null ? null : CloneMap(map);
         }
     }
 
-    public MonitoringMap CreateMapWithSlides(
-        string name,
-        string? description,
-        int columns,
-        int rows,
-        MonitoringMapDisplayPreset displayPreset,
-        int aspectRatioWidth,
-        int aspectRatioHeight,
-        MonitoringMapWallboardFit wallboardFit,
-        int autoRotateSeconds,
-        MonitoringMapPaginationMode paginationMode,
-        IReadOnlyList<MonitoringMapSlide> slides)
+    public MonitoringMap CreateMap(MonitoringMap draft)
     {
         lock (_gate)
         {
             EnsureDefaultMaps();
             var now = DateTimeOffset.UtcNow;
-            var normalizedColumns = Math.Clamp(columns, 4, 24);
-            var normalizedRows = Math.Clamp(rows, 3, 16);
-            var normalizedSlides = NormalizeMapSlides(slides, normalizedColumns, normalizedRows);
             var map = new MonitoringMap
             {
-                Name = NormalizeMapName(name),
-                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-                Columns = normalizedColumns,
-                Rows = normalizedRows,
-                DisplayPreset = displayPreset,
-                AspectRatioWidth = Math.Clamp(aspectRatioWidth, 0, 64),
-                AspectRatioHeight = Math.Clamp(aspectRatioHeight, 0, 64),
-                WallboardFit = wallboardFit,
-                AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds),
-                PaginationMode = paginationMode,
                 PublicToken = CreateToken(),
-                CreatedUtc = now,
-                UpdatedUtc = now,
-                Slides = normalizedSlides,
-                Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList()
+                CreatedUtc = now
             };
+            ApplyMapDraft(map, draft);
+            map.UpdatedUtc = now;
 
             _document.Maps.Add(map);
             QueueSave(SavePriority.Configuration);
@@ -579,19 +555,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    public bool UpdateMapWithSlides(
-        Guid mapId,
-        string name,
-        string? description,
-        int columns,
-        int rows,
-        MonitoringMapDisplayPreset displayPreset,
-        int aspectRatioWidth,
-        int aspectRatioHeight,
-        MonitoringMapWallboardFit wallboardFit,
-        int autoRotateSeconds,
-        MonitoringMapPaginationMode paginationMode,
-        IReadOnlyList<MonitoringMapSlide> slides)
+    public bool UpdateMap(Guid mapId, MonitoringMap draft)
     {
         lock (_gate)
         {
@@ -602,40 +566,60 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 return false;
             }
 
-            var normalizedColumns = Math.Clamp(columns, 4, 24);
-            var normalizedRows = Math.Clamp(rows, 3, 16);
-            var normalizedSlides = NormalizeMapSlides(slides, normalizedColumns, normalizedRows);
-            map.Name = NormalizeMapName(name);
-            map.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
-            map.Columns = normalizedColumns;
-            map.Rows = normalizedRows;
-            map.DisplayPreset = displayPreset;
-            map.AspectRatioWidth = Math.Clamp(aspectRatioWidth, 0, 64);
-            map.AspectRatioHeight = Math.Clamp(aspectRatioHeight, 0, 64);
-            map.WallboardFit = wallboardFit;
-            map.AutoRotateSeconds = NormalizeAutoRotateSeconds(autoRotateSeconds);
-            map.PaginationMode = paginationMode;
-            map.Slides = normalizedSlides;
-            map.Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList();
+            ApplyMapDraft(map, draft);
             map.UpdatedUtc = DateTimeOffset.UtcNow;
             QueueSave(SavePriority.Configuration);
             return true;
         }
     }
 
+    /// <summary>Normalizes a draft's editable fields onto <paramref name="target"/> (a live document map for
+    /// UpdateMap, or a freshly-constructed one for CreateMap). Deliberately does NOT touch the legacy
+    /// Columns/Rows/DisplayPreset - the new editor no longer authors grid cells, so those stay whatever they
+    /// were (default on create, unchanged on update) purely so an old backup round-trips its original metadata.</summary>
+    private static void ApplyMapDraft(MonitoringMap target, MonitoringMap draft)
+    {
+        target.Name = NormalizeMapName(draft.Name);
+        target.Description = string.IsNullOrWhiteSpace(draft.Description) ? null : draft.Description.Trim();
+        target.AspectRatioWidth = Math.Clamp(draft.AspectRatioWidth, 0, 64);
+        target.AspectRatioHeight = Math.Clamp(draft.AspectRatioHeight, 0, 64);
+        target.WallboardFit = draft.WallboardFit;
+        target.AutoRotateSeconds = NormalizeAutoRotateSeconds(draft.AutoRotateSeconds);
+        target.PaginationMode = draft.PaginationMode;
+        target.PublicEnabled = draft.PublicEnabled;
+        target.ShowSlideHeaders = draft.ShowSlideHeaders;
+
+        var aspect = target.EffectiveAspect();
+        var (logicalWidth, logicalHeight) = MonitoringMap.LogicalSizeFor(aspect.Width, aspect.Height);
+        target.LogicalWidth = logicalWidth;
+        target.LogicalHeight = logicalHeight;
+        target.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
+
+        var normalizedSlides = NormalizeMapSlides(draft.Slides, logicalWidth, logicalHeight);
+        target.Slides = normalizedSlides;
+        target.Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList();
+    }
+
     private static int NormalizeAutoRotateSeconds(int seconds) => Math.Clamp(seconds, 3, 600);
+
+    private static int? NormalizeSlideDurationSeconds(int? seconds) => seconds is int value ? Math.Clamp(value, 3, 600) : null;
 
     private static List<MonitoringMapSlide> NormalizeMapSlides(
         IReadOnlyList<MonitoringMapSlide> slides,
-        int columns,
-        int rows)
+        int logicalWidth,
+        int logicalHeight)
     {
         var result = (slides ?? [])
             .Select((slide, index) => new MonitoringMapSlide
             {
                 Id = slide.Id == Guid.Empty ? Guid.NewGuid() : slide.Id,
                 Name = string.IsNullOrWhiteSpace(slide.Name) ? $"Slide {index + 1}" : slide.Name.Trim(),
-                Tiles = NormalizeMapTiles(slide.Tiles ?? [], columns, rows).ToList()
+                Title = string.IsNullOrWhiteSpace(slide.Title) ? null : slide.Title.Trim(),
+                Subtitle = string.IsNullOrWhiteSpace(slide.Subtitle) ? null : slide.Subtitle.Trim(),
+                DurationSeconds = NormalizeSlideDurationSeconds(slide.DurationSeconds),
+                BackgroundColor = NormalizeColor(slide.BackgroundColor),
+                ShowHeader = slide.ShowHeader,
+                Tiles = NormalizeMapTiles(slide.Tiles ?? [], logicalWidth, logicalHeight).ToList()
             })
             .ToList();
 
@@ -2820,45 +2804,47 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     {
         _document.Maps ??= [];
 
-        if (_document.Maps.Count > 0 || !createStarterMap)
+        if (_document.Maps.Count == 0 && createStarterMap)
         {
-            EnsureMapPublicTokens();
-            return;
+            var root = _document.RootProbe;
+            // Authored directly on the v1 logical canvas (1920x1080) - no grid cells to migrate, so this
+            // skips MonitoringMapLayoutMigration entirely (it is a no-op past LayoutVersion 0 anyway).
+            _document.Maps.Add(new MonitoringMap
+            {
+                Name = "Operations Wall",
+                Description = "A starter map for wall displays and office screens.",
+                PublicToken = CreateToken(),
+                LayoutVersion = MonitoringMap.CurrentLayoutVersion,
+                LogicalWidth = 1920,
+                LogicalHeight = 1080,
+                Tiles =
+                [
+                    new MonitoringMapTile
+                    {
+                        Kind = MonitoringMapTileKind.Status,
+                        Title = "Overall status",
+                        ElementId = root.Id,
+                        X = 24,
+                        Y = 24,
+                        Width = 600,
+                        Height = 280
+                    },
+                    new MonitoringMapTile
+                    {
+                        Kind = MonitoringMapTileKind.Text,
+                        Title = "Matmon Map",
+                        Text = "Assign sensors, folders or probes to tiles in edit mode.",
+                        X = 648,
+                        Y = 24,
+                        Width = 600,
+                        Height = 280
+                    }
+                ]
+            });
         }
 
-        var root = _document.RootProbe;
-        _document.Maps.Add(new MonitoringMap
-        {
-            Name = "Operations Wall",
-            Description = "A starter map for wall displays and office screens.",
-            DisplayPreset = MonitoringMapDisplayPreset.FullHd1080,
-            PublicToken = CreateToken(),
-            Columns = 12,
-            Rows = 6,
-            Tiles =
-            [
-                new MonitoringMapTile
-                {
-                    Kind = MonitoringMapTileKind.Status,
-                    Title = "Overall status",
-                    ElementId = root.Id,
-                    X = 1,
-                    Y = 1,
-                    Width = 4,
-                    Height = 2
-                },
-                new MonitoringMapTile
-                {
-                    Kind = MonitoringMapTileKind.Text,
-                    Title = "Matmon Map",
-                    Text = "Assign sensors, folders or probes to tiles in edit mode.",
-                    X = 5,
-                    Y = 1,
-                    Width = 4,
-                    Height = 2
-                }
-            ]
-        });
+        EnsureMapPublicTokens();
+        MigrateMapLayouts();
     }
 
     private void EnsureMapPublicTokens()
@@ -2870,6 +2856,30 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 map.PublicToken = CreateToken();
                 map.UpdatedUtc = DateTimeOffset.UtcNow;
             }
+        }
+    }
+
+    /// <summary>Converts every map still on the legacy v0 (grid-cell) layout to the v1 logical-px canvas -
+    /// see <see cref="MonitoringMapLayoutMigration"/>. Idempotent (a v1 map is a no-op), so it is safe to call
+    /// from every map accessor (<see cref="EnsureDefaultMaps"/>) as well as once eagerly at startup and after
+    /// a backup restore (<c>NormalizeAfterRestoreLocked</c>) which might reintroduce v0 maps.</summary>
+    private void MigrateMapLayouts()
+    {
+        var changed = false;
+        foreach (var map in _document.Maps)
+        {
+            if (map.LayoutVersion >= MonitoringMap.CurrentLayoutVersion)
+            {
+                continue;
+            }
+
+            MonitoringMapLayoutMigration.MigrateToLogical(map);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            QueueSave(SavePriority.Configuration);
         }
     }
 
@@ -4038,22 +4048,21 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         return string.IsNullOrWhiteSpace(normalized) ? "Map" : normalized;
     }
 
+    /// <summary>Snaps a logical-px coordinate/size to the design grid. Delegates to the single shared
+    /// implementation in Core so the store, the layout migration and the designer cannot drift apart.</summary>
+    private static int SnapToGrid(int value) => MonitoringMapTileConstraints.Snap(value);
+
     private static IReadOnlyList<MonitoringMapTile> NormalizeMapTiles(
         IReadOnlyList<MonitoringMapTile> tiles,
-        int columns,
-        int rows)
+        int canvasWidth,
+        int canvasHeight)
     {
         return tiles
             .Where(tile => !string.IsNullOrWhiteSpace(tile.Title) || !string.IsNullOrWhiteSpace(tile.Text) || tile.ElementId.HasValue || !string.IsNullOrWhiteSpace(tile.TargetTag))
             .Select(tile =>
             {
-                var sizeLimits = GetMapTileSizeLimits(tile.Kind, columns, rows);
-                var width = Math.Clamp(tile.Width <= 0 ? sizeLimits.DefaultWidth : tile.Width, sizeLimits.MinWidth, sizeLimits.MaxWidth);
-                var height = Math.Clamp(tile.Height <= 0 ? sizeLimits.DefaultHeight : tile.Height, sizeLimits.MinHeight, sizeLimits.MaxHeight);
-                var x = Math.Clamp(tile.X <= 0 ? 1 : tile.X, 1, Math.Max(1, columns - width + 1));
-                var y = Math.Clamp(tile.Y <= 0 ? 1 : tile.Y, 1, Math.Max(1, rows - height + 1));
-
-                return new MonitoringMapTile
+                var (_, _, defaultWidth, defaultHeight) = MonitoringMapTileConstraints.For(tile.Kind);
+                var normalized = new MonitoringMapTile
                 {
                     Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
                     Kind = tile.Kind,
@@ -4063,10 +4072,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim(),
                     IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim(),
                     ShowCard = tile.ShowCard,
-                    X = x,
-                    Y = y,
-                    Width = width,
-                    Height = height,
+                    X = SnapToGrid(tile.X),
+                    Y = SnapToGrid(tile.Y),
+                    Width = SnapToGrid(tile.Width <= 0 ? defaultWidth : tile.Width),
+                    Height = SnapToGrid(tile.Height <= 0 ? defaultHeight : tile.Height),
                     BackgroundColor = NormalizeColor(tile.BackgroundColor),
                     AccentColor = NormalizeColor(tile.AccentColor),
                     TextColor = NormalizeColor(tile.TextColor),
@@ -4076,30 +4085,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     ShowStateBadge = tile.ShowStateBadge,
                     ShowElementName = tile.ShowElementName
                 };
+
+                MonitoringMapTileConstraints.Clamp(normalized, canvasWidth, canvasHeight);
+                return normalized;
             })
             .ToArray();
-    }
-
-    private static MapTileSizeLimits GetMapTileSizeLimits(MonitoringMapTileKind kind, int columns, int rows)
-    {
-        var limits = kind switch
-        {
-            MonitoringMapTileKind.Text => new MapTileSizeLimits(2, 1, 12, 6, 4, 2),
-            MonitoringMapTileKind.Status => new MapTileSizeLimits(3, 2, 12, 8, 4, 2),
-            MonitoringMapTileKind.Value => new MapTileSizeLimits(2, 2, 8, 6, 3, 2),
-            MonitoringMapTileKind.Graph => new MapTileSizeLimits(4, 3, 12, 10, 5, 3),
-            _ => new MapTileSizeLimits(2, 1, 8, 6, 3, 2)
-        };
-
-        var maxWidth = Math.Clamp(limits.MaxWidth, limits.MinWidth, columns);
-        var maxHeight = Math.Clamp(limits.MaxHeight, limits.MinHeight, rows);
-        return limits with
-        {
-            MaxWidth = maxWidth,
-            MaxHeight = maxHeight,
-            DefaultWidth = Math.Clamp(limits.DefaultWidth, limits.MinWidth, maxWidth),
-            DefaultHeight = Math.Clamp(limits.DefaultHeight, limits.MinHeight, maxHeight)
-        };
     }
 
     private static string? NormalizeColor(string? color)
@@ -4119,14 +4109,6 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         return null;
     }
-
-    private sealed record MapTileSizeLimits(
-        int MinWidth,
-        int MinHeight,
-        int MaxWidth,
-        int MaxHeight,
-        int DefaultWidth,
-        int DefaultHeight);
 
     private sealed class WorkspaceDocument
     {

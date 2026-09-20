@@ -20,6 +20,14 @@
         var fit = map.WallboardFit == MonitoringMapWallboardFit.Stretch ? "stretch to fill" : "keep ratio";
         return $"{aspect.Width}:{aspect.Height} · {fit}";
     }
+
+    string LibrarySummary(MonitoringMap candidate)
+    {
+        var slideCount = candidate.EffectiveSlides().Count;
+        var aspect = candidate.EffectiveAspect();
+        var publicState = candidate.PublicEnabled ? "on" : "off";
+        return $"{slideCount} slide{(slideCount == 1 ? "" : "s")} · {aspect.Width}:{aspect.Height} · Public {publicState} · updated {candidate.UpdatedUtc.LocalDateTime:g}";
+    }
 }
 
 <section class="dashboard-shell maps-shell">
@@ -63,9 +71,9 @@
                     <article class="map-library-row">
                         <a class="map-library-main" asp-page="/Maps" asp-route-mapId="@candidate.Id">
                             <strong>@candidate.Name</strong>
-                            <span>@candidate.Tiles.Count tile@(candidate.Tiles.Count == 1 ? "" : "s") - @candidate.Columns x @candidate.Rows - @MapPresetText(candidate) - updated @candidate.UpdatedUtc.LocalDateTime.ToString("g")</span>
+                            <span>@LibrarySummary(candidate)</span>
                         </a>
-                        @if (Model.CanEditMaps)
+                        @if (Model.CanEditMaps && candidate.PublicEnabled)
                         {
                             <div class="map-public-link">
                                 @MatmonIcons.Render("lock")
@@ -76,11 +84,17 @@
                             <a class="workspace-submit" asp-page="/Maps" asp-route-mapId="@candidate.Id">@MatmonIcons.Render("dashboard")<span>Open</span></a>
                             @if (Model.CanEditMaps)
                             {
-                                <a class="workspace-secondary-submit" href="@publicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
+                                if (candidate.PublicEnabled)
+                                {
+                                    <a class="workspace-secondary-submit" href="@publicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
+                                }
                                 <a class="workspace-secondary-submit" asp-page="/MapEditor" asp-route-mapId="@candidate.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@candidate.Id">
-                                    <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Rotate</span></button>
-                                </form>
+                                @if (candidate.PublicEnabled)
+                                {
+                                    <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@candidate.Id">
+                                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Rotate</span></button>
+                                    </form>
+                                }
                             }
                         </div>
                     </article>
@@ -117,151 +131,43 @@
                             }
                         </select>
                     </form>
-                    <a class="workspace-secondary-submit" href="@selectedPublicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
+                    @if (map.PublicEnabled)
+                    {
+                        <a class="workspace-secondary-submit" href="@selectedPublicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
+                    }
                     <a class="workspace-submit" asp-page="/MapEditor" asp-route-mapId="@map.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
                 }
             </div>
 
-            <div class="map-carousel" data-map-carousel>
-                @for (var slideIndex = 0; slideIndex < Model.Display.Slides.Count; slideIndex++)
+            <div class="map-stage" data-map-stage data-map-fit="@map.WallboardFit.ToString().ToLowerInvariant()" style="--map-w: @map.LogicalWidth; --map-h: @map.LogicalHeight;">
+                <div class="map-carousel" data-map-carousel>
+                    @for (var slideIndex = 0; slideIndex < Model.Display.Slides.Count; slideIndex++)
+                    {
+                        var slide = Model.Display.Slides[slideIndex];
+                        var slideModel = new MapSlideRenderModel
+                        {
+                            Slide = slide.Slide,
+                            Map = map,
+                            SlideIndex = slideIndex,
+                            Tiles = slide.Tiles.Select(tile => MapTileRenderModel.FromDisplay(tile)).ToArray()
+                        };
+                        <partial name="_MapSlide" model="slideModel" />
+                    }
+                </div>
+                @if (Model.Display.Slides.Count > 1)
                 {
-                    var slide = Model.Display.Slides[slideIndex];
-                    <div class="map-canvas map-carousel-slide" data-map-slide data-slide-index="@slideIndex" hidden="@(slideIndex == 0 ? null : "hidden")" style="--map-columns: @map.Columns; --map-rows: @map.Rows; --map-display-width: @map.EffectiveAspect().Width; --map-display-height: @map.EffectiveAspect().Height;">
-                @foreach (var tile in slide.Tiles)
-                {
-                    <article class="map-tile map-tile-display@(tile.Tile.ShowCard ? "" : " is-plain")" data-state="@tile.StateKey" data-kind="@tile.Tile.Kind.ToString().ToLowerInvariant()" data-tile-h="@tile.Tile.Height" style="--tile-x: @tile.Tile.X; --tile-y: @tile.Tile.Y; --tile-w: @tile.Tile.Width; --tile-h: @tile.Tile.Height; @TileStyle(tile.Tile)">
-                        @if (tile.Tile.ShowTitle || tile.Tile.ShowStateBadge)
-                        {
-                            <div class="map-tile-head">
-                                <span class="map-tile-icon">@MatmonIcons.Render(tile.IconKey)</span>
-                                @if (tile.Tile.ShowTitle)
-                                {
-                                    <strong>@(string.IsNullOrWhiteSpace(tile.Tile.Title) ? (tile.Element?.Name ?? tile.KindLabel) : tile.Tile.Title)</strong>
-                                }
-                                @if (tile.Tile.ShowStateBadge)
-                                {
-                                    <span class="state-pill" data-state="@tile.StateKey">@tile.StateLabel</span>
-                                }
-                            </div>
-                        }
-
-                        @if (tile.Tile.Kind == MonitoringMapTileKind.Graph)
-                        {
-                            <div class="map-tile-graph-frame">
-                                @if (!string.IsNullOrWhiteSpace(tile.GraphLinePath))
-                                {
-                                    <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-                                        @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Area && !string.IsNullOrWhiteSpace(tile.GraphAreaPath))
-                                        {
-                                            <path class="map-graph-area" d="@tile.GraphAreaPath"></path>
-                                        }
-                                        @if (tile.Tile.GraphType == MonitoringMapTileGraphType.Bars && !string.IsNullOrWhiteSpace(tile.GraphBarPath))
-                                        {
-                                            <path class="map-graph-bars" d="@tile.GraphBarPath"></path>
-                                        }
-                                        else
-                                        {
-                                            <path class="map-graph-line" d="@tile.GraphLinePath"></path>
-                                        }
-                                    </svg>
-                                }
-                                else
-                                {
-                                    <span>No graph data yet</span>
-                                }
-                            </div>
-                        }
-
-                        @if (tile.ProgressPercent.HasValue && tile.EffectiveVisualType == MonitoringMapTileVisualType.Gauge)
-                        {
-                            <div class="map-tile-gauge" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
-                                <span>
-                                    <strong>@FormatProgressLabel(tile.ProgressPercent)</strong>
-                                    <small>@tile.ProgressLabel</small>
-                                </span>
-                            </div>
-                        }
-                        else if (tile.ProgressPercent.HasValue && tile.EffectiveVisualType == MonitoringMapTileVisualType.ProgressBar)
-                        {
-                            <div class="map-tile-progress-wrap">
-                                <div class="map-tile-progress" style="--map-progress: @FormatProgressPercent(tile.ProgressPercent)">
-                                    <span></span>
-                                </div>
-                                <small>@tile.ProgressLabel</small>
-                            </div>
-                        }
-
-                        @if (!string.IsNullOrWhiteSpace(tile.Value) && tile.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
-                        {
-                            <div class="map-tile-value">@tile.Value</div>
-                        }
-
-                        <p>@tile.Subtitle</p>
-                        <small>
-                            @tile.KindLabel
-                            @if (tile.Tile.ShowElementName && tile.Element is not null)
+                    <div class="map-carousel-nav" data-map-carousel-nav>
+                        <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
+                        <div class="map-carousel-dots">
+                            @for (var dot = 0; dot < Model.Display.Slides.Count; dot++)
                             {
-                                <text> - @tile.Element.Name</text>
+                                <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@Model.Display.Slides[dot].Slide.Name</button>
                             }
-                        </small>
-                    </article>
-                }
+                        </div>
+                        <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
                     </div>
                 }
             </div>
-            @if (Model.Display.Slides.Count > 1)
-            {
-                <div class="map-carousel-nav" data-map-carousel-nav>
-                    <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
-                    <div class="map-carousel-dots">
-                        @for (var dot = 0; dot < Model.Display.Slides.Count; dot++)
-                        {
-                            <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@Model.Display.Slides[dot].Name</button>
-                        }
-                    </div>
-                    <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
-                </div>
-            }
         </section>
     }
 </section>
-
-@functions {
-    private static string MapPresetText(MonitoringMapDisplayPreset preset)
-    {
-        var info = MonitoringMapDisplayPresetCatalog.Resolve(preset);
-        return $"{info.Label} ({info.Dimensions})";
-    }
-
-    private static string TileStyle(MonitoringMapTile tile)
-    {
-        var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(tile.BackgroundColor))
-        {
-            parts.Add($"--map-tile-custom-bg: {tile.BackgroundColor}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(tile.AccentColor))
-        {
-            parts.Add($"--map-tile-custom-accent: {tile.AccentColor}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(tile.TextColor))
-        {
-            parts.Add($"--map-tile-custom-text: {tile.TextColor}");
-        }
-
-        return parts.Count == 0 ? string.Empty : string.Join("; ", parts) + ";";
-    }
-
-    private static string FormatProgressPercent(double? value)
-    {
-        return Math.Clamp(value.GetValueOrDefault(), 0, 100)
-            .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatProgressLabel(double? value)
-    {
-        return $"{Math.Clamp(value.GetValueOrDefault(), 0, 100):0.#}%";
-    }
-}

@@ -1,0 +1,34 @@
+@model Matmon.Host.Ui.MapSlideRenderModel
+@{
+    var slide = Model.Slide;
+    var map = Model.Map;
+    var showHeader = map.ShowSlideHeaders && slide.ShowHeader &&
+        (!string.IsNullOrWhiteSpace(slide.Title) || !string.IsNullOrWhiteSpace(slide.Subtitle));
+    var slideStyle = $"--map-w: {map.LogicalWidth}; --map-h: {map.LogicalHeight};"
+        + (string.IsNullOrWhiteSpace(slide.BackgroundColor) ? string.Empty : $" --slide-bg: {slide.BackgroundColor};");
+}
+<section class="map-slide@(Model.Editable ? " map-slide-editable" : "")"
+         data-map-slide
+         data-slide-id="@slide.Id"
+         data-slide-index="@Model.SlideIndex"
+         data-slide-duration="@(slide.DurationSeconds?.ToString() ?? "")"
+         style="@slideStyle"
+         hidden="@(Model.SlideIndex == 0 ? null : "hidden")">
+    @if (showHeader)
+    {
+        <header class="map-slide-header">
+            @if (!string.IsNullOrWhiteSpace(slide.Title))
+            {
+                <h2>@slide.Title</h2>
+            }
+            @if (!string.IsNullOrWhiteSpace(slide.Subtitle))
+            {
+                <p>@slide.Subtitle</p>
+            }
+        </header>
+    }
+    @foreach (var tile in Model.Tiles)
+    {
+        <partial name="_MapTile" model="tile" />
+    }
+</section>

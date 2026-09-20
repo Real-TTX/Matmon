@@ -74,6 +74,15 @@ public class MonitoringMapCloneTests
         AssertEveryScalarSurvivesClone(new MonitoringMapTile(), tile => tile.Clone());
     }
 
+    [Fact]
+    public void SlideClone_copies_every_scalar_property()
+    {
+        // Slides gained their own scalar fields (Title/Subtitle/DurationSeconds/BackgroundColor/ShowHeader)
+        // alongside the pre-existing Id/Name - the map/tile clones already had reflection coverage but slides
+        // did not, so a dropped field here would have gone unnoticed the same way WallboardFit once did.
+        AssertEveryScalarSurvivesClone(new MonitoringMapSlide(), slide => slide.Clone());
+    }
+
     private static void AssertEveryScalarSurvivesClone<T>(T instance, Func<T, T> clone)
     {
         var scalars = typeof(T)

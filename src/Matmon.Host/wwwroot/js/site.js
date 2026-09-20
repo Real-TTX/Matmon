@@ -33,6 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeDiscoveryResultTable();
   initializeDiscoveryJobList();
   initializeDiscoveryScanForm();
+  initializeMapStages();
   initializeMapDesigner();
   initializeMapCarousel();
   initializeElementPickers();
@@ -818,28 +819,12 @@ function initializeMapCarousel() {
     let active = 0;
     let timer = null;
 
-    // "Overlay - on mouse-move / change": reveal the page indicator on activity, then fade it.
-    const stage = carousel.closest("[data-map-pagination]");
-    const autoHideNav = stage?.dataset.mapPagination === "overlayonactivity";
-    let activityTimer = null;
-    const pingActivity = () => {
-      if (!autoHideNav || !stage) {
-        return;
-      }
-      stage.classList.add("is-active");
-      if (activityTimer) {
-        clearTimeout(activityTimer);
-      }
-      activityTimer = setTimeout(() => stage.classList.remove("is-active"), 2600);
-    };
-
     const show = (index) => {
       active = (index + slides.length) % slides.length;
       slides.forEach((slide, i) => {
         slide.hidden = i !== active;
       });
       dots.forEach((dot, i) => dot.classList.toggle("is-active", i === active));
-      pingActivity();
     };
 
     const stop = () => {
@@ -3164,15 +3149,74 @@ function discoveryStatusTone(status) {
   return "warning";
 }
 
+// Computes the uniform scale (+ centering offset) that fits each [data-map-stage]'s fixed logical canvas
+// (--map-w x --map-h, in px) into whatever box the stage actually renders at, and writes it back as
+// --map-kx/--map-ky/--map-ox/--map-oy - which .map-slide's `transform: translate(...) scale(...)` (site.css)
+// reads. This is THE mechanism that makes the editor, /Maps and /Maps/Public render identically: the same
+// .map-stage > .map-slide > .map-tile markup, only k differs per screen.
+function fitMapStages() {
+  document.querySelectorAll("[data-map-stage]").forEach((stage) => {
+    const style = getComputedStyle(stage);
+    const mapWidth = parseFloat(style.getPropertyValue("--map-w")) || 1920;
+    const mapHeight = parseFloat(style.getPropertyValue("--map-h")) || 1080;
+    const rect = stage.getBoundingClientRect();
+    const containerWidth = rect.width;
+    const containerHeight = rect.height;
+    if (!containerWidth || !containerHeight || !mapWidth || !mapHeight) {
+      return;
+    }
+
+    const fit = (stage.dataset.mapFit || "fit").toLowerCase();
+    let kx;
+    let ky;
+    if (fit === "stretch") {
+      kx = containerWidth / mapWidth;
+      ky = containerHeight / mapHeight;
+    } else {
+      const k = Math.min(containerWidth / mapWidth, containerHeight / mapHeight);
+      kx = k;
+      ky = k;
+    }
+
+    const offsetX = (containerWidth - mapWidth * kx) / 2;
+    const offsetY = (containerHeight - mapHeight * ky) / 2;
+
+    stage.style.setProperty("--map-kx", String(kx));
+    stage.style.setProperty("--map-ky", String(ky));
+    stage.style.setProperty("--map-ox", `${offsetX}px`);
+    stage.style.setProperty("--map-oy", `${offsetY}px`);
+    // Exposed for the designer's pointer math (drag/resize) - avoids re-deriving k from a possibly-stale
+    // getComputedStyle read on every pointermove.
+    stage._mapScale = { kx, ky, offsetX, offsetY, mapWidth, mapHeight };
+  });
+}
+
+function initializeMapStages() {
+  const stages = document.querySelectorAll("[data-map-stage]");
+  if (stages.length === 0) {
+    return;
+  }
+
+  fitMapStages();
+
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(() => fitMapStages());
+    stages.forEach((stage) => observer.observe(stage));
+  } else {
+    window.addEventListener("resize", fitMapStages);
+  }
+}
+
 function initializeMapDesigner() {
+  // The designer canvas IS the (single, always-visible) .map-slide - slide switching just filters which
+  // tiles are shown on it (setActiveSlide/applySlideFilter below), matching the pre-Phase-A behaviour.
   const canvas = document.querySelector("[data-map-designer]");
   if (!canvas) {
     return;
   }
 
+  const stage = canvas.closest("[data-map-stage]") || canvas;
   const form = document.querySelector("[data-map-designer-form]");
-  const columnInput = form?.querySelector("[data-map-columns]");
-  const rowInput = form?.querySelector("[data-map-rows]");
   const scaleInput = form?.querySelector("[data-map-scale]");
   const scaleOutput = form?.querySelector("[data-map-scale-output]");
   const readScale = () => {
@@ -3218,16 +3262,6 @@ function initializeMapDesigner() {
     Value: "Value",
     Graph: "Graph"
   };
-  // One consistent rule (mirrors Core MonitoringMapTileConstraints): a per-kind readability floor, and a
-  // maximum of the whole board for every kind (the big maxWidth/maxHeight are capped to the live grid in
-  // getSizeLimits). A graph needs >=3x2; an aggregate/summary >=2x1; text/value/element can be a single cell.
-  const sizeLimits = {
-    Text: { minWidth: 1, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 4, defaultHeight: 1 },
-    Element: { minWidth: 1, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 3, defaultHeight: 2 },
-    Status: { minWidth: 2, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 4, defaultHeight: 2 },
-    Value: { minWidth: 1, minHeight: 1, maxWidth: 24, maxHeight: 16, defaultWidth: 2, defaultHeight: 2 },
-    Graph: { minWidth: 3, minHeight: 2, maxWidth: 24, maxHeight: 16, defaultWidth: 5, defaultHeight: 3 }
-  };
   const kindHints = {
     "0": "Text tiles do not need a target.",
     "1": "Shows one target state or value. Progress and gauge use the default channel when possible.",
@@ -3241,31 +3275,36 @@ function initializeMapDesigner() {
     Graph: "Uses the selected sensor history as a compact trend graph."
   };
   const colorPattern = /^#[0-9a-fA-F]{6}$/;
-  const presetOptions = {
-    FullHd1080: { width: 1920, height: 1080, label: "Optimized for Full HD" },
-    Qhd1440: { width: 2560, height: 1440, label: "Optimized for QHD" },
-    Uhd2160: { width: 3840, height: 2160, label: "Optimized for 4K UHD" },
-    Ultrawide3440x1440: { width: 3440, height: 1440, label: "Optimized for ultrawide" }
+
+  // The single MonitoringMapTileConstraints table, read from the server-rendered JSON block instead of a
+  // second, hand-duplicated JS table that could silently drift from the Core one.
+  const constraintsEl = form?.querySelector("[data-map-constraints]");
+  let constraints = {};
+  try {
+    constraints = constraintsEl ? JSON.parse(constraintsEl.textContent || "{}") : {};
+  } catch {
+    constraints = {};
+  }
+  const snapGrid = Number(constraints.snapGrid) > 0 ? Number(constraints.snapGrid) : 8;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const snap = (value) => Math.round(value / snapGrid) * snapGrid;
+  const getLimits = (kind) =>
+    constraints[normalizeKind(kind)] || constraints.Element || { minWidth: 160, minHeight: 80, defaultWidth: 320, defaultHeight: 160 };
+
+  // The logical canvas is always 1920px wide; only the height varies with the aspect ratio - mirrors
+  // MonitoringMap.LogicalSizeFor exactly so the designer never disagrees with what the store will save.
+  const readLogicalSize = () => {
+    const aspectWidth = Math.max(1, Math.round(Number(aspectWidthInput?.value) || 16));
+    const aspectHeight = Math.max(1, Math.round(Number(aspectHeightInput?.value) || 9));
+    const logicalWidth = 1920;
+    const logicalHeight = Math.max(1, Math.round((logicalWidth * aspectHeight) / aspectWidth));
+    return { aspectWidth, aspectHeight, logicalWidth, logicalHeight };
   };
 
-  const readGridValue = (value, fallback, min, max) => {
-    const numeric = Number(value);
-    const rounded = Number.isFinite(numeric) ? Math.round(numeric) : fallback;
-    return Math.min(max, Math.max(min, rounded));
-  };
-
-  const readGrid = () => ({
-    columns: readGridValue(columnInput?.value, 12, 4, 24),
-    rows: readGridValue(rowInput?.value, 8, 3, 16)
-  });
-
-  // The grid the user last committed, so a column/row change can scale the tiles relative to it.
-  let lastCommittedGrid = readGrid();
-
-  const syncMapSummary = (grid = readGrid()) => {
+  const syncMapSummary = () => {
     const name = mapNameInput?.value?.trim() || "New Map";
     const description = mapDescriptionInput?.value?.trim() || "No description";
-    const preset = readDisplayPreset();
+    const { aspectWidth, aspectHeight } = readLogicalSize();
     if (mapTitlePreview) {
       mapTitlePreview.textContent = name;
     }
@@ -3273,54 +3312,30 @@ function initializeMapDesigner() {
       mapDescriptionPreview.textContent = description;
     }
     if (mapGridPreview) {
-      mapGridPreview.textContent = `${preset.label} · ${grid.columns} x ${grid.rows} grid`;
+      mapGridPreview.textContent = `${aspectWidth}:${aspectHeight} canvas`;
     }
   };
 
-  const readDisplayPreset = () => {
-    // Only the aspect ratio matters now - the board scales to fill whatever screen it is shown on.
-    const width = Math.max(1, Math.round(Number(aspectWidthInput?.value) || 16));
-    const height = Math.max(1, Math.round(Number(aspectHeightInput?.value) || 9));
-    return {
-      width,
-      height,
-      label: `${width}:${height}`
-    };
-  };
+  // Recomputes the logical canvas size from the aspect-ratio fields, applies it to the stage + slide (both
+  // carry their own --map-w/--map-h - the slide's server-rendered inline style would otherwise shadow the
+  // stage's via CSS inheritance), zooms the stage per the slider (a percentage of the workbench width -
+  // fitMapStages then measures the resulting box and computes kx/ky, so there is no separate zoom math here),
+  // and finally re-clamps every tile into the (possibly resized) canvas.
+  const syncCanvas = () => {
+    const { logicalWidth, logicalHeight } = readLogicalSize();
+    stage.style.setProperty("--map-w", String(logicalWidth));
+    stage.style.setProperty("--map-h", String(logicalHeight));
+    canvas.style.setProperty("--map-w", String(logicalWidth));
+    canvas.style.setProperty("--map-h", String(logicalHeight));
 
-  const syncGrid = (commit = false) => {
-    const grid = readGrid();
-    const preset = readDisplayPreset();
-    if (commit && columnInput) {
-      columnInput.value = String(grid.columns);
-    }
-    if (commit && rowInput) {
-      rowInput.value = String(grid.rows);
-    }
-
-    canvas.style.setProperty("--map-columns", String(grid.columns));
-    canvas.style.setProperty("--map-rows", String(grid.rows));
-    canvas.style.setProperty("--map-display-width", String(preset.width));
-    canvas.style.setProperty("--map-display-height", String(preset.height));
     const scale = readScale();
-    // Only the aspect ratio matters (preset.width/height are ratio numbers now, e.g. 16/9). The board fills
-    // the workbench width at 100% and derives its height from the ratio; the CSS `zoom` property then scales
-    // the WHOLE board uniformly (workbench scrolls above 100%, shrinks below). getBoundingClientRect reports
-    // zoomed coords, so drag/resize stays correct.
-    const workbench = canvas.closest(".map-designer-workbench");
-    const baseWidth = workbench ? Math.max(320, workbench.clientWidth - 14) : 960;
-    canvas.style.width = `${baseWidth}px`;
-    canvas.style.minWidth = "";
-    canvas.style.minHeight = "";
-    canvas.style.aspectRatio = `${preset.width} / ${preset.height}`;
-    canvas.style.zoom = String(scale);
+    stage.style.width = `${Math.round(scale * 100)}%`;
     if (scaleOutput) {
       scaleOutput.textContent = `${Math.round(scale * 100)}%`;
     }
-    if (mapSelectButton) {
-      mapSelectButton.style.minWidth = `${baseWidth}px`;
-    }
-    syncMapSummary(grid);
+
+    syncMapSummary();
+    fitMapStages();
     canvas.querySelectorAll("[data-map-tile]").forEach((tile) => applyTilePosition(tile));
   };
 
@@ -3328,20 +3343,6 @@ function initializeMapDesigner() {
   const getTile = (index) => canvas.querySelector(`[data-map-tile][data-tile-index="${index}"]`);
   const normalizeKind = (kind) => numericKindMap[String(kind)] || String(kind || "Element");
   const getKindLabel = (kind) => kindLabels[String(kind)] || kindLabels[normalizeKind(kind)] || "Tile";
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const getSizeLimits = (kind) => {
-    const grid = readGrid();
-    const limits = sizeLimits[normalizeKind(kind)] || sizeLimits.Element;
-    const maxWidth = clamp(limits.maxWidth, limits.minWidth, grid.columns);
-    const maxHeight = clamp(limits.maxHeight, limits.minHeight, grid.rows);
-    return {
-      ...limits,
-      maxWidth,
-      maxHeight,
-      defaultWidth: clamp(limits.defaultWidth, limits.minWidth, maxWidth),
-      defaultHeight: clamp(limits.defaultHeight, limits.minHeight, maxHeight)
-    };
-  };
   const createId = () => {
     if (window.crypto?.randomUUID) {
       return window.crypto.randomUUID();
@@ -3364,12 +3365,12 @@ function initializeMapDesigner() {
     const { x, y, width, height } = getTileControls(tile);
     const panel = getPanel(tile.dataset.tileIndex || "");
     const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
-    const grid = readGrid();
-    const limits = getSizeLimits(kind);
-    const nextWidth = clamp(Math.round(Number(width?.value || limits.defaultWidth)), limits.minWidth, limits.maxWidth);
-    const nextHeight = clamp(Math.round(Number(height?.value || limits.defaultHeight)), limits.minHeight, limits.maxHeight);
-    const nextX = clamp(Math.round(Number(x?.value || 1)), 1, Math.max(1, grid.columns - nextWidth + 1));
-    const nextY = clamp(Math.round(Number(y?.value || 1)), 1, Math.max(1, grid.rows - nextHeight + 1));
+    const { logicalWidth, logicalHeight } = readLogicalSize();
+    const limits = getLimits(kind);
+    const nextWidth = clamp(snap(Number(width?.value || limits.defaultWidth)), limits.minWidth, logicalWidth);
+    const nextHeight = clamp(snap(Number(height?.value || limits.defaultHeight)), limits.minHeight, logicalHeight);
+    const nextX = clamp(snap(Number(x?.value ?? 0)), 0, Math.max(0, logicalWidth - nextWidth));
+    const nextY = clamp(snap(Number(y?.value ?? 0)), 0, Math.max(0, logicalHeight - nextHeight));
     if (width) {
       width.value = String(nextWidth);
     }
@@ -3387,11 +3388,9 @@ function initializeMapDesigner() {
     tile.style.setProperty("--tile-y", String(nextY));
     tile.style.setProperty("--tile-w", String(nextWidth));
     tile.style.setProperty("--tile-h", String(nextHeight));
-    // Drives the single-line strip layout for one-row value/summary tiles (CSS keys on data-tile-h).
-    tile.dataset.tileH = String(nextHeight);
     const readout = panel?.querySelector("[data-map-property-size]");
     if (readout) {
-      readout.textContent = `Size ${nextWidth} x ${nextHeight} · Min ${limits.minWidth} x ${limits.minHeight} · Max ${limits.maxWidth} x ${limits.maxHeight}`;
+      readout.textContent = `Size ${nextWidth} x ${nextHeight} px · Min ${limits.minWidth} x ${limits.minHeight} px`;
     }
     // Live size badge on the tile itself (shown while dragging/resizing) - "you see the tile taking shape".
     const badge = tile.querySelector("[data-map-tile-size-badge]");
@@ -3443,8 +3442,8 @@ function initializeMapDesigner() {
       graphField.hidden = !isGraph;
     }
     if (hint) {
-      const limits = getSizeLimits(kind);
-      hint.textContent = `${kindHints[kind] || "Select a target and place the tile on the grid."} Resize from the bottom-right corner. Allowed size: ${limits.minWidth}x${limits.minHeight} to ${limits.maxWidth}x${limits.maxHeight}.`;
+      const limits = getLimits(kind);
+      hint.textContent = `${kindHints[kind] || "Select a target and place the tile on the canvas."} Drag to move, resize from the bottom-right corner. Minimum size: ${limits.minWidth} x ${limits.minHeight} px.`;
     }
   };
 
@@ -3460,38 +3459,53 @@ function initializeMapDesigner() {
     return { token, kind, visual, graphType, key: [token, kind, visual, graphType].join("|") };
   };
 
+  // Updates the REAL tile hooks (shared with the display partial _MapTile.cshtml - the mock system that
+  // used to live here was deleted). A just-added tile has no target/value yet, so none of these elements
+  // exist until the tile is actually saved and reloaded with a resolved preview - each update below is a
+  // no-op until then, which is fine: the state/value/graph fragments are Phase C's live-JSON job anyway.
   const applyLivePreview = (tile, data) => {
     if (!tile || !data) {
       return;
     }
-    const mock = tile.querySelector("[data-map-tile-mock]");
     if (data.stateKey) {
       tile.dataset.state = data.stateKey;
     }
-    if (!mock) {
-      return;
+    const stateLabelEl = tile.querySelector("[data-tile-state-label]");
+    if (stateLabelEl) {
+      if (data.stateKey) {
+        stateLabelEl.dataset.state = data.stateKey;
+      }
+      if (data.stateLabel) {
+        stateLabelEl.textContent = data.stateLabel;
+      }
+    }
+    const valueEl = tile.querySelector("[data-tile-value]");
+    if (valueEl) {
+      valueEl.textContent = data.hasValue ? data.value : "—";
+    }
+    const subtitleEl = tile.querySelector("[data-tile-subtitle]");
+    if (subtitleEl && data.subtitle !== undefined && data.subtitle !== null) {
+      subtitleEl.textContent = data.subtitle;
     }
     const pct = (data.progressPercent === null || data.progressPercent === undefined)
       ? null
       : Math.round(data.progressPercent);
-    const valueEl = mock.querySelector('[data-mock="value"]');
-    if (valueEl) {
-      valueEl.textContent = data.hasValue ? data.value : "—";
-    }
-    const gauge = mock.querySelector('[data-mock="gauge"]');
-    if (gauge) {
-      gauge.style.setProperty("--map-progress", pct ?? 0);
-      const strong = gauge.querySelector("strong");
-      if (strong) {
-        strong.textContent = pct ?? "—";
+    if (pct !== null) {
+      const progressEl = tile.querySelector("[data-tile-progress]");
+      if (progressEl) {
+        progressEl.style.setProperty("--map-progress", pct);
+        const strong = progressEl.querySelector("strong");
+        if (strong) {
+          strong.textContent = pct;
+        }
       }
     }
-    const progress = mock.querySelector('[data-mock="progress"] .map-tile-progress');
-    if (progress) {
-      progress.style.setProperty("--map-progress", pct ?? 0);
+    const progressLabelEl = tile.querySelector("[data-tile-progress-label]");
+    if (progressLabelEl && data.progressLabel) {
+      progressLabelEl.textContent = data.progressLabel;
     }
     if (data.graphLinePath) {
-      const path = mock.querySelector('[data-mock="graph"] .map-graph-line');
+      const path = tile.querySelector("[data-tile-graph-line]");
       if (path) {
         path.setAttribute("d", data.graphLinePath);
       }
@@ -3543,35 +3557,27 @@ function initializeMapDesigner() {
     const kind = normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element");
     const elementSelect = panel.querySelector("[data-map-property-element]");
     const text = panel.querySelector("[data-map-property-text]")?.value || "";
-    const preview = tile.querySelector("[data-map-tile-preview]");
-    const titleElement = tile.querySelector("[data-map-tile-title]");
+    const subtitle = tile.querySelector("[data-tile-subtitle]");
+    const titleElement = tile.querySelector("[data-tile-title]");
     const showTitle = panel.querySelector("[data-map-property-show-title]")?.checked ?? true;
     tile.dataset.kind = kind;
     if (titleElement) {
       titleElement.hidden = !showTitle;
       titleElement.replaceChildren(document.createTextNode(title));
     }
-    tile.querySelector("[data-map-tile-kind-label]")?.replaceChildren(document.createTextNode(getKindLabel(kind)));
-    if (preview) {
+    if (subtitle) {
       const isText = kind === "Text";
       // The target is now an element picker: its name lives on the hidden value
-      // input's data-selected-name (set when chosen / server-rendered).
+      // input's data-selected-name (set when chosen / server-rendered). A resolved live preview (once the
+      // TilePreview fetch below lands) overwrites this with the real subtitle via applyLivePreview.
       const selectedText = (elementSelect?.dataset.selectedName || "").trim();
-      preview.textContent = isText
+      subtitle.textContent = isText
         ? (text.trim() || "Text tile")
         : (selectedText || "No target selected");
     }
 
     const showCard = panel.querySelector("[data-map-property-show-card]")?.checked ?? true;
     tile.classList.toggle("is-plain", !showCard);
-
-    // Design-mode realistic preview: pick the mock (value / gauge / progress / graph / text) from kind + visual.
-    const visual = (panel.querySelector("[data-map-property-visual-type]")?.value || "").trim();
-    tile.dataset.preview = kind === "Text" ? "text"
-      : kind === "Graph" ? "graph"
-      : visual === "Gauge" ? "gauge"
-      : visual === "ProgressBar" ? "progress"
-      : "value";
 
     syncPanelVisibility(panel);
     applyTileAppearance(tile, panel);
@@ -3624,14 +3630,18 @@ function initializeMapDesigner() {
     syncMapSummary();
   };
 
-  const pointerToGrid = (event, width, height) => {
+  // Converts a pointer event to logical-px coordinates on the canvas, transform-aware: the canvas
+  // (.map-slide) is scaled via CSS transform (see fitMapStages), so its OWN getBoundingClientRect() already
+  // reflects that scale - dividing by (renderedSize / logicalSize) recovers the pre-scale logical position
+  // without needing to read the --map-kx/ky custom properties back out.
+  const pointerToLogical = (event) => {
     const rect = canvas.getBoundingClientRect();
-    const grid = readGrid();
-    const cellWidth = rect.width / grid.columns;
-    const cellHeight = rect.height / grid.rows;
+    const { logicalWidth, logicalHeight } = readLogicalSize();
+    const kx = rect.width / logicalWidth || 1;
+    const ky = rect.height / logicalHeight || 1;
     return {
-      x: Math.max(1, Math.min(grid.columns - width + 1, Math.floor((event.clientX - rect.left) / cellWidth) + 1)),
-      y: Math.max(1, Math.min(grid.rows - height + 1, Math.floor((event.clientY - rect.top) / cellHeight) + 1))
+      x: (event.clientX - rect.left) / kx,
+      y: (event.clientY - rect.top) / ky
     };
   };
 
@@ -3683,14 +3693,14 @@ function initializeMapDesigner() {
 
       const move = (moveEvent) => {
         const controls = getTileControls(tile);
-        const tileWidth = Math.max(1, Number(controls.width?.value || 3));
-        const tileHeight = Math.max(1, Number(controls.height?.value || 2));
-        const next = pointerToGrid(moveEvent, tileWidth, tileHeight);
+        // Positions the tile's top-left corner directly under the pointer (no drag-offset compensation,
+        // same simplification the pre-Phase-A grid version made) - applyTilePosition snaps + clamps it.
+        const point = pointerToLogical(moveEvent);
         if (controls.x) {
-          controls.x.value = String(next.x);
+          controls.x.value = String(Math.round(point.x));
         }
         if (controls.y) {
-          controls.y.value = String(next.y);
+          controls.y.value = String(Math.round(point.y));
         }
 
         applyTilePosition(tile);
@@ -3719,28 +3729,26 @@ function initializeMapDesigner() {
       const controls = getTileControls(tile);
       const panel = getPanel(tile.dataset.tileIndex || "");
       const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
-      const startWidth = Math.max(1, Number(controls.width?.value || 3));
-      const startHeight = Math.max(1, Number(controls.height?.value || 2));
+      const limits = getLimits(kind);
+      const startWidth = Math.max(limits.minWidth, Number(controls.width?.value || limits.defaultWidth));
+      const startHeight = Math.max(limits.minHeight, Number(controls.height?.value || limits.defaultHeight));
       const startX = Number(event.clientX);
       const startY = Number(event.clientY);
+      // k at drag-start (screen px per logical px) - a pointer delta in screen px divided by k is the
+      // equivalent delta in logical px, same maths as pointerToLogical but for a DELTA instead of a point.
+      const rect = canvas.getBoundingClientRect();
+      const { logicalWidth, logicalHeight } = readLogicalSize();
+      const kx = rect.width / logicalWidth || 1;
+      const ky = rect.height / logicalHeight || 1;
 
       const move = (moveEvent) => {
-        const rect = canvas.getBoundingClientRect();
-        const grid = readGrid();
-        const cellWidth = rect.width / grid.columns;
-        const cellHeight = rect.height / grid.rows;
-        const x = Math.max(1, Number(controls.x?.value || 1));
-        const y = Math.max(1, Number(controls.y?.value || 1));
-        const limits = getSizeLimits(kind);
-        const deltaWidth = Math.round((moveEvent.clientX - startX) / cellWidth);
-        const deltaHeight = Math.round((moveEvent.clientY - startY) / cellHeight);
-        const maxWidthAtPosition = Math.min(limits.maxWidth, grid.columns - x + 1);
-        const maxHeightAtPosition = Math.min(limits.maxHeight, grid.rows - y + 1);
+        const deltaWidth = (moveEvent.clientX - startX) / kx;
+        const deltaHeight = (moveEvent.clientY - startY) / ky;
         if (controls.width) {
-          controls.width.value = String(clamp(startWidth + deltaWidth, limits.minWidth, maxWidthAtPosition));
+          controls.width.value = String(Math.max(limits.minWidth, Math.round(startWidth + deltaWidth)));
         }
         if (controls.height) {
-          controls.height.value = String(clamp(startHeight + deltaHeight, limits.minHeight, maxHeightAtPosition));
+          controls.height.value = String(Math.max(limits.minHeight, Math.round(startHeight + deltaHeight)));
         }
 
         applyTilePosition(tile);
@@ -3768,17 +3776,18 @@ function initializeMapDesigner() {
     const kind = normalizeKind(tool.kind || "Element");
     const baseTitle = tool.title || getKindLabel(kind);
     const title = `${baseTitle} ${index + 1}`;
-    const limits = getSizeLimits(kind);
-    const width = clamp(Math.max(1, Number(tool.width || limits.defaultWidth)), limits.minWidth, limits.maxWidth);
-    const height = clamp(Math.max(1, Number(tool.height || limits.defaultHeight)), limits.minHeight, limits.maxHeight);
-    const grid = readGrid();
-    const x = Math.max(1, Math.min(grid.columns - width + 1, position?.x || 1));
-    const y = Math.max(1, Math.min(grid.rows - height + 1, position?.y || 1));
+    const limits = getLimits(kind);
+    const { logicalWidth, logicalHeight } = readLogicalSize();
+    const width = clamp(limits.defaultWidth, limits.minWidth, logicalWidth);
+    const height = clamp(limits.defaultHeight, limits.minHeight, logicalHeight);
+    const x = clamp(snap(position?.x ?? 0), 0, Math.max(0, logicalWidth - width));
+    const y = clamp(snap(position?.y ?? 0), 0, Math.max(0, logicalHeight - height));
     const html = template.innerHTML
       .replaceAll("__index__", String(index))
       .replaceAll("__id__", createId())
       .replaceAll("__slideId__", activeSlideId || "")
       .replaceAll("__kind__", kind)
+      .replaceAll("__visual__", (tool.visual || "card").toLowerCase())
       .replaceAll("__kindLabel__", getKindLabel(kind))
       .replaceAll("__title__", title)
       .replaceAll("__x__", String(x))
@@ -3814,8 +3823,11 @@ function initializeMapDesigner() {
   mapSelectButton?.addEventListener("click", selectMap);
   mapNameInput?.addEventListener("input", () => syncMapSummary());
   mapDescriptionInput?.addEventListener("input", () => syncMapSummary());
-  aspectWidthInput?.addEventListener("input", () => syncGrid());
-  aspectHeightInput?.addEventListener("input", () => syncGrid());
+  // Changing the aspect ratio changes the logical canvas HEIGHT (width is always 1920) - re-clamping every
+  // tile (inside syncCanvas) is the "rescale" step here; unlike the old grid-cell scheme there is no separate
+  // proportional-rescale pass because a tile's px size/position simply keeps meaning the same thing.
+  aspectWidthInput?.addEventListener("input", () => syncCanvas());
+  aspectHeightInput?.addEventListener("input", () => syncCanvas());
   form?.querySelectorAll("[data-map-aspect-preset]").forEach((button) => {
     button.addEventListener("click", () => {
       if (aspectWidthInput) { aspectWidthInput.value = button.dataset.aspectW || "16"; }
@@ -3823,42 +3835,10 @@ function initializeMapDesigner() {
       form?.querySelectorAll("[data-map-aspect-preset]").forEach((other) => {
         other.classList.toggle("is-active", other === button);
       });
-      syncGrid();
+      syncCanvas();
     });
   });
-  // Scale existing tiles proportionally when the column/row count changes, so the visual layout is
-  // preserved (a finer grid keeps tiles the same size, occupying more cells) instead of leaving them
-  // the same cell-span - which shrank + clustered them to the top-left and squished the graphs.
-  // applyTilePosition (via syncGrid) then clamps everything into the new bounds. Runs on "change"
-  // (commit) only - the per-keystroke "input" reflow is dropped so a half-typed number (which clamps
-  // to the min) can't destroy the tile sizes before the scale is applied.
-  const rescaleTilesToGrid = (oldGrid, newGrid) => {
-    if (!oldGrid || (oldGrid.columns === newGrid.columns && oldGrid.rows === newGrid.rows)) {
-      return;
-    }
-    const colRatio = newGrid.columns / oldGrid.columns;
-    const rowRatio = newGrid.rows / oldGrid.rows;
-    const scalePos = (value, ratio) => Math.max(1, Math.round((Number(value || 1) - 1) * ratio) + 1);
-    const scaleSpan = (value, ratio) => Math.max(1, Math.round(Number(value || 1) * ratio));
-    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
-      const { x, y, width, height } = getTileControls(tile);
-      if (width) { width.value = String(scaleSpan(width.value, colRatio)); }
-      if (height) { height.value = String(scaleSpan(height.value, rowRatio)); }
-      if (x) { x.value = String(scalePos(x.value, colRatio)); }
-      if (y) { y.value = String(scalePos(y.value, rowRatio)); }
-    });
-  };
-  const commitGridChange = () => {
-    const nextGrid = readGrid();
-    rescaleTilesToGrid(lastCommittedGrid, nextGrid);
-    lastCommittedGrid = nextGrid;
-    syncGrid(true);
-  };
-  columnInput?.addEventListener("change", commitGridChange);
-  rowInput?.addEventListener("change", commitGridChange);
-  scaleInput?.addEventListener("input", () => syncGrid());
-  // Recompute the board's fit-to-workbench base width when the window resizes.
-  window.addEventListener("resize", () => syncGrid());
+  scaleInput?.addEventListener("input", () => syncCanvas());
 
   const renderSlideInputs = () => {
     if (!slideInputsHost) {
@@ -3866,15 +3846,23 @@ function initializeMapDesigner() {
     }
     slideInputsHost.replaceChildren();
     slides.forEach((slide, index) => {
-      const idInput = document.createElement("input");
-      idInput.type = "hidden";
-      idInput.name = `Input.Slides[${index}].Id`;
-      idInput.value = slide.id;
-      const nameInput = document.createElement("input");
-      nameInput.type = "hidden";
-      nameInput.name = `Input.Slides[${index}].Name`;
-      nameInput.value = slide.name;
-      slideInputsHost.append(idInput, nameInput);
+      const hidden = (field, value) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = `Input.Slides[${index}].${field}`;
+        input.value = value ?? "";
+        return input;
+      };
+      // Title/Subtitle/DurationSeconds/BackgroundColor/ShowHeader have no editing UI yet (Phase B's slide
+      // properties panel) - this just round-trips whatever the slide already had through add/rename/delete.
+      slideInputsHost.append(
+        hidden("Id", slide.id),
+        hidden("Name", slide.name),
+        hidden("Title", slide.title),
+        hidden("Subtitle", slide.subtitle),
+        hidden("DurationSeconds", slide.durationSeconds),
+        hidden("BackgroundColor", slide.backgroundColor),
+        hidden("ShowHeader", slide.showHeader === false ? "false" : "true"));
     });
   };
 
@@ -3917,7 +3905,7 @@ function initializeMapDesigner() {
 
   const addSlide = () => {
     const id = createId();
-    slides.push({ id, name: `Slide ${slides.length + 1}` });
+    slides.push({ id, name: `Slide ${slides.length + 1}`, showHeader: true });
     renderSlideInputs();
     renderSlideTabs();
     setActiveSlide(id);
@@ -3963,7 +3951,12 @@ function initializeMapDesigner() {
   slides = slideTabsHost
     ? Array.from(slideTabsHost.querySelectorAll("[data-map-slide-tab]")).map((tab) => ({
         id: tab.dataset.slideId,
-        name: tab.textContent.trim()
+        name: tab.textContent.trim(),
+        title: tab.dataset.slideTitle || "",
+        subtitle: tab.dataset.slideSubtitle || "",
+        durationSeconds: tab.dataset.slideDuration || "",
+        backgroundColor: tab.dataset.slideBg || "",
+        showHeader: tab.dataset.slideShowHeader !== "false"
       }))
     : [];
   if (slides.length === 0) {
@@ -3978,14 +3971,12 @@ function initializeMapDesigner() {
 
   canvas.querySelectorAll("[data-map-tile]").forEach(setupTile);
   applySlideFilter();
-  syncGrid(true);
+  syncCanvas();
 
   document.querySelectorAll("[data-map-tool-kind]").forEach((tool) => {
     const payload = {
       kind: tool.getAttribute("data-map-tool-kind"),
       title: tool.getAttribute("data-map-tool-title"),
-      width: tool.getAttribute("data-map-tool-width"),
-      height: tool.getAttribute("data-map-tool-height"),
       visual: tool.getAttribute("data-map-tool-visual")
     };
 
@@ -4015,11 +4006,9 @@ function initializeMapDesigner() {
 
     try {
       const payload = JSON.parse(rawPayload);
-      const width = Math.max(1, Number(payload.width || 3));
-      const height = Math.max(1, Number(payload.height || 2));
-      addTile(payload, pointerToGrid(event, width, height));
+      addTile(payload, pointerToLogical(event));
     } catch {
-      addTile({ kind: "1", title: "Tile", width: 3, height: 2 });
+      addTile({ kind: "1", title: "Tile" });
     }
   });
 

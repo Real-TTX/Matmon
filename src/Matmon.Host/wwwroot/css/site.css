@@ -1,3 +1,13 @@
+/* A page with no Bootstrap (the public map wallboard loads only this file, no Layout) otherwise defaults to
+   content-box sizing, so an element's declared width/height excludes its border/padding - which is exactly
+   why the public canvas used to render ~17px too large and get clipped. Every page in the app already gets
+   this reset for free via Bootstrap's own identical rule, so this changes nothing for them. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 :root {
   color-scheme: dark;
   --matmon-page-bg: #0c1117;
@@ -8090,58 +8100,100 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: min(20rem, 70vw);
 }
 
-.map-canvas,
-.map-editor-canvas {
-  display: grid;
-  grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
-  grid-template-rows: repeat(var(--map-rows, 8), minmax(0, 1fr));
-  gap: 0.45rem;
-  /* Only the aspect ratio matters - fill the container width and derive height from the ratio, so the board
-     scales to any screen (notebook / Full-HD wall / 4K). --map-display-width/height carry the ratio (e.g. 16/9). */
+/* --- Logical-canvas map scaling (Phase A) ---
+   Every map has a fixed LOGICAL canvas (--map-w x --map-h, in px - e.g. 1920x1080) that tiles are
+   positioned against in real px. .map-stage is the responsive container (sized by its page context);
+   .map-slide is the canvas itself, always exactly --map-w x --map-h, uniformly scaled into the stage via
+   transform: translate + scale (kx/ky/ox/oy, computed by initializeMapStages/fitMapStages in site.js).
+   Because the editor, /Maps and /Maps/Public all render the SAME .map-stage > .map-slide > .map-tile
+   markup - only kx/ky differs - they are WYSIWYG by construction rather than by three parallel CSS/grid
+   systems staying in sync by hand. */
+.map-stage {
+  position: relative;
+  overflow: hidden;
   width: 100%;
-  aspect-ratio: var(--map-display-width, 16) / var(--map-display-height, 9);
+}
+
+/* In-app viewer (Maps.cshtml) and the designer workbench: a bounded box that keeps the canvas ratio and
+   fits the viewport instead of forcing a page scrollbar. */
+.map-view-panel .map-stage,
+.map-designer-workbench .map-stage {
+  aspect-ratio: var(--map-w, 1920) / var(--map-h, 1080);
   margin-inline: auto;
-  min-height: 28rem;
-  padding: 0.55rem;
   border: 1px solid var(--matmon-border);
   border-radius: 10px;
-  background:
-    linear-gradient(rgba(124, 142, 171, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 142, 171, 0.08) 1px, transparent 1px),
-    var(--matmon-surface-soft);
-  background-size: calc(100% / var(--map-columns, 12)) calc(100% / var(--map-rows, 8));
+  background: var(--matmon-surface-soft);
 }
 
-.map-editor-canvas {
-  min-height: 36rem;
-  width: 100%;
-  max-width: none;
-}
-
-/* In-app map view: keep the board inside the viewport so it never forces a
-   page scrollbar. aspect-ratio holds the shape until max-height clamps it. */
-.map-view-panel .map-canvas {
-  min-height: 0;
+.map-view-panel .map-stage {
   max-height: calc(100vh - 15rem);
 }
 
-/* Narrow viewports: let the in-app board reflow vertically and fill the width instead of being
-   letterboxed into a thin strip by the fixed 16:9 aspect-ratio. Tiles keep their column spans, so
-   a 1-2 wide tile stays a readable fraction of the width; rows get a usable min height. The public
-   wallboard (.public-map-shell .map-canvas) is intentionally NOT touched - it keeps its TV shape. */
-@media (max-width: 640px) {
-  .map-view-panel .map-canvas {
-    aspect-ratio: auto;
-    max-height: none;
-    min-height: 0;
-    grid-template-rows: repeat(var(--map-rows, 8), minmax(3rem, auto));
-  }
+.map-designer-workbench .map-stage {
+  max-height: none;
+}
+
+/* Public wallboard: the stage IS the screen. */
+.public-map-shell .map-stage {
+  position: fixed;
+  inset: 0;
+  background: #000;
+}
+
+.map-slide {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: calc(var(--map-w, 1920) * 1px);
+  height: calc(var(--map-h, 1080) * 1px);
+  transform-origin: 0 0;
+  transform: translate(var(--map-ox, 0px), var(--map-oy, 0px)) scale(var(--map-kx, 1), var(--map-ky, 1));
+  background-color: var(--slide-bg, var(--matmon-bg));
+  font-size: 16px;
+  overflow: hidden;
+}
+
+.map-slide[hidden] {
+  display: none !important;
+}
+
+/* Design-mode helper grid (8px, matching MonitoringMapTileConstraints.SnapGrid) - lies exactly on the
+   canvas since there is no padding/gap to throw the math off (unlike the old CSS-grid gap). */
+.map-slide-editable {
+  background-image:
+    linear-gradient(rgba(124, 142, 171, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 142, 171, 0.12) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.map-slide-header {
+  position: absolute;
+  left: 24px;
+  top: 16px;
+  right: 24px;
+  height: 72px;
+  color: var(--matmon-text);
+  pointer-events: none;
+}
+
+.map-slide-header h2 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.1;
+}
+
+.map-slide-header p {
+  margin: 0;
+  font-size: 20px;
+  color: var(--matmon-muted);
 }
 
 .map-tile {
   --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tone, var(--matmon-border)));
-  grid-column: var(--tile-x, 1) / span var(--tile-w, 3);
-  grid-row: var(--tile-y, 1) / span var(--tile-h, 2);
+  position: absolute;
+  left: calc(var(--tile-x, 0) * 1px);
+  top: calc(var(--tile-y, 0) * 1px);
+  width: calc(var(--tile-w, 320) * 1px);
+  height: calc(var(--tile-h, 160) * 1px);
   /* Flex column so the main visual (graph/gauge/value/progress) can grow and fill the
      tile instead of the content packing at the top and leaving the cell half empty.
      justify-content:center balances "flat" tiles (summary/state/text without a growing
@@ -8150,14 +8202,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 6px;
   min-width: 0;
   min-height: 0;
   container-type: size;
-  padding: 0.7rem;
+  padding: 12px;
   border: 1px solid color-mix(in srgb, var(--map-tile-accent) 52%, var(--matmon-border));
   border-left: 4px solid var(--map-tile-accent);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--map-tile-custom-bg, color-mix(in srgb, var(--matmon-surface) 92%, var(--map-tile-tone, transparent)));
   box-shadow: var(--matmon-shadow-soft);
   color: var(--map-tile-custom-text, var(--matmon-text));
@@ -8208,8 +8260,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
   /* Height-biased but capped by width, so a wide/short tile gets a readable title instead of the tiny value
-     cqmin (the smaller side) used to force. */
-  font-size: clamp(0.62rem, min(11cqh, 9cqw), 1.15rem);
+     cqmin (the smaller side) used to force. cq units measure the tile's own layout size, which the stage's
+     transform:scale does NOT change, so this stays correct at any zoom level - no rem ceiling needed. */
+  font-size: min(11cqh, 9cqw);
 }
 
 .map-tile-head .state-pill {
@@ -8241,7 +8294,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   text-overflow: ellipsis;
   /* Fill the available height (cqh) but cap by width (cqw) so it stays big on wide/short tiles yet never
      overflows a narrow one - a single readable line either way. */
-  font-size: clamp(0.95rem, min(40cqh, 26cqw), 3.4rem);
+  font-size: min(40cqh, 26cqw);
   font-weight: 800;
   line-height: 1;
 }
@@ -8298,7 +8351,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-gauge strong {
-  font-size: clamp(0.7rem, 15cqmin, 1.7rem);
+  font-size: 15cqmin;
   line-height: 1;
 }
 
@@ -8311,12 +8364,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: clamp(0.52rem, min(7cqh, 5.5cqw), 0.85rem);
+  font-size: min(7cqh, 5.5cqw);
 }
 
-/* Progress-bar thickness tracks the tile: slim on a one-row tile, chunkier on a tall one. */
+/* Progress-bar thickness tracks the tile: slim on a short tile, chunkier on a tall one. */
 .map-tile-progress {
-  height: clamp(0.45rem, 9cqh, 0.9rem);
+  height: 9cqh;
+  min-height: 6px;
 }
 
 /* One grid-row tall: tighten the chrome and drop the muted subtitle/kind line so the primary metric keeps
@@ -8335,36 +8389,6 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   .map-tile > small {
     display: none;
   }
-}
-
-/* One-row value / summary tile (row span = 1) -> a single line: label left, metric right, so a slim strip
-   (e.g. 6x1) reads cleanly instead of stacking title over value. Keyed on the row span (data-tile-h), not
-   a container query, because a tile cannot size-query ITSELF - only its descendants can. Scoped to plain
-   value/summary tiles (a direct .map-tile-value, no gauge/progress/graph block) + the designer's value mock. */
-.map-tile[data-tile-h="1"]:has(> .map-tile-value):not(:has(> .map-tile-progress-wrap)):not(:has(> .map-tile-graph-frame)),
-.map-tile-editor[data-tile-h="1"][data-preview="value"] {
-  flex-flow: row wrap;
-  align-items: center;
-  column-gap: 0.6rem;
-  row-gap: 0.1rem;
-}
-
-.map-tile[data-tile-h="1"]:has(> .map-tile-value):not(:has(> .map-tile-progress-wrap)):not(:has(> .map-tile-graph-frame)) > .map-tile-head,
-.map-tile-editor[data-tile-h="1"][data-preview="value"] > .map-tile-head {
-  flex: 1 1 7rem;
-  min-width: 0;
-}
-
-.map-tile[data-tile-h="1"]:has(> .map-tile-value):not(:has(> .map-tile-progress-wrap)):not(:has(> .map-tile-graph-frame)) > .map-tile-value {
-  flex: 0 1 auto;
-  margin-left: auto;
-  justify-content: flex-end;
-}
-
-.map-tile-editor[data-tile-h="1"][data-preview="value"] > .map-tile-mock {
-  flex: 0 1 auto;
-  margin-left: auto;
-  align-self: center;
 }
 
 /* The ring only degrades to a flat number + bar once the tile is genuinely too short for a legible ring;
@@ -8396,7 +8420,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   }
 
   .map-tile-gauge strong {
-    font-size: clamp(1rem, min(46cqh, 22cqw), 2.4rem);
+    font-size: min(46cqh, 22cqw);
   }
 
   /* Slim fill bar under the number so a short gauge still reads as a level, not just a bare figure. */
@@ -8404,7 +8428,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
     content: "";
     display: block;
     width: 100%;
-    height: clamp(0.4rem, 7cqh, 0.7rem);
+    height: 7cqh;
+    min-height: 3px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--map-tile-accent) 42%, var(--matmon-border));
     background:
@@ -8425,7 +8450,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border-radius: 8px;
   background: color-mix(in srgb, var(--map-tile-accent, transparent) 10%, transparent);
   color: var(--matmon-muted);
-  font-size: clamp(0.42rem, 4cqmin, 0.78rem);
+  font-size: 4cqmin;
 }
 
 .map-tile-graph {
@@ -8449,41 +8474,6 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-graph-bars {
   stroke-width: 3.2;
-}
-
-/* Design-mode realistic preview: the editor tile shows a static mock of how the real tile will look
-   (a big value, a gauge, a progress bar or a sparkline), picked by the tile's data-preview attribute
-   (set server-side + kept in sync by site.js from kind + visual type). Reuses the real display visuals. */
-.map-tile-mock {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.map-tile-mock-part {
-  display: none;
-}
-
-.map-tile-editor[data-preview="value"] .map-tile-mock-part[data-mock="value"] {
-  display: flex;
-}
-
-.map-tile-editor[data-preview="gauge"] .map-tile-mock-part[data-mock="gauge"] {
-  display: grid;
-}
-
-.map-tile-editor[data-preview="progress"] .map-tile-mock-part[data-mock="progress"] {
-  display: grid;
-}
-
-.map-tile-editor[data-preview="graph"] .map-tile-mock-part[data-mock="graph"] {
-  display: grid;
-}
-
-.map-tile-editor[data-preview="text"] .map-tile-mock {
-  display: none;
 }
 
 /* --- Icon picker (shared modal: visual glyph grid + search) --- */
@@ -8882,27 +8872,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   outline-offset: 2px;
 }
 
-/* Design preview: the real tile content (value/gauge/graph, from live data) sits DIMMED underneath, so the
-   edit chrome (title, handles, size badge) stays legible on top - "you see the values through it". */
-.map-tile-editor .map-tile-mock {
-  opacity: 0.6;
-}
-
-.map-tile-editor.is-resizing .map-tile-mock,
-.map-tile-editor.is-dragging .map-tile-mock {
-  opacity: 0.38;
-}
-
-/* Keep the tile usable as it shrinks: drop the kind label on small tiles and scale the remove button. */
+/* Keep the tile usable as it shrinks: scale the remove button with it. */
 .map-tile-editor .map-tile-remove {
-  width: clamp(1.1rem, 16cqmin, 1.75rem);
-  height: clamp(1.1rem, 16cqmin, 1.75rem);
-}
-
-@container (max-width: 150px) {
-  .map-tile-editor .map-tile-kind-label {
-    display: none;
-  }
+  width: min(16cqmin, 1.75rem);
+  height: min(16cqmin, 1.75rem);
 }
 
 /* Map aspect-ratio controls (ratio presets + free B:H). */
@@ -9041,165 +9014,39 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .public-map-body {
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(120, 213, 200, 0.12), transparent 30rem),
-    var(--matmon-bg);
+  background: #000;
   color: var(--matmon-text);
 }
 
 .public-map-shell {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 0.85rem;
+  position: relative;
   height: 100vh;
-  padding: 1rem;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.public-map-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--matmon-border);
-  border-radius: 10px;
-  background: var(--matmon-surface);
-}
-
-.public-map-header span {
-  color: var(--matmon-muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.public-map-header h1,
-.public-map-header p {
-  margin: 0;
-}
-
-.public-map-header h1 {
-  font-size: clamp(1.3rem, 2vw, 2rem);
-}
-
-.public-map-header p {
-  color: var(--matmon-muted);
-}
-
-.public-map-headline {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.public-map-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.1rem;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.public-map-meta span {
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-.public-map-meta .public-map-meta-brand {
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.public-map-meta-time {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: var(--matmon-foreground);
-  font-variant-numeric: tabular-nums;
-}
-
-.public-map-meta-time .ui-icon {
-  width: 0.9rem;
-  height: 0.9rem;
-}
-
-/* Public wallboard fills the row the shell grid hands it (1fr) exactly, so the
-   board scales to the screen instead of overflowing into a scrollbar. */
-.public-map-canvas {
-  min-height: 0;
-  height: 100%;
-  width: 100%;
-  max-width: none;
-  aspect-ratio: auto;
-}
-
-/* Wallboard fit (per map). Default above = "stretch" (fills the screen). "fit" keeps the map's aspect ratio,
-   centered, with slim letterbox bars if the screen ratio differs. */
-.public-map-stage[data-map-fit="fit"] .public-map-carousel {
-  container-type: size;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.public-map-stage[data-map-fit="fit"] .public-map-canvas {
-  aspect-ratio: var(--map-display-width, 16) / var(--map-display-height, 9);
-  /* The largest ratio-true box that fits the carousel in BOTH directions (container-query units of the
-     carousel). If the screen is wider than the map ratio -> bars left/right; taller -> bars top/bottom.
-     No distortion either way. */
-  width: min(100cqw, calc(100cqh * var(--map-display-width, 16) / var(--map-display-height, 9)));
-  height: auto;
-  margin: auto;
 }
 
 /* --- Map carousel (multi-slide) --- */
 .map-carousel {
   display: block;
   width: 100%;
+  height: 100%;
 }
 
-.public-map-carousel {
-  flex: 1;
-  min-height: 0;
-}
-
-/* A hidden slide must stay hidden despite .map-canvas using display:grid. */
+/* A hidden slide must stay hidden despite .map-slide using position:absolute. */
 .map-carousel-slide[hidden] {
   display: none !important;
 }
 
+/* Always a small overlay near the bottom edge of its .map-stage (a sibling of .map-slide inside it) - the
+   public stage is a fullscreen fixed box with no "below the board" area left on screen, and the in-app
+   viewer's stage is letterboxed the same way, so both use the same overlay treatment. */
 .map-carousel-nav {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
-  margin-top: 0.6rem;
-}
-
-.public-map-carousel-nav {
-  margin-top: 0.4rem;
-}
-
-/* Stage wraps the board + its page indicator so an overlay indicator can float over it. */
-.public-map-stage {
-  position: relative;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.public-map-carousel-nav.is-overlay {
-  position: absolute;
-  left: 50%;
-  bottom: 0.9rem;
-  transform: translateX(-50%);
-  margin: 0;
   z-index: 5;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
@@ -9207,17 +9054,6 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border: 1px solid var(--matmon-border);
   backdrop-filter: blur(6px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-}
-
-.public-map-carousel-nav.is-auto-hide {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s ease;
-}
-
-.public-map-stage.is-active .public-map-carousel-nav.is-auto-hide {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .map-carousel-arrow {
@@ -11374,15 +11210,6 @@ button.workspace-action-menu-link {
   .map-library-actions > *,
   .map-library-actions form {
     width: 100%;
-  }
-
-  .public-map-shell {
-    padding: 0.55rem;
-  }
-
-  .public-map-header {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .monitoring-view-switch {

@@ -1,0 +1,112 @@
+@model Matmon.Host.Ui.MapTileRenderModel
+@{
+    var tile = Model.Tile;
+    // One shared card for the dashboard viewer, the public wallboard AND (in editable mode) the designer -
+    // true WYSIWYG instead of the designer showing a hand-built "mock" of what the tile might look like.
+    var editorAttributes = Model.Editable
+        ? $"data-map-tile data-tile-index=\"{Model.Index}\" data-slide-id=\"{Model.SlideId}\""
+        : string.Empty;
+    var showHead = tile.ShowTitle || tile.ShowStateBadge || Model.Editable;
+}
+<article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")"
+         data-tile-id="@tile.Id"
+         data-state="@Model.StateKey"
+         data-kind="@tile.Kind.ToString().ToLowerInvariant()"
+         data-visual="@Model.EffectiveVisualType.ToString().ToLowerInvariant()"
+         @Html.Raw(editorAttributes)
+         style="--tile-x: @tile.X; --tile-y: @tile.Y; --tile-w: @tile.Width; --tile-h: @tile.Height; @MapTileRender.TileStyle(tile)"
+         hidden="@(Model.IsDeleted ? "hidden" : null)">
+    @if (Model.Editable)
+    {
+        <input type="hidden" name="@(Model.FieldNamePrefix).Id" value="@tile.Id" />
+        <input type="hidden" name="@(Model.FieldNamePrefix).SlideId" value="@Model.SlideId" data-map-tile-slide-id />
+        <input type="hidden" name="@(Model.FieldNamePrefix).IsDeleted" value="@(Model.IsDeleted ? "true" : "false")" data-map-tile-deleted />
+        <input type="hidden" name="@(Model.FieldNamePrefix).X" value="@tile.X" data-map-tile-x />
+        <input type="hidden" name="@(Model.FieldNamePrefix).Y" value="@tile.Y" data-map-tile-y />
+    }
+
+    @if (showHead)
+    {
+        <div class="map-tile-head@(Model.Editable ? " map-tile-drag-handle" : "")" data-map-drag-handle="@(Model.Editable ? "" : null)">
+            <span class="map-tile-icon">@MatmonIcons.Render(Model.IconKey)</span>
+            @if (tile.ShowTitle)
+            {
+                <strong data-tile-title>@(string.IsNullOrWhiteSpace(tile.Title) ? (Model.ElementName ?? Model.KindLabel) : tile.Title)</strong>
+            }
+            @if (tile.ShowStateBadge)
+            {
+                <span class="state-pill" data-state="@Model.StateKey" data-tile-state-label>@Model.StateLabel</span>
+            }
+            @if (Model.Editable)
+            {
+                <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
+            }
+        </div>
+    }
+
+    @if (tile.Kind == MonitoringMapTileKind.Graph)
+    {
+        <div class="map-tile-graph-frame">
+            @if (!string.IsNullOrWhiteSpace(Model.GraphLinePath))
+            {
+                <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                    @if (tile.GraphType == MonitoringMapTileGraphType.Area && !string.IsNullOrWhiteSpace(Model.GraphAreaPath))
+                    {
+                        <path class="map-graph-area" d="@Model.GraphAreaPath" data-tile-graph-area></path>
+                    }
+                    @if (tile.GraphType == MonitoringMapTileGraphType.Bars && !string.IsNullOrWhiteSpace(Model.GraphBarPath))
+                    {
+                        <path class="map-graph-bars" d="@Model.GraphBarPath" data-tile-graph-bars></path>
+                    }
+                    else
+                    {
+                        <path class="map-graph-line" d="@Model.GraphLinePath" data-tile-graph-line></path>
+                    }
+                </svg>
+            }
+            else
+            {
+                <span>No graph data yet</span>
+            }
+        </div>
+    }
+
+    @if (Model.ProgressPercent.HasValue && Model.EffectiveVisualType == MonitoringMapTileVisualType.Gauge)
+    {
+        <div class="map-tile-gauge" data-tile-progress style="--map-progress: @MapTileRender.FormatProgressPercent(Model.ProgressPercent)">
+            <span>
+                <strong>@MapTileRender.FormatProgressLabel(Model.ProgressPercent)</strong>
+                <small data-tile-progress-label>@Model.ProgressLabel</small>
+            </span>
+        </div>
+    }
+    else if (Model.ProgressPercent.HasValue && Model.EffectiveVisualType == MonitoringMapTileVisualType.ProgressBar)
+    {
+        <div class="map-tile-progress-wrap">
+            <div class="map-tile-progress" data-tile-progress style="--map-progress: @MapTileRender.FormatProgressPercent(Model.ProgressPercent)">
+                <span></span>
+            </div>
+            <small data-tile-progress-label>@Model.ProgressLabel</small>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.Value) && Model.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
+    {
+        <div class="map-tile-value" data-tile-value>@Model.Value</div>
+    }
+
+    <p data-tile-subtitle>@Model.Subtitle</p>
+    <small>
+        @Model.KindLabel
+        @if (tile.ShowElementName && !string.IsNullOrWhiteSpace(Model.ElementName))
+        {
+            <text> - @Model.ElementName</text>
+        }
+    </small>
+
+    @if (Model.Editable)
+    {
+        <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">@tile.Width &times; @tile.Height</span>
+        <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
+    }
+</article>
