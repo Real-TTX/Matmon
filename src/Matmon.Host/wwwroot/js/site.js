@@ -3691,16 +3691,22 @@ function initializeMapDesigner() {
       handle.setPointerCapture(event.pointerId);
       tile.classList.add("is-dragging");
 
+      // Remember WHERE INSIDE the tile the pointer grabbed it, so that spot stays under the cursor for
+      // the whole drag. Without this the tile's top-left corner was slammed onto the pointer, so grabbing
+      // a tile anywhere but its exact corner made it jump the instant you started moving.
+      const grabControls = getTileControls(tile);
+      const grabPoint = pointerToLogical(event);
+      const grabOffsetX = grabPoint.x - Number(grabControls.x?.value || 0);
+      const grabOffsetY = grabPoint.y - Number(grabControls.y?.value || 0);
+
       const move = (moveEvent) => {
         const controls = getTileControls(tile);
-        // Positions the tile's top-left corner directly under the pointer (no drag-offset compensation,
-        // same simplification the pre-Phase-A grid version made) - applyTilePosition snaps + clamps it.
         const point = pointerToLogical(moveEvent);
         if (controls.x) {
-          controls.x.value = String(Math.round(point.x));
+          controls.x.value = String(Math.round(point.x - grabOffsetX));
         }
         if (controls.y) {
-          controls.y.value = String(Math.round(point.y));
+          controls.y.value = String(Math.round(point.y - grabOffsetY));
         }
 
         applyTilePosition(tile);
@@ -3780,8 +3786,10 @@ function initializeMapDesigner() {
     const { logicalWidth, logicalHeight } = readLogicalSize();
     const width = clamp(limits.defaultWidth, limits.minWidth, logicalWidth);
     const height = clamp(limits.defaultHeight, limits.minHeight, logicalHeight);
-    const x = clamp(snap(position?.x ?? 0), 0, Math.max(0, logicalWidth - width));
-    const y = clamp(snap(position?.y ?? 0), 0, Math.max(0, logicalHeight - height));
+    // Drop CENTERS the new tile on the cursor rather than hanging it off the pointer by its top-left
+    // corner, so where you release is where the tile appears.
+    const x = clamp(snap((position?.x ?? 0) - width / 2), 0, Math.max(0, logicalWidth - width));
+    const y = clamp(snap((position?.y ?? 0) - height / 2), 0, Math.max(0, logicalHeight - height));
     const html = template.innerHTML
       .replaceAll("__index__", String(index))
       .replaceAll("__id__", createId())
