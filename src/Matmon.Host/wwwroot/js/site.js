@@ -3676,19 +3676,26 @@ function initializeMapDesigner() {
       selectMap();
     });
 
-    const handle = tile.querySelector("[data-map-drag-handle]");
-    if (!handle) {
-      return;
-    }
+    // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). It used to
+    // be a thin header strip - barely 15% of a tile's height, and proportionally thinner the smaller the
+    // tile or the zoom - so most of a tile simply did not react to dragging at all.
+    tile.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
 
-    handle.addEventListener("pointerdown", (event) => {
-      if (event.target instanceof HTMLElement && event.target.closest("input, select, textarea, button")) {
+      if (event.target instanceof HTMLElement
+        && event.target.closest("input, select, textarea, button, a, [data-map-resize-handle]")) {
         return;
       }
 
       event.preventDefault();
       selectTile(tile.dataset.tileIndex || "");
-      handle.setPointerCapture(event.pointerId);
+      try {
+        tile.setPointerCapture(event.pointerId);
+      } catch {
+        // Capture is a nicety here; the window-level listeners below are what actually carry the drag.
+      }
       tile.classList.add("is-dragging");
 
       // Remember WHERE INSIDE the tile the pointer grabbed it, so that spot stays under the cursor for
@@ -3714,14 +3721,16 @@ function initializeMapDesigner() {
 
       const up = () => {
         tile.classList.remove("is-dragging");
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", up);
-        handle.removeEventListener("pointercancel", up);
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
       };
 
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", up);
-      handle.addEventListener("pointercancel", up);
+      // Bound to the WINDOW, not the tile: the cursor regularly outruns the tile mid-drag, and a pointerup
+      // the element missed used to strand it in is-dragging with the move handler still attached.
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
     });
 
     const resizeHandle = tile.querySelector("[data-map-resize-handle]");
@@ -3762,14 +3771,15 @@ function initializeMapDesigner() {
 
       const up = () => {
         tile.classList.remove("is-resizing");
-        resizeHandle.removeEventListener("pointermove", move);
-        resizeHandle.removeEventListener("pointerup", up);
-        resizeHandle.removeEventListener("pointercancel", up);
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
       };
 
-      resizeHandle.addEventListener("pointermove", move);
-      resizeHandle.addEventListener("pointerup", up);
-      resizeHandle.addEventListener("pointercancel", up);
+      // Same reasoning as the move drag: the pointer leaves the small grip almost immediately.
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
     });
   };
 

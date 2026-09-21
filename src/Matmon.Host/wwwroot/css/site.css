@@ -8783,13 +8783,16 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-tile-editor {
   position: relative;
   padding: 0.52rem;
-  cursor: pointer;
+  /* The whole tile is the drag surface (see initializeMapDesigner), so say so - a plain pointer read as
+     "click to select" and left most of the tile feeling dead. */
+  cursor: grab;
 }
 
 .map-tile-editor.is-dragging {
   opacity: 0.82;
   transform: scale(0.99);
   z-index: 20;
+  cursor: grabbing;
 }
 
 .map-tile-editor.is-selected {
