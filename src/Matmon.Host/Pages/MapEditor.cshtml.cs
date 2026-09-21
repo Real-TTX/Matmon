@@ -97,6 +97,10 @@ public sealed class MapEditorModel : PageModel
                 PaginationMode = Input.PaginationMode,
                 PublicEnabled = Input.PublicEnabled,
                 ShowSlideHeaders = Input.ShowSlideHeaders,
+                Columns = Input.Columns,
+                Rows = Input.Rows,
+                TilePadding = Input.TilePadding,
+                OuterMargin = Input.OuterMargin,
                 Slides = BuildSlidesFromInput().ToList()
             };
 
@@ -170,10 +174,10 @@ public sealed class MapEditorModel : PageModel
             ?? (string.IsNullOrEmpty(tile.TargetToken) && tile.ElementId != Guid.Empty ? tile.ElementId : null),
         TargetTag = MonitoringTargetResolver.TagName(tile.TargetToken),
         Text = tile.Text,
-        X = tile.X,
-        Y = tile.Y,
-        Width = Math.Max(1, tile.Width),
-        Height = Math.Max(1, tile.Height),
+        Column = Math.Max(1, tile.Column),
+        Row = Math.Max(1, tile.Row),
+        ColumnSpan = Math.Max(1, tile.ColumnSpan),
+        RowSpan = Math.Max(1, tile.RowSpan),
         BackgroundColor = tile.BackgroundColor,
         AccentColor = tile.AccentColor,
         TextColor = tile.TextColor,
@@ -214,6 +218,10 @@ public sealed class MapEditorModel : PageModel
                 PaginationMode = map.PaginationMode,
                 PublicEnabled = map.PublicEnabled,
                 ShowSlideHeaders = map.ShowSlideHeaders,
+                Columns = map.Columns,
+                Rows = map.Rows,
+                TilePadding = map.TilePadding,
+                OuterMargin = map.OuterMargin,
                 Slides = slides.Select(slide => new MapSlideInput
                 {
                     Id = slide.Id,
@@ -235,10 +243,10 @@ public sealed class MapEditorModel : PageModel
                         ? MonitoringTargetResolver.ForTag(tag)
                         : tile.ElementId is { } eid ? MonitoringTargetResolver.ForElement(eid) : null,
                     Text = tile.Text,
-                    X = tile.X,
-                    Y = tile.Y,
-                    Width = tile.Width,
-                    Height = tile.Height,
+                    Column = tile.Column,
+                    Row = tile.Row,
+                    ColumnSpan = tile.ColumnSpan,
+                    RowSpan = tile.RowSpan,
                     BackgroundColor = tile.BackgroundColor,
                     AccentColor = tile.AccentColor,
                     TextColor = tile.TextColor,
@@ -258,12 +266,13 @@ public sealed class MapEditorModel : PageModel
                 .GroupBy(vm => vm.Tile.Id)
                 .ToDictionary(group => group.Key, group => group.First());
 
+            var renderMap = BuildInputMapForRender();
             TileRenderModels = Input.Tiles.Select((tileInput, index) =>
             {
                 var domainTile = ToTile(tileInput);
                 return previewsByTileId.TryGetValue(tileInput.Id, out var preview)
-                    ? MapTileRenderModel.FromDisplay(preview, editable: true, index: index, slideId: tileInput.SlideId, tileOverride: domainTile)
-                    : MapTileRenderModel.Placeholder(domainTile, index, tileInput.SlideId);
+                    ? MapTileRenderModel.FromDisplay(preview, renderMap, editable: true, index: index, slideId: tileInput.SlideId, tileOverride: domainTile)
+                    : MapTileRenderModel.Placeholder(domainTile, renderMap, index, tileInput.SlideId);
             }).ToArray();
         }
         else
@@ -286,19 +295,37 @@ public sealed class MapEditorModel : PageModel
                         SlideId = defaultSlideId,
                         Kind = MonitoringMapTileKind.Status,
                         Title = "Status",
-                        X = 24,
-                        Y = 24,
-                        Width = 400,
-                        Height = 200
+                        Column = 1,
+                        Row = 1,
+                        ColumnSpan = 4,
+                        RowSpan = 2
                     }
                 ]
             };
 
+            var renderMap = BuildInputMapForRender();
             TileRenderModels = Input.Tiles.Select((tileInput, index) =>
-                MapTileRenderModel.Placeholder(ToTile(tileInput), index, tileInput.SlideId)).ToArray();
+                MapTileRenderModel.Placeholder(ToTile(tileInput), renderMap, index, tileInput.SlideId)).ToArray();
         }
 
         LoadElementOptions();
+    }
+
+    /// <summary>A transient (unsaved) <see cref="MonitoringMap"/> reflecting the currently-bound <see cref="Input"/>
+    /// geometry fields - just enough for <see cref="MonitoringMapGeometry.PixelRect"/> to compute the designer's
+    /// tile render rects, in BOTH create mode (no real map exists yet) and edit mode (mirrors the loaded map).</summary>
+    private MonitoringMap BuildInputMapForRender()
+    {
+        var (logicalWidth, logicalHeight) = MonitoringMap.LogicalSizeFor(Input.AspectRatioWidth, Input.AspectRatioHeight);
+        return new MonitoringMap
+        {
+            Columns = Input.Columns,
+            Rows = Input.Rows,
+            TilePadding = Input.TilePadding,
+            OuterMargin = Input.OuterMargin,
+            LogicalWidth = logicalWidth,
+            LogicalHeight = logicalHeight
+        };
     }
 
     private void LoadElementOptions()
@@ -312,11 +339,10 @@ public sealed class MapEditorModel : PageModel
         var dict = new Dictionary<string, object>();
         foreach (var kind in Enum.GetValues<MonitoringMapTileKind>())
         {
-            var (minWidth, minHeight, defaultWidth, defaultHeight) = MonitoringMapTileConstraints.For(kind);
-            dict[kind.ToString()] = new { minWidth, minHeight, defaultWidth, defaultHeight };
+            var (minColumns, minRows, defaultColumns, defaultRows) = MonitoringMapTileConstraints.For(kind);
+            dict[kind.ToString()] = new { minColumns, minRows, defaultColumns, defaultRows };
         }
 
-        dict["snapGrid"] = MonitoringMapTileConstraints.SnapGrid;
         return dict;
     }
 }
@@ -344,6 +370,17 @@ public sealed class MapEditorInput
     public bool PublicEnabled { get; set; }
 
     public bool ShowSlideHeaders { get; set; } = true;
+
+    /// <summary>Grid column/row count and cell gap/margin - authoritative geometry under v2, but there is no
+    /// dedicated "grid size" UI yet (that is the mockup editor rebuild); hidden fields round-trip the map's
+    /// current values so editing a map never silently resets its grid to the defaults below.</summary>
+    public int Columns { get; set; } = 12;
+
+    public int Rows { get; set; } = 6;
+
+    public int TilePadding { get; set; } = 16;
+
+    public int OuterMargin { get; set; } = 24;
 
     public List<MapTileInput> Tiles { get; set; } = [];
 
@@ -388,14 +425,14 @@ public sealed class MapTileInput
 
     public string? Text { get; set; }
 
-    /// <summary>Logical px - see <see cref="MonitoringMap.LogicalWidth"/>.</summary>
-    public int X { get; set; }
+    /// <summary>1-based grid cell coordinates - see <see cref="MonitoringMap.Columns"/>/<see cref="MonitoringMap.Rows"/>.</summary>
+    public int Column { get; set; } = 1;
 
-    public int Y { get; set; }
+    public int Row { get; set; } = 1;
 
-    public int Width { get; set; } = 320;
+    public int ColumnSpan { get; set; } = 2;
 
-    public int Height { get; set; } = 160;
+    public int RowSpan { get; set; } = 2;
 
     public string? BackgroundColor { get; set; }
 

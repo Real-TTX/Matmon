@@ -4,8 +4,11 @@
     var map = Model.Map;
     var showHeader = map.ShowSlideHeaders && slide.ShowHeader &&
         (!string.IsNullOrWhiteSpace(slide.Title) || !string.IsNullOrWhiteSpace(slide.Subtitle));
-    var slideStyle = $"--map-w: {map.LogicalWidth}; --map-h: {map.LogicalHeight};"
+    var slideStyle = $"--map-w: {map.LogicalWidth}; --map-h: {map.LogicalHeight}; --tile-gap: {map.TilePadding}px;"
         + (string.IsNullOrWhiteSpace(slide.BackgroundColor) ? string.Empty : $" --slide-bg: {slide.BackgroundColor};");
+    // Auto-Stack (mobile) renders tiles in reading order rather than the grid's absolute positions - sorted
+    // here, server-side, so the DOM order is already correct whichever layout the JS/CSS end up picking.
+    var orderedTiles = Model.Tiles.OrderBy(t => t.Tile.Row).ThenBy(t => t.Tile.Column).ToList();
 }
 <section class="map-slide@(Model.Editable ? " map-slide-editable" : "")"
          data-map-slide
@@ -27,7 +30,18 @@
             }
         </header>
     }
-    @foreach (var tile in Model.Tiles)
+    @if (Model.Editable)
+    {
+        @* Grid guide lines lined up exactly with the real cells (replaces the old fixed 8px background-grid
+           pattern, which stopped meaning anything once cell size became derived from Columns/Rows/padding/margin). *@
+        <div class="map-grid-guides" aria-hidden="true">
+            @foreach (var cell in Matmon.Host.Ui.MapTileRender.GridCells(map))
+            {
+                <span class="map-grid-cell" style="left: @(cell.X)px; top: @(cell.Y)px; width: @(cell.W)px; height: @(cell.H)px;"></span>
+            }
+        </div>
+    }
+    @foreach (var tile in orderedTiles)
     {
         <partial name="_MapTile" model="tile" />
     }

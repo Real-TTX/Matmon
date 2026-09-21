@@ -8100,14 +8100,18 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: min(20rem, 70vw);
 }
 
-/* --- Logical-canvas map scaling (Phase A) ---
-   Every map has a fixed LOGICAL canvas (--map-w x --map-h, in px - e.g. 1920x1080) that tiles are
-   positioned against in real px. .map-stage is the responsive container (sized by its page context);
-   .map-slide is the canvas itself, always exactly --map-w x --map-h, uniformly scaled into the stage via
-   transform: translate + scale (kx/ky/ox/oy, computed by initializeMapStages/fitMapStages in site.js).
-   Because the editor, /Maps and /Maps/Public all render the SAME .map-stage > .map-slide > .map-tile
-   markup - only kx/ky differs - they are WYSIWYG by construction rather than by three parallel CSS/grid
-   systems staying in sync by hand. */
+/* --- Logical-canvas map scaling (Phase A) + strict cell grid (v2) ---
+   Every map has a fixed LOGICAL canvas (--map-w x --map-h, in px - e.g. 1920x1080). A tile's Column/Row/
+   ColumnSpan/RowSpan (the v2 cell geometry) is converted to a px rect ONCE, server-side, via
+   MonitoringMapGeometry.PixelRect (Ui/MapTileRender.cs) - the resulting --tile-x/y/w/h custom properties are
+   all this CSS ever sees, so the scaling pipeline below is unchanged from Phase A. .map-stage is the
+   responsive container (sized by its page context); .map-slide is the canvas itself, always exactly
+   --map-w x --map-h, uniformly scaled into the stage via transform: translate + scale (kx/ky/ox/oy, computed
+   by initializeMapStages/fitMapStages in site.js). Because the editor, /Maps and /Maps/Public all render the
+   SAME .map-stage > .map-slide > .map-tile markup - only kx/ky differs - they are WYSIWYG by construction
+   rather than by three parallel CSS/grid systems staying in sync by hand. Below ~640 CSS px of stage width,
+   fitMapStages switches a slide to [data-layout="stack"] instead (see further down) - a single-column,
+   reading-order list for narrow/mobile screens, skipping the transform math entirely. */
 .map-stage {
   position: relative;
   overflow: hidden;
@@ -8133,6 +8137,18 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   max-height: none;
 }
 
+/* A stacked slide (see the Auto-Stack rule near .map-slide[hidden]) flows to its natural (taller-than-16:9)
+   height instead of the fixed aspect-ratio box, so the aspect-ratio/overflow clamp that keeps the scaled
+   canvas letterboxed must relax for it - otherwise a narrow in-app viewer or designer pane would clip the
+   single-column list instead of letting the panel scroll to it. */
+.map-view-panel .map-stage:has(.map-slide[data-layout="stack"]),
+.map-designer-workbench .map-stage:has(.map-slide[data-layout="stack"]) {
+  aspect-ratio: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
 /* Public wallboard: the stage IS the screen. */
 .public-map-shell .map-stage {
   position: fixed;
@@ -8156,13 +8172,47 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   display: none !important;
 }
 
-/* Design-mode helper grid (8px, matching MonitoringMapTileConstraints.SnapGrid) - lies exactly on the
-   canvas since there is no padding/gap to throw the math off (unlike the old CSS-grid gap). */
-.map-slide-editable {
-  background-image:
-    linear-gradient(rgba(124, 142, 171, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 142, 171, 0.12) 1px, transparent 1px);
-  background-size: 8px 8px;
+/* Auto-Stack (mobile): fitMapStages() (site.js) sets this when the STAGE's own rendered width drops below
+   ~640 CSS px (not the viewport - so it also works correctly inside the tunnel/embedded console) - the grid
+   becomes an ordinary single-column flex list instead of the transform-scaled absolute canvas above, and the
+   designer's own transform math is skipped for it entirely. Tile order already matches (Row, Column) reading
+   order because _MapSlide.cshtml sorts server-side, so no JS re-ordering is needed either. */
+.map-slide[data-layout="stack"] {
+  position: static;
+  width: 100%;
+  height: auto;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tile-gap, 16px);
+}
+
+.map-slide[data-layout="stack"] .map-tile {
+  position: static;
+  width: 100%;
+  height: auto;
+  min-height: var(--stack-min-h, 72px);
+}
+
+.map-slide[data-layout="stack"] .map-grid-guides {
+  display: none;
+}
+
+/* Design-mode grid guides: one absolutely-positioned box per real cell (server-rendered by _MapSlide.cshtml
+   from MapTileRender.GridCells), so the lines are exactly where a tile will actually snap - replaces a fixed
+   8px background-grid pattern that stopped meaning anything once cell size became derived from
+   Columns/Rows/TilePadding/OuterMargin instead of a flat px snap. Rendered before the tiles in DOM order, so
+   the (equally absolutely-positioned) tiles naturally paint on top with no z-index needed. */
+.map-grid-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-grid-cell {
+  position: absolute;
+  border: 1px dashed rgba(124, 142, 171, 0.25);
+  border-radius: 4px;
 }
 
 .map-slide-header {

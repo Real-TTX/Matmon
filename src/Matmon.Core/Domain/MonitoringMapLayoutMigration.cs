@@ -1,20 +1,26 @@
 namespace Matmon.Core.Domain;
 
 /// <summary>
-/// One-time, idempotent conversion of a map's tile geometry from the legacy v0 grid-cell scheme (1-based
-/// Columns x Rows cells) to the v1 free logical-px canvas (<see cref="MonitoringMap.LogicalWidth"/> x
-/// <see cref="MonitoringMap.LogicalHeight"/>) that the WYSIWYG editor/viewer/public-wallboard all render
-/// identically. Pure and framework-free so it is unit-testable without a store.
+/// One-time, idempotent conversion of a map's tile geometry onto the current v2 cell scheme
+/// (<see cref="MonitoringMapTile.Column"/>/<see cref="MonitoringMapTile.Row"/>/
+/// <see cref="MonitoringMapTile.ColumnSpan"/>/<see cref="MonitoringMapTile.RowSpan"/>). Two starting points,
+/// both guarded on <see cref="MonitoringMap.LayoutVersion"/> so this is a no-op past
+/// <see cref="MonitoringMap.CurrentLayoutVersion"/>:
+/// <list type="bullet">
+/// <item>v0 (the original grid-cell scheme) - the tile's raw fields already ARE 1-based cell coordinates
+/// (see the <c>[JsonPropertyName]</c> aliases on <see cref="MonitoringMapTile.Column"/> etc. - the JSON key
+/// never changed), so this is essentially an identity pass, just clamped onto the kind's minimum span.</item>
+/// <item>v1 (the Phase A free logical-px canvas) - the same raw fields instead hold a px rect, which is
+/// converted back to the nearest cell via <see cref="MonitoringMapGeometry.CellRectFromPixels"/> - the exact
+/// inverse of the formula the renderer uses.</item>
+/// </list>
+/// Pure and framework-free so it is unit-testable without a store.
 /// </summary>
 public static class MonitoringMapLayoutMigration
 {
-    /// <summary>The legacy CSS grid's cell gap, preserved as logical px so migrated tiles keep the same visual
-    /// spacing they had under the old layout instead of touching their neighbours.</summary>
-    private const int Gap = 12;
-
     /// <summary>Converts <paramref name="map"/> in place. A no-op once the map is already on
     /// <see cref="MonitoringMap.CurrentLayoutVersion"/> (idempotent - safe to call on every load/save).</summary>
-    public static void MigrateToLogical(MonitoringMap map)
+    public static void MigrateToCells(MonitoringMap map)
     {
         if (map.LayoutVersion >= MonitoringMap.CurrentLayoutVersion)
         {
@@ -26,48 +32,48 @@ public static class MonitoringMapLayoutMigration
         map.LogicalWidth = logicalWidth;
         map.LogicalHeight = logicalHeight;
 
-        var columns = Math.Max(1, map.Columns);
-        var rows = Math.Max(1, map.Rows);
-        var cellWidth = (double)logicalWidth / columns;
-        var cellHeight = (double)logicalHeight / rows;
+        // Only a v1 map's raw fields hold px - a v0 map's fields already are cell coordinates (see the
+        // JsonPropertyName aliasing on MonitoringMapTile), so no conversion is needed for it, just clamping.
+        var fromLogicalPx = map.LayoutVersion == 1;
 
         foreach (var slide in map.Slides)
         {
-            MigrateTiles(slide.Tiles, cellWidth, cellHeight, logicalWidth, logicalHeight);
+            MigrateTiles(slide.Tiles, map, fromLogicalPx);
         }
 
         // The legacy single-board Tiles list mirrors slide 1 but is a separate set of tile instances (cloned at
         // save time), so it needs the same conversion applied independently.
-        MigrateTiles(map.Tiles, cellWidth, cellHeight, logicalWidth, logicalHeight);
+        MigrateTiles(map.Tiles, map, fromLogicalPx);
 
-        // A v0 map always had a live anonymous link (the feature was not opt-in yet); a v1 map created fresh
-        // defaults PublicEnabled to false. Since this method only runs for a v0 map (guarded above), setting
-        // it unconditionally here is exactly "only for v0 maps".
+        // Both v0 and v1 predate the opt-in public link (it was always live); a fresh v2 map defaults
+        // PublicEnabled to false. Since this method only runs for a v0/v1 map (guarded above), setting it
+        // unconditionally here is exactly "only for a migrated map".
         map.PublicEnabled = true;
         map.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
     }
 
-    private static void MigrateTiles(List<MonitoringMapTile> tiles, double cellWidth, double cellHeight, int canvasWidth, int canvasHeight)
+    private static void MigrateTiles(List<MonitoringMapTile> tiles, MonitoringMap map, bool fromLogicalPx)
     {
         foreach (var tile in tiles)
         {
-            var x = (int)Math.Round((tile.X - 1) * cellWidth, MidpointRounding.AwayFromZero) + Gap / 2;
-            var y = (int)Math.Round((tile.Y - 1) * cellHeight, MidpointRounding.AwayFromZero) + Gap / 2;
-            var width = (int)Math.Round(tile.Width * cellWidth, MidpointRounding.AwayFromZero) - Gap;
-            var height = (int)Math.Round(tile.Height * cellHeight, MidpointRounding.AwayFromZero) - Gap;
-
-            // Snap onto the design grid, exactly as the designer and the store's save-time normalization do.
-            // Without this the migrated rect (e.g. 6/468 - the half-gap is not a multiple of SnapGrid) differs
-            // from what the editor shows the moment it loads, so merely opening and saving a migrated map would
-            // silently shift every tile by a few px.
-            tile.X = MonitoringMapTileConstraints.Snap(x);
-            tile.Y = MonitoringMapTileConstraints.Snap(y);
-            tile.Width = MonitoringMapTileConstraints.Snap(width);
-            tile.Height = MonitoringMapTileConstraints.Snap(height);
+            if (fromLogicalPx)
+            {
+                // v1 (Phase A logical px) -> v2 (cells): invert the SAME cell<->px formula the renderer uses,
+                // rounding to the nearest whole cell. At this point Column/Row/ColumnSpan/RowSpan still hold
+                // the raw v1 px rect (deserialized via the shared "x"/"y"/"width"/"height" JSON keys) - they
+                // are overwritten here with the real cell values.
+                var (column, row, columnSpan, rowSpan) = MonitoringMapGeometry.CellRectFromPixels(
+                    map, tile.Column, tile.Row, tile.ColumnSpan, tile.RowSpan);
+                tile.Column = column;
+                tile.Row = row;
+                tile.ColumnSpan = columnSpan;
+                tile.RowSpan = rowSpan;
+            }
+            // else v0: Column/Row/ColumnSpan/RowSpan already are the 1-based cell coordinates - identity.
 
             // A legacy tile that hung off the edge of its grid (or was smaller than the new kind minimum)
-            // is clamped into the canvas rather than rejected - see MonitoringMapTileConstraints.Clamp.
-            MonitoringMapTileConstraints.Clamp(tile, canvasWidth, canvasHeight);
+            // is clamped into the grid rather than rejected - see MonitoringMapTileConstraints.Clamp.
+            MonitoringMapTileConstraints.Clamp(tile, map.Columns, map.Rows);
         }
     }
 }

@@ -14,15 +14,15 @@
          data-kind="@tile.Kind.ToString().ToLowerInvariant()"
          data-visual="@Model.EffectiveVisualType.ToString().ToLowerInvariant()"
          @Html.Raw(editorAttributes)
-         style="--tile-x: @tile.X; --tile-y: @tile.Y; --tile-w: @tile.Width; --tile-h: @tile.Height; @MapTileRender.TileStyle(tile)"
+         style="--tile-x: @Model.TileX; --tile-y: @Model.TileY; --tile-w: @Model.TileWidth; --tile-h: @Model.TileHeight; --stack-min-h: @(tile.RowSpan * 72)px; @MapTileRender.TileStyle(tile)"
          hidden="@(Model.IsDeleted ? "hidden" : null)">
     @if (Model.Editable)
     {
         <input type="hidden" name="@(Model.FieldNamePrefix).Id" value="@tile.Id" />
         <input type="hidden" name="@(Model.FieldNamePrefix).SlideId" value="@Model.SlideId" data-map-tile-slide-id />
         <input type="hidden" name="@(Model.FieldNamePrefix).IsDeleted" value="@(Model.IsDeleted ? "true" : "false")" data-map-tile-deleted />
-        <input type="hidden" name="@(Model.FieldNamePrefix).X" value="@tile.X" data-map-tile-x />
-        <input type="hidden" name="@(Model.FieldNamePrefix).Y" value="@tile.Y" data-map-tile-y />
+        <input type="hidden" name="@(Model.FieldNamePrefix).Column" value="@tile.Column" data-map-tile-column />
+        <input type="hidden" name="@(Model.FieldNamePrefix).Row" value="@tile.Row" data-map-tile-row />
     }
 
     @if (showHead)
@@ -106,7 +106,7 @@
 
     @if (Model.Editable)
     {
-        <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">@tile.Width &times; @tile.Height</span>
+        <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">@tile.ColumnSpan &times; @tile.RowSpan</span>
         <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
     }
 </article>

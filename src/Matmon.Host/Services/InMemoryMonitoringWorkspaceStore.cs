@@ -574,9 +574,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     }
 
     /// <summary>Normalizes a draft's editable fields onto <paramref name="target"/> (a live document map for
-    /// UpdateMap, or a freshly-constructed one for CreateMap). Deliberately does NOT touch the legacy
-    /// Columns/Rows/DisplayPreset - the new editor no longer authors grid cells, so those stay whatever they
-    /// were (default on create, unchanged on update) purely so an old backup round-trips its original metadata.</summary>
+    /// UpdateMap, or a freshly-constructed one for CreateMap). Columns/Rows/TilePadding/OuterMargin ARE
+    /// authoritative geometry again under v2 (unlike the old free-px editor, which deliberately left them
+    /// alone) - the caller round-trips the map's current values on the draft so editing a map never silently
+    /// resets its grid.</summary>
     private static void ApplyMapDraft(MonitoringMap target, MonitoringMap draft)
     {
         target.Name = NormalizeMapName(draft.Name);
@@ -588,6 +589,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         target.PaginationMode = draft.PaginationMode;
         target.PublicEnabled = draft.PublicEnabled;
         target.ShowSlideHeaders = draft.ShowSlideHeaders;
+        target.Columns = Math.Clamp(draft.Columns, 4, 24);
+        target.Rows = Math.Clamp(draft.Rows, 2, 16);
+        target.TilePadding = Math.Clamp(draft.TilePadding, 0, 64);
+        target.OuterMargin = Math.Clamp(draft.OuterMargin, 0, 96);
 
         var aspect = target.EffectiveAspect();
         var (logicalWidth, logicalHeight) = MonitoringMap.LogicalSizeFor(aspect.Width, aspect.Height);
@@ -595,7 +600,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         target.LogicalHeight = logicalHeight;
         target.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
 
-        var normalizedSlides = NormalizeMapSlides(draft.Slides, logicalWidth, logicalHeight);
+        var normalizedSlides = NormalizeMapSlides(draft.Slides, target.Columns, target.Rows);
         target.Slides = normalizedSlides;
         target.Tiles = normalizedSlides[0].Tiles.Select(CloneMapTile).ToList();
     }
@@ -606,8 +611,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
     private static List<MonitoringMapSlide> NormalizeMapSlides(
         IReadOnlyList<MonitoringMapSlide> slides,
-        int logicalWidth,
-        int logicalHeight)
+        int columns,
+        int rows)
     {
         var result = (slides ?? [])
             .Select((slide, index) => new MonitoringMapSlide
@@ -619,7 +624,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 DurationSeconds = NormalizeSlideDurationSeconds(slide.DurationSeconds),
                 BackgroundColor = NormalizeColor(slide.BackgroundColor),
                 ShowHeader = slide.ShowHeader,
-                Tiles = NormalizeMapTiles(slide.Tiles ?? [], logicalWidth, logicalHeight).ToList()
+                Tiles = NormalizeMapTiles(slide.Tiles ?? [], columns, rows).ToList()
             })
             .ToList();
 
@@ -2807,8 +2812,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         if (_document.Maps.Count == 0 && createStarterMap)
         {
             var root = _document.RootProbe;
-            // Authored directly on the v1 logical canvas (1920x1080) - no grid cells to migrate, so this
-            // skips MonitoringMapLayoutMigration entirely (it is a no-op past LayoutVersion 0 anyway).
+            // Authored directly on the v2 cell grid (default 12x6) - no older layout to migrate, so this
+            // skips MonitoringMapLayoutMigration entirely (it is a no-op past LayoutVersion 0/1 anyway).
             _document.Maps.Add(new MonitoringMap
             {
                 Name = "Operations Wall",
@@ -2824,20 +2829,20 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                         Kind = MonitoringMapTileKind.Status,
                         Title = "Overall status",
                         ElementId = root.Id,
-                        X = 24,
-                        Y = 24,
-                        Width = 600,
-                        Height = 280
+                        Column = 1,
+                        Row = 1,
+                        ColumnSpan = 6,
+                        RowSpan = 3
                     },
                     new MonitoringMapTile
                     {
                         Kind = MonitoringMapTileKind.Text,
                         Title = "Matmon Map",
                         Text = "Assign sensors, folders or probes to tiles in edit mode.",
-                        X = 648,
-                        Y = 24,
-                        Width = 600,
-                        Height = 280
+                        Column = 7,
+                        Row = 1,
+                        ColumnSpan = 6,
+                        RowSpan = 3
                     }
                 ]
             });
@@ -2859,10 +2864,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    /// <summary>Converts every map still on the legacy v0 (grid-cell) layout to the v1 logical-px canvas -
-    /// see <see cref="MonitoringMapLayoutMigration"/>. Idempotent (a v1 map is a no-op), so it is safe to call
-    /// from every map accessor (<see cref="EnsureDefaultMaps"/>) as well as once eagerly at startup and after
-    /// a backup restore (<c>NormalizeAfterRestoreLocked</c>) which might reintroduce v0 maps.</summary>
+    /// <summary>Converts every map still on an older tile-geometry layout (v0 grid-cell or v1 free-px) onto
+    /// the current v2 cell grid - see <see cref="MonitoringMapLayoutMigration"/>. Idempotent (an already-v2 map
+    /// is a no-op), so it is safe to call from every map accessor (<see cref="EnsureDefaultMaps"/>) as well as
+    /// once eagerly at startup and after a backup restore (<c>NormalizeAfterRestoreLocked</c>) which might
+    /// reintroduce an older map.</summary>
     private void MigrateMapLayouts()
     {
         var changed = false;
@@ -2873,7 +2879,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 continue;
             }
 
-            MonitoringMapLayoutMigration.MigrateToLogical(map);
+            MonitoringMapLayoutMigration.MigrateToCells(map);
             changed = true;
         }
 
@@ -4048,20 +4054,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         return string.IsNullOrWhiteSpace(normalized) ? "Map" : normalized;
     }
 
-    /// <summary>Snaps a logical-px coordinate/size to the design grid. Delegates to the single shared
-    /// implementation in Core so the store, the layout migration and the designer cannot drift apart.</summary>
-    private static int SnapToGrid(int value) => MonitoringMapTileConstraints.Snap(value);
-
     private static IReadOnlyList<MonitoringMapTile> NormalizeMapTiles(
         IReadOnlyList<MonitoringMapTile> tiles,
-        int canvasWidth,
-        int canvasHeight)
+        int columns,
+        int rows)
     {
         return tiles
             .Where(tile => !string.IsNullOrWhiteSpace(tile.Title) || !string.IsNullOrWhiteSpace(tile.Text) || tile.ElementId.HasValue || !string.IsNullOrWhiteSpace(tile.TargetTag))
             .Select(tile =>
             {
-                var (_, _, defaultWidth, defaultHeight) = MonitoringMapTileConstraints.For(tile.Kind);
+                var (_, _, defaultColumns, defaultRows) = MonitoringMapTileConstraints.For(tile.Kind);
                 var normalized = new MonitoringMapTile
                 {
                     Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
@@ -4072,10 +4074,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim(),
                     IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim(),
                     ShowCard = tile.ShowCard,
-                    X = SnapToGrid(tile.X),
-                    Y = SnapToGrid(tile.Y),
-                    Width = SnapToGrid(tile.Width <= 0 ? defaultWidth : tile.Width),
-                    Height = SnapToGrid(tile.Height <= 0 ? defaultHeight : tile.Height),
+                    Column = Math.Max(1, tile.Column),
+                    Row = Math.Max(1, tile.Row),
+                    ColumnSpan = tile.ColumnSpan <= 0 ? defaultColumns : tile.ColumnSpan,
+                    RowSpan = tile.RowSpan <= 0 ? defaultRows : tile.RowSpan,
                     BackgroundColor = NormalizeColor(tile.BackgroundColor),
                     AccentColor = NormalizeColor(tile.AccentColor),
                     TextColor = NormalizeColor(tile.TextColor),
@@ -4086,7 +4088,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     ShowElementName = tile.ShowElementName
                 };
 
-                MonitoringMapTileConstraints.Clamp(normalized, canvasWidth, canvasHeight);
+                MonitoringMapTileConstraints.Clamp(normalized, columns, rows);
                 return normalized;
             })
             .ToArray();

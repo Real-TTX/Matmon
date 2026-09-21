@@ -30,6 +30,13 @@
         <input type="hidden" asp-for="Input.Id" />
         <input type="hidden" asp-for="Input.PublicEnabled" data-map-public-enabled />
         <input type="hidden" asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers />
+        @* Grid geometry - authoritative under v2, but there is no dedicated "grid size" UI yet (that is the
+           mockup editor rebuild); these round-trip the map's current values so editing never silently resets
+           the grid, and the designer JS reads them to convert cells <-> px. *@
+        <input type="hidden" asp-for="Input.Columns" data-map-columns />
+        <input type="hidden" asp-for="Input.Rows" data-map-rows />
+        <input type="hidden" asp-for="Input.TilePadding" data-map-tile-padding />
+        <input type="hidden" asp-for="Input.OuterMargin" data-map-outer-margin />
         <script type="application/json" data-map-constraints>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TileConstraintsJson))</script>
         <div class="icon-picker-modal" data-icon-picker-modal hidden>
             <div class="icon-picker-backdrop" data-icon-picker-close></div>
@@ -142,7 +149,26 @@
                              data-map-slide
                              data-map-designer
                              data-next-tile-index="@Model.Input.Tiles.Count"
-                             style="--map-w: @logicalSize.Width; --map-h: @logicalSize.Height;">
+                             style="--map-w: @logicalSize.Width; --map-h: @logicalSize.Height; --tile-gap: @(Model.Input.TilePadding)px;">
+                            @* Grid guide lines lined up exactly with the real cells (replaces the old fixed 8px
+                               background-grid pattern) - same MapTileRender.GridCells helper _MapSlide.cshtml uses. *@
+                            <div class="map-grid-guides" aria-hidden="true">
+                                @{
+                                    var gridMap = new MonitoringMap
+                                    {
+                                        Columns = Model.Input.Columns,
+                                        Rows = Model.Input.Rows,
+                                        TilePadding = Model.Input.TilePadding,
+                                        OuterMargin = Model.Input.OuterMargin,
+                                        LogicalWidth = logicalSize.Width,
+                                        LogicalHeight = logicalSize.Height
+                                    };
+                                }
+                                @foreach (var cell in MapTileRender.GridCells(gridMap))
+                                {
+                                    <span class="map-grid-cell" style="left: @(cell.X)px; top: @(cell.Y)px; width: @(cell.W)px; height: @(cell.H)px;"></span>
+                                }
+                            </div>
                             @for (var index = 0; index < Model.TileRenderModels.Count; index++)
                             {
                                 <partial name="_MapTile" model="Model.TileRenderModels[index]" />
@@ -178,7 +204,7 @@
                                 <span class="map-aspect-colon">:</span>
                                 <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
                             </div>
-                            <span class="workspace-inline-note">Only the ratio matters — the board scales to any screen. Tiles keep their logical-pixel position/size (a fixed 1920px-wide canvas) regardless of ratio.</span>
+                            <span class="workspace-inline-note">Only the ratio matters — the board scales to any screen. Tiles keep their grid cell position/size regardless of ratio.</span>
                         </div>
                         <label class="workspace-field">
                             <span class="workspace-label">Wallboard fit</span>
@@ -270,9 +296,9 @@
                                     <label><input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge /> <span>Show state badge</span></label>
                                     <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
                                 </div>
-                                <input asp-for="Input.Tiles[index].Width" type="hidden" data-map-tile-width />
-                                <input asp-for="Input.Tiles[index].Height" type="hidden" data-map-tile-height />
-                                <div class="map-property-size-readout" data-map-property-size>Size @tile.Width &times; @tile.Height px</div>
+                                <input asp-for="Input.Tiles[index].ColumnSpan" type="hidden" data-map-tile-column-span />
+                                <input asp-for="Input.Tiles[index].RowSpan" type="hidden" data-map-tile-row-span />
+                                <div class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</div>
                                 <div class="map-property-hint" data-map-property-hint></div>
                             </section>
                         }
@@ -289,12 +315,12 @@
                          data-state="unknown"
                          data-kind="__kind__"
                          data-visual="__visual__"
-                         style="--tile-x: __x__; --tile-y: __y__; --tile-w: __w__; --tile-h: __h__;">
+                         style="--tile-x: 0; --tile-y: 0; --tile-w: 100; --tile-h: 100;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
                     <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
                     <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
-                    <input type="hidden" name="Input.Tiles[__index__].X" value="__x__" data-map-tile-x />
-                    <input type="hidden" name="Input.Tiles[__index__].Y" value="__y__" data-map-tile-y />
+                    <input type="hidden" name="Input.Tiles[__index__].Column" value="__column__" data-map-tile-column />
+                    <input type="hidden" name="Input.Tiles[__index__].Row" value="__row__" data-map-tile-row />
 
                     <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
                         <span class="map-tile-icon">@MatmonIcons.Render("square")</span>
@@ -303,7 +329,7 @@
                     </div>
                     <p data-tile-subtitle>No target selected</p>
                     <small data-map-tile-kind-label>__kindLabel__</small>
-                    <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__w__ × __h__</span>
+                    <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__colSpan__ × __rowSpan__</span>
                     <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
                 </article>
                 <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
@@ -364,9 +390,9 @@
                         <label><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /> <span>Show state badge</span></label>
                         <label><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /> <span>Show target name</span></label>
                     </div>
-                    <input name="Input.Tiles[__index__].Width" value="__w__" type="hidden" data-map-tile-width />
-                    <input name="Input.Tiles[__index__].Height" value="__h__" type="hidden" data-map-tile-height />
-                    <div class="map-property-size-readout" data-map-property-size>Size __w__ x __h__ px</div>
+                    <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="hidden" data-map-tile-column-span />
+                    <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="hidden" data-map-tile-row-span />
+                    <div class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</div>
                     <div class="map-property-hint" data-map-property-hint></div>
                 </section>
             </template>

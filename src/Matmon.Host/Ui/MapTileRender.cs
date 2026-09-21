@@ -66,6 +66,28 @@ public static class MapTileRender
             _ => "sensor"
         };
     }
+
+    /// <summary>The px rect of every cell in the map's grid (Columns x Rows), used to render the editor's grid
+    /// guide lines (<c>_MapSlide.cshtml</c>) so they line up exactly with the real cells - replaces the old
+    /// fixed 8px CSS background-grid pattern, which no longer means anything under the v2 cell scheme.</summary>
+    public static IReadOnlyList<(int X, int Y, int W, int H)> GridCells(MonitoringMap map)
+    {
+        var (cellWidth, cellHeight) = MonitoringMapGeometry.CellSize(map);
+        var columns = Math.Max(1, map.Columns);
+        var rows = Math.Max(1, map.Rows);
+        var cells = new List<(int X, int Y, int W, int H)>(columns * rows);
+        for (var row = 0; row < rows; row++)
+        {
+            for (var column = 0; column < columns; column++)
+            {
+                var x = map.OuterMargin + column * (cellWidth + map.TilePadding);
+                var y = map.OuterMargin + row * (cellHeight + map.TilePadding);
+                cells.Add(((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(cellWidth), (int)Math.Round(cellHeight)));
+            }
+        }
+
+        return cells;
+    }
 }
 
 /// <summary>
@@ -104,6 +126,17 @@ public sealed class MapTileRenderModel
 
     public string? ElementName { get; init; }
 
+    // --- Precomputed logical-px render rect (Tile.Column/Row/ColumnSpan/RowSpan -> px via
+    // MonitoringMapGeometry.PixelRect, computed once here so _MapTile.cshtml stays a dumb template). ---
+
+    public int TileX { get; init; }
+
+    public int TileY { get; init; }
+
+    public int TileWidth { get; init; }
+
+    public int TileHeight { get; init; }
+
     // --- Editor-only (Phase C's live-JSON patch hooks target the same DOM regardless of this flag) ---
 
     /// <summary>True when rendered inside the designer: adds the drag handle, remove button, size badge,
@@ -121,50 +154,68 @@ public sealed class MapTileRenderModel
 
     public static MapTileRenderModel FromDisplay(
         MapDisplayTileViewModel vm,
+        MonitoringMap map,
         bool editable = false,
         int index = 0,
         Guid slideId = default,
         bool isDeleted = false,
-        MonitoringMapTile? tileOverride = null) => new()
+        MonitoringMapTile? tileOverride = null)
     {
-        Tile = tileOverride ?? vm.Tile,
-        StateKey = vm.StateKey,
-        StateLabel = vm.StateLabel,
-        Subtitle = vm.Subtitle,
-        Value = vm.Value,
-        KindLabel = vm.KindLabel,
-        IconKey = vm.IconKey,
-        GraphLinePath = vm.GraphLinePath,
-        GraphAreaPath = vm.GraphAreaPath,
-        GraphBarPath = vm.GraphBarPath,
-        ProgressPercent = vm.ProgressPercent,
-        ProgressLabel = vm.ProgressLabel,
-        EffectiveVisualType = vm.EffectiveVisualType,
-        ElementName = vm.Element?.Name,
-        Editable = editable,
-        Index = index,
-        SlideId = slideId,
-        IsDeleted = isDeleted
-    };
+        var tile = tileOverride ?? vm.Tile;
+        var rect = MonitoringMapGeometry.PixelRect(map, tile);
+        return new()
+        {
+            Tile = tile,
+            StateKey = vm.StateKey,
+            StateLabel = vm.StateLabel,
+            Subtitle = vm.Subtitle,
+            Value = vm.Value,
+            KindLabel = vm.KindLabel,
+            IconKey = vm.IconKey,
+            GraphLinePath = vm.GraphLinePath,
+            GraphAreaPath = vm.GraphAreaPath,
+            GraphBarPath = vm.GraphBarPath,
+            ProgressPercent = vm.ProgressPercent,
+            ProgressLabel = vm.ProgressLabel,
+            EffectiveVisualType = vm.EffectiveVisualType,
+            ElementName = vm.Element?.Name,
+            TileX = rect.X,
+            TileY = rect.Y,
+            TileWidth = rect.W,
+            TileHeight = rect.H,
+            Editable = editable,
+            Index = index,
+            SlideId = slideId,
+            IsDeleted = isDeleted
+        };
+    }
 
     /// <summary>A tile with no resolved live data yet - a just-added designer tile before its first
     /// live-preview fetch resolves, or one whose target could not be found.</summary>
-    public static MapTileRenderModel Placeholder(MonitoringMapTile tile, int index, Guid slideId, bool isDeleted = false) => new()
+    public static MapTileRenderModel Placeholder(MonitoringMapTile tile, MonitoringMap map, int index, Guid slideId, bool isDeleted = false)
     {
-        Tile = tile,
-        StateKey = "unknown",
-        StateLabel = "Unknown",
-        Subtitle = tile.Kind == MonitoringMapTileKind.Text
-            ? tile.Text ?? string.Empty
-            : (tile.ElementId.HasValue || !string.IsNullOrWhiteSpace(tile.TargetTag) ? string.Empty : "No target selected"),
-        KindLabel = MapTileRender.KindLabel(tile.Kind),
-        IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? MapTileRender.IconForKind(tile.Kind) : tile.IconKey.Trim(),
-        EffectiveVisualType = tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType,
-        Editable = true,
-        Index = index,
-        SlideId = slideId,
-        IsDeleted = isDeleted
-    };
+        var rect = MonitoringMapGeometry.PixelRect(map, tile);
+        return new()
+        {
+            Tile = tile,
+            StateKey = "unknown",
+            StateLabel = "Unknown",
+            Subtitle = tile.Kind == MonitoringMapTileKind.Text
+                ? tile.Text ?? string.Empty
+                : (tile.ElementId.HasValue || !string.IsNullOrWhiteSpace(tile.TargetTag) ? string.Empty : "No target selected"),
+            KindLabel = MapTileRender.KindLabel(tile.Kind),
+            IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? MapTileRender.IconForKind(tile.Kind) : tile.IconKey.Trim(),
+            EffectiveVisualType = tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType,
+            TileX = rect.X,
+            TileY = rect.Y,
+            TileWidth = rect.W,
+            TileHeight = rect.H,
+            Editable = true,
+            Index = index,
+            SlideId = slideId,
+            IsDeleted = isDeleted
+        };
+    }
 }
 
 /// <summary>The model behind the shared <c>_MapSlide.cshtml</c> partial: a slide plus its already-rendered

@@ -21,8 +21,8 @@ public sealed class MapDisplayProvider
         var latest = _workspaceStore.GetLatestSensorObservations();
 
         MapDisplayTileViewModel[] BuildTiles(IEnumerable<MonitoringMapTile> source) => source
-            .OrderBy(tile => tile.Y)
-            .ThenBy(tile => tile.X)
+            .OrderBy(tile => tile.Row)
+            .ThenBy(tile => tile.Column)
             .Select(tile =>
             {
                 if (!string.IsNullOrWhiteSpace(tile.TargetTag))

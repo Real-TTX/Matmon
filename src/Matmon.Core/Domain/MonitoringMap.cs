@@ -1,11 +1,18 @@
+using System.Text.Json.Serialization;
+
 namespace Matmon.Core.Domain;
 
 public sealed class MonitoringMap
 {
-    /// <summary>The current tile-geometry layout scheme. 0 = legacy grid cells (Columns x Rows), 1 = free
-    /// positioning in logical px on a <see cref="LogicalWidth"/> x <see cref="LogicalHeight"/> canvas. A map
-    /// loaded with an older version is migrated once via <see cref="MonitoringMapLayoutMigration"/>.</summary>
-    public const int CurrentLayoutVersion = 1;
+    /// <summary>The current tile-geometry layout scheme. 0 = legacy grid cells (Columns x Rows, no
+    /// padding/margin concept), 1 = free positioning in logical px on a <see cref="LogicalWidth"/> x
+    /// <see cref="LogicalHeight"/> canvas (Phase A), 2 = the current strict cell grid - Columns/Rows are
+    /// authoritative again (<see cref="MonitoringMapTile.Column"/>/<see cref="MonitoringMapTile.Row"/>/
+    /// <see cref="MonitoringMapTile.ColumnSpan"/>/<see cref="MonitoringMapTile.RowSpan"/>), with
+    /// <see cref="TilePadding"/>/<see cref="OuterMargin"/> controlling the cell-to-px conversion
+    /// (<see cref="MonitoringMapGeometry"/>). A map loaded with an older version is migrated once via
+    /// <see cref="MonitoringMapLayoutMigration"/>.</summary>
+    public const int CurrentLayoutVersion = 2;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -17,12 +24,18 @@ public sealed class MonitoringMap
 
     public int LayoutVersion { get; set; }
 
-    /// <summary>Legacy grid column count (v0 tile geometry). No longer written by the editor once a map is on
-    /// <see cref="CurrentLayoutVersion"/> - kept only so an old backup round-trips its original grid metadata.</summary>
+    /// <summary>Grid column count for tile placement - see <see cref="MonitoringMapTile.Column"/>/
+    /// <see cref="MonitoringMapTile.ColumnSpan"/> and <see cref="MonitoringMapGeometry"/>.</summary>
     public int Columns { get; set; } = 12;
 
-    /// <summary>Legacy grid row count - see <see cref="Columns"/>.</summary>
-    public int Rows { get; set; } = 8;
+    /// <summary>Grid row count - see <see cref="Columns"/>.</summary>
+    public int Rows { get; set; } = 6;
+
+    /// <summary>Logical px gap between adjacent cells (both axes) - see <see cref="MonitoringMapGeometry"/>.</summary>
+    public int TilePadding { get; set; } = 16;
+
+    /// <summary>Logical px margin around the whole grid (all four sides) - see <see cref="MonitoringMapGeometry"/>.</summary>
+    public int OuterMargin { get; set; } = 24;
 
     /// <summary>Legacy full-board display preset, superseded by <see cref="AspectRatioWidth"/>/<see cref="AspectRatioHeight"/>
     /// and no longer written by the editor - see <see cref="Columns"/>.</summary>
@@ -126,6 +139,8 @@ public sealed class MonitoringMap
         LayoutVersion = LayoutVersion,
         Columns = Columns,
         Rows = Rows,
+        TilePadding = TilePadding,
+        OuterMargin = OuterMargin,
         DisplayPreset = DisplayPreset,
         AspectRatioWidth = AspectRatioWidth,
         AspectRatioHeight = AspectRatioHeight,
@@ -208,16 +223,26 @@ public sealed class MonitoringMapTile
     /// e.g. a section heading placed at height 1 with no visible tile. Defaults to true (a normal card).</summary>
     public bool ShowCard { get; set; } = true;
 
-    /// <summary>Logical px, 0-based, snapped to <see cref="MonitoringMapTileConstraints.SnapGrid"/> - see the
-    /// "Kern-Architektur" note on <see cref="MonitoringMap.LogicalWidth"/>. Pre-v1 maps stored a 1-based grid
-    /// cell index here instead; <see cref="MonitoringMapLayoutMigration"/> converts those once.</summary>
-    public int X { get; set; }
+    /// <summary>1-based grid column this tile starts in - see <see cref="MonitoringMap.Columns"/> and
+    /// <see cref="MonitoringMapGeometry"/>. Kept under the JSON key "x" (its name under both the v0 grid-cell
+    /// scheme and the v1 free-px scheme) so an old workspace.json still deserializes into this field; the
+    /// value is only actually a cell index once <see cref="MonitoringMapLayoutMigration"/> has run (a v1 map's
+    /// raw px value is reinterpreted by the migration, not by this attribute).</summary>
+    [JsonPropertyName("x")]
+    public int Column { get; set; } = 1;
 
-    public int Y { get; set; }
+    /// <summary>1-based grid row this tile starts in - see <see cref="Column"/>.</summary>
+    [JsonPropertyName("y")]
+    public int Row { get; set; } = 1;
 
-    public int Width { get; set; } = 320;
+    /// <summary>How many grid columns this tile spans (&gt;= 1, floored to the kind's minimum by
+    /// <see cref="MonitoringMapTileConstraints.Clamp"/>) - see <see cref="Column"/>.</summary>
+    [JsonPropertyName("width")]
+    public int ColumnSpan { get; set; } = 2;
 
-    public int Height { get; set; } = 160;
+    /// <summary>How many grid rows this tile spans - see <see cref="ColumnSpan"/>.</summary>
+    [JsonPropertyName("height")]
+    public int RowSpan { get; set; } = 2;
 
     public string? BackgroundColor { get; set; }
 
@@ -245,10 +270,10 @@ public sealed class MonitoringMapTile
         Text = Text,
         IconKey = IconKey,
         ShowCard = ShowCard,
-        X = X,
-        Y = Y,
-        Width = Width,
-        Height = Height,
+        Column = Column,
+        Row = Row,
+        ColumnSpan = ColumnSpan,
+        RowSpan = RowSpan,
         BackgroundColor = BackgroundColor,
         AccentColor = AccentColor,
         TextColor = TextColor,
@@ -313,54 +338,99 @@ public enum MonitoringMapTileVisualType
 }
 
 /// <summary>
-/// The single source of truth for map-tile sizing, in logical px (see <see cref="MonitoringMap.LogicalWidth"/>).
-/// Replaces two now-deleted rival tables (the store's grid-cell <c>MapTileSizeLimits</c> and the JS
-/// <c>sizeLimits</c> object) that could silently drift apart. Only a per-kind minimum floor is defined - a
-/// tile may otherwise grow to fill the whole canvas, so <see cref="Clamp"/> derives the ceiling from the
-/// canvas size passed in rather than from a second per-kind maximum.
+/// The single source of truth for map-tile sizing, in grid CELLS (see <see cref="MonitoringMap.Columns"/>/
+/// <see cref="MonitoringMap.Rows"/>). Replaces two now-deleted rival tables (the store's grid-cell
+/// <c>MapTileSizeLimits</c> and the JS <c>sizeLimits</c> object) that could silently drift apart. Only a
+/// per-kind minimum floor is defined - a tile may otherwise grow to fill the whole grid, so <see cref="Clamp"/>
+/// derives the ceiling from the grid size passed in rather than from a second per-kind maximum.
 /// </summary>
 public static class MonitoringMapTileConstraints
 {
-    /// <summary>Every tile position/size snaps to this many logical px (a WinForms-style design grid).</summary>
-    public const int SnapGrid = 8;
-
-    /// <summary>Rounds a logical-px coordinate/size onto the <see cref="SnapGrid"/>. The single snap
-    /// implementation shared by the layout migration, the store's save-time normalization and (via the
-    /// serialized constraints block) the designer JS - so a tile has exactly one canonical geometry and
-    /// merely opening the editor can never nudge it.</summary>
-    public static int Snap(int value) =>
-        (int)Math.Round(value / (double)SnapGrid, MidpointRounding.AwayFromZero) * SnapGrid;
-
-    /// <summary>(MinWidth, MinHeight, DefaultWidth, DefaultHeight) in logical px for a tile kind.</summary>
-    public static (int MinWidth, int MinHeight, int DefaultWidth, int DefaultHeight) For(MonitoringMapTileKind kind)
+    /// <summary>(MinColumns, MinRows, DefaultColumns, DefaultRows) in grid cells for a tile kind. Every kind
+    /// has a floor of at least 2x2 cells (the mockup's "no smaller than 2x2" rule) - a wider/taller floor is
+    /// only set where the tile kind genuinely needs the room (a graph needs room for an axis, a summary tile
+    /// needs room for its rollup counts).</summary>
+    public static (int MinColumns, int MinRows, int DefaultColumns, int DefaultRows) For(MonitoringMapTileKind kind)
     {
         return kind switch
         {
-            MonitoringMapTileKind.Text => (96, 40, 320, 120),
-            MonitoringMapTileKind.Element => (160, 80, 320, 160),
-            MonitoringMapTileKind.Value => (160, 80, 240, 160),
-            MonitoringMapTileKind.Status => (200, 80, 400, 160),
-            MonitoringMapTileKind.Graph => (240, 120, 480, 240),
-            _ => (160, 80, 320, 160)
+            MonitoringMapTileKind.Text => (2, 2, 2, 2),
+            MonitoringMapTileKind.Element => (2, 2, 3, 2),
+            MonitoringMapTileKind.Value => (2, 2, 2, 2),
+            MonitoringMapTileKind.Status => (3, 2, 4, 2),
+            MonitoringMapTileKind.Graph => (4, 3, 4, 3),
+            _ => (2, 2, 2, 2)
         };
     }
 
-    /// <summary>Clamps a tile's logical-px rect in place: enforces the kind's minimum size (shrinking it below
-    /// the canvas size only if the canvas itself is smaller than the minimum), then keeps the whole rect inside
-    /// the 0..canvasWidth / 0..canvasHeight canvas. Mutates <paramref name="tile"/> - used by both the layout
-    /// migration and the store's save-time normalization so a dragged-off-canvas or too-small tile always lands
-    /// somewhere sane rather than being rejected.</summary>
-    public static void Clamp(MonitoringMapTile tile, int canvasWidth, int canvasHeight)
+    /// <summary>Clamps a tile's cell geometry in place: enforces the kind's minimum span (shrinking it below
+    /// the grid size only if the grid itself is smaller than the minimum), then keeps the whole span inside the
+    /// 1..columns / 1..rows grid. Mutates <paramref name="tile"/> - used by both the layout migration and the
+    /// store's save-time normalization so an off-grid or too-small tile always lands somewhere sane rather than
+    /// being rejected.</summary>
+    public static void Clamp(MonitoringMapTile tile, int columns, int rows)
     {
-        var (minWidth, minHeight, _, _) = For(tile.Kind);
-        // Enforce the floor first, then cap to the canvas - in that order, so a canvas smaller than the kind's
-        // usual minimum (a tiny/degenerate board) still yields a tile no bigger than the canvas itself rather
+        var (minColumns, minRows, _, _) = For(tile.Kind);
+        columns = Math.Max(1, columns);
+        rows = Math.Max(1, rows);
+
+        // Enforce the floor first, then cap to the grid - in that order, so a grid smaller than the kind's
+        // usual minimum (a tiny/degenerate board) still yields a tile no bigger than the grid itself rather
         // than one that overflows it.
-        var width = Math.Min(Math.Max(minWidth, tile.Width), Math.Max(0, canvasWidth));
-        var height = Math.Min(Math.Max(minHeight, tile.Height), Math.Max(0, canvasHeight));
-        tile.Width = width;
-        tile.Height = height;
-        tile.X = Math.Clamp(tile.X, 0, Math.Max(0, canvasWidth - width));
-        tile.Y = Math.Clamp(tile.Y, 0, Math.Max(0, canvasHeight - height));
+        var columnSpan = Math.Min(Math.Max(minColumns, tile.ColumnSpan), columns);
+        var rowSpan = Math.Min(Math.Max(minRows, tile.RowSpan), rows);
+        tile.ColumnSpan = columnSpan;
+        tile.RowSpan = rowSpan;
+        tile.Column = Math.Clamp(tile.Column, 1, Math.Max(1, columns - columnSpan + 1));
+        tile.Row = Math.Clamp(tile.Row, 1, Math.Max(1, rows - rowSpan + 1));
     }
+}
+
+/// <summary>
+/// The single cell &lt;-&gt; logical-px conversion for a map's tiles, implemented once so the render partials
+/// (<see cref="MonitoringMap.LogicalWidth"/>-based - see <c>Ui/MapTileRender.cs</c> in Matmon.Host), the
+/// designer JS (mirrored, since JS cannot reference Core) and the v1-&gt;v2 layout migration below can never
+/// disagree about what a given (Column, Row, ColumnSpan, RowSpan) rect looks like in px.
+/// </summary>
+public static class MonitoringMapGeometry
+{
+    /// <summary>The width/height of a single grid cell in logical px, derived from the map's canvas size, its
+    /// Columns/Rows and the padding/margin gaps.</summary>
+    public static (double CellWidth, double CellHeight) CellSize(MonitoringMap map)
+    {
+        var columns = Math.Max(1, map.Columns);
+        var rows = Math.Max(1, map.Rows);
+        var cellWidth = (map.LogicalWidth - 2.0 * map.OuterMargin - (columns - 1) * map.TilePadding) / columns;
+        var cellHeight = (map.LogicalHeight - 2.0 * map.OuterMargin - (rows - 1) * map.TilePadding) / rows;
+        return (cellWidth, cellHeight);
+    }
+
+    /// <summary>Converts a tile's cell geometry to its logical-px render rect:
+    /// <c>x = margin + (col-1) * (cellW+gap)</c>, <c>w = span*cellW + (span-1)*gap</c> (and the y/h equivalents).</summary>
+    public static (int X, int Y, int W, int H) PixelRect(MonitoringMap map, MonitoringMapTile tile)
+    {
+        var (cellWidth, cellHeight) = CellSize(map);
+        var x = map.OuterMargin + (tile.Column - 1) * (cellWidth + map.TilePadding);
+        var y = map.OuterMargin + (tile.Row - 1) * (cellHeight + map.TilePadding);
+        var w = tile.ColumnSpan * cellWidth + (tile.ColumnSpan - 1) * map.TilePadding;
+        var h = tile.RowSpan * cellHeight + (tile.RowSpan - 1) * map.TilePadding;
+        return (Round(x), Round(y), Round(w), Round(h));
+    }
+
+    /// <summary>Inverts <see cref="PixelRect"/>: given a v1 (Phase A free-px) tile's raw px rect, finds the
+    /// nearest cell rect using the map's CURRENT Columns/Rows/TilePadding/OuterMargin. Used only by
+    /// <see cref="MonitoringMapLayoutMigration"/> - a v2-native tile is always authored directly in cells.</summary>
+    public static (int Column, int Row, int ColumnSpan, int RowSpan) CellRectFromPixels(MonitoringMap map, int x, int y, int width, int height)
+    {
+        var (cellWidth, cellHeight) = CellSize(map);
+        var columnStep = cellWidth + map.TilePadding;
+        var rowStep = cellHeight + map.TilePadding;
+        var column = columnStep > 0 ? Round((x - map.OuterMargin) / columnStep) + 1 : 1;
+        var row = rowStep > 0 ? Round((y - map.OuterMargin) / rowStep) + 1 : 1;
+        var columnSpan = columnStep > 0 ? Round((width + map.TilePadding) / columnStep) : 1;
+        var rowSpan = rowStep > 0 ? Round((height + map.TilePadding) / rowStep) : 1;
+        return (Math.Max(1, column), Math.Max(1, row), Math.Max(1, columnSpan), Math.Max(1, rowSpan));
+    }
+
+    private static int Round(double value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 }
