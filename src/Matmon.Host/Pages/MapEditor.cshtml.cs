@@ -41,10 +41,12 @@ public sealed class MapEditorModel : PageModel
 
     public IReadOnlyList<MonitoringMapDisplayPresetInfo> DisplayPresetOptions { get; } = MonitoringMapDisplayPresetCatalog.All;
 
-    /// <summary>The single <see cref="MonitoringMapTileConstraints"/> table serialized for the designer's JS
-    /// (a <c>&lt;script type="application/json" data-map-constraints&gt;</c> block) - replaces a second,
-    /// hand-duplicated JS table that could silently drift from the Core one.</summary>
-    public IReadOnlyDictionary<string, object> TileConstraintsJson { get; } = BuildTileConstraintsJson();
+    /// <summary>Everything the designer JS needs that is authored server-side, in ONE
+    /// <c>&lt;script type="application/json" data-map-designer-config&gt;</c> block: the single
+    /// <see cref="MonitoringMapTileConstraints"/> table (a second hand-duplicated JS copy could silently
+    /// drift), the <see cref="MapWidgetCatalog"/> palette and its layout templates. The JS needs the widget
+    /// catalog too because a template slot names a widget key, not a tile kind.</summary>
+    public IReadOnlyDictionary<string, object> DesignerConfigJson { get; } = BuildDesignerConfigJson();
 
     public bool IsCreateMode => !Input.Id.HasValue || Input.Id.Value == Guid.Empty;
 
@@ -334,16 +336,46 @@ public sealed class MapEditorModel : PageModel
         TilePickerOptions = Matmon.Host.Ui.ElementPickerOptions.Build(root);
     }
 
-    private static IReadOnlyDictionary<string, object> BuildTileConstraintsJson()
+    private static IReadOnlyDictionary<string, object> BuildDesignerConfigJson()
     {
-        var dict = new Dictionary<string, object>();
+        var constraints = new Dictionary<string, object>();
         foreach (var kind in Enum.GetValues<MonitoringMapTileKind>())
         {
             var (minColumns, minRows, defaultColumns, defaultRows) = MonitoringMapTileConstraints.For(kind);
-            dict[kind.ToString()] = new { minColumns, minRows, defaultColumns, defaultRows };
+            constraints[kind.ToString()] = new { minColumns, minRows, defaultColumns, defaultRows };
         }
 
-        return dict;
+        var widgets = MapWidgetCatalog.All.ToDictionary(
+            widget => widget.Key,
+            object (widget) => new
+            {
+                kind = widget.Kind.ToString(),
+                visual = widget.VisualType.ToString(),
+                title = widget.Label
+            });
+
+        var templates = MapWidgetCatalog.LayoutTemplates.Select(template => new
+        {
+            key = template.Key,
+            label = template.Label,
+            minColumns = template.MinColumns,
+            minRows = template.MinRows,
+            slots = template.Slots.Select(slot => new
+            {
+                widget = slot.WidgetKey,
+                column = slot.Column,
+                row = slot.Row,
+                columnSpan = slot.ColumnSpan,
+                rowSpan = slot.RowSpan
+            })
+        });
+
+        return new Dictionary<string, object>
+        {
+            ["constraints"] = constraints,
+            ["widgets"] = widgets,
+            ["templates"] = templates
+        };
     }
 }
 

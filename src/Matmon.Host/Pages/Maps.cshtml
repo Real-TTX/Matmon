@@ -156,7 +156,7 @@
                 </div>
                 @if (Model.Display.Slides.Count > 1)
                 {
-                    <div class="map-carousel-nav" data-map-carousel-nav>
+                    <div class="map-carousel-nav" data-map-carousel-nav data-map-pagination="@Model.Display.Map.PaginationMode.ToString().ToLowerInvariant()">
                         <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
                         <div class="map-carousel-dots">
                             @for (var dot = 0; dot < Model.Display.Slides.Count; dot++)

@@ -29,15 +29,10 @@
     <form method="post" class="map-editor-form" data-map-designer-form>
         <input type="hidden" asp-for="Input.Id" />
         <input type="hidden" asp-for="Input.PublicEnabled" data-map-public-enabled />
-        <input type="hidden" asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers />
-        @* Grid geometry - authoritative under v2, but there is no dedicated "grid size" UI yet (that is the
-           mockup editor rebuild); these round-trip the map's current values so editing never silently resets
-           the grid, and the designer JS reads them to convert cells <-> px. *@
-        <input type="hidden" asp-for="Input.Columns" data-map-columns />
-        <input type="hidden" asp-for="Input.Rows" data-map-rows />
-        <input type="hidden" asp-for="Input.TilePadding" data-map-tile-padding />
-        <input type="hidden" asp-for="Input.OuterMargin" data-map-outer-margin />
-        <script type="application/json" data-map-constraints>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TileConstraintsJson))</script>
+        @* PublicEnabled has no visible toggle yet (that is the public-link work) - a hidden field round-trips
+           it so editing a map never silently un-publishes it. Columns/Rows/TilePadding/OuterMargin and
+           ShowSlideHeaders are now real inputs in the Grid / Wallboard property tabs. *@
+        <script type="application/json" data-map-designer-config>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DesignerConfigJson))</script>
         <div class="icon-picker-modal" data-icon-picker-modal hidden>
             <div class="icon-picker-backdrop" data-icon-picker-close></div>
             <div class="icon-picker-dialog" role="dialog" aria-modal="true" aria-label="Choose icon">
@@ -85,7 +80,10 @@
                     </div>
                     <div class="map-slide-actions">
                         <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
-                        <button type="button" class="map-slide-action" data-map-slide-rename title="Rename current slide">@MatmonIcons.Render("pencil")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-duplicate title="Duplicate this slide and its widgets">@MatmonIcons.Render("copy")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-move="-1" title="Move slide left">@MatmonIcons.Render("arrow-left")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-move="1" title="Move slide right">@MatmonIcons.Render("arrow-right")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-settings title="Slide properties">@MatmonIcons.Render("gear")</button>
                         <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
                     </div>
                     <div data-map-slide-inputs hidden></div>
@@ -99,39 +97,56 @@
             </div>
 
             <div class="map-designer-shell">
-                <aside class="map-toolbox" aria-label="Map toolbox">
+                @* The palette is rendered from MapWidgetCatalog, not hand-written buttons: several entries are
+                   the same tile Kind with a different VisualType (Gauge and Progress are both a Value tile),
+                   which is the distinction a user picks by and the enum cannot express. Adding a widget is one
+                   entry in that catalog. *@
+                <aside class="map-toolbox" aria-label="Widget library">
                     <div class="map-designer-side-title">
                         @MatmonIcons.Render("spark")
-                        <strong>Toolbox</strong>
+                        <strong>Widgets</strong>
                     </div>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Element" data-map-tool-title="State">
-                        @MatmonIcons.Render("sensor")
-                        <span><strong>State</strong><small>One sensor, host, folder or probe</small></span>
-                    </button>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Value">
-                        @MatmonIcons.Render("square")
-                        <span><strong>Value</strong><small>Large default channel value</small></span>
-                    </button>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Graph" data-map-tool-title="Graph">
-                        @MatmonIcons.Render("chart")
-                        <span><strong>Graph</strong><small>Sensor trend sparkline</small></span>
-                    </button>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Status" data-map-tool-title="Summary">
-                        @MatmonIcons.Render("dashboard")
-                        <span><strong>Summary</strong><small>Aggregated health below a target</small></span>
-                    </button>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Gauge" data-map-tool-visual="@MonitoringMapTileVisualType.Gauge">
-                        @MatmonIcons.Render("chart")
-                        <span><strong>Gauge</strong><small>Radial gauge of a percent channel</small></span>
-                    </button>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Value" data-map-tool-title="Progress" data-map-tool-visual="@MonitoringMapTileVisualType.ProgressBar">
-                        @MatmonIcons.Render("signal")
-                        <span><strong>Progress</strong><small>Progress bar of a percent channel</small></span>
-                    </button>
-                    <button type="button" class="map-tool-button" draggable="true" data-map-tool-kind="@MonitoringMapTileKind.Text" data-map-tool-title="Text">
-                        @MatmonIcons.Render("list")
-                        <span><strong>Text</strong><small>Label, notes or instructions</small></span>
-                    </button>
+                    <div class="map-toolbox-search">
+                        @MatmonIcons.Render("search")
+                        <input type="text" class="form-control workspace-input" placeholder="Search widgets…" data-map-tool-search autocomplete="off" aria-label="Search widgets" />
+                    </div>
+                    <div class="map-toolbox-list">
+                        @foreach (var group in MapWidgetCatalog.ByCategory())
+                        {
+                            <div class="map-toolbox-group" data-map-tool-group>
+                                <span class="map-toolbox-group-label">@MapWidgetCatalog.CategoryLabel(group.Key)</span>
+                                @foreach (var widget in group)
+                                {
+                                    <button type="button" class="map-tool-button" draggable="true"
+                                            data-map-tool-widget="@widget.Key"
+                                            data-map-tool-kind="@widget.Kind"
+                                            data-map-tool-title="@widget.Label"
+                                            data-map-tool-visual="@widget.VisualType"
+                                            data-map-tool-search="@($"{widget.Label} {widget.Description} {widget.SearchTerms}".ToLowerInvariant())">
+                                        @MatmonIcons.Render(widget.IconKey)
+                                        <span><strong>@widget.Label</strong><small>@widget.Description</small></span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        <div class="map-toolbox-empty" data-map-tool-empty hidden>No matching widget.</div>
+                    </div>
+
+                    <div class="map-toolbox-templates" data-map-layout-templates>
+                        <span class="map-toolbox-group-label">Layouts</span>
+                        <p class="map-toolbox-note">Fills the current slide with empty, correctly-sized widgets.</p>
+                        <div class="map-layout-chips">
+                        @foreach (var template in MapWidgetCatalog.LayoutTemplates)
+                        {
+                            <button type="button" class="map-layout-chip" data-map-layout="@template.Key"
+                                    data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
+                                    title="@template.Description">@template.Label</button>
+                        }
+                        </div>
+                        <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
+                            Some layouts need a larger grid than this map has.
+                        </div>
+                    </div>
                 </aside>
 
                 <div class="map-designer-workbench">
@@ -177,44 +192,87 @@
                     </div>
                 </div>
 
-                <aside class="map-property-editor" aria-label="Tile properties">
+                <aside class="map-property-editor" aria-label="Properties">
                     <div class="map-designer-side-title">
                         @MatmonIcons.Render("gear")
-                        <strong>Properties</strong>
+                        <strong data-map-property-scope-label>Properties</strong>
                     </div>
+
+                    @* Tab bar for the TILE panels. It sits outside them because only one tile panel is visible
+                       at a time - keeping the bar here means the chosen tab survives clicking from tile to
+                       tile, which a per-panel bar would not. Hidden unless a tile is selected. *@
+                    <div class="map-property-tabs" data-map-property-tabs hidden role="tablist">
+                        <button type="button" class="map-property-tab is-active" data-map-property-tab="general" role="tab" aria-selected="true">General</button>
+                        <button type="button" class="map-property-tab" data-map-property-tab="data" role="tab" aria-selected="false">Data</button>
+                        <button type="button" class="map-property-tab" data-map-property-tab="display" role="tab" aria-selected="false">Display</button>
+                    </div>
+
                     <section class="map-property-panel map-property-map-panel" data-map-property-map-panel>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Name</span>
-                            <input asp-for="Input.Name" class="form-control workspace-input" data-map-name />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Description</span>
-                            <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
-                        </label>
-                        <div class="workspace-field">
-                            <span class="workspace-label">Aspect ratio</span>
-                            <div class="map-aspect-presets">
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="9">16:9</button>
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="10">16:10</button>
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="21" data-aspect-h="9">21:9</button>
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="4" data-aspect-h="3">4:3</button>
-                            </div>
-                            <div class="map-aspect-custom">
-                                <input asp-for="Input.AspectRatioWidth" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-w aria-label="Aspect ratio width" />
-                                <span class="map-aspect-colon">:</span>
-                                <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
-                            </div>
-                            <span class="workspace-inline-note">Only the ratio matters — the board scales to any screen. Tiles keep their grid cell position/size regardless of ratio.</span>
+                        <div class="map-property-tabs" data-map-map-tabs role="tablist">
+                            <button type="button" class="map-property-tab is-active" data-map-map-tab="general" role="tab" aria-selected="true">General</button>
+                            <button type="button" class="map-property-tab" data-map-map-tab="grid" role="tab" aria-selected="false">Grid</button>
+                            <button type="button" class="map-property-tab" data-map-map-tab="wallboard" role="tab" aria-selected="false">Wallboard</button>
                         </div>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Wallboard fit</span>
-                            <select asp-for="Input.WallboardFit" class="form-select workspace-select">
-                                <option value="@MonitoringMapWallboardFit.Fit">Keep ratio (letterbox)</option>
-                                <option value="@MonitoringMapWallboardFit.Stretch">Stretch to fill screen</option>
-                            </select>
-                        </label>
-                        <div class="map-property-section">
-                            <span class="workspace-label">Wallboard</span>
+
+                        <div data-map-map-group="general">
+                            <label class="workspace-field">
+                                <span class="workspace-label">Name</span>
+                                <input asp-for="Input.Name" class="form-control workspace-input" data-map-name />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Description</span>
+                                <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
+                            </label>
+                            <div class="workspace-field">
+                                <span class="workspace-label">Aspect ratio</span>
+                                <div class="map-aspect-presets">
+                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="9">16:9</button>
+                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="10">16:10</button>
+                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="21" data-aspect-h="9">21:9</button>
+                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="4" data-aspect-h="3">4:3</button>
+                                </div>
+                                <div class="map-aspect-custom">
+                                    <input asp-for="Input.AspectRatioWidth" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-w aria-label="Aspect ratio width" />
+                                    <span class="map-aspect-colon">:</span>
+                                    <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
+                                </div>
+                                <span class="workspace-inline-note">Only the ratio matters &mdash; the board scales to any screen. Tiles keep their grid cell position/size regardless of ratio.</span>
+                            </div>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Wallboard fit</span>
+                                <select asp-for="Input.WallboardFit" class="form-select workspace-select">
+                                    <option value="@MonitoringMapWallboardFit.Fit">Keep ratio (letterbox)</option>
+                                    <option value="@MonitoringMapWallboardFit.Stretch">Stretch to fill screen</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        @* Grid geometry is authoritative under v2 - these were hidden round-trip fields until
+                           now, which is exactly why cells were chosen over pixels: change the column count and
+                           every widget flows with it instead of standing still. *@
+                        <div data-map-map-group="grid" hidden>
+                            <div class="map-grid-fields">
+                                <label class="workspace-field">
+                                    <span class="workspace-label">Columns</span>
+                                    <input asp-for="Input.Columns" type="number" min="2" max="48" class="form-control workspace-input" data-map-columns />
+                                </label>
+                                <label class="workspace-field">
+                                    <span class="workspace-label">Rows</span>
+                                    <input asp-for="Input.Rows" type="number" min="2" max="32" class="form-control workspace-input" data-map-rows />
+                                </label>
+                                <label class="workspace-field">
+                                    <span class="workspace-label">Gap (px)</span>
+                                    <input asp-for="Input.TilePadding" type="number" min="0" max="80" class="form-control workspace-input" data-map-tile-padding />
+                                </label>
+                                <label class="workspace-field">
+                                    <span class="workspace-label">Margin (px)</span>
+                                    <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="form-control workspace-input" data-map-outer-margin />
+                                </label>
+                            </div>
+                            <span class="workspace-inline-note">Gap and margin are in logical canvas pixels (the canvas is 1920 wide whatever the screen), so they scale with the board. Widgets are re-clamped into the new grid as you change it.</span>
+                        </div>
+
+                        <div data-map-map-group="wallboard" hidden>
                             <label class="workspace-field">
                                 <span class="workspace-label">Auto-rotate (seconds per slide)</span>
                                 <input asp-for="Input.AutoRotateSeconds" type="number" min="3" max="600" class="form-control workspace-input" />
@@ -228,53 +286,95 @@
                                     <option value="@MonitoringMapPaginationMode.Hidden">Hidden (auto-rotate only)</option>
                                 </select>
                             </label>
+                            <div class="map-property-checks">
+                                <label><input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers /> <span>Show slide headings on the board</span></label>
+                            </div>
                             <div class="map-property-hint">
                                 Auto-rotate &amp; the page indicator are used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
                             </div>
                         </div>
-                        <div class="map-property-hint">
-                            This edits the map itself. Click a tile to switch the property editor to that control.
-                        </div>
                     </section>
+
+                    @* Slide properties. These fields are NOT model-bound: the designer keeps the slide list in
+                       JS and re-renders the hidden Input.Slides[..] inputs from it (renderSlideInputs), which
+                       is the path add/rename/reorder/delete already went through. *@
+                    <section class="map-property-panel map-slide-panel" data-map-slide-panel hidden>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Slide name</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="name" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Heading</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="title" placeholder="Shown on the board" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Sub-heading</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="subtitle" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Duration (seconds)</span>
+                            <input type="number" min="3" max="600" class="form-control workspace-input" data-map-slide-field="durationSeconds" placeholder="Map default" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Background</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="backgroundColor" placeholder="auto or #0b1220" />
+                        </label>
+                        <div class="map-property-checks">
+                            <label><input type="checkbox" data-map-slide-field="showHeader" /> <span>Show this slide heading</span></label>
+                        </div>
+                        <div class="map-property-hint">Duration overrides the map auto-rotate for this slide only.</div>
+                    </section>
+
                     <div class="map-property-empty" data-map-property-empty hidden>
-                        Select the map title or a tile to edit its properties.
+                        Select the map title, a slide or a tile to edit its properties.
                     </div>
                     <div data-map-property-host>
                         @for (var index = 0; index < Model.Input.Tiles.Count; index++)
                         {
                             var tile = Model.Input.Tiles[index];
+                            @* Grouped into the General/Data/Display tabs the aside's [data-map-property-tabs]
+                               bar drives. The bar lives OUTSIDE the panels on purpose: only one panel is ever
+                               visible, and a per-panel bar would reset the chosen tab every time you click a
+                               different tile. Mirror any field change in the <template> below. *@
                             <section class="map-property-panel" data-map-property-panel data-tile-index="@index" hidden>
-                                <label class="workspace-field">
-                                    <span class="workspace-label">Title</span>
-                                    <input asp-for="Input.Tiles[index].Title" class="form-control workspace-input" data-map-property-title />
-                                </label>
-                                <div class="workspace-field">
-                                    <span class="workspace-label">Tile type</span>
-                                    <input type="hidden" asp-for="Input.Tiles[index].Kind" data-map-property-kind />
-                                    <input type="hidden" asp-for="Input.Tiles[index].VisualType" data-map-property-visual-type />
-                                    <span class="map-property-readonly" data-map-property-kind-label>@MapTileRender.KindLabel(tile.Kind)</span>
+                                <div data-map-prop-group="general">
+                                    <label class="workspace-field">
+                                        <span class="workspace-label">Title</span>
+                                        <input asp-for="Input.Tiles[index].Title" class="form-control workspace-input" data-map-property-title />
+                                    </label>
+                                    <div class="workspace-field">
+                                        <span class="workspace-label">Widget</span>
+                                        <input type="hidden" asp-for="Input.Tiles[index].Kind" data-map-property-kind />
+                                        <input type="hidden" asp-for="Input.Tiles[index].VisualType" data-map-property-visual-type />
+                                        <span class="map-property-readonly" data-map-property-kind-label>@MapTileRender.KindLabel(tile.Kind)</span>
+                                    </div>
+                                    <input asp-for="Input.Tiles[index].ColumnSpan" type="hidden" data-map-tile-column-span />
+                                    <input asp-for="Input.Tiles[index].RowSpan" type="hidden" data-map-tile-row-span />
+                                    <div class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</div>
+                                    <div class="map-property-hint" data-map-property-hint></div>
                                 </div>
-                                <label class="workspace-field" data-map-property-target>
-                                    <span class="workspace-label">Target</span>
-                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].TargetToken", DomId = $"picker-map-tile-{index}", SelectedValue = Model.Input.Tiles[index].TargetToken, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
-                                </label>
-                                <label class="workspace-field" data-map-property-text-only>
-                                    <span class="workspace-label">Text</span>
-                                    <textarea asp-for="Input.Tiles[index].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
-                                </label>
-                                <label class="workspace-field" data-map-property-graph-only>
-                                    <span class="workspace-label">Graph type</span>
-                                    <select asp-for="Input.Tiles[index].GraphType" asp-items="Model.GraphTypeOptions" class="form-select workspace-select" data-map-property-graph-type></select>
-                                </label>
-                                <div class="map-property-section">
-                                    <span class="workspace-label">Appearance</span>
+                                <div data-map-prop-group="data" hidden>
+                                    <label class="workspace-field" data-map-property-target>
+                                        <span class="workspace-label">Target</span>
+                                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].TargetToken", DomId = $"picker-map-tile-{index}", SelectedValue = Model.Input.Tiles[index].TargetToken, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                                    </label>
+                                    <label class="workspace-field" data-map-property-text-only>
+                                        <span class="workspace-label">Text</span>
+                                        <textarea asp-for="Input.Tiles[index].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
+                                    </label>
+                                    <label class="workspace-field" data-map-property-graph-only>
+                                        <span class="workspace-label">Graph type</span>
+                                        <select asp-for="Input.Tiles[index].GraphType" asp-items="Model.GraphTypeOptions" class="form-select workspace-select" data-map-property-graph-type></select>
+                                    </label>
+                                </div>
+                                <div data-map-prop-group="display" hidden>
                                     <div class="workspace-field icon-picker-field">
                                         <span class="workspace-label">Icon</span>
                                         <input type="hidden" asp-for="Input.Tiles[index].IconKey" data-map-property-icon data-icon-picker-value />
                                         <button type="button" class="form-control workspace-input icon-picker-trigger" data-icon-picker-trigger>
                                             <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render(string.IsNullOrWhiteSpace(tile.IconKey) ? "square" : tile.IconKey)</span>
                                             <span class="icon-picker-trigger-label" data-icon-picker-trigger-label>@(string.IsNullOrWhiteSpace(tile.IconKey) ? "Auto (by type)" : tile.IconKey)</span>
-                                            <span class="icon-picker-trigger-caret" aria-hidden="true">▾</span>
+                                            <span class="icon-picker-trigger-caret" aria-hidden="true">&#9662;</span>
                                         </button>
                                     </div>
                                     <label class="workspace-field">
@@ -289,17 +389,13 @@
                                         <span class="workspace-label">Text color</span>
                                         <input asp-for="Input.Tiles[index].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
                                     </label>
+                                    <div class="map-property-checks">
+                                        <label><input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card /> <span>Card background</span></label>
+                                        <label><input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title /> <span>Show title</span></label>
+                                        <label><input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge /> <span>Show state badge</span></label>
+                                        <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
+                                    </div>
                                 </div>
-                                <div class="map-property-checks">
-                                    <label><input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card /> <span>Card background</span></label>
-                                    <label><input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title /> <span>Show title</span></label>
-                                    <label><input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge /> <span>Show state badge</span></label>
-                                    <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
-                                </div>
-                                <input asp-for="Input.Tiles[index].ColumnSpan" type="hidden" data-map-tile-column-span />
-                                <input asp-for="Input.Tiles[index].RowSpan" type="hidden" data-map-tile-row-span />
-                                <div class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</div>
-                                <div class="map-property-hint" data-map-property-hint></div>
                             </section>
                         }
                     </div>
@@ -332,43 +428,53 @@
                     <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__colSpan__ × __rowSpan__</span>
                     <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
                 </article>
+                @* Property panel for a freshly dropped tile. Kept field-for-field identical to the
+                   server-rendered one above - only grouped into the same General/Data/Display tabs, which the
+                   designer toggles via [data-map-prop-group]. Any field added here must be added there too. *@
                 <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
-                    <label class="workspace-field">
-                        <span class="workspace-label">Title</span>
-                        <input name="Input.Tiles[__index__].Title" value="__title__" class="form-control workspace-input" data-map-property-title />
-                    </label>
-                    <div class="workspace-field">
-                        <span class="workspace-label">Tile type</span>
-                        <input type="hidden" name="Input.Tiles[__index__].Kind" value="__kind__" data-map-property-kind />
-                        <input type="hidden" name="Input.Tiles[__index__].VisualType" value="__visual__" data-map-property-visual-type />
-                        <span class="map-property-readonly" data-map-property-kind-label>__kindLabel__</span>
+                    <div data-map-prop-group="general">
+                        <label class="workspace-field">
+                            <span class="workspace-label">Title</span>
+                            <input name="Input.Tiles[__index__].Title" value="__title__" class="form-control workspace-input" data-map-property-title />
+                        </label>
+                        <div class="workspace-field">
+                            <span class="workspace-label">Widget</span>
+                            <input type="hidden" name="Input.Tiles[__index__].Kind" value="__kind__" data-map-property-kind />
+                            <input type="hidden" name="Input.Tiles[__index__].VisualType" value="__visual__" data-map-property-visual-type />
+                            <span class="map-property-readonly" data-map-property-kind-label>__kindLabel__</span>
+                        </div>
+                        <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="hidden" data-map-tile-column-span />
+                        <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="hidden" data-map-tile-row-span />
+                        <div class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</div>
+                        <div class="map-property-hint" data-map-property-hint></div>
                     </div>
-                    <label class="workspace-field" data-map-property-target>
-                        <span class="workspace-label">Target</span>
-                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].TargetToken", DomId = "picker-map-tile-__index__", SelectedValue = null, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
-                    </label>
-                    <label class="workspace-field" data-map-property-text-only>
-                        <span class="workspace-label">Text</span>
-                        <textarea name="Input.Tiles[__index__].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
-                    </label>
-                    <label class="workspace-field" data-map-property-graph-only>
-                        <span class="workspace-label">Graph type</span>
-                        <select name="Input.Tiles[__index__].GraphType" class="form-select workspace-select" data-map-property-graph-type>
-                            <option value="@MonitoringMapTileGraphType.Line">Line</option>
-                            <option value="@MonitoringMapTileGraphType.Area">Area</option>
-                            <option value="@MonitoringMapTileGraphType.Bars">Bars</option>
-                            <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
-                        </select>
-                    </label>
-                    <div class="map-property-section">
-                        <span class="workspace-label">Appearance</span>
+                    <div data-map-prop-group="data" hidden>
+                        <label class="workspace-field" data-map-property-target>
+                            <span class="workspace-label">Target</span>
+                            <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].TargetToken", DomId = "picker-map-tile-__index__", SelectedValue = null, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                        </label>
+                        <label class="workspace-field" data-map-property-text-only>
+                            <span class="workspace-label">Text</span>
+                            <textarea name="Input.Tiles[__index__].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
+                        </label>
+                        <label class="workspace-field" data-map-property-graph-only>
+                            <span class="workspace-label">Graph type</span>
+                            <select name="Input.Tiles[__index__].GraphType" class="form-select workspace-select" data-map-property-graph-type>
+                                <option value="@MonitoringMapTileGraphType.Line">Line</option>
+                                <option value="@MonitoringMapTileGraphType.Area">Area</option>
+                                <option value="@MonitoringMapTileGraphType.Bars">Bars</option>
+                                <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div data-map-prop-group="display" hidden>
                         <div class="workspace-field icon-picker-field">
                             <span class="workspace-label">Icon</span>
                             <input type="hidden" name="Input.Tiles[__index__].IconKey" value="" data-map-property-icon data-icon-picker-value />
                             <button type="button" class="form-control workspace-input icon-picker-trigger" data-icon-picker-trigger>
                                 <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render("square")</span>
                                 <span class="icon-picker-trigger-label" data-icon-picker-trigger-label>Auto (by type)</span>
-                                <span class="icon-picker-trigger-caret" aria-hidden="true">▾</span>
+                                <span class="icon-picker-trigger-caret" aria-hidden="true">&#9662;</span>
                             </button>
                         </div>
                         <label class="workspace-field">
@@ -383,17 +489,13 @@
                             <span class="workspace-label">Text color</span>
                             <input name="Input.Tiles[__index__].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
                         </label>
+                        <div class="map-property-checks">
+                            <label><input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card /> <span>Card background</span></label>
+                            <label><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /> <span>Show title</span></label>
+                            <label><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /> <span>Show state badge</span></label>
+                            <label><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /> <span>Show target name</span></label>
+                        </div>
                     </div>
-                    <div class="map-property-checks">
-                        <label><input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card /> <span>Card background</span></label>
-                        <label><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /> <span>Show title</span></label>
-                        <label><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /> <span>Show state badge</span></label>
-                        <label><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /> <span>Show target name</span></label>
-                    </div>
-                    <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="hidden" data-map-tile-column-span />
-                    <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="hidden" data-map-tile-row-span />
-                    <div class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</div>
-                    <div class="map-property-hint" data-map-property-hint></div>
                 </section>
             </template>
 

@@ -41,7 +41,7 @@
             </div>
             @if (showPagination)
             {
-                <div class="map-carousel-nav" data-map-carousel-nav>
+                <div class="map-carousel-nav" data-map-carousel-nav data-map-pagination="@map.PaginationMode.ToString().ToLowerInvariant()">
                     <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
                     <div class="map-carousel-dots">
                         @for (var dot = 0; dot < display.Slides.Count; dot++)

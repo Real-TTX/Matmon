@@ -819,12 +819,33 @@ function initializeMapCarousel() {
     let active = 0;
     let timer = null;
 
+    // Page controls either sit under the board, float over it, or float over it and fade out while nothing
+    // happens (MonitoringMapPaginationMode). These three were REFERENCED further down but never declared,
+    // so the function threw a ReferenceError before wiring the arrows, dots and autoplay - which is why a
+    // multi-slide wallboard never advanced past slide 1.
+    const nav = scope.querySelector("[data-map-carousel-nav]");
+    const paginationMode = (nav?.dataset.mapPagination || "below").toLowerCase();
+    const autoHideNav = paginationMode === "overlayonactivity";
+    const stage = carousel.closest("[data-map-stage]");
+    let idleTimer = null;
+    const pingActivity = () => {
+      if (!nav) {
+        return;
+      }
+      nav.classList.remove("is-idle");
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => nav.classList.add("is-idle"), 3000);
+    };
+
     const show = (index) => {
       active = (index + slides.length) % slides.length;
       slides.forEach((slide, i) => {
         slide.hidden = i !== active;
       });
       dots.forEach((dot, i) => dot.classList.toggle("is-active", i === active));
+      if (autoHideNav) {
+        pingActivity();
+      }
     };
 
     const stop = () => {
@@ -3170,7 +3191,11 @@ function fitMapStages() {
     const containerWidth = rect.width;
     const containerHeight = rect.height;
     const slides = stage.querySelectorAll(".map-slide");
-    const shouldStack = containerWidth > 0 && containerWidth < MapStackBreakpoint;
+    // Never stack the DESIGNER canvas. Auto-Stack is a reading layout for narrow VIEWERS; applying it to the
+    // editor would show a single-column list while the user is placing widgets on a grid, which is the exact
+    // opposite of WYSIWYG - and it silently kicks in on any window where the canvas column lands under 640px.
+    const isDesigner = stage.querySelector("[data-map-designer]") !== null;
+    const shouldStack = !isDesigner && containerWidth > 0 && containerWidth < MapStackBreakpoint;
     slides.forEach((slide) => {
       if (shouldStack) {
         slide.dataset.layout = "stack";
@@ -3293,25 +3318,37 @@ function initializeMapDesigner() {
   };
   const colorPattern = /^#[0-9a-fA-F]{6}$/;
 
-  // The single MonitoringMapTileConstraints table, read from the server-rendered JSON block instead of a
-  // second, hand-duplicated JS table that could silently drift from the Core one. Cell-based (v2): each entry
-  // is {minColumns, minRows, defaultColumns, defaultRows}.
-  const constraintsEl = form?.querySelector("[data-map-constraints]");
-  let constraints = {};
+  // Everything the designer needs that is authored server-side, in ONE JSON block: the single
+  // MonitoringMapTileConstraints table (a second hand-duplicated JS copy could silently drift from the Core
+  // one), the MapWidgetCatalog palette and its layout templates. Constraints are cell-based (v2):
+  // {minColumns, minRows, defaultColumns, defaultRows}. A template slot names a WIDGET key, not a tile kind,
+  // which is why the palette has to be here too.
+  const configEl = form?.querySelector("[data-map-designer-config]");
+  let designerConfig = {};
   try {
-    constraints = constraintsEl ? JSON.parse(constraintsEl.textContent || "{}") : {};
+    designerConfig = configEl ? JSON.parse(configEl.textContent || "{}") : {};
   } catch {
-    constraints = {};
+    designerConfig = {};
   }
+  const constraints = designerConfig.constraints || {};
+  const widgetCatalog = designerConfig.widgets || {};
+  const layoutTemplates = Array.isArray(designerConfig.templates) ? designerConfig.templates : [];
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const getLimits = (kind) =>
     constraints[normalizeKind(kind)] || constraints.Element || { minColumns: 2, minRows: 2, defaultColumns: 2, defaultRows: 2 };
 
-  // Grid geometry hidden inputs (round-tripped, no dedicated "grid size" UI yet - see MapEditorInput.Columns).
+  // Grid geometry - real inputs in the Grid property tab now. Editing one reflows every widget, which is the
+  // whole reason v2 stores cells instead of pixels.
   const columnsInput = form?.querySelector("[data-map-columns]");
   const rowsInput = form?.querySelector("[data-map-rows]");
   const tilePaddingInput = form?.querySelector("[data-map-tile-padding]");
   const outerMarginInput = form?.querySelector("[data-map-outer-margin]");
+  const gridGuides = canvas.querySelector(".map-grid-guides");
+  const propertyTabs = form?.querySelector("[data-map-property-tabs]");
+  const slidePanel = form?.querySelector("[data-map-slide-panel]");
+  const scopeLabel = form?.querySelector("[data-map-property-scope-label]");
+  // The tile tab bar lives outside the per-tile panels, so the chosen tab survives clicking tile to tile.
+  let activePropertyTab = "general";
 
   // The logical canvas is always 1920px wide; only the height varies with the aspect ratio - mirrors
   // MonitoringMap.LogicalSizeFor exactly so the designer never disagrees with what the store will save.
@@ -3376,6 +3413,25 @@ function initializeMapDesigner() {
   // stage's via CSS inheritance), zooms the stage per the slider (a percentage of the workbench width -
   // fitMapStages then measures the resulting box and computes kx/ky, so there is no separate zoom math here),
   // and finally re-clamps every tile into the (possibly resized) canvas.
+  // The guide lines are server-rendered from MapTileRender.GridCells for the first paint. Once the user edits
+  // columns/rows/gap/margin they have to be rebuilt from the same formula here, or the guides would keep
+  // showing the old grid while the widgets already snap to the new one.
+  const renderGridGuides = () => {
+    if (!gridGuides) {
+      return;
+    }
+    const grid = readGrid();
+    const cells = [];
+    for (let row = 1; row <= grid.rows; row += 1) {
+      for (let column = 1; column <= grid.columns; column += 1) {
+        const rect = cellRectToPx(grid, column, row, 1, 1);
+        const style = "left:" + rect.x + "px;top:" + rect.y + "px;width:" + rect.w + "px;height:" + rect.h + "px;";
+        cells.push('<span class="map-grid-cell" style="' + style + '"></span>');
+      }
+    }
+    gridGuides.innerHTML = cells.join("");
+  };
+
   const syncCanvas = () => {
     const { logicalWidth, logicalHeight } = readLogicalSize();
     stage.style.setProperty("--map-w", String(logicalWidth));
@@ -3390,6 +3446,7 @@ function initializeMapDesigner() {
     }
 
     syncMapSummary();
+    renderGridGuides();
     fitMapStages();
     canvas.querySelectorAll("[data-map-tile]").forEach((tile) => applyTilePosition(tile));
   };
@@ -3642,28 +3699,60 @@ function initializeMapDesigner() {
     refreshTilePreview(tile, panel);
   };
 
-  const selectTile = (index) => {
-    if (mapPanel) {
-      mapPanel.hidden = true;
-    }
-    mapSelectButton?.classList.remove("is-selected");
+  // Which General/Data/Display group of the SELECTED tile panel is visible. The bar is shared by all tile
+  // panels (see MapEditor.cshtml), so this is designer state, not per-panel state.
+  const applyPropertyTab = (panel) => {
+    panel?.querySelectorAll("[data-map-prop-group]").forEach((group) => {
+      group.hidden = group.dataset.mapPropGroup !== activePropertyTab;
+    });
+    propertyTabs?.querySelectorAll("[data-map-property-tab]").forEach((button) => {
+      const isActive = button.dataset.mapPropertyTab === activePropertyTab;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+  };
 
+  // The three selection modes share one aside, so each one has to put every other mode's chrome away -
+  // otherwise the tile tab bar lingers over the map panel, or the slide panel stays open behind a tile.
+  const setPropertyScope = (scope, label) => {
+    if (mapPanel) {
+      mapPanel.hidden = scope !== "map";
+    }
+    if (slidePanel) {
+      slidePanel.hidden = scope !== "slide";
+    }
+    if (propertyTabs) {
+      propertyTabs.hidden = scope !== "tile";
+    }
+    if (scopeLabel) {
+      scopeLabel.textContent = label;
+    }
+    mapSelectButton?.classList.toggle("is-selected", scope === "map");
+    slideStrip?.classList.toggle("is-selected", scope === "slide");
+  };
+
+  const selectTile = (index) => {
     canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
       tile.classList.toggle("is-selected", tile.dataset.tileIndex === String(index) && !tile.hidden);
     });
 
-    let hasPanel = false;
+    let activePanel = null;
     propertyHost?.querySelectorAll("[data-map-property-panel]").forEach((panel) => {
       const isActive = panel.dataset.tileIndex === String(index);
       panel.hidden = !isActive;
       if (isActive) {
-        hasPanel = true;
+        activePanel = panel;
         syncPanelVisibility(panel);
       }
     });
 
+    setPropertyScope("tile", activePanel
+      ? (activePanel.querySelector("[data-map-property-kind-label]")?.textContent?.trim() || "Widget")
+      : "Properties");
+    applyPropertyTab(activePanel);
+
     if (propertyEmpty) {
-      propertyEmpty.hidden = hasPanel;
+      propertyEmpty.hidden = Boolean(activePanel);
     }
   };
 
@@ -3679,12 +3768,39 @@ function initializeMapDesigner() {
     if (propertyEmpty) {
       propertyEmpty.hidden = true;
     }
-    if (mapPanel) {
-      mapPanel.hidden = false;
+
+    setPropertyScope("map", "Map");
+    syncMapSummary();
+  };
+
+  // Slide properties are NOT model-bound - the designer owns the slide list and re-renders the hidden
+  // Input.Slides[..] inputs from it, so the panel reads and writes that JS model directly.
+  const selectSlide = () => {
+    const slide = slides.find((candidate) => candidate.id === activeSlideId);
+    if (!slide || !slidePanel) {
+      return;
     }
 
-    mapSelectButton?.classList.add("is-selected");
-    syncMapSummary();
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      tile.classList.remove("is-selected");
+    });
+    propertyHost?.querySelectorAll("[data-map-property-panel]").forEach((panel) => {
+      panel.hidden = true;
+    });
+    if (propertyEmpty) {
+      propertyEmpty.hidden = true;
+    }
+
+    slidePanel.querySelectorAll("[data-map-slide-field]").forEach((field) => {
+      const key = field.dataset.mapSlideField;
+      if (field.type === "checkbox") {
+        field.checked = slide[key] !== false;
+      } else {
+        field.value = slide[key] ?? "";
+      }
+    });
+
+    setPropertyScope("slide", `Slide - ${slide.name}`);
   };
 
   // Converts a pointer event to logical-px coordinates on the canvas, transform-aware: the canvas
@@ -3854,7 +3970,7 @@ function initializeMapDesigner() {
     });
   };
 
-  const addTile = (tool, position) => {
+  const addTile = (tool, position, placement) => {
     if (!template || !propertyHost) {
       return;
     }
@@ -3865,16 +3981,22 @@ function initializeMapDesigner() {
     const title = `${baseTitle} ${index + 1}`;
     const limits = getLimits(kind);
     const grid = readGrid();
-    const columnSpan = clamp(limits.defaultColumns, limits.minColumns, grid.columns);
-    const rowSpan = clamp(limits.defaultRows, limits.minRows, grid.rows);
-    // Drop CENTERS the new tile on the cursor rather than hanging it off the pointer by its top-left
-    // corner, so where you release is where the tile appears - computed in px then converted to the
-    // nearest cell, since the drop point itself is a continuous pointer position.
-    const rectW = columnSpan * grid.cellWidth + (columnSpan - 1) * grid.tilePadding;
-    const rectH = rowSpan * grid.cellHeight + (rowSpan - 1) * grid.tilePadding;
-    const dropCell = pxPointToCell(grid, (position?.x ?? grid.outerMargin) - rectW / 2, (position?.y ?? grid.outerMargin) - rectH / 2);
-    const column = clamp(dropCell.column, 1, Math.max(1, grid.columns - columnSpan + 1));
-    const row = clamp(dropCell.row, 1, Math.max(1, grid.rows - rowSpan + 1));
+    const columnSpan = clamp(placement?.columnSpan ?? limits.defaultColumns, limits.minColumns, grid.columns);
+    const rowSpan = clamp(placement?.rowSpan ?? limits.defaultRows, limits.minRows, grid.rows);
+    // A layout template hands in an explicit cell. A DROP instead centers the new tile on the cursor rather
+    // than hanging it off the pointer by its top-left corner, so where you release is where the tile appears -
+    // computed in px then converted to the nearest cell, since the drop point is a continuous position.
+    let targetColumn = placement?.column;
+    let targetRow = placement?.row;
+    if (targetColumn === undefined || targetRow === undefined) {
+      const rectW = columnSpan * grid.cellWidth + (columnSpan - 1) * grid.tilePadding;
+      const rectH = rowSpan * grid.cellHeight + (rowSpan - 1) * grid.tilePadding;
+      const dropCell = pxPointToCell(grid, (position?.x ?? grid.outerMargin) - rectW / 2, (position?.y ?? grid.outerMargin) - rectH / 2);
+      targetColumn = dropCell.column;
+      targetRow = dropCell.row;
+    }
+    const column = clamp(targetColumn, 1, Math.max(1, grid.columns - columnSpan + 1));
+    const row = clamp(targetRow, 1, Math.max(1, grid.rows - rowSpan + 1));
     const html = template.innerHTML
       .replaceAll("__index__", String(index))
       .replaceAll("__id__", createId())
@@ -4110,6 +4232,227 @@ function initializeMapDesigner() {
       selectMap();
     }
   });
+
+  // --- Widget palette: search -------------------------------------------------------------------------
+  const toolSearch = form?.querySelector("[data-map-tool-search]");
+  const toolEmpty = form?.querySelector("[data-map-tool-empty]");
+  const filterTools = () => {
+    const needle = (toolSearch?.value || "").trim().toLowerCase();
+    let visible = 0;
+    form?.querySelectorAll("[data-map-tool-group]").forEach((group) => {
+      let groupVisible = 0;
+      group.querySelectorAll("[data-map-tool-widget]").forEach((button) => {
+        const match = !needle || (button.dataset.mapToolSearch || "").includes(needle);
+        button.hidden = !match;
+        if (match) {
+          groupVisible += 1;
+        }
+      });
+      group.hidden = groupVisible === 0;
+      visible += groupVisible;
+    });
+    if (toolEmpty) {
+      toolEmpty.hidden = visible > 0;
+    }
+  };
+  toolSearch?.addEventListener("input", filterTools);
+
+  // --- Layout templates -------------------------------------------------------------------------------
+  // A template is authored against a minimum grid; on a smaller one its slots would be clamped and pile up,
+  // so the button is disabled instead of quietly producing a mess.
+  const syncLayoutAvailability = () => {
+    const grid = readGrid();
+    let anyHidden = false;
+    form?.querySelectorAll("[data-map-layout]").forEach((button) => {
+      const tooSmall = grid.columns < Number(button.dataset.layoutMinColumns || 1)
+        || grid.rows < Number(button.dataset.layoutMinRows || 1);
+      button.disabled = tooSmall;
+      button.classList.toggle("is-disabled", tooSmall);
+      anyHidden = anyHidden || tooSmall;
+    });
+    const warn = form?.querySelector("[data-map-layout-too-small]");
+    if (warn) {
+      warn.hidden = !anyHidden;
+    }
+  };
+
+  const applyLayoutTemplate = (key) => {
+    const template = layoutTemplates.find((candidate) => candidate.key === key);
+    if (!template) {
+      return;
+    }
+    const existing = Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((tile) =>
+      (tile.dataset.slideId || "") === activeSlideId
+      && tile.querySelector("[data-map-tile-deleted]")?.value !== "true");
+    if (existing.length > 0 && !window.confirm(`Replace the ${existing.length} widget(s) on this slide with the "${template.label}" layout?`)) {
+      return;
+    }
+    existing.forEach((tile) => {
+      const deleted = tile.querySelector("[data-map-tile-deleted]");
+      if (deleted) {
+        deleted.value = "true";
+      }
+      tile.hidden = true;
+    });
+
+    (template.slots || []).forEach((slot) => {
+      const widget = widgetCatalog[slot.widget];
+      if (!widget) {
+        return;
+      }
+      addTile(widget, null, slot);
+    });
+    selectMap();
+  };
+
+  form?.querySelectorAll("[data-map-layout]").forEach((button) => {
+    button.addEventListener("click", () => applyLayoutTemplate(button.dataset.mapLayout));
+  });
+
+  // --- Grid size --------------------------------------------------------------------------------------
+  // Resizing the grid is DESTRUCTIVE: shrinking it re-clamps every widget into the smaller grid and growing
+  // it back cannot undo that. So commit on "change" (blur / Enter), never on "input" - typing "12" passes
+  // through "1", which on every keystroke would have flattened the whole board into a single column. The
+  // value is also pulled back inside the field's own min/max first, since a number input happily holds "0".
+  [columnsInput, rowsInput, tilePaddingInput, outerMarginInput].forEach((input) => {
+    input?.addEventListener("change", () => {
+      const min = Number(input.min || 0);
+      const max = Number(input.max) || Number.MAX_SAFE_INTEGER;
+      input.value = String(Math.min(max, Math.max(min, Math.round(Number(input.value) || min))));
+      syncCanvas();
+      syncLayoutAvailability();
+    });
+  });
+
+  // --- Property tabs ----------------------------------------------------------------------------------
+  propertyTabs?.querySelectorAll("[data-map-property-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activePropertyTab = button.dataset.mapPropertyTab || "general";
+      applyPropertyTab(propertyHost?.querySelector("[data-map-property-panel]:not([hidden])"));
+    });
+  });
+
+  const mapTabs = mapPanel?.querySelector("[data-map-map-tabs]");
+  mapTabs?.querySelectorAll("[data-map-map-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const name = button.dataset.mapMapTab;
+      mapTabs.querySelectorAll("[data-map-map-tab]").forEach((other) => {
+        const isActive = other === button;
+        other.classList.toggle("is-active", isActive);
+        other.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      mapPanel?.querySelectorAll("[data-map-map-group]").forEach((group) => {
+        group.hidden = group.dataset.mapMapGroup !== name;
+      });
+    });
+  });
+
+  // --- Slide properties -------------------------------------------------------------------------------
+  slidePanel?.querySelectorAll("[data-map-slide-field]").forEach((field) => {
+    field.addEventListener("input", () => {
+      const slide = slides.find((candidate) => candidate.id === activeSlideId);
+      if (!slide) {
+        return;
+      }
+      const key = field.dataset.mapSlideField;
+      slide[key] = field.type === "checkbox" ? field.checked : field.value;
+      renderSlideInputs();
+      if (key === "name") {
+        renderSlideTabs();
+        setPropertyScope("slide", `Slide - ${slide.name}`);
+      }
+    });
+  });
+  form?.querySelector("[data-map-slide-settings]")?.addEventListener("click", selectSlide);
+
+  // --- Slide order + duplicate ------------------------------------------------------------------------
+  form?.querySelectorAll("[data-map-slide-move]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const delta = Number(button.dataset.mapSlideMove || 0);
+      const from = slides.findIndex((candidate) => candidate.id === activeSlideId);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= slides.length) {
+        return;
+      }
+      slides.splice(to, 0, slides.splice(from, 1)[0]);
+      renderSlideInputs();
+      renderSlideTabs();
+    });
+  });
+
+  // cloneNode copies ATTRIBUTES, not live input state, so anything typed since page load would be lost in a
+  // duplicate. Writing the current state back into the attributes first makes the clone faithful.
+  const freezeValues = (root) => {
+    root.querySelectorAll("input, textarea, select").forEach((field) => {
+      if (field.type === "checkbox" || field.type === "radio") {
+        field.toggleAttribute("checked", field.checked);
+      } else if (field.tagName === "SELECT") {
+        Array.from(field.options).forEach((option) => option.toggleAttribute("selected", option.selected));
+      } else if (field.tagName === "TEXTAREA") {
+        field.textContent = field.value;
+      } else {
+        field.setAttribute("value", field.value);
+      }
+    });
+  };
+
+  form?.querySelector("[data-map-slide-duplicate]")?.addEventListener("click", () => {
+    const source = slides.find((candidate) => candidate.id === activeSlideId);
+    if (!source) {
+      return;
+    }
+    const newSlideId = createId();
+    slides.splice(slides.indexOf(source) + 1, 0, { ...source, id: newSlideId, name: `${source.name} copy` });
+
+    const sourceTiles = Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((tile) =>
+      (tile.dataset.slideId || "") === source.id
+      && tile.querySelector("[data-map-tile-deleted]")?.value !== "true");
+
+    sourceTiles.forEach((tile) => {
+      const oldIndex = tile.dataset.tileIndex;
+      const panel = getPanel(oldIndex);
+      if (!panel) {
+        return;
+      }
+      const index = Number(canvas.dataset.nextTileIndex || 0);
+      freezeValues(tile);
+      freezeValues(panel);
+      // Re-index by string so the element picker's DOM ids (picker-map-tile-N) are rewritten too - a cloned
+      // duplicate id would make the picker in the copy drive the original's hidden field.
+      const rewrite = (html) => html
+        .replaceAll(`Input.Tiles[${oldIndex}]`, `Input.Tiles[${index}]`)
+        .replaceAll(`picker-map-tile-${oldIndex}`, `picker-map-tile-${index}`)
+        .replaceAll(`data-tile-index="${oldIndex}"`, `data-tile-index="${index}"`);
+      const tileClone = document.createRange().createContextualFragment(rewrite(tile.outerHTML)).firstElementChild;
+      const panelClone = document.createRange().createContextualFragment(rewrite(panel.outerHTML)).firstElementChild;
+      if (!tileClone || !panelClone) {
+        return;
+      }
+      const newTileId = createId();
+      tileClone.dataset.tileId = newTileId;
+      tileClone.dataset.slideId = newSlideId;
+      tileClone.querySelector(`input[name="Input.Tiles[${index}].Id"]`)?.setAttribute("value", newTileId);
+      const slideField = tileClone.querySelector("[data-map-tile-slide-id]");
+      if (slideField) {
+        slideField.value = newSlideId;
+        slideField.setAttribute("value", newSlideId);
+      }
+      canvas.appendChild(tileClone);
+      propertyHost?.appendChild(panelClone);
+      canvas.dataset.nextTileIndex = String(index + 1);
+      setupTile(tileClone);
+    });
+
+    renderSlideInputs();
+    renderSlideTabs();
+    initializeElementPickers();
+    initializeIconPicker();
+    setActiveSlide(newSlideId);
+  });
+
+  filterTools();
+  syncLayoutAvailability();
+  renderGridGuides();
 
   selectMap();
 }

@@ -8857,7 +8857,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-editor {
-  position: relative;
+  /* NO position here: .map-tile already places the tile absolutely from --tile-x/y, and a "relative" here
+     (same specificity, later in the file) silently put the designer canvas back into normal flow, so every
+     widget was offset by the stacked height of the ones before it. It went unnoticed because the designer
+     canvas was also being Auto-Stacked at the widths it was tested at. */
   padding: 0.52rem;
   /* The whole tile is the drag surface (see initializeMapDesigner), so say so - a plain pointer read as
      "click to select" and left most of the tile feeling dead. */
@@ -9028,6 +9031,146 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   display: none;
 }
 
+/* --- Map editor: widget library, property tabs, grid + slide panels (WP3) --------------------------- */
+
+/* A tab group and the palette's category groups are plain divs, so the UA [hidden] rule already hides
+   them - but .map-property-tabs is a flex row, which would override it. */
+.map-property-tabs[hidden],
+.map-toolbox-group[hidden],
+.map-toolbox-empty[hidden],
+.map-toolbox-note-warn[hidden] {
+  display: none;
+}
+
+.map-toolbox {
+  /* Column flexbox, not a grid: the widget LIST absorbs the leftover height and scrolls on its own, so
+     the layout templates underneath stay visible instead of being pushed below the fold. */
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  max-height: min(36rem, 72vh);
+}
+.map-toolbox-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.map-toolbox-search .ui-icon {
+  position: absolute;
+  left: 0.5rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--matmon-muted);
+  pointer-events: none;
+}
+.map-toolbox-search input {
+  padding-left: 1.75rem;
+}
+.map-toolbox-list {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  flex: 1 1 auto;
+  min-height: 12rem;
+  overflow: auto;
+}
+.map-toolbox-group {
+  display: grid;
+  gap: 0.3rem;
+}
+.map-toolbox-group-label {
+  color: var(--matmon-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.map-toolbox-empty,
+.map-toolbox-note {
+  margin: 0;
+  color: var(--matmon-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+.map-toolbox-note-warn {
+  color: var(--matmon-warning);
+}
+.map-toolbox-templates {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 0.3rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--matmon-border);
+}
+.map-layout-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+/* Compact chips, description in the tooltip: four full-width buttons with a description squeezed the widget
+   list itself down to a sliver and pushed the layouts below the fold. */
+.map-layout-chip {
+  padding: 0.28rem 0.6rem;
+  border: 1px dashed var(--matmon-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--matmon-text);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.map-layout-chip:hover:not(:disabled) {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--matmon-accent) 55%, var(--matmon-border));
+  background: color-mix(in srgb, var(--matmon-surface) 84%, var(--matmon-accent) 16%);
+}
+.map-layout-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.map-tool-button small {
+  color: var(--matmon-muted);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+/* Same underline-tab language as .sensor-tabs, but scoped: the designer is one big form, and
+   initializeSensorTabs resolves its panels per FORM, so reusing it here would make every tab bar on the
+   page fight over the same panels. */
+.map-property-tabs {
+  display: flex;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--matmon-border);
+}
+.map-property-tab {
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--matmon-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.map-property-tab:hover {
+  color: var(--matmon-text);
+}
+.map-property-tab.is-active {
+  color: var(--matmon-accent);
+  border-bottom-color: var(--matmon-accent);
+}
+
+.map-grid-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.map-slide-strip.is-selected {
+  border-color: color-mix(in srgb, var(--matmon-accent) 55%, var(--matmon-border));
+}
+
 .map-property-size-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -9133,6 +9276,22 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border: 1px solid var(--matmon-border);
   backdrop-filter: blur(6px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+/* PaginationMode "Overlay - on mouse-move / change": the controls fade out while nothing is happening, so a
+   wall display is not permanently branded with a nav bar. Driven by initializeMapCarousel's pingActivity.
+   NB "Below the board" still renders as an overlay like "always visible" - moving it out of the scaled
+   stage is a separate layout change, not done here. */
+.map-carousel-nav[data-map-pagination="overlayonactivity"] {
+  transition: opacity 240ms ease;
+}
+.map-carousel-nav[data-map-pagination="overlayonactivity"].is-idle {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-carousel-nav[data-map-pagination="overlayonactivity"] {
+    transition: none;
+  }
 }
 
 .map-carousel-arrow {
