@@ -45,6 +45,12 @@
                 }
             </div>
         }
+        else
+        {
+            @* Unmanaged install: the sign-in card carries the Matmon lockup where a partner's logo would go,
+               so the two states have the same shape instead of an empty gap. *@
+            <div class="auth-brand-lockup"><img src="~/brand/matmon-logo.svg" alt="Matmon" /></div>
+        }
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
         {

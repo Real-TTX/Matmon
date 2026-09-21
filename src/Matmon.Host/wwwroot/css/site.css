@@ -523,6 +523,11 @@ body.is-sidebar-open {
   width: 2.1rem;
   height: 2.1rem;
 }
+/* The About hero mark is an <img> now (the mark is a multi-stop gradient, not a currentColor glyph). */
+.about-hero-mark img {
+  width: 2.4rem;
+  height: auto;
+}
 
 .about-hero-copy {
   display: grid;
@@ -639,6 +644,16 @@ body.is-sidebar-open {
   width: 1.35rem;
   height: 1.35rem;
   color: var(--matmon-accent);
+}
+
+.brand-mark {
+  flex: 0 0 auto;
+  /* Sized by WIDTH, not height: the mark is 1.26:1, and .brand-note's padding-left (1.9rem) assumes a
+     1.35rem icon slot plus the 0.55rem .brand gap. Sizing by height would widen it past that and knock
+     the note text out of alignment with the brand name. */
+  width: 1.35rem;
+  height: auto;
+  display: block;
 }
 
 .brand:hover,
@@ -1303,6 +1318,17 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
 .auth-card {
   width: min(560px, 100%);
   padding: 1rem 1rem 0.95rem;
+}
+
+.auth-brand-lockup {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0 18px;
+}
+.auth-brand-lockup img {
+  width: 170px;
+  max-width: 62%;
+  height: auto;
 }
 
 .auth-shell-login .page-header {
