@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 392 88" role="img" aria-label="matmon">
+  <title>matmon</title>
+  <!-- Geometric-sans wordmark drawn as stroked geometry, so it needs no font to render anywhere.
+       x-height 20..76, stem weight 14, bowls r=21, shoulders r=16.5. Letters are spaced on their INK
+       extents (butt caps end exactly on the path), not on nominal boxes - spacing the 't' by its box
+       made the word read as "mat mon". -->
+  <g fill="none" stroke-width="14" stroke-linecap="butt" stroke-linejoin="round">
+    <g stroke="#16304F">
+      <path d="M7 76 V43.5 A16.5 16.5 0 0 1 40 43.5 V76 M40 43.5 A16.5 16.5 0 0 1 73 43.5 V76"/>
+      <path d="M138 20 V76 M96 48 a21 21 0 1 0 42 0 a21 21 0 1 0 -42 0"/>
+      <path d="M167 4 V76 M154 27 H180"/>
+    </g>
+    <g stroke="#18A6A2">
+      <path d="M196 76 V43.5 A16.5 16.5 0 0 1 229 43.5 V76 M229 43.5 A16.5 16.5 0 0 1 262 43.5 V76"/>
+      <path d="M285 48 a21 21 0 1 0 42 0 a21 21 0 1 0 -42 0"/>
+      <path d="M350 76 V43.5 A16.5 16.5 0 0 1 383 43.5 V76"/>
+    </g>
+  </g>
+</svg>

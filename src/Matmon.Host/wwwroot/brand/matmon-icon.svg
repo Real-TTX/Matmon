@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Matmon">
+  <title>Matmon</title>
+  <!-- App-Icon / Favicon: die Silhouette der Marke aus dem Markenverlauf ausgestanzt. Bewusst NICHT
+       die schattierte Marke - deren dunkle linke Flanke verschwindet auf dunklen Tableisten. -->
+  <defs>
+    <linearGradient id="mmIconBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14418A"/><stop offset=".55" stop-color="#1B86D0"/><stop offset="1" stop-color="#1FA79E"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#mmIconBg)"/>
+  <path transform="translate(12 16.1) scale(.0901)" fill="#fff" d="M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z"/>
+</svg>

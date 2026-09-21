@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 392 236" role="img" aria-label="Matmon">
+  <title>Matmon</title>
+  <!-- Gestapelte Sperrschrift: Marke ueber der Wortmarke. -->
+  <defs>
+    <!-- Ein einziger Verlauf ueber die ganze Marke (Farbton 211deg links -> 180deg rechts), Achse
+         diagonal. Die "Facetten" des Originals sind KEINE eigenen Farbflaechen: der Farbton ist
+         ueberall derselbe, es sind reine Abdunklungen entlang dreier Falzkanten. Darum schwarze
+         Verlaufsschatten statt Einzelflaechen - und darum laufen die Kanten diagonal, nicht senkrecht. -->
+    <linearGradient id="mlBase" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="444" y2="160">
+      <stop offset="0" stop-color="#004EA3"/><stop offset=".10" stop-color="#015CB6"/>
+      <stop offset=".23" stop-color="#0371D2"/><stop offset=".41" stop-color="#0892E2"/>
+      <stop offset=".52" stop-color="#0DA4EC"/><stop offset=".64" stop-color="#0CBBEB"/>
+      <stop offset=".73" stop-color="#12B0BF"/><stop offset=".84" stop-color="#15C1C2"/>
+      <stop offset="1" stop-color="#18CCC5"/>
+    </linearGradient>
+    <!-- Falz 1: obere linke Aussenecke -> innere Taille; Schatten links davon, am Falz am dunkelsten. -->
+    <linearGradient id="mlFoldL" gradientUnits="userSpaceOnUse" x1="116" y1="155" x2="-1" y2="265">
+      <stop offset="0" stop-color="#000" stop-opacity=".77"/><stop offset="1" stop-color="#000" stop-opacity=".43"/>
+    </linearGradient>
+    <!-- Falz 2: aus der oberen Kerbenspitze schraeg nach unten rechts (wo das eine Band unter dem anderen liegt). -->
+    <linearGradient id="mlFoldM" gradientUnits="userSpaceOnUse" x1="228.5" y1="110.5" x2="335.7" y2="5.6">
+      <stop offset="0" stop-color="#000" stop-opacity=".30"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Falz 3: Gegenstueck rechts. -->
+    <linearGradient id="mlFoldR" gradientUnits="userSpaceOnUse" x1="328" y1="158.2" x2="413" y2="257">
+      <stop offset="0" stop-color="#000" stop-opacity=".365"/><stop offset="1" stop-color="#000" stop-opacity=".195"/>
+    </linearGradient>
+    <clipPath id="mlClip"><path d="M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z"/></clipPath>
+  </defs>
+  <g transform="translate(130.5 13) scale(.295)">
+    <g clip-path="url(#mlClip)">
+      <path d="M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z" fill="url(#mlBase)"/>
+      <path d="M-20 27L116 155L116 360L-20 360Z" fill="url(#mlFoldL)"/>
+      <path d="M228.5 110.5L300.7 184.3L328 160L470 35.6L470-20L394-20Z" fill="url(#mlFoldM)"/>
+      <path d="M470 35.6L328 158.2L328 360L480 360L480 35.6Z" fill="url(#mlFoldR)"/>
+    </g>
+  </g>
+  <g transform="translate(0 146)">
+    <g fill="none" stroke-width="14" stroke-linecap="butt" stroke-linejoin="round">
+      <g stroke="#16304F">
+        <path d="M7 76 V43.5 A16.5 16.5 0 0 1 40 43.5 V76 M40 43.5 A16.5 16.5 0 0 1 73 43.5 V76"/>
+        <path d="M138 20 V76 M96 48 a21 21 0 1 0 42 0 a21 21 0 1 0 -42 0"/>
+        <path d="M167 4 V76 M154 27 H180"/>
+      </g>
+      <g stroke="#18A6A2">
+        <path d="M196 76 V43.5 A16.5 16.5 0 0 1 229 43.5 V76 M229 43.5 A16.5 16.5 0 0 1 262 43.5 V76"/>
+        <path d="M285 48 a21 21 0 1 0 42 0 a21 21 0 1 0 -42 0"/>
+        <path d="M350 76 V43.5 A16.5 16.5 0 0 1 383 43.5 V76"/>
+      </g>
+    </g>
+  </g>
+</svg>
