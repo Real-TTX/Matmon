@@ -7,6 +7,17 @@
         ? $"data-map-tile data-tile-index=\"{Model.Index}\" data-slide-id=\"{Model.SlideId}\""
         : string.Empty;
     var showHead = tile.ShowTitle || tile.ShowStateBadge || Model.Editable;
+    // A collection widget renders its own body (rows / SLA figure / clock / heading) and would otherwise ALSO
+    // get the generic value + subtitle + kind footer underneath, printing the same number twice and stealing
+    // the height the rows need. Heading and Clock drop the footer entirely - they are chrome, not readings.
+    var isCollection = tile.Kind is MonitoringMapTileKind.SensorList or MonitoringMapTileKind.AlertFeed
+        or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
+    var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
+    // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
+    // screenshot/print is correct; initializeMapClocks then ticks it.
+    var clockNow = tile.Kind == MonitoringMapTileKind.Clock
+        ? TimeZoneInfo.ConvertTime(DateTimeOffset.Now, MapTileRender.ResolveTimeZone(Model.TimeZoneId))
+        : default;
 }
 <article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")"
          data-tile-id="@tile.Id"
@@ -42,6 +53,67 @@
                 <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
             }
         </div>
+    }
+
+    @* --- Collection widgets ------------------------------------------------------------------------- *@
+    @if (tile.Kind == MonitoringMapTileKind.Heading)
+    {
+        <div class="map-tile-heading">
+            <strong>@(string.IsNullOrWhiteSpace(tile.Title) ? "Heading" : tile.Title)</strong>
+            @if (!string.IsNullOrWhiteSpace(tile.Text))
+            {
+                <small>@tile.Text</small>
+            }
+        </div>
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Clock)
+    {
+        @* Server-rendered first paint so the tile is never blank (and prints/screenshots correctly), then
+           initializeMapClocks ticks it in the MAP's timezone - not the browser's, because the public
+           wallboard has nobody signed in and every other timestamp on the board is server-side. *@
+        <div class="map-tile-clock" data-map-clock data-time-zone="@Model.TimeZoneId">
+            <strong data-clock-time>@clockNow.ToString("HH:mm")</strong>
+            <small data-clock-date>@clockNow.ToString("ddd dd MMM")</small>
+        </div>
+    }
+    else if (Model.Sla is { } sla)
+    {
+        <div class="map-tile-sla">
+            <strong>@(sla.Percent is { } pct ? pct.ToString("0.##") + " %" : "-")</strong>
+            <small>@sla.Label</small>
+        </div>
+    }
+    else if (Model.Rows is { } rows)
+    {
+        @if (rows.Count == 0)
+        {
+            <p class="map-tile-rows-empty">@(tile.Kind == MonitoringMapTileKind.AlertFeed ? "No open alerts" : "No sensors")</p>
+        }
+        else
+        {
+            <ul class="map-tile-rows">
+                @foreach (var row in rows)
+                {
+                    <li class="map-tile-row" data-state="@row.Tone">
+                        <span class="map-tile-row-label">
+                            <strong>@row.Label</strong>
+                            @if (!string.IsNullOrWhiteSpace(row.Detail))
+                            {
+                                <small>@row.Detail</small>
+                            }
+                        </span>
+                        @if (!string.IsNullOrWhiteSpace(row.Value))
+                        {
+                            <span class="map-tile-row-value">@row.Value</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(row.TimeText))
+                        {
+                            <span class="map-tile-row-time">@row.TimeText</span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
     }
 
     @if (tile.Kind == MonitoringMapTileKind.Graph)
@@ -90,19 +162,22 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Model.Value) && Model.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
+    @if (!isCollection && !string.IsNullOrWhiteSpace(Model.Value) && Model.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
     {
         <div class="map-tile-value" data-tile-value>@Model.Value</div>
     }
 
-    <p data-tile-subtitle>@Model.Subtitle</p>
-    <small>
-        @Model.KindLabel
-        @if (tile.ShowElementName && !string.IsNullOrWhiteSpace(Model.ElementName))
-        {
-            <text> - @Model.ElementName</text>
-        }
-    </small>
+    @if (!isChrome)
+    {
+        <p data-tile-subtitle>@Model.Subtitle</p>
+        <small>
+            @Model.KindLabel
+            @if (tile.ShowElementName && !string.IsNullOrWhiteSpace(Model.ElementName))
+            {
+                <text> - @Model.ElementName</text>
+            }
+        </small>
+    }
 
     @if (Model.Editable)
     {

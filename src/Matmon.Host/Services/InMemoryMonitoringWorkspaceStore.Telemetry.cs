@@ -130,6 +130,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return _telemetry.GetStatistics(sensorId);
     }
 
+    public IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId, DateTimeOffset fromUtc)
+    {
+        return _telemetry.GetStatistics(sensorId, fromUtc);
+    }
+
     public StorageTelemetryOverview GetStorageTelemetryOverview()
     {
         var counts = _telemetry.GetCounts();

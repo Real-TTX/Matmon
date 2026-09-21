@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using Matmon.Core.Domain;
+using Matmon.Core.Telemetry;
 
 namespace Matmon.Host.Services;
 
@@ -7,6 +9,12 @@ public sealed class MapDisplayProvider
 {
     private const double SparklineWidth = 100;
     private const double SparklineHeight = 40;
+
+    /// <summary>How long an SLA tile reuses its computed uptime - see ResolveUptime. A multi-day figure does
+    /// not move between two page loads.</summary>
+    private static readonly TimeSpan SlaCacheTtl = TimeSpan.FromMinutes(5);
+
+    private readonly ConcurrentDictionary<string, (DateTimeOffset ComputedUtc, UptimeSummary Summary)> _slaCache = new();
 
     private readonly IMonitoringWorkspaceStore _workspaceStore;
 
@@ -25,6 +33,11 @@ public sealed class MapDisplayProvider
             .ThenBy(tile => tile.Column)
             .Select(tile =>
             {
+                if (IsCollectionKind(tile.Kind))
+                {
+                    return BuildCollectionTile(tile, elements, latest);
+                }
+
                 if (!string.IsNullOrWhiteSpace(tile.TargetTag))
                 {
                     return BuildTagAggregateTile(tile, latest);
@@ -49,6 +62,11 @@ public sealed class MapDisplayProvider
     public MapDisplayTileViewModel ResolveTilePreview(MonitoringMapTile tile)
     {
         var latest = _workspaceStore.GetLatestSensorObservations();
+
+        if (IsCollectionKind(tile.Kind))
+        {
+            return BuildCollectionTile(tile, _workspaceStore.GetAllElements().ToDictionary(element => element.Id), latest);
+        }
 
         if (!string.IsNullOrWhiteSpace(tile.TargetTag))
         {
@@ -271,6 +289,264 @@ public sealed class MapDisplayProvider
         return new Sparkline(line, smoothLine, area, bars);
     }
 
+    // --- Collection widgets (list / alert feed / SLA / clock / heading) --------------------------------
+    // These differ from the tiles above in that their content is a LIST or an aggregate over a window rather
+    // than one element's current state, which is why MapDisplayTileViewModel grew optional Rows/Sla instead
+    // of a parallel view-model hierarchy.
+
+    private static bool IsCollectionKind(MonitoringMapTileKind kind) =>
+        kind is MonitoringMapTileKind.SensorList
+             or MonitoringMapTileKind.AlertFeed
+             or MonitoringMapTileKind.Sla
+             or MonitoringMapTileKind.Clock
+             or MonitoringMapTileKind.Heading;
+
+    /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
+    /// understands - an element id or "tag:name". Null when the tile has no target at all, which for an alert
+    /// feed means "the whole workspace" rather than "nothing".</summary>
+    private static string? TargetToken(MonitoringMapTile tile) =>
+        !string.IsNullOrWhiteSpace(tile.TargetTag)
+            ? MonitoringTargetResolver.TagPrefix + tile.TargetTag
+            : tile.ElementId is { } id ? id.ToString() : null;
+
+    private MapDisplayTileViewModel BuildCollectionTile(
+        MonitoringMapTile tile,
+        IReadOnlyDictionary<Guid, MonitoringElement> elements,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
+        return tile.Kind switch
+        {
+            MonitoringMapTileKind.Heading => CreateTile(tile, element, "ok", "Heading", tile.Text ?? string.Empty, string.Empty, "Heading", "list"),
+            MonitoringMapTileKind.Clock => CreateTile(tile, element, "ok", "Clock", string.Empty, string.Empty, "Clock", "clock"),
+            MonitoringMapTileKind.AlertFeed => BuildAlertFeedTile(tile, element),
+            MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
+            _ => BuildSensorListTile(tile, element, latest)
+        };
+    }
+
+    private MapDisplayTileViewModel BuildSensorListTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile));
+        if (sensors.Count == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", string.Empty, KindLabel(tile.Kind), "list");
+        }
+
+        var limit = Math.Clamp(tile.ListLimit, 1, 50);
+        var entries = sensors
+            .Select(sensor =>
+            {
+                latest.TryGetValue(sensor.Id, out var observation);
+                var channel = PickChannel(observation, tile.ListChannelKey);
+                return new
+                {
+                    Sensor = sensor,
+                    Observation = observation,
+                    Channel = channel,
+                    Numeric = channel?.Value ?? observation?.Value,
+                    State = observation?.State ?? SensorState.Unknown
+                };
+            })
+            .ToArray();
+
+        // A value-ranked list must not let "no reading" win the top spot, so a missing number sorts to the
+        // far end in BOTH directions rather than being treated as zero.
+        var ordered = tile.ListMode switch
+        {
+            MonitoringMapListMode.TopValue => entries
+                .OrderByDescending(entry => entry.Numeric ?? double.MinValue)
+                .ThenBy(entry => entry.Sensor.Name, StringComparer.OrdinalIgnoreCase),
+            MonitoringMapListMode.BottomValue => entries
+                .OrderBy(entry => entry.Numeric ?? double.MaxValue)
+                .ThenBy(entry => entry.Sensor.Name, StringComparer.OrdinalIgnoreCase),
+            MonitoringMapListMode.Alphabetical => entries
+                .OrderBy(entry => entry.Sensor.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(entry => entry.Sensor.Id),
+            _ => entries
+                .OrderByDescending(entry => (int)MonitoringStatePresentation.FromSensorState(entry.State))
+                .ThenBy(entry => entry.Sensor.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        var rows = ordered
+            .Take(limit)
+            .Select(entry => new MapTileRowDto(
+                entry.Sensor.Name,
+                entry.Channel?.Label ?? entry.Sensor.SensorTypeKey,
+                entry.Observation is null ? string.Empty : FormatObservationValue(entry.Observation, entry.Channel),
+                MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(entry.State)),
+                null))
+            .ToArray();
+
+        var severity = entries
+            .Select(entry => MonitoringStatePresentation.FromSensorState(entry.State))
+            .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+        var subtitle = entries.Length > rows.Length
+            ? $"Top {rows.Length} of {entries.Length} sensors"
+            : $"{entries.Length} sensors";
+
+        return CreateTile(tile, element, MonitoringStatePresentation.Key(severity), MonitoringStatePresentation.Label(severity),
+            subtitle, string.Empty, KindLabel(tile.Kind), "list", rows: rows);
+    }
+
+    private MapDisplayTileViewModel BuildAlertFeedTile(MonitoringMapTile tile, MonitoringElement? element)
+    {
+        var limit = Math.Clamp(tile.ListLimit, 1, 50);
+        var token = TargetToken(tile);
+        // No target = the whole workspace. Scoping to a target means "this element and everything under it",
+        // so the element's own id goes in alongside its sensors - a folder can carry an alert itself.
+        HashSet<Guid>? scope = null;
+        if (token is not null)
+        {
+            scope = _workspaceStore.ResolveTargetSensors(token).Select(sensor => sensor.Id).ToHashSet();
+            if (tile.ElementId is { } elementId)
+            {
+                scope.Add(elementId);
+            }
+        }
+
+        var alerts = _workspaceStore.Workspace.Alerts
+            .Where(alert => alert.IsActive)
+            .Where(alert => scope is null || scope.Contains(alert.ElementId))
+            .OrderByDescending(alert => (int)MonitoringStatePresentation.FromSensorState(alert.State))
+            .ThenByDescending(alert => alert.LastSeenUtc)
+            .Take(limit)
+            .ToArray();
+
+        var rows = alerts
+            .Select(alert => new MapTileRowDto(
+                alert.ElementName,
+                alert.Message,
+                alert.IsAcknowledged ? "ack" : null,
+                MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(alert.State)),
+                FormatRelative(alert.LastSeenUtc)))
+            .ToArray();
+
+        if (rows.Length == 0)
+        {
+            return CreateTile(tile, element, "ok", "All clear", "No open alerts", string.Empty, KindLabel(tile.Kind), "bell", rows: rows);
+        }
+
+        var severity = alerts
+            .Select(alert => MonitoringStatePresentation.FromSensorState(alert.State))
+            .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+        return CreateTile(tile, element, MonitoringStatePresentation.Key(severity), MonitoringStatePresentation.Label(severity),
+            $"{rows.Length} open", string.Empty, KindLabel(tile.Kind), "bell", rows: rows);
+    }
+
+    private MapDisplayTileViewModel BuildSlaTile(MonitoringMapTile tile, MonitoringElement? element)
+    {
+        var days = Math.Clamp(tile.SlaWindowDays, 1, 365);
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile));
+        if (sensors.Count == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", string.Empty, KindLabel(tile.Kind), "chart");
+        }
+
+        var summary = ResolveUptime(tile, sensors, days);
+        var label = sensors.Count == 1 ? $"{days}d uptime" : $"{days}d uptime, {sensors.Count} sensors";
+        var sla = new MapSlaDto(summary.Percent, days, summary.StateSamples, label);
+
+        if (!summary.HasData)
+        {
+            return CreateTile(tile, element, "unknown", "No history", $"No statistics in the last {days} days", string.Empty,
+                KindLabel(tile.Kind), "chart", sla: sla);
+        }
+
+        // Thresholds are presentation only - an SLA tile reports history, it does not raise anything, so this
+        // deliberately does not touch the sensor's own alert state.
+        var percent = summary.Percent!.Value;
+        var stateKey = percent >= 99.5 ? "ok" : percent >= 95 ? "warning" : "error";
+        var stateLabel = percent >= 99.5 ? "On target" : percent >= 95 ? "Degraded" : "Breached";
+
+        return new MapDisplayTileViewModel(
+            tile,
+            element,
+            stateKey,
+            stateLabel,
+            label,
+            $"{percent:0.##} %",
+            KindLabel(tile.Kind),
+            string.IsNullOrWhiteSpace(tile.IconKey) ? "chart" : tile.IconKey!.Trim(),
+            null, null, null, "#7c8eab",
+            Math.Clamp(percent, 0, 100),
+            $"{summary.StateSamples} samples",
+            tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.ProgressBar : tile.VisualType,
+            null,
+            sla);
+    }
+
+    /// <summary>
+    /// Uptime for an SLA tile, cached per (tile, window, sensor set) for <see cref="SlaCacheTtl"/>.
+    /// This is the ONE query on a wallboard that scales with the number of sensors behind a target - a tag
+    /// matching 200 sensors is 200 statistics reads - and a multi-day uptime figure simply does not move
+    /// between two page loads, so re-reading it every render would be pure waste. Everything else a tile
+    /// shows comes from the latest-observation cache and is already paid for.
+    /// </summary>
+    private UptimeSummary ResolveUptime(MonitoringMapTile tile, IReadOnlyList<SensorElement> sensors, int days)
+    {
+        var key = $"{tile.Id}|{days}|{sensors.Count}";
+        var now = DateTimeOffset.UtcNow;
+        if (_slaCache.TryGetValue(key, out var cached) && now - cached.ComputedUtc < SlaCacheTtl)
+        {
+            return cached.Summary;
+        }
+
+        var fromUtc = now.AddDays(-days);
+        var summary = SensorUptime.Combine(sensors.Select(sensor =>
+            SensorUptime.FromBuckets(_workspaceStore.GetSensorStatistics(sensor.Id, fromUtc), fromUtc)));
+
+        // Bounded so a workspace that churns through tiles cannot grow this without limit.
+        if (_slaCache.Count > 256)
+        {
+            _slaCache.Clear();
+        }
+
+        _slaCache[key] = (now, summary);
+        return summary;
+    }
+
+    private static SensorChannelValue? PickChannel(SensorObservation? observation, string? channelKey)
+    {
+        if (observation is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(channelKey))
+        {
+            return observation.Channels.FirstOrDefault(channel =>
+                string.Equals(channel.Key, channelKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return observation.Channels.FirstOrDefault(channel => channel.IsDefault)
+            ?? observation.Channels.FirstOrDefault(channel => !channel.IsVirtual);
+    }
+
+    private static string FormatRelative(DateTimeOffset timestampUtc)
+    {
+        var age = DateTimeOffset.UtcNow - timestampUtc;
+        if (age < TimeSpan.Zero)
+        {
+            age = TimeSpan.Zero;
+        }
+
+        if (age.TotalMinutes < 1)
+        {
+            return "just now";
+        }
+
+        if (age.TotalHours < 1)
+        {
+            return $"{(int)age.TotalMinutes}m";
+        }
+
+        return age.TotalDays < 1 ? $"{(int)age.TotalHours}h" : $"{(int)age.TotalDays}d";
+    }
+
     private static MapDisplayTileViewModel CreateTile(
         MonitoringMapTile tile,
         MonitoringElement? element,
@@ -279,7 +555,9 @@ public sealed class MapDisplayProvider
         string subtitle,
         string value,
         string kindLabel,
-        string iconKey)
+        string iconKey,
+        IReadOnlyList<MapTileRowDto>? rows = null,
+        MapSlaDto? sla = null)
     {
         return new MapDisplayTileViewModel(
             tile,
@@ -296,7 +574,9 @@ public sealed class MapDisplayProvider
             "#7c8eab",
             null,
             string.Empty,
-            tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType);
+            tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType,
+            rows,
+            sla);
     }
 
     private static double? ResolveSensorProgressPercent(SensorObservation observation, SensorChannelValue? channel)
@@ -340,6 +620,11 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Value => "Value",
             MonitoringMapTileKind.Graph => "Graph",
             MonitoringMapTileKind.Text => "Text",
+            MonitoringMapTileKind.SensorList => "List",
+            MonitoringMapTileKind.AlertFeed => "Alerts",
+            MonitoringMapTileKind.Sla => "SLA",
+            MonitoringMapTileKind.Clock => "Clock",
+            MonitoringMapTileKind.Heading => "Heading",
             _ => "Tile"
         };
     }
@@ -433,4 +718,17 @@ public sealed record MapDisplayTileViewModel(
     string GraphColor,
     double? ProgressPercent,
     string ProgressLabel,
-    MonitoringMapTileVisualType EffectiveVisualType);
+    MonitoringMapTileVisualType EffectiveVisualType,
+    /// <summary>Rows of a list-style widget (sensor list, alert feed). Null for every other kind - these are
+    /// optional collections on the ONE tile view-model rather than a parallel hierarchy, because every other
+    /// field (state, icon, colours, card chrome) is shared.</summary>
+    IReadOnlyList<MapTileRowDto>? Rows = null,
+    MapSlaDto? Sla = null);
+
+/// <param name="Tone">A state key ("ok"/"warning"/"error"/"unknown") for the row pill.</param>
+/// <param name="TimeText">Pre-formatted relative age, e.g. "12m" - formatted server-side so the public
+/// wallboard needs no locale handling in the browser.</param>
+public sealed record MapTileRowDto(string Label, string? Detail, string? Value, string Tone, string? TimeText);
+
+/// <param name="Percent">Null when the window holds no state samples - "unknown", which must NOT render as 0.</param>
+public sealed record MapSlaDto(double? Percent, int WindowDays, long StateSamples, string Label);

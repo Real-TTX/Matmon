@@ -101,6 +101,11 @@ public sealed class MonitoringMap
     /// <summary>How the public wallboard shows the slide pagination / page indicator.</summary>
     public MonitoringMapPaginationMode PaginationMode { get; set; } = MonitoringMapPaginationMode.Below;
 
+    /// <summary>IANA timezone the board renders times in (clock widget, timestamps). Per MAP, not per user:
+    /// the public wallboard has nobody signed in, and a browser-local clock would contradict every
+    /// server-rendered timestamp next to it. Null = the platform timezone.</summary>
+    public string? DisplayTimeZoneId { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
@@ -151,6 +156,7 @@ public sealed class MonitoringMap
         WallboardFit = WallboardFit,
         AutoRotateSeconds = AutoRotateSeconds,
         PaginationMode = PaginationMode,
+        DisplayTimeZoneId = DisplayTimeZoneId,
         CreatedUtc = CreatedUtc,
         UpdatedUtc = UpdatedUtc,
         Tiles = Tiles.Select(tile => tile.Clone()).ToList(),
@@ -260,6 +266,25 @@ public sealed class MonitoringMapTile
 
     public bool ShowElementName { get; set; } = true;
 
+    // --- Widget-specific options ------------------------------------------------------------------------
+    // Deliberately flat properties on the tile rather than a loose key/value bag: there are a handful of
+    // them, they are strongly typed, and workspace.json stays readable.
+
+    /// <summary>How a <see cref="MonitoringMapTileKind.SensorList"/> tile picks and orders its rows.</summary>
+    public MonitoringMapListMode ListMode { get; set; } = MonitoringMapListMode.Worst;
+
+    /// <summary>How many rows a list / alert-feed tile shows. Clamped at render time - a tile that is two
+    /// cells tall cannot honestly show twenty rows.</summary>
+    public int ListLimit { get; set; } = 5;
+
+    /// <summary>Channel key a <see cref="MonitoringMapListMode.TopValue"/> list ranks by. Null = the sensor's
+    /// default channel. Channel keys differ per sensor type and there is no cross-type catalog, so the editor
+    /// fills this picker from the channels actually observed under the target.</summary>
+    public string? ListChannelKey { get; set; }
+
+    /// <summary>Window a <see cref="MonitoringMapTileKind.Sla"/> tile reports uptime over.</summary>
+    public int SlaWindowDays { get; set; } = 7;
+
     public MonitoringMapTile Clone() => new()
     {
         Id = Id,
@@ -281,7 +306,11 @@ public sealed class MonitoringMapTile
         VisualType = VisualType,
         ShowTitle = ShowTitle,
         ShowStateBadge = ShowStateBadge,
-        ShowElementName = ShowElementName
+        ShowElementName = ShowElementName,
+        ListMode = ListMode,
+        ListLimit = ListLimit,
+        ListChannelKey = ListChannelKey,
+        SlaWindowDays = SlaWindowDays
     };
 }
 
@@ -291,7 +320,38 @@ public enum MonitoringMapTileKind
     Element = 1,
     Status = 2,
     Value = 3,
-    Graph = 4
+    Graph = 4,
+
+    /// <summary>A ranked list of the sensors under a target - see <see cref="MonitoringMapListMode"/>.</summary>
+    SensorList = 5,
+
+    /// <summary>The newest active alerts, optionally scoped to a target subtree.</summary>
+    AlertFeed = 6,
+
+    /// <summary>Uptime over a window, from the downsampled statistics buckets.</summary>
+    Sla = 7,
+
+    /// <summary>A clock in the map timezone. Ticks client-side - a server-rendered time would be stale the
+    /// moment the page is cached or the wallboard stops reloading.</summary>
+    Clock = 8,
+
+    /// <summary>A large section heading. Text with a display treatment, not a data widget.</summary>
+    Heading = 9
+}
+
+public enum MonitoringMapListMode
+{
+    /// <summary>Worst state first, then by name - the "what needs attention" list.</summary>
+    Worst = 0,
+
+    /// <summary>Highest channel value first - the "top talkers" list.</summary>
+    TopValue = 1,
+
+    /// <summary>Lowest channel value first.</summary>
+    BottomValue = 2,
+
+    /// <summary>Plain alphabetical, for a stable roster that does not reshuffle on every poll.</summary>
+    Alphabetical = 3
 }
 
 public enum MonitoringMapTileGraphType
@@ -359,6 +419,13 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Value => (2, 2, 2, 2),
             MonitoringMapTileKind.Status => (3, 2, 4, 2),
             MonitoringMapTileKind.Graph => (4, 3, 4, 3),
+            // Rows need width to be readable and height to show more than one line, so the list-style widgets
+            // start larger than a value tile - a 2x2 "top talkers" would show exactly one truncated row.
+            MonitoringMapTileKind.SensorList => (3, 3, 4, 4),
+            MonitoringMapTileKind.AlertFeed => (4, 3, 5, 4),
+            MonitoringMapTileKind.Sla => (2, 2, 3, 2),
+            MonitoringMapTileKind.Clock => (2, 2, 2, 2),
+            MonitoringMapTileKind.Heading => (3, 1, 6, 1),
             _ => (2, 2, 2, 2)
         };
     }

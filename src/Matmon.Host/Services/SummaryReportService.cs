@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using Matmon.Core;
 using Matmon.Core.Domain;
+using Matmon.Core.Telemetry;
 
 namespace Matmon.Host.Services;
 
@@ -57,19 +58,11 @@ public sealed class SummaryReportDataCollector
                 continue;
             }
 
-            // Dedupe buckets by window start (statistics are per channel; the state distribution is the
-            // same across a sensor's channels, so one bucket per window avoids double counting).
-            var buckets = _workspaceStore.GetSensorStatistics(sensor.Id)
-                .Where(bucket => bucket.BucketStartUtc >= fromUtc)
-                .GroupBy(bucket => bucket.BucketStartUtc)
-                .Select(group => group.First())
-                .ToArray();
-
-            var healthy = buckets.Sum(bucket => bucket.HealthyCount);
-            var warning = buckets.Sum(bucket => bucket.WarningCount);
-            var critical = buckets.Sum(bucket => bucket.CriticalCount);
-            var stateSamples = healthy + warning + critical;
-            double? uptime = stateSamples > 0 ? (double)(healthy + warning) / stateSamples * 100 : null;
+            // Windowed in SQL, and the two easy-to-get-wrong parts - the per-channel dedupe and "a warning
+            // still counts as up" - live in the shared SensorUptime, so this and the wallboard's SLA widget
+            // cannot drift apart.
+            var uptimeSummary = SensorUptime.FromBuckets(_workspaceStore.GetSensorStatistics(sensor.Id, fromUtc), fromUtc);
+            var uptime = uptimeSummary.Percent;
 
             latest.TryGetValue(sensor.Id, out var observation);
             var unit = ResolveUnit(observation);
@@ -79,7 +72,7 @@ public sealed class SummaryReportDataCollector
                 uptime,
                 observation?.Value,
                 unit,
-                buckets.Sum(bucket => bucket.SampleCount)));
+                (int)Math.Min(int.MaxValue, uptimeSummary.Samples)));
         }
 
         var lowestUptime = lines

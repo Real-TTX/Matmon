@@ -182,6 +182,11 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId);
 
+    /// <summary>Only the buckets at or after <paramref name="fromUtc"/> - pushed into the SQL rather than
+    /// filtered in C#, because the unwindowed read pulls every bucket a sensor ever had across every channel
+    /// and a wallboard SLA tile does this per tile, per render.</summary>
+    IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId, DateTimeOffset fromUtc);
+
     /// <summary>
     /// Recomputes recent statistics buckets from raw observations and applies
     /// telemetry retention. Invoked periodically by the rollup service.

@@ -659,6 +659,28 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    public IReadOnlyList<SensorStatisticsBucket> GetStatistics(Guid sensorId, DateTimeOffset fromUtc)
+    {
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText =
+                """
+                SELECT sensor_id, bucket_minutes, bucket_start, default_channel_key, state,
+                       sample_count, average, minimum, maximum, last_value, unit, message,
+                       low_percentile, high_percentile, healthy_count, warning_count, critical_count
+                FROM sensor_statistics
+                WHERE sensor_id = $sensor AND bucket_start >= $from
+                ORDER BY bucket_start ASC;
+                """;
+            cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
+            // bucket_start is Unix MILLISECONDS (INTEGER), not an ISO string - comparing it to text would silently
+            // match nothing and the tile would just look like it had no history.
+            cmd.Parameters.AddWithValue("$from", fromUtc.ToUnixTimeMilliseconds());
+            return ReadStatistics(cmd);
+        }
+    }
+
     public IReadOnlyList<SensorStatisticsBucket> GetAllStatistics()
     {
         lock (_sync)

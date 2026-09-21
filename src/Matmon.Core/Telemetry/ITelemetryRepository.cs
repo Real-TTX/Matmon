@@ -65,6 +65,11 @@ public interface ITelemetryRepository
 
     IReadOnlyList<SensorStatisticsBucket> GetStatistics(Guid sensorId);
 
+    /// <summary>Only the buckets at or after <paramref name="fromUtc"/>. The unwindowed overload reads every
+    /// bucket a sensor ever had, across every channel, and leaves the filtering to the caller - fine for a
+    /// nightly e-mail, far too much for a wallboard tile that re-renders on every page load.</summary>
+    IReadOnlyList<SensorStatisticsBucket> GetStatistics(Guid sensorId, DateTimeOffset fromUtc);
+
     IReadOnlyList<SensorStatisticsBucket> GetAllStatistics();
 
     int PruneStatistics(Guid sensorId, DateTimeOffset cutoffUtc);

@@ -30,8 +30,20 @@ public static class MapWidgetCatalog
         new("graph", "Graph", "Sensor trend sparkline", "chart", MapWidgetCategory.Metrics,
             MonitoringMapTileKind.Graph, SearchTerms: "chart trend history sparkline line area bars"),
 
+        new("list", "Sensor list", "Ranked list of the sensors under a target", "list", MapWidgetCategory.Metrics,
+            MonitoringMapTileKind.SensorList, SearchTerms: "top talkers worst ranking table rows busiest"),
+        new("sla", "SLA / uptime", "Availability over a window, from the statistics buckets", "chart", MapWidgetCategory.Metrics,
+            MonitoringMapTileKind.Sla, SearchTerms: "uptime availability percent history slo"),
+
+        new("alerts", "Alert feed", "Newest open alerts, optionally scoped to a target", "bell", MapWidgetCategory.Status,
+            MonitoringMapTileKind.AlertFeed, SearchTerms: "incidents problems events open acknowledged"),
+
         new("text", "Text", "Label, notes or instructions", "list", MapWidgetCategory.Content,
-            MonitoringMapTileKind.Text, SearchTerms: "label heading note caption instructions")
+            MonitoringMapTileKind.Text, SearchTerms: "label note caption instructions"),
+        new("heading", "Heading", "Large section title for grouping a board", "list", MapWidgetCategory.Content,
+            MonitoringMapTileKind.Heading, SearchTerms: "title section header caption"),
+        new("clock", "Clock", "Current time in the board timezone", "clock", MapWidgetCategory.Content,
+            MonitoringMapTileKind.Clock, SearchTerms: "time date wall now")
     ];
 
     public static MapWidgetDefinition? Find(string? key) =>

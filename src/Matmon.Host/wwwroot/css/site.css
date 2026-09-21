@@ -8375,6 +8375,101 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   line-height: 1;
 }
 
+/* --- Collection widgets: sensor list, alert feed, SLA, clock, heading ------------------------------- */
+/* All sized in cq units like the rest of the tile content, so they scale with the tile rather than with the
+   root font size - the whole board is one transformed canvas and rem would not follow it. */
+
+.map-tile-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2cqh;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+.map-tile-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2cqw;
+  min-width: 0;
+  padding-left: 1.6cqw;
+  border-left: 2px solid var(--map-row-tone, var(--matmon-border));
+  font-size: clamp(7px, 7cqh, 20px);
+  line-height: 1.25;
+}
+.map-tile-row[data-state="ok"] { --map-row-tone: #78d5c8; }
+.map-tile-row[data-state="warning"] { --map-row-tone: #f3b36b; }
+.map-tile-row[data-state="error"] { --map-row-tone: #f08b8b; }
+.map-tile-row[data-state="unknown"],
+.map-tile-row[data-state="disabled"] { --map-row-tone: #7c8eab; }
+
+.map-tile-row-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.map-tile-row-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.map-tile-row-label small,
+.map-tile-row-time {
+  color: var(--matmon-muted);
+  font-size: 0.8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-tile-row-value {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.map-tile-row-time {
+  flex: 0 0 auto;
+}
+.map-tile-rows-empty {
+  margin: auto 0;
+  color: var(--matmon-muted);
+  font-size: clamp(7px, 8cqh, 22px);
+}
+
+.map-tile-sla,
+.map-tile-clock,
+.map-tile-heading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5cqh;
+  min-width: 0;
+  flex: 1;
+}
+.map-tile-sla strong,
+.map-tile-clock strong {
+  font-size: clamp(14px, 34cqh, 96px);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.map-tile-heading strong {
+  font-size: clamp(12px, 46cqh, 72px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+.map-tile-sla small,
+.map-tile-clock small,
+.map-tile-heading small {
+  color: var(--matmon-muted);
+  font-size: clamp(7px, 11cqh, 24px);
+}
+
 .map-tile-progress-wrap {
   display: grid;
   gap: 0.25rem;

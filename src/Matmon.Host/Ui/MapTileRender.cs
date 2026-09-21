@@ -51,6 +51,11 @@ public static class MapTileRender
             MonitoringMapTileKind.Value => "Value",
             MonitoringMapTileKind.Graph => "Graph",
             MonitoringMapTileKind.Text => "Text",
+            MonitoringMapTileKind.SensorList => "List",
+            MonitoringMapTileKind.AlertFeed => "Alerts",
+            MonitoringMapTileKind.Sla => "SLA",
+            MonitoringMapTileKind.Clock => "Clock",
+            MonitoringMapTileKind.Heading => "Heading",
             _ => "Tile"
         };
     }
@@ -63,8 +68,33 @@ public static class MapTileRender
             MonitoringMapTileKind.Text => "list",
             MonitoringMapTileKind.Status => "dashboard",
             MonitoringMapTileKind.Value => "square",
+            MonitoringMapTileKind.SensorList => "list",
+            MonitoringMapTileKind.AlertFeed => "bell",
+            MonitoringMapTileKind.Sla => "chart",
+            MonitoringMapTileKind.Clock => "clock",
+            MonitoringMapTileKind.Heading => "list",
             _ => "sensor"
         };
+    }
+
+    /// <summary>Resolves a map timezone id to a TimeZoneInfo, falling back to the platform zone. Silently
+    /// tolerant on purpose: an id that is valid on Linux ("Europe/Berlin") and one that is valid on Windows
+    /// ("W. Europe Standard Time") both occur in the wild, and a wallboard must not go blank over it.</summary>
+    public static TimeZoneInfo ResolveTimeZone(string? timeZoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            return TimeZoneInfo.Local;
+        }
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return TimeZoneInfo.Local;
+        }
     }
 
     /// <summary>The px rect of every cell in the map's grid (Columns x Rows), used to render the editor's grid
@@ -149,6 +179,15 @@ public sealed class MapTileRenderModel
 
     public bool IsDeleted { get; init; }
 
+    /// <summary>Rows of a list-style widget (sensor list, alert feed); null for every other kind.</summary>
+    public IReadOnlyList<MapTileRowDto>? Rows { get; init; }
+
+    public MapSlaDto? Sla { get; init; }
+
+    /// <summary>IANA timezone the board renders times in - carried down to the clock widget, which ticks
+    /// client-side and therefore needs the MAP timezone rather than the browser one.</summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>The model-binding prefix for this tile's hidden inputs, e.g. <c>Input.Tiles[3]</c>.</summary>
     public string FieldNamePrefix => $"Input.Tiles[{Index}]";
 
@@ -186,7 +225,10 @@ public sealed class MapTileRenderModel
             Editable = editable,
             Index = index,
             SlideId = slideId,
-            IsDeleted = isDeleted
+            IsDeleted = isDeleted,
+            Rows = vm.Rows,
+            Sla = vm.Sla,
+            TimeZoneId = map.DisplayTimeZoneId
         };
     }
 

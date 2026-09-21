@@ -95,6 +95,7 @@ public sealed class MapEditorModel : PageModel
                 AspectRatioWidth = Input.AspectRatioWidth,
                 AspectRatioHeight = Input.AspectRatioHeight,
                 WallboardFit = Input.WallboardFit,
+                DisplayTimeZoneId = string.IsNullOrWhiteSpace(Input.DisplayTimeZoneId) ? null : Input.DisplayTimeZoneId.Trim(),
                 AutoRotateSeconds = Input.AutoRotateSeconds,
                 PaginationMode = Input.PaginationMode,
                 PublicEnabled = Input.PublicEnabled,
@@ -189,7 +190,11 @@ public sealed class MapEditorModel : PageModel
         ShowCard = tile.ShowCard,
         ShowTitle = tile.ShowTitle,
         ShowStateBadge = tile.ShowStateBadge,
-        ShowElementName = tile.ShowElementName
+        ShowElementName = tile.ShowElementName,
+        ListMode = tile.ListMode,
+        ListLimit = Math.Clamp(tile.ListLimit, 1, 50),
+        ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim(),
+        SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365)
     };
 
     public IActionResult OnPostDelete()
@@ -216,6 +221,7 @@ public sealed class MapEditorModel : PageModel
                 AspectRatioWidth = map.AspectRatioWidth > 0 ? map.AspectRatioWidth : 16,
                 AspectRatioHeight = map.AspectRatioHeight > 0 ? map.AspectRatioHeight : 9,
                 WallboardFit = map.WallboardFit,
+                DisplayTimeZoneId = map.DisplayTimeZoneId,
                 AutoRotateSeconds = map.AutoRotateSeconds,
                 PaginationMode = map.PaginationMode,
                 PublicEnabled = map.PublicEnabled,
@@ -258,7 +264,11 @@ public sealed class MapEditorModel : PageModel
                     ShowCard = tile.ShowCard,
                     ShowTitle = tile.ShowTitle,
                     ShowStateBadge = tile.ShowStateBadge,
-                    ShowElementName = tile.ShowElementName
+                    ShowElementName = tile.ShowElementName,
+                    ListMode = tile.ListMode,
+                    ListLimit = tile.ListLimit,
+                    ListChannelKey = tile.ListChannelKey,
+                    SlaWindowDays = tile.SlaWindowDays
                 })).ToList()
             };
 
@@ -393,6 +403,10 @@ public sealed class MapEditorInput
 
     public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Fit;
 
+    /// <summary>IANA timezone for the board clock/timestamps - per map, because the public wallboard has no
+    /// signed-in user whose preference could apply.</summary>
+    public string? DisplayTimeZoneId { get; set; }
+
     public int AutoRotateSeconds { get; set; } = 12;
 
     public MonitoringMapPaginationMode PaginationMode { get; set; } = MonitoringMapPaginationMode.Below;
@@ -485,6 +499,14 @@ public sealed class MapTileInput
     public bool ShowStateBadge { get; set; } = true;
 
     public bool ShowElementName { get; set; } = true;
+
+    public MonitoringMapListMode ListMode { get; set; } = MonitoringMapListMode.Worst;
+
+    public int ListLimit { get; set; } = 5;
+
+    public string? ListChannelKey { get; set; }
+
+    public int SlaWindowDays { get; set; } = 7;
 
     public bool IsDeleted { get; set; }
 }

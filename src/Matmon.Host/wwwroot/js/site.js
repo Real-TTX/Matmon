@@ -36,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMapStages();
   initializeMapDesigner();
   initializeMapCarousel();
+  initializeMapClocks();
   initializeElementPickers();
   initializeIconPicker();
   initializeTagInputs();
@@ -802,6 +803,53 @@ function initializeElementPickers() {
   });
 }
 
+
+// Ticks every [data-map-clock] in the MAP's timezone (not the browser's): the public wallboard has nobody
+// signed in, and a browser-local clock would contradict every server-rendered timestamp beside it on the
+// same board. The first paint is server-rendered, so this only keeps it current.
+function initializeMapClocks() {
+  const clocks = Array.from(document.querySelectorAll("[data-map-clock]"));
+  if (clocks.length === 0) {
+    return;
+  }
+
+  const formatters = new Map();
+  const formatterFor = (zone, options) => {
+    const key = (zone || "") + "|" + JSON.stringify(options);
+    if (!formatters.has(key)) {
+      // An invalid/unknown zone id must not blank the board - fall back to the browser's own zone.
+      try {
+        formatters.set(key, new Intl.DateTimeFormat(undefined, zone ? { ...options, timeZone: zone } : options));
+      } catch {
+        formatters.set(key, new Intl.DateTimeFormat(undefined, options));
+      }
+    }
+    return formatters.get(key);
+  };
+
+  const tick = () => {
+    const now = new Date();
+    clocks.forEach((clock) => {
+      const zone = clock.dataset.timeZone || "";
+      const time = clock.querySelector("[data-clock-time]");
+      const date = clock.querySelector("[data-clock-date]");
+      if (time) {
+        time.textContent = formatterFor(zone, { hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+      }
+      if (date) {
+        date.textContent = formatterFor(zone, { weekday: "short", day: "2-digit", month: "short" }).format(now);
+      }
+    });
+  };
+
+  tick();
+  // Align to the next minute, then tick once a minute - the display has no seconds, so a per-second timer
+  // would just wake the wallboard 60x more often for nothing.
+  window.setTimeout(() => {
+    tick();
+    window.setInterval(tick, 60000);
+  }, (60 - new Date().getSeconds()) * 1000);
+}
 function initializeMapCarousel() {
   document.querySelectorAll("[data-map-carousel]").forEach((carousel) => {
     const slides = Array.from(carousel.querySelectorAll("[data-map-slide]"));
@@ -3285,12 +3333,19 @@ function initializeMapDesigner() {
   const slideDeleteButton = slideStrip?.querySelector("[data-map-slide-delete]");
   let slides = [];
   let activeSlideId = "";
+  // Numeric keys because an enum round-tripped through a hidden input can arrive as either the name or the
+  // underlying int depending on which path wrote it.
   const numericKindMap = {
     "0": "Text",
     "1": "Element",
     "2": "Status",
     "3": "Value",
-    "4": "Graph"
+    "4": "Graph",
+    "5": "SensorList",
+    "6": "AlertFeed",
+    "7": "Sla",
+    "8": "Clock",
+    "9": "Heading"
   };
   const kindLabels = {
     "0": "Text",
@@ -3298,13 +3353,28 @@ function initializeMapDesigner() {
     "2": "Summary",
     "3": "Value",
     "4": "Graph",
+    "5": "List",
+    "6": "Alerts",
+    "7": "SLA",
+    "8": "Clock",
+    "9": "Heading",
     Text: "Text",
     Element: "State",
     Status: "Summary",
     Value: "Value",
-    Graph: "Graph"
+    Graph: "Graph",
+    SensorList: "List",
+    AlertFeed: "Alerts",
+    Sla: "SLA",
+    Clock: "Clock",
+    Heading: "Heading"
   };
   const kindHints = {
+    SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
+    AlertFeed: "Newest open alerts. With no target it shows the whole workspace.",
+    Sla: "Uptime over a window, from the statistics buckets - not live state.",
+    Clock: "Shows the board timezone (Map properties > Wallboard).",
+    Heading: "A section title. Use Text for the sub-line.",
     "0": "Text tiles do not need a target.",
     "1": "Shows one target state or value. Progress and gauge use the default channel when possible.",
     "2": "Aggregates all child sensors below the selected target. Progress and gauge show healthy percentage.",
@@ -3536,18 +3606,26 @@ function initializeMapDesigner() {
     }
 
     const kind = normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element");
-    const isText = kind === "Text";
+    const isText = kind === "Text" || kind === "Heading";
     const isGraph = kind === "Graph";
+    const isList = kind === "SensorList";
+    const isRows = isList || kind === "AlertFeed";
+    const isSla = kind === "Sla";
+    // A clock has no target at all; a heading and a text tile carry their own copy instead of one.
+    const isTargetless = kind === "Clock" || kind === "Text" || kind === "Heading";
     const targetField = panel.querySelector("[data-map-property-target]");
     const visualField = panel.querySelector("[data-map-property-visual]");
     const textField = panel.querySelector("[data-map-property-text-only]");
     const graphField = panel.querySelector("[data-map-property-graph-only]");
     const hint = panel.querySelector("[data-map-property-hint]");
     if (targetField) {
-      targetField.hidden = isText;
+      targetField.hidden = isTargetless;
     }
+    panel.querySelectorAll("[data-map-property-list-only]").forEach((field) => { field.hidden = !isList; });
+    panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !isRows; });
+    panel.querySelectorAll("[data-map-property-sla-only]").forEach((field) => { field.hidden = !isSla; });
     if (visualField) {
-      visualField.hidden = isText || isGraph;
+      visualField.hidden = isText || isGraph || isRows || isSla || kind === "Clock";
     }
     if (textField) {
       textField.hidden = !isText;
