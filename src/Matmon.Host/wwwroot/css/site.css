@@ -9644,10 +9644,18 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   backdrop-filter: blur(6px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
-/* PaginationMode "Overlay - on mouse-move / change": the controls fade out while nothing is happening, so a
-   wall display is not permanently branded with a nav bar. Driven by initializeMapCarousel's pingActivity.
-   NB "Below the board" still renders as an overlay like "always visible" - moving it out of the scaled
-   stage is a separate layout change, not done here. */
+/* PaginationMode "Below the board": the controls sit UNDER the board in normal flow. They are rendered as a
+   SIBLING of .map-stage for this (see _MapCarouselNav) - inside the stage they would be scaled along with the
+   board, which is why this mode used to look identical to the overlay one. */
+.map-carousel-nav[data-map-pagination="below"] {
+  position: static;
+  transform: none;
+  margin: 0.6rem auto 0;
+  width: fit-content;
+}
+
+/* "Overlay - on mouse-move / change": the controls fade out while nothing is happening, so a wall display is
+   not permanently branded with a nav bar. Driven by initializeMapCarousel's pingActivity. */
 .map-carousel-nav[data-map-pagination="overlayonactivity"] {
   transition: opacity 240ms ease;
 }
@@ -13195,3 +13203,56 @@ html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critica
 .map-slide-preview-tile[data-state="unknown"],
 .map-slide-preview-tile[data-state="disabled"],
 .map-slide-preview-tile[data-state="paused"] { --map-preview-tone: #7c8eab; }
+
+/* --- Public-link share panel ------------------------------------------------------------------------ */
+.map-share-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+.map-share-main {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.map-share-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.map-share-row input {
+  font-family: var(--matmon-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+}
+.map-share-rotate {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.map-share-qr {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 10px;
+  /* The QR is drawn in black on transparent, so it needs a light plate in BOTH themes - a dark-theme
+     wallboard page would otherwise show black on near-black and no phone would read it. */
+  background: #ffffff;
+}
+.map-share-qr svg {
+  display: block;
+  width: 8.5rem;
+  height: 8.5rem;
+}
+.map-share-qr small {
+  color: #444;
+  font-size: 0.66rem;
+}
+@media (max-width: 760px) {
+  .map-share-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

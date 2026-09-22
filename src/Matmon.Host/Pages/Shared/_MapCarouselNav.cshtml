@@ -1,0 +1,19 @@
+@model Matmon.Host.Ui.MapCarouselNavModel
+@*
+    Slide controls for a wallboard. One partial for both viewers - it used to be copy-pasted into Maps.cshtml
+    and MapPublic.cshtml, which is how the two drifted.
+
+    WHERE it is rendered matters: for "Below the board" the caller puts it AFTER the .map-stage, because the
+    stage is a fixed-size, uniformly SCALED canvas - anything inside it is scaled with the board and cannot sit
+    under it. The overlay modes render it inside the stage, where the absolute positioning anchors correctly.
+*@
+<div class="map-carousel-nav" data-map-carousel-nav data-map-pagination="@Model.Mode.ToString().ToLowerInvariant()">
+    <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
+    <div class="map-carousel-dots">
+        @for (var dot = 0; dot < Model.SlideNames.Count; dot++)
+        {
+            <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@Model.SlideNames[dot]</button>
+        }
+    </div>
+    <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
+</div>

@@ -10,8 +10,9 @@ public sealed class MapDisplayProvider
     private const double SparklineWidth = 100;
     private const double SparklineHeight = 40;
 
-    /// <summary>How long an SLA tile reuses its computed uptime - see ResolveUptime. A multi-day figure does
-    /// not move between two page loads.</summary>
+    /// <summary>Default lifetime of a cached SLA figure when the tile does not set its own
+    /// <see cref="MonitoringMapTile.RefreshSeconds"/> - see ResolveUptime. A multi-day figure does not move
+    /// between two page loads.</summary>
     private static readonly TimeSpan SlaCacheTtl = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<string, (DateTimeOffset ComputedUtc, UptimeSummary Summary)> _slaCache = new();
@@ -492,9 +493,13 @@ public sealed class MapDisplayProvider
     /// </summary>
     private UptimeSummary ResolveUptime(MonitoringMapTile tile, IReadOnlyList<SensorElement> sensors, int days)
     {
-        var key = $"{tile.Id}|{days}|{sensors.Count}";
+        // The tile's own RefreshSeconds wins when set - that field exists precisely so an expensive or
+        // slow-changing widget can be told how stale its answer may be. It is part of the KEY as well as the
+        // comparison, so shortening it takes effect immediately instead of waiting out the old entry.
+        var ttl = tile.RefreshSeconds > 0 ? TimeSpan.FromSeconds(tile.RefreshSeconds) : SlaCacheTtl;
+        var key = $"{tile.Id}|{days}|{sensors.Count}|{(int)ttl.TotalSeconds}";
         var now = DateTimeOffset.UtcNow;
-        if (_slaCache.TryGetValue(key, out var cached) && now - cached.ComputedUtc < SlaCacheTtl)
+        if (_slaCache.TryGetValue(key, out var cached) && now - cached.ComputedUtc < ttl)
         {
             return cached.Summary;
         }

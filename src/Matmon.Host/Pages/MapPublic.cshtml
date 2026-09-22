@@ -6,6 +6,7 @@
     var map = display.Map;
     ViewData["Title"] = map.Name;
     var showPagination = display.Slides.Count > 1 && map.PaginationMode != MonitoringMapPaginationMode.Hidden;
+    var navModel = new Matmon.Host.Ui.MapCarouselNavModel(display.Slides.Select(s => s.Slide.Name).ToArray(), map.PaginationMode);
 }
 <!doctype html>
 <html lang="en" data-theme="dark">
@@ -39,20 +40,15 @@
                     <partial name="_MapSlide" model="slideModel" />
                 }
             </div>
-            @if (showPagination)
+            @if (showPagination && map.PaginationMode != MonitoringMapPaginationMode.Below)
             {
-                <div class="map-carousel-nav" data-map-carousel-nav data-map-pagination="@map.PaginationMode.ToString().ToLowerInvariant()">
-                    <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
-                    <div class="map-carousel-dots">
-                        @for (var dot = 0; dot < display.Slides.Count; dot++)
-                        {
-                            <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@display.Slides[dot].Slide.Name</button>
-                        }
-                    </div>
-                    <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
-                </div>
+                <partial name="_MapCarouselNav" model="navModel" />
             }
         </div>
+        @if (showPagination && map.PaginationMode == MonitoringMapPaginationMode.Below)
+        {
+            <partial name="_MapCarouselNav" model="navModel" />
+        }
     </main>
     <script src="~/js/site.js" asp-append-version="true"></script>
 </body>

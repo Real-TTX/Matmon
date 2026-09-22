@@ -1006,7 +1006,13 @@ function initializeMapCarousel() {
       return;
     }
 
-    const scope = carousel.parentElement || carousel;
+    // Walk up until the controls are in scope. In "Below the board" mode the nav is a SIBLING OF THE STAGE,
+    // not a child of it - the stage is a uniformly scaled canvas, so anything inside it scales with the board
+    // instead of sitting under it. Bounded so a page with two boards cannot adopt the other one's controls.
+    let scope = carousel.parentElement || carousel;
+    for (let hops = 0; hops < 3 && scope.parentElement && !scope.querySelector("[data-map-carousel-nav]"); hops += 1) {
+      scope = scope.parentElement;
+    }
     const dots = Array.from(scope.querySelectorAll("[data-map-carousel-dot]"));
     const prev = scope.querySelector("[data-map-carousel-prev]");
     const next = scope.querySelector("[data-map-carousel-next]");

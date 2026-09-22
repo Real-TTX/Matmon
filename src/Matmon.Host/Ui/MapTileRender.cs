@@ -300,3 +300,8 @@ public sealed class MapSlideRenderModel
 
     public bool Editable { get; init; }
 }
+
+/// <param name="Mode">Decides BOTH the styling and where the caller renders it: "Below the board" must sit
+/// outside the .map-stage, because the stage is a uniformly scaled canvas and anything inside it scales with
+/// the board instead of sitting under it.</param>
+public sealed record MapCarouselNavModel(IReadOnlyList<string> SlideNames, MonitoringMapPaginationMode Mode);

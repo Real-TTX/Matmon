@@ -112,6 +112,9 @@
     else if (Model.Display is not null)
     {
         var selectedPublicUrl = PublicUrl(map);
+        var mapNav = Model.Display.Slides.Count > 1
+            ? new Matmon.Host.Ui.MapCarouselNavModel(Model.Display.Slides.Select(s => s.Slide.Name).ToArray(), map.PaginationMode)
+            : null;
         @* The in-app viewer patches itself from the same JSON the public board polls, so a map on a second
            monitor stays current without a reload throwing the carousel back to slide 1. *@
         <section class="panel map-view-panel"
@@ -159,20 +162,59 @@
                         <partial name="_MapSlide" model="slideModel" />
                     }
                 </div>
-                @if (Model.Display.Slides.Count > 1)
+                @if (mapNav is not null && Model.Display.Map.PaginationMode != MonitoringMapPaginationMode.Below)
                 {
-                    <div class="map-carousel-nav" data-map-carousel-nav data-map-pagination="@Model.Display.Map.PaginationMode.ToString().ToLowerInvariant()">
-                        <button type="button" class="map-carousel-arrow" data-map-carousel-prev aria-label="Previous slide">@MatmonIcons.Render("arrow-left")</button>
-                        <div class="map-carousel-dots">
-                            @for (var dot = 0; dot < Model.Display.Slides.Count; dot++)
-                            {
-                                <button type="button" class="map-carousel-dot @(dot == 0 ? "is-active" : "")" data-map-carousel-dot data-slide-index="@dot">@Model.Display.Slides[dot].Slide.Name</button>
-                            }
-                        </div>
-                        <button type="button" class="map-carousel-arrow" data-map-carousel-next aria-label="Next slide">@MatmonIcons.Render("arrow-right")</button>
-                    </div>
+                    <partial name="_MapCarouselNav" model="mapNav" />
                 }
             </div>
+            @if (mapNav is not null && Model.Display.Map.PaginationMode == MonitoringMapPaginationMode.Below)
+            {
+                <partial name="_MapCarouselNav" model="mapNav" />
+            }
         </section>
+            @* Share panel for the public link. The QR is the point of it: a wallboard is usually set up by
+               someone standing at the TV, and typing a 32-character token by hand is the worst part of the job. *@
+            @if (map.PublicEnabled && Model.CanEditMaps)
+            {
+                <section class="panel panel-stack map-share-panel">
+                    <div class="panel-header">
+                        <h2 class="section-title">@MatmonIcons.Render("network")<span>Public link</span></h2>
+                        <span class="panel-hint">No sign-in required - anyone with the link sees this board</span>
+                    </div>
+                    <div class="map-share-grid">
+                        <div class="map-share-main">
+                            <label class="workspace-field">
+                                <span class="workspace-label">Link</span>
+                                <div class="map-share-row">
+                                    <input type="text" class="form-control workspace-input" id="map-public-url" value="@selectedPublicUrl" readonly />
+                                    <button type="button" class="workspace-secondary-submit" data-copy-button data-copy-target="map-public-url">
+                                        @MatmonIcons.Render("copy")<span data-copy-label>Copy</span>
+                                    </button>
+                                </div>
+                            </label>
+                            <div class="map-property-hint">
+                                <strong>Kiosk setup:</strong> open the link in the display browser and press <kbd>F11</kbd> for
+                                full screen. The board refreshes its values in place, so it can stay open indefinitely -
+                                it never reloads unless the layout itself changes.
+                                @if (Model.Display!.Slides.Count > 1)
+                                {
+                                    <text> Slides rotate every @map.AutoRotateSeconds s.</text>
+                                }
+                            </div>
+                            <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@map.Id" class="map-share-rotate">
+                                <button type="submit" class="workspace-secondary-submit"
+                                        onclick="return confirm('Generate a new link? The current one stops working immediately.');">
+                                    @MatmonIcons.Render("arrow-right")<span>New link</span>
+                                </button>
+                                <span class="workspace-inline-note">Rotating invalidates the old link at once - use it if it leaked.</span>
+                            </form>
+                        </div>
+                        <div class="map-share-qr" aria-label="QR code for the public link">
+                            @Html.Raw(Matmon.Host.Services.TotpQr.Render(selectedPublicUrl, 3, QRCoder.QRCodeGenerator.ECCLevel.M))
+                            <small>Scan to open on a phone</small>
+                        </div>
+                    </div>
+                </section>
+            }
     }
 </section>
