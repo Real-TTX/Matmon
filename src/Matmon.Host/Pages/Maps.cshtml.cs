@@ -1,5 +1,6 @@
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -33,6 +34,15 @@ public sealed class MapsModel : PageModel
     {
         LoadMaps();
         return Page();
+    }
+
+    /// <summary>Live values for the in-app viewer - the same payload the public board polls.</summary>
+    public IActionResult OnGetData(Guid mapId)
+    {
+        var map = _workspaceStore.FindMap(mapId);
+        return map is null
+            ? NotFound()
+            : new JsonResult(MapLiveData.Build(_displayProvider.Build(map)));
     }
 
     public IActionResult OnPostRotatePublicLink(Guid mapId)

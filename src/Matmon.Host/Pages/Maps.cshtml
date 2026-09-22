@@ -112,7 +112,12 @@
     else if (Model.Display is not null)
     {
         var selectedPublicUrl = PublicUrl(map);
-        <section class="panel map-view-panel">
+        @* The in-app viewer patches itself from the same JSON the public board polls, so a map on a second
+           monitor stays current without a reload throwing the carousel back to slide 1. *@
+        <section class="panel map-view-panel"
+                 data-map-live="/Maps?mapId=@map.Id&amp;handler=Data"
+                 data-map-live-interval="30"
+                 data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(Model.Display).Revision">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("dashboard")<span>@map.Name</span></h2>
                 <span class="panel-hint">@MapPresetText(map)</span>

@@ -28,10 +28,8 @@
 
     <form method="post" class="map-editor-form" data-map-designer-form>
         <input type="hidden" asp-for="Input.Id" />
-        <input type="hidden" asp-for="Input.PublicEnabled" data-map-public-enabled />
-        @* PublicEnabled has no visible toggle yet (that is the public-link work) - a hidden field round-trips
-           it so editing a map never silently un-publishes it. Columns/Rows/TilePadding/OuterMargin and
-           ShowSlideHeaders are now real inputs in the Grid / Wallboard property tabs. *@
+        @* Grid geometry, ShowSlideHeaders and the public-link toggle are all real inputs in the Grid /
+           Wallboard property tabs now. *@
         <script type="application/json" data-map-designer-config>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DesignerConfigJson))</script>
         <div class="icon-picker-modal" data-icon-picker-modal hidden>
             <div class="icon-picker-backdrop" data-icon-picker-close></div>
@@ -299,6 +297,12 @@
                             </label>
                             <div class="map-property-checks">
                                 <label><input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers /> <span>Show slide headings on the board</span></label>
+                                <label><input asp-for="Input.PublicEnabled" data-map-public-enabled /> <span>Publish an anonymous link</span></label>
+                            </div>
+                            <div class="map-property-hint">
+                                The public link needs no sign-in - anyone holding it sees the board. Turning this
+                                off makes the link 404 immediately, including its live-data endpoint. Copy or
+                                rotate the link on the Maps page.
                             </div>
                             <div class="map-property-hint">
                                 Auto-rotate &amp; the page indicator are used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.

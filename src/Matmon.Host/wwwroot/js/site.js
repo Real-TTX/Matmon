@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMapDesigner();
   initializeMapCarousel();
   initializeMapClocks();
+  initializeMapLiveData();
   initializeElementPickers();
   initializeIconPicker();
   initializeTagInputs();
@@ -849,6 +850,154 @@ function initializeMapClocks() {
     tick();
     window.setInterval(tick, 60000);
   }, (60 - new Date().getSeconds()) * 1000);
+}
+
+// Refreshes a wallboard IN PLACE from [data-map-live]'s JSON endpoint, replacing the 30-second meta-refresh
+// the public board used to carry. That refresh had a failure mode worth naming: a full reload resets the
+// slide carousel to slide 1, so on a board with more than one slide every later slide was effectively
+// unreachable on a TV - it would appear for a few seconds and then be yanked back.
+//
+// Only VALUES are patched. Anything structural (a tile added, removed, moved, resized) is baked into the
+// server-rendered markup, so the payload carries a revision over exactly that shape and a change there does
+// one honest full reload.
+function initializeMapLiveData() {
+  const root = document.querySelector("[data-map-live]");
+  if (!root) {
+    return;
+  }
+
+  const url = root.dataset.mapLive;
+  const seconds = Math.max(5, Number(root.dataset.mapLiveInterval) || 20);
+  let revision = root.dataset.mapLiveRevision || "";
+  let failures = 0;
+
+  const setText = (scope, selector, text) => {
+    const target = scope.querySelector(selector);
+    if (target && text !== null && text !== undefined && target.textContent !== text) {
+      target.textContent = text;
+    }
+  };
+
+  const patchRows = (tile, rows) => {
+    if (!rows) {
+      return;
+    }
+    const items = tile.querySelectorAll(".map-tile-row");
+    // Row COUNT is part of the revision, so a mismatch here means the payload and the markup are already out
+    // of step and a reload is on its way - patching half a list would just look broken in the meantime.
+    if (items.length !== rows.length) {
+      return;
+    }
+    items.forEach((item, index) => {
+      const row = rows[index];
+      item.dataset.state = row.tone || "unknown";
+      setText(item, ".map-tile-row-label strong", row.label);
+      setText(item, ".map-tile-row-label small", row.detail || "");
+      setText(item, ".map-tile-row-value", row.value || "");
+      setText(item, ".map-tile-row-time", row.timeText || "");
+    });
+  };
+
+  const patchPins = (tile, pins) => {
+    if (!pins) {
+      return;
+    }
+    const markers = tile.querySelectorAll(".map-pin");
+    if (markers.length !== pins.length) {
+      return;
+    }
+    markers.forEach((marker, index) => {
+      const pin = pins[index];
+      marker.dataset.state = pin.tone || "unknown";
+      marker.title = pin.label || "";
+      setText(marker, ".map-pin-label strong", pin.label);
+      setText(marker, ".map-pin-label small", pin.value || "");
+    });
+  };
+
+  const patchTile = (tile, data) => {
+    tile.dataset.state = data.stateKey || "unknown";
+    const badge = tile.querySelector("[data-tile-state-label]");
+    if (badge) {
+      badge.dataset.state = data.stateKey || "unknown";
+      badge.textContent = data.stateLabel || "";
+    }
+    setText(tile, "[data-tile-value]", data.value || "");
+    setText(tile, "[data-tile-subtitle]", data.subtitle || "");
+    setText(tile, "[data-tile-progress-label]", data.progressLabel || "");
+
+    const progress = tile.querySelector("[data-tile-progress]");
+    if (progress && data.progressPercent !== null && data.progressPercent !== undefined) {
+      const percent = Math.min(100, Math.max(0, Number(data.progressPercent)));
+      // Explicit fixed formatting: a locale-formatted "42,5" would make the whole declaration invalid.
+      progress.style.setProperty("--map-progress", percent.toFixed(2));
+      const label = progress.querySelector("strong");
+      if (label) {
+        label.textContent = `${percent.toFixed(1)}%`;
+      }
+    }
+
+    const line = tile.querySelector("[data-tile-graph-line]");
+    if (line && data.graphLinePath) {
+      line.setAttribute("d", data.graphLinePath);
+    }
+    const area = tile.querySelector("[data-tile-graph-area]");
+    if (area && data.graphAreaPath) {
+      area.setAttribute("d", data.graphAreaPath);
+    }
+    const bars = tile.querySelector("[data-tile-graph-bars]");
+    if (bars && data.graphBarPath) {
+      bars.setAttribute("d", data.graphBarPath);
+    }
+
+    const sla = tile.querySelector(".map-tile-sla");
+    if (sla && data.sla) {
+      setText(sla, "strong", data.sla.percent === null || data.sla.percent === undefined
+        ? "-"
+        : `${Number(data.sla.percent).toFixed(2).replace(/\.?0+$/, "")} %`);
+      setText(sla, "small", data.sla.label || "");
+    }
+
+    patchRows(tile, data.rows);
+    patchPins(tile, data.pins);
+  };
+
+  const refresh = async () => {
+    try {
+      const response = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!response.ok) {
+        failures += 1;
+        return;
+      }
+
+      const snapshot = await response.json();
+      failures = 0;
+
+      if (revision && snapshot.revision && snapshot.revision !== revision) {
+        // The board's shape changed (a tile added/moved/resized) - that cannot be patched into markup the
+        // server rendered, so take the one reload it costs.
+        window.location.reload();
+        return;
+      }
+      revision = snapshot.revision || revision;
+
+      (snapshot.slides || []).forEach((slide) => {
+        (slide.tiles || []).forEach((data) => {
+          const tile = document.querySelector(`.map-tile[data-tile-id="${data.id}"]`);
+          if (tile) {
+            patchTile(tile, data);
+          }
+        });
+      });
+    } catch {
+      // A wallboard is unattended: a transient network blip must leave the last good values on screen, not
+      // blank the board or stop polling.
+      failures += 1;
+    }
+  };
+
+  refresh();
+  window.setInterval(refresh, seconds * 1000);
 }
 function initializeMapCarousel() {
   document.querySelectorAll("[data-map-carousel]").forEach((carousel) => {

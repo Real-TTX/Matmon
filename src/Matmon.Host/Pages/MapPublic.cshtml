@@ -13,13 +13,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    @* Reloads the whole page every 30s so a structural change (a new/removed tile, slide, etc.) always
-       reaches the wallboard even without the (still-todo, Phase C) live-JSON in-place patch. *@
-    <meta http-equiv="refresh" content="30" />
     <title>@map.Name - Matmon</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
-<body class="public-map-body">
+<body class="public-map-body"
+      data-map-live="/Maps/Public/@map.PublicToken?handler=Data"
+      data-map-live-interval="@Math.Clamp(map.AutoRotateSeconds, 10, 120)"
+      data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(display).Revision">
     <main class="public-map-shell">
         <div class="map-stage"
              data-map-stage
