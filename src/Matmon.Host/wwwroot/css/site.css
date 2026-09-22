@@ -8470,6 +8470,143 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-size: clamp(7px, 11cqh, 24px);
 }
 
+/* --- Image / world-map tiles and their status pins -------------------------------------------------- */
+.map-tile-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.map-tile-image,
+.map-tile-worldmap {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.map-tile-worldmap {
+  /* currentColor in the SVG, so the map takes the tile's text colour and works in both themes without a
+     second asset. */
+  object-fit: contain;
+  opacity: 0.32;
+}
+.map-tile-canvas-empty {
+  color: var(--matmon-muted);
+  font-size: clamp(7px, 9cqh, 20px);
+}
+
+.map-pin {
+  position: absolute;
+  /* left/top are the pin's POINT, so the marker is centred on it rather than hanging below-right of it. */
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: clamp(6px, 6cqh, 16px);
+  line-height: 1.15;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.map-pin[data-state="ok"] { --map-pin-tone: #78d5c8; }
+.map-pin[data-state="warning"] { --map-pin-tone: #f3b36b; }
+.map-pin[data-state="error"] { --map-pin-tone: #f08b8b; }
+.map-pin[data-state="unknown"],
+.map-pin[data-state="disabled"] { --map-pin-tone: #7c8eab; }
+
+.map-pin-dot {
+  flex: 0 0 auto;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 50%;
+  background: var(--map-pin-tone, #7c8eab);
+  /* A ring rather than a border so the dot stays visible on both a dark photo and a white floorplan. */
+  box-shadow: 0 0 0 0.18em color-mix(in srgb, var(--map-pin-tone, #7c8eab) 30%, transparent),
+              0 1px 3px rgba(0, 0, 0, 0.55);
+}
+.map-pin-label {
+  display: flex;
+  flex-direction: column;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--matmon-surface) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--map-pin-tone, var(--matmon-border)) 45%, transparent);
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-pin-label strong {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-pin-label small {
+  color: var(--matmon-muted);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+.map-pin[data-pin-style="tile"] .map-pin-dot {
+  width: 0.5em;
+  height: 0.5em;
+}
+
+/* In the designer the canvas is the drop target for placing pins, so it must take the pointer back from the
+   tile's own drag surface. */
+.map-tile-editor .map-tile-canvas.is-placing {
+  cursor: crosshair;
+  outline: 2px dashed color-mix(in srgb, var(--matmon-accent) 60%, transparent);
+  outline-offset: -2px;
+}
+
+.map-pin-editor {
+  display: grid;
+  gap: 0.4rem;
+}
+.map-pin-row {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 8px;
+  background: var(--matmon-surface-soft);
+}
+.map-pin-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.3rem;
+  align-items: center;
+}
+.map-pin-row-geo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+.map-pin-row-remove {
+  display: inline-flex;
+  padding: 0.25rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--matmon-muted);
+  cursor: pointer;
+}
+.map-pin-row-remove:hover {
+  color: var(--matmon-danger, #f08b8b);
+  border-color: color-mix(in srgb, var(--matmon-danger, #f08b8b) 50%, transparent);
+}
+.map-pin-actions,
+.map-image-upload {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+.map-image-upload input[type="file"] {
+  min-width: 0;
+  font-size: 0.75rem;
+}
+
 .map-tile-progress-wrap {
   display: grid;
   gap: 0.25rem;

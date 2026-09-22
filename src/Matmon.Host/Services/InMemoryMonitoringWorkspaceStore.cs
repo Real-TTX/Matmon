@@ -585,6 +585,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         target.AspectRatioWidth = Math.Clamp(draft.AspectRatioWidth, 0, 64);
         target.AspectRatioHeight = Math.Clamp(draft.AspectRatioHeight, 0, 64);
         target.WallboardFit = draft.WallboardFit;
+        target.DisplayTimeZoneId = string.IsNullOrWhiteSpace(draft.DisplayTimeZoneId) ? null : draft.DisplayTimeZoneId.Trim();
         target.AutoRotateSeconds = NormalizeAutoRotateSeconds(draft.AutoRotateSeconds);
         target.PaginationMode = draft.PaginationMode;
         target.PublicEnabled = draft.PublicEnabled;
@@ -4054,44 +4055,81 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         return string.IsNullOrWhiteSpace(normalized) ? "Map" : normalized;
     }
 
+    /// <summary>
+    /// Normalizes a saved tile. Starts from <see cref="MonitoringMapTile.Clone"/> and then fixes up only the
+    /// fields that need it, rather than hand-constructing a new tile from a field list - that construction
+    /// silently DROPPED every property added to the tile afterwards (it cost the widget options and the
+    /// image/pin fields exactly once, which is once too often). A new tile property is now carried by default
+    /// and only shows up here if it genuinely needs normalizing.
+    /// </summary>
     private static IReadOnlyList<MonitoringMapTile> NormalizeMapTiles(
         IReadOnlyList<MonitoringMapTile> tiles,
         int columns,
         int rows)
     {
         return tiles
-            .Where(tile => !string.IsNullOrWhiteSpace(tile.Title) || !string.IsNullOrWhiteSpace(tile.Text) || tile.ElementId.HasValue || !string.IsNullOrWhiteSpace(tile.TargetTag))
+            .Where(HasContent)
             .Select(tile =>
             {
                 var (_, _, defaultColumns, defaultRows) = MonitoringMapTileConstraints.For(tile.Kind);
-                var normalized = new MonitoringMapTile
-                {
-                    Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
-                    Kind = tile.Kind,
-                    Title = string.IsNullOrWhiteSpace(tile.Title) ? "Tile" : tile.Title.Trim(),
-                    ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId,
-                    TargetTag = string.IsNullOrWhiteSpace(tile.TargetTag) ? null : tile.TargetTag.Trim(),
-                    Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim(),
-                    IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim(),
-                    ShowCard = tile.ShowCard,
-                    Column = Math.Max(1, tile.Column),
-                    Row = Math.Max(1, tile.Row),
-                    ColumnSpan = tile.ColumnSpan <= 0 ? defaultColumns : tile.ColumnSpan,
-                    RowSpan = tile.RowSpan <= 0 ? defaultRows : tile.RowSpan,
-                    BackgroundColor = NormalizeColor(tile.BackgroundColor),
-                    AccentColor = NormalizeColor(tile.AccentColor),
-                    TextColor = NormalizeColor(tile.TextColor),
-                    GraphType = tile.GraphType,
-                    VisualType = tile.VisualType,
-                    ShowTitle = tile.ShowTitle,
-                    ShowStateBadge = tile.ShowStateBadge,
-                    ShowElementName = tile.ShowElementName
-                };
+                var normalized = tile.Clone();
+
+                normalized.Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id;
+                normalized.Title = string.IsNullOrWhiteSpace(tile.Title) ? "Tile" : tile.Title.Trim();
+                normalized.ElementId = tile.ElementId == Guid.Empty ? null : tile.ElementId;
+                normalized.TargetTag = string.IsNullOrWhiteSpace(tile.TargetTag) ? null : tile.TargetTag.Trim();
+                normalized.Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim();
+                normalized.IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim();
+                normalized.Column = Math.Max(1, tile.Column);
+                normalized.Row = Math.Max(1, tile.Row);
+                normalized.ColumnSpan = tile.ColumnSpan <= 0 ? defaultColumns : tile.ColumnSpan;
+                normalized.RowSpan = tile.RowSpan <= 0 ? defaultRows : tile.RowSpan;
+                normalized.BackgroundColor = NormalizeColor(tile.BackgroundColor);
+                normalized.AccentColor = NormalizeColor(tile.AccentColor);
+                normalized.TextColor = NormalizeColor(tile.TextColor);
+                normalized.ListLimit = Math.Clamp(tile.ListLimit, 1, 50);
+                normalized.SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365);
+                normalized.ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim();
+                normalized.ImageAssetId = tile.ImageAssetId == Guid.Empty ? null : tile.ImageAssetId;
+                normalized.Pins = tile.Pins.Select(NormalizePin).ToList();
 
                 MonitoringMapTileConstraints.Clamp(normalized, columns, rows);
                 return normalized;
             })
             .ToArray();
+    }
+
+    /// <summary>An empty tile is dropped on save. "Empty" has to include the newer content-bearing fields -
+    /// a floorplan whose title was cleared still has its picture and its pins.</summary>
+    private static bool HasContent(MonitoringMapTile tile) =>
+        !string.IsNullOrWhiteSpace(tile.Title)
+        || !string.IsNullOrWhiteSpace(tile.Text)
+        || tile.ElementId.HasValue
+        || !string.IsNullOrWhiteSpace(tile.TargetTag)
+        || tile.ImageAssetId.HasValue
+        || tile.Pins.Count > 0
+        || tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.AlertFeed;
+
+    private static MonitoringMapPin NormalizePin(MonitoringMapPin pin)
+    {
+        // Id is init-only, so a blank one needs a fresh object rather than an assignment.
+        var normalized = pin.Id == Guid.Empty
+            ? new MonitoringMapPin { Id = Guid.NewGuid() }
+            : pin.Clone();
+        if (pin.Id == Guid.Empty)
+        {
+            normalized.Style = pin.Style;
+            normalized.ShowLabel = pin.ShowLabel;
+        }
+        normalized.Label = string.IsNullOrWhiteSpace(pin.Label) ? null : pin.Label.Trim();
+        normalized.TargetToken = string.IsNullOrWhiteSpace(pin.TargetToken) ? null : pin.TargetToken.Trim();
+        normalized.X = Math.Clamp(pin.X, 0, 1);
+        normalized.Y = Math.Clamp(pin.Y, 0, 1);
+        normalized.Latitude = MonitoringMapGeoProjection.IsValidLatitude(pin.Latitude) ? pin.Latitude : null;
+        normalized.Longitude = MonitoringMapGeoProjection.IsValidLongitude(pin.Longitude)
+            ? MonitoringMapGeoProjection.WrapLongitude(pin.Longitude!.Value)
+            : null;
+        return normalized;
     }
 
     private static string? NormalizeColor(string? color)

@@ -11,6 +11,15 @@ namespace Matmon.Host.Ui;
 /// </summary>
 public static class MapTileRender
 {
+    /// <summary>CSS object-fit for an image tile - Contain is the default because cropping a floorplan would
+    /// silently move every pin relative to what the user placed it against.</summary>
+    public static string ImageFitCss(MonitoringMapImageFit fit) => fit switch
+    {
+        MonitoringMapImageFit.Cover => "cover",
+        MonitoringMapImageFit.Stretch => "fill",
+        _ => "contain"
+    };
+
     public static string TileStyle(MonitoringMapTile tile)
     {
         var parts = new List<string>();
@@ -56,6 +65,8 @@ public static class MapTileRender
             MonitoringMapTileKind.Sla => "SLA",
             MonitoringMapTileKind.Clock => "Clock",
             MonitoringMapTileKind.Heading => "Heading",
+            MonitoringMapTileKind.Image => "Image",
+            MonitoringMapTileKind.GeoMap => "World map",
             _ => "Tile"
         };
     }
@@ -73,6 +84,8 @@ public static class MapTileRender
             MonitoringMapTileKind.Sla => "chart",
             MonitoringMapTileKind.Clock => "clock",
             MonitoringMapTileKind.Heading => "list",
+            MonitoringMapTileKind.Image => "square",
+            MonitoringMapTileKind.GeoMap => "network",
             _ => "sensor"
         };
     }
@@ -184,6 +197,9 @@ public sealed class MapTileRenderModel
 
     public MapSlaDto? Sla { get; init; }
 
+    /// <summary>Status markers on an image / world-map tile, already positioned as a percent of the tile.</summary>
+    public IReadOnlyList<MapPinDto>? Pins { get; init; }
+
     /// <summary>IANA timezone the board renders times in - carried down to the clock widget, which ticks
     /// client-side and therefore needs the MAP timezone rather than the browser one.</summary>
     public string? TimeZoneId { get; init; }
@@ -228,6 +244,7 @@ public sealed class MapTileRenderModel
             IsDeleted = isDeleted,
             Rows = vm.Rows,
             Sla = vm.Sla,
+            Pins = vm.Pins,
             TimeZoneId = map.DisplayTimeZoneId
         };
     }

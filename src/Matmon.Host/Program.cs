@@ -131,6 +131,11 @@ builder.Services.AddSingleton<NetworkDiscoveryService>();
 builder.Services.AddSingleton<DiscoveryJobStore>();
 builder.Services.AddSingleton<IOnDemandRunStore, OnDemandRunStore>();
 builder.Services.AddSingleton<MapDisplayProvider>();
+// Uploaded map pictures live on disk under data/uploads, NOT in workspace.json - that file is fully
+// re-serialised on a 750ms debounce, so a 1 MB floorplan in it would be rewritten every time a pin moves.
+builder.Services.AddSingleton(provider => new MapAssetStore(
+    workspaceDirectory,
+    provider.GetRequiredService<ILogger<MapAssetStore>>()));
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -367,6 +372,21 @@ app.MapGet("/api/branding/logo", (HttpContext http, IMonitoringWorkspaceStore st
     var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
         "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(logo.Value.Bytes))[..16] + "\"");
     return Results.File(logo.Value.Bytes, logo.Value.ContentType, entityTag: etag);
+}).AllowAnonymous();
+
+// An uploaded map picture. Anonymous because the PUBLIC wallboard has to load it, but the id is an opaque
+// GUID and nothing enumerates them. Content type comes from the stored bytes' magic bytes - never from the
+// upload's own claim - plus nosniff, because these are served same-origin.
+app.MapGet("/api/map-assets/{id:guid}", (HttpContext http, Guid id, MapAssetStore assets) =>
+{
+    if (assets.Find(id) is not { } asset)
+    {
+        return Results.NotFound();
+    }
+
+    http.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    return Results.File(asset.Bytes, asset.ContentType,
+        entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue(asset.ETag));
 }).AllowAnonymous();
 
 // The partner small logo, served as the instance favicon + mobile-header mark (white-label). Same anonymous,

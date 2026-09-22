@@ -3345,7 +3345,9 @@ function initializeMapDesigner() {
     "6": "AlertFeed",
     "7": "Sla",
     "8": "Clock",
-    "9": "Heading"
+    "9": "Heading",
+    "10": "Image",
+    "11": "GeoMap"
   };
   const kindLabels = {
     "0": "Text",
@@ -3358,6 +3360,8 @@ function initializeMapDesigner() {
     "7": "SLA",
     "8": "Clock",
     "9": "Heading",
+    "10": "Image",
+    "11": "World map",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -3367,7 +3371,9 @@ function initializeMapDesigner() {
     AlertFeed: "Alerts",
     Sla: "SLA",
     Clock: "Clock",
-    Heading: "Heading"
+    Heading: "Heading",
+    Image: "Image",
+    GeoMap: "World map"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -3375,6 +3381,8 @@ function initializeMapDesigner() {
     Sla: "Uptime over a window, from the statistics buckets - not live state.",
     Clock: "Shows the board timezone (Map properties > Wallboard).",
     Heading: "A section title. Use Text for the sub-line.",
+    Image: "Upload a picture, then place status pins on it.",
+    GeoMap: "The shipped offline world map - pins are placed by latitude/longitude.",
     "0": "Text tiles do not need a target.",
     "1": "Shows one target state or value. Progress and gauge use the default channel when possible.",
     "2": "Aggregates all child sensors below the selected target. Progress and gauge show healthy percentage.",
@@ -3600,6 +3608,227 @@ function initializeMapDesigner() {
     setColor("--map-tile-custom-text", text);
   };
 
+  // --- Image upload + pin editor ----------------------------------------------------------------------
+  // Pins are held as JSON in one hidden field per tile (see MapTileInput.PinsJson): they are an unbounded
+  // per-tile collection placed by clicking a picture, and the designer clones whole tiles by rewriting field
+  // names - index-bound nested fields would have to be re-indexed on every clone and delete.
+  const pinTemplate = form?.querySelector("template[data-map-pin-template]");
+
+  const readPins = (panel) => {
+    const field = panel?.querySelector("[data-map-property-pins]");
+    if (!field?.value) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(field.value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writePins = (panel, pins) => {
+    const field = panel?.querySelector("[data-map-property-pins]");
+    if (field) {
+      field.value = pins.length === 0 ? "" : JSON.stringify(pins);
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  };
+
+  const isGeoPanel = (panel) =>
+    normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value) === "GeoMap";
+
+  const renderPinRows = (panel) => {
+    const host = panel?.querySelector("[data-map-pin-editor]");
+    if (!host || !pinTemplate) {
+      return;
+    }
+
+    const pins = readPins(panel);
+    const geo = isGeoPanel(panel);
+    host.replaceChildren();
+
+    pins.forEach((pin, index) => {
+      // Rewrite the picker's DOM id per pin - a duplicated id would make the picker in one row drive
+      // another row's hidden value.
+      const html = pinTemplate.innerHTML.replaceAll("__pinId__", pin.id || `p${index}`);
+      const row = document.createRange().createContextualFragment(html).querySelector("[data-map-pin-row]");
+      if (!row) {
+        return;
+      }
+
+      row.querySelector('[data-pin-field="label"]').value = pin.label || "";
+      row.querySelector('[data-pin-field="style"]').value = pin.style || "Dot";
+      const target = row.querySelector("[data-pin-field-target]");
+      if (target) {
+        target.value = pin.targetToken || "";
+      }
+      const geoBox = row.querySelector("[data-map-pin-geo]");
+      if (geoBox) {
+        geoBox.hidden = !geo;
+        row.querySelector('[data-pin-field="latitude"]').value = pin.latitude ?? "";
+        row.querySelector('[data-pin-field="longitude"]').value = pin.longitude ?? "";
+      }
+
+      const collect = () => {
+        const current = readPins(panel);
+        const entry = current[index];
+        if (!entry) {
+          return;
+        }
+        entry.label = row.querySelector('[data-pin-field="label"]').value;
+        entry.style = row.querySelector('[data-pin-field="style"]').value;
+        entry.targetToken = row.querySelector("[data-pin-field-target]")?.value || null;
+        if (geo) {
+          const lat = Number(row.querySelector('[data-pin-field="latitude"]').value);
+          const lon = Number(row.querySelector('[data-pin-field="longitude"]').value);
+          entry.latitude = Number.isFinite(lat) ? lat : null;
+          entry.longitude = Number.isFinite(lon) ? lon : null;
+        }
+        writePins(panel, current);
+      };
+
+      row.querySelectorAll("[data-pin-field], [data-pin-field-target]").forEach((field) => {
+        field.addEventListener("change", collect);
+        field.addEventListener("input", collect);
+      });
+      row.querySelector("[data-map-pin-remove]")?.addEventListener("click", () => {
+        const current = readPins(panel);
+        current.splice(index, 1);
+        writePins(panel, current);
+        renderPinRows(panel);
+      });
+
+      host.appendChild(row);
+    });
+
+    const hint = panel.querySelector("[data-map-pin-hint]");
+    if (hint) {
+      hint.textContent = geo
+        ? "Enter latitude/longitude - the world map is equirectangular, so a pin lands exactly on its coordinates."
+        : 'Use "Place on picture" and then click the tile where the pin belongs.';
+    }
+    const placeButton = panel.querySelector("[data-map-pin-place]");
+    if (placeButton) {
+      placeButton.hidden = geo;
+    }
+    initializeElementPickers();
+  };
+
+  const addPin = (panel, x, y) => {
+    const pins = readPins(panel);
+    pins.push({
+      id: createId(),
+      label: "",
+      showLabel: true,
+      style: "Dot",
+      targetToken: null,
+      x: x ?? 0.5,
+      y: y ?? 0.5,
+      latitude: null,
+      longitude: null
+    });
+    writePins(panel, pins);
+    renderPinRows(panel);
+  };
+
+  // "Place on picture" arms the tile's canvas for ONE click. The canvas is inside the tile, whose whole
+  // surface is the drag handle, so the armed listener runs in the capture phase and stops the event before
+  // the drag logic sees it.
+  let placementCleanup = null;
+  const armPinPlacement = (panel) => {
+    placementCleanup?.();
+    const index = panel.dataset.tileIndex;
+    const canvas2 = getTile(index)?.querySelector("[data-map-pin-canvas]");
+    if (!canvas2) {
+      window.alert("Upload a picture first.");
+      return;
+    }
+
+    canvas2.classList.add("is-placing");
+    const onClick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = canvas2.getBoundingClientRect();
+      addPin(panel, (event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+      placementCleanup?.();
+    };
+    const onPointerDown = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    canvas2.addEventListener("click", onClick, true);
+    canvas2.addEventListener("pointerdown", onPointerDown, true);
+    placementCleanup = () => {
+      canvas2.classList.remove("is-placing");
+      canvas2.removeEventListener("click", onClick, true);
+      canvas2.removeEventListener("pointerdown", onPointerDown, true);
+      placementCleanup = null;
+    };
+  };
+
+  propertyHost?.addEventListener("click", (event) => {
+    const panel = event.target.closest("[data-map-property-panel]");
+    if (!panel) {
+      return;
+    }
+    if (event.target.closest("[data-map-pin-add]")) {
+      addPin(panel, 0.5, 0.5);
+    } else if (event.target.closest("[data-map-pin-place]")) {
+      armPinPlacement(panel);
+    } else if (event.target.closest("[data-map-image-clear]")) {
+      const field = panel.querySelector("[data-map-property-image-id]");
+      if (field) {
+        field.value = "";
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+  });
+
+  // Uploaded via fetch, not a form post: a full post would store the picture and throw away every unsaved
+  // tile position on the canvas.
+  propertyHost?.addEventListener("change", async (event) => {
+    const input = event.target.closest("[data-map-image-file]");
+    if (!input || !input.files?.length) {
+      return;
+    }
+    const panel = input.closest("[data-map-property-panel]");
+    const status = panel?.querySelector("[data-map-image-status]");
+    const body = new FormData();
+    body.append("file", input.files[0]);
+    const token = form?.querySelector('input[name="__RequestVerificationToken"]')?.value;
+    if (status) {
+      status.textContent = "Uploading…";
+    }
+
+    try {
+      const response = await fetch(`${location.pathname}?handler=UploadImage`, {
+        method: "POST",
+        headers: token ? { RequestVerificationToken: token } : {},
+        body
+      });
+      const result = await response.json();
+      if (result.id) {
+        const field = panel.querySelector("[data-map-property-image-id]");
+        if (field) {
+          field.value = result.id;
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (status) {
+          status.textContent = "Uploaded. Save the map to keep it.";
+        }
+      } else if (status) {
+        status.textContent = result.error || "Upload failed.";
+      }
+    } catch {
+      if (status) {
+        status.textContent = "Upload failed.";
+      }
+    } finally {
+      input.value = "";
+    }
+  });
+
   const syncPanelVisibility = (panel) => {
     if (!panel) {
       return;
@@ -3611,8 +3840,12 @@ function initializeMapDesigner() {
     const isList = kind === "SensorList";
     const isRows = isList || kind === "AlertFeed";
     const isSla = kind === "Sla";
+    const isImage = kind === "Image";
+    const isPinned = isImage || kind === "GeoMap";
     // A clock has no target at all; a heading and a text tile carry their own copy instead of one.
-    const isTargetless = kind === "Clock" || kind === "Text" || kind === "Heading";
+    // An image / world map has no single target of its own - each PIN carries one.
+    const isTargetless = kind === "Clock" || kind === "Text" || kind === "Heading"
+      || kind === "Image" || kind === "GeoMap";
     const targetField = panel.querySelector("[data-map-property-target]");
     const visualField = panel.querySelector("[data-map-property-visual]");
     const textField = panel.querySelector("[data-map-property-text-only]");
@@ -3624,8 +3857,13 @@ function initializeMapDesigner() {
     panel.querySelectorAll("[data-map-property-list-only]").forEach((field) => { field.hidden = !isList; });
     panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !isRows; });
     panel.querySelectorAll("[data-map-property-sla-only]").forEach((field) => { field.hidden = !isSla; });
+    panel.querySelectorAll("[data-map-property-image-only]").forEach((field) => { field.hidden = !isImage; });
+    panel.querySelectorAll("[data-map-property-pins-only]").forEach((field) => { field.hidden = !isPinned; });
+    if (isPinned) {
+      renderPinRows(panel);
+    }
     if (visualField) {
-      visualField.hidden = isText || isGraph || isRows || isSla || kind === "Clock";
+      visualField.hidden = isText || isGraph || isRows || isSla || isPinned || kind === "Clock";
     }
     if (textField) {
       textField.hidden = !isText;
@@ -3752,7 +3990,10 @@ function initializeMapDesigner() {
     const subtitle = tile.querySelector("[data-tile-subtitle]");
     const titleElement = tile.querySelector("[data-tile-title]");
     const showTitle = panel.querySelector("[data-map-property-show-title]")?.checked ?? true;
-    tile.dataset.kind = kind;
+    // Lower-cased to match what the server renders (_MapTile writes Kind.ToString().ToLowerInvariant()).
+    // Two spellings of the same attribute depending on how the tile got there is a trap for any future
+    // CSS/JS that selects on it.
+    tile.dataset.kind = String(kind).toLowerCase();
     if (titleElement) {
       titleElement.hidden = !showTitle;
       titleElement.replaceChildren(document.createTextNode(title));
@@ -4079,6 +4320,7 @@ function initializeMapDesigner() {
       .replaceAll("__index__", String(index))
       .replaceAll("__id__", createId())
       .replaceAll("__slideId__", activeSlideId || "")
+      .replaceAll("__kindLower__", kind.toLowerCase())
       .replaceAll("__kind__", kind)
       .replaceAll("__visual__", (tool.visual || "card").toLowerCase())
       .replaceAll("__kindLabel__", getKindLabel(kind))

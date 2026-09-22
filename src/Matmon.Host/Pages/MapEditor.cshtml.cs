@@ -11,11 +11,13 @@ public sealed class MapEditorModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MapDisplayProvider _displayProvider;
+    private readonly ILogger<MapEditorModel> _logger;
 
-    public MapEditorModel(IMonitoringWorkspaceStore workspaceStore, MapDisplayProvider displayProvider)
+    public MapEditorModel(IMonitoringWorkspaceStore workspaceStore, MapDisplayProvider displayProvider, ILogger<MapEditorModel> logger)
     {
         _workspaceStore = workspaceStore;
         _displayProvider = displayProvider;
+        _logger = logger;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -82,6 +84,22 @@ public sealed class MapEditorModel : PageModel
             progressLabel = vm.ProgressLabel,
             graphLinePath = vm.GraphLinePath
         });
+    }
+
+    /// <summary>AJAX image upload. A full form post would save the picture but throw away every unsaved tile
+    /// position on the canvas, so this returns JSON and the designer patches the tile in place.</summary>
+    public IActionResult OnPostUploadImage(IFormFile? file, [FromServices] MapAssetStore assets)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return new JsonResult(new { error = "No file selected." });
+        }
+
+        using var stream = file.OpenReadStream();
+        var id = assets.Save(stream, out var error);
+        return new JsonResult(id is { } assetId
+            ? new { id = (string?)assetId.ToString(), error = (string?)null }
+            : new { id = (string?)null, error });
     }
 
     public IActionResult OnPostSave()
@@ -168,7 +186,15 @@ public sealed class MapEditorModel : PageModel
             .ToList();
     }
 
-    private static MonitoringMapTile ToTile(MapTileInput tile) => new()
+    /// <summary>Shared by the read and write side so the pin JSON round-trips symmetrically. The string-enum
+    /// converter is NOT optional: JsonSerializerDefaults.Web does not include one, so "style":"Dot" throws and
+    /// - before this - the catch below silently returned an empty list and every pin vanished on save.</summary>
+    private static readonly System.Text.Json.JsonSerializerOptions PinJsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web)
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
+    private MonitoringMapTile ToTile(MapTileInput tile) => new()
     {
         Id = tile.Id == Guid.Empty ? Guid.NewGuid() : tile.Id,
         Kind = tile.Kind,
@@ -194,8 +220,33 @@ public sealed class MapEditorModel : PageModel
         ListMode = tile.ListMode,
         ListLimit = Math.Clamp(tile.ListLimit, 1, 50),
         ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim(),
-        SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365)
+        SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365),
+        ImageAssetId = tile.ImageAssetId,
+        ImageFit = tile.ImageFit,
+        Pins = ParsePins(tile.PinsJson)
     };
+
+    /// <summary>Parses the designer's pin JSON defensively - a malformed blob costs the tile its pins, never
+    /// the whole save.</summary>
+    private List<MonitoringMapPin> ParsePins(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<MonitoringMapPin>>(json, PinJsonOptions) ?? [];
+        }
+        catch (System.Text.Json.JsonException exception)
+        {
+            // Losing the pins beats losing the whole save - but say so, because a silent empty list here is
+            // indistinguishable from "the user deleted them".
+            _logger.LogWarning(exception, "Could not parse the pin JSON for a map tile; its pins were dropped.");
+            return [];
+        }
+    }
 
     public IActionResult OnPostDelete()
     {
@@ -268,7 +319,10 @@ public sealed class MapEditorModel : PageModel
                     ListMode = tile.ListMode,
                     ListLimit = tile.ListLimit,
                     ListChannelKey = tile.ListChannelKey,
-                    SlaWindowDays = tile.SlaWindowDays
+                    SlaWindowDays = tile.SlaWindowDays,
+                    ImageAssetId = tile.ImageAssetId,
+                    ImageFit = tile.ImageFit,
+                    PinsJson = tile.Pins.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Pins, PinJsonOptions)
                 })).ToList()
             };
 
@@ -507,6 +561,16 @@ public sealed class MapTileInput
     public string? ListChannelKey { get; set; }
 
     public int SlaWindowDays { get; set; } = 7;
+
+    public Guid? ImageAssetId { get; set; }
+
+    public MonitoringMapImageFit ImageFit { get; set; } = MonitoringMapImageFit.Contain;
+
+    /// <summary>The tile's pins as JSON, not as bound <c>Pins[i].X</c> fields. Pins are an unbounded
+    /// per-tile collection edited entirely client-side (you place one by clicking the picture), and the
+    /// designer clones whole tiles by rewriting their field names - index-based binding would mean
+    /// re-indexing a nested collection on every clone and delete. One opaque string moves with the tile.</summary>
+    public string? PinsJson { get; set; }
 
     public bool IsDeleted { get; set; }
 }

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" role="img" aria-label="World map">
+  <title>World map (coarse)</title>
+  <!--
+    Deliberately COARSE continent silhouettes, hand-authored for Matmon from coastal reference points.
+    No third-party map data is used or embedded, so there is no upstream licence to honour.
+
+    Projection: equirectangular, 1 SVG unit = 1 degree. Pin placement is therefore exact and trivial:
+        x = longitude + 180      (-180..180  ->   0..360)
+        y = 90 - latitude        (  90..-90  ->   0..180)
+    Keep that invariant if you ever redraw this - the Geo widget's pin maths depends on it.
+  -->
+  <g fill="currentColor" fill-rule="evenodd">
+    <!-- North America -->
+    <path d="M12,24 L28,31 L47,35 L56,42 L57,52 L62,56 L70,67 L74,67 L80,73 L88,76 L101,81
+             L93,69 L90,61 L99,65 L101,57 L106,49 L120,45 L127,42 L123,32 L102,30 L110,18
+             L80,16 L55,18 L24,19 Z"/>
+    <!-- Greenland -->
+    <path d="M135,30 L130,24 L125,18 L135,10 L155,8 L160,15 L150,22 L138,29 Z"/>
+    <!-- South America -->
+    <path d="M101,81 L112,79 L122,83 L130,90 L145,96 L142,103 L137,113 L132,116 L124,125 L118,129
+             L115,137 L112,145 L105,138 L107,127 L108,123 L110,113 L103,102 L99,94 L102,88 Z"/>
+    <!-- Africa -->
+    <path d="M174,54 L190,53 L200,57 L210,59 L213,62 L218,72 L223,78 L231,79 L222,90 L220,94
+             L219,97 L220,106 L213,116 L211,120 L198,124 L192,113 L192,102 L189,90 L185,86
+             L180,85 L171,85 L163,75 L164,69 L167,62 Z"/>
+    <!-- Eurasia -->
+    <path d="M171,51 L171,47 L176,42 L184,37 L188,33 L185,31 L185,29 L197,22 L205,19 L220,22
+             L224,25 L250,19 L280,14 L308,17 L340,20 L360,24 L342,34 L322,36 L312,47 L307,55
+             L302,59 L294,68 L289,79 L284,89 L280,77 L274,74 L268,68 L260,77 L257,82 L253,71
+             L247,65 L242,65 L236,63 L239,68 L232,75 L225,77 L219,69 L215,61 L214,57 L216,54
+             L207,52 L203,53 L198,51 L192,46 L185,47 L182,49 L175,54 Z"/>
+    <!-- British Isles -->
+    <path d="M175,32 L178,33 L180,37 L177,39 L175,36 Z"/>
+    <path d="M170,36 L174,35 L174,38 L170,38 Z"/>
+    <!-- Japan -->
+    <path d="M320,45 L322,48 L320,54 L315,56 L311,57 L313,55 L318,52 L319,48 Z"/>
+    <!-- Madagascar -->
+    <path d="M223,102 L230,105 L227,115 L224,112 Z"/>
+    <!-- Indonesia / New Guinea -->
+    <path d="M275,85 L286,96 L284,96 L275,87 Z"/>
+    <path d="M285,96 L294,98 L294,99 L285,97 Z"/>
+    <path d="M289,88 L299,89 L297,94 L290,93 Z"/>
+    <path d="M311,91 L330,99 L327,99 L311,93 Z"/>
+    <!-- Philippines -->
+    <path d="M300,76 L305,74 L306,80 L302,83 Z"/>
+    <!-- Australia -->
+    <path d="M295,122 L294,112 L311,102 L323,101 L326,107 L333,117 L331,124 L325,128 L318,125 L309,122 Z"/>
+    <!-- New Zealand -->
+    <path d="M353,125 L358,128 L355,131 Z"/>
+    <path d="M348,134 L352,136 L347,136 Z"/>
+    <!-- Antarctica -->
+    <path d="M0,158 L45,155 L90,159 L135,156 L180,160 L225,156 L270,159 L315,155 L360,158 L360,180 L0,180 Z"/>
+  </g>
+</svg>

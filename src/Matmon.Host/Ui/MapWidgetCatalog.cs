@@ -43,7 +43,14 @@ public static class MapWidgetCatalog
         new("heading", "Heading", "Large section title for grouping a board", "list", MapWidgetCategory.Content,
             MonitoringMapTileKind.Heading, SearchTerms: "title section header caption"),
         new("clock", "Clock", "Current time in the board timezone", "clock", MapWidgetCategory.Content,
-            MonitoringMapTileKind.Clock, SearchTerms: "time date wall now")
+            MonitoringMapTileKind.Clock, SearchTerms: "time date wall now"),
+
+        new("image", "Image", "An uploaded picture - logo, photo, diagram", "square", MapWidgetCategory.Places,
+            MonitoringMapTileKind.Image, SearchTerms: "picture photo logo diagram upload png jpeg"),
+        new("floorplan", "Floorplan + pins", "A picture with status pins placed on it", "probe", MapWidgetCategory.Places,
+            MonitoringMapTileKind.Image, SearchTerms: "plan rack room office markers dots layout"),
+        new("geomap", "World map", "Offline world map with pins by latitude/longitude", "network", MapWidgetCategory.Places,
+            MonitoringMapTileKind.GeoMap, SearchTerms: "geo globe sites locations countries world")
     ];
 
     public static MapWidgetDefinition? Find(string? key) =>
@@ -57,6 +64,7 @@ public static class MapWidgetCatalog
         MapWidgetCategory.Status => "Status",
         MapWidgetCategory.Metrics => "Metrics",
         MapWidgetCategory.Content => "Content",
+        MapWidgetCategory.Places => "Places",
         _ => "Other"
     };
 
@@ -98,7 +106,8 @@ public enum MapWidgetCategory
 {
     Status = 0,
     Metrics = 1,
-    Content = 2
+    Content = 2,
+    Places = 3
 }
 
 /// <param name="Key">Stable palette key - also what a layout template's slot refers to.</param>

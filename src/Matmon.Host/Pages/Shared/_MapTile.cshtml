@@ -11,7 +11,8 @@
     // get the generic value + subtitle + kind footer underneath, printing the same number twice and stealing
     // the height the rows need. Heading and Clock drop the footer entirely - they are chrome, not readings.
     var isCollection = tile.Kind is MonitoringMapTileKind.SensorList or MonitoringMapTileKind.AlertFeed
-        or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
+        or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
+        or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap;
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
     // screenshot/print is correct; initializeMapClocks then ticks it.
@@ -114,6 +115,45 @@
                 }
             </ul>
         }
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Image || tile.Kind == MonitoringMapTileKind.GeoMap)
+    {
+        @* One frame for both: the world map is just a different picture behind the same pin layer, and pins
+           are positioned in percent so they hold at any rendered size and under any object-fit. *@
+        <div class="map-tile-canvas" data-map-pin-canvas>
+            @if (tile.Kind == MonitoringMapTileKind.GeoMap)
+            {
+                <img class="map-tile-worldmap" src="~/brand/world-map.svg" alt="" aria-hidden="true" />
+            }
+            else if (tile.ImageAssetId is { } assetId)
+            {
+                <img class="map-tile-image" src="/api/map-assets/@assetId" alt="@(tile.Title ?? "Map image")"
+                     style="object-fit: @MapTileRender.ImageFitCss(tile.ImageFit);" />
+            }
+            else
+            {
+                <span class="map-tile-canvas-empty">No image uploaded</span>
+            }
+
+            @foreach (var pin in Model.Pins ?? [])
+            {
+                <span class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style"
+                      style="left: @pin.X.ToString(System.Globalization.CultureInfo.InvariantCulture)%; top: @pin.Y.ToString(System.Globalization.CultureInfo.InvariantCulture)%;"
+                      title="@pin.Label">
+                    <span class="map-pin-dot" aria-hidden="true"></span>
+                    @if (pin.ShowLabel || pin.Style == "tile")
+                    {
+                        <span class="map-pin-label">
+                            <strong>@pin.Label</strong>
+                            @if (!string.IsNullOrWhiteSpace(pin.Value))
+                            {
+                                <small>@pin.Value</small>
+                            }
+                        </span>
+                    }
+                </span>
+            }
+        </div>
     }
 
     @if (tile.Kind == MonitoringMapTileKind.Graph)

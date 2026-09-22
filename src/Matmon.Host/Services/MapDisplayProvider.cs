@@ -299,7 +299,9 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.AlertFeed
              or MonitoringMapTileKind.Sla
              or MonitoringMapTileKind.Clock
-             or MonitoringMapTileKind.Heading;
+             or MonitoringMapTileKind.Heading
+             or MonitoringMapTileKind.Image
+             or MonitoringMapTileKind.GeoMap;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
     /// understands - an element id or "tag:name". Null when the tile has no target at all, which for an alert
@@ -320,6 +322,8 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Heading => CreateTile(tile, element, "ok", "Heading", tile.Text ?? string.Empty, string.Empty, "Heading", "list"),
             MonitoringMapTileKind.Clock => CreateTile(tile, element, "ok", "Clock", string.Empty, string.Empty, "Clock", "clock"),
             MonitoringMapTileKind.AlertFeed => BuildAlertFeedTile(tile, element),
+            MonitoringMapTileKind.Image => BuildImageTile(tile, element, latest, geo: false),
+            MonitoringMapTileKind.GeoMap => BuildImageTile(tile, element, latest, geo: true),
             MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
             _ => BuildSensorListTile(tile, element, latest)
         };
@@ -547,6 +551,106 @@ public sealed class MapDisplayProvider
         return age.TotalDays < 1 ? $"{(int)age.TotalHours}h" : $"{(int)age.TotalDays}d";
     }
 
+    private MapDisplayTileViewModel BuildImageTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest,
+        bool geo)
+    {
+        var pins = BuildPins(tile, latest, geo);
+        var severity = pins
+            .Select(pin => pin.Severity)
+            .DefaultIfEmpty(MonitoringSeverity.Ok)
+            .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+
+        var subtitle = pins.Count switch
+        {
+            0 when geo => "No locations placed",
+            0 => tile.ImageAssetId is null ? "No image uploaded" : "No pins placed",
+            1 => "1 pin",
+            _ => $"{pins.Count} pins"
+        };
+
+        return CreateTile(tile, element,
+            MonitoringStatePresentation.Key(severity),
+            MonitoringStatePresentation.Label(severity),
+            subtitle, string.Empty, KindLabel(tile.Kind), geo ? "network" : "square",
+            pins: pins);
+    }
+
+    /// <summary>
+    /// Resolves every pin's target to a state, and its position to a FRACTION of the tile. An image pin is
+    /// already stored as a fraction; a geo pin is projected from lat/lon by
+    /// <see cref="MonitoringMapGeoProjection"/>. Both end up in the same 0..1 space, so the renderer has one
+    /// case to handle and a pin stays put at any rendered size.
+    /// </summary>
+    private IReadOnlyList<MapPinDto> BuildPins(
+        MonitoringMapTile tile,
+        IReadOnlyDictionary<Guid, SensorObservation> latest,
+        bool geo)
+    {
+        if (tile.Pins.Count == 0)
+        {
+            return [];
+        }
+
+        var pins = new List<MapPinDto>(tile.Pins.Count);
+        foreach (var pin in tile.Pins)
+        {
+            double x;
+            double y;
+            if (geo)
+            {
+                // A geo pin without coordinates has nowhere to go - dropping it beats stacking every
+                // unplaced pin in the top-left corner of the Atlantic.
+                if (!MonitoringMapGeoProjection.IsValidLatitude(pin.Latitude) ||
+                    !MonitoringMapGeoProjection.IsValidLongitude(pin.Longitude))
+                {
+                    continue;
+                }
+
+                (x, y) = MonitoringMapGeoProjection.ToFraction(pin.Latitude!.Value, pin.Longitude!.Value);
+            }
+            else
+            {
+                x = Math.Clamp(pin.X, 0, 1);
+                y = Math.Clamp(pin.Y, 0, 1);
+            }
+
+            var sensors = _workspaceStore.ResolveTargetSensors(pin.TargetToken);
+            var states = sensors
+                .Select(sensor => latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown)
+                .ToArray();
+            var severity = states.Length == 0
+                ? MonitoringSeverity.Ok
+                : states.Select(MonitoringStatePresentation.FromSensorState).Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+
+            // An unplaced/untargeted pin reads as "unknown" rather than as a healthy green dot, which would
+            // be a lie on a wallboard.
+            var tone = sensors.Count == 0 ? "unknown" : MonitoringStatePresentation.Key(severity);
+
+            string? value = null;
+            if (pin.Style == MonitoringMapPinStyle.Tile && sensors.Count > 0)
+            {
+                value = sensors.Count == 1 && latest.TryGetValue(sensors[0].Id, out var single)
+                    ? FormatObservationValue(single, PickChannel(single, null))
+                    : $"{states.Count(state => state is SensorState.Healthy or SensorState.Paused)}/{states.Length}";
+            }
+
+            pins.Add(new MapPinDto(
+                string.IsNullOrWhiteSpace(pin.Label) ? sensors.FirstOrDefault()?.Name ?? "Pin" : pin.Label!,
+                pin.ShowLabel,
+                tone,
+                sensors.Count == 0 ? MonitoringSeverity.Ok : severity,
+                Math.Round(x * 100, 3),
+                Math.Round(y * 100, 3),
+                pin.Style == MonitoringMapPinStyle.Tile ? "tile" : "dot",
+                value));
+        }
+
+        return pins;
+    }
+
     private static MapDisplayTileViewModel CreateTile(
         MonitoringMapTile tile,
         MonitoringElement? element,
@@ -557,7 +661,8 @@ public sealed class MapDisplayProvider
         string kindLabel,
         string iconKey,
         IReadOnlyList<MapTileRowDto>? rows = null,
-        MapSlaDto? sla = null)
+        MapSlaDto? sla = null,
+        IReadOnlyList<MapPinDto>? pins = null)
     {
         return new MapDisplayTileViewModel(
             tile,
@@ -576,7 +681,8 @@ public sealed class MapDisplayProvider
             string.Empty,
             tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType,
             rows,
-            sla);
+            sla,
+            pins);
     }
 
     private static double? ResolveSensorProgressPercent(SensorObservation observation, SensorChannelValue? channel)
@@ -625,6 +731,8 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Sla => "SLA",
             MonitoringMapTileKind.Clock => "Clock",
             MonitoringMapTileKind.Heading => "Heading",
+            MonitoringMapTileKind.Image => "Image",
+            MonitoringMapTileKind.GeoMap => "World map",
             _ => "Tile"
         };
     }
@@ -723,7 +831,12 @@ public sealed record MapDisplayTileViewModel(
     /// optional collections on the ONE tile view-model rather than a parallel hierarchy, because every other
     /// field (state, icon, colours, card chrome) is shared.</summary>
     IReadOnlyList<MapTileRowDto>? Rows = null,
-    MapSlaDto? Sla = null);
+    MapSlaDto? Sla = null,
+    IReadOnlyList<MapPinDto>? Pins = null);
+
+/// <param name="X">Position as a PERCENT of the tile (0..100) - an image pin is stored that way and a geo pin
+/// is projected into it, so the renderer has one case and the pin holds at any rendered size.</param>
+public sealed record MapPinDto(string Label, bool ShowLabel, string Tone, MonitoringSeverity Severity, double X, double Y, string Style, string? Value);
 
 /// <param name="Tone">A state key ("ok"/"warning"/"error"/"unknown") for the row pill.</param>
 /// <param name="TimeText">Pre-formatted relative age, e.g. "12m" - formatted server-side so the public

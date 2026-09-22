@@ -285,6 +285,16 @@ public sealed class MonitoringMapTile
     /// <summary>Window a <see cref="MonitoringMapTileKind.Sla"/> tile reports uptime over.</summary>
     public int SlaWindowDays { get; set; } = 7;
 
+    /// <summary>The uploaded picture behind an <see cref="MonitoringMapTileKind.Image"/> tile. Only the ID is
+    /// stored - the bytes live in the MapAssetStore on disk, never in workspace.json, which is fully
+    /// re-serialised on a 750ms debounce and re-parsed on every start.</summary>
+    public Guid? ImageAssetId { get; set; }
+
+    public MonitoringMapImageFit ImageFit { get; set; } = MonitoringMapImageFit.Contain;
+
+    /// <summary>Status markers on an image or geo tile.</summary>
+    public List<MonitoringMapPin> Pins { get; set; } = [];
+
     public MonitoringMapTile Clone() => new()
     {
         Id = Id,
@@ -310,7 +320,10 @@ public sealed class MonitoringMapTile
         ListMode = ListMode,
         ListLimit = ListLimit,
         ListChannelKey = ListChannelKey,
-        SlaWindowDays = SlaWindowDays
+        SlaWindowDays = SlaWindowDays,
+        ImageAssetId = ImageAssetId,
+        ImageFit = ImageFit,
+        Pins = Pins.Select(pin => pin.Clone()).ToList()
     };
 }
 
@@ -336,7 +349,13 @@ public enum MonitoringMapTileKind
     Clock = 8,
 
     /// <summary>A large section heading. Text with a display treatment, not a data widget.</summary>
-    Heading = 9
+    Heading = 9,
+
+    /// <summary>An uploaded picture (floorplan, rack photo, office plan) with optional status pins on it.</summary>
+    Image = 10,
+
+    /// <summary>The shipped offline world map with pins placed by latitude/longitude.</summary>
+    GeoMap = 11
 }
 
 public enum MonitoringMapListMode
@@ -426,6 +445,9 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Sla => (2, 2, 3, 2),
             MonitoringMapTileKind.Clock => (2, 2, 2, 2),
             MonitoringMapTileKind.Heading => (3, 1, 6, 1),
+            // A picture with pins on it is useless small - you cannot hit a pin, let alone read its label.
+            MonitoringMapTileKind.Image => (3, 3, 6, 4),
+            MonitoringMapTileKind.GeoMap => (4, 3, 6, 4),
             _ => (2, 2, 2, 2)
         };
     }
@@ -500,4 +522,72 @@ public static class MonitoringMapGeometry
     }
 
     private static int Round(double value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
+}
+
+/// <summary>
+/// A marker on an <see cref="MonitoringMapTileKind.Image"/> (floorplan / rack photo / office plan) or a
+/// <see cref="MonitoringMapTileKind.GeoMap"/> tile. Its colour follows the resolved state of
+/// <see cref="TargetToken"/>, exactly like a status tile - a pin IS a status tile, just positioned on a
+/// picture instead of in the grid.
+/// </summary>
+public sealed class MonitoringMapPin
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+
+    /// <summary>Element id or "tag:name" - the same single token the element picker writes and
+    /// <c>IMonitoringWorkspaceStore.ResolveTargetSensors</c> understands.</summary>
+    public string? TargetToken { get; set; }
+
+    public string? Label { get; set; }
+
+    public bool ShowLabel { get; set; } = true;
+
+    public MonitoringMapPinStyle Style { get; set; } = MonitoringMapPinStyle.Dot;
+
+    /// <summary>Position on the IMAGE as a fraction (0..1) of its width/height - relative, not pixels, so a
+    /// pin stays where it was put no matter what size the board renders at or how the image is fitted.
+    /// Ignored by a geo tile, which positions from <see cref="Latitude"/>/<see cref="Longitude"/>.</summary>
+    public double X { get; set; }
+
+    public double Y { get; set; }
+
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
+    public MonitoringMapPin Clone() => new()
+    {
+        Id = Id,
+        TargetToken = TargetToken,
+        Label = Label,
+        ShowLabel = ShowLabel,
+        Style = Style,
+        X = X,
+        Y = Y,
+        Latitude = Latitude,
+        Longitude = Longitude
+    };
+}
+
+public enum MonitoringMapPinStyle
+{
+    /// <summary>A small coloured dot with an optional label.</summary>
+    Dot = 0,
+
+    /// <summary>A miniature value card - the "mini tile" on a floorplan.</summary>
+    Tile = 1
+}
+
+/// <summary>How an uploaded image fills its tile.</summary>
+public enum MonitoringMapImageFit
+{
+    /// <summary>Whole image visible, letterboxed. The default, because a floorplan must not be cropped -
+    /// cropping would silently move every pin relative to what the user sees.</summary>
+    Contain = 0,
+
+    /// <summary>Fills the tile, cropping the overflow.</summary>
+    Cover = 1,
+
+    /// <summary>Distorts to fill exactly.</summary>
+    Stretch = 2
 }

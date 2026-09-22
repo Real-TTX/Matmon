@@ -400,6 +400,33 @@
                                         <input asp-for="Input.Tiles[index].SlaWindowDays" type="number" min="1" max="365" class="form-control workspace-input" />
                                         <span class="workspace-inline-note">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
                                     </label>
+                                    <div class="workspace-field" data-map-property-image-only>
+                                        <span class="workspace-label">Picture</span>
+                                        <input type="hidden" asp-for="Input.Tiles[index].ImageAssetId" data-map-property-image-id />
+                                        <div class="map-image-upload">
+                                            <input type="file" accept="image/png,image/jpeg" class="form-control workspace-input" data-map-image-file />
+                                            <button type="button" class="workspace-secondary-submit" data-map-image-clear>Remove</button>
+                                        </div>
+                                        <span class="workspace-inline-note" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
+                                    </div>
+                                    <label class="workspace-field" data-map-property-image-only>
+                                        <span class="workspace-label">Fit</span>
+                                        <select asp-for="Input.Tiles[index].ImageFit" class="form-select workspace-select">
+                                            <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
+                                            <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
+                                            <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
+                                        </select>
+                                    </label>
+                                    <div class="workspace-field" data-map-property-pins-only>
+                                        <span class="workspace-label">Pins</span>
+                                        <input type="hidden" asp-for="Input.Tiles[index].PinsJson" data-map-property-pins />
+                                        <div class="map-pin-editor" data-map-pin-editor></div>
+                                        <div class="map-pin-actions">
+                                            <button type="button" class="workspace-secondary-submit" data-map-pin-place>Place on picture</button>
+                                            <button type="button" class="workspace-secondary-submit" data-map-pin-add>Add pin</button>
+                                        </div>
+                                        <span class="workspace-inline-note" data-map-pin-hint></span>
+                                    </div>
                                 </div>
                                 <div data-map-prop-group="display" hidden>
                                     <div class="workspace-field icon-picker-field">
@@ -436,6 +463,27 @@
                 </aside>
             </div>
 
+            @* One pin row, cloned per pin by the designer. The target uses the SAME element picker as
+               everything else (cloned, ids rewritten) rather than a long native select - pins are not special
+               enough to deserve their own target UI. Nothing here is model-bound: the designer serialises the
+               rows into the tile's single PinsJson field. *@
+            <template data-map-pin-template>
+                <div class="map-pin-row" data-map-pin-row data-pin-id="__pinId__">
+                    <div class="map-pin-row-main">
+                        <input type="text" class="form-control workspace-input" data-pin-field="label" placeholder="Label" />
+                        <select class="form-select workspace-select" data-pin-field="style">
+                            <option value="Dot">Dot</option>
+                            <option value="Tile">Mini tile</option>
+                        </select>
+                        <button type="button" class="map-pin-row-remove" data-map-pin-remove aria-label="Remove pin">@MatmonIcons.Render("trash")</button>
+                    </div>
+                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-pin-__pinId__", AllowTags = true, Placeholder = "No target", Options = Model.TilePickerOptions, ValueAttribute = "data-pin-field-target" })" />
+                    <div class="map-pin-row-geo" data-map-pin-geo hidden>
+                        <input type="number" step="0.0001" min="-90" max="90" class="form-control workspace-input" data-pin-field="latitude" placeholder="Latitude" aria-label="Latitude" />
+                        <input type="number" step="0.0001" min="-180" max="180" class="form-control workspace-input" data-pin-field="longitude" placeholder="Longitude" aria-label="Longitude" />
+                    </div>
+                </div>
+            </template>
             <template data-map-tile-template>
                 <article class="map-tile map-tile-editor"
                          data-map-tile
@@ -443,7 +491,7 @@
                          data-slide-id="__slideId__"
                          data-tile-id="__id__"
                          data-state="unknown"
-                         data-kind="__kind__"
+                         data-kind="__kindLower__"
                          data-visual="__visual__"
                          style="--tile-x: 0; --tile-y: 0; --tile-w: 100; --tile-h: 100;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
@@ -523,6 +571,33 @@
                             <input name="Input.Tiles[__index__].SlaWindowDays" type="number" min="1" max="365" value="7" class="form-control workspace-input" />
                             <span class="workspace-inline-note">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
                         </label>
+                        <div class="workspace-field" data-map-property-image-only>
+                            <span class="workspace-label">Picture</span>
+                            <input type="hidden" name="Input.Tiles[__index__].ImageAssetId" data-map-property-image-id />
+                            <div class="map-image-upload">
+                                <input type="file" accept="image/png,image/jpeg" class="form-control workspace-input" data-map-image-file />
+                                <button type="button" class="workspace-secondary-submit" data-map-image-clear>Remove</button>
+                            </div>
+                            <span class="workspace-inline-note" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
+                        </div>
+                        <label class="workspace-field" data-map-property-image-only>
+                            <span class="workspace-label">Fit</span>
+                            <select name="Input.Tiles[__index__].ImageFit" class="form-select workspace-select">
+                                <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
+                                <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
+                                <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
+                            </select>
+                        </label>
+                        <div class="workspace-field" data-map-property-pins-only>
+                            <span class="workspace-label">Pins</span>
+                            <input type="hidden" name="Input.Tiles[__index__].PinsJson" data-map-property-pins />
+                            <div class="map-pin-editor" data-map-pin-editor></div>
+                            <div class="map-pin-actions">
+                                <button type="button" class="workspace-secondary-submit" data-map-pin-place>Place on picture</button>
+                                <button type="button" class="workspace-secondary-submit" data-map-pin-add>Add pin</button>
+                            </div>
+                            <span class="workspace-inline-note" data-map-pin-hint></span>
+                        </div>
                     </div>
                     <div data-map-prop-group="display" hidden>
                         <div class="workspace-field icon-picker-field">
