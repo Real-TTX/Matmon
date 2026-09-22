@@ -53,6 +53,30 @@ public static class MapWidgetCatalog
             MonitoringMapTileKind.GeoMap, SearchTerms: "geo globe sites locations countries world")
     ];
 
+    /// <summary>Which schematic the palette draws for an entry. Derived from what the widget actually
+    /// RENDERS rather than from its <see cref="MonitoringMapTileKind"/> alone - a gauge and a progress bar are
+    /// both Value tiles and look nothing alike, which is the very reason they are separate palette entries.
+    /// Keeping it here means a new catalog entry gets a sensible preview without a second table to keep in
+    /// sync with this one.</summary>
+    public static string PreviewKey(MapWidgetDefinition widget) => widget switch
+    {
+        { VisualType: MonitoringMapTileVisualType.Gauge } => "gauge",
+        { VisualType: MonitoringMapTileVisualType.ProgressBar } => "progress",
+        { Kind: MonitoringMapTileKind.Graph } => "graph",
+        { Kind: MonitoringMapTileKind.SensorList } => "list",
+        { Kind: MonitoringMapTileKind.AlertFeed } => "alerts",
+        { Kind: MonitoringMapTileKind.Sla } => "sla",
+        { Kind: MonitoringMapTileKind.Clock } => "clock",
+        { Kind: MonitoringMapTileKind.Heading } => "heading",
+        { Kind: MonitoringMapTileKind.Text } => "text",
+        { Kind: MonitoringMapTileKind.GeoMap } => "geo",
+        // Both are Image tiles; "floorplan" is the one that exists for its pins, so it previews them.
+        { Kind: MonitoringMapTileKind.Image } => widget.Key == "floorplan" ? "pins" : "image",
+        { Kind: MonitoringMapTileKind.Status } => "group",
+        { Kind: MonitoringMapTileKind.Value } => "value",
+        _ => "state"
+    };
+
     public static MapWidgetDefinition? Find(string? key) =>
         string.IsNullOrWhiteSpace(key) ? null : All.FirstOrDefault(widget => widget.Key == key);
 

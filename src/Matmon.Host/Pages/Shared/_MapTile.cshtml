@@ -16,6 +16,10 @@
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
     // screenshot/print is correct; initializeMapClocks then ticks it.
+    // The one place the head's title is decided, so the footer below can ask "am I about to repeat this?"
+    var shownTitle = tile.ShowTitle
+        ? (string.IsNullOrWhiteSpace(tile.Title) ? (Model.ElementName ?? Model.KindLabel) : tile.Title)
+        : null;
     var clockNow = tile.Kind == MonitoringMapTileKind.Clock
         ? TimeZoneInfo.ConvertTime(DateTimeOffset.Now, MapTileRender.ResolveTimeZone(Model.TimeZoneId))
         : default;
@@ -43,7 +47,7 @@
             <span class="map-tile-icon">@MatmonIcons.Render(Model.IconKey)</span>
             @if (tile.ShowTitle)
             {
-                <strong data-tile-title>@(string.IsNullOrWhiteSpace(tile.Title) ? (Model.ElementName ?? Model.KindLabel) : tile.Title)</strong>
+                <strong data-tile-title>@shownTitle</strong>
             }
             @if (tile.ShowStateBadge)
             {
@@ -210,13 +214,32 @@
     @if (!isChrome)
     {
         <p data-tile-subtitle>@Model.Subtitle</p>
-        <small>
-            @Model.KindLabel
-            @if (tile.ShowElementName && !string.IsNullOrWhiteSpace(Model.ElementName))
-            {
-                <text> - @Model.ElementName</text>
-            }
-        </small>
+        @* The kind label only earns a line when nothing else names the tile. Printing "State" under every
+           state tile is a caption you read once and then never again - and on a wall display that line costs
+           height the actual reading could have used. With a title shown, the title already says it. *@
+        // ...and never a second time: "NAS-01" as the heading with "NAS-01" again underneath is a line of
+        // wallboard height spent saying nothing. The target name earns its line only when it differs.
+        var showElementName = tile.ShowElementName
+            && !string.IsNullOrWhiteSpace(Model.ElementName)
+            && !string.Equals(shownTitle, Model.ElementName, StringComparison.OrdinalIgnoreCase);
+        var showKindLabel = !tile.ShowTitle;
+        @if (showKindLabel || showElementName)
+        {
+            <small data-map-tile-kind-label>
+                @if (showKindLabel)
+                {
+                    @Model.KindLabel
+                }
+                @if (showKindLabel && showElementName)
+                {
+                    <text> - </text>
+                }
+                @if (showElementName)
+                {
+                    @Model.ElementName
+                }
+            </small>
+        }
     }
 
     @if (Model.Editable)

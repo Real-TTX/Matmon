@@ -105,18 +105,25 @@
                         {
                             <div class="map-toolbox-group" data-map-tool-group>
                                 <span class="map-toolbox-group-label">@MapWidgetCatalog.CategoryLabel(group.Key)</span>
+                                <div class="map-toolbox-group-items">
                                 @foreach (var widget in group)
                                 {
+                                    @* A drawn preview, not a word: the description is what the entry MEANS,
+                                       the schematic is what it LOOKS like, and on a wallboard the second is
+                                       what you are actually choosing between. The description moves to the
+                                       tooltip because two cards per row leaves no honest room for it. *@
                                     <button type="button" class="map-tool-button" draggable="true"
+                                            title="@widget.Description"
                                             data-map-tool-widget="@widget.Key"
                                             data-map-tool-kind="@widget.Kind"
                                             data-map-tool-title="@widget.Label"
                                             data-map-tool-visual="@widget.VisualType"
                                             data-map-tool-search="@($"{widget.Label} {widget.Description} {widget.SearchTerms}".ToLowerInvariant())">
-                                        @MatmonIcons.Render(widget.IconKey)
-                                        <span><strong>@widget.Label</strong><small>@widget.Description</small></span>
+                                        <partial name="_MapWidgetPreview" model="@MapWidgetCatalog.PreviewKey(widget)" />
+                                        <span class="map-tool-label"><strong>@widget.Label</strong></span>
                                     </button>
                                 }
+                                </div>
                             </div>
                         }
                         <div class="map-toolbox-empty" data-map-tool-empty hidden>No matching widget.</div>
@@ -935,22 +942,22 @@
                         </label>
                         <div class="map-property-switches">
                             <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card />
+                                <input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card /><input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" />
                                 <span class="map-switch-track" aria-hidden="true"></span>
                                 <span>Card background</span>
                             </label>
                             <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title />
+                                <input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" />
                                 <span class="map-switch-track" aria-hidden="true"></span>
                                 <span>Show title</span>
                             </label>
                             <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge />
+                                <input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" />
                                 <span class="map-switch-track" aria-hidden="true"></span>
                                 <span>Show state badge</span>
                             </label>
                             <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked />
+                                <input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" />
                                 <span class="map-switch-track" aria-hidden="true"></span>
                                 <span>Show target name</span>
                             </label>
