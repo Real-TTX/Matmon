@@ -17,7 +17,12 @@ public enum WorkspaceBackupSection
     Events = 1 << 8,
     Statistics = 1 << 9,
     BackupJobs = 1 << 10,
-    All = Topology | Templates | SensorDefinitions | Notifications | Maps | Users | Alerts | SensorHistory | Events | Statistics | BackupJobs
+
+    /// <summary>The PICTURES uploaded onto maps (floorplans etc.). Separate from <see cref="Maps"/> because
+    /// they are binary and bulky: a map restores its pins and layout from Maps alone, but without this its
+    /// floorplan comes back blank.</summary>
+    MapAssets = 1 << 11,
+    All = Topology | Templates | SensorDefinitions | Notifications | Maps | Users | Alerts | SensorHistory | Events | Statistics | BackupJobs | MapAssets
 }
 
 /// <summary>Where a scheduled backup job writes its snapshot: a local disk file (default) or a push to the
@@ -34,8 +39,10 @@ public static class WorkspaceBackupSections
     /// <summary>The section set pushed to / restored from the cloud: everything EXCEPT the bulky telemetry
     /// sections AND local Users. Users are excluded so a cross-instance / DR restore can never overwrite the
     /// local accounts and lock out the admin doing the restore.</summary>
+    /// <para>MapAssets is excluded too: it is megabytes of pictures, and a nightly cloud job would re-upload
+    /// every floorplan on every run. A local backup carries them.</para>
     public const WorkspaceBackupSection CloudConfig =
-        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users);
+        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets);
 }
 
 public sealed class WorkspaceBackupJob
@@ -164,4 +171,16 @@ public sealed record WorkspaceBackupRestoreResult(
     /// <summary>Credential bundles / notification secrets that could not be decrypted on restore (e.g. a
     /// cross-instance restore with no portable passphrase) and were therefore dropped - the user must re-enter them.</summary>
     public IReadOnlyList<string> DroppedSecretsOrEmpty => DroppedSecrets ?? [];
+}
+
+/// <summary>An uploaded map picture inside a backup package. Transport only: the live copy lives on disk in
+/// the MapAssetStore, never in workspace.json - which is why this list is always empty outside a snapshot,
+/// exactly like the telemetry sections.</summary>
+public sealed class WorkspaceMapAsset
+{
+    public Guid Id { get; set; }
+
+    /// <summary>Base64 image bytes. Re-validated by magic bytes on restore, so a tampered package cannot
+    /// smuggle a script-bearing file into a directory that is served anonymously.</summary>
+    public string? Data { get; set; }
 }

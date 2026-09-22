@@ -30,6 +30,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private readonly string _backupDirectoryPath;
     private readonly Timer _saveTimer;
     private readonly ITelemetryRepository _telemetry;
+    private readonly MapAssetStore? _mapAssets;
     private readonly INotificationSink? _notificationSink;
     private WorkspaceDocument _document;
     private DateTimeOffset? _firstDirtyUtc;
@@ -46,8 +47,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         IDataProtectionProvider dataProtectionProvider,
         ITelemetryRepository telemetry,
         ILogger<InMemoryMonitoringWorkspaceStore> logger,
-        INotificationSink? notificationSink = null)
+        INotificationSink? notificationSink = null,
+        MapAssetStore? mapAssets = null)
     {
+        // Optional: a store built without one simply does not carry uploaded map pictures in its backups,
+        // which is the honest behaviour for the unit tests that construct it directly.
+        _mapAssets = mapAssets;
         _logger = logger;
         _authOptions = authOptions;
         _runtimeOptions = runtimeOptions;
@@ -4203,6 +4208,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public List<MonitoringEvent> Events { get; set; } = [];
 
         public List<SensorStatisticsBucket> SensorStatistics { get; set; } = [];
+
+        /// <summary>Backup transport only - the live pictures are files in the MapAssetStore. Cleared on load
+        /// like the telemetry sections, so workspace.json never carries image bytes.</summary>
+        public List<WorkspaceMapAsset> MapAssets { get; set; } = [];
     }
 
 

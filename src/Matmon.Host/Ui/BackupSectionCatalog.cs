@@ -96,6 +96,7 @@ public static class BackupSectionCatalog
         new(WorkspaceBackupSection.SensorHistory, "History", "Raw sensor observation history"),
         new(WorkspaceBackupSection.Events, "Events", "Event log and audit trail"),
         new(WorkspaceBackupSection.Statistics, "Statistics", "Aggregated sensor statistics buckets"),
+        new(WorkspaceBackupSection.MapAssets, "Map images", "Pictures uploaded onto maps (floorplans, photos)"),
         new(WorkspaceBackupSection.BackupJobs, "Backup jobs", "Scheduled backup definitions")
     ];
 

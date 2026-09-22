@@ -122,7 +122,17 @@ builder.Services.AddSingleton<SummaryReportSender>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
-builder.Services.AddSingleton<IMonitoringWorkspaceStore, InMemoryMonitoringWorkspaceStore>();
+// Constructed explicitly rather than by convention so the store gets the MapAssetStore - it needs it to put
+// uploaded map pictures into a local backup and to write them back on restore.
+builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemoryMonitoringWorkspaceStore(
+    provider.GetRequiredService<IHostEnvironment>(),
+    provider.GetRequiredService<MatmonRuntimeOptions>(),
+    provider.GetRequiredService<MatmonAuthOptions>(),
+    provider.GetRequiredService<IDataProtectionProvider>(),
+    provider.GetRequiredService<ITelemetryRepository>(),
+    provider.GetRequiredService<ILogger<InMemoryMonitoringWorkspaceStore>>(),
+    provider.GetService<INotificationSink>(),
+    provider.GetRequiredService<MapAssetStore>()));
 builder.Services.AddSingleton<StorageOverviewProvider>();
 builder.Services.AddSingleton<IConfigurationOverviewProvider, ConfigurationOverviewProvider>();
 builder.Services.AddSingleton<SlaveProbeRuntimeState>();

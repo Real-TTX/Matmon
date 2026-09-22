@@ -55,6 +55,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 Alerts = sample.Alerts.ToList(),
                 BackupJobs = [],
                 SensorHistory = [],
+                MapAssets = [],
                 Events = [],
                 SensorStatistics = []
             };
@@ -87,6 +88,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.SensorHistory ??= [];
         document.Events ??= [];
         document.SensorStatistics ??= [];
+        // Backup transport only - the live pictures are files on disk. Cleared rather than null-coalesced, so a
+        // hand-edited or legacy workspace.json can never leave image bytes in the saved document.
+        document.MapAssets = [];
         return document;
     }
 
@@ -110,6 +114,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             SensorHistory = [],
             Events = [],
             SensorStatistics = [],
+            MapAssets = [],
             Maps = [],
             Users = []
         };

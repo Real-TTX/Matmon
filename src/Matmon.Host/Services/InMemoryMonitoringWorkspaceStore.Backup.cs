@@ -574,6 +574,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 documentClone.SensorStatistics = _telemetry.GetAllStatistics().ToList();
             }
 
+            // Uploaded pictures live as files, not in the document, so they are pulled in the same way the
+            // telemetry sections are.
+            if (job.Sections.HasFlag(WorkspaceBackupSection.MapAssets) && _mapAssets is { } assets)
+            {
+                documentClone.MapAssets = assets.EnumerateAll()
+                    .Select(asset => new WorkspaceMapAsset { Id = asset.Id, Data = Convert.ToBase64String(asset.Bytes) })
+                    .ToList();
+            }
+
             return new WorkspaceBackupPackage
             {
                 Id = Guid.NewGuid(),
@@ -637,6 +646,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         {
             document.Alerts = [];
             document.AlertMutes = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.MapAssets))
+        {
+            document.MapAssets.Clear();
         }
 
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
@@ -790,6 +804,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 WorkspaceBackupSection.Statistics => (
                     document.SensorStatistics.Count,
                     $"{document.SensorStatistics.Count} statistic buckets"),
+                WorkspaceBackupSection.MapAssets => (
+                    document.MapAssets.Count,
+                    $"{document.MapAssets.Count} map image(s)"),
                 WorkspaceBackupSection.BackupJobs => (
                     document.BackupJobs.Count,
                     $"{document.BackupJobs.Count} backup jobs"),
@@ -894,6 +911,30 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {
             target.BackupJobs = source.BackupJobs;
+        }
+
+        // Written back under their ORIGINAL ids: the tiles restored from the Maps section reference those
+        // ids, so a fresh one would orphan every floorplan in the snapshot. MapAssetStore.Restore re-checks
+        // the magic bytes, so a tampered package cannot smuggle a script-bearing file into a directory that
+        // is served anonymously.
+        if (sections.HasFlag(WorkspaceBackupSection.MapAssets) && _mapAssets is { } assetStore)
+        {
+            foreach (var asset in source.MapAssets)
+            {
+                if (asset.Id == Guid.Empty || string.IsNullOrWhiteSpace(asset.Data))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    assetStore.Restore(asset.Id, Convert.FromBase64String(asset.Data));
+                }
+                catch (FormatException)
+                {
+                    _logger.LogWarning("Map asset {AssetId} in the backup was not valid base64 and was skipped.", asset.Id);
+                }
+            }
         }
     }
 

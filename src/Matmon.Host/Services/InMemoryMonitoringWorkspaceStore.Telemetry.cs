@@ -190,6 +190,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         _document.SensorHistory = [];
         _document.Events = [];
         _document.SensorStatistics = [];
+        _document.MapAssets = [];
     }
 
     private void AddEvent(MonitoringEvent monitoringEvent)
