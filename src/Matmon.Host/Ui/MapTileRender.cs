@@ -20,9 +20,18 @@ public static class MapTileRender
         _ => "contain"
     };
 
-    public static string TileStyle(MonitoringMapTile tile)
+    /// <param name="stateKey">The resolved presentation state, so a tile-level colour rule can override the
+    /// theme tone for exactly the state the tile is currently in. Passed separately because the tile itself
+    /// does not know its state - that is resolved by the display provider.</param>
+    public static string TileStyle(MonitoringMapTile tile, string? stateKey = null)
     {
         var parts = new List<string>();
+        if (MonitoringMapColorRules.ResolveByKey(tile.ColorRules, stateKey) is { } ruleColor)
+        {
+            // Same custom property the theme sets per data-state, so the rule simply wins without a second
+            // styling path - and it goes through BrandingSafety, so nothing unvalidated reaches CSS.
+            parts.Add($"--map-tile-tone: {ruleColor}");
+        }
         if (!string.IsNullOrWhiteSpace(tile.BackgroundColor))
         {
             parts.Add($"--map-tile-custom-bg: {tile.BackgroundColor}");

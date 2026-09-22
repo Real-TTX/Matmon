@@ -3466,7 +3466,6 @@ function initializeMapDesigner() {
   const mapDescriptionInput = form?.querySelector("[data-map-description]");
   const aspectWidthInput = form?.querySelector("[data-map-aspect-w]");
   const aspectHeightInput = form?.querySelector("[data-map-aspect-h]");
-  const mapPanel = form?.querySelector("[data-map-property-map-panel]");
   const mapSelectButton = form?.querySelector("[data-map-select-map]");
   const mapTitlePreview = form?.querySelector("[data-map-title-preview]");
   const mapDescriptionPreview = form?.querySelector("[data-map-description-preview]");
@@ -4180,15 +4179,9 @@ function initializeMapDesigner() {
     });
   };
 
-  // The three selection modes share one aside, so each one has to put every other mode's chrome away -
-  // otherwise the tile tab bar lingers over the map panel, or the slide panel stays open behind a tile.
+  // The board's own settings live in the Display/Settings TABS now, so the right-hand column has just two
+  // states: a widget is selected, or nothing is. That is what "Properties" means on the mockup.
   const setPropertyScope = (scope, label) => {
-    if (mapPanel) {
-      mapPanel.hidden = scope !== "map";
-    }
-    if (slidePanel) {
-      slidePanel.hidden = scope !== "slide";
-    }
     if (propertyTabs) {
       propertyTabs.hidden = scope !== "tile";
     }
@@ -4196,7 +4189,6 @@ function initializeMapDesigner() {
       scopeLabel.textContent = label;
     }
     mapSelectButton?.classList.toggle("is-selected", scope === "map");
-    slideStrip?.classList.toggle("is-selected", scope === "slide");
   };
 
   const selectTile = (index) => {
@@ -4234,10 +4226,10 @@ function initializeMapDesigner() {
     });
 
     if (propertyEmpty) {
-      propertyEmpty.hidden = true;
+      propertyEmpty.hidden = false;
     }
 
-    setPropertyScope("map", "Map");
+    setPropertyScope("map", "Properties");
     syncMapSummary();
   };
 
@@ -4268,7 +4260,8 @@ function initializeMapDesigner() {
       }
     });
 
-    setPropertyScope("slide", `Slide - ${slide.name}`);
+    // The panel lives in the Slides TAB now, so "edit this slide" has to take you there.
+    form?.querySelector('[data-sensor-tab-target="slides"]')?.click();
   };
 
   // Converts a pointer event to logical-px coordinates on the canvas, transform-aware: the canvas
@@ -4801,21 +4794,6 @@ function initializeMapDesigner() {
     });
   });
 
-  const mapTabs = mapPanel?.querySelector("[data-map-map-tabs]");
-  mapTabs?.querySelectorAll("[data-map-map-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const name = button.dataset.mapMapTab;
-      mapTabs.querySelectorAll("[data-map-map-tab]").forEach((other) => {
-        const isActive = other === button;
-        other.classList.toggle("is-active", isActive);
-        other.setAttribute("aria-selected", isActive ? "true" : "false");
-      });
-      mapPanel?.querySelectorAll("[data-map-map-group]").forEach((group) => {
-        group.hidden = group.dataset.mapMapGroup !== name;
-      });
-    });
-  });
-
   // --- Slide properties -------------------------------------------------------------------------------
   slidePanel?.querySelectorAll("[data-map-slide-field]").forEach((field) => {
     field.addEventListener("input", () => {
@@ -4919,6 +4897,93 @@ function initializeMapDesigner() {
     setActiveSlide(newSlideId);
   });
 
+
+  // --- Slide previews ---------------------------------------------------------------------------------
+  // A real scaled clone of the slide, not a hand-drawn thumbnail: a preview that can disagree with the board
+  // is worse than no preview at all. Cloned from the live canvas so it reflects unsaved edits too.
+  const slidePreviewHost = form?.querySelector("[data-map-slide-previews]");
+
+  const renderSlidePreviews = () => {
+    if (!slidePreviewHost) {
+      return;
+    }
+    const { logicalWidth, logicalHeight } = readLogicalSize();
+    slidePreviewHost.style.setProperty("--map-preview-ratio", `${logicalWidth} / ${logicalHeight}`);
+
+    slidePreviewHost.querySelectorAll("[data-map-slide-card]").forEach((card) => {
+      const frame = card.querySelector("[data-map-slide-preview]");
+      if (!frame) {
+        return;
+      }
+      frame.style.setProperty("--map-preview-ratio", `${logicalWidth} / ${logicalHeight}`);
+      const slideId = card.dataset.slideId || "";
+      const board = document.createElement("div");
+      board.className = "map-slide map-slide-preview-board";
+      board.style.cssText = `position:absolute;inset:0;width:${logicalWidth}px;height:${logicalHeight}px;`
+        + "transform-origin:top left;";
+
+      canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+        if ((tile.dataset.slideId || "") !== slideId
+          || tile.querySelector("[data-map-tile-deleted]")?.value === "true") {
+          return;
+        }
+        const dot = document.createElement("span");
+        dot.className = "map-slide-preview-tile";
+        dot.dataset.state = tile.dataset.state || "unknown";
+        dot.style.cssText = `position:absolute;left:${tile.style.getPropertyValue("--tile-x")}px;`
+          + `top:${tile.style.getPropertyValue("--tile-y")}px;`
+          + `width:${tile.style.getPropertyValue("--tile-w")}px;`
+          + `height:${tile.style.getPropertyValue("--tile-h")}px;`;
+        board.appendChild(dot);
+      });
+
+      frame.replaceChildren(board);
+      // Scale AFTER insertion: the frame has no size until it is in the document.
+      const rect = frame.getBoundingClientRect();
+      if (rect.width > 0) {
+        board.style.transform = `scale(${rect.width / logicalWidth})`;
+      }
+    });
+  };
+
+  form?.querySelectorAll("[data-map-slide-card]").forEach((card) => {
+    card.addEventListener("click", () => {
+      setActiveSlide(card.dataset.slideId || "");
+      slidePreviewHost?.querySelectorAll("[data-map-slide-card]").forEach((other) => {
+        other.classList.toggle("is-active", other === card);
+      });
+      selectSlide();
+    });
+
+    // Reorder by dragging a card - the mockup's filmstrip, and far more direct than the arrow buttons.
+    card.addEventListener("dragstart", (event) => {
+      event.dataTransfer?.setData("text/plain", card.dataset.slideId || "");
+      card.classList.add("is-dragging");
+    });
+    card.addEventListener("dragend", () => card.classList.remove("is-dragging"));
+    card.addEventListener("dragover", (event) => event.preventDefault());
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const movedId = event.dataTransfer?.getData("text/plain");
+      const from = slides.findIndex((candidate) => candidate.id === movedId);
+      const to = slides.findIndex((candidate) => candidate.id === card.dataset.slideId);
+      if (from < 0 || to < 0 || from === to) {
+        return;
+      }
+      slides.splice(to, 0, slides.splice(from, 1)[0]);
+      renderSlideInputs();
+      renderSlideTabs();
+      window.location.hash = "";
+      // The cards are server-rendered, so reordering them in the DOM keeps the strip honest without a reload.
+      const cards = Array.from(slidePreviewHost.querySelectorAll("[data-map-slide-card]"));
+      const moved = cards.find((candidate) => candidate.dataset.slideId === movedId);
+      if (moved) {
+        slidePreviewHost.insertBefore(moved, from < to ? card.nextSibling : card);
+      }
+      renderSlidePreviews();
+    });
+  });
+  renderSlidePreviews();
   filterTools();
   syncLayoutAvailability();
   renderGridGuides();

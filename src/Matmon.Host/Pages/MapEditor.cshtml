@@ -61,31 +61,22 @@
         <section class="panel map-editor-panel">
             <div class="panel-header">
                 <h2 class="section-title">@MatmonIcons.Render("move")<span>Designer</span></h2>
-                <span class="panel-hint">Drag from the toolbox, select map title or tile, edit properties</span>
+                <span class="panel-hint">Drag a widget onto the canvas, click it to edit its properties</span>
+            </div>
+            @* Top-level tabs, as in the mockup. The map's own settings moved OUT of the right-hand column
+               into Display/Settings, so that column is now purely the SELECTED WIDGET's properties - which is
+               what "Properties" means on the mockup. Uses the app-wide .sensor-tabs language; the per-widget
+               and per-slide tab bars deliberately use their own data- attributes so initializeSensorTabs
+               (which resolves panels per FORM) cannot fight with them. *@
+            <div class="sensor-tabs map-editor-tabs" data-sensor-tabs>
+                <button type="button" class="sensor-tab" data-sensor-tab-target="editor">@MatmonIcons.Render("move")<span>Editor</span></button>
+                <button type="button" class="sensor-tab" data-sensor-tab-target="slides">@MatmonIcons.Render("copy")<span>Slides</span></button>
+                <button type="button" class="sensor-tab" data-sensor-tab-target="display">@MatmonIcons.Render("eye")<span>Display</span></button>
+                <button type="button" class="sensor-tab" data-sensor-tab-target="settings">@MatmonIcons.Render("gear")<span>Settings</span></button>
             </div>
 
+            <div class="map-tab-panel" data-sensor-tab="editor">
             <div class="map-editor-toolbar">
-                <div class="map-slide-strip" data-map-slide-strip>
-                    <div class="map-slide-tabs" data-map-slide-tabs>
-                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                        {
-                            var slide = Model.Input.Slides[slideIndex];
-                            <button type="button" class="map-slide-tab @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id"
-                                    data-slide-title="@slide.Title" data-slide-subtitle="@slide.Subtitle"
-                                    data-slide-duration="@slide.DurationSeconds" data-slide-bg="@slide.BackgroundColor"
-                                    data-slide-show-header="@(slide.ShowHeader ? "true" : "false")">@slide.Name</button>
-                        }
-                    </div>
-                    <div class="map-slide-actions">
-                        <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
-                        <button type="button" class="map-slide-action" data-map-slide-duplicate title="Duplicate this slide and its widgets">@MatmonIcons.Render("copy")</button>
-                        <button type="button" class="map-slide-action" data-map-slide-move="-1" title="Move slide left">@MatmonIcons.Render("arrow-left")</button>
-                        <button type="button" class="map-slide-action" data-map-slide-move="1" title="Move slide right">@MatmonIcons.Render("arrow-right")</button>
-                        <button type="button" class="map-slide-action" data-map-slide-settings title="Slide properties">@MatmonIcons.Render("gear")</button>
-                        <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
-                    </div>
-                    <div data-map-slide-inputs hidden></div>
-                </div>
 
                 <label class="map-editor-scale" title="Zoom the design canvas">
                     <span class="workspace-label">Zoom</span>
@@ -203,145 +194,11 @@
                         <button type="button" class="map-property-tab is-active" data-map-property-tab="general" role="tab" aria-selected="true">General</button>
                         <button type="button" class="map-property-tab" data-map-property-tab="data" role="tab" aria-selected="false">Data</button>
                         <button type="button" class="map-property-tab" data-map-property-tab="display" role="tab" aria-selected="false">Display</button>
+                        <button type="button" class="map-property-tab" data-map-property-tab="advanced" role="tab" aria-selected="false">Advanced</button>
                     </div>
 
-                    <section class="map-property-panel map-property-map-panel" data-map-property-map-panel>
-                        <div class="map-property-tabs" data-map-map-tabs role="tablist">
-                            <button type="button" class="map-property-tab is-active" data-map-map-tab="general" role="tab" aria-selected="true">General</button>
-                            <button type="button" class="map-property-tab" data-map-map-tab="grid" role="tab" aria-selected="false">Grid</button>
-                            <button type="button" class="map-property-tab" data-map-map-tab="wallboard" role="tab" aria-selected="false">Wallboard</button>
-                        </div>
-
-                        <div data-map-map-group="general">
-                            <label class="workspace-field">
-                                <span class="workspace-label">Name</span>
-                                <input asp-for="Input.Name" class="form-control workspace-input" data-map-name />
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Description</span>
-                                <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
-                            </label>
-                            <div class="workspace-field">
-                                <span class="workspace-label">Aspect ratio</span>
-                                <div class="map-aspect-presets">
-                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="9">16:9</button>
-                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="10">16:10</button>
-                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="21" data-aspect-h="9">21:9</button>
-                                    <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="4" data-aspect-h="3">4:3</button>
-                                </div>
-                                <div class="map-aspect-custom">
-                                    <input asp-for="Input.AspectRatioWidth" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-w aria-label="Aspect ratio width" />
-                                    <span class="map-aspect-colon">:</span>
-                                    <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
-                                </div>
-                                <span class="workspace-inline-note">Only the ratio matters &mdash; the board scales to any screen. Tiles keep their grid cell position/size regardless of ratio.</span>
-                            </div>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Wallboard fit</span>
-                                <select asp-for="Input.WallboardFit" class="form-select workspace-select">
-                                    <option value="@MonitoringMapWallboardFit.Fit">Keep ratio (letterbox)</option>
-                                    <option value="@MonitoringMapWallboardFit.Stretch">Stretch to fill screen</option>
-                                </select>
-                            </label>
-                        </div>
-
-                        @* Grid geometry is authoritative under v2 - these were hidden round-trip fields until
-                           now, which is exactly why cells were chosen over pixels: change the column count and
-                           every widget flows with it instead of standing still. *@
-                        <div data-map-map-group="grid" hidden>
-                            <div class="map-grid-fields">
-                                <label class="workspace-field">
-                                    <span class="workspace-label">Columns</span>
-                                    <input asp-for="Input.Columns" type="number" min="2" max="48" class="form-control workspace-input" data-map-columns />
-                                </label>
-                                <label class="workspace-field">
-                                    <span class="workspace-label">Rows</span>
-                                    <input asp-for="Input.Rows" type="number" min="2" max="32" class="form-control workspace-input" data-map-rows />
-                                </label>
-                                <label class="workspace-field">
-                                    <span class="workspace-label">Gap (px)</span>
-                                    <input asp-for="Input.TilePadding" type="number" min="0" max="80" class="form-control workspace-input" data-map-tile-padding />
-                                </label>
-                                <label class="workspace-field">
-                                    <span class="workspace-label">Margin (px)</span>
-                                    <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="form-control workspace-input" data-map-outer-margin />
-                                </label>
-                            </div>
-                            <span class="workspace-inline-note">Gap and margin are in logical canvas pixels (the canvas is 1920 wide whatever the screen), so they scale with the board. Widgets are re-clamped into the new grid as you change it.</span>
-                        </div>
-
-                        <div data-map-map-group="wallboard" hidden>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Auto-rotate (seconds per slide)</span>
-                                <input asp-for="Input.AutoRotateSeconds" type="number" min="3" max="600" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Page indicator</span>
-                                <select asp-for="Input.PaginationMode" class="form-select workspace-select">
-                                    <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
-                                    <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
-                                    <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on mouse-move / change</option>
-                                    <option value="@MonitoringMapPaginationMode.Hidden">Hidden (auto-rotate only)</option>
-                                </select>
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Board timezone</span>
-                                <input asp-for="Input.DisplayTimeZoneId" class="form-control workspace-input" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
-                                <datalist id="map-timezone-list">
-                                    @foreach (var zone in TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
-                                    {
-                                        <option value="@zone"></option>
-                                    }
-                                </datalist>
-                                <span class="workspace-inline-note">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
-                            </label>
-                            <div class="map-property-checks">
-                                <label><input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers /> <span>Show slide headings on the board</span></label>
-                                <label><input asp-for="Input.PublicEnabled" data-map-public-enabled /> <span>Publish an anonymous link</span></label>
-                            </div>
-                            <div class="map-property-hint">
-                                The public link needs no sign-in - anyone holding it sees the board. Turning this
-                                off makes the link 404 immediately, including its live-data endpoint. Copy or
-                                rotate the link on the Maps page.
-                            </div>
-                            <div class="map-property-hint">
-                                Auto-rotate &amp; the page indicator are used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
-                            </div>
-                        </div>
-                    </section>
-
-                    @* Slide properties. These fields are NOT model-bound: the designer keeps the slide list in
-                       JS and re-renders the hidden Input.Slides[..] inputs from it (renderSlideInputs), which
-                       is the path add/rename/reorder/delete already went through. *@
-                    <section class="map-property-panel map-slide-panel" data-map-slide-panel hidden>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Slide name</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="name" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Heading</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="title" placeholder="Shown on the board" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Sub-heading</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="subtitle" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Duration (seconds)</span>
-                            <input type="number" min="3" max="600" class="form-control workspace-input" data-map-slide-field="durationSeconds" placeholder="Map default" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Background</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="backgroundColor" placeholder="auto or #0b1220" />
-                        </label>
-                        <div class="map-property-checks">
-                            <label><input type="checkbox" data-map-slide-field="showHeader" /> <span>Show this slide heading</span></label>
-                        </div>
-                        <div class="map-property-hint">Duration overrides the map auto-rotate for this slide only.</div>
-                    </section>
-
-                    <div class="map-property-empty" data-map-property-empty hidden>
-                        Select the map title, a slide or a tile to edit its properties.
+                    <div class="map-property-empty" data-map-property-empty>
+                        Select a widget on the canvas to edit it. Board settings live in the Display and Settings tabs.
                     </div>
                     <div data-map-property-host>
                         @for (var index = 0; index < Model.Input.Tiles.Count; index++)
@@ -461,10 +318,250 @@
                                         <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
                                     </div>
                                 </div>
+                                <div data-map-prop-group="advanced" hidden>
+                                    @* Four buckets, not six states: "up / warning / down / unknown" is how
+                                       someone configuring a wallboard thinks. MonitoringMapColorRules is where
+                                       the six SensorStates collapse into these four, in one place. *@
+                                    <span class="workspace-label">Colour rules</span>
+                                    <div class="map-color-rules">
+                                        @foreach (var bucket in MonitoringMapColorRules.Buckets)
+                                        {
+                                            var current = tile.ColorRules.TryGetValue(bucket.Key, out var hex) ? hex : string.Empty;
+                                            <label class="map-color-rule">
+                                                <span>@bucket.Label</span>
+                                                <input type="text" class="form-control workspace-input"
+                                                       name="Input.Tiles[@index].ColorRules[@bucket.Key]" value="@current"
+                                                       placeholder="theme" data-map-color-rule="@bucket.Key" />
+                                            </label>
+                                        }
+                                    </div>
+                                    <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
+                                    <label class="workspace-field">
+                                        <span class="workspace-label">Refresh (seconds)</span>
+                                        <input asp-for="Input.Tiles[index].RefreshSeconds" type="number" min="0" max="3600" class="form-control workspace-input" placeholder="0" />
+                                        <span class="workspace-inline-note">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence. Useful for a widget whose data is expensive or slow-changing.</span>
+                                    </label>
+                                </div>
                             </section>
                         }
                     </div>
                 </aside>
+            </div>
+
+                @* Filmstrip at the BOTTOM of the editor, as in the mockup - switching slide while
+                   designing should not mean leaving the canvas. *@
+                <div class="map-slide-strip" data-map-slide-strip>
+                    <div class="map-slide-tabs" data-map-slide-tabs>
+                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                        {
+                            var slide = Model.Input.Slides[slideIndex];
+                            <button type="button" class="map-slide-tab @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id"
+                                    data-slide-title="@slide.Title" data-slide-subtitle="@slide.Subtitle"
+                                    data-slide-duration="@slide.DurationSeconds" data-slide-bg="@slide.BackgroundColor"
+                                    data-slide-show-header="@(slide.ShowHeader ? "true" : "false")">@slide.Name</button>
+                        }
+                    </div>
+                    <div class="map-slide-actions">
+                        <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
+                        <button type="button" class="map-slide-action" data-map-slide-duplicate title="Duplicate this slide and its widgets">@MatmonIcons.Render("copy")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-move="-1" title="Move slide left">@MatmonIcons.Render("arrow-left")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-move="1" title="Move slide right">@MatmonIcons.Render("arrow-right")</button>
+                        <button type="button" class="map-slide-action" data-map-slide-settings title="Slide properties">@MatmonIcons.Render("gear")</button>
+                        <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
+                    </div>
+                    <div data-map-slide-inputs hidden></div>
+                </div>
+            </div>
+
+            @* --- Slides -------------------------------------------------------------------------------- *@
+            @* The filmstrip renders a REAL miniature of each slide through the same _MapSlide partial the
+               board uses, not a hand-drawn thumbnail: a preview that can disagree with the board is worse
+               than no preview. *@
+            <div class="map-tab-panel" data-sensor-tab="slides">
+                <div class="map-slides-layout">
+                    <div class="map-slides-strip" data-map-slide-previews>
+                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                        {
+                            var slide = Model.Input.Slides[slideIndex];
+                            <button type="button" class="map-slide-card @(slideIndex == 0 ? "is-active" : "")"
+                                    data-map-slide-card data-slide-id="@slide.Id" draggable="true">
+                                <span class="map-slide-card-frame">
+                                    <span class="map-slide-card-index">@(slideIndex + 1)</span>
+                                    <span class="map-slide-card-preview" data-map-slide-preview></span>
+                                </span>
+                                <span class="map-slide-card-meta">
+                                    <strong>@slide.Name</strong>
+                                    <small>@(slide.DurationSeconds is { } seconds ? $"{seconds}s" : "Map default")</small>
+                                </span>
+                            </button>
+                        }
+                    </div>
+
+                    <section class="panel-subcard map-slide-panel" data-map-slide-panel>
+                        <h3 class="map-settings-title">Selected slide</h3>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Slide name</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="name" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Heading</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="title" placeholder="Shown on the board" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Sub-heading</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="subtitle" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Duration (seconds)</span>
+                            <input type="number" min="3" max="600" class="form-control workspace-input" data-map-slide-field="durationSeconds" placeholder="Map default" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Background</span>
+                            <input type="text" class="form-control workspace-input" data-map-slide-field="backgroundColor" placeholder="auto or #0b1220" />
+                        </label>
+                        <div class="map-property-checks">
+                            <label><input type="checkbox" data-map-slide-field="showHeader" /> <span>Show this slide heading</span></label>
+                        </div>
+                        <div class="map-property-hint">Duration overrides the map auto-rotate for this slide only. Drag a card to reorder.</div>
+                        <div data-map-prop-group="advanced" hidden>
+                            @* Four buckets, not six states: "up / warning / down / unknown" is how
+                               someone configuring a wallboard thinks. MonitoringMapColorRules is where
+                               the six SensorStates collapse into these four, in one place. *@
+                            <span class="workspace-label">Colour rules</span>
+                            <div class="map-color-rules">
+                                @foreach (var bucket in MonitoringMapColorRules.Buckets)
+                                {
+                            var current = string.Empty;
+                            <label class="map-color-rule">
+                                <span>@bucket.Label</span>
+                                <input type="text" class="form-control workspace-input"
+                                       name="Input.Tiles[__index__].ColorRules[@bucket.Key]" value="@current"
+                                       placeholder="theme" data-map-color-rule="@bucket.Key" />
+                            </label>
+                                }
+                            </div>
+                            <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Refresh (seconds)</span>
+                                <input name="Input.Tiles[__index__].RefreshSeconds" value="0" type="number" min="0" max="3600" class="form-control workspace-input" placeholder="0" />
+                                <span class="workspace-inline-note">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence. Useful for a widget whose data is expensive or slow-changing.</span>
+                            </label>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            @* --- Display ------------------------------------------------------------------------------- *@
+            <div class="map-tab-panel" data-sensor-tab="display">
+                <div class="map-settings-grid">
+                    <section class="panel-subcard">
+                        <h3 class="map-settings-title">Canvas</h3>
+                        <div class="workspace-field">
+                            <span class="workspace-label">Aspect ratio</span>
+                            <div class="map-aspect-presets">
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="9">16:9</button>
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="10">16:10</button>
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="21" data-aspect-h="9">21:9</button>
+                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="4" data-aspect-h="3">4:3</button>
+                            </div>
+                            <div class="map-aspect-custom">
+                                <input asp-for="Input.AspectRatioWidth" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-w aria-label="Aspect ratio width" />
+                                <span class="map-aspect-colon">:</span>
+                                <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
+                            </div>
+                            <span class="workspace-inline-note">Only the ratio matters &mdash; the board scales to any screen. Widgets keep their grid cell position and size regardless of it.</span>
+                        </div>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Wallboard fit</span>
+                            <select asp-for="Input.WallboardFit" class="form-select workspace-select">
+                                <option value="@MonitoringMapWallboardFit.Fit">Keep ratio (letterbox)</option>
+                                <option value="@MonitoringMapWallboardFit.Stretch">Stretch to fill screen</option>
+                            </select>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Board timezone</span>
+                            <input asp-for="Input.DisplayTimeZoneId" class="form-control workspace-input" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
+                            <datalist id="map-timezone-list">
+                                @foreach (var zone in TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
+                                {
+                                    <option value="@zone"></option>
+                                }
+                            </datalist>
+                            <span class="workspace-inline-note">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
+                        </label>
+                    </section>
+
+                    <section class="panel-subcard">
+                        <h3 class="map-settings-title">Rotation</h3>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Auto-rotate (seconds per slide)</span>
+                            <input asp-for="Input.AutoRotateSeconds" type="number" min="3" max="600" class="form-control workspace-input" />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Page indicator</span>
+                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
+                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on mouse-move / change</option>
+                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden (auto-rotate only)</option>
+                            </select>
+                        </label>
+                        <div class="map-property-checks">
+                            <label><input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers /> <span>Show slide headings on the board</span></label>
+                        </div>
+                        <div class="map-property-hint">
+                            Auto-rotate and the page indicator are used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            @* --- Settings ------------------------------------------------------------------------------ *@
+            <div class="map-tab-panel" data-sensor-tab="settings">
+                <div class="map-settings-grid">
+                    <section class="panel-subcard">
+                        <h3 class="map-settings-title">Board</h3>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Name</span>
+                            <input asp-for="Input.Name" class="form-control workspace-input" data-map-name />
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Description</span>
+                            <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
+                        </label>
+                        <div class="map-property-checks">
+                            <label><input asp-for="Input.PublicEnabled" data-map-public-enabled /> <span>Publish an anonymous link</span></label>
+                        </div>
+                        <div class="map-property-hint">
+                            The public link needs no sign-in - anyone holding it sees the board. Turning this off makes the link 404 immediately, including its live-data endpoint. Copy or rotate the link on the Maps page.
+                        </div>
+                    </section>
+
+                    @* Grid geometry is authoritative under v2 - this is exactly why cells were chosen over
+                       pixels: change the column count and every widget flows with it instead of standing still. *@
+                    <section class="panel-subcard">
+                        <h3 class="map-settings-title">Grid</h3>
+                        <div class="map-grid-fields">
+                            <label class="workspace-field">
+                                <span class="workspace-label">Columns</span>
+                                <input asp-for="Input.Columns" type="number" min="2" max="48" class="form-control workspace-input" data-map-columns />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Rows</span>
+                                <input asp-for="Input.Rows" type="number" min="2" max="32" class="form-control workspace-input" data-map-rows />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Gap (px)</span>
+                                <input asp-for="Input.TilePadding" type="number" min="0" max="80" class="form-control workspace-input" data-map-tile-padding />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Margin (px)</span>
+                                <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="form-control workspace-input" data-map-outer-margin />
+                            </label>
+                        </div>
+                        <span class="workspace-inline-note">Gap and margin are in logical canvas pixels (the canvas is 1920 wide whatever the screen), so they scale with the board. Widgets are re-clamped into the new grid when you commit a change.</span>
+                    </section>
+                </div>
             </div>
 
             @* One pin row, cloned per pin by the designer. The target uses the SAME element picker as

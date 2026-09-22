@@ -75,6 +75,8 @@ public sealed class MapSaveRoundTripTests : IDisposable
         SlaWindowDays = 30,
         ImageAssetId = Guid.NewGuid(),
         ImageFit = MonitoringMapImageFit.Cover,
+        ColorRules = new Dictionary<string, string> { ["up"] = "#11aa22", ["down"] = "#cc2233" },
+        RefreshSeconds = 120,
         Pins =
         [
             new MonitoringMapPin
@@ -128,7 +130,17 @@ public sealed class MapSaveRoundTripTests : IDisposable
 
             var expected = property.GetValue(original);
             var actual = property.GetValue(saved);
-            if (!Equals(expected, actual))
+
+            // Dictionaries compare by REFERENCE, which would make this test fail for a field that round-trips
+            // perfectly AND pass for nothing - so collections are compared by content.
+            var equal = (expected, actual) switch
+            {
+                (IDictionary<string, string> left, IDictionary<string, string> right) =>
+                    left.Count == right.Count && left.All(entry => right.TryGetValue(entry.Key, out var value) && value == entry.Value),
+                _ => Equals(expected, actual)
+            };
+
+            if (!equal)
             {
                 mismatches.Add($"{property.Name}: expected {expected ?? "null"}, got {actual ?? "null"}");
             }

@@ -292,6 +292,17 @@ public sealed class MonitoringMapTile
 
     public MonitoringMapImageFit ImageFit { get; set; } = MonitoringMapImageFit.Contain;
 
+    /// <summary>
+    /// Per-state colour overrides for this tile, keyed by the bucket names in
+    /// <see cref="MonitoringMapColorRules"/>. Empty = the theme's own state colours.
+    /// </summary>
+    public Dictionary<string, string> ColorRules { get; set; } = [];
+
+    /// <summary>How often this tile's data may be recomputed, in seconds. This is a server-side CACHE TTL,
+    /// not a per-widget timer: the board polls on one schedule, and a widget whose data is expensive (SLA)
+    /// or slow-changing simply reuses its last answer for this long. 0 = the board's own cadence.</summary>
+    public int RefreshSeconds { get; set; }
+
     /// <summary>Status markers on an image or geo tile.</summary>
     public List<MonitoringMapPin> Pins { get; set; } = [];
 
@@ -323,7 +334,9 @@ public sealed class MonitoringMapTile
         SlaWindowDays = SlaWindowDays,
         ImageAssetId = ImageAssetId,
         ImageFit = ImageFit,
-        Pins = Pins.Select(pin => pin.Clone()).ToList()
+        Pins = Pins.Select(pin => pin.Clone()).ToList(),
+        ColorRules = new Dictionary<string, string>(ColorRules),
+        RefreshSeconds = RefreshSeconds
     };
 }
 
@@ -590,4 +603,63 @@ public enum MonitoringMapImageFit
 
     /// <summary>Distorts to fill exactly.</summary>
     Stretch = 2
+}
+
+/// <summary>
+/// The four colour buckets a map tile can override. Deliberately FOUR, while <see cref="SensorState"/> has
+/// six: "Up / Warning / Down / Unknown" is how someone configuring a wallboard thinks, and asking them to
+/// colour Disabled and Paused separately is asking a question they do not have an opinion about. The mapping
+/// below is where the six collapse into the four, in one place.
+/// </summary>
+public static class MonitoringMapColorRules
+{
+    public const string Up = "up";
+    public const string Warning = "warning";
+    public const string Down = "down";
+    public const string Unknown = "unknown";
+
+    public static IReadOnlyList<(string Key, string Label)> Buckets { get; } =
+    [
+        (Up, "Up / healthy"),
+        (Warning, "Warning"),
+        (Down, "Down / critical"),
+        (Unknown, "Unknown / paused")
+    ];
+
+    /// <summary>Which bucket a concrete sensor state falls into. Paused counts as Unknown rather than as Up:
+    /// a paused sensor is not reporting, and painting it green would be a lie on a wall display.</summary>
+    public static string BucketFor(SensorState state) => state switch
+    {
+        SensorState.Healthy => Up,
+        SensorState.Warning => Warning,
+        SensorState.Critical => Down,
+        SensorState.Disabled => Down,
+        _ => Unknown
+    };
+
+    /// <summary>The tile's override for a state, or null to keep the theme colour. Validated through
+    /// <see cref="BrandingSafety.SafeHexColor"/> at the point of use, never trusted raw into CSS.</summary>
+    public static string? Resolve(IReadOnlyDictionary<string, string>? rules, SensorState state) =>
+        rules is not null && rules.TryGetValue(BucketFor(state), out var color)
+            ? BrandingSafety.SafeHexColor(color)
+            : null;
+
+    public static string? ResolveByKey(IReadOnlyDictionary<string, string>? rules, string? stateKey)
+    {
+        if (rules is null || string.IsNullOrWhiteSpace(stateKey))
+        {
+            return null;
+        }
+
+        // The render pipeline speaks the presentation keys ("ok"/"warning"/"error"/"unknown"), not SensorState.
+        var bucket = stateKey.ToLowerInvariant() switch
+        {
+            "ok" => Up,
+            "warning" => Warning,
+            "error" => Down,
+            _ => Unknown
+        };
+
+        return rules.TryGetValue(bucket, out var color) ? BrandingSafety.SafeHexColor(color) : null;
+    }
 }

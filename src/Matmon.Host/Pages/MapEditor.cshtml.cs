@@ -223,7 +223,13 @@ public sealed class MapEditorModel : PageModel
         SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365),
         ImageAssetId = tile.ImageAssetId,
         ImageFit = tile.ImageFit,
-        Pins = ParsePins(tile.PinsJson)
+        Pins = ParsePins(tile.PinsJson),
+        // Only real #rrggbb values are stored - an unparseable one would just be ignored at render time, so
+        // keeping it would leave the user staring at a value that does nothing.
+        ColorRules = tile.ColorRules
+            .Where(entry => BrandingSafety.SafeHexColor(entry.Value) is not null)
+            .ToDictionary(entry => entry.Key, entry => BrandingSafety.SafeHexColor(entry.Value)!),
+        RefreshSeconds = Math.Clamp(tile.RefreshSeconds, 0, 3600)
     };
 
     /// <summary>Parses the designer's pin JSON defensively - a malformed blob costs the tile its pins, never
@@ -322,7 +328,9 @@ public sealed class MapEditorModel : PageModel
                     SlaWindowDays = tile.SlaWindowDays,
                     ImageAssetId = tile.ImageAssetId,
                     ImageFit = tile.ImageFit,
-                    PinsJson = tile.Pins.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Pins, PinJsonOptions)
+                    PinsJson = tile.Pins.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Pins, PinJsonOptions),
+                    ColorRules = new Dictionary<string, string>(tile.ColorRules),
+                    RefreshSeconds = tile.RefreshSeconds
                 })).ToList()
             };
 
@@ -571,6 +579,13 @@ public sealed class MapTileInput
     /// designer clones whole tiles by rewriting their field names - index-based binding would mean
     /// re-indexing a nested collection on every clone and delete. One opaque string moves with the tile.</summary>
     public string? PinsJson { get; set; }
+
+    /// <summary>Per-state colour overrides, keyed by the MonitoringMapColorRules buckets. Bound as an indexed
+    /// dictionary (Input.Tiles[i].ColorRules[up]) - it is a fixed, tiny key set, so unlike the pins it does
+    /// not need the JSON treatment.</summary>
+    public Dictionary<string, string> ColorRules { get; set; } = [];
+
+    public int RefreshSeconds { get; set; }
 
     public bool IsDeleted { get; set; }
 }

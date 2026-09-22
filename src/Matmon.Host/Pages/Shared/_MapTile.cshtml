@@ -26,7 +26,7 @@
          data-kind="@tile.Kind.ToString().ToLowerInvariant()"
          data-visual="@Model.EffectiveVisualType.ToString().ToLowerInvariant()"
          @Html.Raw(editorAttributes)
-         style="--tile-x: @Model.TileX; --tile-y: @Model.TileY; --tile-w: @Model.TileWidth; --tile-h: @Model.TileHeight; --stack-min-h: @(tile.RowSpan * 72)px; @MapTileRender.TileStyle(tile)"
+         style="--tile-x: @Model.TileX; --tile-y: @Model.TileY; --tile-w: @Model.TileWidth; --tile-h: @Model.TileHeight; --stack-min-h: @(tile.RowSpan * 72)px; @MapTileRender.TileStyle(tile, Model.StateKey)"
          hidden="@(Model.IsDeleted ? "hidden" : null)">
     @if (Model.Editable)
     {
