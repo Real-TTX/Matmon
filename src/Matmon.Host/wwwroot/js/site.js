@@ -3489,6 +3489,10 @@ function initializeMapDesigner() {
   const slideAddButton = form?.querySelector("[data-map-slide-add]");
   let slides = [];
   let activeSlideId = "";
+  // Forward reference: renderSlideTabs is declared long before renderSlidePreviews, and `typeof` on a const
+  // still in its temporal dead zone throws - so the strip is refreshed through a mutable hook that is a no-op
+  // until the real renderer exists.
+  let refreshSlidePreviews = () => {};
   // Numeric keys because an enum round-tripped through a hidden input can arrive as either the name or the
   // underlying int depending on which path wrote it.
   const numericKindMap = {
@@ -4688,6 +4692,7 @@ function initializeMapDesigner() {
       setText(".map-slide-row-duration", slide.durationSeconds ? `${slide.durationSeconds}s` : "—");
       slideTabsHost.appendChild(row);
     });
+    refreshSlidePreviews();
     const counter = form?.querySelector("[data-map-slide-count]");
     if (counter) {
       counter.textContent = String(slides.length);
@@ -5111,10 +5116,47 @@ function initializeMapDesigner() {
   // is worse than no preview at all. Cloned from the live canvas so it reflects unsaved edits too.
   const slidePreviewHost = form?.querySelector("[data-map-slide-previews]");
 
+  // Same prototype trick as the slide rows: clone the server's own card so an added slide's miniature is
+  // markup-identical to a loaded one.
+  const slideCardPrototype = slidePreviewHost?.querySelector("[data-map-slide-card]")?.cloneNode(true) || null;
+  const autoRotateInput = form?.querySelector('[name="Input.AutoRotateSeconds"]');
+
+  // The filmstrip used to repaint only the cards the SERVER had rendered, so adding, duplicating, reordering
+  // or deleting a slide left it showing the old running order - and a preview that disagrees with the board
+  // is worse than no preview. Reconcile the card list against `slides` first, then paint.
+  const syncSlideCards = () => {
+    if (!slidePreviewHost || !slideCardPrototype) {
+      return;
+    }
+    const existing = new Map(Array.from(slidePreviewHost.querySelectorAll("[data-map-slide-card]"))
+      .map((card) => [card.dataset.slideId || "", card]));
+    slides.forEach((slide, index) => {
+      let card = existing.get(slide.id);
+      if (!card) {
+        card = slideCardPrototype.cloneNode(true);
+        card.dataset.slideId = slide.id;
+      }
+      existing.delete(slide.id);
+      card.classList.toggle("is-active", slide.id === activeSlideId);
+      const title = card.querySelector(".map-slide-card-meta strong");
+      if (title) {
+        title.textContent = `${index + 1}. ${slide.name}`;
+      }
+      const duration = card.querySelector(".map-slide-card-meta small");
+      if (duration) {
+        duration.textContent = `${slide.durationSeconds || autoRotateInput?.value || 15}s`;
+      }
+      // appendChild on a card already in the host MOVES it, which is how the order follows `slides`.
+      slidePreviewHost.appendChild(card);
+    });
+    existing.forEach((card) => card.remove());
+  };
+
   const renderSlidePreviews = () => {
     if (!slidePreviewHost) {
       return;
     }
+    syncSlideCards();
     const { logicalWidth, logicalHeight } = readLogicalSize();
     slidePreviewHost.style.setProperty("--map-preview-ratio", `${logicalWidth} / ${logicalHeight}`);
 
@@ -5154,42 +5196,49 @@ function initializeMapDesigner() {
     });
   };
 
-  form?.querySelectorAll("[data-map-slide-card]").forEach((card) => {
-    card.addEventListener("click", () => {
-      setActiveSlide(card.dataset.slideId || "");
-      slidePreviewHost?.querySelectorAll("[data-map-slide-card]").forEach((other) => {
-        other.classList.toggle("is-active", other === card);
-      });
-      selectSlide();
-    });
+  refreshSlidePreviews = renderSlidePreviews;
 
-    // Reorder by dragging a card - the mockup's filmstrip, and far more direct than the arrow buttons.
-    card.addEventListener("dragstart", (event) => {
-      event.dataTransfer?.setData("text/plain", card.dataset.slideId || "");
-      card.classList.add("is-dragging");
-    });
-    card.addEventListener("dragend", () => card.classList.remove("is-dragging"));
-    card.addEventListener("dragover", (event) => event.preventDefault());
-    card.addEventListener("drop", (event) => {
-      event.preventDefault();
-      const movedId = event.dataTransfer?.getData("text/plain");
-      const from = slides.findIndex((candidate) => candidate.id === movedId);
-      const to = slides.findIndex((candidate) => candidate.id === card.dataset.slideId);
-      if (from < 0 || to < 0 || from === to) {
-        return;
-      }
-      slides.splice(to, 0, slides.splice(from, 1)[0]);
-      renderSlideInputs();
-      renderSlideTabs();
-      window.location.hash = "";
-      // The cards are server-rendered, so reordering them in the DOM keeps the strip honest without a reload.
-      const cards = Array.from(slidePreviewHost.querySelectorAll("[data-map-slide-card]"));
-      const moved = cards.find((candidate) => candidate.dataset.slideId === movedId);
-      if (moved) {
-        slidePreviewHost.insertBefore(moved, from < to ? card.nextSibling : card);
-      }
-      renderSlidePreviews();
-    });
+  // Delegated, because the cards are rebuilt whenever the slide list changes - per-card listeners would be
+  // dropped by the first add and the strip would go inert.
+  slidePreviewHost?.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-map-slide-card]");
+    if (!card) {
+      return;
+    }
+    setActiveSlide(card.dataset.slideId || "");
+    selectSlide();
+  });
+
+  // Reorder by dragging a card - the mockup's filmstrip, and far more direct than arrow buttons.
+  slidePreviewHost?.addEventListener("dragstart", (event) => {
+    const card = event.target.closest("[data-map-slide-card]");
+    if (!card) {
+      return;
+    }
+    event.dataTransfer?.setData("text/plain", card.dataset.slideId || "");
+    card.classList.add("is-dragging");
+  });
+  slidePreviewHost?.addEventListener("dragend", (event) => {
+    event.target.closest("[data-map-slide-card]")?.classList.remove("is-dragging");
+  });
+  slidePreviewHost?.addEventListener("dragover", (event) => event.preventDefault());
+  slidePreviewHost?.addEventListener("drop", (event) => {
+    const card = event.target.closest("[data-map-slide-card]");
+    if (!card) {
+      return;
+    }
+    event.preventDefault();
+    const movedId = event.dataTransfer?.getData("text/plain");
+    const from = slides.findIndex((candidate) => candidate.id === movedId);
+    const to = slides.findIndex((candidate) => candidate.id === card.dataset.slideId);
+    if (from < 0 || to < 0 || from === to) {
+      return;
+    }
+    slides.splice(to, 0, slides.splice(from, 1)[0]);
+    renderSlideInputs();
+    // renderSlideTabs refreshes the strip, and syncSlideCards re-orders it from `slides` - so the DOM
+    // follows the model instead of being nudged into place by hand.
+    renderSlideTabs();
   });
   renderSlidePreviews();
   filterTools();

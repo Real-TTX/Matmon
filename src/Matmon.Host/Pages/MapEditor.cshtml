@@ -536,8 +536,15 @@
                         </label>
                         <label class="workspace-field">
                             <span class="workspace-label">Default duration</span>
+                            @* The stored value is folded into the option list: a select can only post one of
+                               its own options, so a board saved at 25 s would have been silently rewritten to
+                               the first entry the moment anything else on this page was saved. *@
+                            @{
+                                var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
+                                    .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
+                            }
                             <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
-                                @foreach (var seconds in new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 })
+                                @foreach (var seconds in rotationChoices)
                                 {
                                     <option value="@seconds">@seconds seconds</option>
                                 }
@@ -684,24 +691,21 @@
 
                     <section class="panel-subcard">
                         <h3 class="map-settings-title">Rotation</h3>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Auto-rotate (seconds per slide)</span>
-                            <input asp-for="Input.AutoRotateSeconds" type="number" min="3" max="600" class="form-control workspace-input" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Page indicator</span>
-                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
-                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on mouse-move / change</option>
-                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden (auto-rotate only)</option>
-                            </select>
-                        </label>
-                        <div class="map-property-checks">
-                            <label><input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers /> <span>Show slide headings on the board</span></label>
-                        </div>
+                        @* Autoplay, the per-slide duration and the page indicator live beside the slide list on
+                           the Editor tab - they are about the running order, and that is where you are looking
+                           when you set them. They are NOT repeated here: two inputs bound to one property post
+                           whichever the binder sees first, so the one you edited can silently lose. *@
                         <div class="map-property-hint">
-                            Auto-rotate and the page indicator are used by the public wallboard with more than one slide. The in-app viewer stays on manual controls.
+                            Autoplay, the slide duration and the page indicator sit next to the slide list on the
+                            <strong>Editor</strong> tab. They drive the public wallboard when a board has more than
+                            one slide; the in-app viewer stays on manual controls.
+                        </div>
+                        <div class="map-property-switches">
+                            <label class="map-switch">
+                                <input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Show slide headings on the board</span>
+                            </label>
                         </div>
                     </section>
                 </div>
