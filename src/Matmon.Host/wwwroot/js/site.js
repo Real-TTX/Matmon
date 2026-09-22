@@ -931,10 +931,9 @@ function initializeMapLiveData() {
       const percent = Math.min(100, Math.max(0, Number(data.progressPercent)));
       // Explicit fixed formatting: a locale-formatted "42,5" would make the whole declaration invalid.
       progress.style.setProperty("--map-progress", percent.toFixed(2));
-      const label = progress.querySelector("strong");
-      if (label) {
-        label.textContent = `${percent.toFixed(1)}%`;
-      }
+      // Deliberately NOT writing the percentage into the dial's <strong>: that is the reading (with its
+      // unit), kept in step by the [data-tile-value] setter above. Overwriting it here turned "12 ms" into
+      // "2.4%" on the first poll after load.
     }
 
     const line = tile.querySelector("[data-tile-graph-line]");
@@ -4066,6 +4065,9 @@ function initializeMapDesigner() {
     if (targetField) {
       targetField.hidden = isTargetless;
     }
+    // Channel + scale belong to the tiles that show ONE number: value, gauge and progress are all Value.
+    const isValue = kind === "Value";
+    panel.querySelectorAll("[data-map-property-value-only]").forEach((field) => { field.hidden = !isValue; });
     panel.querySelectorAll("[data-map-property-list-only]").forEach((field) => { field.hidden = !isList; });
     panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !isRows; });
     panel.querySelectorAll("[data-map-property-sla-only]").forEach((field) => { field.hidden = !isSla; });
@@ -4367,7 +4369,7 @@ function initializeMapDesigner() {
     panel?.querySelectorAll("[data-map-tile-column-span], [data-map-tile-row-span]").forEach((input) => {
       input.addEventListener("input", () => applyTilePosition(tile));
     });
-    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon]").forEach((input) => {
+    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon], [data-map-property-value-only] input").forEach((input) => {
       input.addEventListener("input", () => syncTileFromPanel(panel));
       input.addEventListener("change", () => syncTileFromPanel(panel));
     });
@@ -4521,6 +4523,42 @@ function initializeMapDesigner() {
     });
   };
 
+  // First free cell for a tile of this size on the ACTIVE slide, scanning left-to-right then down. Falls back
+  // to 1,1 when the board is genuinely full - better a visible overlap the user can drag apart than a click
+  // that silently does nothing.
+  const findFreeCell = (grid, columnSpan, rowSpan) => {
+    const taken = [];
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      if ((tile.dataset.slideId || "") !== activeSlideId
+        || tile.querySelector("[data-map-tile-deleted]")?.value === "true") {
+        return;
+      }
+      const panel = getPanel(tile.dataset.tileIndex || "");
+      taken.push({
+        column: Number(tile.querySelector("[data-map-tile-column]")?.value || 1),
+        row: Number(tile.querySelector("[data-map-tile-row]")?.value || 1),
+        columnSpan: Number(panel?.querySelector("[data-map-tile-column-span]")?.value || 1),
+        rowSpan: Number(panel?.querySelector("[data-map-tile-row-span]")?.value || 1)
+      });
+    });
+
+    const overlaps = (column, row) => taken.some((other) =>
+      column < other.column + other.columnSpan
+      && column + columnSpan > other.column
+      && row < other.row + other.rowSpan
+      && row + rowSpan > other.row);
+
+    for (let row = 1; row <= grid.rows - rowSpan + 1; row += 1) {
+      for (let column = 1; column <= grid.columns - columnSpan + 1; column += 1) {
+        if (!overlaps(column, row)) {
+          return { column, row };
+        }
+      }
+    }
+
+    return { column: 1, row: 1 };
+  };
+
   const addTile = (tool, position, placement) => {
     if (!template || !propertyHost) {
       return;
@@ -4539,12 +4577,19 @@ function initializeMapDesigner() {
     // computed in px then converted to the nearest cell, since the drop point is a continuous position.
     let targetColumn = placement?.column;
     let targetRow = placement?.row;
-    if (targetColumn === undefined || targetRow === undefined) {
+    if ((targetColumn === undefined || targetRow === undefined) && position) {
       const rectW = columnSpan * grid.cellWidth + (columnSpan - 1) * grid.tilePadding;
       const rectH = rowSpan * grid.cellHeight + (rowSpan - 1) * grid.tilePadding;
-      const dropCell = pxPointToCell(grid, (position?.x ?? grid.outerMargin) - rectW / 2, (position?.y ?? grid.outerMargin) - rectH / 2);
+      const dropCell = pxPointToCell(grid, position.x - rectW / 2, position.y - rectH / 2);
       targetColumn = dropCell.column;
       targetRow = dropCell.row;
+    } else if (targetColumn === undefined || targetRow === undefined) {
+      // A palette CLICK has no drop point, and defaulting to the outer margin put every widget on cell 1,1 -
+      // click the palette four times and you have four tiles buried under each other, in a grid whose whole
+      // premise is that widgets do not overlap. So scan for the first cell the new tile actually fits in.
+      const free = findFreeCell(grid, columnSpan, rowSpan);
+      targetColumn = free.column;
+      targetRow = free.row;
     }
     const column = clamp(targetColumn, 1, Math.max(1, grid.columns - columnSpan + 1));
     const row = clamp(targetRow, 1, Math.max(1, grid.rows - rowSpan + 1));

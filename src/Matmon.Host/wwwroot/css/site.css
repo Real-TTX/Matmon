@@ -8647,38 +8647,78 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-gauge {
+  position: relative;
   flex: 1 1 auto;
-  min-height: 0;
   display: grid;
   place-items: center;
-  align-self: center;
-  height: 100%;
-  width: auto;
-  max-width: 100%;
-  margin: 0 auto;
-  aspect-ratio: 1;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at center, var(--matmon-surface) 0 55%, transparent 56%),
-    conic-gradient(var(--map-tile-accent) calc(var(--map-progress, 0) * 1%), color-mix(in srgb, var(--map-tile-accent) 14%, var(--matmon-border)) 0);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--map-tile-accent) 35%, transparent);
+  min-height: 0;
+  min-width: 0;
 }
 
-.map-tile-gauge span {
+.map-gauge {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.map-gauge-track,
+.map-gauge-fill {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+
+.map-gauge-track {
+  stroke: color-mix(in srgb, var(--map-tile-accent) 18%, var(--matmon-border));
+}
+
+/* pathLength="100" on the path is what makes this one line work: the dash array is then in PERCENT of the
+   arc, so the fill is the reading itself with no arc-length arithmetic in C# or JS. */
+.map-gauge-fill {
+  stroke: var(--map-tile-accent);
+  stroke-dasharray: var(--map-progress, 0) 100;
+  transition: stroke-dasharray 320ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-gauge-fill {
+    transition: none;
+  }
+}
+
+/* Sits in the mouth of the arc rather than in a punched-out hole, so the reading keeps its size while the
+   dial keeps its full sweep. */
+.map-gauge-readout {
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
   display: grid;
-  place-items: center;
-  gap: 0.08rem;
-  width: 64%;
-  aspect-ratio: 1;
-  border-radius: inherit;
-  background: var(--matmon-surface);
-  color: var(--matmon-text);
+  justify-items: center;
+  gap: 0.05rem;
+  max-width: 74%;
+  transform: translateX(-50%);
   text-align: center;
 }
 
-.map-tile-gauge strong {
-  font-size: 15cqmin;
+.map-gauge-readout strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 17cqmin;
   line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wins over the generic ".map-tile small" below by carrying one more class, so the order of these two blocks
+   in the file cannot silently decide the dial's caption size. */
+.map-tile .map-gauge-readout small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--matmon-muted);
+  font-size: 6.5cqmin;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .map-tile p,

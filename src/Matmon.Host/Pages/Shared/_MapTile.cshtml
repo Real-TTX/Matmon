@@ -189,9 +189,18 @@
 
     @if (Model.ProgressPercent.HasValue && Model.EffectiveVisualType == MonitoringMapTileVisualType.Gauge)
     {
+        @* A real dial: a 180-degree arc carrying pathLength="100", so the fill is set straight from the
+           percentage with no path maths anywhere. It used to be a 360-degree conic-gradient donut - a ring
+           chart, not a gauge, and it contradicted the very schematic the palette draws for this widget.
+           The big figure is the READING (with its unit); the caption underneath is the scale, because a
+           needle two thirds of the way round is unreadable if nothing says two thirds of what. *@
         <div class="map-tile-gauge" data-tile-progress style="--map-progress: @MapTileRender.FormatProgressPercent(Model.ProgressPercent)">
-            <span>
-                <strong>@MapTileRender.FormatProgressLabel(Model.ProgressPercent)</strong>
+            <svg class="map-gauge" viewBox="0 0 100 58" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                <path class="map-gauge-track" d="M8 52 A42 42 0 0 1 92 52" pathLength="100" />
+                <path class="map-gauge-fill" d="M8 52 A42 42 0 0 1 92 52" pathLength="100" />
+            </svg>
+            <span class="map-gauge-readout">
+                <strong data-tile-value>@(string.IsNullOrWhiteSpace(Model.Value) ? MapTileRender.FormatProgressLabel(Model.ProgressPercent) : Model.Value)</strong>
                 <small data-tile-progress-label>@Model.ProgressLabel</small>
             </span>
         </div>
@@ -206,7 +215,11 @@
         </div>
     }
 
-    @if (!isCollection && !string.IsNullOrWhiteSpace(Model.Value) && Model.EffectiveVisualType != MonitoringMapTileVisualType.Gauge)
+    @* "Gauge" only suppresses the plain reading when a dial was actually DRAWN. A gauge pointed at a channel
+       with no scale draws none (see MapDisplayProvider.ResolveSensorProgressPercent), and skipping the value
+       as well left that tile completely blank - the reading is still the point of the widget. *@
+    @if (!isCollection && !string.IsNullOrWhiteSpace(Model.Value)
+        && (Model.EffectiveVisualType != MonitoringMapTileVisualType.Gauge || !Model.ProgressPercent.HasValue))
     {
         <div class="map-tile-value" data-tile-value>@Model.Value</div>
     }

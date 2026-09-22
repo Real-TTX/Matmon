@@ -112,8 +112,7 @@ public sealed class MapDisplayProvider
             return CreateTile(tile, sensor, "unknown", "No data", sensor.SensorTypeKey, string.Empty, KindLabel(tile.Kind), "sensor");
         }
 
-        var channel = observation.Channels.FirstOrDefault(candidate => candidate.IsDefault)
-            ?? observation.Channels.FirstOrDefault(candidate => candidate.Value.HasValue);
+        var channel = ResolveTileChannel(observation, tile);
         var value = FormatObservationValue(observation, channel);
         var subtitle = string.IsNullOrWhiteSpace(observation.Message)
             ? sensor.SensorTypeKey
@@ -121,9 +120,12 @@ public sealed class MapDisplayProvider
         var graph = tile.Kind == MonitoringMapTileKind.Graph
             ? BuildSparkline(sensor.Id)
             : Sparkline.Empty;
-        var progressPercent = ResolveSensorProgressPercent(observation, channel);
+        var progressPercent = ResolveSensorProgressPercent(tile, channel);
+        // The dial's big figure is the reading itself, so this caption says what the dial is SCALED to -
+        // without it a needle two thirds round is unreadable, because nothing on the tile says two thirds of
+        // what. It falls back to the state only when there is no dial at all.
         var progressLabel = progressPercent.HasValue
-            ? $"{progressPercent.Value:0.#}%"
+            ? FormatGaugeScale(tile, channel)
             : MonitoringStatePresentation.Label(observation.State);
 
         return new MapDisplayTileViewModel(
@@ -690,24 +692,72 @@ public sealed class MapDisplayProvider
             pins);
     }
 
-    private static double? ResolveSensorProgressPercent(SensorObservation observation, SensorChannelValue? channel)
+    /// <summary>The channel a tile reads: the one it was pointed at, else the sensor's default, else the
+    /// first with a number. The VIRTUAL sensorState channel is never picked - it is a 1/0 health flag, not a
+    /// reading, and letting it win meant a failing sensor rendered a great big "0" as though that were its
+    /// measurement.</summary>
+    private static SensorChannelValue? ResolveTileChannel(SensorObservation observation, MonitoringMapTile tile)
     {
-        var numeric = channel?.Value ?? observation.Value;
-        if (numeric.HasValue && double.IsFinite(numeric.Value))
+        if (!string.IsNullOrWhiteSpace(tile.ChannelKey))
         {
-            return Math.Clamp(numeric.Value, 0, 100);
+            var requested = observation.Channels.FirstOrDefault(candidate =>
+                string.Equals(candidate.Key, tile.ChannelKey, StringComparison.OrdinalIgnoreCase));
+            if (requested is not null)
+            {
+                return requested;
+            }
         }
 
-        return observation.State switch
+        return observation.Channels.FirstOrDefault(candidate => candidate.IsDefault && !candidate.IsVirtual)
+            ?? observation.Channels.FirstOrDefault(candidate => !candidate.IsVirtual && candidate.Value.HasValue);
+    }
+
+    private static bool IsPercentChannel(SensorChannelValue? channel) =>
+        channel?.Unit is { } unit && unit.Trim() is "%" or "percent";
+
+    /// <summary>Where the needle sits, 0..100 - or null for "do not draw a dial".
+    /// A dial needs a scale, and only two things provide one: an explicit <see cref="MonitoringMapTile.GaugeMin"/>
+    /// / <see cref="MonitoringMapTile.GaugeMax"/>, or a channel that is already a percentage. The old code
+    /// clamped ANY number into 0..100 and called it a percent, so 12 ms of latency drew a dial at 12 % and
+    /// 4 500 ms drew a full one - and with no numeric channel at all it invented a position from the sensor
+    /// state, painting a needle that measured nothing. Both are made-up readings; on a wall display a made-up
+    /// reading is worse than an empty one.</summary>
+    private static double? ResolveSensorProgressPercent(MonitoringMapTile tile, SensorChannelValue? channel)
+    {
+        if (channel?.Value is not { } numeric || !double.IsFinite(numeric))
         {
-            SensorState.Healthy => 100,
-            SensorState.Paused => 100,
-            SensorState.Warning => 50,
-            SensorState.Critical => 0,
-            SensorState.Disabled => 0,
-            SensorState.Unknown => null,
-            _ => null
-        };
+            return null;
+        }
+
+        var (min, max) = ResolveGaugeScale(tile, channel);
+        if (max is null || min is null || max <= min)
+        {
+            return null;
+        }
+
+        return Math.Clamp((numeric - min.Value) / (max.Value - min.Value) * 100, 0, 100);
+    }
+
+    private static (double? Min, double? Max) ResolveGaugeScale(MonitoringMapTile tile, SensorChannelValue? channel)
+    {
+        if (tile.GaugeMin is { } min && tile.GaugeMax is { } max && max > min)
+        {
+            return (min, max);
+        }
+
+        return IsPercentChannel(channel) ? (0d, 100d) : (null, null);
+    }
+
+    private static string FormatGaugeScale(MonitoringMapTile tile, SensorChannelValue? channel)
+    {
+        var (min, max) = ResolveGaugeScale(tile, channel);
+        if (min is null || max is null)
+        {
+            return string.Empty;
+        }
+
+        var unit = string.IsNullOrWhiteSpace(channel?.Unit) ? string.Empty : " " + channel!.Unit!.Trim();
+        return $"{min.Value:0.##} - {max.Value:0.##}{unit}";
     }
 
     private static string FormatObservationValue(SensorObservation observation, SensorChannelValue? channel)

@@ -4096,6 +4096,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 normalized.ListLimit = Math.Clamp(tile.ListLimit, 1, 50);
                 normalized.SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365);
                 normalized.ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim();
+                normalized.ChannelKey = string.IsNullOrWhiteSpace(tile.ChannelKey) ? null : tile.ChannelKey.Trim();
+                // A half-entered or inverted range is not a scale - drop it and fall back to the percent rule
+                // rather than rendering a dial whose maths cannot work.
+                if (tile.GaugeMin is not { } gaugeMin || tile.GaugeMax is not { } gaugeMax || gaugeMax <= gaugeMin)
+                {
+                    normalized.GaugeMin = null;
+                    normalized.GaugeMax = null;
+                }
                 normalized.ImageAssetId = tile.ImageAssetId == Guid.Empty ? null : tile.ImageAssetId;
                 normalized.Pins = tile.Pins.Select(NormalizePin).ToList();
 

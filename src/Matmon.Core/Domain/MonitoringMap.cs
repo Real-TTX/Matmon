@@ -282,6 +282,21 @@ public sealed class MonitoringMapTile
     /// cells tall cannot honestly show twenty rows.</summary>
     public int ListLimit { get; set; } = 5;
 
+    /// <summary>Which channel a Value / Gauge / Progress tile reads. Null = the sensor's own default channel.
+    /// Without it a dial could only ever show whichever channel happened to be default, which on a
+    /// multi-channel sensor (CPU + memory + disk + SMART) is a coin toss - and the reason a gauge pointed at
+    /// a host so often showed a number nobody asked for.</summary>
+    public string? ChannelKey { get; set; }
+
+    /// <summary>Gauge / progress-bar scale, in the CHANNEL'S OWN unit. Null+null means "0..100 if the channel
+    /// is a percentage, otherwise no dial at all" - deliberately not a silent 0..100 fallback: treating 12 ms
+    /// of latency as 12 % is a made-up reading, and a made-up reading on a wall display is worse than none.
+    /// Set both to put a non-percent channel (latency, throughput, temperature) on a dial.</summary>
+    public double? GaugeMin { get; set; }
+
+    /// <inheritdoc cref="GaugeMin"/>
+    public double? GaugeMax { get; set; }
+
     /// <summary>Channel key a <see cref="MonitoringMapListMode.TopValue"/> list ranks by. Null = the sensor's
     /// default channel. Channel keys differ per sensor type and there is no cross-type catalog, so the editor
     /// fills this picker from the channels actually observed under the target.</summary>
@@ -335,6 +350,9 @@ public sealed class MonitoringMapTile
         ShowElementName = ShowElementName,
         ListMode = ListMode,
         ListLimit = ListLimit,
+        ChannelKey = ChannelKey,
+        GaugeMin = GaugeMin,
+        GaugeMax = GaugeMax,
         ListChannelKey = ListChannelKey,
         SlaWindowDays = SlaWindowDays,
         ImageAssetId = ImageAssetId,

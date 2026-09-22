@@ -220,6 +220,9 @@ public sealed class MapEditorModel : PageModel
         ShowElementName = tile.ShowElementName,
         ListMode = tile.ListMode,
         ListLimit = Math.Clamp(tile.ListLimit, 1, 50),
+        ChannelKey = string.IsNullOrWhiteSpace(tile.ChannelKey) ? null : tile.ChannelKey.Trim(),
+        GaugeMin = tile.GaugeMin,
+        GaugeMax = tile.GaugeMax,
         ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim(),
         SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365),
         ImageAssetId = tile.ImageAssetId,
@@ -326,6 +329,9 @@ public sealed class MapEditorModel : PageModel
                     ShowElementName = tile.ShowElementName,
                     ListMode = tile.ListMode,
                     ListLimit = tile.ListLimit,
+                    ChannelKey = tile.ChannelKey,
+                    GaugeMin = tile.GaugeMin,
+                    GaugeMax = tile.GaugeMax,
                     ListChannelKey = tile.ListChannelKey,
                     SlaWindowDays = tile.SlaWindowDays,
                     ImageAssetId = tile.ImageAssetId,
@@ -569,6 +575,12 @@ public sealed class MapTileInput
     public MonitoringMapListMode ListMode { get; set; } = MonitoringMapListMode.Worst;
 
     public int ListLimit { get; set; } = 5;
+
+    public string? ChannelKey { get; set; }
+
+    public double? GaugeMin { get; set; }
+
+    public double? GaugeMax { get; set; }
 
     public string? ListChannelKey { get; set; }
 

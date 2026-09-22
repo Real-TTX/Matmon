@@ -370,6 +370,27 @@
                                             <option value="@MonitoringMapListMode.Alphabetical">By name</option>
                                         </select>
                                     </label>
+                                    @* A value / gauge / progress tile has to be told WHICH channel it shows -
+                                       a host sensor reports CPU, memory, disk and SMART, and "whichever is
+                                       default" is a coin toss. The scale is separate because a dial needs one:
+                                       a percentage channel brings its own 0..100, anything else (latency,
+                                       throughput, temperature) has to say where full is. *@
+                                    <label class="workspace-field" data-map-property-value-only>
+                                        <span class="workspace-label">Channel</span>
+                                        <input asp-for="Input.Tiles[index].ChannelKey" class="form-control workspace-input" placeholder="Default channel" />
+                                        <span class="workspace-inline-note">Channel keys differ per sensor type (e.g. <code>cpu</code>, <code>memory</code>, <code>latency</code>) - the Channels tab of the sensor lists them. Empty = the sensor's own default channel.</span>
+                                    </label>
+                                    <div class="workspace-field map-property-size" data-map-property-value-only>
+                                        <label class="workspace-field">
+                                            <span class="workspace-label">Scale from</span>
+                                            <input asp-for="Input.Tiles[index].GaugeMin" type="number" step="any" class="form-control workspace-input" placeholder="0" />
+                                        </label>
+                                        <label class="workspace-field">
+                                            <span class="workspace-label">Scale to</span>
+                                            <input asp-for="Input.Tiles[index].GaugeMax" type="number" step="any" class="form-control workspace-input" placeholder="100" />
+                                        </label>
+                                    </div>
+                                    <span class="workspace-inline-note" data-map-property-value-only>A gauge or bar needs a scale. Leave both empty for a percentage channel; for anything else set them in the channel's own unit, or the tile shows the plain number instead of inventing a dial position.</span>
                                     <label class="workspace-field" data-map-property-list-only>
                                         <span class="workspace-label">Rank by channel</span>
                                         <input asp-for="Input.Tiles[index].ListChannelKey" class="form-control workspace-input" placeholder="Default channel" />
@@ -867,6 +888,21 @@
                                 <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
                             </select>
                         </label>
+                        <label class="workspace-field" data-map-property-value-only>
+                            <span class="workspace-label">Channel</span>
+                            <input name="Input.Tiles[__index__].ChannelKey" class="form-control workspace-input" placeholder="Default channel" />
+                        </label>
+                        <div class="workspace-field map-property-size" data-map-property-value-only>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Scale from</span>
+                                <input name="Input.Tiles[__index__].GaugeMin" type="number" step="any" class="form-control workspace-input" placeholder="0" />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Scale to</span>
+                                <input name="Input.Tiles[__index__].GaugeMax" type="number" step="any" class="form-control workspace-input" placeholder="100" />
+                            </label>
+                        </div>
+                        <span class="workspace-inline-note" data-map-property-value-only>Leave the scale empty for a percentage channel; set it in the channel's own unit for anything else.</span>
                         <label class="workspace-field" data-map-property-list-only>
                             <span class="workspace-label">Order</span>
                             <select name="Input.Tiles[__index__].ListMode" class="form-select workspace-select">
