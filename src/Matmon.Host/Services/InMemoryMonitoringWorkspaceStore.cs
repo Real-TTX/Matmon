@@ -592,6 +592,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         target.WallboardFit = draft.WallboardFit;
         target.DisplayTimeZoneId = string.IsNullOrWhiteSpace(draft.DisplayTimeZoneId) ? null : draft.DisplayTimeZoneId.Trim();
         target.AutoRotateSeconds = NormalizeAutoRotateSeconds(draft.AutoRotateSeconds);
+        target.AutoRotateEnabled = draft.AutoRotateEnabled;
         target.PaginationMode = draft.PaginationMode;
         target.PublicEnabled = draft.PublicEnabled;
         target.ShowSlideHeaders = draft.ShowSlideHeaders;

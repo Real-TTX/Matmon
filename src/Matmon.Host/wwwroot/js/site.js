@@ -3479,12 +3479,14 @@ function initializeMapDesigner() {
   const propertyHost = form?.querySelector("[data-map-property-host]");
   const propertyEmpty = form?.querySelector("[data-map-property-empty]");
   const template = form?.querySelector("template[data-map-tile-template]");
-  const slideStrip = form?.querySelector("[data-map-slide-strip]");
-  const slideTabsHost = slideStrip?.querySelector("[data-map-slide-tabs]");
-  const slideInputsHost = slideStrip?.querySelector("[data-map-slide-inputs]");
-  const slideAddButton = slideStrip?.querySelector("[data-map-slide-add]");
-  const slideRenameButton = slideStrip?.querySelector("[data-map-slide-rename]");
-  const slideDeleteButton = slideStrip?.querySelector("[data-map-slide-delete]");
+  // Resolved from the FORM, not from the old [data-map-slide-strip] wrapper the slide list used to sit in.
+  // When that wrapper became the bottom-row card these all silently became null, and the failure was quiet
+  // and total: renderSlideInputs() bailed out, so the hidden Input.Slides[..] fields were never written and
+  // a save would have dropped every slide - while the tiles, filtered against a slide id that then existed
+  // nowhere, all vanished from the canvas.
+  const slideTabsHost = form?.querySelector("[data-map-slide-tabs]");
+  const slideInputsHost = form?.querySelector("[data-map-slide-inputs]");
+  const slideAddButton = form?.querySelector("[data-map-slide-add]");
   let slides = [];
   let activeSlideId = "";
   // Numeric keys because an enum round-tripped through a hidden input can arrive as either the name or the
@@ -3636,7 +3638,10 @@ function initializeMapDesigner() {
       mapDescriptionPreview.textContent = description;
     }
     if (mapGridPreview) {
-      mapGridPreview.textContent = `${aspectWidth}:${aspectHeight} canvas`;
+      // The canvas header states the GRID, which is what you place widgets against - the aspect ratio is a
+      // Display setting and saying "16:9" here told you nothing about where a widget would land.
+      const grid = readGrid();
+      mapGridPreview.textContent = ` 00d7 `;
     }
   };
 
@@ -3648,6 +3653,31 @@ function initializeMapDesigner() {
   // The guide lines are server-rendered from MapTileRender.GridCells for the first paint. Once the user edits
   // columns/rows/gap/margin they have to be rebuilt from the same formula here, or the guides would keep
   // showing the old grid while the widgets already snap to the new one.
+
+  // The ruler labels are server-rendered as percentages of the logical canvas; once the user changes the
+  // grid they must be rebuilt from the same numbers, or they would keep counting the old columns.
+  const renderRulers = (grid) => {
+    const frame = form?.querySelector("[data-map-rulers]");
+    if (!frame) {
+      return;
+    }
+
+    const build = (host, count, positionOf, axis) => {
+      if (!host) {
+        return;
+      }
+      const parts = [];
+      for (let i = 0; i < count; i += 1) {
+        parts.push('<span style="' + axis + ':' + positionOf(i).toFixed(3) + '%">' + (i + 1) + "</span>");
+      }
+      host.innerHTML = parts.join("");
+    };
+
+    build(frame.querySelector(".map-ruler-columns"), grid.columns,
+      (i) => (cellRectToPx(grid, i + 1, 1, 1, 1).x + grid.cellWidth / 2) / grid.logicalWidth * 100, "left");
+    build(frame.querySelector(".map-ruler-rows"), grid.rows,
+      (i) => (cellRectToPx(grid, 1, i + 1, 1, 1).y + grid.cellHeight / 2) / grid.logicalHeight * 100, "top");
+  };
   const renderGridGuides = () => {
     if (!gridGuides) {
       return;
@@ -3662,6 +3692,7 @@ function initializeMapDesigner() {
       }
     }
     gridGuides.innerHTML = cells.join("");
+    renderRulers(grid);
   };
 
   const syncCanvas = () => {
@@ -3760,6 +3791,29 @@ function initializeMapDesigner() {
     setColor("--map-tile-custom-bg", background);
     setColor("--map-tile-custom-accent", accent);
     setColor("--map-tile-custom-text", text);
+  };
+
+  // The swatch is a convenience on top of the hex field, never a second source of truth: the TEXT input is
+  // what posts, because only it can hold "" = keep the theme colour, which a colour input cannot express.
+  const setupColorRules = (panel) => {
+    panel?.querySelectorAll("[data-map-color-rule]").forEach((text) => {
+      const key = text.dataset.mapColorRule;
+      const swatch = panel.querySelector('[data-map-color-swatch="' + key + '"]');
+      const clear = panel.querySelector('[data-map-color-clear="' + key + '"]');
+      swatch?.addEventListener("input", () => {
+        text.value = swatch.value.toUpperCase();
+      });
+      text.addEventListener("input", () => {
+        const value = text.value.trim();
+        if (swatch && colorPattern.test(value)) {
+          swatch.value = value;
+        }
+      });
+      clear?.addEventListener("click", () => {
+        text.value = "";
+        text.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    });
   };
 
   // --- Image upload + pin editor ----------------------------------------------------------------------
@@ -4163,6 +4217,22 @@ function initializeMapDesigner() {
         : (selectedText || "No target selected");
     }
 
+    // The properties header card names what you are editing, so it has to follow the same title/kind/icon
+    // the tile shows - otherwise the aside can end up claiming to edit a different widget.
+    const headTitle = panel.querySelector("[data-map-property-head-title]");
+    if (headTitle) {
+      headTitle.textContent = title.trim() || getKindLabel(kind);
+    }
+    const headKind = panel.querySelector("[data-map-property-head-kind]");
+    if (headKind) {
+      headKind.textContent = getKindLabel(kind);
+    }
+    const headIcon = panel.querySelector("[data-map-property-head-icon]");
+    const iconGlyph = panel.querySelector("[data-icon-picker-trigger-glyph]");
+    if (headIcon && iconGlyph) {
+      headIcon.replaceChildren(...Array.from(iconGlyph.childNodes).map((node) => node.cloneNode(true)));
+    }
+
     const showCard = panel.querySelector("[data-map-property-show-card]")?.checked ?? true;
     tile.classList.toggle("is-plain", !showCard);
 
@@ -4293,7 +4363,7 @@ function initializeMapDesigner() {
     panel?.querySelectorAll("[data-map-tile-column-span], [data-map-tile-row-span]").forEach((input) => {
       input.addEventListener("input", () => applyTilePosition(tile));
     });
-    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card]").forEach((input) => {
+    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon]").forEach((input) => {
       input.addEventListener("input", () => syncTileFromPanel(panel));
       input.addEventListener("change", () => syncTileFromPanel(panel));
     });
@@ -4304,8 +4374,7 @@ function initializeMapDesigner() {
     }
     syncTileFromPanel(panel);
 
-    tile.querySelector("[data-map-remove-tile]")?.addEventListener("click", (event) => {
-      event.stopPropagation();
+    const removeTile = () => {
       const deleted = tile.querySelector("[data-map-tile-deleted]");
       if (deleted) {
         deleted.value = "true";
@@ -4314,7 +4383,18 @@ function initializeMapDesigner() {
       tile.hidden = true;
       panel?.setAttribute("hidden", "hidden");
       selectMap();
+    };
+
+    tile.querySelector("[data-map-remove-tile]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeTile();
     });
+    // Same action from the properties header - one function, so the two can never drift apart.
+    panel?.querySelector("[data-map-property-remove]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      removeTile();
+    });
+    setupColorRules(panel);
 
     // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). It used to
     // be a thin header strip - barely 15% of a tile's height, and proportionally thinner the smaller the
@@ -4521,7 +4601,15 @@ function initializeMapDesigner() {
       syncCanvas();
     });
   });
+  // The zoom is a <select> now, so "change" is the event it actually fires.
+  scaleInput?.addEventListener("change", () => syncCanvas());
   scaleInput?.addEventListener("input", () => syncCanvas());
+  form?.querySelector("[data-map-fit-grid]")?.addEventListener("click", () => {
+    if (scaleInput) {
+      scaleInput.value = "1";
+    }
+    syncCanvas();
+  });
 
   const renderSlideInputs = () => {
     if (!slideInputsHost) {
@@ -4549,21 +4637,61 @@ function initializeMapDesigner() {
     });
   };
 
+  // The first server-rendered row is the prototype every JS-rendered row is cloned from (captured before the
+  // list is first re-rendered). A map with no rows yet - a brand new one - falls back to a hand-built row.
+  const slideRowPrototype = slideTabsHost?.querySelector("[data-map-slide-tab]")?.cloneNode(true) || null;
+  const buildFallbackSlideRow = () => {
+    const row = document.createElement("div");
+    row.innerHTML =
+      '<span class="map-slide-row-grip" aria-hidden="true"></span>'
+      + '<span class="map-slide-row-index"></span>'
+      + '<span class="map-slide-row-name"></span>'
+      + '<span class="map-slide-row-duration"></span>'
+      + '<span class="map-slide-row-actions">'
+      + '<button type="button" class="map-slide-row-action" data-map-slide-settings title="Slide properties">&#9881;</button>'
+      + '<button type="button" class="map-slide-row-action" data-map-slide-duplicate title="Duplicate slide">&#10697;</button>'
+      + '<button type="button" class="map-slide-row-action is-danger" data-map-slide-delete title="Delete slide">&#128465;</button>'
+      + "</span>";
+    return row;
+  };
+
   const renderSlideTabs = () => {
     if (!slideTabsHost) {
       return;
     }
     slideTabsHost.replaceChildren();
-    slides.forEach((slide) => {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = "map-slide-tab" + (slide.id === activeSlideId ? " is-active" : "");
-      tab.dataset.slideId = slide.id;
-      tab.setAttribute("data-map-slide-tab", "");
-      tab.textContent = slide.name;
-      tab.addEventListener("click", () => setActiveSlide(slide.id));
-      slideTabsHost.appendChild(tab);
+    slides.forEach((slide, index) => {
+      // Cloned from the server's own first row, so an added slide is markup-identical to a loaded one -
+      // including the icons. Hand-writing a lookalike here drifted from the server the moment either side
+      // changed, and the symptom was cosmetic enough to live for a long time.
+      const row = slideRowPrototype
+        ? slideRowPrototype.cloneNode(true)
+        : buildFallbackSlideRow();
+      row.className = "map-slide-row" + (slide.id === activeSlideId ? " is-active" : "");
+      row.dataset.slideId = slide.id;
+      row.dataset.slideTitle = slide.title || "";
+      row.dataset.slideSubtitle = slide.subtitle || "";
+      row.dataset.slideDuration = slide.durationSeconds || "";
+      row.dataset.slideBg = slide.backgroundColor || "";
+      row.dataset.slideShowHeader = slide.showHeader === false ? "false" : "true";
+      row.setAttribute("data-map-slide-tab", "");
+      row.draggable = true;
+      const setText = (selector, value) => {
+        const node = row.querySelector(selector);
+        if (node) {
+          // textContent, not innerHTML - a slide name is user input.
+          node.textContent = value;
+        }
+      };
+      setText(".map-slide-row-index", String(index + 1));
+      setText(".map-slide-row-name", slide.name);
+      setText(".map-slide-row-duration", slide.durationSeconds ? `${slide.durationSeconds}s` : "—");
+      slideTabsHost.appendChild(row);
     });
+    const counter = form?.querySelector("[data-map-slide-count]");
+    if (counter) {
+      counter.textContent = String(slides.length);
+    }
   };
 
   const applySlideFilter = () => {
@@ -4634,7 +4762,7 @@ function initializeMapDesigner() {
   slides = slideTabsHost
     ? Array.from(slideTabsHost.querySelectorAll("[data-map-slide-tab]")).map((tab) => ({
         id: tab.dataset.slideId,
-        name: tab.textContent.trim(),
+        name: (tab.querySelector(".map-slide-row-name")?.textContent || tab.textContent || "").trim(),
         title: tab.dataset.slideTitle || "",
         subtitle: tab.dataset.slideSubtitle || "",
         durationSeconds: tab.dataset.slideDuration || "",
@@ -4649,8 +4777,56 @@ function initializeMapDesigner() {
   renderSlideInputs();
   renderSlideTabs();
   slideAddButton?.addEventListener("click", addSlide);
-  slideRenameButton?.addEventListener("click", renameSlide);
-  slideDeleteButton?.addEventListener("click", deleteSlide);
+  // One delegated handler for the whole slide list. Delegation, not per-button listeners, because the rows
+  // are re-rendered on every add/reorder/rename - and crucially an action must act on ITS OWN row, not on
+  // whatever happened to be active, so the row is selected first.
+  slideTabsHost?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-map-slide-tab]");
+    if (!row) {
+      return;
+    }
+
+    const slideId = row.dataset.slideId || "";
+    if (slideId && slideId !== activeSlideId) {
+      setActiveSlide(slideId);
+    }
+
+    if (event.target.closest("[data-map-slide-settings]")) {
+      selectSlide();
+    } else if (event.target.closest("[data-map-slide-duplicate]")) {
+      duplicateActiveSlide();
+    } else if (event.target.closest("[data-map-slide-delete]")) {
+      deleteSlide();
+    }
+  });
+
+  // Reorder by dragging a row - same model mutation the filmstrip cards use.
+  slideTabsHost?.addEventListener("dragstart", (event) => {
+    const row = event.target.closest("[data-map-slide-tab]");
+    if (row) {
+      event.dataTransfer?.setData("text/plain", row.dataset.slideId || "");
+      row.classList.add("is-dragging");
+    }
+  });
+  slideTabsHost?.addEventListener("dragend", (event) => {
+    event.target.closest("[data-map-slide-tab]")?.classList.remove("is-dragging");
+  });
+  slideTabsHost?.addEventListener("dragover", (event) => event.preventDefault());
+  slideTabsHost?.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const target = event.target.closest("[data-map-slide-tab]");
+    const movedId = event.dataTransfer?.getData("text/plain");
+    const from = slides.findIndex((candidate) => candidate.id === movedId);
+    const to = slides.findIndex((candidate) => candidate.id === target?.dataset.slideId);
+    if (!target || from < 0 || to < 0 || from === to) {
+      return;
+    }
+    slides.splice(to, 0, slides.splice(from, 1)[0]);
+    renderSlideInputs();
+    renderSlideTabs();
+    renderSlidePreviews();
+  });
+
 
   canvas.querySelectorAll("[data-map-tile]").forEach(setupTile);
   applySlideFilter();
@@ -4724,6 +4900,46 @@ function initializeMapDesigner() {
     }
   };
   toolSearch?.addEventListener("input", filterTools);
+
+  // --- Canvas view toggles ----------------------------------------------------------------------------
+  // Purely how the canvas is drawn for this user, never part of the saved board - hence localStorage and not
+  // a map field. There is deliberately no "snap off": v2 stores cells, so there is no position to save
+  // between two of them.
+  const viewPreference = (key, fallback) => {
+    try {
+      const stored = window.localStorage?.getItem("matmon.map.view." + key);
+      return stored === null || stored === undefined ? fallback : stored === "true";
+    } catch {
+      return fallback;
+    }
+  };
+  const rememberViewPreference = (key, value) => {
+    try {
+      window.localStorage?.setItem("matmon.map.view." + key, value ? "true" : "false");
+    } catch {
+      /* private mode - the toggle still works for this session */
+    }
+  };
+  const bindViewToggle = (selector, key, apply) => {
+    const input = form?.querySelector(selector);
+    if (!input) {
+      return;
+    }
+    input.checked = viewPreference(key, true);
+    apply(input.checked);
+    input.addEventListener("change", () => {
+      rememberViewPreference(key, input.checked);
+      apply(input.checked);
+    });
+  };
+  bindViewToggle("[data-map-view-grid]", "grid", (on) => {
+    if (gridGuides) {
+      gridGuides.hidden = !on;
+    }
+  });
+  bindViewToggle("[data-map-view-rulers]", "rulers", (on) => {
+    form?.querySelector("[data-map-rulers]")?.classList.toggle("is-rulerless", !on);
+  });
 
   // --- Layout templates -------------------------------------------------------------------------------
   // A template is authored against a minimum grid; on a smaller one its slots would be clamped and pile up,
@@ -4816,22 +5032,6 @@ function initializeMapDesigner() {
       }
     });
   });
-  form?.querySelector("[data-map-slide-settings]")?.addEventListener("click", selectSlide);
-
-  // --- Slide order + duplicate ------------------------------------------------------------------------
-  form?.querySelectorAll("[data-map-slide-move]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const delta = Number(button.dataset.mapSlideMove || 0);
-      const from = slides.findIndex((candidate) => candidate.id === activeSlideId);
-      const to = from + delta;
-      if (from < 0 || to < 0 || to >= slides.length) {
-        return;
-      }
-      slides.splice(to, 0, slides.splice(from, 1)[0]);
-      renderSlideInputs();
-      renderSlideTabs();
-    });
-  });
 
   // cloneNode copies ATTRIBUTES, not live input state, so anything typed since page load would be lost in a
   // duplicate. Writing the current state back into the attributes first makes the clone faithful.
@@ -4849,7 +5049,9 @@ function initializeMapDesigner() {
     });
   };
 
-  form?.querySelector("[data-map-slide-duplicate]")?.addEventListener("click", () => {
+  // Named, because the slide list delegates to it - the rows are re-rendered constantly, so a listener
+  // bound to one button would be lost the first time a slide is added.
+  function duplicateActiveSlide() {
     const source = slides.find((candidate) => candidate.id === activeSlideId);
     if (!source) {
       return;
@@ -4901,7 +5103,7 @@ function initializeMapDesigner() {
     initializeElementPickers();
     initializeIconPicker();
     setActiveSlide(newSlideId);
-  });
+  }
 
 
   // --- Slide previews ---------------------------------------------------------------------------------

@@ -96,6 +96,10 @@ public sealed class MonitoringMap
     }
 
     /// <summary>Seconds each slide is shown before the public wallboard auto-advances to the next slide.</summary>
+    /// <summary>Whether the public wallboard advances slides on its own. Separate from the interval so
+    /// turning rotation off does not mean losing the configured cadence.</summary>
+    public bool AutoRotateEnabled { get; set; } = true;
+
     public int AutoRotateSeconds { get; set; } = 12;
 
     /// <summary>How the public wallboard shows the slide pagination / page indicator.</summary>
@@ -156,6 +160,7 @@ public sealed class MonitoringMap
         WallboardFit = WallboardFit,
         AutoRotateSeconds = AutoRotateSeconds,
         PaginationMode = PaginationMode,
+        AutoRotateEnabled = AutoRotateEnabled,
         DisplayTimeZoneId = DisplayTimeZoneId,
         CreatedUtc = CreatedUtc,
         UpdatedUtc = UpdatedUtc,
@@ -625,6 +630,17 @@ public static class MonitoringMapColorRules
         (Down, "Down / critical"),
         (Unknown, "Unknown / paused")
     ];
+
+    /// <summary>A representative swatch for a bucket - only what the editor's colour picker opens on when
+    /// the tile has no override for it. Never used at render time: an empty rule means "keep the theme
+    /// colour", which a colour input cannot express, so this is a starting point and not a default value.</summary>
+    public static string DefaultHex(string bucketKey) => bucketKey switch
+    {
+        Up => "#3FB950",
+        Warning => "#D29922",
+        Down => "#F85149",
+        _ => "#8B949E"
+    };
 
     /// <summary>Which bucket a concrete sensor state falls into. Paused counts as Unknown rather than as Up:
     /// a paused sensor is not reporting, and painting it green would be a lie on a wall display.</summary>

@@ -6,13 +6,23 @@
 }
 
 <section class="dashboard-shell maps-shell">
-    <div class="page-header">
+    @* Header per mockup: what this screen is, then the three board-level actions on the right with Save as
+       the filled primary. Preview/Fullscreen open the read-only viewer rather than duplicating the board. *@
+    <div class="page-header map-editor-header">
         <div class="page-title">
-            @MatmonIcons.Render("dashboard")
-            <h1>@(Model.IsCreateMode ? "New Map" : "Edit Map")</h1>
+            <div>
+                <h1>Layout &amp; Slides</h1>
+                <p class="map-editor-subtitle">Design your wallboard. Use the grid, add widgets and configure the slide rotation.</p>
+            </div>
         </div>
         <div class="page-actions">
             <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+            @if (!Model.IsCreateMode)
+            {
+                <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id" target="_blank" rel="noopener">@MatmonIcons.Render("eye")<span>Preview</span></a>
+                <button type="button" class="workspace-secondary-submit" data-map-fullscreen>@MatmonIcons.Render("move")<span>Fullscreen</span></button>
+            }
+            <button type="submit" form="map-editor-form" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save layout</span></button>
         </div>
     </div>
 
@@ -26,7 +36,7 @@
         </div>
     }
 
-    <form method="post" class="map-editor-form" data-map-designer-form>
+    <form method="post" id="map-editor-form" class="map-editor-form" data-map-designer-form>
         <input type="hidden" asp-for="Input.Id" />
         @* Grid geometry, ShowSlideHeaders and the public-link toggle are all real inputs in the Grid /
            Wallboard property tabs now. *@
@@ -76,15 +86,6 @@
             </div>
 
             <div class="map-tab-panel" data-sensor-tab="editor">
-            <div class="map-editor-toolbar">
-
-                <label class="map-editor-scale" title="Zoom the design canvas">
-                    <span class="workspace-label">Zoom</span>
-                    <input type="range" min="0.5" max="2" step="0.1" value="1" class="map-scale-range" data-map-scale />
-                    <span class="map-scale-output" data-map-scale-output>100%</span>
-                </label>
-            </div>
-
             <div class="map-designer-shell">
                 @* The palette is rendered from MapWidgetCatalog, not hand-written buttons: several entries are
                    the same tile Kind with a different VisualType (Gauge and Progress are both a Value tile),
@@ -124,12 +125,27 @@
                     <div class="map-toolbox-templates" data-map-layout-templates>
                         <span class="map-toolbox-group-label">Layouts</span>
                         <p class="map-toolbox-note">Fills the current slide with empty, correctly-sized widgets.</p>
-                        <div class="map-layout-chips">
+                        @* Thumbnails, not word chips: the whole point of a layout is its shape, and the
+                           shape is already declared as slots - so the preview is generated from the SAME
+                           slots the template applies. A hand-drawn thumbnail could disagree with it. *@
+                        <div class="map-layout-cards">
                         @foreach (var template in MapWidgetCatalog.LayoutTemplates)
                         {
-                            <button type="button" class="map-layout-chip" data-map-layout="@template.Key"
+                            <button type="button" class="map-layout-card" data-map-layout="@template.Key"
                                     data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
-                                    title="@template.Description">@template.Label</button>
+                                    title="@template.Description">
+                                <span class="map-layout-thumb" aria-hidden="true"
+                                      style="grid-template-columns: repeat(@template.MinColumns, 1fr); grid-template-rows: repeat(@template.MinRows, 1fr);">
+                                    @foreach (var slot in template.Slots)
+                                    {
+                                        <span style="grid-column: @slot.Column / span @slot.ColumnSpan; grid-row: @slot.Row / span @slot.RowSpan;"></span>
+                                    }
+                                </span>
+                                <span class="map-layout-card-meta">
+                                    <strong>@template.Label</strong>
+                                    <small>@template.Description</small>
+                                </span>
+                            </button>
                         }
                         </div>
                         <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
@@ -139,15 +155,72 @@
                 </aside>
 
                 <div class="map-designer-workbench">
-                    <button type="button" class="map-designer-map-title" data-map-select-map>
-                        <span class="map-designer-map-title-icon">@MatmonIcons.Render("dashboard")</span>
-                        <span>
+                    @* Canvas header per mockup: which slide, the geometry facts underneath, and the view
+                       controls on the right. Clicking the title still selects the board itself, which is how
+                       you get back from a widget to the board-level settings. *@
+                    <div class="map-canvas-head">
+                        <button type="button" class="map-canvas-title" data-map-select-map>
                             <strong data-map-title-preview>@Model.Input.Name</strong>
-                            <small data-map-description-preview>@(string.IsNullOrWhiteSpace(Model.Input.Description) ? "No description" : Model.Input.Description)</small>
-                        </span>
-                        <em data-map-grid-preview>@Model.Input.AspectRatioWidth:@Model.Input.AspectRatioHeight canvas</em>
-                    </button>
+                            <small>
+                                Grid: <b data-map-grid-preview>@Model.Input.Columns &times; @Model.Input.Rows</b>
+                                <span class="map-canvas-sep">|</span> Widget min: <b>2 &times; 2</b>
+                                <span class="map-canvas-sep">|</span> Snap: <b class="is-on">ON</b>
+                            </small>
+                        </button>
+                        <div class="map-canvas-tools">
+                            <label class="map-canvas-zoom" title="Zoom the design canvas">
+                                @* A select, not a slider: the mockup's discrete steps are what people actually
+                                   want here, and a range input gives no way to hit exactly 100%. The old
+                                   [data-map-scale] contract is unchanged, so the designer needs no change. *@
+                                <select class="form-select workspace-select" data-map-scale>
+                                    <option value="0.5">50%</option>
+                                    <option value="0.75">75%</option>
+                                    <option value="1" selected>100%</option>
+                                    <option value="1.25">125%</option>
+                                    <option value="1.5">150%</option>
+                                    <option value="2">200%</option>
+                                </select>
+                                <span class="map-scale-output" data-map-scale-output hidden>100%</span>
+                            </label>
+                            <button type="button" class="workspace-secondary-submit map-canvas-fit" data-map-fit-grid title="Reset the zoom so the whole board fits">
+                                @MatmonIcons.Render("move")<span>Fit to grid</span>
+                            </button>
+                        </div>
+                    </div>
 
+                    @* Rulers: the grid's own coordinates, so "put it in column 7" stops being guesswork. Each
+                       label is positioned as a PERCENTAGE of the logical canvas, computed from the same
+                       MapTileRender.GridCells the guide lines use - percentages survive the stage's uniform
+                       scale transform, absolute px would not. *@
+                    @{
+                        var rulerMap = new MonitoringMap
+                        {
+                            Columns = Model.Input.Columns,
+                            Rows = Model.Input.Rows,
+                            TilePadding = Model.Input.TilePadding,
+                            OuterMargin = Model.Input.OuterMargin,
+                            LogicalWidth = logicalSize.Width,
+                            LogicalHeight = logicalSize.Height
+                        };
+                        var rulerCells = MapTileRender.GridCells(rulerMap).ToArray();
+                    }
+                    <div class="map-canvas-frame" data-map-rulers>
+                        <div class="map-ruler map-ruler-columns" aria-hidden="true">
+                            @for (var column = 0; column < Model.Input.Columns; column++)
+                            {
+                                var cell = rulerCells[column];
+                                var centre = (cell.X + cell.W / 2.0) / logicalSize.Width * 100;
+                                <span style="left: @centre.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%">@(column + 1)</span>
+                            }
+                        </div>
+                        <div class="map-ruler map-ruler-rows" aria-hidden="true">
+                            @for (var row = 0; row < Model.Input.Rows; row++)
+                            {
+                                var cell = rulerCells[row * Model.Input.Columns];
+                                var centre = (cell.Y + cell.H / 2.0) / logicalSize.Height * 100;
+                                <span style="top: @centre.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%">@(row + 1)</span>
+                            }
+                        </div>
                     <div class="map-stage" data-map-stage data-map-fit="fit" style="--map-w: @logicalSize.Width; --map-h: @logicalSize.Height;">
                         <div class="map-slide map-slide-editable"
                              data-map-slide
@@ -179,6 +252,7 @@
                             }
                         </div>
                     </div>
+                    </div>
                 </div>
 
                 <aside class="map-property-editor" aria-label="Properties">
@@ -197,8 +271,28 @@
                         <button type="button" class="map-property-tab" data-map-property-tab="advanced" role="tab" aria-selected="false">Advanced</button>
                     </div>
 
+                    @* Nothing selected: the aside shows the CANVAS view settings instead of an empty box.
+                       These are deliberately view-only (remembered per browser, never saved on the map) - the
+                       board's own geometry stays in the Settings tab, so there is exactly one input per
+                       stored property and the two can never drift apart. *@
                     <div class="map-property-empty" data-map-property-empty>
-                        Select a widget on the canvas to edit it. Board settings live in the Display and Settings tabs.
+                        <p>Select a widget on the canvas to edit it. The board's own size, grid and wallboard
+                           options live in the <strong>Display</strong> and <strong>Settings</strong> tabs.</p>
+                        <div class="map-view-settings">
+                            <span class="workspace-label">Canvas view</span>
+                            <label class="map-switch">
+                                <input type="checkbox" checked data-map-view-grid />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Show grid</span>
+                            </label>
+                            <label class="map-switch">
+                                <input type="checkbox" checked data-map-view-rulers />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Show rulers</span>
+                            </label>
+                            <span class="workspace-inline-note">Affects this browser only - it does not change the board.
+                                Widgets always snap: the layout is stored as grid cells, so there is no position between two of them.</span>
+                        </div>
                     </div>
                     <div data-map-property-host>
                         @for (var index = 0; index < Model.Input.Tiles.Count; index++)
@@ -209,6 +303,17 @@
                                visible, and a per-panel bar would reset the chosen tab every time you click a
                                different tile. Mirror any field change in the <template> below. *@
                             <section class="map-property-panel" data-map-property-panel data-tile-index="@index" hidden>
+                                @* Header card per mockup: what you have selected, at a glance, with its one
+                                   destructive action. It mirrors the tile - the designer keeps icon/title/kind
+                                   in step, so the aside never claims to be editing a different widget. *@
+                                <header class="map-property-head">
+                                    <span class="map-property-head-icon" data-map-property-head-icon>@MatmonIcons.Render(string.IsNullOrWhiteSpace(tile.IconKey) ? "square" : tile.IconKey)</span>
+                                    <span class="map-property-head-text">
+                                        <strong data-map-property-head-title>@(string.IsNullOrWhiteSpace(tile.Title) ? MapTileRender.KindLabel(tile.Kind) : tile.Title)</strong>
+                                        <small data-map-property-head-kind>@MapTileRender.KindLabel(tile.Kind)</small>
+                                    </span>
+                                    <button type="button" class="map-property-head-remove" data-map-property-remove title="Delete widget" aria-label="Delete widget">@MatmonIcons.Render("trash")</button>
+                                </header>
                                 <div data-map-prop-group="general">
                                     <label class="workspace-field">
                                         <span class="workspace-label">Title</span>
@@ -220,8 +325,19 @@
                                         <input type="hidden" asp-for="Input.Tiles[index].VisualType" data-map-property-visual-type />
                                         <span class="map-property-readonly" data-map-property-kind-label>@MapTileRender.KindLabel(tile.Kind)</span>
                                     </div>
-                                    <input asp-for="Input.Tiles[index].ColumnSpan" type="hidden" data-map-tile-column-span />
-                                    <input asp-for="Input.Tiles[index].RowSpan" type="hidden" data-map-tile-row-span />
+                                    @* Size is editable here, not only by dragging the handle: a number field is
+                                       keyboard reachable and lets you type an exact span, and it is the SAME
+                                       input the drag writes into, so the two can never disagree. *@
+                                    <div class="map-property-size">
+                                        <label class="workspace-field">
+                                            <span class="workspace-label">Width (cells)</span>
+                                            <input asp-for="Input.Tiles[index].ColumnSpan" type="number" min="1" max="@Model.Input.Columns" class="form-control workspace-input" data-map-tile-column-span />
+                                        </label>
+                                        <label class="workspace-field">
+                                            <span class="workspace-label">Height (cells)</span>
+                                            <input asp-for="Input.Tiles[index].RowSpan" type="number" min="1" max="@Model.Input.Rows" class="form-control workspace-input" data-map-tile-row-span />
+                                        </label>
+                                    </div>
                                     <div class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</div>
                                     <div class="map-property-hint" data-map-property-hint></div>
                                 </div>
@@ -311,11 +427,29 @@
                                         <span class="workspace-label">Text color</span>
                                         <input asp-for="Input.Tiles[index].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
                                     </label>
-                                    <div class="map-property-checks">
-                                        <label><input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card /> <span>Card background</span></label>
-                                        <label><input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title /> <span>Show title</span></label>
-                                        <label><input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge /> <span>Show state badge</span></label>
-                                        <label><input asp-for="Input.Tiles[index].ShowElementName" /> <span>Show target name</span></label>
+                                    @* Pill toggles per mockup. Still real checkboxes underneath, so they post,
+                                       take focus and need no JS - only the track is drawn from :checked. *@
+                                    <div class="map-property-switches">
+                                        <label class="map-switch">
+                                            <input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card />
+                                            <span class="map-switch-track" aria-hidden="true"></span>
+                                            <span>Card background</span>
+                                        </label>
+                                        <label class="map-switch">
+                                            <input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title />
+                                            <span class="map-switch-track" aria-hidden="true"></span>
+                                            <span>Show title</span>
+                                        </label>
+                                        <label class="map-switch">
+                                            <input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge />
+                                            <span class="map-switch-track" aria-hidden="true"></span>
+                                            <span>Show state badge</span>
+                                        </label>
+                                        <label class="map-switch">
+                                            <input asp-for="Input.Tiles[index].ShowElementName" />
+                                            <span class="map-switch-track" aria-hidden="true"></span>
+                                            <span>Show target name</span>
+                                        </label>
                                     </div>
                                 </div>
                                 <div data-map-prop-group="advanced" hidden>
@@ -327,12 +461,21 @@
                                         @foreach (var bucket in MonitoringMapColorRules.Buckets)
                                         {
                                             var current = tile.ColorRules.TryGetValue(bucket.Key, out var hex) ? hex : string.Empty;
-                                            <label class="map-color-rule">
-                                                <span>@bucket.Label</span>
+                                            var swatch = BrandingSafety.SafeHexColor(current) ?? MonitoringMapColorRules.DefaultHex(bucket.Key);
+                                            <div class="map-color-rule">
+                                                <span class="map-color-rule-label">@bucket.Label</span>
+                                                @* The swatch is a view control only - the TEXT field is what posts. A colour
+                                                   input cannot express "leave it to the theme", which is the default and the
+                                                   answer most boards want, so it seeds the text rather than replacing it. *@
+                                                <input type="color" class="map-color-swatch" value="@swatch"
+                                                       data-map-color-swatch="@bucket.Key" aria-label="@bucket.Label colour"
+                                                       tabindex="-1" />
                                                 <input type="text" class="form-control workspace-input"
                                                        name="Input.Tiles[@index].ColorRules[@bucket.Key]" value="@current"
                                                        placeholder="theme" data-map-color-rule="@bucket.Key" />
-                                            </label>
+                                                <button type="button" class="map-color-rule-clear" data-map-color-clear="@bucket.Key"
+                                                        title="Back to the theme colour" aria-label="Reset @bucket.Label to the theme colour">@MatmonIcons.Render("x")</button>
+                                            </div>
                                         }
                                     </div>
                                     <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
@@ -348,54 +491,102 @@
                 </aside>
             </div>
 
-                @* Filmstrip at the BOTTOM of the editor, as in the mockup - switching slide while
-                   designing should not mean leaving the canvas. *@
-                <div class="map-slide-strip" data-map-slide-strip>
-                    <div class="map-slide-tabs" data-map-slide-tabs>
-                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                        {
-                            var slide = Model.Input.Slides[slideIndex];
-                            <button type="button" class="map-slide-tab @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id"
-                                    data-slide-title="@slide.Title" data-slide-subtitle="@slide.Subtitle"
-                                    data-slide-duration="@slide.DurationSeconds" data-slide-bg="@slide.BackgroundColor"
-                                    data-slide-show-header="@(slide.ShowHeader ? "true" : "false")">@slide.Name</button>
-                        }
-                    </div>
-                    <div class="map-slide-actions">
-                        <button type="button" class="map-slide-action" data-map-slide-add title="Add slide">@MatmonIcons.Render("plus")<span>Slide</span></button>
-                        <button type="button" class="map-slide-action" data-map-slide-duplicate title="Duplicate this slide and its widgets">@MatmonIcons.Render("copy")</button>
-                        <button type="button" class="map-slide-action" data-map-slide-move="-1" title="Move slide left">@MatmonIcons.Render("arrow-left")</button>
-                        <button type="button" class="map-slide-action" data-map-slide-move="1" title="Move slide right">@MatmonIcons.Render("arrow-right")</button>
-                        <button type="button" class="map-slide-action" data-map-slide-settings title="Slide properties">@MatmonIcons.Render("gear")</button>
-                        <button type="button" class="map-slide-action map-slide-action-danger" data-map-slide-delete title="Delete current slide">@MatmonIcons.Render("trash")</button>
-                    </div>
-                    <div data-map-slide-inputs hidden></div>
+                @* Bottom row per mockup: the slide LIST (reorderable, with duration and a row menu), the
+                   rotation settings that only make sense next to it, and a filmstrip preview of the running
+                   order. The old plain slide tabs are gone - this replaces them. *@
+                <div class="map-editor-bottom">
+                    <section class="panel-subcard map-slides-list-card">
+                        <div class="map-subcard-head">
+                            <h3 class="map-settings-title">Slides <span class="map-count" data-map-slide-count>@Model.Input.Slides.Count</span></h3>
+                            <button type="button" class="workspace-secondary-submit" data-map-slide-add>@MatmonIcons.Render("plus")<span>Add slide</span></button>
+                        </div>
+                        <div class="map-slide-rows" data-map-slide-tabs>
+                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                            {
+                                var slide = Model.Input.Slides[slideIndex];
+                                <div class="map-slide-row @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id"
+                                     data-slide-title="@slide.Title" data-slide-subtitle="@slide.Subtitle"
+                                     data-slide-duration="@slide.DurationSeconds" data-slide-bg="@slide.BackgroundColor"
+                                     data-slide-show-header="@(slide.ShowHeader ? "true" : "false")"
+                                     draggable="true">
+                                    <span class="map-slide-row-grip" aria-hidden="true">@MatmonIcons.Render("move")</span>
+                                    <span class="map-slide-row-index">@(slideIndex + 1)</span>
+                                    <span class="map-slide-row-name">@slide.Name</span>
+                                    <span class="map-slide-row-duration">@(slide.DurationSeconds is { } seconds ? $"{seconds}s" : "—")</span>
+                                    <span class="map-slide-row-actions">
+                                        <button type="button" class="map-slide-row-action" data-map-slide-settings title="Slide properties">@MatmonIcons.Render("gear")</button>
+                                        <button type="button" class="map-slide-row-action" data-map-slide-duplicate title="Duplicate slide">@MatmonIcons.Render("copy")</button>
+                                        <button type="button" class="map-slide-row-action is-danger" data-map-slide-delete title="Delete slide">@MatmonIcons.Render("trash")</button>
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                        <div data-map-slide-inputs hidden></div>
+                    </section>
+
+                    <section class="panel-subcard">
+                        <div class="map-subcard-head">
+                            <h3 class="map-settings-title">Slide rotation</h3>
+                        </div>
+                        <p class="map-toolbox-note">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</p>
+                        <label class="map-switch">
+                            <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
+                            <span class="map-switch-track" aria-hidden="true"></span>
+                            <span>Autoplay</span>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Default duration</span>
+                            <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
+                                @foreach (var seconds in new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 })
+                                {
+                                    <option value="@seconds">@seconds seconds</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Page indicator</span>
+                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
+                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
+                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
+                            </select>
+                        </label>
+                    </section>
+
+                    <section class="panel-subcard map-preview-card">
+                        <div class="map-subcard-head">
+                            <h3 class="map-settings-title">Preview &ndash; slide rotation</h3>
+                            <span class="workspace-inline-note">@logicalSize.Width &times; @logicalSize.Height</span>
+                        </div>
+                        @* Real scaled miniatures of each slide, cloned from the live canvas by
+                           renderSlidePreviews - a preview that can disagree with the board is worse than none. *@
+                        <div class="map-slides-strip" data-map-slide-previews>
+                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                            {
+                                var slide = Model.Input.Slides[slideIndex];
+                                <button type="button" class="map-slide-card @(slideIndex == 0 ? "is-active" : "")"
+                                        data-map-slide-card data-slide-id="@slide.Id">
+                                    <span class="map-slide-card-frame">
+                                        <span class="map-slide-card-preview" data-map-slide-preview></span>
+                                    </span>
+                                    <span class="map-slide-card-meta">
+                                        <strong>@(slideIndex + 1). @slide.Name</strong>
+                                        <small>@(slide.DurationSeconds is { } d ? $"{d}s" : $"{Model.Input.AutoRotateSeconds}s")</small>
+                                    </span>
+                                </button>
+                            }
+                        </div>
+                    </section>
                 </div>
             </div>
 
-            @* --- Slides -------------------------------------------------------------------------------- *@
-            @* The filmstrip renders a REAL miniature of each slide through the same _MapSlide partial the
-               board uses, not a hand-drawn thumbnail: a preview that can disagree with the board is worse
-               than no preview. *@
+            @* --- Slides ------------------------------------------------------------------------------- *@
+            @* Slide PROPERTIES only - the filmstrip and the running order live under the canvas in the
+               Editor tab (that is where the mockup puts them, and where you actually need them). Clicking a
+               slide's gear switches here. *@
             <div class="map-tab-panel" data-sensor-tab="slides">
-                <div class="map-slides-layout">
-                    <div class="map-slides-strip" data-map-slide-previews>
-                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                        {
-                            var slide = Model.Input.Slides[slideIndex];
-                            <button type="button" class="map-slide-card @(slideIndex == 0 ? "is-active" : "")"
-                                    data-map-slide-card data-slide-id="@slide.Id" draggable="true">
-                                <span class="map-slide-card-frame">
-                                    <span class="map-slide-card-index">@(slideIndex + 1)</span>
-                                    <span class="map-slide-card-preview" data-map-slide-preview></span>
-                                </span>
-                                <span class="map-slide-card-meta">
-                                    <strong>@slide.Name</strong>
-                                    <small>@(slide.DurationSeconds is { } seconds ? $"{seconds}s" : "Map default")</small>
-                                </span>
-                            </button>
-                        }
-                    </div>
+                <div class="map-settings-grid">
 
                     <section class="panel-subcard map-slide-panel" data-map-slide-panel>
                         <h3 class="map-settings-title">Selected slide</h3>
@@ -615,6 +806,14 @@
                    server-rendered one above - only grouped into the same General/Data/Display tabs, which the
                    designer toggles via [data-map-prop-group]. Any field added here must be added there too. *@
                 <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
+                    <header class="map-property-head">
+                        <span class="map-property-head-icon" data-map-property-head-icon>@MatmonIcons.Render("square")</span>
+                        <span class="map-property-head-text">
+                            <strong data-map-property-head-title>__title__</strong>
+                            <small data-map-property-head-kind>__kindLabel__</small>
+                        </span>
+                        <button type="button" class="map-property-head-remove" data-map-property-remove title="Delete widget" aria-label="Delete widget">@MatmonIcons.Render("trash")</button>
+                    </header>
                     <div data-map-prop-group="general">
                         <label class="workspace-field">
                             <span class="workspace-label">Title</span>
@@ -626,8 +825,16 @@
                             <input type="hidden" name="Input.Tiles[__index__].VisualType" value="__visual__" data-map-property-visual-type />
                             <span class="map-property-readonly" data-map-property-kind-label>__kindLabel__</span>
                         </div>
-                        <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="hidden" data-map-tile-column-span />
-                        <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="hidden" data-map-tile-row-span />
+                        <div class="map-property-size">
+                            <label class="workspace-field">
+                                <span class="workspace-label">Width (cells)</span>
+                                <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="number" min="1" max="@Model.Input.Columns" class="form-control workspace-input" data-map-tile-column-span />
+                            </label>
+                            <label class="workspace-field">
+                                <span class="workspace-label">Height (cells)</span>
+                                <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="number" min="1" max="@Model.Input.Rows" class="form-control workspace-input" data-map-tile-row-span />
+                            </label>
+                        </div>
                         <div class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</div>
                         <div class="map-property-hint" data-map-property-hint></div>
                     </div>
@@ -722,18 +929,60 @@
                             <span class="workspace-label">Text color</span>
                             <input name="Input.Tiles[__index__].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
                         </label>
-                        <div class="map-property-checks">
-                            <label><input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card /> <span>Card background</span></label>
-                            <label><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /> <span>Show title</span></label>
-                            <label><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /> <span>Show state badge</span></label>
-                            <label><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /> <span>Show target name</span></label>
+                        <div class="map-property-switches">
+                            <label class="map-switch">
+                                <input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Card background</span>
+                            </label>
+                            <label class="map-switch">
+                                <input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Show title</span>
+                            </label>
+                            <label class="map-switch">
+                                <input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Show state badge</span>
+                            </label>
+                            <label class="map-switch">
+                                <input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" /><input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked />
+                                <span class="map-switch-track" aria-hidden="true"></span>
+                                <span>Show target name</span>
+                            </label>
                         </div>
+                    </div>
+                    @* The Advanced group has to exist in the template too - a freshly dropped tile otherwise
+                       showed an empty Advanced tab until the first save. *@
+                    <div data-map-prop-group="advanced" hidden>
+                        <span class="workspace-label">Colour rules</span>
+                        <div class="map-color-rules">
+                            @foreach (var bucket in MonitoringMapColorRules.Buckets)
+                            {
+                                <div class="map-color-rule">
+                                    <span class="map-color-rule-label">@bucket.Label</span>
+                                    <input type="color" class="map-color-swatch" value="@MonitoringMapColorRules.DefaultHex(bucket.Key)"
+                                           data-map-color-swatch="@bucket.Key" aria-label="@bucket.Label colour" tabindex="-1" />
+                                    <input type="text" class="form-control workspace-input"
+                                           name="Input.Tiles[__index__].ColorRules[@bucket.Key]" value=""
+                                           placeholder="theme" data-map-color-rule="@bucket.Key" />
+                                    <button type="button" class="map-color-rule-clear" data-map-color-clear="@bucket.Key"
+                                            title="Back to the theme colour" aria-label="Reset @bucket.Label to the theme colour">@MatmonIcons.Render("x")</button>
+                                </div>
+                            }
+                        </div>
+                        <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Refresh (seconds)</span>
+                            <input name="Input.Tiles[__index__].RefreshSeconds" type="number" min="0" max="3600" class="form-control workspace-input" placeholder="0" />
+                            <span class="workspace-inline-note">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence.</span>
+                        </label>
                     </div>
                 </section>
             </template>
 
+            @* Save lives in the page header (mockup), so only the destructive action stays down here. *@
             <div class="page-actions workspace-toolbar">
-                <button type="submit" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save map</span></button>
                 @if (!Model.IsCreateMode)
                 {
                     <span class="workspace-form-actions-spacer"></span>

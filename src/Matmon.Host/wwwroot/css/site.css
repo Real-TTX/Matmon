@@ -9335,30 +9335,61 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   padding-top: 0.6rem;
   border-top: 1px solid var(--matmon-border);
 }
-.map-layout-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
+/* Two across so a thumbnail is big enough to read as a shape while the widget list above keeps its room. */
+.map-layout-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
 }
-/* Compact chips, description in the tooltip: four full-width buttons with a description squeezed the widget
-   list itself down to a sliver and pushed the layouts below the fold. */
-.map-layout-chip {
-  padding: 0.28rem 0.6rem;
-  border: 1px dashed var(--matmon-border);
-  border-radius: 999px;
-  background: transparent;
+.map-layout-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 9px;
+  background: var(--matmon-surface);
   color: var(--matmon-text);
-  font-size: 0.74rem;
+  text-align: left;
   cursor: pointer;
 }
-.map-layout-chip:hover:not(:disabled) {
-  border-style: solid;
+.map-layout-card:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--matmon-accent) 55%, var(--matmon-border));
   background: color-mix(in srgb, var(--matmon-surface) 84%, var(--matmon-accent) 16%);
 }
-.map-layout-chip:disabled {
+.map-layout-card:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+/* The thumbnail is a real CSS grid of the template's own slots - same numbers the template places tiles at,
+   so it cannot show an arrangement the button does not produce. */
+.map-layout-thumb {
+  display: grid;
+  gap: 2px;
+  aspect-ratio: 16 / 9;
+  padding: 2px;
+  border-radius: 5px;
+  background: var(--matmon-surface-strong);
+}
+.map-layout-thumb span {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--matmon-accent) 55%, transparent);
+}
+.map-layout-card-meta {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.map-layout-card-meta strong {
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.map-layout-card-meta small {
+  overflow: hidden;
+  color: var(--matmon-muted);
+  font-size: 0.65rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .map-tool-button small {
   color: var(--matmon-muted);
@@ -9518,14 +9549,63 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 .map-color-rule {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 7rem;
-  gap: 0.4rem;
+  grid-template-columns: minmax(0, 1fr) 1.6rem 6rem 1.4rem;
+  gap: 0.35rem;
   align-items: center;
   font-size: 0.78rem;
 }
-.map-color-rule input {
+.map-color-rule-label {
+  overflow: hidden;
+  color: var(--matmon-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-color-rule input[type="text"] {
   font-family: var(--matmon-mono, ui-monospace, monospace);
   font-size: 0.75rem;
+}
+/* A native colour input, stripped of its chrome so it reads as a swatch. It is a convenience on top of the
+   hex field, never the source of truth - see the note in the markup. */
+.map-color-swatch {
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.map-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.map-color-swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}
+.map-color-swatch::-moz-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}
+.map-color-rule-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--matmon-muted);
+  cursor: pointer;
+}
+.map-color-rule-clear:hover {
+  color: var(--matmon-text);
+  background: var(--matmon-surface-strong);
+}
+.map-color-rule-clear .ui-icon {
+  width: 0.8rem;
+  height: 0.8rem;
 }
 
 @media (max-width: 1100px) {
@@ -9562,21 +9642,80 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   background: var(--matmon-surface-soft);
 }
 
-.map-property-checks {
+.map-property-switches,
+.map-view-settings {
   display: grid;
-  gap: 0.35rem;
-}
-
-.map-property-checks label {
-  display: flex;
-  align-items: center;
   gap: 0.4rem;
-  color: var(--matmon-muted);
-  font-size: 0.82rem;
 }
 
-.map-property-checks input {
-  accent-color: var(--matmon-accent);
+.map-view-settings {
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--matmon-border);
+}
+
+/* Header card: the selected widget's identity and its one destructive action, above the tabs' content. */
+.map-property-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  margin: -0.15rem -0.15rem 0.1rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 9px;
+  background: var(--matmon-surface-soft);
+}
+.map-property-head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--matmon-accent) 20%, transparent);
+  color: var(--matmon-accent);
+}
+.map-property-head-icon .ui-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+.map-property-head-text {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.map-property-head-text strong {
+  overflow: hidden;
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-property-head-text small {
+  color: var(--matmon-muted);
+  font-size: 0.68rem;
+}
+.map-property-head-remove {
+  display: inline-flex;
+  padding: 0.25rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--matmon-muted);
+  cursor: pointer;
+}
+.map-property-head-remove:hover {
+  color: var(--matmon-danger, #f08b8b);
+  background: var(--matmon-surface-strong);
+}
+.map-property-head-remove .ui-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.map-property-size {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
 }
 
 .map-property-size-readout {
@@ -13253,6 +13392,286 @@ html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critica
 }
 @media (max-width: 760px) {
   .map-share-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Map editor chrome: header, canvas head, rulers, bottom row, switches -------------------------- */
+
+.map-editor-subtitle {
+  margin: 0.15rem 0 0;
+  color: var(--matmon-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.map-canvas-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.map-canvas-title {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--matmon-text);
+  text-align: left;
+  cursor: pointer;
+}
+.map-canvas-title:hover,
+.map-canvas-title.is-selected {
+  border-color: color-mix(in srgb, var(--matmon-accent) 45%, transparent);
+}
+.map-canvas-title strong {
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+.map-canvas-title small {
+  color: var(--matmon-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.map-canvas-title small b {
+  color: var(--matmon-text);
+  font-weight: 600;
+}
+.map-canvas-title small b.is-on {
+  color: var(--matmon-accent);
+}
+.map-canvas-sep {
+  margin: 0 0.35rem;
+  opacity: 0.4;
+}
+.map-canvas-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.map-canvas-zoom select {
+  width: 6rem;
+}
+
+/* Rulers frame: the stage sits inside, offset by the ruler gutters. Labels are placed as a PERCENTAGE of
+   the logical canvas (computed server-side from the same grid cells the guide lines use), so they stay on
+   their column no matter what the stage is scaled to. */
+.map-canvas-frame {
+  position: relative;
+  padding: 1.1rem 0 0 1.5rem;
+}
+/* Rulers off: the gutters collapse too, so the canvas gets the space back instead of leaving a blank L. */
+.map-canvas-frame.is-rulerless {
+  padding: 0;
+}
+.map-canvas-frame.is-rulerless .map-ruler {
+  display: none;
+}
+.map-ruler {
+  position: absolute;
+  color: var(--matmon-muted);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+.map-ruler span {
+  position: absolute;
+}
+.map-ruler-columns {
+  top: 0;
+  left: 1.5rem;
+  right: 0;
+  height: 1rem;
+}
+.map-ruler-columns span {
+  transform: translateX(-50%);
+}
+.map-ruler-rows {
+  top: 1.1rem;
+  bottom: 0;
+  left: 0;
+  width: 1.5rem;
+}
+.map-ruler-rows span {
+  right: 0.35rem;
+  transform: translateY(-50%);
+}
+
+/* --- Bottom row -------------------------------------------------------------------------------- */
+.map-editor-bottom {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(14rem, 0.8fr) minmax(20rem, 1.4fr);
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+  align-items: start;
+}
+.map-subcard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.map-count {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--matmon-accent) 18%, transparent);
+  color: var(--matmon-accent);
+  font-size: 0.68rem;
+}
+.map-slide-rows {
+  display: grid;
+  gap: 0.25rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+.map-slide-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.map-slide-row:hover {
+  background: var(--matmon-surface-soft);
+}
+.map-slide-row.is-active {
+  border-color: color-mix(in srgb, var(--matmon-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--matmon-accent) 12%, transparent);
+}
+.map-slide-row.is-dragging {
+  opacity: 0.5;
+}
+.map-slide-row-grip {
+  display: inline-flex;
+  color: var(--matmon-muted);
+  cursor: grab;
+}
+.map-slide-row-grip .ui-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.map-slide-row-index {
+  min-width: 1.1rem;
+  color: var(--matmon-muted);
+  font-variant-numeric: tabular-nums;
+}
+.map-slide-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-slide-row-duration {
+  color: var(--matmon-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.map-slide-row-actions {
+  display: inline-flex;
+  gap: 0.15rem;
+  /* Row actions only on hover or on the active row - five slides x three buttons is visual noise. */
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.map-slide-row:hover .map-slide-row-actions,
+.map-slide-row.is-active .map-slide-row-actions,
+.map-slide-row:focus-within .map-slide-row-actions {
+  opacity: 1;
+}
+.map-slide-row-action {
+  display: inline-flex;
+  padding: 0.15rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--matmon-muted);
+  cursor: pointer;
+}
+.map-slide-row-action:hover {
+  color: var(--matmon-text);
+  background: var(--matmon-surface-strong);
+}
+.map-slide-row-action.is-danger:hover {
+  color: var(--matmon-danger, #f08b8b);
+}
+.map-slide-row-action .ui-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.map-preview-card .map-slides-strip {
+  max-height: 14rem;
+  overflow: auto;
+}
+
+/* --- Switch ------------------------------------------------------------------------------------ */
+/* The mockup's pill toggles. A real checkbox underneath, so it posts, is keyboard reachable and needs no
+   JS - the track is drawn from its :checked state. */
+.map-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.map-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.map-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.1rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: var(--matmon-surface-strong);
+  border: 1px solid var(--matmon-border);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.map-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0.14rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--matmon-muted);
+  transform: translateY(-50%);
+  transition: transform 140ms ease, background 140ms ease;
+}
+.map-switch input:checked + .map-switch-track {
+  background: color-mix(in srgb, var(--matmon-accent) 55%, transparent);
+  border-color: var(--matmon-accent);
+}
+.map-switch input:checked + .map-switch-track::after {
+  background: #fff;
+  transform: translate(0.92rem, -50%);
+}
+.map-switch input:focus-visible + .map-switch-track {
+  outline: 2px solid var(--matmon-accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-switch-track,
+  .map-switch-track::after {
+    transition: none;
+  }
+}
+
+@media (max-width: 1200px) {
+  .map-editor-bottom {
     grid-template-columns: minmax(0, 1fr);
   }
 }

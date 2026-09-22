@@ -115,6 +115,7 @@ public sealed class MapEditorModel : PageModel
                 WallboardFit = Input.WallboardFit,
                 DisplayTimeZoneId = string.IsNullOrWhiteSpace(Input.DisplayTimeZoneId) ? null : Input.DisplayTimeZoneId.Trim(),
                 AutoRotateSeconds = Input.AutoRotateSeconds,
+                AutoRotateEnabled = Input.AutoRotateEnabled,
                 PaginationMode = Input.PaginationMode,
                 PublicEnabled = Input.PublicEnabled,
                 ShowSlideHeaders = Input.ShowSlideHeaders,
@@ -280,6 +281,7 @@ public sealed class MapEditorModel : PageModel
                 WallboardFit = map.WallboardFit,
                 DisplayTimeZoneId = map.DisplayTimeZoneId,
                 AutoRotateSeconds = map.AutoRotateSeconds,
+                AutoRotateEnabled = map.AutoRotateEnabled,
                 PaginationMode = map.PaginationMode,
                 PublicEnabled = map.PublicEnabled,
                 ShowSlideHeaders = map.ShowSlideHeaders,
@@ -468,6 +470,8 @@ public sealed class MapEditorInput
     /// <summary>IANA timezone for the board clock/timestamps - per map, because the public wallboard has no
     /// signed-in user whose preference could apply.</summary>
     public string? DisplayTimeZoneId { get; set; }
+
+    public bool AutoRotateEnabled { get; set; } = true;
 
     public int AutoRotateSeconds { get; set; } = 12;
 
