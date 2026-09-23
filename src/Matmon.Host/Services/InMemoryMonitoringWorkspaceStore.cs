@@ -2882,7 +2882,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             Subtitle = "Everything that must be up right now",
             Tiles =
             [
-                tile(MonitoringMapTileKind.Heading, "Live status", 8, 1, configure: t => t.Text = "Every probe, every sensor"),
+                // Same height as the clock beside it: a flow leaves a hole when one tile in a band is
+                // shorter than its neighbour, and the starter board should not demonstrate that.
+                tile(MonitoringMapTileKind.Heading, "Live status", 8, 2, configure: t => t.Text = "Every probe, every sensor"),
                 tile(MonitoringMapTileKind.Clock, "Time", 4, 1),
                 tile(MonitoringMapTileKind.Status, "Overall health", 4, 3, root.Id),
                 tile(MonitoringMapTileKind.AlertFeed, "Open alerts", 8, 3, root.Id, t => t.ListLimit = 5),

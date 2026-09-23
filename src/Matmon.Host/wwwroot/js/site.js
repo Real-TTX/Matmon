@@ -4140,6 +4140,85 @@ function initializeMapDesigner() {
     }, 200));
   };
 
+  // Which parts of a tile change its STRUCTURE rather than its value. A value comes from the cheap JSON
+  // preview; a structure change means the markup itself is different (a gauge has an arc, a list has rows),
+  // and the only honest source for that is the same partial the viewer renders.
+  const structureKeyFor = (panel) => [
+    normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || "Element"),
+    panel?.querySelector("[data-map-property-visual-type]")?.value || "",
+    panel?.querySelector("[data-map-property-graph-type]")?.value || "",
+    panel?.querySelector("[data-map-property-image-id]")?.value || "",
+    panel?.querySelector('[name$=".ChannelKey"]')?.value || "",
+    panel?.querySelector('[name$=".GaugeMin"]')?.value || "",
+    panel?.querySelector('[name$=".GaugeMax"]')?.value || "",
+    (panel?.querySelector("[data-map-property-element]")?.value || "") === "" ? "no-target" : "target"
+  ].join("|");
+
+  const structureCache = new WeakMap();
+
+  const refreshTileBody = (tile, panel) => {
+    if (!tile || !panel) {
+      return;
+    }
+    const key = structureKeyFor(panel);
+    if (structureCache.get(tile) === key) {
+      return;
+    }
+    structureCache.set(tile, key);
+
+    const index = tile.dataset.tileIndex || "0";
+    const params = new URLSearchParams({
+      handler: "TileMarkup",
+      index,
+      id: tile.querySelector(`[name="Input.Tiles[${index}].Id"]`)?.value || "",
+      slideId: tile.dataset.slideId || "",
+      token: panel.querySelector("[data-map-property-element]")?.value || "",
+      kind: normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element"),
+      visualType: panel.querySelector("[data-map-property-visual-type]")?.value || "Card",
+      graphType: panel.querySelector("[data-map-property-graph-type]")?.value || "Line",
+      title: panel.querySelector("[data-map-property-title]")?.value || "",
+      columnSpan: panel.querySelector("[data-map-tile-column-span]")?.value || "3",
+      rowSpan: panel.querySelector("[data-map-tile-row-span]")?.value || "2",
+      order: tile.querySelector("[data-map-tile-order]")?.value || "0",
+      imageAssetId: panel.querySelector("[data-map-property-image-id]")?.value || "",
+      imageFit: panel.querySelector("[data-map-property-image-fit]")?.value || "Contain",
+      channelKey: panel.querySelector('[name$=".ChannelKey"]')?.value || "",
+      gaugeMin: panel.querySelector('[name$=".GaugeMin"]')?.value || "",
+      gaugeMax: panel.querySelector('[name$=".GaugeMax"]')?.value || ""
+    });
+
+    fetch(`${window.location.pathname}?${params}`, { headers: { Accept: "text/html" } })
+      .then((response) => (response.ok ? response.text() : null))
+      .then((html) => {
+        // Only apply if the tile still wants this structure - a fast kind change must not be overwritten by
+        // the answer to the previous one.
+        if (!html || structureCache.get(tile) !== key || !tile.isConnected) {
+          return;
+        }
+        const replacement = document.createRange().createContextualFragment(html).querySelector("[data-map-tile]");
+        if (!replacement) {
+          return;
+        }
+        // The replacement is a fresh server render and knows nothing about this tile's editor state - which
+        // slide filter hid it, whether it is pending deletion, whether it is the selected one. Carry all three
+        // across, or a refresh un-hides every tile on the board including the other slides'.
+        const wasSelected = tile.classList.contains("is-selected");
+        replacement.hidden = tile.hidden;
+        const deletedBefore = tile.querySelector("[data-map-tile-deleted]")?.value;
+        const deletedAfter = replacement.querySelector("[data-map-tile-deleted]");
+        if (deletedAfter && deletedBefore) {
+          deletedAfter.value = deletedBefore;
+        }
+        tile.replaceWith(replacement);
+        structureCache.set(replacement, key);
+        setupTile(replacement);
+        if (wasSelected) {
+          replacement.classList.add("is-selected");
+        }
+      })
+      .catch(() => {});
+  };
+
   const syncTileFromPanel = (panel) => {
     if (!panel) {
       return;
@@ -4196,6 +4275,7 @@ function initializeMapDesigner() {
     tile.classList.toggle("is-plain", !showCard);
 
     syncPanelVisibility(panel);
+    refreshTileBody(tile, panel);
     syncTileImage(tile, panel);
     applyTileAppearance(tile, panel);
     applyTileSize(tile);
@@ -4300,49 +4380,83 @@ function initializeMapDesigner() {
     form?.querySelector('[data-sensor-tab-target="slides"]')?.click();
   };
 
-  const setupTile = (tile) => {
-    applyTileSize(tile);
-    tile.addEventListener("click", () => selectTile(tile.dataset.tileIndex || ""));
-
-    const panel = getPanel(tile.dataset.tileIndex || "");
-    panel?.querySelectorAll("[data-map-tile-column-span], [data-map-tile-row-span]").forEach((input) => {
-      input.addEventListener("input", () => applyTileSize(tile));
-    });
-    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon], [data-map-property-image-id], [data-map-property-image-fit], [data-map-property-value-only] input").forEach((input) => {
-      input.addEventListener("input", () => syncTileFromPanel(panel));
-      input.addEventListener("change", () => syncTileFromPanel(panel));
-    });
-    // The server already rendered each saved tile's real preview, so seed the cache to skip an
-    // identical refetch on load; live fetches then only fire when the user actually changes the target.
-    if (panel) {
-      previewKeyCache.set(tile, previewKeyFor(panel).key);
+  // Deletes whatever tile currently carries this index - looked up at call time, because the tile ELEMENT is
+  // replaced each time the server hands back a new body and a captured reference would go stale.
+  const removeTileByIndex = (index) => {
+    const tile = getTile(index);
+    const panel = getPanel(index);
+    const deleted = tile?.querySelector("[data-map-tile-deleted]");
+    if (deleted) {
+      deleted.value = "true";
     }
-    syncTileFromPanel(panel);
-
-    const removeTile = () => {
-      const deleted = tile.querySelector("[data-map-tile-deleted]");
-      if (deleted) {
-        deleted.value = "true";
-      }
-
+    if (tile) {
       tile.hidden = true;
-      panel?.setAttribute("hidden", "hidden");
-      // Removing a tile leaves a hole in the order; the flow has to close up behind it.
-      commitFlowOrder();
-      selectMap();
-    };
+    }
+    panel?.setAttribute("hidden", "hidden");
+    // Removing a tile leaves a hole in the order; the flow has to close up behind it.
+    commitFlowOrder();
+    selectMap();
+  };
 
+  // Everything bound to the tile ELEMENT. Re-run for every replacement body.
+  const wireTileElement = (tile) => {
+    const index = tile.dataset.tileIndex || "";
+    tile.addEventListener("click", () => selectTile(index));
     tile.querySelector("[data-map-remove-tile]")?.addEventListener("click", (event) => {
       event.stopPropagation();
-      removeTile();
+      removeTileByIndex(index);
     });
-    // Same action from the properties header - one function, so the two can never drift apart.
-    panel?.querySelector("[data-map-property-remove]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      removeTile();
-    });
-    setupColorRules(panel);
+    wireTileDrag(tile);
+  };
 
+  const setupTile = (tile) => {
+    applyTileSize(tile);
+    const panel = getPanel(tile.dataset.tileIndex || "");
+
+    // The PANEL is wired once. setupTile runs again for every replacement tile body, and binding the panel's
+    // inputs a second time would fire syncTileFromPanel twice per keystroke - and three times after the next
+    // swap. The tile's own listeners are safe to re-bind: that element is new each time.
+    if (panel?.dataset.wired !== "1") {
+      if (panel) {
+        panel.dataset.wired = "1";
+      }
+      panel?.querySelectorAll("[data-map-tile-column-span], [data-map-tile-row-span]").forEach((input) => {
+        input.addEventListener("input", () => {
+          const current = getTile(panel.dataset.tileIndex || "");
+          if (current) {
+            applyTileSize(current);
+          }
+        });
+      });
+      panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon], [data-map-property-image-id], [data-map-property-image-fit], [data-map-property-value-only] input").forEach((input) => {
+        input.addEventListener("input", () => syncTileFromPanel(panel));
+        input.addEventListener("change", () => syncTileFromPanel(panel));
+      });
+      // Same action as the tile's own X - one function, so the two can never drift apart.
+      panel?.querySelector("[data-map-property-remove]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        removeTileByIndex(panel.dataset.tileIndex || "");
+      });
+      setupColorRules(panel);
+    }
+
+    // The server already rendered each saved tile's real preview and its real BODY, so seed both caches to
+    // skip an identical refetch on load - a board with twenty widgets would otherwise fire twenty markup
+    // requests the moment it opens, for markup it already has. Only a stub straight out of the <template>
+    // (marked by addTile) is missing its real body.
+    if (panel) {
+      previewKeyCache.set(tile, previewKeyFor(panel).key);
+      if (tile.dataset.stub !== "1") {
+        structureCache.set(tile, structureKeyFor(panel));
+      }
+    }
+
+    wireTileElement(tile);
+    syncTileFromPanel(panel);
+
+  };
+
+  const wireTileDrag = (tile) => {
     // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). Dragging
     // REORDERS now - v3 tiles have no position, so there is nothing to drag them to. The tile is moved in the
     // DOM as the pointer passes other tiles, which means the grid reflows live and the drag preview is the
@@ -4501,6 +4615,8 @@ function initializeMapDesigner() {
       return;
     }
 
+    // Straight out of the <template>, so it is a generic stub until the server sends its real body.
+    tile.dataset.stub = "1";
     canvas.appendChild(tile);
     propertyHost.appendChild(panel);
     canvas.dataset.nextTileIndex = String(index + 1);

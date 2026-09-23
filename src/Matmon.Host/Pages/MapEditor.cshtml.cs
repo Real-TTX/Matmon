@@ -86,6 +86,58 @@ public sealed class MapEditorModel : PageModel
         });
     }
 
+    /// <summary>The real rendered tile for the designer, as markup. The tile &lt;template&gt; in the page can
+    /// only be one generic stub, so a freshly dropped gauge / list / graph / picture showed nothing but its
+    /// header until the map was saved - on an editor whose whole promise is that it renders the real tile,
+    /// every new widget broke that promise. This hands back the SAME _MapTile partial the viewer uses, so the
+    /// two cannot drift; the designer swaps it in whenever a tile's STRUCTURE changes (its kind, visual,
+    /// graph type or picture), never for a value, which the cheaper TilePreview JSON above still carries.</summary>
+    public IActionResult OnGetTileMarkup(
+        int index,
+        Guid id,
+        Guid slideId,
+        string? token,
+        MonitoringMapTileKind kind,
+        MonitoringMapTileVisualType visualType,
+        MonitoringMapTileGraphType graphType,
+        string? title,
+        int columnSpan,
+        int rowSpan,
+        int order,
+        Guid? imageAssetId,
+        MonitoringMapImageFit imageFit,
+        string? channelKey,
+        double? gaugeMin,
+        double? gaugeMax)
+    {
+        var tile = new MonitoringMapTile
+        {
+            Id = id == Guid.Empty ? Guid.NewGuid() : id,
+            Kind = kind,
+            VisualType = visualType,
+            GraphType = graphType,
+            Title = string.IsNullOrWhiteSpace(title) ? MapTileRender.KindLabel(kind) : title,
+            ElementId = MonitoringTargetResolver.ElementId(token),
+            TargetTag = MonitoringTargetResolver.TagName(token),
+            Order = order,
+            ColumnSpan = columnSpan,
+            RowSpan = rowSpan,
+            ImageAssetId = imageAssetId == Guid.Empty ? null : imageAssetId,
+            ImageFit = imageFit,
+            // Without these a dial has no scale, so the preview drew no dial at all and a gauge looked broken
+            // in the editor while being fine in the viewer - see ResolveSensorProgressPercent.
+            ChannelKey = string.IsNullOrWhiteSpace(channelKey) ? null : channelKey.Trim(),
+            GaugeMin = gaugeMin,
+            GaugeMax = gaugeMax
+        };
+        MonitoringMapTileConstraints.Clamp(tile, Math.Max(1, Input.Columns), Math.Max(1, Input.Rows));
+
+        var renderMap = BuildInputMapForRender();
+        var preview = _displayProvider.ResolveTilePreview(tile);
+        var model = MapTileRenderModel.FromDisplay(preview, renderMap, editable: true, index: index, slideId: slideId, tileOverride: tile);
+        return Partial("_MapTile", model);
+    }
+
     /// <summary>AJAX image upload. A full form post would save the picture but throw away every unsaved tile
     /// position on the canvas, so this returns JSON and the designer patches the tile in place.</summary>
     public IActionResult OnPostUploadImage(IFormFile? file, [FromServices] MapAssetStore assets)

@@ -15,14 +15,15 @@
                 <p class="map-editor-subtitle">Design your wallboard. Use the grid, add widgets and configure the slide rotation.</p>
             </div>
         </div>
+        @* Only VIEW actions up here. Back/Save/Delete belong to the form, and this app puts a form's actions
+           in one row at its foot - Back and Save on the left, Delete pushed right. Splitting them (Save in the
+           header, Delete at the bottom) meant the two ends of one decision sat at opposite ends of the page. *@
         <div class="page-actions">
-            <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
             @if (!Model.IsCreateMode)
             {
                 <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id" target="_blank" rel="noopener">@MatmonIcons.Render("eye")<span>Preview</span></a>
                 <button type="button" class="workspace-secondary-submit" data-map-fullscreen>@MatmonIcons.Render("move")<span>Fullscreen</span></button>
             }
-            <button type="submit" form="map-editor-form" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save layout</span></button>
         </div>
     </div>
 
@@ -958,6 +959,8 @@
 
             @* Save lives in the page header (mockup), so only the destructive action stays down here. *@
             <div class="page-actions workspace-toolbar">
+                <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
+                <button type="submit" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save layout</span></button>
                 @if (!Model.IsCreateMode)
                 {
                     <span class="workspace-form-actions-spacer"></span>
