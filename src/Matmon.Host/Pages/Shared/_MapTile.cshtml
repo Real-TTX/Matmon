@@ -29,6 +29,11 @@
          data-state="@Model.StateKey"
          data-kind="@tile.Kind.ToString().ToLowerInvariant()"
          data-visual="@Model.EffectiveVisualType.ToString().ToLowerInvariant()"
+         @* How much the tile can say, decided by its height in row units - a one-row tile is a line, a
+            two-row tile is a reading, a three-row tile can afford a detail. Emitted server-side rather than
+            asked with a container query, because a query container cannot style ITSELF from its own size and
+            the tile is the container. *@
+         data-density="@(tile.RowSpan <= 1 ? "s" : tile.RowSpan == 2 ? "m" : "l")"
          @Html.Raw(editorAttributes)
          style="--tile-span: @tile.ColumnSpan; --tile-rows: @tile.RowSpan; @MapTileRender.TileStyle(tile, Model.StateKey)"
          hidden="@(Model.IsDeleted ? "hidden" : null)">
@@ -40,6 +45,10 @@
         <input type="hidden" name="@(Model.FieldNamePrefix).Order" value="@tile.Order" data-map-tile-order />
     }
 
+    @* The head is an EYEBROW, not a heading: on a board read from across a room the reading is the hero and
+       the name is its caption, so the name sits above it small and quiet rather than competing with it in
+       bold. The state badge only appears when the state is worth a word - an "OK" pill on a green card is a
+       label for something the colour already said - so a healthy tile gets a dot instead. *@
     @if (showHead)
     {
         <div class="map-tile-head@(Model.Editable ? " map-tile-drag-handle" : "")" data-map-drag-handle="@(Model.Editable ? "" : null)">
@@ -50,7 +59,15 @@
             }
             @if (tile.ShowStateBadge)
             {
-                <span class="state-pill" data-state="@Model.StateKey" data-tile-state-label>@Model.StateLabel</span>
+                @if (Model.StateKey == "ok")
+                {
+                    <span class="map-tile-state-dot" data-state="@Model.StateKey" title="@Model.StateLabel" aria-label="@Model.StateLabel"></span>
+                    <span class="state-pill is-collapsed" data-state="@Model.StateKey" data-tile-state-label hidden>@Model.StateLabel</span>
+                }
+                else
+                {
+                    <span class="state-pill" data-state="@Model.StateKey" data-tile-state-label>@Model.StateLabel</span>
+                }
             }
             @if (Model.Editable)
             {
@@ -58,6 +75,8 @@
             }
         </div>
     }
+
+    <div class="map-tile-body">
 
     @* --- Collection widgets ------------------------------------------------------------------------- *@
     @if (tile.Kind == MonitoringMapTileKind.Heading)
@@ -231,20 +250,21 @@
         <div class="map-tile-value" data-tile-value>@Model.Value</div>
     }
 
-    @* An SLA tile already prints its window under the percentage, and the generic subtitle is the same
-       string - two identical captions stacked on a phone card. *@
+    </div>
+
+    @* ONE detail line, and only when it says something the eyebrow did not. An SLA tile already prints its
+       window under the percentage; a subtitle that repeats the sensor type under a tile named after the
+       sensor is a line of wallboard height spent on nothing. *@
     @if (!isChrome && Model.Sla is null)
     {
-        <p data-tile-subtitle>@Model.Subtitle</p>
-        @* The kind label only earns a line when nothing else names the tile. Printing "State" under every
-           state tile is a caption you read once and then never again - and on a wall display that line costs
-           height the actual reading could have used. With a title shown, the title already says it. *@
-        // ...and never a second time: "NAS-01" as the heading with "NAS-01" again underneath is a line of
-        // wallboard height spent saying nothing. The target name earns its line only when it differs.
+        // The kind label only earns a line when nothing else names the tile ("State" under every state tile
+        // is a caption you read once), and the target name only when it differs from the eyebrow above it.
         var showElementName = tile.ShowElementName
             && !string.IsNullOrWhiteSpace(Model.ElementName)
             && !string.Equals(shownTitle, Model.ElementName, StringComparison.OrdinalIgnoreCase);
         var showKindLabel = !tile.ShowTitle;
+        <div class="map-tile-foot">
+        <p data-tile-subtitle>@Model.Subtitle</p>
         @if (showKindLabel || showElementName)
         {
             <small data-map-tile-kind-label>
@@ -262,6 +282,7 @@
                 }
             </small>
         }
+        </div>
     }
 
     @if (Model.Editable)

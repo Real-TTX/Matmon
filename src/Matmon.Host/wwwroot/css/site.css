@@ -3070,7 +3070,7 @@ html[data-theme-mode="system"] .theme-toggle-icon[data-theme-icon="system"] {
   color: #f0b072;
 }
 
-.monitoring-tree .state-pill[data-state="ok"] {
+.state-pill[data-state="ok"] {
   background: rgba(120, 213, 200, 0.18);
   border-color: rgba(120, 213, 200, 0.5);
   color: #7ad5c8;
@@ -3871,6 +3871,12 @@ html[data-monitoring-size]:not([data-monitoring-size="s"]) .monitoring-list-shel
   gap: 0.18rem;
   min-width: 4.5rem;
   text-align: right;
+}
+
+/* A pill carrying [hidden] must actually hide: .state-pill declares display:inline-flex, which outranks the
+   user-agent [hidden] rule, so the collapsed "OK" pill kept showing beside the dot that replaced it. */
+.state-pill[hidden] {
+  display: none !important;
 }
 
 .state-pill {
@@ -8215,7 +8221,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* ⚠️ A DEFINITE height, not auto+min-height. The tile is a `container-type: size` query container and its
+/* A definite height keeps a stacked tile the same proportion it asked for (rowSpan x 72px). It used to be
+   load-bearing for a different reason - the tile was a `container-type: size` container and its
    whole type scale is in cqh/cqmin units; a container whose block size comes from its own content is
    indefinite, so the browser resolves every one of those units to ZERO. The tile still measured 144px (the
    min-height), which is why the symptom was so odd: cards, borders, state pills and the SVG gauge arc all
@@ -8344,6 +8351,11 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-tile {
   --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tone, var(--matmon-border)));
+  /* The query container is INLINE-SIZE now, not size. The type scale hangs off the row unit rather than off
+     the tile's height, so the only cq units left measure WIDTH - and an inline-size container does not need a
+     definite height. That retires the trap that rendered every piece of text at font-size 0 whenever a tile's
+     height came from its content, and it lets a stacked tile grow to fit its own text. */
+  container-type: inline-size;
   /* ⚠️ RELATIVE, and it matters. The tile's resize grip, its size badge and its pin layer are all absolutely
      positioned children; v2's tile was `position: absolute` so they had a containing block for free, and the
      v3 rewrite dropped that without replacing it. Every grip in the board then escaped to the nearest
@@ -8363,13 +8375,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
      justify-content:center balances "flat" tiles (summary/state/text without a growing
      visual) so they use the height too - tiles with a flex:1 visual are unaffected
      because the visual already consumes the free space. */
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
+  /* Three slots: eyebrow / body / detail. A fixed three-row grid rather than a flex column, so the reading
+     always gets the space left over and the two caption rows cannot push it around. */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: calc(var(--map-type, 0.95rem) * 0.25);
   min-width: 0;
   min-height: 0;
-  container-type: size;
   padding: calc(var(--map-type, 0.95rem) * 0.62);
   border: 1px solid color-mix(in srgb, var(--map-tile-accent) 48%, var(--matmon-border));
   border-radius: 12px;
@@ -8428,6 +8440,88 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   padding: 0.15rem 0.35rem;
 }
 
+/* --- Tile anatomy -------------------------------------------------------------------------------- */
+/* The body holds whatever the widget actually IS - a dial, a bar, a chart, rows, a reading - and it is the
+   only part allowed to grow. */
+.map-tile-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.25);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.map-tile-foot {
+  display: grid;
+  min-width: 0;
+}
+
+/* A healthy tile says so with a dot, not with a word: the card is already green. */
+.map-tile-state-dot {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: calc(var(--map-type, 0.95rem) * 0.42);
+  height: calc(var(--map-type, 0.95rem) * 0.42);
+  border-radius: 50%;
+  background: var(--map-tile-accent);
+  box-shadow: 0 0 0 calc(var(--map-type, 0.95rem) * 0.12) color-mix(in srgb, var(--map-tile-accent) 28%, transparent);
+}
+
+/* --- Density ------------------------------------------------------------------------------------- */
+/* One row: a single line. Eyebrow on the left, reading on the right, nothing else - there is no room for a
+   detail and a squeezed one is worse than none. */
+.map-tile[data-density="s"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.5);
+}
+.map-tile[data-density="s"] .map-tile-body {
+  justify-content: center;
+  align-items: flex-end;
+}
+.map-tile[data-density="s"] .map-tile-foot {
+  display: none;
+}
+.map-tile[data-density="s"] .map-tile-value {
+  flex: 0 0 auto;
+  font-size: calc(var(--map-type, 0.95rem) * 1.45);
+}
+
+/* A heading is prose, not a reading: it keeps the WIDTH (the columns swap, so the label shrinks and the
+   text fills the rest) and stays left-aligned. Aligning only inside the body was not enough - the body was
+   still parked in the narrow auto column meant for a number. */
+.map-tile[data-kind="heading"][data-density="s"],
+.map-tile[data-kind="text"][data-density="s"] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.map-tile[data-kind="heading"][data-density="s"] .map-tile-body,
+.map-tile[data-kind="text"][data-density="s"] .map-tile-body {
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* Stacked, there is one column and no room beside the label: the one-row tile goes back to eyebrow over
+   reading. Side by side it pushed a heading straight off the card. */
+.map-slide[data-layout="stack"] .map-tile[data-density="s"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  /* Grow to the content: one row of height cannot hold an eyebrow, a heading and its subtext, and clipping
+     the heading of a heading widget is the one thing it must never do. */
+  height: auto;
+  min-height: calc(var(--map-row-unit, 4.6rem));
+}
+.map-slide[data-layout="stack"] .map-tile[data-density="s"] .map-tile-body {
+  align-items: flex-start;
+}
+
+/* Two rows: the reading, and at most one caption under it. */
+.map-tile[data-density="m"] .map-tile-foot small {
+  display: none;
+}
+
 .map-tile-head {
   display: flex;
   align-items: center;
@@ -8445,7 +8539,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   /* Height-biased but capped by width, so a wide/short tile gets a readable title instead of the tiny value
      cqmin (the smaller side) used to force. cq units measure the tile's own layout size, which the stage's
      transform:scale does NOT change, so this stays correct at any zoom level - no rem ceiling needed. */
-  font-size: var(--map-type, 0.95rem);
+  /* An eyebrow: quiet, spaced, above the reading rather than competing with it. A bold heading the same
+     weight as the number made every tile look like a form field with a value in it. */
+  font-size: calc(var(--map-type, 0.95rem) * 0.8);
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--matmon-text) 72%, var(--matmon-muted));
 }
 
 .map-tile-head .state-pill {
@@ -8578,7 +8678,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.5cqh;
+  gap: calc(var(--map-type, 0.95rem) * 0.16);
   min-width: 0;
   flex: 1;
 }
@@ -8878,13 +8978,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-tile:has(.map-tile-progress-wrap) .map-tile-value {
   flex: 0 1 auto;
   min-height: 0;
-  font-size: min(22cqh, 18cqw);
+  font-size: min(calc(var(--map-type, 0.95rem) * 1.2 * var(--tile-rows, 2)), 18cqw);
 }
 
 /* The bar IS the widget, so it gets real weight - at 9cqh it read as a hairline under a big number and you
    could not judge a fill level from across a room, which is the only reason to choose a bar over a figure. */
 .map-tile-progress {
-  height: 22cqh;
+  height: calc(var(--map-type, 0.95rem) * 0.55);
   min-height: 10px;
   max-height: 2.4rem;
 }
@@ -8936,7 +9036,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   }
 
   .map-tile-gauge strong {
-    font-size: min(46cqh, 22cqw);
+    font-size: min(calc(var(--map-type, 0.95rem) * 1.4 * var(--tile-rows, 2)), 22cqw);
   }
 
   /* Slim fill bar under the number so a short gauge still reads as a level, not just a bare figure. */
@@ -8944,7 +9044,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
     content: "";
     display: block;
     width: 100%;
-    height: 7cqh;
+    height: calc(var(--map-type, 0.95rem) * 0.22);
     min-height: 3px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--map-tile-accent) 42%, var(--matmon-border));
@@ -9468,8 +9568,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 /* Keep the tile usable as it shrinks: scale the remove button with it. */
 .map-tile-editor .map-tile-remove {
-  width: min(16cqmin, 1.75rem);
-  height: min(16cqmin, 1.75rem);
+  width: min(1.1 * var(--map-type, 0.95rem), 1.75rem);
+  height: min(1.1 * var(--map-type, 0.95rem), 1.75rem);
 }
 
 /* Map aspect-ratio controls (ratio presets + free B:H). */
@@ -10031,8 +10131,20 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   height: 100vh;
   /* A wallboard is unattended: nothing should be reachable only by scrolling, and nothing should move
      because someone brushed a mouse. The board is fitted to the screen (see fitWallboard in site.js), so
-     any overflow left over is a bug rather than content. */
+     any overflow left over is a bug rather than content. On a PHONE that reasoning inverts - a single column
+     of eight tiles cannot fit any screen, and refusing to scroll there just hides half the board. */
   overflow: hidden;
+}
+
+.public-map-shell:has(.map-slide[data-layout="stack"]) {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+.public-map-shell:has(.map-slide[data-layout="stack"]) .map-stage {
+  position: static;
+  inset: auto;
 }
 
 /* The stage is `position: fixed`, so a nav rendered AFTER it - which is what "below the board" does - sat in
