@@ -540,19 +540,7 @@ public static class MonitoringMapGeometry
         return (cellWidth, cellHeight);
     }
 
-    /// <summary>Converts a tile's cell geometry to its logical-px render rect:
-    /// <c>x = margin + (col-1) * (cellW+gap)</c>, <c>w = span*cellW + (span-1)*gap</c> (and the y/h equivalents).</summary>
-    public static (int X, int Y, int W, int H) PixelRect(MonitoringMap map, MonitoringMapTile tile)
-    {
-        var (cellWidth, cellHeight) = CellSize(map);
-        var x = map.OuterMargin + (tile.Column - 1) * (cellWidth + map.TilePadding);
-        var y = map.OuterMargin + (tile.Row - 1) * (cellHeight + map.TilePadding);
-        var w = tile.ColumnSpan * cellWidth + (tile.ColumnSpan - 1) * map.TilePadding;
-        var h = tile.RowSpan * cellHeight + (tile.RowSpan - 1) * map.TilePadding;
-        return (Round(x), Round(y), Round(w), Round(h));
-    }
-
-    /// <summary>Inverts <see cref="PixelRect"/>: given a v1 (Phase A free-px) tile's raw px rect, finds the
+    /// <summary>Given a v1 (Phase A free-px) tile's raw px rect, finds the
     /// nearest cell rect using the map's CURRENT Columns/Rows/TilePadding/OuterMargin. Used only by
     /// <see cref="MonitoringMapLayoutMigration"/> - a v2-native tile is always authored directly in cells.</summary>
     public static (int Column, int Row, int ColumnSpan, int RowSpan) CellRectFromPixels(MonitoringMap map, int x, int y, int width, int height)

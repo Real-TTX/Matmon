@@ -3434,6 +3434,8 @@ function initializeMapDesigner() {
 
   const stage = canvas.closest("[data-map-stage]") || canvas;
   const form = document.querySelector("[data-map-designer-form]");
+  // NB: no zoom or aspect handles here any more - a flow has neither. The aspect fields still exist as hidden
+  // inputs so an older board round-trips, but nothing in the designer reads them.
   const scaleInput = form?.querySelector("[data-map-scale]");
   const scaleOutput = form?.querySelector("[data-map-scale-output]");
   const readScale = () => {
@@ -4976,14 +4978,14 @@ function initializeMapDesigner() {
   });
 
   // --- Layout templates -------------------------------------------------------------------------------
-  // A template is authored against a minimum grid; on a smaller one its slots would be clamped and pile up,
-  // so the button is disabled instead of quietly producing a mess.
+  // A template is authored for a number of COLUMNS; on a narrower board its widths would be clamped and the
+  // arrangement it exists to demonstrate would not survive, so the button is disabled instead of quietly
+  // producing a mess. Its row count no longer matters - a flow is as tall as it needs to be.
   const syncLayoutAvailability = () => {
     const grid = readGrid();
     let anyHidden = false;
     form?.querySelectorAll("[data-map-layout]").forEach((button) => {
-      const tooSmall = grid.columns < Number(button.dataset.layoutMinColumns || 1)
-        || grid.rows < Number(button.dataset.layoutMinRows || 1);
+      const tooSmall = grid.columns < Number(button.dataset.layoutMinColumns || 1);
       button.disabled = tooSmall;
       button.classList.toggle("is-disabled", tooSmall);
       anyHidden = anyHidden || tooSmall;

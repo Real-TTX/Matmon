@@ -119,27 +119,6 @@ public static class MapTileRender
         }
     }
 
-    /// <summary>The px rect of every cell in the map's grid (Columns x Rows), used to render the editor's grid
-    /// guide lines (<c>_MapSlide.cshtml</c>) so they line up exactly with the real cells - replaces the old
-    /// fixed 8px CSS background-grid pattern, which no longer means anything under the v2 cell scheme.</summary>
-    public static IReadOnlyList<(int X, int Y, int W, int H)> GridCells(MonitoringMap map)
-    {
-        var (cellWidth, cellHeight) = MonitoringMapGeometry.CellSize(map);
-        var columns = Math.Max(1, map.Columns);
-        var rows = Math.Max(1, map.Rows);
-        var cells = new List<(int X, int Y, int W, int H)>(columns * rows);
-        for (var row = 0; row < rows; row++)
-        {
-            for (var column = 0; column < columns; column++)
-            {
-                var x = map.OuterMargin + column * (cellWidth + map.TilePadding);
-                var y = map.OuterMargin + row * (cellHeight + map.TilePadding);
-                cells.Add(((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(cellWidth), (int)Math.Round(cellHeight)));
-            }
-        }
-
-        return cells;
-    }
 }
 
 /// <summary>
@@ -179,15 +158,11 @@ public sealed class MapTileRenderModel
     public string? ElementName { get; init; }
 
     // --- Precomputed logical-px render rect (Tile.Column/Row/ColumnSpan/RowSpan -> px via
-    // MonitoringMapGeometry.PixelRect, computed once here so _MapTile.cshtml stays a dumb template). ---
+    // v3 places a tile with the grid (span columns x span row units), so there is no px rect to precompute
+    // and no TileX/Y/Width/Height on this model any more - _MapTile reads the spans straight off the tile. ---
 
-    public int TileX { get; init; }
 
-    public int TileY { get; init; }
 
-    public int TileWidth { get; init; }
-
-    public int TileHeight { get; init; }
 
     // --- Editor-only (Phase C's live-JSON patch hooks target the same DOM regardless of this flag) ---
 
@@ -226,7 +201,6 @@ public sealed class MapTileRenderModel
         MonitoringMapTile? tileOverride = null)
     {
         var tile = tileOverride ?? vm.Tile;
-        var rect = MonitoringMapGeometry.PixelRect(map, tile);
         return new()
         {
             Tile = tile,
@@ -243,10 +217,6 @@ public sealed class MapTileRenderModel
             ProgressLabel = vm.ProgressLabel,
             EffectiveVisualType = vm.EffectiveVisualType,
             ElementName = vm.Element?.Name,
-            TileX = rect.X,
-            TileY = rect.Y,
-            TileWidth = rect.W,
-            TileHeight = rect.H,
             Editable = editable,
             Index = index,
             SlideId = slideId,
@@ -262,7 +232,6 @@ public sealed class MapTileRenderModel
     /// live-preview fetch resolves, or one whose target could not be found.</summary>
     public static MapTileRenderModel Placeholder(MonitoringMapTile tile, MonitoringMap map, int index, Guid slideId, bool isDeleted = false)
     {
-        var rect = MonitoringMapGeometry.PixelRect(map, tile);
         return new()
         {
             Tile = tile,
@@ -274,10 +243,6 @@ public sealed class MapTileRenderModel
             KindLabel = MapTileRender.KindLabel(tile.Kind),
             IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? MapTileRender.IconForKind(tile.Kind) : tile.IconKey.Trim(),
             EffectiveVisualType = tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.Card : tile.VisualType,
-            TileX = rect.X,
-            TileY = rect.Y,
-            TileWidth = rect.W,
-            TileHeight = rect.H,
             Editable = true,
             Index = index,
             SlideId = slideId,

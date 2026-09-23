@@ -8507,7 +8507,11 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 /* All sized in cq units like the rest of the tile content, so they scale with the tile rather than with the
    root font size - the whole board is one transformed canvas and rem would not follow it. */
 
+/* A list is as tall as its tile, so the row that does not fit gets cut in half - which reads as a broken
+   widget rather than as "there is more". Fading the bottom edge says the second thing, and the feed already
+   prints its total underneath ("4 open"), so nothing is hidden without a number for it. */
 .map-tile-rows {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.1em), transparent 100%);
   display: flex;
   flex-direction: column;
   gap: calc(var(--map-type, 0.95rem) * 0.3);
