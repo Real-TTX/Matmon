@@ -222,13 +222,18 @@
     @* "Gauge" only suppresses the plain reading when a dial was actually DRAWN. A gauge pointed at a channel
        with no scale draws none (see MapDisplayProvider.ResolveSensorProgressPercent), and skipping the value
        as well left that tile completely blank - the reading is still the point of the widget. *@
-    @if (!isCollection && !string.IsNullOrWhiteSpace(Model.Value)
+    @* A GRAPH's widget is the trend; printing the latest reading underneath it at the value tile's size put a
+       52cqh figure in a tile that had already spent its height on the chart, and it simply overflowed. The
+       number is still on the tile - in the caption line, where it belongs next to a curve. *@
+    @if (!isCollection && tile.Kind != MonitoringMapTileKind.Graph && !string.IsNullOrWhiteSpace(Model.Value)
         && (Model.EffectiveVisualType != MonitoringMapTileVisualType.Gauge || !Model.ProgressPercent.HasValue))
     {
         <div class="map-tile-value" data-tile-value>@Model.Value</div>
     }
 
-    @if (!isChrome)
+    @* An SLA tile already prints its window under the percentage, and the generic subtitle is the same
+       string - two identical captions stacked on a phone card. *@
+    @if (!isChrome && Model.Sla is null)
     {
         <p data-tile-subtitle>@Model.Subtitle</p>
         @* The kind label only earns a line when nothing else names the tile. Printing "State" under every

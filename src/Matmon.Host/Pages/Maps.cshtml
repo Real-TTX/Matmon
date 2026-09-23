@@ -14,19 +14,16 @@
                 : Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme))
             ?? $"/Maps/Public/{candidate.PublicToken}";
 
-    string MapPresetText(MonitoringMap map)
-    {
-        var aspect = map.EffectiveAspect();
-        var fit = map.WallboardFit == MonitoringMapWallboardFit.Stretch ? "stretch to fill" : "keep ratio";
-        return $"{aspect.Width}:{aspect.Height} · {fit}";
-    }
+    // v3 boards have no aspect ratio and no letterbox mode - they flow across their columns. Describing one
+    // as "1920:1080 · keep ratio" was left over from the canvas and told the reader nothing true.
+    string MapPresetText(MonitoringMap map) =>
+        $"{Math.Max(1, map.Columns)} columns · {Math.Max(1, map.Rows)} rows per screen";
 
     string LibrarySummary(MonitoringMap candidate)
     {
         var slideCount = candidate.EffectiveSlides().Count;
-        var aspect = candidate.EffectiveAspect();
         var publicState = candidate.PublicEnabled ? "on" : "off";
-        return $"{slideCount} slide{(slideCount == 1 ? "" : "s")} · {aspect.Width}:{aspect.Height} · Public {publicState} · updated {candidate.UpdatedUtc.LocalDateTime:g}";
+        return $"{slideCount} slide{(slideCount == 1 ? "" : "s")} · {Math.Max(1, candidate.Columns)} columns · Public {publicState} · updated {candidate.UpdatedUtc.LocalDateTime:g}";
     }
 }
 

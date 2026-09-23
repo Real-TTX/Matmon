@@ -89,6 +89,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         if (_runtimeOptions.ProvisionDemoSensors)
         {
+            EnsureDemoLoopbackSensor();
             EnsureDefaultWindowsHealthSensor();
             EnsureDefaultProxmoxSensor();
         }
@@ -2820,45 +2821,116 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         if (_document.Maps.Count == 0 && createStarterMap)
         {
-            var root = _document.RootProbe;
-            // Authored directly on the v2 cell grid (default 12x6) - no older layout to migrate, so this
-            // skips MonitoringMapLayoutMigration entirely (it is a no-op past LayoutVersion 0/1 anyway).
-            _document.Maps.Add(new MonitoringMap
-            {
-                Name = "Operations Wall",
-                Description = "A starter map for wall displays and office screens.",
-                PublicToken = CreateToken(),
-                LayoutVersion = MonitoringMap.CurrentLayoutVersion,
-                LogicalWidth = 1920,
-                LogicalHeight = 1080,
-                Tiles =
-                [
-                    new MonitoringMapTile
-                    {
-                        Kind = MonitoringMapTileKind.Status,
-                        Title = "Overall status",
-                        ElementId = root.Id,
-                        Column = 1,
-                        Row = 1,
-                        ColumnSpan = 6,
-                        RowSpan = 3
-                    },
-                    new MonitoringMapTile
-                    {
-                        Kind = MonitoringMapTileKind.Text,
-                        Title = "Matmon Map",
-                        Text = "Assign sensors, folders or probes to tiles in edit mode.",
-                        Column = 7,
-                        Row = 1,
-                        ColumnSpan = 6,
-                        RowSpan = 3
-                    }
-                ]
-            });
+            _document.Maps.Add(BuildStarterMap());
         }
 
         EnsureMapPublicTokens();
         MigrateMapLayouts();
+    }
+
+
+    /// <summary>The board a fresh install opens with. Deliberately a REAL board rather than two placeholder
+    /// tiles: half the point of a wallboard editor is seeing what the widgets look like with something in
+    /// them, and "add your first widget" teaches nobody what a gauge or an alert feed is for. It binds to
+    /// whatever the seeded topology actually contains - an empty workspace still gets a valid board, just
+    /// with unassigned tiles.</summary>
+    private MonitoringMap BuildStarterMap()
+    {
+        var root = _document.RootProbe;
+        // The demo loopback sensor first, by IDENTITY rather than by sorting on its name: a board whose
+        // gauges and trends are all empty - because every seeded sensor points at a host this machine does
+        // not have - teaches nothing.
+        var sensors = MonitoringTopology.EnumerateDescendants(root).OfType<SensorElement>().ToList();
+        if (_demoLoopbackSensorId is { } loopbackId)
+        {
+            var loopback = sensors.FirstOrDefault(candidate => candidate.Id == loopbackId);
+            if (loopback is not null)
+            {
+                sensors.Remove(loopback);
+                sensors.Insert(0, loopback);
+            }
+        }
+        var containers = MonitoringTopology.EnumerateDescendants(root).OfType<MonitoringContainerElement>().ToList();
+        Guid? sensor(int index) => index < sensors.Count ? sensors[index].Id : null;
+        Guid? container(int index) => index < containers.Count ? containers[index].Id : root.Id;
+
+        var order = 0;
+        MonitoringMapTile tile(MonitoringMapTileKind kind, string title, int columnSpan, int rowSpan,
+            Guid? elementId = null, Action<MonitoringMapTile>? configure = null)
+        {
+            var created = new MonitoringMapTile
+            {
+                Kind = kind,
+                Title = title,
+                ElementId = elementId,
+                Order = order++,
+                ColumnSpan = columnSpan,
+                RowSpan = rowSpan
+            };
+            configure?.Invoke(created);
+            return created;
+        }
+
+        var overview = new MonitoringMapSlide
+        {
+            Name = "Overview",
+            Title = "Operations",
+            Subtitle = "Everything that must be up right now",
+            Tiles =
+            [
+                tile(MonitoringMapTileKind.Heading, "Live status", 8, 1, configure: t => t.Text = "Every probe, every sensor"),
+                tile(MonitoringMapTileKind.Clock, "Time", 4, 1),
+                tile(MonitoringMapTileKind.Status, "Overall health", 4, 3, root.Id),
+                tile(MonitoringMapTileKind.AlertFeed, "Open alerts", 8, 3, root.Id, t => t.ListLimit = 5),
+                tile(MonitoringMapTileKind.Element, "Primary probe", 3, 2, container(0)),
+                tile(MonitoringMapTileKind.Element, "Key sensor", 3, 2, sensor(0)),
+                tile(MonitoringMapTileKind.Sla, "Uptime 7 days", 3, 2, sensor(0), t => t.SlaWindowDays = 7),
+                tile(MonitoringMapTileKind.Value, "Latest reading", 3, 2, sensor(0))
+            ]
+        };
+
+        order = 0;
+        var detail = new MonitoringMapSlide
+        {
+            Name = "Detail",
+            Title = "Trends",
+            Subtitle = "How the numbers have been moving",
+            Tiles =
+            [
+                tile(MonitoringMapTileKind.Graph, "Trend", 8, 4, sensor(0), t => t.GraphType = MonitoringMapTileGraphType.Area),
+                tile(MonitoringMapTileKind.SensorList, "Worst first", 4, 4, root.Id, t =>
+                {
+                    t.ListMode = MonitoringMapListMode.Worst;
+                    t.ListLimit = 6;
+                }),
+                tile(MonitoringMapTileKind.Value, "Gauge", 3, 3, sensor(0), t =>
+                {
+                    t.VisualType = MonitoringMapTileVisualType.Gauge;
+                    t.GaugeMin = 0;
+                    t.GaugeMax = 100;
+                }),
+                tile(MonitoringMapTileKind.Value, "Progress", 3, 3, sensor(1) ?? sensor(0), t =>
+                {
+                    t.VisualType = MonitoringMapTileVisualType.ProgressBar;
+                    t.GaugeMin = 0;
+                    t.GaugeMax = 100;
+                }),
+                tile(MonitoringMapTileKind.Element, "Second sensor", 3, 3, sensor(1)),
+                tile(MonitoringMapTileKind.Text, "Notes", 3, 3, configure: t =>
+                    t.Text = "Drag a widget to reorder it. Its width is in columns, its height in rows.")
+            ]
+        };
+
+        return new MonitoringMap
+        {
+            Name = "Operations Wall",
+            Description = "A starter board - edit it, or delete it once you have your own.",
+            PublicToken = CreateToken(),
+            LayoutVersion = MonitoringMap.CurrentLayoutVersion,
+            Columns = 12,
+            Rows = 8,
+            Slides = [overview, detail]
+        };
     }
 
     private void EnsureMapPublicTokens()
@@ -3169,6 +3241,39 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         {
             MonitoringSettings.SetChannelThreshold(settings, channelKey, severity, rule);
         }
+    }
+
+    private const string DemoLoopbackSensorName = "Loopback latency";
+
+    /// <summary>Set by <see cref="EnsureDemoLoopbackSensor"/> so <see cref="BuildStarterMap"/> can bind to it
+    /// directly. Looking it up again by name is the kind of indirection that quietly stops matching.</summary>
+    private Guid? _demoLoopbackSensorId;
+
+    /// <summary>One demo sensor that actually REPORTS. The other demo sensors point at hosts a dev box does
+    /// not have, so every widget on the starter board showed an error and the gauges and bars - which refuse
+    /// to draw a dial without a reading - rendered as empty cards. A ping to loopback always answers, so the
+    /// example board demonstrates the widgets instead of demonstrating failure states.</summary>
+    private void EnsureDemoLoopbackSensor()
+    {
+        const string sensorTarget = "127.0.0.1";
+        const string sensorName = DemoLoopbackSensorName;
+
+        var sensor = EnumerateElements(_document.RootProbe)
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.SensorTypeKey, PingSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Name, sensorName, StringComparison.OrdinalIgnoreCase));
+
+        if (sensor is null)
+        {
+            sensor = new SensorElement(sensorName, PingSensorExecutor.Definition.Key, sensorTarget)
+            {
+                Description = "Always-on demo sensor so the example board has live numbers in it"
+            };
+            AddChild(_document.RootProbe, sensor);
+        }
+
+        _demoLoopbackSensorId = sensor.Id;
     }
 
     private void EnsureDefaultWindowsHealthSensor()

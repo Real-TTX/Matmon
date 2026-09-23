@@ -8320,26 +8320,24 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border-radius: 4px;
 }
 
+/* A full-width row of the flow, not an absolute overlay. It was pinned to the top-left of the old canvas,
+   where nothing else lived; on a grid it sat straight on top of the first row of widgets. */
 .map-slide-header {
-  position: absolute;
-  left: 24px;
-  top: 16px;
-  right: 24px;
-  height: 72px;
+  grid-column: 1 / -1;
   color: var(--matmon-text);
   pointer-events: none;
 }
 
 .map-slide-header h2 {
   margin: 0;
-  font-size: 40px;
-  line-height: 1.1;
+  font-size: clamp(1.1rem, 2.2vw, 2.2rem);
+  line-height: 1.15;
 }
 
 .map-slide-header p {
   margin: 0;
-  font-size: 20px;
   color: var(--matmon-muted);
+  font-size: clamp(0.78rem, 1.1vw, 1.1rem);
 }
 
 .map-tile {
@@ -8363,7 +8361,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: 0;
   min-height: 0;
   container-type: size;
-  padding: 12px;
+  /* Proportional, so a small tile spends its space on the reading rather than on its own margin. */
+  padding: clamp(6px, 4.5cqmin, 14px);
   border: 1px solid color-mix(in srgb, var(--map-tile-accent) 52%, var(--matmon-border));
   border-left: 4px solid var(--map-tile-accent);
   border-radius: 10px;
@@ -8465,7 +8464,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   text-overflow: ellipsis;
   /* Fill the available height (cqh) but cap by width (cqw) so it stays big on wide/short tiles yet never
      overflows a narrow one - a single readable line either way. */
-  font-size: min(40cqh, 26cqw);
+  font-size: min(52cqh, 30cqw);
   font-weight: 800;
   line-height: 1;
   /* Digits of equal width, so a value that ticks 9 -> 10 -> 11 does not make the whole line jitter on a
@@ -8826,6 +8825,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   white-space: nowrap;
 }
 
+/* Caption lines, deliberately quiet and deliberately small: every pixel they take is a pixel the actual
+   reading does not get. */
 .map-tile p,
 .map-tile small {
   flex: 0 0 auto;
@@ -8835,7 +8836,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: min(7cqh, 5.5cqw);
+  font-size: min(6cqh, 5cqw);
 }
 
 /* A progress tile has already spent height on the bar and its scale caption, so the reading cannot also
@@ -8846,10 +8847,12 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   font-size: min(22cqh, 18cqw);
 }
 
-/* Progress-bar thickness tracks the tile: slim on a short tile, chunkier on a tall one. */
+/* The bar IS the widget, so it gets real weight - at 9cqh it read as a hairline under a big number and you
+   could not judge a fill level from across a room, which is the only reason to choose a bar over a figure. */
 .map-tile-progress {
-  height: 9cqh;
-  min-height: 6px;
+  height: 22cqh;
+  min-height: 10px;
+  max-height: 2.4rem;
 }
 
 /* One grid-row tall: tighten the chrome and drop the muted subtitle/kind line so the primary metric keeps
@@ -8919,7 +8922,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 
 .map-tile-graph-frame {
-  flex: 1 1 auto;
+  /* A shrink floor as well as a grow factor: without the basis the frame collapsed to its content on a tile
+     that also carries a title and two caption lines, and the trend - the whole widget - got the leftovers. */
+  flex: 1 1 60%;
   display: grid;
   align-items: stretch;
   /* No fixed floor - the frame must be able to shrink into a small tile instead of overflowing it. */
