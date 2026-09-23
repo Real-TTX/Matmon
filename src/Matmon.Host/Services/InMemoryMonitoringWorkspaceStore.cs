@@ -2868,6 +2868,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 RowSpan = rowSpan
             };
             configure?.Invoke(created);
+            // Through the same clamp the store and the editor use, so the seed cannot author a tile the
+            // editor will silently resize the moment you open the board (the clock asked for one row, its
+            // kind minimum is two, and opening the editor quietly changed the layout).
+            MonitoringMapTileConstraints.Clamp(created, 12, 8);
             return created;
         }
 

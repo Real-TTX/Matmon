@@ -8181,6 +8181,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    wallboard overrides it so a slide fills the screen (see .public-map-shell). */
 .map-slide {
   --map-row-unit: 4.6rem;
+  /* ⚠️ The tile type scale hangs off the ROW UNIT, not off the tile. It used to be a percentage of the tile
+     (cqh/cqmin), which was right when the board was a fixed 1920px canvas scaled to the screen as one piece -
+     there, "11% of the tile" was a proportion of a drawing. v3 renders at real size, so the same rule gave
+     the SAME title element 3.8px on a one-row tile and 21.5px on a three-row one, side by side on one board,
+     and made the editor disagree with the viewer whenever their widths did. Hanging it off the row unit means
+     every tile on a board shares one scale, the editor matches the viewer by construction, and a wallboard -
+     which enlarges the row unit to fill the screen - enlarges the text with it. */
+  --map-type: calc(var(--map-row-unit) * 0.21);
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
@@ -8221,12 +8229,11 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 /* Stacked means a phone at arm's length, not a TV across the room. The cq type scale is sized for the wall
    and lands at 8px inside a 336px-wide card, so the SMALL text gets a floor here - the big reading keeps its
    cq size, since that is the one thing a phone renders well anyway. */
-.map-slide[data-layout="stack"] .map-tile-head strong {
-  font-size: max(0.88rem, min(11cqh, 9cqw));
-}
-.map-slide[data-layout="stack"] .map-tile p,
-.map-slide[data-layout="stack"] .map-tile small {
-  font-size: max(0.72rem, min(7cqh, 5.5cqw));
+/* The rem floors these rules used to add are unnecessary now that the scale hangs off the row unit rather
+   than off the tile - a one-row tile no longer collapses its own text. Kept only as a slight bump, because a
+   phone is held at arm's length rather than watched from across a room. */
+.map-slide[data-layout="stack"] {
+  --map-type: calc(var(--map-row-unit) * 0.24);
 }
 /* On a WIDE, short tile the arc is fitted by height, so it ends up only a fraction of the tile across and a
    reading inside its mouth has room for "0…" and nothing else. Past roughly 2.2:1 the dial therefore moves to
@@ -8277,12 +8284,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
     font-size: 1.15rem;
   }
 }
-.map-slide[data-layout="stack"] .map-tile-row {
-  font-size: max(0.72rem, clamp(7px, 7cqh, 20px));
-}
-.map-slide[data-layout="stack"] .map-tile-kind-label {
-  font-size: max(0.62rem, clamp(0.42rem, 3.6cqmin, 0.68rem));
-}
+
 
 .map-slide[data-layout="stack"] .map-grid-guides {
   display: none;
@@ -8342,6 +8344,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-tile {
   --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tone, var(--matmon-border)));
+  /* ⚠️ RELATIVE, and it matters. The tile's resize grip, its size badge and its pin layer are all absolutely
+     positioned children; v2's tile was `position: absolute` so they had a containing block for free, and the
+     v3 rewrite dropped that without replacing it. Every grip in the board then escaped to the nearest
+     positioned ancestor - the slide - and stacked up in its bottom-right corner, so resizing looked simply
+     gone. (The old note "the editor tile must NOT declare position" was about `relative` breaking v2's
+     absolute placement; under v3 the opposite is required.) */
+  position: relative;
   /* A grid item: as wide as its column span, as tall as its row units. The explicit height (rather than
      letting the row stretch) is what keeps the tile a DEFINITE-size query container, which its whole cqh/cqmin
      type scale depends on - see the note on the stacked tile, where getting that wrong rendered every piece
@@ -8361,8 +8370,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: 0;
   min-height: 0;
   container-type: size;
-  /* Proportional, so a small tile spends its space on the reading rather than on its own margin. */
-  padding: clamp(6px, 4.5cqmin, 14px);
+  padding: calc(var(--map-type, 0.95rem) * 0.62);
   border: 1px solid color-mix(in srgb, var(--map-tile-accent) 52%, var(--matmon-border));
   border-left: 4px solid var(--map-tile-accent);
   border-radius: 10px;
@@ -8418,7 +8426,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   /* Height-biased but capped by width, so a wide/short tile gets a readable title instead of the tiny value
      cqmin (the smaller side) used to force. cq units measure the tile's own layout size, which the stage's
      transform:scale does NOT change, so this stays correct at any zoom level - no rem ceiling needed. */
-  font-size: min(11cqh, 9cqw);
+  font-size: var(--map-type, 0.95rem);
 }
 
 .map-tile-head .state-pill {
@@ -8433,8 +8441,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: max(14px, 13cqh);
-  height: max(14px, 13cqh);
+  width: calc(var(--map-type, 0.95rem) * 1.5);
+  height: calc(var(--map-type, 0.95rem) * 1.5);
   border-radius: 25%;
   background: color-mix(in srgb, var(--map-tile-accent) 22%, transparent);
   color: var(--map-tile-accent, var(--matmon-muted));
@@ -8450,7 +8458,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border: 1px solid var(--matmon-border);
   border-radius: 999px;
   color: var(--matmon-muted);
-  font-size: clamp(0.42rem, 3.6cqmin, 0.68rem);
+  font-size: calc(var(--map-type, 0.95rem) * 0.66);
   white-space: nowrap;
 }
 
@@ -8462,9 +8470,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  /* Fill the available height (cqh) but cap by width (cqw) so it stays big on wide/short tiles yet never
-     overflows a narrow one - a single readable line either way. */
-  font-size: min(52cqh, 30cqw);
+  /* Grows with the tile's HEIGHT IN ROWS (a taller tile should shout louder) and is capped by the tile's
+     width, so it stays a single readable line either way. */
+  font-size: min(calc(var(--map-type, 0.95rem) * 1.7 * var(--tile-rows, 2)), 30cqw);
   font-weight: 800;
   line-height: 1;
   /* Digits of equal width, so a value that ticks 9 -> 10 -> 11 does not make the whole line jitter on a
@@ -8480,7 +8488,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-tile-rows {
   display: flex;
   flex-direction: column;
-  gap: 2cqh;
+  gap: calc(var(--map-type, 0.95rem) * 0.3);
   flex: 1;
   min-height: 0;
   margin: 0;
@@ -8493,9 +8501,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   align-items: baseline;
   gap: 2cqw;
   min-width: 0;
-  padding-left: 1.6cqw;
+  padding-left: 0.5rem;
   border-left: 2px solid var(--map-row-tone, var(--matmon-border));
-  font-size: clamp(7px, 7cqh, 20px);
+  font-size: calc(var(--map-type, 0.95rem) * 0.82);
   line-height: 1.25;
 }
 .map-tile-row[data-state="ok"] { --map-row-tone: #78d5c8; }
@@ -8535,7 +8543,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-tile-rows-empty {
   margin: auto 0;
   color: var(--matmon-muted);
-  font-size: clamp(7px, 8cqh, 22px);
+  font-size: calc(var(--map-type, 0.95rem) * 0.82);
 }
 
 .map-tile-sla,
@@ -8550,13 +8558,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 .map-tile-sla strong,
 .map-tile-clock strong {
-  font-size: clamp(14px, 34cqh, 96px);
+  font-size: calc(var(--map-type, 0.95rem) * 1.5 * var(--tile-rows, 2));
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .map-tile-heading strong {
-  font-size: clamp(12px, 46cqh, 72px);
+  font-size: calc(var(--map-type, 0.95rem) * 1.5 * var(--tile-rows, 2));
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: 0.01em;
@@ -8565,7 +8573,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-tile-clock small,
 .map-tile-heading small {
   color: var(--matmon-muted);
-  font-size: clamp(7px, 11cqh, 24px);
+  font-size: calc(var(--map-type, 0.95rem) * 0.78);
 }
 
 /* --- Image / world-map tiles and their status pins -------------------------------------------------- */
@@ -8604,7 +8612,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 }
 .map-tile-canvas-empty {
   color: var(--matmon-muted);
-  font-size: clamp(7px, 9cqh, 20px);
+  font-size: calc(var(--map-type, 0.95rem) * 1.25);
 }
 
 .map-pin {
@@ -8614,7 +8622,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 0.4em;
-  font-size: clamp(6px, 6cqh, 16px);
+  font-size: calc(var(--map-type, 0.95rem) * 0.78);
   line-height: 1.15;
   white-space: nowrap;
   pointer-events: none;
@@ -8807,7 +8815,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   /* Of the DIAL, not the tile (see .map-gauge-dial) - capped by width so a wide, short dial keeps the
      reading inside the arc's mouth instead of across its stroke. */
-  font-size: min(30cqh, 19cqw);
+  font-size: min(calc(var(--map-type, 0.95rem) * 1.5 * var(--tile-rows, 2)), 19cqw);
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8820,7 +8828,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   max-width: 100%;
   overflow: hidden;
   color: var(--matmon-muted);
-  font-size: min(11cqh, 7cqw);
+  font-size: calc(var(--map-type, 0.95rem) * 0.72);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8836,7 +8844,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: min(6cqh, 5cqw);
+  font-size: calc(var(--map-type, 0.95rem) * 0.72);
 }
 
 /* A progress tile has already spent height on the bar and its scale caption, so the reading cannot also
@@ -8937,7 +8945,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
      top-left of a big empty box it reads as a broken widget rather than as "nothing to plot yet". */
   place-items: center;
   color: var(--matmon-muted);
-  font-size: 4cqmin;
+  font-size: calc(var(--map-type, 0.95rem) * 0.8);
 }
 /* The SVG still has to fill the frame - place-items:center would otherwise shrink it to its content. */
 .map-tile-graph-frame > svg {
