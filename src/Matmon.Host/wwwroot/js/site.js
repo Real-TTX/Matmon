@@ -3796,6 +3796,58 @@ function initializeMapDesigner() {
     setColor("--map-tile-custom-text", text);
   };
 
+  // WYSIWYG for the picture widgets. The upload handler only wrote the asset id into a hidden field, so the
+  // canvas kept showing "No image uploaded" until the map was saved and the page came back from the server -
+  // on an editor whose whole promise is that it renders the real tile, that is the one widget that did not.
+  const imageFitToCss = (value) => {
+    switch (String(value || "").toLowerCase()) {
+      case "cover": return "cover";
+      case "stretch": return "fill";
+      default: return "contain";
+    }
+  };
+
+  const syncTileImage = (tile, panel) => {
+    const pinCanvas = tile.querySelector("[data-map-pin-canvas]");
+    if (!pinCanvas) {
+      return;
+    }
+    // The world map is a fixed shipped asset, not an upload - leave its <img> alone.
+    const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
+    if (kind === "GeoMap") {
+      return;
+    }
+
+    const assetId = (panel?.querySelector("[data-map-property-image-id]")?.value || "").trim();
+    let image = pinCanvas.querySelector("img.map-tile-image");
+    let empty = pinCanvas.querySelector(".map-tile-canvas-empty");
+
+    if (!assetId) {
+      image?.remove();
+      if (!empty) {
+        empty = document.createElement("span");
+        empty.className = "map-tile-canvas-empty";
+        empty.textContent = "No image uploaded";
+        pinCanvas.prepend(empty);
+      }
+      return;
+    }
+
+    empty?.remove();
+    if (!image) {
+      image = document.createElement("img");
+      image.className = "map-tile-image";
+      image.alt = "";
+      // Before the pins, so they keep painting on top of it.
+      pinCanvas.prepend(image);
+    }
+    const source = "/api/map-assets/" + encodeURIComponent(assetId);
+    if (!image.getAttribute("src") || image.getAttribute("src") !== source) {
+      image.setAttribute("src", source);
+    }
+    image.style.objectFit = imageFitToCss(panel?.querySelector("[data-map-property-image-fit]")?.value);
+  };
+
   // The swatch is a convenience on top of the hex field, never a second source of truth: the TEXT input is
   // what posts, because only it can hold "" = keep the theme colour, which a colour input cannot express.
   const setupColorRules = (panel) => {
@@ -4243,6 +4295,7 @@ function initializeMapDesigner() {
     tile.classList.toggle("is-plain", !showCard);
 
     syncPanelVisibility(panel);
+    syncTileImage(tile, panel);
     applyTileAppearance(tile, panel);
     applyTilePosition(tile);
     refreshTilePreview(tile, panel);
@@ -4369,7 +4422,7 @@ function initializeMapDesigner() {
     panel?.querySelectorAll("[data-map-tile-column-span], [data-map-tile-row-span]").forEach((input) => {
       input.addEventListener("input", () => applyTilePosition(tile));
     });
-    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon], [data-map-property-value-only] input").forEach((input) => {
+    panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon], [data-map-property-image-id], [data-map-property-image-fit], [data-map-property-value-only] input").forEach((input) => {
       input.addEventListener("input", () => syncTileFromPanel(panel));
       input.addEventListener("change", () => syncTileFromPanel(panel));
     });

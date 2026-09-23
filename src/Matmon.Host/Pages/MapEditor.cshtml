@@ -416,7 +416,7 @@
                                     </div>
                                     <label class="workspace-field" data-map-property-image-only>
                                         <span class="workspace-label">Fit</span>
-                                        <select asp-for="Input.Tiles[index].ImageFit" class="form-select workspace-select">
+                                        <select asp-for="Input.Tiles[index].ImageFit" class="form-select workspace-select" data-map-property-image-fit>
                                             <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
                                             <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
                                             <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
@@ -937,7 +937,7 @@
                         </div>
                         <label class="workspace-field" data-map-property-image-only>
                             <span class="workspace-label">Fit</span>
-                            <select name="Input.Tiles[__index__].ImageFit" class="form-select workspace-select">
+                            <select name="Input.Tiles[__index__].ImageFit" class="form-select workspace-select" data-map-property-image-fit>
                                 <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
                                 <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
                                 <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
