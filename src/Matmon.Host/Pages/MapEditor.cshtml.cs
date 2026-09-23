@@ -204,8 +204,7 @@ public sealed class MapEditorModel : PageModel
             ?? (string.IsNullOrEmpty(tile.TargetToken) && tile.ElementId != Guid.Empty ? tile.ElementId : null),
         TargetTag = MonitoringTargetResolver.TagName(tile.TargetToken),
         Text = tile.Text,
-        Column = Math.Max(1, tile.Column),
-        Row = Math.Max(1, tile.Row),
+        Order = tile.Order,
         ColumnSpan = Math.Max(1, tile.ColumnSpan),
         RowSpan = Math.Max(1, tile.RowSpan),
         BackgroundColor = tile.BackgroundColor,
@@ -313,8 +312,7 @@ public sealed class MapEditorModel : PageModel
                         ? MonitoringTargetResolver.ForTag(tag)
                         : tile.ElementId is { } eid ? MonitoringTargetResolver.ForElement(eid) : null,
                     Text = tile.Text,
-                    Column = tile.Column,
-                    Row = tile.Row,
+                    Order = tile.Order,
                     ColumnSpan = tile.ColumnSpan,
                     RowSpan = tile.RowSpan,
                     BackgroundColor = tile.BackgroundColor,
@@ -377,8 +375,7 @@ public sealed class MapEditorModel : PageModel
                         SlideId = defaultSlideId,
                         Kind = MonitoringMapTileKind.Status,
                         Title = "Status",
-                        Column = 1,
-                        Row = 1,
+                        Order = 0,
                         ColumnSpan = 4,
                         RowSpan = 2
                     }
@@ -440,14 +437,18 @@ public sealed class MapEditorModel : PageModel
             label = template.Label,
             minColumns = template.MinColumns,
             minRows = template.MinRows,
-            slots = template.Slots.Select(slot => new
-            {
-                widget = slot.WidgetKey,
-                column = slot.Column,
-                row = slot.Row,
-                columnSpan = slot.ColumnSpan,
-                rowSpan = slot.RowSpan
-            })
+            // A template is an ordered list of widgets in v3, not a set of placements: the slots' authored
+            // row/column only survive as the order they are laid down in, which is exactly how the flow will
+            // arrange them anyway.
+            slots = template.Slots
+                .OrderBy(slot => slot.Row)
+                .ThenBy(slot => slot.Column)
+                .Select(slot => new
+                {
+                    widget = slot.WidgetKey,
+                    columnSpan = slot.ColumnSpan,
+                    rowSpan = slot.RowSpan
+                })
         });
 
         return new Dictionary<string, object>
@@ -544,9 +545,9 @@ public sealed class MapTileInput
     public string? Text { get; set; }
 
     /// <summary>1-based grid cell coordinates - see <see cref="MonitoringMap.Columns"/>/<see cref="MonitoringMap.Rows"/>.</summary>
-    public int Column { get; set; } = 1;
-
-    public int Row { get; set; } = 1;
+    /// <summary>Position in the slide's flow - v3 has no x/y. Written by the designer's drag-to-reorder and
+    /// re-densified on save by <see cref="MonitoringMapFlow.Normalize"/>.</summary>
+    public int Order { get; set; }
 
     public int ColumnSpan { get; set; } = 2;
 

@@ -8293,17 +8293,20 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    8px background-grid pattern that stopped meaning anything once cell size became derived from
    Columns/Rows/TilePadding/OuterMargin instead of a flat px snap. Rendered before the tiles in DOM order, so
    the (equally absolutely-positioned) tiles naturally paint on top with no z-index needed. */
-/* Laid out by the SAME grid as the tiles (one stripe per column, first row, pinned behind them), so a guide
-   cannot drift from where a tile will actually land. */
+/* An overlay that repeats the tiles' OWN grid definition, rather than joining their grid as items: a flow
+   has no explicit rows, so a `grid-row: 1 / -1` stripe resolved to the first row only and the guides showed
+   as short stubs at the top. Same columns, same gap, same inset - it cannot drift from where a tile lands. */
 .map-grid-guides {
-  display: contents;
+  position: absolute;
+  inset: var(--map-margin, 24px);
+  display: grid;
+  grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
+  gap: var(--tile-gap, 16px);
+  pointer-events: none;
 }
 .map-grid-column {
-  grid-row: 1 / -1;
-  grid-column: span 1;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--matmon-border) 26%, transparent);
-  pointer-events: none;
+  background: color-mix(in srgb, var(--matmon-border) 20%, transparent);
 }
 .map-grid-guides-legacy {
   position: absolute;

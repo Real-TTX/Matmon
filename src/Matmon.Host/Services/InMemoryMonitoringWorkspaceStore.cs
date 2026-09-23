@@ -631,7 +631,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 DurationSeconds = NormalizeSlideDurationSeconds(slide.DurationSeconds),
                 BackgroundColor = NormalizeColor(slide.BackgroundColor),
                 ShowHeader = slide.ShowHeader,
-                Tiles = NormalizeMapTiles(slide.Tiles ?? [], columns, rows).ToList()
+                // v3: the flow order IS the layout, so it is normalised to a dense 0..n-1 on every save - a
+                // gap or a duplicate would make the next drag land somewhere the user did not aim.
+                Tiles = MonitoringMapFlow.Normalize(NormalizeMapTiles(slide.Tiles ?? [], columns, rows)).ToList()
             })
             .ToList();
 
@@ -4086,8 +4088,6 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 normalized.TargetTag = string.IsNullOrWhiteSpace(tile.TargetTag) ? null : tile.TargetTag.Trim();
                 normalized.Text = string.IsNullOrWhiteSpace(tile.Text) ? null : tile.Text.Trim();
                 normalized.IconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? null : tile.IconKey.Trim();
-                normalized.Column = Math.Max(1, tile.Column);
-                normalized.Row = Math.Max(1, tile.Row);
                 normalized.ColumnSpan = tile.ColumnSpan <= 0 ? defaultColumns : tile.ColumnSpan;
                 normalized.RowSpan = tile.RowSpan <= 0 ? defaultRows : tile.RowSpan;
                 normalized.BackgroundColor = NormalizeColor(tile.BackgroundColor);

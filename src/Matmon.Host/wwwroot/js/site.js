@@ -3376,6 +3376,9 @@ function discoveryStatusTone(status) {
 // scaled canvas - based on the STAGE's own rendered width, not the viewport, so it is also correct inside an
 // embedded/tunneled console whose iframe may be narrower than the outer window.
 const MapStackBreakpoint = 640;
+// Mirrors MonitoringMapTileConstraints.MaxRowSpan (Matmon.Core) - JS cannot reference Core, and a designer
+// that let you drag a tile taller than the store will save is a silent data loss on the next save.
+const MapMaxRowSpan = 24;
 
 // Computes the uniform scale (+ centering offset) that fits each [data-map-stage]'s fixed logical canvas
 // (--map-w x --map-h, in px) into whatever box the stage actually renders at, and writes it back as
@@ -3557,53 +3560,19 @@ function initializeMapDesigner() {
   // The tile tab bar lives outside the per-tile panels, so the chosen tab survives clicking tile to tile.
   let activePropertyTab = "general";
 
-  // The logical canvas is always 1920px wide; only the height varies with the aspect ratio - mirrors
-  // MonitoringMap.LogicalSizeFor exactly so the designer never disagrees with what the store will save.
-  const readLogicalSize = () => {
-    const aspectWidth = Math.max(1, Math.round(Number(aspectWidthInput?.value) || 16));
-    const aspectHeight = Math.max(1, Math.round(Number(aspectHeightInput?.value) || 9));
-    const logicalWidth = 1920;
-    const logicalHeight = Math.max(1, Math.round((logicalWidth * aspectHeight) / aspectWidth));
-    return { aspectWidth, aspectHeight, logicalWidth, logicalHeight };
-  };
-
-  // The SAME cell<->px math as MonitoringMapGeometry (Matmon.Core), mirrored here because JS cannot reference
-  // Core directly. columns/rows/tilePadding/outerMargin are read from the hidden round-trip inputs above.
-  const readGrid = () => {
-    const { logicalWidth, logicalHeight } = readLogicalSize();
-    const columns = Math.max(1, Math.round(Number(columnsInput?.value) || 12));
-    const rows = Math.max(1, Math.round(Number(rowsInput?.value) || 6));
-    const tilePadding = Math.max(0, Number(tilePaddingInput?.value) || 16);
-    const outerMargin = Math.max(0, Number(outerMarginInput?.value) || 24);
-    const cellWidth = (logicalWidth - 2 * outerMargin - (columns - 1) * tilePadding) / columns;
-    const cellHeight = (logicalHeight - 2 * outerMargin - (rows - 1) * tilePadding) / rows;
-    return { columns, rows, tilePadding, outerMargin, logicalWidth, logicalHeight, cellWidth, cellHeight };
-  };
-
-  // Cell rect (1-based column/row, span in cells) -> logical-px rect - mirrors MonitoringMapGeometry.PixelRect.
-  const cellRectToPx = (grid, column, row, columnSpan, rowSpan) => ({
-    x: grid.outerMargin + (column - 1) * (grid.cellWidth + grid.tilePadding),
-    y: grid.outerMargin + (row - 1) * (grid.cellHeight + grid.tilePadding),
-    w: columnSpan * grid.cellWidth + (columnSpan - 1) * grid.tilePadding,
-    h: rowSpan * grid.cellHeight + (rowSpan - 1) * grid.tilePadding
-  });
-
-  // Logical-px point -> nearest 1-based cell - mirrors MonitoringMapGeometry.CellRectFromPixels' column/row half.
-  const pxPointToCell = (grid, x, y) => ({
-    column: Math.round((x - grid.outerMargin) / (grid.cellWidth + grid.tilePadding)) + 1,
-    row: Math.round((y - grid.outerMargin) / (grid.cellHeight + grid.tilePadding)) + 1
-  });
-
-  // Logical-px size -> nearest cell span - mirrors MonitoringMapGeometry.CellRectFromPixels' span half.
-  const pxSizeToSpan = (grid, width, height) => ({
-    columnSpan: Math.round((width + grid.tilePadding) / (grid.cellWidth + grid.tilePadding)),
-    rowSpan: Math.round((height + grid.tilePadding) / (grid.cellHeight + grid.tilePadding))
+  // v3 has no canvas and no pixel math. The slide is a CSS grid, so the only thing the designer needs to
+  // know is the shape of that grid - everything that used to mirror MonitoringMapGeometry here (cell rects,
+  // px<->cell conversions, the zoom/scale transform) went with the canvas.
+  const readGrid = () => ({
+    columns: Math.max(1, Math.round(Number(columnsInput?.value) || 12)),
+    rows: Math.max(1, Math.round(Number(rowsInput?.value) || 6)),
+    tilePadding: Math.max(0, Number(tilePaddingInput?.value) || 16),
+    outerMargin: Math.max(0, Number(outerMarginInput?.value) || 24)
   });
 
   const syncMapSummary = () => {
     const name = mapNameInput?.value?.trim() || "New Map";
     const description = mapDescriptionInput?.value?.trim() || "No description";
-    const { aspectWidth, aspectHeight } = readLogicalSize();
     if (mapTitlePreview) {
       mapTitlePreview.textContent = name;
     }
@@ -3611,80 +3580,33 @@ function initializeMapDesigner() {
       mapDescriptionPreview.textContent = description;
     }
     if (mapGridPreview) {
-      // The canvas header states the GRID, which is what you place widgets against - the aspect ratio is a
-      // Display setting and saying "16:9" here told you nothing about where a widget would land.
-      const grid = readGrid();
-      mapGridPreview.textContent = ` 00d7 `;
+      mapGridPreview.textContent = String(readGrid().columns);
     }
   };
 
-  // Recomputes the logical canvas size from the aspect-ratio fields, applies it to the stage + slide (both
-  // carry their own --map-w/--map-h - the slide's server-rendered inline style would otherwise shadow the
-  // stage's via CSS inheritance), zooms the stage per the slider (a percentage of the workbench width -
-  // fitMapStages then measures the resulting box and computes kx/ky, so there is no separate zoom math here),
-  // and finally re-clamps every tile into the (possibly resized) canvas.
-  // The guide lines are server-rendered from MapTileRender.GridCells for the first paint. Once the user edits
-  // columns/rows/gap/margin they have to be rebuilt from the same formula here, or the guides would keep
-  // showing the old grid while the widgets already snap to the new one.
-
-  // The ruler labels are server-rendered as percentages of the logical canvas; once the user changes the
-  // grid they must be rebuilt from the same numbers, or they would keep counting the old columns.
-  const renderRulers = (grid) => {
-    const frame = form?.querySelector("[data-map-rulers]");
-    if (!frame) {
-      return;
-    }
-
-    const build = (host, count, positionOf, axis) => {
-      if (!host) {
-        return;
-      }
-      const parts = [];
-      for (let i = 0; i < count; i += 1) {
-        parts.push('<span style="' + axis + ':' + positionOf(i).toFixed(3) + '%">' + (i + 1) + "</span>");
-      }
-      host.innerHTML = parts.join("");
-    };
-
-    build(frame.querySelector(".map-ruler-columns"), grid.columns,
-      (i) => (cellRectToPx(grid, i + 1, 1, 1, 1).x + grid.cellWidth / 2) / grid.logicalWidth * 100, "left");
-    build(frame.querySelector(".map-ruler-rows"), grid.rows,
-      (i) => (cellRectToPx(grid, 1, i + 1, 1, 1).y + grid.cellHeight / 2) / grid.logicalHeight * 100, "top");
-  };
-  const renderGridGuides = () => {
+  // One stripe per column, laid out by the same grid as the tiles.
+  const renderGridGuides = (grid = readGrid()) => {
     if (!gridGuides) {
       return;
     }
-    const grid = readGrid();
-    const cells = [];
-    for (let row = 1; row <= grid.rows; row += 1) {
-      for (let column = 1; column <= grid.columns; column += 1) {
-        const rect = cellRectToPx(grid, column, row, 1, 1);
-        const style = "left:" + rect.x + "px;top:" + rect.y + "px;width:" + rect.w + "px;height:" + rect.h + "px;";
-        cells.push('<span class="map-grid-cell" style="' + style + '"></span>');
-      }
+    gridGuides.replaceChildren();
+    for (let column = 0; column < grid.columns; column += 1) {
+      const stripe = document.createElement("span");
+      stripe.className = "map-grid-column";
+      gridGuides.appendChild(stripe);
     }
-    gridGuides.innerHTML = cells.join("");
-    renderRulers(grid);
   };
 
   const syncCanvas = () => {
-    const { logicalWidth, logicalHeight } = readLogicalSize();
-    stage.style.setProperty("--map-w", String(logicalWidth));
-    stage.style.setProperty("--map-h", String(logicalHeight));
-    canvas.style.setProperty("--map-w", String(logicalWidth));
-    canvas.style.setProperty("--map-h", String(logicalHeight));
-
-    const scale = readScale();
-    stage.style.width = `${Math.round(scale * 100)}%`;
-    if (scaleOutput) {
-      scaleOutput.textContent = `${Math.round(scale * 100)}%`;
-    }
-
+    const grid = readGrid();
+    canvas.style.setProperty("--map-columns", String(grid.columns));
+    canvas.style.setProperty("--map-rows", String(grid.rows));
+    canvas.style.setProperty("--tile-gap", `${grid.tilePadding}px`);
+    canvas.style.setProperty("--map-margin", `${grid.outerMargin}px`);
+    renderGridGuides(grid);
     syncMapSummary();
-    renderGridGuides();
     fitMapStages();
-    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => applyTilePosition(tile));
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => applyTileSize(tile));
   };
 
   const getPanel = (index) => propertyHost?.querySelector(`[data-map-property-panel][data-tile-index="${index}"]`);
@@ -3702,51 +3624,60 @@ function initializeMapDesigner() {
   const getTileControls = (tile) => {
     const panel = getPanel(tile.dataset.tileIndex || "");
     return {
-      column: tile.querySelector("[data-map-tile-column]"),
-      row: tile.querySelector("[data-map-tile-row]"),
+      order: tile.querySelector("[data-map-tile-order]"),
       columnSpan: panel?.querySelector("[data-map-tile-column-span]"),
       rowSpan: panel?.querySelector("[data-map-tile-row-span]")
     };
   };
 
-  const applyTilePosition = (tile) => {
-    const { column, row, columnSpan, rowSpan } = getTileControls(tile);
+  // A tile has a size, not a position: the grid decides where it lands. Writing the spans back into their
+  // inputs after clamping is what keeps the keyboard fields, the resize grip and what you see in agreement.
+  const applyTileSize = (tile) => {
     const panel = getPanel(tile.dataset.tileIndex || "");
+    const { columnSpan: columnSpanInput, rowSpan: rowSpanInput } = getTileControls(tile);
     const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
     const limits = getLimits(kind);
     const grid = readGrid();
-    const nextColumnSpan = clamp(Math.round(Number(columnSpan?.value || limits.defaultColumns)), limits.minColumns, grid.columns);
-    const nextRowSpan = clamp(Math.round(Number(rowSpan?.value || limits.defaultRows)), limits.minRows, grid.rows);
-    const nextColumn = clamp(Math.round(Number(column?.value ?? 1)), 1, Math.max(1, grid.columns - nextColumnSpan + 1));
-    const nextRow = clamp(Math.round(Number(row?.value ?? 1)), 1, Math.max(1, grid.rows - nextRowSpan + 1));
-    if (columnSpan) {
-      columnSpan.value = String(nextColumnSpan);
+
+    // The kind's minimum, unless the board itself is narrower than that - then the board wins, or the tile
+    // would be wider than the slide it lives on.
+    const minColumns = Math.min(limits.minColumns, grid.columns);
+    const columnSpan = clamp(Math.round(Number(columnSpanInput?.value || limits.defaultColumns)), minColumns, grid.columns);
+    const rowSpan = clamp(Math.round(Number(rowSpanInput?.value || limits.defaultRows)), limits.minRows, MapMaxRowSpan);
+    if (columnSpanInput) {
+      columnSpanInput.value = String(columnSpan);
     }
-    if (rowSpan) {
-      rowSpan.value = String(nextRowSpan);
-    }
-    if (column) {
-      column.value = String(nextColumn);
-    }
-    if (row) {
-      row.value = String(nextRow);
+    if (rowSpanInput) {
+      rowSpanInput.value = String(rowSpan);
     }
 
-    const rect = cellRectToPx(grid, nextColumn, nextRow, nextColumnSpan, nextRowSpan);
-    tile.style.setProperty("--tile-x", String(Math.round(rect.x)));
-    tile.style.setProperty("--tile-y", String(Math.round(rect.y)));
-    tile.style.setProperty("--tile-w", String(Math.round(rect.w)));
-    tile.style.setProperty("--tile-h", String(Math.round(rect.h)));
-    tile.style.setProperty("--stack-min-h", `${nextRowSpan * 72}px`);
+    tile.style.setProperty("--tile-span", String(columnSpan));
+    tile.style.setProperty("--tile-rows", String(rowSpan));
+
     const readout = panel?.querySelector("[data-map-property-size]");
     if (readout) {
-      readout.textContent = `Size ${nextColumnSpan} x ${nextRowSpan} cells · Min ${limits.minColumns} x ${limits.minRows} cells`;
+      readout.textContent = `${columnSpan} of ${grid.columns} columns · ${rowSpan} rows tall · min ${limits.minColumns} x ${limits.minRows}`;
     }
-    // Live size badge on the tile itself (shown while dragging/resizing) - "you see the tile taking shape".
     const badge = tile.querySelector("[data-map-tile-size-badge]");
     if (badge) {
-      badge.textContent = `${nextColumnSpan} × ${nextRowSpan}`;
+      badge.textContent = `${columnSpan} × ${rowSpan}`;
     }
+  };
+
+  // The flow order IS the layout, so after any reorder the hidden Order inputs are rewritten from the tiles'
+  // DOM order - one place, so the model can never disagree with what the canvas shows.
+  const commitFlowOrder = () => {
+    let order = 0;
+    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
+      if ((tile.dataset.slideId || "") !== activeSlideId) {
+        return;
+      }
+      const field = tile.querySelector("[data-map-tile-order]");
+      if (field) {
+        field.value = String(order);
+      }
+      order += 1;
+    });
   };
 
   const applyTileAppearance = (tile, panel) => {
@@ -4267,7 +4198,7 @@ function initializeMapDesigner() {
     syncPanelVisibility(panel);
     syncTileImage(tile, panel);
     applyTileAppearance(tile, panel);
-    applyTilePosition(tile);
+    applyTileSize(tile);
     refreshTilePreview(tile, panel);
   };
 
@@ -4369,28 +4300,13 @@ function initializeMapDesigner() {
     form?.querySelector('[data-sensor-tab-target="slides"]')?.click();
   };
 
-  // Converts a pointer event to logical-px coordinates on the canvas, transform-aware: the canvas
-  // (.map-slide) is scaled via CSS transform (see fitMapStages), so its OWN getBoundingClientRect() already
-  // reflects that scale - dividing by (renderedSize / logicalSize) recovers the pre-scale logical position
-  // without needing to read the --map-kx/ky custom properties back out.
-  const pointerToLogical = (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const { logicalWidth, logicalHeight } = readLogicalSize();
-    const kx = rect.width / logicalWidth || 1;
-    const ky = rect.height / logicalHeight || 1;
-    return {
-      x: (event.clientX - rect.left) / kx,
-      y: (event.clientY - rect.top) / ky
-    };
-  };
-
   const setupTile = (tile) => {
-    applyTilePosition(tile);
+    applyTileSize(tile);
     tile.addEventListener("click", () => selectTile(tile.dataset.tileIndex || ""));
 
     const panel = getPanel(tile.dataset.tileIndex || "");
     panel?.querySelectorAll("[data-map-tile-column-span], [data-map-tile-row-span]").forEach((input) => {
-      input.addEventListener("input", () => applyTilePosition(tile));
+      input.addEventListener("input", () => applyTileSize(tile));
     });
     panel?.querySelectorAll("[data-map-property-title], [data-map-property-kind], [data-map-property-visual-type], [data-map-property-element], [data-map-property-text], [data-map-property-graph-type], [data-map-property-background], [data-map-property-accent], [data-map-property-text-color], [data-map-property-show-title], [data-map-property-show-badge], [data-map-property-show-card], [data-map-property-icon], [data-map-property-image-id], [data-map-property-image-fit], [data-map-property-value-only] input").forEach((input) => {
       input.addEventListener("input", () => syncTileFromPanel(panel));
@@ -4411,6 +4327,8 @@ function initializeMapDesigner() {
 
       tile.hidden = true;
       panel?.setAttribute("hidden", "hidden");
+      // Removing a tile leaves a hole in the order; the flow has to close up behind it.
+      commitFlowOrder();
       selectMap();
     };
 
@@ -4425,9 +4343,10 @@ function initializeMapDesigner() {
     });
     setupColorRules(panel);
 
-    // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). It used to
-    // be a thin header strip - barely 15% of a tile's height, and proportionally thinner the smaller the
-    // tile or the zoom - so most of a tile simply did not react to dragging at all.
+    // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). Dragging
+    // REORDERS now - v3 tiles have no position, so there is nothing to drag them to. The tile is moved in the
+    // DOM as the pointer passes other tiles, which means the grid reflows live and the drag preview is the
+    // real layout rather than a ghost that might disagree with it.
     tile.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) {
         return;
@@ -4440,47 +4359,51 @@ function initializeMapDesigner() {
 
       event.preventDefault();
       selectTile(tile.dataset.tileIndex || "");
-      try {
-        tile.setPointerCapture(event.pointerId);
-      } catch {
-        // Capture is a nicety here; the window-level listeners below are what actually carry the drag.
-      }
-      tile.classList.add("is-dragging");
 
-      // Remember WHERE INSIDE the tile (in logical px) the pointer grabbed it, so that spot stays under the
-      // cursor for the whole drag - expressed as a px offset from the tile's current cell rect, since the
-      // pointer itself moves continuously while cells only exist at discrete steps. Without this the tile's
-      // top-left corner was slammed onto the pointer, so grabbing a tile anywhere but its exact corner made
-      // it jump the instant you started moving.
-      const grabControls = getTileControls(tile);
-      const grabGrid = readGrid();
-      const grabRect = cellRectToPx(
-        grabGrid,
-        Number(grabControls.column?.value || 1),
-        Number(grabControls.row?.value || 1),
-        Number(grabControls.columnSpan?.value || 2),
-        Number(grabControls.rowSpan?.value || 2));
-      const grabPoint = pointerToLogical(event);
-      const grabOffsetX = grabPoint.x - grabRect.x;
-      const grabOffsetY = grabPoint.y - grabRect.y;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let dragging = false;
+
+      const siblings = () => Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((other) =>
+        (other.dataset.slideId || "") === activeSlideId
+        && !other.hidden
+        && other.querySelector("[data-map-tile-deleted]")?.value !== "true");
 
       const move = (moveEvent) => {
-        const controls = getTileControls(tile);
-        const grid = readGrid();
-        const point = pointerToLogical(moveEvent);
-        const cell = pxPointToCell(grid, point.x - grabOffsetX, point.y - grabOffsetY);
-        if (controls.column) {
-          controls.column.value = String(cell.column);
-        }
-        if (controls.row) {
-          controls.row.value = String(cell.row);
+        if (!dragging) {
+          // A few pixels of slop, so a plain click to SELECT a tile is not read as a reorder.
+          if (Math.abs(moveEvent.clientX - startX) < 4 && Math.abs(moveEvent.clientY - startY) < 4) {
+            return;
+          }
+          dragging = true;
+          tile.classList.add("is-dragging");
         }
 
-        applyTilePosition(tile);
+        const target = siblings().find((other) => {
+          if (other === tile) {
+            return false;
+          }
+          const rect = other.getBoundingClientRect();
+          return moveEvent.clientX >= rect.left && moveEvent.clientX <= rect.right
+            && moveEvent.clientY >= rect.top && moveEvent.clientY <= rect.bottom;
+        });
+        if (!target) {
+          return;
+        }
+
+        // Past the target's midpoint means "after it" - the same rule a text cursor follows, and the only one
+        // that lets you drop a tile at the very end of the flow.
+        const rect = target.getBoundingClientRect();
+        const after = moveEvent.clientX > rect.left + rect.width / 2;
+        target.parentNode?.insertBefore(tile, after ? target.nextSibling : target);
       };
 
       const up = () => {
-        tile.classList.remove("is-dragging");
+        if (dragging) {
+          tile.classList.remove("is-dragging");
+          commitFlowOrder();
+          refreshSlidePreviews();
+        }
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
         window.removeEventListener("pointercancel", up);
@@ -4502,34 +4425,29 @@ function initializeMapDesigner() {
       tile.classList.add("is-resizing");
 
       const controls = getTileControls(tile);
-      const panel = getPanel(tile.dataset.tileIndex || "");
-      const kind = normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || tile.dataset.kind);
-      const limits = getLimits(kind);
+      const startRect = tile.getBoundingClientRect();
+      const startColumnSpan = Math.max(1, Number(controls.columnSpan?.value || 3));
+      const startRowSpan = Math.max(1, Number(controls.rowSpan?.value || 2));
       const grid = readGrid();
-      const startColumnSpan = Math.max(limits.minColumns, Number(controls.columnSpan?.value || limits.defaultColumns));
-      const startRowSpan = Math.max(limits.minRows, Number(controls.rowSpan?.value || limits.defaultRows));
-      const startRect = cellRectToPx(grid, Number(controls.column?.value || 1), Number(controls.row?.value || 1), startColumnSpan, startRowSpan);
-      const startX = Number(event.clientX);
-      const startY = Number(event.clientY);
-      // k at drag-start (screen px per logical px) - a pointer delta in screen px divided by k is the
-      // equivalent delta in logical px, same maths as pointerToLogical but for a DELTA instead of a point.
-      const rect = canvas.getBoundingClientRect();
-      const { logicalWidth, logicalHeight } = readLogicalSize();
-      const kx = rect.width / logicalWidth || 1;
-      const ky = rect.height / logicalHeight || 1;
+      // Measured off the tile itself rather than computed from the canvas: one column is however wide this
+      // tile's own span turned out to be, gaps included. No unit parsing, and it stays right at any zoom or
+      // font size the browser happens to be using.
+      const columnStep = (startRect.width + grid.tilePadding) / startColumnSpan;
+      const rowStep = (startRect.height + grid.tilePadding) / startRowSpan;
+      const startX = event.clientX;
+      const startY = event.clientY;
 
       const move = (moveEvent) => {
-        const deltaWidth = (moveEvent.clientX - startX) / kx;
-        const deltaHeight = (moveEvent.clientY - startY) / ky;
-        const span = pxSizeToSpan(grid, startRect.w + deltaWidth, startRect.h + deltaHeight);
-        if (controls.columnSpan) {
-          controls.columnSpan.value = String(Math.max(limits.minColumns, span.columnSpan));
+        if (columnStep > 0 && controls.columnSpan) {
+          const width = startRect.width + (moveEvent.clientX - startX);
+          controls.columnSpan.value = String(Math.max(1, Math.round((width + grid.tilePadding) / columnStep)));
         }
-        if (controls.rowSpan) {
-          controls.rowSpan.value = String(Math.max(limits.minRows, span.rowSpan));
+        if (rowStep > 0 && controls.rowSpan) {
+          const height = startRect.height + (moveEvent.clientY - startY);
+          controls.rowSpan.value = String(Math.max(1, Math.round((height + grid.tilePadding) / rowStep)));
         }
 
-        applyTilePosition(tile);
+        applyTileSize(tile);
       };
 
       const up = () => {
@@ -4537,6 +4455,7 @@ function initializeMapDesigner() {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
         window.removeEventListener("pointercancel", up);
+        refreshSlidePreviews();
       };
 
       // Same reasoning as the move drag: the pointer leaves the small grip almost immediately.
@@ -4544,42 +4463,6 @@ function initializeMapDesigner() {
       window.addEventListener("pointerup", up);
       window.addEventListener("pointercancel", up);
     });
-  };
-
-  // First free cell for a tile of this size on the ACTIVE slide, scanning left-to-right then down. Falls back
-  // to 1,1 when the board is genuinely full - better a visible overlap the user can drag apart than a click
-  // that silently does nothing.
-  const findFreeCell = (grid, columnSpan, rowSpan) => {
-    const taken = [];
-    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
-      if ((tile.dataset.slideId || "") !== activeSlideId
-        || tile.querySelector("[data-map-tile-deleted]")?.value === "true") {
-        return;
-      }
-      const panel = getPanel(tile.dataset.tileIndex || "");
-      taken.push({
-        column: Number(tile.querySelector("[data-map-tile-column]")?.value || 1),
-        row: Number(tile.querySelector("[data-map-tile-row]")?.value || 1),
-        columnSpan: Number(panel?.querySelector("[data-map-tile-column-span]")?.value || 1),
-        rowSpan: Number(panel?.querySelector("[data-map-tile-row-span]")?.value || 1)
-      });
-    });
-
-    const overlaps = (column, row) => taken.some((other) =>
-      column < other.column + other.columnSpan
-      && column + columnSpan > other.column
-      && row < other.row + other.rowSpan
-      && row + rowSpan > other.row);
-
-    for (let row = 1; row <= grid.rows - rowSpan + 1; row += 1) {
-      for (let column = 1; column <= grid.columns - columnSpan + 1; column += 1) {
-        if (!overlaps(column, row)) {
-          return { column, row };
-        }
-      }
-    }
-
-    return { column: 1, row: 1 };
   };
 
   const addTile = (tool, position, placement) => {
@@ -4593,29 +4476,12 @@ function initializeMapDesigner() {
     const title = `${baseTitle} ${index + 1}`;
     const limits = getLimits(kind);
     const grid = readGrid();
-    const columnSpan = clamp(placement?.columnSpan ?? limits.defaultColumns, limits.minColumns, grid.columns);
-    const rowSpan = clamp(placement?.rowSpan ?? limits.defaultRows, limits.minRows, grid.rows);
-    // A layout template hands in an explicit cell. A DROP instead centers the new tile on the cursor rather
-    // than hanging it off the pointer by its top-left corner, so where you release is where the tile appears -
-    // computed in px then converted to the nearest cell, since the drop point is a continuous position.
-    let targetColumn = placement?.column;
-    let targetRow = placement?.row;
-    if ((targetColumn === undefined || targetRow === undefined) && position) {
-      const rectW = columnSpan * grid.cellWidth + (columnSpan - 1) * grid.tilePadding;
-      const rectH = rowSpan * grid.cellHeight + (rowSpan - 1) * grid.tilePadding;
-      const dropCell = pxPointToCell(grid, position.x - rectW / 2, position.y - rectH / 2);
-      targetColumn = dropCell.column;
-      targetRow = dropCell.row;
-    } else if (targetColumn === undefined || targetRow === undefined) {
-      // A palette CLICK has no drop point, and defaulting to the outer margin put every widget on cell 1,1 -
-      // click the palette four times and you have four tiles buried under each other, in a grid whose whole
-      // premise is that widgets do not overlap. So scan for the first cell the new tile actually fits in.
-      const free = findFreeCell(grid, columnSpan, rowSpan);
-      targetColumn = free.column;
-      targetRow = free.row;
-    }
-    const column = clamp(targetColumn, 1, Math.max(1, grid.columns - columnSpan + 1));
-    const row = clamp(targetRow, 1, Math.max(1, grid.rows - rowSpan + 1));
+    const columnSpan = clamp(placement?.columnSpan ?? limits.defaultColumns, Math.min(limits.minColumns, grid.columns), grid.columns);
+    const rowSpan = clamp(placement?.rowSpan ?? limits.defaultRows, limits.minRows, MapMaxRowSpan);
+    // v3 has nowhere to "place" a tile: a new widget joins the END of the flow, which is where a reading
+    // order puts something you just added. Drag it from there. (The drop point is therefore ignored - the
+    // palette's drag is kept only because dragging onto the canvas is how people expect to add one.)
+    const order = canvas.querySelectorAll(`[data-map-tile][data-slide-id="${activeSlideId}"]`).length;
     const html = template.innerHTML
       .replaceAll("__index__", String(index))
       .replaceAll("__id__", createId())
@@ -4625,8 +4491,7 @@ function initializeMapDesigner() {
       .replaceAll("__visual__", (tool.visual || "card").toLowerCase())
       .replaceAll("__kindLabel__", getKindLabel(kind))
       .replaceAll("__title__", title)
-      .replaceAll("__column__", String(column))
-      .replaceAll("__row__", String(row))
+      .replaceAll("__order__", String(order))
       .replaceAll("__colSpan__", String(columnSpan))
       .replaceAll("__rowSpan__", String(rowSpan));
     const fragment = document.createRange().createContextualFragment(html);
@@ -4648,6 +4513,7 @@ function initializeMapDesigner() {
       visualSelect.value = tool.visual;
     }
     setupTile(tile);
+    commitFlowOrder();
     // Initialize the freshly cloned tile's element + icon pickers (guarded so existing
     // ones aren't re-wired).
     initializeElementPickers();
@@ -4658,30 +4524,9 @@ function initializeMapDesigner() {
   mapSelectButton?.addEventListener("click", selectMap);
   mapNameInput?.addEventListener("input", () => syncMapSummary());
   mapDescriptionInput?.addEventListener("input", () => syncMapSummary());
-  // Changing the aspect ratio changes the logical canvas HEIGHT (width is always 1920) - re-clamping every
-  // tile (inside syncCanvas) is the "rescale" step here; unlike the old grid-cell scheme there is no separate
-  // proportional-rescale pass because a tile's px size/position simply keeps meaning the same thing.
-  aspectWidthInput?.addEventListener("input", () => syncCanvas());
-  aspectHeightInput?.addEventListener("input", () => syncCanvas());
-  form?.querySelectorAll("[data-map-aspect-preset]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (aspectWidthInput) { aspectWidthInput.value = button.dataset.aspectW || "16"; }
-      if (aspectHeightInput) { aspectHeightInput.value = button.dataset.aspectH || "9"; }
-      form?.querySelectorAll("[data-map-aspect-preset]").forEach((other) => {
-        other.classList.toggle("is-active", other === button);
-      });
-      syncCanvas();
-    });
-  });
-  // The zoom is a <select> now, so "change" is the event it actually fires.
-  scaleInput?.addEventListener("change", () => syncCanvas());
-  scaleInput?.addEventListener("input", () => syncCanvas());
-  form?.querySelector("[data-map-fit-grid]")?.addEventListener("click", () => {
-    if (scaleInput) {
-      scaleInput.value = "1";
-    }
-    syncCanvas();
-  });
+  // The aspect-ratio and zoom wiring that used to sit here is gone with the canvas: a flow has no scale and
+  // no ratio. What follows is everything else that block was sandwiched between - slides, grid size, the
+  // initial tile setup and the palette - restored unchanged.
 
   const renderSlideInputs = () => {
     if (!slideInputsHost) {
@@ -5220,46 +5065,51 @@ function initializeMapDesigner() {
     existing.forEach((card) => card.remove());
   };
 
+  // Miniatures are a scaled clone of the REAL slide markup, not a hand-drawn set of rectangles. Under v3 a
+  // tile has no px rect to copy - it is placed by the grid - so re-deriving one here would have meant
+  // reimplementing the layout, which is exactly how a preview starts disagreeing with the board.
   const renderSlidePreviews = () => {
     if (!slidePreviewHost) {
       return;
     }
     syncSlideCards();
-    const { logicalWidth, logicalHeight } = readLogicalSize();
-    slidePreviewHost.style.setProperty("--map-preview-ratio", `${logicalWidth} / ${logicalHeight}`);
+    const grid = readGrid();
 
     slidePreviewHost.querySelectorAll("[data-map-slide-card]").forEach((card) => {
       const frame = card.querySelector("[data-map-slide-preview]");
       if (!frame) {
         return;
       }
-      frame.style.setProperty("--map-preview-ratio", `${logicalWidth} / ${logicalHeight}`);
       const slideId = card.dataset.slideId || "";
       const board = document.createElement("div");
       board.className = "map-slide map-slide-preview-board";
-      board.style.cssText = `position:absolute;inset:0;width:${logicalWidth}px;height:${logicalHeight}px;`
-        + "transform-origin:top left;";
+      board.style.cssText = "position:absolute;top:0;left:0;transform-origin:top left;pointer-events:none;";
+      board.style.setProperty("--map-columns", String(grid.columns));
+      board.style.setProperty("--map-rows", String(grid.rows));
+      board.style.setProperty("--tile-gap", `${grid.tilePadding}px`);
+      board.style.setProperty("--map-margin", `${grid.outerMargin}px`);
 
       canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
         if ((tile.dataset.slideId || "") !== slideId
           || tile.querySelector("[data-map-tile-deleted]")?.value === "true") {
           return;
         }
-        const dot = document.createElement("span");
-        dot.className = "map-slide-preview-tile";
-        dot.dataset.state = tile.dataset.state || "unknown";
-        dot.style.cssText = `position:absolute;left:${tile.style.getPropertyValue("--tile-x")}px;`
-          + `top:${tile.style.getPropertyValue("--tile-y")}px;`
-          + `width:${tile.style.getPropertyValue("--tile-w")}px;`
-          + `height:${tile.style.getPropertyValue("--tile-h")}px;`;
-        board.appendChild(dot);
+        const block = document.createElement("span");
+        block.className = "map-slide-preview-tile";
+        block.dataset.state = tile.dataset.state || "unknown";
+        block.style.gridColumn = `span ${tile.style.getPropertyValue("--tile-span") || 3}`;
+        block.style.gridRow = `span ${tile.style.getPropertyValue("--tile-rows") || 2}`;
+        board.appendChild(block);
       });
 
       frame.replaceChildren(board);
-      // Scale AFTER insertion: the frame has no size until it is in the document.
-      const rect = frame.getBoundingClientRect();
-      if (rect.width > 0) {
-        board.style.transform = `scale(${rect.width / logicalWidth})`;
+      // Scale AFTER insertion: the frame has no size until it is in the document, and the board has no
+      // width until it has been laid out at the canvas's own width.
+      const frameWidth = frame.getBoundingClientRect().width;
+      const canvasWidth = canvas.getBoundingClientRect().width || frameWidth;
+      if (frameWidth > 0 && canvasWidth > 0) {
+        board.style.width = `${canvasWidth}px`;
+        board.style.transform = `scale(${frameWidth / canvasWidth})`;
       }
     });
   };

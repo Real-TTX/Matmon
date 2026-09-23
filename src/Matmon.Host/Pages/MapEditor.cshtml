@@ -162,95 +162,34 @@
                 </aside>
 
                 <div class="map-designer-workbench">
-                    @* Canvas header per mockup: which slide, the geometry facts underneath, and the view
-                       controls on the right. Clicking the title still selects the board itself, which is how
-                       you get back from a widget to the board-level settings. *@
+                    @* Canvas header. v3 has no scaled canvas, so there is no zoom and no ruler to read a
+                       coordinate off - the board is shown at its real size and the only geometry facts worth
+                       stating are how many columns it flows across and how tall a row unit is. Clicking the
+                       title still selects the board itself, which is how you get back from a widget to the
+                       board-level settings. *@
                     <div class="map-canvas-head">
                         <button type="button" class="map-canvas-title" data-map-select-map>
                             <strong data-map-title-preview>@Model.Input.Name</strong>
                             <small>
-                                Grid: <b data-map-grid-preview>@Model.Input.Columns &times; @Model.Input.Rows</b>
-                                <span class="map-canvas-sep">|</span> Widget min: <b>2 &times; 2</b>
-                                <span class="map-canvas-sep">|</span> Snap: <b class="is-on">ON</b>
+                                <b data-map-grid-preview>@Model.Input.Columns</b> columns
+                                <span class="map-canvas-sep">|</span> <b>@Model.Input.Rows</b> rows fill a wallboard screen
+                                <span class="map-canvas-sep">|</span> drag a widget to reorder it
                             </small>
                         </button>
-                        <div class="map-canvas-tools">
-                            <label class="map-canvas-zoom" title="Zoom the design canvas">
-                                @* A select, not a slider: the mockup's discrete steps are what people actually
-                                   want here, and a range input gives no way to hit exactly 100%. The old
-                                   [data-map-scale] contract is unchanged, so the designer needs no change. *@
-                                <select class="form-select workspace-select" data-map-scale>
-                                    <option value="0.5">50%</option>
-                                    <option value="0.75">75%</option>
-                                    <option value="1" selected>100%</option>
-                                    <option value="1.25">125%</option>
-                                    <option value="1.5">150%</option>
-                                    <option value="2">200%</option>
-                                </select>
-                                <span class="map-scale-output" data-map-scale-output hidden>100%</span>
-                            </label>
-                            <button type="button" class="workspace-secondary-submit map-canvas-fit" data-map-fit-grid title="Reset the zoom so the whole board fits">
-                                @MatmonIcons.Render("move")<span>Fit to grid</span>
-                            </button>
-                        </div>
                     </div>
 
-                    @* Rulers: the grid's own coordinates, so "put it in column 7" stops being guesswork. Each
-                       label is positioned as a PERCENTAGE of the logical canvas, computed from the same
-                       MapTileRender.GridCells the guide lines use - percentages survive the stage's uniform
-                       scale transform, absolute px would not. *@
-                    @{
-                        var rulerMap = new MonitoringMap
-                        {
-                            Columns = Model.Input.Columns,
-                            Rows = Model.Input.Rows,
-                            TilePadding = Model.Input.TilePadding,
-                            OuterMargin = Model.Input.OuterMargin,
-                            LogicalWidth = logicalSize.Width,
-                            LogicalHeight = logicalSize.Height
-                        };
-                        var rulerCells = MapTileRender.GridCells(rulerMap).ToArray();
-                    }
-                    <div class="map-canvas-frame" data-map-rulers>
-                        <div class="map-ruler map-ruler-columns" aria-hidden="true">
-                            @for (var column = 0; column < Model.Input.Columns; column++)
-                            {
-                                var cell = rulerCells[column];
-                                var centre = (cell.X + cell.W / 2.0) / logicalSize.Width * 100;
-                                <span style="left: @centre.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%">@(column + 1)</span>
-                            }
-                        </div>
-                        <div class="map-ruler map-ruler-rows" aria-hidden="true">
-                            @for (var row = 0; row < Model.Input.Rows; row++)
-                            {
-                                var cell = rulerCells[row * Model.Input.Columns];
-                                var centre = (cell.Y + cell.H / 2.0) / logicalSize.Height * 100;
-                                <span style="top: @centre.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)%">@(row + 1)</span>
-                            }
-                        </div>
-                    <div class="map-stage" data-map-stage data-map-fit="fit" style="--map-w: @logicalSize.Width; --map-h: @logicalSize.Height;">
+                    <div class="map-stage" data-map-stage>
                         <div class="map-slide map-slide-editable"
                              data-map-slide
                              data-map-designer
                              data-next-tile-index="@Model.Input.Tiles.Count"
-                             style="--map-w: @logicalSize.Width; --map-h: @logicalSize.Height; --tile-gap: @(Model.Input.TilePadding)px;">
-                            @* Grid guide lines lined up exactly with the real cells (replaces the old fixed 8px
-                               background-grid pattern) - same MapTileRender.GridCells helper _MapSlide.cshtml uses. *@
+                             style="--map-columns: @Model.Input.Columns; --map-rows: @Model.Input.Rows; --tile-gap: @(Model.Input.TilePadding)px; --map-margin: @(Model.Input.OuterMargin)px;">
+                            @* Column stripes, laid out by the SAME grid as the tiles (see _MapSlide) so a guide
+                               cannot drift from where a tile will actually land. *@
                             <div class="map-grid-guides" aria-hidden="true">
-                                @{
-                                    var gridMap = new MonitoringMap
-                                    {
-                                        Columns = Model.Input.Columns,
-                                        Rows = Model.Input.Rows,
-                                        TilePadding = Model.Input.TilePadding,
-                                        OuterMargin = Model.Input.OuterMargin,
-                                        LogicalWidth = logicalSize.Width,
-                                        LogicalHeight = logicalSize.Height
-                                    };
-                                }
-                                @foreach (var cell in MapTileRender.GridCells(gridMap))
+                                @for (var column = 0; column < Math.Max(1, Model.Input.Columns); column++)
                                 {
-                                    <span class="map-grid-cell" style="left: @(cell.X)px; top: @(cell.Y)px; width: @(cell.W)px; height: @(cell.H)px;"></span>
+                                    <span class="map-grid-column"></span>
                                 }
                             </div>
                             @for (var index = 0; index < Model.TileRenderModels.Count; index++)
@@ -258,7 +197,6 @@
                                 <partial name="_MapTile" model="Model.TileRenderModels[index]" />
                             }
                         </div>
-                    </div>
                     </div>
                 </div>
 
@@ -337,12 +275,12 @@
                                        input the drag writes into, so the two can never disagree. *@
                                     <div class="map-property-size">
                                         <label class="workspace-field">
-                                            <span class="workspace-label">Width (cells)</span>
+                                            <span class="workspace-label">Width (columns)</span>
                                             <input asp-for="Input.Tiles[index].ColumnSpan" type="number" min="1" max="@Model.Input.Columns" class="form-control workspace-input" data-map-tile-column-span />
                                         </label>
                                         <label class="workspace-field">
-                                            <span class="workspace-label">Height (cells)</span>
-                                            <input asp-for="Input.Tiles[index].RowSpan" type="number" min="1" max="@Model.Input.Rows" class="form-control workspace-input" data-map-tile-row-span />
+                                            <span class="workspace-label">Height (rows)</span>
+                                            <input asp-for="Input.Tiles[index].RowSpan" type="number" min="1" max="@MonitoringMapTileConstraints.MaxRowSpan" class="form-control workspace-input" data-map-tile-row-span />
                                         </label>
                                     </div>
                                     <div class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</div>
@@ -682,28 +620,18 @@
                 <div class="map-settings-grid">
                     <section class="panel-subcard">
                         <h3 class="map-settings-title">Canvas</h3>
-                        <div class="workspace-field">
-                            <span class="workspace-label">Aspect ratio</span>
-                            <div class="map-aspect-presets">
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="9">16:9</button>
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="16" data-aspect-h="10">16:10</button>
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="21" data-aspect-h="9">21:9</button>
-                                <button type="button" class="map-aspect-preset" data-map-aspect-preset data-aspect-w="4" data-aspect-h="3">4:3</button>
-                            </div>
-                            <div class="map-aspect-custom">
-                                <input asp-for="Input.AspectRatioWidth" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-w aria-label="Aspect ratio width" />
-                                <span class="map-aspect-colon">:</span>
-                                <input asp-for="Input.AspectRatioHeight" type="number" min="1" max="64" class="form-control workspace-input" data-map-aspect-h aria-label="Aspect ratio height" />
-                            </div>
-                            <span class="workspace-inline-note">Only the ratio matters &mdash; the board scales to any screen. Widgets keep their grid cell position and size regardless of it.</span>
+                        @* No aspect ratio and no letterbox setting any more: the board is a column flow, so it
+                           is as wide as the screen it is on and as tall as its own content. The two knobs that
+                           replaced them - how many columns it flows across and how many rows fill a wallboard
+                           screen - are on the Settings tab, next to the spacing they belong with.
+                           The fields still exist on the model to read older boards; they no longer do anything. *@
+                        <input type="hidden" asp-for="Input.AspectRatioWidth" />
+                        <input type="hidden" asp-for="Input.AspectRatioHeight" />
+                        <input type="hidden" asp-for="Input.WallboardFit" />
+                        <div class="map-property-hint">
+                            A board has no fixed size: it flows across its columns and reflows on a narrower
+                            screen. Set the column count and the rows-per-screen on <strong>Settings</strong>.
                         </div>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Wallboard fit</span>
-                            <select asp-for="Input.WallboardFit" class="form-select workspace-select">
-                                <option value="@MonitoringMapWallboardFit.Fit">Keep ratio (letterbox)</option>
-                                <option value="@MonitoringMapWallboardFit.Stretch">Stretch to fill screen</option>
-                            </select>
-                        </label>
                         <label class="workspace-field">
                             <span class="workspace-label">Board timezone</span>
                             <input asp-for="Input.DisplayTimeZoneId" class="form-control workspace-input" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
@@ -770,8 +698,9 @@
                                 <input asp-for="Input.Columns" type="number" min="2" max="48" class="form-control workspace-input" data-map-columns />
                             </label>
                             <label class="workspace-field">
-                                <span class="workspace-label">Rows</span>
+                                <span class="workspace-label">Rows per screen</span>
                                 <input asp-for="Input.Rows" type="number" min="2" max="32" class="form-control workspace-input" data-map-rows />
+                                <span class="workspace-inline-note">How many row units fill one wallboard screen. A board taller than this scrolls.</span>
                             </label>
                             <label class="workspace-field">
                                 <span class="workspace-label">Gap (px)</span>
@@ -817,12 +746,11 @@
                          data-state="unknown"
                          data-kind="__kindLower__"
                          data-visual="__visual__"
-                         style="--tile-x: 0; --tile-y: 0; --tile-w: 100; --tile-h: 100;">
+                         style="--tile-span: __colSpan__; --tile-rows: __rowSpan__;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
                     <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
                     <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
-                    <input type="hidden" name="Input.Tiles[__index__].Column" value="__column__" data-map-tile-column />
-                    <input type="hidden" name="Input.Tiles[__index__].Row" value="__row__" data-map-tile-row />
+                    <input type="hidden" name="Input.Tiles[__index__].Order" value="__order__" data-map-tile-order />
 
                     <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
                         <span class="map-tile-icon">@MatmonIcons.Render("square")</span>
@@ -859,12 +787,12 @@
                         </div>
                         <div class="map-property-size">
                             <label class="workspace-field">
-                                <span class="workspace-label">Width (cells)</span>
+                                <span class="workspace-label">Width (columns)</span>
                                 <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="number" min="1" max="@Model.Input.Columns" class="form-control workspace-input" data-map-tile-column-span />
                             </label>
                             <label class="workspace-field">
-                                <span class="workspace-label">Height (cells)</span>
-                                <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="number" min="1" max="@Model.Input.Rows" class="form-control workspace-input" data-map-tile-row-span />
+                                <span class="workspace-label">Height (rows)</span>
+                                <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="number" min="1" max="@MonitoringMapTileConstraints.MaxRowSpan" class="form-control workspace-input" data-map-tile-row-span />
                             </label>
                         </div>
                         <div class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</div>
