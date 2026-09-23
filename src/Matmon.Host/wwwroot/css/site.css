@@ -9679,12 +9679,15 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-toolbox-search input {
   padding-left: 1.75rem;
 }
+/* The library is the toolbox now that the layouts moved to the slide's own properties - so it gets the
+   height. It used to be handed 168px of a 504px column while four layout thumbnails took 249px, which is the
+   wrong way round for sixteen widgets you reach for constantly and a layout you pick once. */
 .map-toolbox-list {
   display: grid;
   align-content: start;
   gap: 0.6rem;
   flex: 1 1 auto;
-  min-height: 12rem;
+  min-height: 0;
   overflow: auto;
 }
 .map-toolbox-group {
@@ -9720,6 +9723,12 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35rem;
+  margin-top: 0.3rem;
+}
+.map-slide-panel .map-toolbox-templates {
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--matmon-border);
 }
 .map-layout-card {
   display: grid;
@@ -13926,12 +13935,14 @@ html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critica
 }
 
 /* --- Bottom row -------------------------------------------------------------------------------- */
-.map-editor-bottom {
-  display: grid;
-  grid-template-columns: minmax(18rem, 1fr) minmax(14rem, 0.8fr) minmax(20rem, 1.4fr);
-  gap: 0.7rem;
-  margin-top: 0.8rem;
-  align-items: start;
+/* One strip, full width, directly under the canvas: the running order of the board and nothing else. It
+   replaced a three-card row that mixed the slide list with rotation settings and a second, redundant
+   filmstrip - settings that belong to the board were sitting under the canvas where the board is. */
+.map-editor-slides {
+  margin-top: 0.7rem;
+}
+.map-editor-slides .map-slide-rows {
+  max-height: 11rem;
 }
 .map-subcard-head {
   display: flex;
@@ -14090,6 +14101,30 @@ html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critica
   .map-switch-track,
   .map-switch-track::after {
     transition: none;
+  }
+}
+
+/* The designer is a desktop tool, but it must not be hostile on a phone. Stacked, the three columns came
+   out toolbox-first, so you scrolled past sixteen widget cards before you reached your own board. Canvas
+   first, then the properties you just opened, then the library - and the library gets a ceiling so it cannot
+   run off the bottom of the page again. */
+@media (max-width: 900px) {
+  .map-designer-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .map-designer-workbench {
+    order: 1;
+  }
+  .map-property-editor {
+    order: 2;
+    min-height: 0;
+    max-height: none;
+  }
+  .map-toolbox {
+    order: 3;
+    min-height: 0;
+    max-height: 22rem;
   }
 }
 

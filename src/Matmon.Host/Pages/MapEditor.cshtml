@@ -130,36 +130,6 @@
                         <div class="map-toolbox-empty" data-map-tool-empty hidden>No matching widget.</div>
                     </div>
 
-                    <div class="map-toolbox-templates" data-map-layout-templates>
-                        <span class="map-toolbox-group-label">Layouts</span>
-                        <p class="map-toolbox-note">Fills the current slide with empty, correctly-sized widgets.</p>
-                        @* Thumbnails, not word chips: the whole point of a layout is its shape, and the
-                           shape is already declared as slots - so the preview is generated from the SAME
-                           slots the template applies. A hand-drawn thumbnail could disagree with it. *@
-                        <div class="map-layout-cards">
-                        @foreach (var template in MapWidgetCatalog.LayoutTemplates)
-                        {
-                            <button type="button" class="map-layout-card" data-map-layout="@template.Key"
-                                    data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
-                                    title="@template.Description">
-                                <span class="map-layout-thumb" aria-hidden="true"
-                                      style="grid-template-columns: repeat(@template.MinColumns, 1fr); grid-template-rows: repeat(@template.MinRows, 1fr);">
-                                    @foreach (var slot in template.Slots)
-                                    {
-                                        <span style="grid-column: @slot.Column / span @slot.ColumnSpan; grid-row: @slot.Row / span @slot.RowSpan;"></span>
-                                    }
-                                </span>
-                                <span class="map-layout-card-meta">
-                                    <strong>@template.Label</strong>
-                                    <small>@template.Description</small>
-                                </span>
-                            </button>
-                        }
-                        </div>
-                        <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
-                            Some layouts need more columns than this board has.
-                        </div>
-                    </div>
                 </aside>
 
                 <div class="map-designer-workbench">
@@ -461,7 +431,11 @@
                 @* Bottom row per mockup: the slide LIST (reorderable, with duration and a row menu), the
                    rotation settings that only make sense next to it, and a filmstrip preview of the running
                    order. The old plain slide tabs are gone - this replaces them. *@
-                <div class="map-editor-bottom">
+                @* The running order sits directly under the canvas - switching slide while designing must
+                   not mean leaving the board. The rotation settings that used to sit beside it moved into the
+                   board's own properties, and the duplicate miniature filmstrip is gone: it showed the same
+                   list twice, once as rows and once as grey blocks. *@
+                <div class="map-editor-slides">
                     <section class="panel-subcard map-slides-list-card">
                         <div class="map-subcard-head">
                             <h3 class="map-settings-title">Slides <span class="map-count" data-map-slide-count>@Model.Input.Slides.Count</span></h3>
@@ -491,67 +465,6 @@
                         <div data-map-slide-inputs hidden></div>
                     </section>
 
-                    <section class="panel-subcard">
-                        <div class="map-subcard-head">
-                            <h3 class="map-settings-title">Slide rotation</h3>
-                        </div>
-                        <p class="map-toolbox-note">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</p>
-                        <label class="map-switch">
-                            <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
-                            <span class="map-switch-track" aria-hidden="true"></span>
-                            <span>Autoplay</span>
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Default duration</span>
-                            @* The stored value is folded into the option list: a select can only post one of
-                               its own options, so a board saved at 25 s would have been silently rewritten to
-                               the first entry the moment anything else on this page was saved. *@
-                            @{
-                                var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
-                                    .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
-                            }
-                            <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
-                                @foreach (var seconds in rotationChoices)
-                                {
-                                    <option value="@seconds">@seconds seconds</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Page indicator</span>
-                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
-                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
-                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
-                            </select>
-                        </label>
-                    </section>
-
-                    <section class="panel-subcard map-preview-card">
-                        <div class="map-subcard-head">
-                            <h3 class="map-settings-title">Preview &ndash; slide rotation</h3>
-                            <span class="workspace-inline-note">@logicalSize.Width &times; @logicalSize.Height</span>
-                        </div>
-                        @* Real scaled miniatures of each slide, cloned from the live canvas by
-                           renderSlidePreviews - a preview that can disagree with the board is worse than none. *@
-                        <div class="map-slides-strip" data-map-slide-previews>
-                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                            {
-                                var slide = Model.Input.Slides[slideIndex];
-                                <button type="button" class="map-slide-card @(slideIndex == 0 ? "is-active" : "")"
-                                        data-map-slide-card data-slide-id="@slide.Id">
-                                    <span class="map-slide-card-frame">
-                                        <span class="map-slide-card-preview" data-map-slide-preview></span>
-                                    </span>
-                                    <span class="map-slide-card-meta">
-                                        <strong>@(slideIndex + 1). @slide.Name</strong>
-                                        <small>@(slide.DurationSeconds is { } d ? $"{d}s" : $"{Model.Input.AutoRotateSeconds}s")</small>
-                                    </span>
-                                </button>
-                            }
-                        </div>
-                    </section>
                 </div>
             </div>
 
@@ -587,7 +500,43 @@
                         <div class="map-property-checks">
                             <label><input type="checkbox" data-map-slide-field="showHeader" /> <span>Show this slide heading</span></label>
                         </div>
-                        <div class="map-property-hint">Duration overrides the map auto-rotate for this slide only. Drag a card to reorder.</div>
+                        <div class="map-property-hint">Duration overrides the board's auto-rotate for this slide only. Drag a widget on the canvas to reorder it.</div>
+
+                        @* A layout belongs to the SLIDE, not to the widget library: it is a property of this
+                           page ("this one is a KPI row") rather than a tool you pick up. In the toolbox it
+                           also took more height than the sixteen widgets it sat above, which is the wrong way
+                           round for something you use once per slide. *@
+                        <div class="map-toolbox-templates" data-map-layout-templates>
+                            <span class="workspace-label">Start from a layout</span>
+                            <p class="map-toolbox-note">Replaces this slide's widgets with an empty, correctly-sized arrangement.</p>
+                            @* Thumbnails, not word chips: the whole point of a layout is its shape, and the
+                               shape is already declared as slots - so the preview is generated from the SAME
+                               slots the template applies. A hand-drawn thumbnail could disagree with it. *@
+                            <div class="map-layout-cards">
+                            @foreach (var template in MapWidgetCatalog.LayoutTemplates)
+                            {
+                                <button type="button" class="map-layout-card" data-map-layout="@template.Key"
+                                        data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
+                                        title="@template.Description">
+                                    <span class="map-layout-thumb" aria-hidden="true"
+                                          style="grid-template-columns: repeat(@template.MinColumns, 1fr); grid-template-rows: repeat(@template.MinRows, 1fr);">
+                                        @foreach (var slot in template.Slots)
+                                        {
+                                            <span style="grid-column: @slot.Column / span @slot.ColumnSpan; grid-row: @slot.Row / span @slot.RowSpan;"></span>
+                                        }
+                                    </span>
+                                    <span class="map-layout-card-meta">
+                                        <strong>@template.Label</strong>
+                                        <small>@template.Description</small>
+                                    </span>
+                                </button>
+                            }
+                            </div>
+                            <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
+                                Some layouts need more columns than this board has.
+                            </div>
+                        </div>
+
                         <div data-map-prop-group="advanced" hidden>
                             @* Four buckets, not six states: "up / warning / down / unknown" is how
                                someone configuring a wallboard thinks. MonitoringMapColorRules is where
@@ -671,6 +620,43 @@
             @* --- Settings ------------------------------------------------------------------------------ *@
             <div class="map-tab-panel" data-sensor-tab="settings">
                 <div class="map-settings-grid">
+                    <section class="panel-subcard">
+                        <div class="map-subcard-head">
+                            <h3 class="map-settings-title">Slide rotation</h3>
+                        </div>
+                        <p class="map-toolbox-note">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</p>
+                        <label class="map-switch">
+                            <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
+                            <span class="map-switch-track" aria-hidden="true"></span>
+                            <span>Autoplay</span>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Default duration</span>
+                            @* The stored value is folded into the option list: a select can only post one of
+                               its own options, so a board saved at 25 s would have been silently rewritten to
+                               the first entry the moment anything else on this page was saved. *@
+                            @{
+                                var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
+                                    .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
+                            }
+                            <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
+                                @foreach (var seconds in rotationChoices)
+                                {
+                                    <option value="@seconds">@seconds seconds</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Page indicator</span>
+                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
+                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
+                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
+                            </select>
+                        </label>
+                    </section>
+
                     <section class="panel-subcard">
                         <h3 class="map-settings-title">Board</h3>
                         <label class="workspace-field">
