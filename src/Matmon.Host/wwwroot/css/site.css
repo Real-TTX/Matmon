@@ -10029,6 +10029,24 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .public-map-shell {
   position: relative;
   height: 100vh;
+  /* A wallboard is unattended: nothing should be reachable only by scrolling, and nothing should move
+     because someone brushed a mouse. The board is fitted to the screen (see fitWallboard in site.js), so
+     any overflow left over is a bug rather than content. */
+  overflow: hidden;
+}
+
+/* The stage is `position: fixed`, so a nav rendered AFTER it - which is what "below the board" does - sat in
+   normal document flow behind it, at the top of the page, and slid around as the document scrolled. On a
+   wallboard the indicator belongs in one place: pinned to the bottom, over the board's own margin. The
+   "below" variant needs naming explicitly - it sets position:static at the same specificity and later in the
+   file, so it would otherwise win. On a full-screen board there is no "below" anyway. */
+.public-map-shell .map-carousel-nav,
+.public-map-shell .map-carousel-nav[data-map-pagination="below"] {
+  position: fixed;
+  left: 50%;
+  bottom: 0.9rem;
+  z-index: 5;
+  transform: translateX(-50%);
 }
 
 /* --- Map carousel (multi-slide) --- */

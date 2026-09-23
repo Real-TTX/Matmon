@@ -3391,7 +3391,39 @@ const MapMaxRowSpan = 24;
 // wallboard's row height comes from a pure-CSS calc against the viewport. All that is left for JS is the one
 // thing CSS cannot decide - whether this STAGE (not the viewport, so it is right inside an embedded console
 // too) is narrow enough to collapse to a single column.
+// The wallboard's row unit is a pure CSS calc against the viewport, which is right only while the flow uses
+// no more rows than the board says fill a screen. A ragged band (one tile in a row shorter than its
+// neighbour) can push it past that, and then the TV shows a board you would have to scroll - which nobody is
+// standing there to do. So measure once and shrink the unit until it fits.
+function fitWallboard() {
+  document.querySelectorAll(".public-map-shell .map-slide:not([hidden])").forEach((slide) => {
+    const stage = slide.closest("[data-map-stage]");
+    if (!stage) {
+      return;
+    }
+
+    slide.style.removeProperty("--map-row-unit");
+    const available = stage.clientHeight;
+    const needed = slide.scrollHeight;
+    if (available <= 0 || needed <= available + 1) {
+      return;
+    }
+
+    const unit = parseFloat(getComputedStyle(slide).getPropertyValue("--map-row-unit"));
+    if (!Number.isFinite(unit) || unit <= 0) {
+      return;
+    }
+
+    // The gaps and the padding do not shrink with the unit, so scaling by the height ratio alone would
+    // overshoot; taking the ratio of the ROW part is the honest correction.
+    const chrome = needed - unit * Math.max(1, Math.round(needed / unit));
+    const rowsPart = Math.max(1, needed - chrome);
+    slide.style.setProperty("--map-row-unit", `${Math.max(24, unit * ((available - chrome) / rowsPart))}px`);
+  });
+}
+
 function fitMapStages() {
+  fitWallboard();
   document.querySelectorAll("[data-map-stage]").forEach((stage) => {
     const width = stage.getBoundingClientRect().width;
     // Never stack the DESIGNER canvas: the editor showing a one-column list while the user arranges a
