@@ -4,11 +4,13 @@
     var map = Model.Map;
     var showHeader = map.ShowSlideHeaders && slide.ShowHeader &&
         (!string.IsNullOrWhiteSpace(slide.Title) || !string.IsNullOrWhiteSpace(slide.Subtitle));
-    var slideStyle = $"--map-w: {map.LogicalWidth}; --map-h: {map.LogicalHeight}; --tile-gap: {map.TilePadding}px;"
+    // v3: the slide IS a CSS grid and the browser does the wrapping, so there is no px geometry to emit -
+    // only how many columns, how tall a row unit is and the gap. --map-rows is what a wallboard scales to fit.
+    var slideStyle = $"--map-columns: {Math.Max(1, map.Columns)}; --map-rows: {Math.Max(1, map.Rows)}; --tile-gap: {map.TilePadding}px; --map-margin: {map.OuterMargin}px;"
         + (string.IsNullOrWhiteSpace(slide.BackgroundColor) ? string.Empty : $" --slide-bg: {slide.BackgroundColor};");
-    // Auto-Stack (mobile) renders tiles in reading order rather than the grid's absolute positions - sorted
-    // here, server-side, so the DOM order is already correct whichever layout the JS/CSS end up picking.
-    var orderedTiles = Model.Tiles.OrderBy(t => t.Tile.Row).ThenBy(t => t.Tile.Column).ToList();
+    // DOM order IS the layout now (grid auto-placement), so this sort is the single place the flow order is
+    // applied - the viewer, the wallboard and the designer all read it from here.
+    var orderedTiles = Model.Tiles.OrderBy(t => t.Tile.Order).ToList();
 }
 <section class="map-slide@(Model.Editable ? " map-slide-editable" : "")"
          data-map-slide
@@ -32,12 +34,12 @@
     }
     @if (Model.Editable)
     {
-        @* Grid guide lines lined up exactly with the real cells (replaces the old fixed 8px background-grid
-           pattern, which stopped meaning anything once cell size became derived from Columns/Rows/padding/margin). *@
+        @* Column guides: one stripe per column, laid out by the SAME grid as the tiles, so they cannot drift
+           from where a tile will actually land. A flow has no fixed rows, so there is nothing to draw across. *@
         <div class="map-grid-guides" aria-hidden="true">
-            @foreach (var cell in Matmon.Host.Ui.MapTileRender.GridCells(map))
+            @for (var column = 0; column < Math.Max(1, map.Columns); column++)
             {
-                <span class="map-grid-cell" style="left: @(cell.X)px; top: @(cell.Y)px; width: @(cell.W)px; height: @(cell.H)px;"></span>
+                <span class="map-grid-column"></span>
             }
         </div>
     }

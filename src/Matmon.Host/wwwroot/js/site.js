@@ -3384,54 +3384,24 @@ const MapStackBreakpoint = 640;
 // .map-stage > .map-slide > .map-tile markup, only k differs per screen. Below MapStackBreakpoint, a slide
 // instead gets `data-layout="stack"` (site.css turns it into a single-column flex list) and this function
 // skips its transform math entirely - see the Auto-Stack CSS next to .map-slide[hidden].
+// v3 has no transform-scaled canvas to fit: the slide is a real CSS grid that lays itself out, and the
+// wallboard's row height comes from a pure-CSS calc against the viewport. All that is left for JS is the one
+// thing CSS cannot decide - whether this STAGE (not the viewport, so it is right inside an embedded console
+// too) is narrow enough to collapse to a single column.
 function fitMapStages() {
   document.querySelectorAll("[data-map-stage]").forEach((stage) => {
-    const style = getComputedStyle(stage);
-    const mapWidth = parseFloat(style.getPropertyValue("--map-w")) || 1920;
-    const mapHeight = parseFloat(style.getPropertyValue("--map-h")) || 1080;
-    const rect = stage.getBoundingClientRect();
-    const containerWidth = rect.width;
-    const containerHeight = rect.height;
-    const slides = stage.querySelectorAll(".map-slide");
-    // Never stack the DESIGNER canvas. Auto-Stack is a reading layout for narrow VIEWERS; applying it to the
-    // editor would show a single-column list while the user is placing widgets on a grid, which is the exact
-    // opposite of WYSIWYG - and it silently kicks in on any window where the canvas column lands under 640px.
+    const width = stage.getBoundingClientRect().width;
+    // Never stack the DESIGNER canvas: the editor showing a one-column list while the user arranges a
+    // multi-column board is the exact opposite of WYSIWYG.
     const isDesigner = stage.querySelector("[data-map-designer]") !== null;
-    const shouldStack = !isDesigner && containerWidth > 0 && containerWidth < MapStackBreakpoint;
-    slides.forEach((slide) => {
+    const shouldStack = !isDesigner && width > 0 && width < MapStackBreakpoint;
+    stage.querySelectorAll(".map-slide").forEach((slide) => {
       if (shouldStack) {
         slide.dataset.layout = "stack";
       } else {
         delete slide.dataset.layout;
       }
     });
-
-    if (shouldStack || !containerWidth || !containerHeight || !mapWidth || !mapHeight) {
-      return;
-    }
-
-    const fit = (stage.dataset.mapFit || "fit").toLowerCase();
-    let kx;
-    let ky;
-    if (fit === "stretch") {
-      kx = containerWidth / mapWidth;
-      ky = containerHeight / mapHeight;
-    } else {
-      const k = Math.min(containerWidth / mapWidth, containerHeight / mapHeight);
-      kx = k;
-      ky = k;
-    }
-
-    const offsetX = (containerWidth - mapWidth * kx) / 2;
-    const offsetY = (containerHeight - mapHeight * ky) / 2;
-
-    stage.style.setProperty("--map-kx", String(kx));
-    stage.style.setProperty("--map-ky", String(ky));
-    stage.style.setProperty("--map-ox", `${offsetX}px`);
-    stage.style.setProperty("--map-oy", `${offsetY}px`);
-    // Exposed for the designer's pointer math (drag/resize) - avoids re-deriving k from a possibly-stale
-    // getComputedStyle read on every pointermove.
-    stage._mapScale = { kx, ky, offsetX, offsetY, mapWidth, mapHeight };
   });
 }
 

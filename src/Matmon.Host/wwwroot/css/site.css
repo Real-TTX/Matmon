@@ -8144,54 +8144,52 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   width: 100%;
 }
 
-/* In-app viewer (Maps.cshtml) and the designer workbench: a bounded box that keeps the canvas ratio and
-   fits the viewport instead of forcing a page scrollbar. */
+/* In-app viewer (Maps.cshtml) and the designer workbench: just a bordered box the flow grows inside. No
+   aspect-ratio and no max-height any more - v3 has no fixed canvas to letterbox, so the board is simply as
+   tall as its content and the page scrolls if it has to. This is what ended the editor's 0.38 scale. */
 .map-view-panel .map-stage,
 .map-designer-workbench .map-stage {
-  aspect-ratio: var(--map-w, 1920) / var(--map-h, 1080);
   margin-inline: auto;
   border: 1px solid var(--matmon-border);
   border-radius: 10px;
   background: var(--matmon-surface-soft);
-}
-
-.map-view-panel .map-stage {
-  max-height: calc(100vh - 15rem);
-}
-
-.map-designer-workbench .map-stage {
-  max-height: none;
-}
-
-/* A stacked slide (see the Auto-Stack rule near .map-slide[hidden]) flows to its natural (taller-than-16:9)
-   height instead of the fixed aspect-ratio box, so the aspect-ratio/overflow clamp that keeps the scaled
-   canvas letterboxed must relax for it - otherwise a narrow in-app viewer or designer pane would clip the
-   single-column list instead of letting the panel scroll to it. */
-.map-view-panel .map-stage:has(.map-slide[data-layout="stack"]),
-.map-designer-workbench .map-stage:has(.map-slide[data-layout="stack"]) {
-  aspect-ratio: auto;
-  height: auto;
-  max-height: none;
   overflow: visible;
 }
 
-/* Public wallboard: the stage IS the screen. */
+/* Public wallboard: the stage IS the screen, so a slide of exactly --map-rows row units has to fill it
+   exactly. That is a pure calc against the viewport - no JS measuring, nothing to re-run on resize. A board
+   with MORE rows than that scrolls, which is the honest outcome: shrinking everything to fit an arbitrarily
+   long board is how wallboards end up unreadable. */
 .public-map-shell .map-stage {
   position: fixed;
   inset: 0;
+  overflow: auto;
   background: #000;
 }
 
+.public-map-shell .map-slide {
+  --map-row-unit: calc(
+    (100vh - 2 * var(--map-margin, 24px) - (var(--map-rows, 6) - 1) * var(--tile-gap, 16px)) / var(--map-rows, 6)
+  );
+  min-height: 100vh;
+}
+
+/* v3: the slide IS the grid. No absolute placement, no transform-scaled 1920px canvas - the browser wraps
+   the flow across --map-columns and a tile is as tall as its row units. That is what makes the editor show
+   tiles at their real size instead of at 38%, and what makes "narrower screen" reflow for free.
+   --map-row-unit is the one knob: the in-app viewer and the editor use a fixed comfortable value, the
+   wallboard overrides it so a slide fills the screen (see .public-map-shell). */
 .map-slide {
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: calc(var(--map-w, 1920) * 1px);
-  height: calc(var(--map-h, 1080) * 1px);
-  transform-origin: 0 0;
-  transform: translate(var(--map-ox, 0px), var(--map-oy, 0px)) scale(var(--map-kx, 1), var(--map-ky, 1));
+  --map-row-unit: 4.6rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
+  grid-auto-rows: var(--map-row-unit);
+  gap: var(--tile-gap, 16px);
+  align-content: start;
+  width: 100%;
+  padding: var(--map-margin, 24px);
   background-color: var(--slide-bg, var(--matmon-bg));
-  font-size: 16px;
-  overflow: hidden;
 }
 
 .map-slide[hidden] {
@@ -8203,14 +8201,10 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    becomes an ordinary single-column flex list instead of the transform-scaled absolute canvas above, and the
    designer's own transform math is skipped for it entirely. Tile order already matches (Row, Column) reading
    order because _MapSlide.cshtml sorts server-side, so no JS re-ordering is needed either. */
+/* Auto-Stack (mobile): one column. With v3 that is the same grid with a different column count, so nothing
+   about the tiles changes - no separate flex path, no re-ordering (DOM order already IS the flow order). */
 .map-slide[data-layout="stack"] {
-  position: static;
-  width: 100%;
-  height: auto;
-  transform: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--tile-gap, 16px);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* ⚠️ A DEFINITE height, not auto+min-height. The tile is a `container-type: size` query container and its
@@ -8220,11 +8214,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    drew correctly and every piece of TEXT rendered at font-size 0 - a mobile board of empty boxes.
    --stack-min-h is rowSpan x 72px, so this is the same proportion the tile asked for anyway. */
 .map-slide[data-layout="stack"] .map-tile {
-  position: static;
-  flex: 0 0 auto;
-  width: 100%;
-  height: var(--stack-min-h, 72px);
-  min-height: var(--stack-min-h, 72px);
+  /* One column, so every tile is full width whatever it asked for. */
+  grid-column: span 1;
 }
 
 /* Stacked means a phone at arm's length, not a TV across the room. The cq type scale is sized for the wall
@@ -8237,36 +8228,54 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-slide[data-layout="stack"] .map-tile small {
   font-size: max(0.72rem, min(7cqh, 5.5cqw));
 }
-/* Stacked, the tile is wide and short, so the height-fitted arc is only ~86px across - a reading INSIDE its
-   mouth had room for "0…" and nothing else. Beside the dial it simply reads. `display: contents` dissolves
-   the dial wrapper so the arc and the readout become the two columns of the gauge row; the cq-based sizes go
-   with it, hence the fixed rem sizes here. */
-.map-slide[data-layout="stack"] .map-gauge-dial {
-  display: contents;
+/* On a WIDE, short tile the arc is fitted by height, so it ends up only a fraction of the tile across and a
+   reading inside its mouth has room for "0…" and nothing else. Past roughly 2.2:1 the dial therefore moves to
+   the left and the reading sits beside it, where it simply reads. Driven by a container query on the tile, so
+   it is the tile's own size that decides - the same rule covers a stacked phone card, a small widget on a
+   wide board and anything in between, instead of three lookalike special cases. Measured: the arc's MOUTH is
+   about three quarters of the dial's width, so below roughly a 26rem tile there is simply no room in there
+   for a reading and its scale.
+   `display: contents` dissolves the dial wrapper so the arc and the readout become the two columns of the
+   gauge row; the dial-scoped cq sizes go with it, hence the fixed rem sizes here. */
+@container (max-width: 26rem) {
+  .map-gauge-dial {
+    display: contents;
+  }
+  .map-tile-gauge {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: 0.6rem;
+  }
+  .map-gauge {
+    width: auto;
+    height: 100%;
+    aspect-ratio: 100 / 58;
+  }
+  .map-gauge-readout {
+    position: static;
+    max-width: none;
+    transform: none;
+    justify-items: start;
+    text-align: left;
+  }
+  .map-gauge-readout strong {
+    font-size: 1.45rem;
+  }
+  .map-tile .map-gauge-readout small {
+    font-size: 0.72rem;
+  }
 }
-.map-slide[data-layout="stack"] .map-tile-gauge {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  justify-items: start;
-  gap: 0.6rem;
-}
-.map-slide[data-layout="stack"] .map-gauge {
-  width: auto;
-  height: 100%;
-  aspect-ratio: 100 / 58;
-}
-.map-slide[data-layout="stack"] .map-gauge-readout {
-  position: static;
-  max-width: none;
-  transform: none;
-  justify-items: start;
-  text-align: left;
-}
-.map-slide[data-layout="stack"] .map-gauge-readout strong {
-  font-size: 1.45rem;
-}
-.map-slide[data-layout="stack"] .map-tile .map-gauge-readout small {
-  font-size: 0.72rem;
+
+/* Smaller still: the scale caption is the first thing to drop. A reading you can read beats a reading and a
+   caption you cannot. */
+@container (max-width: 14rem) {
+  .map-gauge-readout small {
+    display: none;
+  }
+  .map-gauge-readout strong {
+    font-size: 1.15rem;
+  }
 }
 .map-slide[data-layout="stack"] .map-tile-row {
   font-size: max(0.72rem, clamp(7px, 7cqh, 20px));
@@ -8284,7 +8293,19 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    8px background-grid pattern that stopped meaning anything once cell size became derived from
    Columns/Rows/TilePadding/OuterMargin instead of a flat px snap. Rendered before the tiles in DOM order, so
    the (equally absolutely-positioned) tiles naturally paint on top with no z-index needed. */
+/* Laid out by the SAME grid as the tiles (one stripe per column, first row, pinned behind them), so a guide
+   cannot drift from where a tile will actually land. */
 .map-grid-guides {
+  display: contents;
+}
+.map-grid-column {
+  grid-row: 1 / -1;
+  grid-column: span 1;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--matmon-border) 26%, transparent);
+  pointer-events: none;
+}
+.map-grid-guides-legacy {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -8320,11 +8341,13 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 
 .map-tile {
   --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tone, var(--matmon-border)));
-  position: absolute;
-  left: calc(var(--tile-x, 0) * 1px);
-  top: calc(var(--tile-y, 0) * 1px);
-  width: calc(var(--tile-w, 320) * 1px);
-  height: calc(var(--tile-h, 160) * 1px);
+  /* A grid item: as wide as its column span, as tall as its row units. The explicit height (rather than
+     letting the row stretch) is what keeps the tile a DEFINITE-size query container, which its whole cqh/cqmin
+     type scale depends on - see the note on the stacked tile, where getting that wrong rendered every piece
+     of text at font-size 0. */
+  grid-column: span var(--tile-span, 3);
+  grid-row: span var(--tile-rows, 2);
+  height: calc(var(--tile-rows, 2) * var(--map-row-unit, 4.6rem) + (var(--tile-rows, 2) - 1) * var(--tile-gap, 16px));
   /* Flex column so the main visual (graph/gauge/value/progress) can grow and fill the
      tile instead of the content packing at the top and leaving the cell half empty.
      justify-content:center balances "flat" tiles (summary/state/text without a growing

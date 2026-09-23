@@ -12,7 +12,7 @@ public sealed class MonitoringMap
     /// <see cref="TilePadding"/>/<see cref="OuterMargin"/> controlling the cell-to-px conversion
     /// (<see cref="MonitoringMapGeometry"/>). A map loaded with an older version is migrated once via
     /// <see cref="MonitoringMapLayoutMigration"/>.</summary>
-    public const int CurrentLayoutVersion = 2;
+    public const int CurrentLayoutVersion = 3;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -234,24 +234,30 @@ public sealed class MonitoringMapTile
     /// e.g. a section heading placed at height 1 with no visible tile. Defaults to true (a normal card).</summary>
     public bool ShowCard { get; set; } = true;
 
-    /// <summary>1-based grid column this tile starts in - see <see cref="MonitoringMap.Columns"/> and
-    /// <see cref="MonitoringMapGeometry"/>. Kept under the JSON key "x" (its name under both the v0 grid-cell
-    /// scheme and the v1 free-px scheme) so an old workspace.json still deserializes into this field; the
-    /// value is only actually a cell index once <see cref="MonitoringMapLayoutMigration"/> has run (a v1 map's
-    /// raw px value is reinterpreted by the migration, not by this attribute).</summary>
+    /// <summary>Position in the slide's FLOW (0-based, dense). v3 has no x/y: tiles are laid out in order,
+    /// left to right, wrapping when the remaining columns cannot hold the next one - so two tiles can never
+    /// overlap and the whole board reflows by itself when the column count changes or the screen narrows.</summary>
+    [JsonPropertyName("order")]
+    public int Order { get; set; }
+
+    /// <summary>⚠️ v2 legacy, read by <see cref="MonitoringMapLayoutMigration"/> and by nothing else. A v2
+    /// workspace.json stores the tile's cell coordinates under "x"/"y"; the migration turns them into
+    /// <see cref="Order"/> and zeroes them. Do not render from these.</summary>
     [JsonPropertyName("x")]
-    public int Column { get; set; } = 1;
+    public int Column { get; set; }
 
-    /// <summary>1-based grid row this tile starts in - see <see cref="Column"/>.</summary>
+    /// <inheritdoc cref="Column"/>
     [JsonPropertyName("y")]
-    public int Row { get; set; } = 1;
+    public int Row { get; set; }
 
-    /// <summary>How many grid columns this tile spans (&gt;= 1, floored to the kind's minimum by
-    /// <see cref="MonitoringMapTileConstraints.Clamp"/>) - see <see cref="Column"/>.</summary>
+    /// <summary>How many of the slide's columns this tile occupies (&gt;= 1, floored to the kind's minimum by
+    /// <see cref="MonitoringMapTileConstraints.Clamp"/> and capped at <see cref="MonitoringMap.Columns"/>).</summary>
     [JsonPropertyName("width")]
-    public int ColumnSpan { get; set; } = 2;
+    public int ColumnSpan { get; set; } = 3;
 
-    /// <summary>How many grid rows this tile spans - see <see cref="ColumnSpan"/>.</summary>
+    /// <summary>The tile's height in ROW UNITS. Not a grid coordinate - a unit is a fixed slice of height
+    /// (<see cref="MonitoringMap.Rows"/> of them fill one screen on a wallboard), so rows of tiles line up
+    /// instead of every card finding its own height.</summary>
     [JsonPropertyName("height")]
     public int RowSpan { get; set; } = 2;
 
@@ -338,6 +344,7 @@ public sealed class MonitoringMapTile
         ShowCard = ShowCard,
         Column = Column,
         Row = Row,
+        Order = Order,
         ColumnSpan = ColumnSpan,
         RowSpan = RowSpan,
         BackgroundColor = BackgroundColor,
@@ -493,21 +500,24 @@ public static class MonitoringMapTileConstraints
     /// 1..columns / 1..rows grid. Mutates <paramref name="tile"/> - used by both the layout migration and the
     /// store's save-time normalization so an off-grid or too-small tile always lands somewhere sane rather than
     /// being rejected.</summary>
+    /// <summary>The tallest a single tile may be, in row units. A tile is allowed to be taller than one
+    /// screen (<see cref="MonitoringMap.Rows"/>) - a long sensor list is a legitimate thing to scroll to -
+    /// but not unboundedly so, because the wallboard scales a slide to fit and one runaway tile would shrink
+    /// every other tile on the board to nothing.</summary>
+    public const int MaxRowSpan = 24;
+
+    /// <summary>Clamps a tile's flow geometry in place: the kind's minimum width, capped at the slide's column
+    /// count, and a height of at least the kind's minimum. v3 has no x/y to clamp - a tile cannot be placed
+    /// off the board because it is never placed at all, only ordered.</summary>
     public static void Clamp(MonitoringMapTile tile, int columns, int rows)
     {
         var (minColumns, minRows, _, _) = For(tile.Kind);
         columns = Math.Max(1, columns);
-        rows = Math.Max(1, rows);
 
-        // Enforce the floor first, then cap to the grid - in that order, so a grid smaller than the kind's
-        // usual minimum (a tiny/degenerate board) still yields a tile no bigger than the grid itself rather
-        // than one that overflows it.
-        var columnSpan = Math.Min(Math.Max(minColumns, tile.ColumnSpan), columns);
-        var rowSpan = Math.Min(Math.Max(minRows, tile.RowSpan), rows);
-        tile.ColumnSpan = columnSpan;
-        tile.RowSpan = rowSpan;
-        tile.Column = Math.Clamp(tile.Column, 1, Math.Max(1, columns - columnSpan + 1));
-        tile.Row = Math.Clamp(tile.Row, 1, Math.Max(1, rows - rowSpan + 1));
+        // Floor first, then cap to the slide width - in that order, so a slide narrower than the kind's usual
+        // minimum still yields a tile no wider than the slide rather than one that overflows it.
+        tile.ColumnSpan = Math.Min(Math.Max(minColumns, tile.ColumnSpan), columns);
+        tile.RowSpan = Math.Clamp(tile.RowSpan, minRows, MaxRowSpan);
     }
 }
 

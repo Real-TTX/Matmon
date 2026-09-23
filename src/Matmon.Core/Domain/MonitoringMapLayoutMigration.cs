@@ -27,6 +27,14 @@ public static class MonitoringMapLayoutMigration
             return;
         }
 
+        // A v2 board is already in cells - it only needs the cells turned into a flow order.
+        if (map.LayoutVersion == 2)
+        {
+            MigrateCellsToFlow(map);
+            map.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
+            return;
+        }
+
         var aspect = map.EffectiveAspect();
         var (logicalWidth, logicalHeight) = MonitoringMap.LogicalSizeFor(aspect.Width, aspect.Height);
         map.LogicalWidth = logicalWidth;
@@ -45,11 +53,49 @@ public static class MonitoringMapLayoutMigration
         // save time), so it needs the same conversion applied independently.
         MigrateTiles(map.Tiles, map, fromLogicalPx);
 
-        // Both v0 and v1 predate the opt-in public link (it was always live); a fresh v2 map defaults
-        // PublicEnabled to false. Since this method only runs for a v0/v1 map (guarded above), setting it
-        // unconditionally here is exactly "only for a migrated map".
+        // ...and then the same cells-to-flow step a v2 board takes, so every version lands on v3.
+        MigrateCellsToFlow(map);
+
+        // Both v0 and v1 predate the opt-in public link (it was always live); a fresh map defaults
+        // PublicEnabled to false, so this restores what those boards actually did. Only reached for a v0/v1
+        // map (the v2 branch below returns before this).
         map.PublicEnabled = true;
         map.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
+    }
+
+    /// <summary>v2 (cells) -> v3 (flow). The cell coordinates become a reading ORDER: top row first, then left
+    /// to right - which is the order a person would have read the board in anyway, so a migrated board comes
+    /// back looking like itself. Widths carry over unchanged; heights keep their number and only change
+    /// meaning (grid rows spanned -> row units tall), which is the same thing measured the same way.</summary>
+    private static void MigrateCellsToFlow(MonitoringMap map)
+    {
+        foreach (var slide in map.Slides)
+        {
+            OrderTiles(slide.Tiles, map);
+        }
+
+        OrderTiles(map.Tiles, map);
+    }
+
+    private static void OrderTiles(List<MonitoringMapTile> tiles, MonitoringMap map)
+    {
+        var ordered = tiles
+            .Select((tile, index) => (tile, index))
+            .OrderBy(entry => entry.tile.Row)
+            .ThenBy(entry => entry.tile.Column)
+            .ThenBy(entry => entry.index)
+            .Select(entry => entry.tile)
+            .ToList();
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].Order = i;
+            // The cell coordinates are dead weight from here on; leaving them set would invite a future
+            // reader to trust them.
+            ordered[i].Column = 0;
+            ordered[i].Row = 0;
+            MonitoringMapTileConstraints.Clamp(ordered[i], map.Columns, map.Rows);
+        }
     }
 
     private static void MigrateTiles(List<MonitoringMapTile> tiles, MonitoringMap map, bool fromLogicalPx)

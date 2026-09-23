@@ -6,14 +6,15 @@ namespace Matmon.Tests;
 /// <see cref="MonitoringMapTileConstraints"/> is the single min-span/clamp table shared by the store's
 /// save-time normalization, the layout migration and (mirrored) the designer's JS - replacing two rival
 /// tables that could silently drift apart (the store's grid-cell MapTileSizeLimits and the JS sizeLimits).
-/// v2 works in grid CELLS (Column/Row/ColumnSpan/RowSpan), not px.
+/// v3 is a FLOW: a tile has a width in columns and a height in row units, and no position at all - so there
+/// is nothing left to clamp it "into the grid", only a width to cap and a height to bound.
 /// </summary>
 public class MonitoringMapTileConstraintsTests
 {
     [Fact]
     public void Clamp_enforces_the_kind_minimum_span()
     {
-        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Graph, Column = 1, Row = 1, ColumnSpan = 1, RowSpan = 1 };
+        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Graph, ColumnSpan = 1, RowSpan = 1 };
 
         MonitoringMapTileConstraints.Clamp(tile, columns: 12, rows: 6);
 
@@ -23,42 +24,40 @@ public class MonitoringMapTileConstraintsTests
     }
 
     [Fact]
-    public void Clamp_keeps_the_tile_fully_inside_the_grid()
+    public void Clamp_caps_the_width_at_the_slide_width()
     {
-        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Value, Column = 100, Row = 50, ColumnSpan = 2, RowSpan = 2 };
+        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Value, ColumnSpan = 100, RowSpan = 2 };
 
         MonitoringMapTileConstraints.Clamp(tile, columns: 12, rows: 6);
 
-        Assert.InRange(tile.Column, 1, 12 - tile.ColumnSpan + 1);
-        Assert.InRange(tile.Row, 1, 6 - tile.RowSpan + 1);
-        Assert.True(tile.Column + tile.ColumnSpan - 1 <= 12);
-        Assert.True(tile.Row + tile.RowSpan - 1 <= 6);
+        Assert.Equal(12, tile.ColumnSpan);
     }
 
     [Fact]
-    public void Clamp_pulls_a_negative_position_back_onto_the_grid()
+    public void Clamp_shrinks_the_minimum_when_the_slide_itself_is_narrower()
     {
-        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Text, Column = -500, Row = -50, ColumnSpan = 2, RowSpan = 2 };
-
-        MonitoringMapTileConstraints.Clamp(tile, columns: 12, rows: 6);
-
-        Assert.Equal(1, tile.Column);
-        Assert.Equal(1, tile.Row);
-    }
-
-    [Fact]
-    public void Clamp_shrinks_the_minimum_when_the_grid_itself_is_smaller()
-    {
-        // A degenerate/very small grid must not leave the tile spanning more cells than the grid has, even
-        // though that is below the kind's normal minimum - Clamp falls back to the grid size in that case.
-        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Status, Column = 1, Row = 1, ColumnSpan = 4, RowSpan = 2 };
+        // A one-column slide must not leave a tile spanning four columns, even though that is below the
+        // kind's normal minimum - the slide width wins.
+        var tile = new MonitoringMapTile { Kind = MonitoringMapTileKind.Status, ColumnSpan = 4, RowSpan = 2 };
 
         MonitoringMapTileConstraints.Clamp(tile, columns: 1, rows: 1);
 
         Assert.Equal(1, tile.ColumnSpan);
-        Assert.Equal(1, tile.RowSpan);
-        Assert.Equal(1, tile.Column);
-        Assert.Equal(1, tile.Row);
+    }
+
+    [Fact]
+    public void Clamp_lets_a_tile_be_taller_than_one_screen_but_not_unbounded()
+    {
+        // A long sensor list is a legitimate thing to scroll to, so the screen height (rows) is NOT a cap -
+        // but one runaway tile would shrink every other tile on a scaled wallboard to nothing, so there is
+        // still a ceiling.
+        var tall = new MonitoringMapTile { Kind = MonitoringMapTileKind.SensorList, ColumnSpan = 4, RowSpan = 10 };
+        MonitoringMapTileConstraints.Clamp(tall, columns: 12, rows: 6);
+        Assert.Equal(10, tall.RowSpan);
+
+        var runaway = new MonitoringMapTile { Kind = MonitoringMapTileKind.SensorList, ColumnSpan = 4, RowSpan = 9999 };
+        MonitoringMapTileConstraints.Clamp(runaway, columns: 12, rows: 6);
+        Assert.Equal(MonitoringMapTileConstraints.MaxRowSpan, runaway.RowSpan);
     }
 
     [Theory]
