@@ -8213,11 +8213,66 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: var(--tile-gap, 16px);
 }
 
+/* ⚠️ A DEFINITE height, not auto+min-height. The tile is a `container-type: size` query container and its
+   whole type scale is in cqh/cqmin units; a container whose block size comes from its own content is
+   indefinite, so the browser resolves every one of those units to ZERO. The tile still measured 144px (the
+   min-height), which is why the symptom was so odd: cards, borders, state pills and the SVG gauge arc all
+   drew correctly and every piece of TEXT rendered at font-size 0 - a mobile board of empty boxes.
+   --stack-min-h is rowSpan x 72px, so this is the same proportion the tile asked for anyway. */
 .map-slide[data-layout="stack"] .map-tile {
   position: static;
+  flex: 0 0 auto;
   width: 100%;
-  height: auto;
+  height: var(--stack-min-h, 72px);
   min-height: var(--stack-min-h, 72px);
+}
+
+/* Stacked means a phone at arm's length, not a TV across the room. The cq type scale is sized for the wall
+   and lands at 8px inside a 336px-wide card, so the SMALL text gets a floor here - the big reading keeps its
+   cq size, since that is the one thing a phone renders well anyway. */
+.map-slide[data-layout="stack"] .map-tile-head strong {
+  font-size: max(0.88rem, min(11cqh, 9cqw));
+}
+.map-slide[data-layout="stack"] .map-tile p,
+.map-slide[data-layout="stack"] .map-tile small {
+  font-size: max(0.72rem, min(7cqh, 5.5cqw));
+}
+/* Stacked, the tile is wide and short, so the height-fitted arc is only ~86px across - a reading INSIDE its
+   mouth had room for "0…" and nothing else. Beside the dial it simply reads. `display: contents` dissolves
+   the dial wrapper so the arc and the readout become the two columns of the gauge row; the cq-based sizes go
+   with it, hence the fixed rem sizes here. */
+.map-slide[data-layout="stack"] .map-gauge-dial {
+  display: contents;
+}
+.map-slide[data-layout="stack"] .map-tile-gauge {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  gap: 0.6rem;
+}
+.map-slide[data-layout="stack"] .map-gauge {
+  width: auto;
+  height: 100%;
+  aspect-ratio: 100 / 58;
+}
+.map-slide[data-layout="stack"] .map-gauge-readout {
+  position: static;
+  max-width: none;
+  transform: none;
+  justify-items: start;
+  text-align: left;
+}
+.map-slide[data-layout="stack"] .map-gauge-readout strong {
+  font-size: 1.45rem;
+}
+.map-slide[data-layout="stack"] .map-tile .map-gauge-readout small {
+  font-size: 0.72rem;
+}
+.map-slide[data-layout="stack"] .map-tile-row {
+  font-size: max(0.72rem, clamp(7px, 7cqh, 20px));
+}
+.map-slide[data-layout="stack"] .map-tile-kind-label {
+  font-size: max(0.62rem, clamp(0.42rem, 3.6cqmin, 0.68rem));
 }
 
 .map-slide[data-layout="stack"] .map-grid-guides {
@@ -8655,7 +8710,18 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: 0;
 }
 
+/* Shrink-wraps the arc: same aspect ratio as the viewBox, so its box IS the dial's box. It is its own
+   query container too, which is what lets the reading scale with the DIAL rather than with the tile. */
+.map-gauge-dial {
+  position: relative;
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 100 / 58;
+  container-type: size;
+}
+
 .map-gauge {
+  display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -8703,7 +8769,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-gauge-readout strong {
   max-width: 100%;
   overflow: hidden;
-  font-size: 17cqmin;
+  /* Of the DIAL, not the tile (see .map-gauge-dial) - capped by width so a wide, short dial keeps the
+     reading inside the arc's mouth instead of across its stroke. */
+  font-size: min(30cqh, 19cqw);
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8716,7 +8784,7 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   max-width: 100%;
   overflow: hidden;
   color: var(--matmon-muted);
-  font-size: 6.5cqmin;
+  font-size: min(11cqh, 7cqw);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8731,6 +8799,14 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: min(7cqh, 5.5cqw);
+}
+
+/* A progress tile has already spent height on the bar and its scale caption, so the reading cannot also
+   claim 40% of the tile - at a phone's stacked size it was simply sliced in half by the tile's overflow. */
+.map-tile:has(.map-tile-progress-wrap) .map-tile-value {
+  flex: 0 1 auto;
+  min-height: 0;
+  font-size: min(22cqh, 18cqw);
 }
 
 /* Progress-bar thickness tracks the tile: slim on a short tile, chunkier on a tall one. */
@@ -11899,6 +11975,19 @@ button.workspace-action-menu-link {
 
   .page-header.has-summary {
     grid-template-columns: 1fr;
+  }
+
+  /* ⚠️ An explicitly PLACED grid child creates the track it is placed in. The desktop rule pins the summary
+     strip to `grid-column: 2`, so collapsing the template to a single `1fr` above achieved nothing - the
+     strip kept generating an implicit second column, and the page TITLE was squeezed into whatever sliver
+     was left beside the actions (56px on a 375px phone, "Layout & Slides" wrapping to three lines). It has
+     to be un-placed here, not just given a narrower template. Hits every page whose header carries a
+     summary card, which is most of them. */
+  .page-header .workspace-summary-strip {
+    grid-column: 1;
+    justify-content: flex-start;
+    margin-top: 0.25rem;
+    margin-bottom: 0.35rem;
   }
 
   .workspace-summary-strip {

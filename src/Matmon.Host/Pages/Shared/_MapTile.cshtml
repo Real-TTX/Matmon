@@ -195,13 +195,18 @@
            The big figure is the READING (with its unit); the caption underneath is the scale, because a
            needle two thirds of the way round is unreadable if nothing says two thirds of what. *@
         <div class="map-tile-gauge" data-tile-progress style="--map-progress: @MapTileRender.FormatProgressPercent(Model.ProgressPercent)">
-            <svg class="map-gauge" viewBox="0 0 100 58" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-                <path class="map-gauge-track" d="M8 52 A42 42 0 0 1 92 52" pathLength="100" />
-                <path class="map-gauge-fill" d="M8 52 A42 42 0 0 1 92 52" pathLength="100" />
-            </svg>
-            <span class="map-gauge-readout">
-                <strong data-tile-value>@(string.IsNullOrWhiteSpace(Model.Value) ? MapTileRender.FormatProgressLabel(Model.ProgressPercent) : Model.Value)</strong>
-                <small data-tile-progress-label>@Model.ProgressLabel</small>
+            @* The readout sits in a box that is exactly the ARC's box, not the tile's. The SVG is fitted by
+               height, so on a wide, short tile (a stacked phone card) the arc is only a fraction of the tile
+               wide - a readout sized against the tile spilled straight over the stroke. *@
+            <span class="map-gauge-dial">
+                <svg class="map-gauge" viewBox="0 0 100 58" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                    <path class="map-gauge-track" d="M8 52 A42 42 0 0 1 92 52" pathLength="100" />
+                    <path class="map-gauge-fill" d="M8 52 A42 42 0 0 1 92 52" pathLength="100" />
+                </svg>
+                <span class="map-gauge-readout">
+                    <strong data-tile-value>@(string.IsNullOrWhiteSpace(Model.Value) ? MapTileRender.FormatProgressLabel(Model.ProgressPercent) : Model.Value)</strong>
+                    <small data-tile-progress-label>@Model.ProgressLabel</small>
+                </span>
             </span>
         </div>
     }
