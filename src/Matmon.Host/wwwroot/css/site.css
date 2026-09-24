@@ -11980,22 +11980,34 @@ button.workspace-action-menu-link {
     text-align: right;
   }
 
+  /* Stacked: canvas first, then the properties you just opened, then the library. Scrolling past sixteen
+     widget cards to reach your own board is the wrong order, and the library needs a ceiling or it runs off
+     the bottom of the page. */
   .map-designer-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .map-toolbox,
-  .map-property-editor {
-    min-height: auto;
-    max-height: none;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .map-designer-workbench {
-    max-height: 72vh;
+    order: 1;
+    max-height: none;
+  }
+
+  .map-property-editor {
+    order: 2;
+    min-height: 0;
+    max-height: none;
   }
 
   .map-toolbox {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    order: 3;
+    min-height: 0;
+    max-height: 26rem;
+  }
+
+  /* Full width, the two-per-row grid gave 348px cards with a 196px schematic - a palette entry the size of
+     a widget. Side by side the card has to be big enough to read; stacked it only has to be recognisable. */
+  .map-toolbox-group-items {
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
   }
 
   .map-designer-side-title {
@@ -14141,30 +14153,6 @@ html[data-theme="dark"] .log-lvl-error, html[data-theme="dark"] .log-lvl-critica
   .map-switch-track,
   .map-switch-track::after {
     transition: none;
-  }
-}
-
-/* The designer is a desktop tool, but it must not be hostile on a phone. Stacked, the three columns came
-   out toolbox-first, so you scrolled past sixteen widget cards before you reached your own board. Canvas
-   first, then the properties you just opened, then the library - and the library gets a ceiling so it cannot
-   run off the bottom of the page again. */
-@media (max-width: 900px) {
-  .map-designer-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .map-designer-workbench {
-    order: 1;
-  }
-  .map-property-editor {
-    order: 2;
-    min-height: 0;
-    max-height: none;
-  }
-  .map-toolbox {
-    order: 3;
-    min-height: 0;
-    max-height: 22rem;
   }
 }
 
