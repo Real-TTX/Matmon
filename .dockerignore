@@ -4,7 +4,12 @@
 .gitignore
 .vscode/
 .idea/
-data/
+# Every runtime data folder, at ANY depth - not just the root one. A bare "data/" matches only
+# /data, so src/Matmon.Host/data (the dev workspace) was copied into the build context, landed in the
+# publish output and shipped inside the image as /app/data/workspace.json. Docker seeds an empty named
+# volume from the image, so a fresh install came up with the developer account and setupCompletedUtc
+# already set: first-run setup never ran and nobody could sign in.
+**/data/
 tmp/
 
 # Not needed to build the runtime image - excluding them keeps the COPY layer
