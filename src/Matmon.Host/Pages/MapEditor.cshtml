@@ -163,12 +163,13 @@
                              data-map-designer
                              data-next-tile-index="@Model.Input.Tiles.Count"
                              style="--map-columns: @Model.Input.Columns; --map-rows: @Model.Input.Rows; --tile-gap: @(Model.Input.TilePadding)px; --map-margin: @(Model.Input.OuterMargin)px;">
-                            @* Column stripes, laid out by the SAME grid as the tiles (see _MapSlide) so a guide
-                               cannot drift from where a tile will actually land. *@
+                            @* A CELL grid, laid out by the SAME grid definition as the tiles (see _MapSlide) so a
+                               guide cannot drift from where a tile will actually land. One screen's worth is
+                               rendered here; the designer re-renders it to cover however tall the flow grows. *@
                             <div class="map-grid-guides" aria-hidden="true">
-                                @for (var column = 0; column < Math.Max(1, Model.Input.Columns); column++)
+                                @for (var cell = 0; cell < Math.Max(1, Model.Input.Columns) * Math.Max(1, Model.Input.Rows); cell++)
                                 {
-                                    <span class="map-grid-column"></span>
+                                    <span class="map-grid-cell-guide"></span>
                                 }
                             </div>
                             @* An empty slide is where a layout MEANS something, so that is where it is

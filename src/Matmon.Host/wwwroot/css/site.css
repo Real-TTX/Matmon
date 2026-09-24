@@ -8308,12 +8308,26 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   inset: var(--map-margin, 24px);
   display: grid;
   grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
+  grid-auto-rows: var(--map-row-unit, 4.6rem);
   gap: var(--tile-gap, 16px);
   pointer-events: none;
 }
-.map-grid-column {
+
+/* One outline per CELL, not a filled bar per column. Twelve solid stripes running the whole height read as
+   content - big pale columns behind the widgets - and they said nothing about the other axis, which is the
+   one a widget's height is actually measured in. An outlined cell grid is graph paper: it shows exactly the
+   unit a tile snaps to, in both directions, without competing with the board. */
+.map-grid-cell-guide {
+  border: 1px dashed color-mix(in srgb, var(--matmon-border) 90%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--matmon-border) 20%, transparent);
+}
+
+/* Where the wallboard SCREEN ends. A board may be taller than "rows per screen" - that is allowed, it
+   scrolls - but on a TV everything past this line is below the fold, and that is worth one honest line
+   rather than finding out on the wall. */
+.map-grid-cell-guide.is-fold {
+  border-bottom-color: color-mix(in srgb, var(--matmon-warning) 55%, transparent);
+  border-bottom-style: solid;
 }
 .map-grid-guides-legacy {
   position: absolute;

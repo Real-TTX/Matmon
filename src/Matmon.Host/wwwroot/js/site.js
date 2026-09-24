@@ -3614,17 +3614,33 @@ function initializeMapDesigner() {
     }
   };
 
-  // One stripe per column, laid out by the same grid as the tiles.
+  // A cell per grid position, laid out by the same grid definition as the tiles - so a guide cannot drift
+  // from where a tile actually lands. The row count is whatever the slide currently needs (it grows as the
+  // flow wraps), never fewer than the board's own rows-per-screen, and the last on-screen row is marked so
+  // you can see where a TV would cut the board off.
   const renderGridGuides = (grid = readGrid()) => {
     if (!gridGuides) {
       return;
     }
+    // The USED row height in px. Reading the custom property gives its authored text ("4.6rem"), and
+    // parseFloat of that is 4.6 - which asked for 28 rows where 8 were needed.
+    const rowUnit = Number.parseFloat(getComputedStyle(gridGuides).gridAutoRows) || 0;
+    const pitch = rowUnit + grid.tilePadding;
+    const available = canvas.clientHeight - 2 * grid.outerMargin + grid.tilePadding;
+    const needed = pitch > 0 ? Math.ceil(available / pitch) : 0;
+    const rows = Math.max(grid.rows, needed, 1);
+
     gridGuides.replaceChildren();
-    for (let column = 0; column < grid.columns; column += 1) {
-      const stripe = document.createElement("span");
-      stripe.className = "map-grid-column";
-      gridGuides.appendChild(stripe);
+    const fragment = document.createDocumentFragment();
+    for (let cell = 0; cell < rows * grid.columns; cell += 1) {
+      const box = document.createElement("span");
+      box.className = "map-grid-cell-guide";
+      if (Math.floor(cell / grid.columns) === grid.rows - 1 && rows > grid.rows) {
+        box.classList.add("is-fold");
+      }
+      fragment.appendChild(box);
     }
+    gridGuides.appendChild(fragment);
   };
 
   const syncCanvas = () => {
