@@ -687,10 +687,12 @@
                          data-kind="__kindLower__"
                          data-visual="__visual__"
                          data-density="__density__"
-                         style="--tile-span: __colSpan__; --tile-rows: __rowSpan__;">
+                         style="--tile-col: __column__; --tile-row: __row__; --tile-span: __colSpan__; --tile-rows: __rowSpan__;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
                     <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
                     <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
+                    <input type="hidden" name="Input.Tiles[__index__].Column" value="__column__" data-map-tile-column />
+                    <input type="hidden" name="Input.Tiles[__index__].Row" value="__row__" data-map-tile-row />
                     <input type="hidden" name="Input.Tiles[__index__].Order" value="__order__" data-map-tile-order />
 
                     @* First paint only - the designer immediately asks ?handler=TileMarkup for the real

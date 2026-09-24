@@ -35,13 +35,17 @@
             the tile is the container. *@
          data-density="@(tile.RowSpan <= 1 ? "s" : tile.RowSpan == 2 ? "m" : "l")"
          @Html.Raw(editorAttributes)
-         style="--tile-span: @tile.ColumnSpan; --tile-rows: @tile.RowSpan; @MapTileRender.TileStyle(tile, Model.StateKey)"
+         @* Placement and size, both in grid cells. A tile with no column/row yet (added this second, not
+            saved) falls back to "auto" so the browser puts it somewhere sensible until the save normalises it. *@
+         style="--tile-col: @(tile.Column > 0 ? tile.Column.ToString() : "auto"); --tile-row: @(tile.Row > 0 ? tile.Row.ToString() : "auto"); --tile-span: @tile.ColumnSpan; --tile-rows: @tile.RowSpan; @MapTileRender.TileStyle(tile, Model.StateKey)"
          hidden="@(Model.IsDeleted ? "hidden" : null)">
     @if (Model.Editable)
     {
         <input type="hidden" name="@(Model.FieldNamePrefix).Id" value="@tile.Id" />
         <input type="hidden" name="@(Model.FieldNamePrefix).SlideId" value="@Model.SlideId" data-map-tile-slide-id />
         <input type="hidden" name="@(Model.FieldNamePrefix).IsDeleted" value="@(Model.IsDeleted ? "true" : "false")" data-map-tile-deleted />
+        <input type="hidden" name="@(Model.FieldNamePrefix).Column" value="@tile.Column" data-map-tile-column />
+        <input type="hidden" name="@(Model.FieldNamePrefix).Row" value="@tile.Row" data-map-tile-row />
         <input type="hidden" name="@(Model.FieldNamePrefix).Order" value="@tile.Order" data-map-tile-order />
     }
 

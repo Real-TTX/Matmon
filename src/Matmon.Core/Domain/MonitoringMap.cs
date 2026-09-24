@@ -4,15 +4,15 @@ namespace Matmon.Core.Domain;
 
 public sealed class MonitoringMap
 {
-    /// <summary>The current tile-geometry layout scheme. 0 = legacy grid cells (Columns x Rows, no
-    /// padding/margin concept), 1 = free positioning in logical px on a <see cref="LogicalWidth"/> x
-    /// <see cref="LogicalHeight"/> canvas (Phase A), 2 = the current strict cell grid - Columns/Rows are
-    /// authoritative again (<see cref="MonitoringMapTile.Column"/>/<see cref="MonitoringMapTile.Row"/>/
-    /// <see cref="MonitoringMapTile.ColumnSpan"/>/<see cref="MonitoringMapTile.RowSpan"/>), with
-    /// <see cref="TilePadding"/>/<see cref="OuterMargin"/> controlling the cell-to-px conversion
-    /// (<see cref="MonitoringMapGeometry"/>). A map loaded with an older version is migrated once via
+    /// <summary>The current tile-geometry layout scheme. 0 = legacy grid cells, 1 = free positioning in
+    /// logical px on a <see cref="LogicalWidth"/> x <see cref="LogicalHeight"/> canvas (Phase A), 2 = strict
+    /// cell grid, 3 = a pure column FLOW with no positions at all, 4 = the current scheme: explicit cells
+    /// again (<see cref="MonitoringMapTile.Column"/>/<see cref="MonitoringMapTile.Row"/> +
+    /// <see cref="MonitoringMapTile.ColumnSpan"/>/<see cref="MonitoringMapTile.RowSpan"/>) on the SAME real
+    /// CSS grid v3 introduced - so a widget goes where you put it and empty space stays empty, without the
+    /// scaled canvas coming back. A map loaded with an older version is migrated once via
     /// <see cref="MonitoringMapLayoutMigration"/>.</summary>
-    public const int CurrentLayoutVersion = 3;
+    public const int CurrentLayoutVersion = 4;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -234,19 +234,23 @@ public sealed class MonitoringMapTile
     /// e.g. a section heading placed at height 1 with no visible tile. Defaults to true (a normal card).</summary>
     public bool ShowCard { get; set; } = true;
 
-    /// <summary>Position in the slide's FLOW (0-based, dense). v3 has no x/y: tiles are laid out in order,
-    /// left to right, wrapping when the remaining columns cannot hold the next one - so two tiles can never
-    /// overlap and the whole board reflows by itself when the column count changes or the screen narrows.</summary>
+    /// <summary>READING order (0-based, dense) - derived from <see cref="Row"/>/<see cref="Column"/> by
+    /// <see cref="MonitoringMapPlacement.Normalize"/>, never edited directly. It is what the stacked
+    /// one-column view (a phone, a narrow embedded console) reads the board in, and it fixes the DOM order so
+    /// stacking needs no re-sorting in CSS.</summary>
     [JsonPropertyName("order")]
     public int Order { get; set; }
 
-    /// <summary>⚠️ v2 legacy, read by <see cref="MonitoringMapLayoutMigration"/> and by nothing else. A v2
-    /// workspace.json stores the tile's cell coordinates under "x"/"y"; the migration turns them into
-    /// <see cref="Order"/> and zeroes them. Do not render from these.</summary>
+    /// <summary>The tile's 1-based grid column. Authoritative again in v4: the widget sits here, and the
+    /// cells around it stay empty if that is what you laid out. Clamped into the slide's
+    /// <see cref="MonitoringMap.Columns"/> by <see cref="MonitoringMapPlacement.Normalize"/>; 0 means "not
+    /// placed yet" and gets the first free spot.</summary>
     [JsonPropertyName("x")]
     public int Column { get; set; }
 
-    /// <inheritdoc cref="Column"/>
+    /// <summary>The tile's 1-based grid row, measured in the same ROW UNITS as <see cref="RowSpan"/>. Not
+    /// bounded by <see cref="MonitoringMap.Rows"/> - that is how many fill one wallboard screen, not a
+    /// ceiling; a taller board scrolls.</summary>
     [JsonPropertyName("y")]
     public int Row { get; set; }
 

@@ -3671,9 +3671,82 @@ function initializeMapDesigner() {
     const panel = getPanel(tile.dataset.tileIndex || "");
     return {
       order: tile.querySelector("[data-map-tile-order]"),
+      column: tile.querySelector("[data-map-tile-column]"),
+      row: tile.querySelector("[data-map-tile-row]"),
       columnSpan: panel?.querySelector("[data-map-tile-column-span]"),
       rowSpan: panel?.querySelector("[data-map-tile-row-span]")
     };
+  };
+
+  // One cell in px, for turning pointer movement into grid steps. The column pitch is derived from the
+  // slide's own content width and the row pitch from the used grid-auto-rows, so it is right at any zoom,
+  // font size or column count without parsing a unit anywhere.
+  const cellMetrics = () => {
+    const grid = readGrid();
+    const rowUnit = Number.parseFloat(getComputedStyle(canvas).gridAutoRows) || 0;
+    const content = canvas.clientWidth - 2 * grid.outerMargin;
+    return {
+      columns: grid.columns,
+      columnPitch: (content + grid.tilePadding) / grid.columns,
+      rowPitch: rowUnit + grid.tilePadding
+    };
+  };
+
+  const tileRect = (tile) => {
+    const controls = getTileControls(tile);
+    return {
+      column: Math.max(1, Number(controls.column?.value || 1)),
+      row: Math.max(1, Number(controls.row?.value || 1)),
+      columnSpan: Math.max(1, Number(controls.columnSpan?.value || tile.style.getPropertyValue("--tile-span") || 3)),
+      rowSpan: Math.max(1, Number(controls.rowSpan?.value || tile.style.getPropertyValue("--tile-rows") || 2))
+    };
+  };
+
+  // Where the tile sits, written to the hidden inputs AND the CSS variables in one place - so the model and
+  // what you see cannot drift apart mid-drag.
+  const applyTilePlacement = (tile, column, row) => {
+    const grid = readGrid();
+    const rect = tileRect(tile);
+    const placedColumn = clamp(Math.round(column), 1, Math.max(1, grid.columns - rect.columnSpan + 1));
+    const placedRow = Math.max(1, Math.round(row));
+
+    const controls = getTileControls(tile);
+    if (controls.column) {
+      controls.column.value = String(placedColumn);
+    }
+    if (controls.row) {
+      controls.row.value = String(placedRow);
+    }
+    tile.style.setProperty("--tile-col", String(placedColumn));
+    tile.style.setProperty("--tile-row", String(placedRow));
+  };
+
+  const activeTiles = () => Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((tile) =>
+    (tile.dataset.slideId || "") === activeSlideId
+    && tile.querySelector("[data-map-tile-deleted]")?.value !== "true");
+
+  // Mirrors MonitoringMapPlacement.FindFreeSpot: first cell, left to right then down, where the tile fits
+  // without touching one that is already there. A palette click that dropped every widget on 1,1 would bury
+  // four of them under each other.
+  const findFreeCell = (columnSpan, rowSpan) => {
+    const grid = readGrid();
+    const placed = activeTiles().map(tileRect);
+    const hits = (column, row) => placed.some((other) =>
+      other.column < column + columnSpan
+      && column < other.column + other.columnSpan
+      && other.row < row + rowSpan
+      && row < other.row + other.rowSpan);
+
+    const lastRow = placed.reduce((max, other) => Math.max(max, other.row + other.rowSpan - 1), 0);
+    for (let row = 1; row <= lastRow + 1; row += 1) {
+      for (let column = 1; column <= grid.columns - columnSpan + 1; column += 1) {
+        if (!hits(column, row)) {
+          return { column, row };
+        }
+      }
+    }
+
+    return { column: 1, row: lastRow + 1 };
   };
 
   // A tile has a size, not a position: the grid decides where it lands. Writing the spans back into their
@@ -3710,23 +3783,20 @@ function initializeMapDesigner() {
     }
   };
 
-  // The flow order IS the layout, so after any reorder the hidden Order inputs are rewritten from the tiles'
-  // DOM order - one place, so the model can never disagree with what the canvas shows.
-  const commitFlowOrder = () => {
-    let order = 0;
-    canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
-      // A deleted tile is still in the DOM (it has to keep posting IsDeleted=true), but it is no longer part
-      // of the flow - counting it would leave the surviving widgets numbered from 2.
-      if ((tile.dataset.slideId || "") !== activeSlideId
-        || tile.querySelector("[data-map-tile-deleted]")?.value === "true") {
-        return;
-      }
-      const field = tile.querySelector("[data-map-tile-order]");
-      if (field) {
-        field.value = String(order);
-      }
-      order += 1;
-    });
+  // The POSITIONS are the layout; Order is only the reading order a stacked phone view follows, so it is
+  // derived from them here rather than kept by hand - exactly as MonitoringMapPlacement.Normalize does it on
+  // save, so the two cannot disagree. (A deleted tile stays in the DOM to keep posting IsDeleted=true and is
+  // skipped, or the survivors would be numbered from 2.)
+  const commitPlacement = () => {
+    activeTiles()
+      .map((tile) => ({ tile, ...tileRect(tile) }))
+      .sort((a, b) => a.row - b.row || a.column - b.column)
+      .forEach((entry, index) => {
+        const field = entry.tile.querySelector("[data-map-tile-order]");
+        if (field) {
+          field.value = String(index);
+        }
+      });
     syncCanvasEmpty?.();
   };
 
@@ -4230,6 +4300,10 @@ function initializeMapDesigner() {
       columnSpan: panel.querySelector("[data-map-tile-column-span]")?.value || "3",
       rowSpan: panel.querySelector("[data-map-tile-row-span]")?.value || "2",
       order: tile.querySelector("[data-map-tile-order]")?.value || "0",
+      // The server render writes the placement into the replacement's style, so it has to know it - without
+      // these the tile came back unplaced and jumped to wherever auto-placement put it.
+      column: tile.querySelector("[data-map-tile-column]")?.value || "0",
+      row: tile.querySelector("[data-map-tile-row]")?.value || "0",
       imageAssetId: panel.querySelector("[data-map-property-image-id]")?.value || "",
       imageFit: panel.querySelector("[data-map-property-image-fit]")?.value || "Contain",
       channelKey: panel.querySelector('[name$=".ChannelKey"]')?.value || "",
@@ -4478,7 +4552,7 @@ function initializeMapDesigner() {
     }
     panel?.setAttribute("hidden", "hidden");
     // Removing a tile leaves a hole in the order; the flow has to close up behind it.
-    commitFlowOrder();
+    commitPlacement();
     selectMap();
   };
 
@@ -4542,9 +4616,9 @@ function initializeMapDesigner() {
 
   const wireTileDrag = (tile) => {
     // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). Dragging
-    // REORDERS now - v3 tiles have no position, so there is nothing to drag them to. The tile is moved in the
-    // DOM as the pointer passes other tiles, which means the grid reflows live and the drag preview is the
-    // real layout rather than a ghost that might disagree with it.
+    // MOVES the tile to a cell: v4 stores a column and a row, so a widget goes where you drop it and the
+    // cells around it stay empty. The tile itself is what moves - its grid variables are rewritten every
+    // pointermove - so the preview during the drag IS the real layout, not a ghost that might disagree.
     tile.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) {
         return;
@@ -4560,16 +4634,13 @@ function initializeMapDesigner() {
 
       const startX = event.clientX;
       const startY = event.clientY;
+      const origin = tileRect(tile);
+      const metrics = cellMetrics();
       let dragging = false;
-
-      const siblings = () => Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((other) =>
-        (other.dataset.slideId || "") === activeSlideId
-        && !other.hidden
-        && other.querySelector("[data-map-tile-deleted]")?.value !== "true");
 
       const move = (moveEvent) => {
         if (!dragging) {
-          // A few pixels of slop, so a plain click to SELECT a tile is not read as a reorder.
+          // A few pixels of slop, so a plain click to SELECT a tile is not read as a move.
           if (Math.abs(moveEvent.clientX - startX) < 4 && Math.abs(moveEvent.clientY - startY) < 4) {
             return;
           }
@@ -4577,29 +4648,23 @@ function initializeMapDesigner() {
           tile.classList.add("is-dragging");
         }
 
-        const target = siblings().find((other) => {
-          if (other === tile) {
-            return false;
-          }
-          const rect = other.getBoundingClientRect();
-          return moveEvent.clientX >= rect.left && moveEvent.clientX <= rect.right
-            && moveEvent.clientY >= rect.top && moveEvent.clientY <= rect.bottom;
-        });
-        if (!target) {
-          return;
-        }
+        // Whole cells of travel, rounded - so the tile snaps between cells instead of drifting a pixel at a
+        // time towards one. There is no position between two of them to land on.
+        const columnDelta = metrics.columnPitch > 0
+          ? Math.round((moveEvent.clientX - startX) / metrics.columnPitch)
+          : 0;
+        const rowDelta = metrics.rowPitch > 0
+          ? Math.round((moveEvent.clientY - startY) / metrics.rowPitch)
+          : 0;
 
-        // Past the target's midpoint means "after it" - the same rule a text cursor follows, and the only one
-        // that lets you drop a tile at the very end of the flow.
-        const rect = target.getBoundingClientRect();
-        const after = moveEvent.clientX > rect.left + rect.width / 2;
-        target.parentNode?.insertBefore(tile, after ? target.nextSibling : target);
+        applyTilePlacement(tile, origin.column + columnDelta, origin.row + rowDelta);
       };
 
       const up = () => {
         if (dragging) {
           tile.classList.remove("is-dragging");
-          commitFlowOrder();
+          commitPlacement();
+          syncCanvas();
           refreshSlidePreviews();
         }
         window.removeEventListener("pointermove", move);
@@ -4646,10 +4711,16 @@ function initializeMapDesigner() {
         }
 
         applyTileSize(tile);
+        // Growing a tile at the right-hand edge would otherwise run it off the board; the column follows the
+        // span back inside the grid.
+        const rect = tileRect(tile);
+        applyTilePlacement(tile, rect.column, rect.row);
       };
 
       const up = () => {
         tile.classList.remove("is-resizing");
+        commitPlacement();
+        syncCanvas();
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
         window.removeEventListener("pointercancel", up);
@@ -4676,9 +4747,14 @@ function initializeMapDesigner() {
     const grid = readGrid();
     const columnSpan = clamp(placement?.columnSpan ?? limits.defaultColumns, Math.min(limits.minColumns, grid.columns), grid.columns);
     const rowSpan = clamp(placement?.rowSpan ?? limits.defaultRows, limits.minRows, MapMaxRowSpan);
-    // v3 has nowhere to "place" a tile: a new widget joins the END of the flow, which is where a reading
-    // order puts something you just added. Drag it from there. (The drop point is therefore ignored - the
-    // palette's drag is kept only because dragging onto the canvas is how people expect to add one.)
+    // Where it lands: the cell you dropped it on, or - for a palette CLICK, which has no drop point - the
+    // first free one. "First free" rather than 1,1, because four clicks would otherwise bury four widgets
+    // under each other on a board whose whole point is that you can see where things are.
+    const dropped = position ?? findFreeCell(columnSpan, rowSpan);
+    const cell = {
+      column: clamp(dropped.column, 1, Math.max(1, grid.columns - columnSpan + 1)),
+      row: Math.max(1, dropped.row)
+    };
     const order = canvas.querySelectorAll(`[data-map-tile][data-slide-id="${activeSlideId}"]`).length;
     const html = template.innerHTML
       .replaceAll("__index__", String(index))
@@ -4690,6 +4766,8 @@ function initializeMapDesigner() {
       .replaceAll("__kindLabel__", getKindLabel(kind))
       .replaceAll("__title__", title)
       .replaceAll("__order__", String(order))
+      .replaceAll("__column__", String(cell.column))
+      .replaceAll("__row__", String(cell.row))
       .replaceAll("__colSpan__", String(columnSpan))
       .replaceAll("__rowSpan__", String(rowSpan))
       // Mirrors _MapTile.cshtml: the density a tile can afford follows from its height in row units.
@@ -4715,7 +4793,7 @@ function initializeMapDesigner() {
       visualSelect.value = tool.visual;
     }
     setupTile(tile);
-    commitFlowOrder();
+    commitPlacement();
     // Initialize the freshly cloned tile's element + icon pickers (guarded so existing
     // ones aren't re-wired).
     initializeElementPickers();
@@ -5017,6 +5095,20 @@ function initializeMapDesigner() {
     }
   });
 
+  // Which cell the pointer is over. The pitch comes from the live grid, so this is right at any column
+  // count, zoom or margin - and a drop lands where you let go rather than at the end of a list.
+  const pointerToCell = (event) => {
+    const grid = readGrid();
+    const metrics = cellMetrics();
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left - grid.outerMargin;
+    const y = event.clientY - rect.top - grid.outerMargin;
+    return {
+      column: metrics.columnPitch > 0 ? Math.max(1, Math.floor(x / metrics.columnPitch) + 1) : 1,
+      row: metrics.rowPitch > 0 ? Math.max(1, Math.floor(y / metrics.rowPitch) + 1) : 1
+    };
+  };
+
   canvas.addEventListener("drop", (event) => {
     event.preventDefault();
     const rawPayload = event.dataTransfer?.getData("application/x-matmon-map-tool");
@@ -5024,12 +5116,17 @@ function initializeMapDesigner() {
       return;
     }
 
+    let payload = null;
     try {
-      const payload = JSON.parse(rawPayload);
-      addTile(payload, pointerToLogical(event));
+      payload = JSON.parse(rawPayload);
     } catch {
-      addTile({ kind: "1", title: "Tile" });
+      // A drop we cannot read is not a widget. This used to fall back to addTile({kind:"1"}) - and since the
+      // cell lookup it called alongside had been deleted with the old canvas, EVERY drop threw and took that
+      // branch: dragging any widget onto the board silently produced a State tile.
+      return;
     }
+
+    addTile(payload, pointerToCell(event));
   });
 
   canvas.addEventListener("click", (event) => {
@@ -5136,7 +5233,7 @@ function initializeMapDesigner() {
       }
       tile.hidden = true;
     });
-    commitFlowOrder();
+    commitPlacement();
     selectMap();
     return true;
   };
@@ -5161,7 +5258,7 @@ function initializeMapDesigner() {
       if (!widget) {
         return;
       }
-      addTile(widget, null, slot);
+      addTile(widget, { column: slot.column, row: slot.row }, slot);
     });
     selectMap();
   };

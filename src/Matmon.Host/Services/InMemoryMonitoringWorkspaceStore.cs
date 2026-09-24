@@ -632,9 +632,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 DurationSeconds = NormalizeSlideDurationSeconds(slide.DurationSeconds),
                 BackgroundColor = NormalizeColor(slide.BackgroundColor),
                 ShowHeader = slide.ShowHeader,
-                // v3: the flow order IS the layout, so it is normalised to a dense 0..n-1 on every save - a
-                // gap or a duplicate would make the next drag land somewhere the user did not aim.
-                Tiles = MonitoringMapFlow.Normalize(NormalizeMapTiles(slide.Tiles ?? [], columns, rows)).ToList()
+                // v4: every tile is put at a legal cell (an unplaced one gets the first free spot) and the
+                // reading order is recomputed from the positions, so the stacked view and the DOM agree.
+                Tiles = MonitoringMapPlacement.Normalize(NormalizeMapTiles(slide.Tiles ?? [], columns, rows), columns).ToList()
             })
             .ToList();
 

@@ -8227,8 +8227,12 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    drew correctly and every piece of TEXT rendered at font-size 0 - a mobile board of empty boxes.
    --stack-min-h is rowSpan x 72px, so this is the same proportion the tile asked for anyway. */
 .map-slide[data-layout="stack"] .map-tile {
-  /* One column, so every tile is full width whatever it asked for. */
+  /* One column, so every tile is full width whatever it asked for - and its placement is dropped entirely:
+     a v4 tile pins itself to a column and a row, which in a one-column list would leave holes where the
+     board had empty space and put two tiles on the same line. Stacked, the only thing that matters is the
+     reading order, and the DOM already carries it (the server sorts by Order). */
   grid-column: span 1;
+  grid-row: auto / span var(--tile-rows, 2);
 }
 
 /* Stacked means a phone at arm's length, not a TV across the room. The cq type scale is sized for the wall
@@ -8379,8 +8383,8 @@ html[data-theme="light"] .workspace-textarea::placeholder {
      letting the row stretch) is what keeps the tile a DEFINITE-size query container, which its whole cqh/cqmin
      type scale depends on - see the note on the stacked tile, where getting that wrong rendered every piece
      of text at font-size 0. */
-  grid-column: span var(--tile-span, 3);
-  grid-row: span var(--tile-rows, 2);
+  grid-column: var(--tile-col, auto) / span var(--tile-span, 3);
+  grid-row: var(--tile-row, auto) / span var(--tile-rows, 2);
   height: calc(var(--tile-rows, 2) * var(--map-row-unit, 4.6rem) + (var(--tile-rows, 2) - 1) * var(--tile-gap, 16px));
   /* Flex column so the main visual (graph/gauge/value/progress) can grow and fill the
      tile instead of the content packing at the top and leaving the cell half empty.

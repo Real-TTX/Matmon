@@ -27,10 +27,19 @@ public static class MonitoringMapLayoutMigration
             return;
         }
 
-        // A v2 board is already in cells - it only needs the cells turned into a flow order.
+        // A v3 board has no positions at all - only the flow order the browser was laying out. Replaying
+        // that same auto-placement turns it into cells that look exactly like what was already on screen.
+        if (map.LayoutVersion == 3)
+        {
+            PackSlides(map);
+            map.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
+            return;
+        }
+
+        // A v2 board is already in cells - they only need normalising onto the current rules.
         if (map.LayoutVersion == 2)
         {
-            MigrateCellsToFlow(map);
+            PlaceSlides(map);
             map.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
             return;
         }
@@ -53,8 +62,8 @@ public static class MonitoringMapLayoutMigration
         // save time), so it needs the same conversion applied independently.
         MigrateTiles(map.Tiles, map, fromLogicalPx);
 
-        // ...and then the same cells-to-flow step a v2 board takes, so every version lands on v3.
-        MigrateCellsToFlow(map);
+        // ...and then the same normalisation a v2 board takes, so every version lands on v4.
+        PlaceSlides(map);
 
         // Both v0 and v1 predate the opt-in public link (it was always live); a fresh map defaults
         // PublicEnabled to false, so this restores what those boards actually did. Only reached for a v0/v1
@@ -63,38 +72,42 @@ public static class MonitoringMapLayoutMigration
         map.LayoutVersion = MonitoringMap.CurrentLayoutVersion;
     }
 
-    /// <summary>v2 (cells) -> v3 (flow). The cell coordinates become a reading ORDER: top row first, then left
-    /// to right - which is the order a person would have read the board in anyway, so a migrated board comes
-    /// back looking like itself. Widths carry over unchanged; heights keep their number and only change
-    /// meaning (grid rows spanned -> row units tall), which is the same thing measured the same way.</summary>
-    private static void MigrateCellsToFlow(MonitoringMap map)
+    /// <summary>v0/v2 (cells) -> v4. The coordinates carry over as they are; widths are unchanged and heights
+    /// keep their number, only changing meaning (grid rows spanned -> row units tall), which is the same
+    /// thing measured the same way. Placement rules (clamp into the grid, reading order) are applied by the
+    /// same code a save runs through, so a migrated board obeys the same invariants as an edited one.</summary>
+    private static void PlaceSlides(MonitoringMap map)
     {
         foreach (var slide in map.Slides)
         {
-            OrderTiles(slide.Tiles, map);
+            ClampTiles(slide.Tiles, map);
+            MonitoringMapPlacement.Normalize(slide.Tiles, map.Columns);
         }
 
-        OrderTiles(map.Tiles, map);
+        ClampTiles(map.Tiles, map);
+        MonitoringMapPlacement.Normalize(map.Tiles, map.Columns);
     }
 
-    private static void OrderTiles(List<MonitoringMapTile> tiles, MonitoringMap map)
+    /// <summary>v3 (flow) -> v4 (cells). See <see cref="MonitoringMapPlacement.PackFromOrder"/>: the stored
+    /// order is replayed through the browser's own auto-placement, so the board lands on the arrangement it
+    /// was already being drawn as rather than on a re-flowed one.</summary>
+    private static void PackSlides(MonitoringMap map)
     {
-        var ordered = tiles
-            .Select((tile, index) => (tile, index))
-            .OrderBy(entry => entry.tile.Row)
-            .ThenBy(entry => entry.tile.Column)
-            .ThenBy(entry => entry.index)
-            .Select(entry => entry.tile)
-            .ToList();
-
-        for (var i = 0; i < ordered.Count; i++)
+        foreach (var slide in map.Slides)
         {
-            ordered[i].Order = i;
-            // The cell coordinates are dead weight from here on; leaving them set would invite a future
-            // reader to trust them.
-            ordered[i].Column = 0;
-            ordered[i].Row = 0;
-            MonitoringMapTileConstraints.Clamp(ordered[i], map.Columns, map.Rows);
+            ClampTiles(slide.Tiles, map);
+            MonitoringMapPlacement.PackFromOrder(slide.Tiles, map.Columns);
+        }
+
+        ClampTiles(map.Tiles, map);
+        MonitoringMapPlacement.PackFromOrder(map.Tiles, map.Columns);
+    }
+
+    private static void ClampTiles(List<MonitoringMapTile> tiles, MonitoringMap map)
+    {
+        foreach (var tile in tiles)
+        {
+            MonitoringMapTileConstraints.Clamp(tile, map.Columns, map.Rows);
         }
     }
 

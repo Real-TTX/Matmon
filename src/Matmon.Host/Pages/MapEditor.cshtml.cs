@@ -103,6 +103,8 @@ public sealed class MapEditorModel : PageModel
         string? title,
         int columnSpan,
         int rowSpan,
+        int column,
+        int row,
         int order,
         Guid? imageAssetId,
         MonitoringMapImageFit imageFit,
@@ -120,6 +122,8 @@ public sealed class MapEditorModel : PageModel
             ElementId = MonitoringTargetResolver.ElementId(token),
             TargetTag = MonitoringTargetResolver.TagName(token),
             Order = order,
+            Column = column,
+            Row = row,
             ColumnSpan = columnSpan,
             RowSpan = rowSpan,
             ImageAssetId = imageAssetId == Guid.Empty ? null : imageAssetId,
@@ -257,6 +261,8 @@ public sealed class MapEditorModel : PageModel
         TargetTag = MonitoringTargetResolver.TagName(tile.TargetToken),
         Text = tile.Text,
         Order = tile.Order,
+        Column = tile.Column,
+        Row = tile.Row,
         ColumnSpan = Math.Max(1, tile.ColumnSpan),
         RowSpan = Math.Max(1, tile.RowSpan),
         BackgroundColor = tile.BackgroundColor,
@@ -365,6 +371,8 @@ public sealed class MapEditorModel : PageModel
                         : tile.ElementId is { } eid ? MonitoringTargetResolver.ForElement(eid) : null,
                     Text = tile.Text,
                     Order = tile.Order,
+                    Column = tile.Column,
+                    Row = tile.Row,
                     ColumnSpan = tile.ColumnSpan,
                     RowSpan = tile.RowSpan,
                     BackgroundColor = tile.BackgroundColor,
@@ -596,9 +604,17 @@ public sealed class MapTileInput
 
     public string? Text { get; set; }
 
-    /// <summary>1-based grid cell coordinates - see <see cref="MonitoringMap.Columns"/>/<see cref="MonitoringMap.Rows"/>.</summary>
-    /// <summary>Position in the slide's flow - v3 has no x/y. Written by the designer's drag-to-reorder and
-    /// re-densified on save by <see cref="MonitoringMapFlow.Normalize"/>.</summary>
+    /// <summary>The tile's 1-based grid cell. Written by the designer when you drag or resize a widget;
+    /// clamped into the grid and turned back into a reading <see cref="Order"/> on save by
+    /// <see cref="MonitoringMapPlacement.Normalize"/>. 0 = not placed yet (a widget just dropped in from the
+    /// palette), which earns it the first free spot rather than a landing on top of whatever is at 1,1.</summary>
+    public int Column { get; set; }
+
+    /// <inheritdoc cref="Column"/>
+    public int Row { get; set; }
+
+    /// <summary>Reading order, derived from <see cref="Column"/>/<see cref="Row"/> on save. Posted back so a
+    /// round trip does not lose it between the placement and the next normalise.</summary>
     public int Order { get; set; }
 
     public int ColumnSpan { get; set; } = 2;
