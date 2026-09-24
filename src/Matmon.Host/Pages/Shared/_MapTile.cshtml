@@ -149,7 +149,11 @@
         <div class="map-tile-canvas" data-map-pin-canvas>
             @if (tile.Kind == MonitoringMapTileKind.GeoMap)
             {
-                <img class="map-tile-worldmap" src="~/brand/world-map.svg" alt="" aria-hidden="true" />
+                @* Not an <img>: an SVG loaded through one is its OWN document, so the file's
+                   fill="currentColor" resolved against the SVG's initial colour - black - and the map was a
+                   black silhouette in both themes, invisible on a dark card. As a CSS mask it is still one
+                   cached external asset, but the colour comes from this page. *@
+                <span class="map-tile-worldmap" aria-hidden="true"></span>
             }
             else if (tile.ImageAssetId is { } assetId)
             {

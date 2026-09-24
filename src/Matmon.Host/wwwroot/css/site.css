@@ -8734,23 +8734,26 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   border-radius: 6px;
 }
 .map-tile-image,
+/* The continents are painted by a MASK, not by an <img>. An SVG in an img tag is an independent document,
+   so its fill="currentColor" resolved to that document's own initial colour (black) and the map came out a
+   black silhouette whatever the theme - a dark smudge on the dark card it usually sits on. Masked, the paint
+   is this element's own background, so it inherits the tile's text colour and flips with the theme (and
+   follows a per-tile TextColor where one is set) while the file stays a single cached asset.
+   mask-size: contain letterboxes exactly like object-fit: contain did, so the pin geometry is unchanged. */
 .map-tile-worldmap {
   display: block;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  /* object-fit does the fitting now; the element box is always the frame. */
-  object-fit: contain;
+  background-color: currentColor;
+  -webkit-mask: url("/brand/world-map.svg") center / contain no-repeat;
+  mask: url("/brand/world-map.svg") center / contain no-repeat;
+  /* Quiet enough to stay a base layer under the pins, strong enough to read as land on either theme. */
+  opacity: 0.34;
 }
 .map-tile-canvas-empty {
   place-self: center;
-}
-.map-tile-worldmap {
-  /* currentColor in the SVG, so the map takes the tile's text colour and works in both themes without a
-     second asset. */
-  object-fit: contain;
-  opacity: 0.32;
 }
 .map-tile-canvas-empty {
   color: var(--matmon-muted);
