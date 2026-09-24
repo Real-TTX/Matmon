@@ -3380,13 +3380,6 @@ const MapStackBreakpoint = 640;
 // that let you drag a tile taller than the store will save is a silent data loss on the next save.
 const MapMaxRowSpan = 24;
 
-// Computes the uniform scale (+ centering offset) that fits each [data-map-stage]'s fixed logical canvas
-// (--map-w x --map-h, in px) into whatever box the stage actually renders at, and writes it back as
-// --map-kx/--map-ky/--map-ox/--map-oy - which .map-slide's `transform: translate(...) scale(...)` (site.css)
-// reads. This is THE mechanism that makes the editor, /Maps and /Maps/Public render identically: the same
-// .map-stage > .map-slide > .map-tile markup, only k differs per screen. Below MapStackBreakpoint, a slide
-// instead gets `data-layout="stack"` (site.css turns it into a single-column flex list) and this function
-// skips its transform math entirely - see the Auto-Stack CSS next to .map-slide[hidden].
 // v3 has no transform-scaled canvas to fit: the slide is a real CSS grid that lays itself out, and the
 // wallboard's row height comes from a pure-CSS calc against the viewport. All that is left for JS is the one
 // thing CSS cannot decide - whether this STAGE (not the viewport, so it is right inside an embedded console
@@ -3491,6 +3484,9 @@ function initializeMapDesigner() {
   // a save would have dropped every slide - while the tiles, filtered against a slide id that then existed
   // nowhere, all vanished from the canvas.
   const slideTabsHost = form?.querySelector("[data-map-slide-tabs]");
+  // The canvas-header switcher. The LIST lives on the Slides tab; this is the one control that has to stay
+  // with the board, so it is rendered from the same `slides` array rather than being a second list.
+  const slideSwitch = form?.querySelector("[data-map-slide-switch]");
   const slideInputsHost = form?.querySelector("[data-map-slide-inputs]");
   const slideAddButton = form?.querySelector("[data-map-slide-add]");
   let slides = [];
@@ -3703,7 +3699,10 @@ function initializeMapDesigner() {
   const commitFlowOrder = () => {
     let order = 0;
     canvas.querySelectorAll("[data-map-tile]").forEach((tile) => {
-      if ((tile.dataset.slideId || "") !== activeSlideId) {
+      // A deleted tile is still in the DOM (it has to keep posting IsDeleted=true), but it is no longer part
+      // of the flow - counting it would leave the surviving widgets numbered from 2.
+      if ((tile.dataset.slideId || "") !== activeSlideId
+        || tile.querySelector("[data-map-tile-deleted]")?.value === "true") {
         return;
       }
       const field = tile.querySelector("[data-map-tile-order]");
@@ -3712,6 +3711,7 @@ function initializeMapDesigner() {
       }
       order += 1;
     });
+    syncCanvasEmpty?.();
   };
 
   const applyTileAppearance = (tile, panel) => {
@@ -4309,6 +4309,11 @@ function initializeMapDesigner() {
     tile.classList.toggle("is-plain", !showCard);
 
     syncPanelVisibility(panel);
+    // Changing the kind can empty a whole property group (a Clock has no target), so the tab bar has to be
+    // re-evaluated with it - otherwise the Data tab stays on screen pointing at nothing.
+    if (!panel.hidden) {
+      applyPropertyTab(panel);
+    }
     refreshTileBody(tile, panel);
     syncTileImage(tile, panel);
     applyTileAppearance(tile, panel);
@@ -4319,11 +4324,30 @@ function initializeMapDesigner() {
   // Which General/Data/Display group of the SELECTED tile panel is visible. The bar is shared by all tile
   // panels (see MapEditor.cshtml), so this is designer state, not per-panel state.
   const applyPropertyTab = (panel) => {
+    // Every panel carries every field and hides the ones its kind has no use for, so a whole GROUP can end up
+    // empty - a Clock has nothing to point at, a Heading has no data at all. A tab that opens onto nothing is
+    // a dead end, so it is hidden, and the selection falls back to General rather than landing there.
+    const groupHasFields = (name) => {
+      const group = panel?.querySelector(`[data-map-prop-group="${name}"]`);
+      if (!group) {
+        return false;
+      }
+      return Array.from(group.children).some((child) => !child.hidden
+        && !(child.tagName === "INPUT" && child.type === "hidden"));
+    };
+
+    let tab = activePropertyTab;
+    if (panel && !groupHasFields(tab)) {
+      tab = "general";
+    }
+
     panel?.querySelectorAll("[data-map-prop-group]").forEach((group) => {
-      group.hidden = group.dataset.mapPropGroup !== activePropertyTab;
+      group.hidden = group.dataset.mapPropGroup !== tab;
     });
     propertyTabs?.querySelectorAll("[data-map-property-tab]").forEach((button) => {
-      const isActive = button.dataset.mapPropertyTab === activePropertyTab;
+      const name = button.dataset.mapPropertyTab;
+      const isActive = name === tab;
+      button.hidden = panel ? !groupHasFields(name) : false;
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-selected", isActive ? "true" : "false");
     });
@@ -4385,9 +4409,26 @@ function initializeMapDesigner() {
 
   // Slide properties are NOT model-bound - the designer owns the slide list and re-renders the hidden
   // Input.Slides[..] inputs from it, so the panel reads and writes that JS model directly.
-  const selectSlide = () => {
+  // The Slides tab shows the slide list and, under it, "Selected slide" - so the fields have to follow the
+  // ACTIVE slide, not only a click on a row's gear. Filling them is therefore separate from selecting: this
+  // half runs on every slide change, the other half also moves the aside and the tab.
+  const fillSlidePanel = () => {
     const slide = slides.find((candidate) => candidate.id === activeSlideId);
     if (!slide || !slidePanel) {
+      return;
+    }
+    slidePanel.querySelectorAll("[data-map-slide-field]").forEach((field) => {
+      const key = field.dataset.mapSlideField;
+      if (field.type === "checkbox") {
+        field.checked = slide[key] !== false;
+      } else {
+        field.value = slide[key] ?? "";
+      }
+    });
+  };
+
+  const selectSlide = () => {
+    if (!slides.some((candidate) => candidate.id === activeSlideId) || !slidePanel) {
       return;
     }
 
@@ -4401,14 +4442,7 @@ function initializeMapDesigner() {
       propertyEmpty.hidden = true;
     }
 
-    slidePanel.querySelectorAll("[data-map-slide-field]").forEach((field) => {
-      const key = field.dataset.mapSlideField;
-      if (field.type === "checkbox") {
-        field.checked = slide[key] !== false;
-      } else {
-        field.value = slide[key] ?? "";
-      }
-    });
+    fillSlidePanel();
 
     // The panel lives in the Slides TAB now, so "edit this slide" has to take you there.
     form?.querySelector('[data-sensor-tab-target="slides"]')?.click();
@@ -4641,7 +4675,9 @@ function initializeMapDesigner() {
       .replaceAll("__title__", title)
       .replaceAll("__order__", String(order))
       .replaceAll("__colSpan__", String(columnSpan))
-      .replaceAll("__rowSpan__", String(rowSpan));
+      .replaceAll("__rowSpan__", String(rowSpan))
+      // Mirrors _MapTile.cshtml: the density a tile can afford follows from its height in row units.
+      .replaceAll("__density__", rowSpan <= 1 ? "s" : rowSpan === 2 ? "m" : "l");
     const fragment = document.createRange().createContextualFragment(html);
     const tile = fragment.querySelector("[data-map-tile]");
     const panel = fragment.querySelector("[data-map-property-panel]");
@@ -4722,6 +4758,23 @@ function initializeMapDesigner() {
     return row;
   };
 
+  const canvasEmpty = form?.querySelector("[data-map-canvas-empty]") || null;
+
+  const renderSlideSwitch = () => {
+    if (!slideSwitch) {
+      return;
+    }
+    slideSwitch.replaceChildren();
+    slides.forEach((slide, index) => {
+      const option = document.createElement("option");
+      option.value = slide.id;
+      // textContent, not innerHTML - a slide name is user input.
+      option.textContent = `${index + 1}. ${slide.name}`;
+      option.selected = slide.id === activeSlideId;
+      slideSwitch.appendChild(option);
+    });
+  };
+
   const renderSlideTabs = () => {
     if (!slideTabsHost) {
       return;
@@ -4755,11 +4808,28 @@ function initializeMapDesigner() {
       setText(".map-slide-row-duration", slide.durationSeconds ? `${slide.durationSeconds}s` : "—");
       slideTabsHost.appendChild(row);
     });
+    renderSlideSwitch();
     refreshSlidePreviews();
     const counter = form?.querySelector("[data-map-slide-count]");
     if (counter) {
       counter.textContent = String(slides.length);
     }
+  };
+
+  // The widgets actually on the active slide - the one question the empty state, the clear action and the
+  // layout guard all ask, so it is asked in one place.
+  const activeSlideTiles = () => Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((tile) =>
+    (tile.dataset.slideId || "") === activeSlideId
+    && tile.querySelector("[data-map-tile-deleted]")?.value !== "true");
+
+  // Layouts are offered ON the empty canvas rather than as a permanent row of cards in the slide's
+  // properties: a layout is what you start a slide FROM, and a card that silently replaces a board you have
+  // already built is the wrong affordance for a destructive act.
+  const syncCanvasEmpty = () => {
+    if (!canvasEmpty) {
+      return;
+    }
+    canvasEmpty.hidden = activeSlideTiles().length > 0;
   };
 
   const applySlideFilter = () => {
@@ -4768,6 +4838,7 @@ function initializeMapDesigner() {
       const onActiveSlide = (tile.dataset.slideId || "") === activeSlideId;
       tile.hidden = deleted || !onActiveSlide;
     });
+    syncCanvasEmpty();
   };
 
   const setActiveSlide = (id) => {
@@ -4775,10 +4846,14 @@ function initializeMapDesigner() {
       return;
     }
     activeSlideId = id;
+    if (slideSwitch && slideSwitch.value !== activeSlideId) {
+      slideSwitch.value = activeSlideId;
+    }
     slideTabsHost?.querySelectorAll("[data-map-slide-tab]").forEach((tab) => {
       tab.classList.toggle("is-active", tab.dataset.slideId === activeSlideId);
     });
     applySlideFilter();
+    fillSlidePanel();
     selectMap();
   };
 
@@ -4845,6 +4920,7 @@ function initializeMapDesigner() {
   renderSlideInputs();
   renderSlideTabs();
   slideAddButton?.addEventListener("click", addSlide);
+  slideSwitch?.addEventListener("change", () => setActiveSlide(slideSwitch.value));
   // One delegated handler for the whole slide list. Delegation, not per-button listeners, because the rows
   // are re-rendered on every add/reorder/rename - and crucially an action must act on ITS OWN row, not on
   // whatever happened to be active, so the row is selected first.
@@ -4898,6 +4974,7 @@ function initializeMapDesigner() {
 
   canvas.querySelectorAll("[data-map-tile]").forEach(setupTile);
   applySlideFilter();
+  fillSlidePanel();
   syncCanvas();
 
   document.querySelectorAll("[data-map-tool-kind]").forEach((tool) => {
@@ -5028,16 +5105,13 @@ function initializeMapDesigner() {
     }
   };
 
-  const applyLayoutTemplate = (key) => {
-    const template = layoutTemplates.find((candidate) => candidate.key === key);
-    if (!template) {
-      return;
-    }
-    const existing = Array.from(canvas.querySelectorAll("[data-map-tile]")).filter((tile) =>
-      (tile.dataset.slideId || "") === activeSlideId
-      && tile.querySelector("[data-map-tile-deleted]")?.value !== "true");
-    if (existing.length > 0 && !window.confirm(`Replace the ${existing.length} widget(s) on this slide with the "${template.label}" layout?`)) {
-      return;
+  // Empties the active slide, asking first and naming the cost. Returns false when the user backs out, so a
+  // caller can abandon whatever it was about to do instead of half-doing it.
+  const clearActiveSlide = (because) => {
+    const existing = activeSlideTiles();
+    if (existing.length > 0
+      && !window.confirm(`This slide has ${existing.length} widget${existing.length === 1 ? "" : "s"}. ${because}`)) {
+      return false;
     }
     existing.forEach((tile) => {
       const deleted = tile.querySelector("[data-map-tile-deleted]");
@@ -5046,6 +5120,25 @@ function initializeMapDesigner() {
       }
       tile.hidden = true;
     });
+    commitFlowOrder();
+    selectMap();
+    return true;
+  };
+
+  form?.querySelector("[data-map-slide-clear]")?.addEventListener("click", () => {
+    clearActiveSlide("Remove them all?");
+  });
+
+  const applyLayoutTemplate = (key) => {
+    const template = layoutTemplates.find((candidate) => candidate.key === key);
+    if (!template) {
+      return;
+    }
+    // Only reachable on an empty slide (the cards live in the canvas empty state), but a layout that
+    // silently threw widgets away would be the worst possible surprise - so it still says so out loud.
+    if (!clearActiveSlide(`Replace them with the "${template.label}" layout?`)) {
+      return;
+    }
 
     (template.slots || []).forEach((slot) => {
       const widget = widgetCatalog[slot.widget];

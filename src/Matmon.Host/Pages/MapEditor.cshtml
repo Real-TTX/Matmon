@@ -82,8 +82,10 @@
             <div class="sensor-tabs map-editor-tabs" data-sensor-tabs>
                 <button type="button" class="sensor-tab" data-sensor-tab-target="editor">@MatmonIcons.Render("move")<span>Editor</span></button>
                 <button type="button" class="sensor-tab" data-sensor-tab-target="slides">@MatmonIcons.Render("copy")<span>Slides</span></button>
-                <button type="button" class="sensor-tab" data-sensor-tab-target="display">@MatmonIcons.Render("eye")<span>Display</span></button>
-                <button type="button" class="sensor-tab" data-sensor-tab-target="settings">@MatmonIcons.Render("gear")<span>Settings</span></button>
+                @* Three tabs, one per object you can edit: the working surface, the slides, the board.
+                   Display and Settings were both board-level and split arbitrarily - Display had ended up
+                   holding three dead hidden inputs, a timezone and a note pointing at Settings. *@
+                <button type="button" class="sensor-tab" data-sensor-tab-target="settings">@MatmonIcons.Render("gear")<span>Board</span></button>
             </div>
 
             <div class="map-tab-panel" data-sensor-tab="editor">
@@ -147,6 +149,12 @@
                                 <span class="map-canvas-sep">|</span> drag a widget to reorder it
                             </small>
                         </button>
+                        @* A switcher, not a list: managing slides lives on the Slides tab, but changing
+                           slide must not mean leaving the board you are drawing on. *@
+                        <label class="map-canvas-slide-switch" title="Switch slide">
+                            @MatmonIcons.Render("copy")
+                            <select class="form-select workspace-select" data-map-slide-switch aria-label="Slide"></select>
+                        </label>
                     </div>
 
                     <div class="map-stage" data-map-stage>
@@ -162,6 +170,43 @@
                                 {
                                     <span class="map-grid-column"></span>
                                 }
+                            </div>
+                            @* An empty slide is where a layout MEANS something, so that is where it is
+                               offered - rather than as a row of cards in the slide's properties that quietly
+                               replaces whatever you had. Shown by the designer only while the active slide
+                               has no widgets. *@
+                            <div class="map-canvas-empty" data-map-canvas-empty hidden>
+                                <strong>This slide is empty</strong>
+                                <div class="map-toolbox-templates" data-map-layout-templates>
+                                    <span class="map-canvas-empty-title">Start from a layout</span>
+                                    <p class="map-toolbox-note">Or drag a widget in from the library on the left.</p>
+                                    @* Thumbnails, not word chips: the whole point of a layout is its shape, and the
+                                       shape is already declared as slots - so the preview is generated from the SAME
+                                       slots the template applies. A hand-drawn thumbnail could disagree with it. *@
+                                    <div class="map-layout-cards">
+                                    @foreach (var template in MapWidgetCatalog.LayoutTemplates)
+                                    {
+                                        <button type="button" class="map-layout-card" data-map-layout="@template.Key"
+                                                data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
+                                                title="@template.Description">
+                                            <span class="map-layout-thumb" aria-hidden="true"
+                                                  style="grid-template-columns: repeat(@template.MinColumns, 1fr); grid-template-rows: repeat(@template.MinRows, 1fr);">
+                                                @foreach (var slot in template.Slots)
+                                                {
+                                                    <span style="grid-column: @slot.Column / span @slot.ColumnSpan; grid-row: @slot.Row / span @slot.RowSpan;"></span>
+                                                }
+                                            </span>
+                                            <span class="map-layout-card-meta">
+                                                <strong>@template.Label</strong>
+                                                <small>@template.Description</small>
+                                            </span>
+                                        </button>
+                                    }
+                                    </div>
+                                    <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
+                                        Some layouts need more columns than this board has.
+                                    </div>
+                                </div>
                             </div>
                             @for (var index = 0; index < Model.TileRenderModels.Count; index++)
                             {
@@ -192,8 +237,8 @@
                        board's own geometry stays in the Settings tab, so there is exactly one input per
                        stored property and the two can never drift apart. *@
                     <div class="map-property-empty" data-map-property-empty>
-                        <p>Select a widget on the canvas to edit it. The board's own size, grid and wallboard
-                           options live in the <strong>Display</strong> and <strong>Settings</strong> tabs.</p>
+                        <p>Select a widget on the canvas to edit it. The running order, the board's grid and its wallboard
+                           options live on <strong>Slides</strong> and <strong>Board</strong>.</p>
                         <div class="map-view-settings">
                             <span class="workspace-label">Canvas view</span>
                             <label class="map-switch">
@@ -428,14 +473,18 @@
                 </aside>
             </div>
 
-                @* Bottom row per mockup: the slide LIST (reorderable, with duration and a row menu), the
-                   rotation settings that only make sense next to it, and a filmstrip preview of the running
-                   order. The old plain slide tabs are gone - this replaces them. *@
-                @* The running order sits directly under the canvas - switching slide while designing must
-                   not mean leaving the board. The rotation settings that used to sit beside it moved into the
-                   board's own properties, and the duplicate miniature filmstrip is gone: it showed the same
-                   list twice, once as rows and once as grey blocks. *@
-                <div class="map-editor-slides">
+            </div>
+
+            @* --- Slides ------------------------------------------------------------------------------- *@
+            @* Slide PROPERTIES only - the filmstrip and the running order live under the canvas in the
+               Editor tab (that is where the mockup puts them, and where you actually need them). Clicking a
+               slide's gear switches here. *@
+            <div class="map-tab-panel" data-sensor-tab="slides">
+                <div class="map-settings-grid">
+
+                    @* The list of slides, on the tab called Slides. It used to sit under the canvas while
+                       this tab held only the selected slide's fields - a tab named after a collection that
+                       did not show the collection. The canvas keeps a switcher instead. *@
                     <section class="panel-subcard map-slides-list-card">
                         <div class="map-subcard-head">
                             <h3 class="map-settings-title">Slides <span class="map-count" data-map-slide-count>@Model.Input.Slides.Count</span></h3>
@@ -465,16 +514,6 @@
                         <div data-map-slide-inputs hidden></div>
                     </section>
 
-                </div>
-            </div>
-
-            @* --- Slides ------------------------------------------------------------------------------- *@
-            @* Slide PROPERTIES only - the filmstrip and the running order live under the canvas in the
-               Editor tab (that is where the mockup puts them, and where you actually need them). Clicking a
-               slide's gear switches here. *@
-            <div class="map-tab-panel" data-sensor-tab="slides">
-                <div class="map-settings-grid">
-
                     <section class="panel-subcard map-slide-panel" data-map-slide-panel>
                         <h3 class="map-settings-title">Selected slide</h3>
                         <label class="workspace-field">
@@ -502,122 +541,18 @@
                         </div>
                         <div class="map-property-hint">Duration overrides the board's auto-rotate for this slide only. Drag a widget on the canvas to reorder it.</div>
 
-                        @* A layout belongs to the SLIDE, not to the widget library: it is a property of this
-                           page ("this one is a KPI row") rather than a tool you pick up. In the toolbox it
-                           also took more height than the sixteen widgets it sat above, which is the wrong way
-                           round for something you use once per slide. *@
-                        <div class="map-toolbox-templates" data-map-layout-templates>
-                            <span class="workspace-label">Start from a layout</span>
-                            <p class="map-toolbox-note">Replaces this slide's widgets with an empty, correctly-sized arrangement.</p>
-                            @* Thumbnails, not word chips: the whole point of a layout is its shape, and the
-                               shape is already declared as slots - so the preview is generated from the SAME
-                               slots the template applies. A hand-drawn thumbnail could disagree with it. *@
-                            <div class="map-layout-cards">
-                            @foreach (var template in MapWidgetCatalog.LayoutTemplates)
-                            {
-                                <button type="button" class="map-layout-card" data-map-layout="@template.Key"
-                                        data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
-                                        title="@template.Description">
-                                    <span class="map-layout-thumb" aria-hidden="true"
-                                          style="grid-template-columns: repeat(@template.MinColumns, 1fr); grid-template-rows: repeat(@template.MinRows, 1fr);">
-                                        @foreach (var slot in template.Slots)
-                                        {
-                                            <span style="grid-column: @slot.Column / span @slot.ColumnSpan; grid-row: @slot.Row / span @slot.RowSpan;"></span>
-                                        }
-                                    </span>
-                                    <span class="map-layout-card-meta">
-                                        <strong>@template.Label</strong>
-                                        <small>@template.Description</small>
-                                    </span>
-                                </button>
-                            }
-                            </div>
-                            <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
-                                Some layouts need more columns than this board has.
-                            </div>
-                        </div>
-
-                        <div data-map-prop-group="advanced" hidden>
-                            @* Four buckets, not six states: "up / warning / down / unknown" is how
-                               someone configuring a wallboard thinks. MonitoringMapColorRules is where
-                               the six SensorStates collapse into these four, in one place. *@
-                            <span class="workspace-label">Colour rules</span>
-                            <div class="map-color-rules">
-                                @foreach (var bucket in MonitoringMapColorRules.Buckets)
-                                {
-                            var current = string.Empty;
-                            <label class="map-color-rule">
-                                <span>@bucket.Label</span>
-                                <input type="text" class="form-control workspace-input"
-                                       name="Input.Tiles[__index__].ColorRules[@bucket.Key]" value="@current"
-                                       placeholder="theme" data-map-color-rule="@bucket.Key" />
-                            </label>
-                                }
-                            </div>
-                            <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Refresh (seconds)</span>
-                                <input name="Input.Tiles[__index__].RefreshSeconds" value="0" type="number" min="0" max="3600" class="form-control workspace-input" placeholder="0" />
-                                <span class="workspace-inline-note">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence. Useful for a widget whose data is expensive or slow-changing.</span>
-                            </label>
-                        </div>
+                        @* Emptying a slide is its own, named action - not a side effect of clicking a
+                           layout card. A layout is what you start an empty slide FROM (the canvas offers
+                           them there); replacing a board you have already built is a decision, so it says
+                           how many widgets it throws away and happens in two steps. *@
+                        <button type="button" class="workspace-secondary-submit map-slide-clear" data-map-slide-clear>
+                            @MatmonIcons.Render("trash")<span>Clear this slide</span>
+                        </button>
                     </section>
                 </div>
             </div>
 
-            @* --- Display ------------------------------------------------------------------------------- *@
-            <div class="map-tab-panel" data-sensor-tab="display">
-                <div class="map-settings-grid">
-                    <section class="panel-subcard">
-                        <h3 class="map-settings-title">Canvas</h3>
-                        @* No aspect ratio and no letterbox setting any more: the board is a column flow, so it
-                           is as wide as the screen it is on and as tall as its own content. The two knobs that
-                           replaced them - how many columns it flows across and how many rows fill a wallboard
-                           screen - are on the Settings tab, next to the spacing they belong with.
-                           The fields still exist on the model to read older boards; they no longer do anything. *@
-                        <input type="hidden" asp-for="Input.AspectRatioWidth" />
-                        <input type="hidden" asp-for="Input.AspectRatioHeight" />
-                        <input type="hidden" asp-for="Input.WallboardFit" />
-                        <div class="map-property-hint">
-                            A board has no fixed size: it flows across its columns and reflows on a narrower
-                            screen. Set the column count and the rows-per-screen on <strong>Settings</strong>.
-                        </div>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Board timezone</span>
-                            <input asp-for="Input.DisplayTimeZoneId" class="form-control workspace-input" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
-                            <datalist id="map-timezone-list">
-                                @foreach (var zone in TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
-                                {
-                                    <option value="@zone"></option>
-                                }
-                            </datalist>
-                            <span class="workspace-inline-note">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
-                        </label>
-                    </section>
-
-                    <section class="panel-subcard">
-                        <h3 class="map-settings-title">Rotation</h3>
-                        @* Autoplay, the per-slide duration and the page indicator live beside the slide list on
-                           the Editor tab - they are about the running order, and that is where you are looking
-                           when you set them. They are NOT repeated here: two inputs bound to one property post
-                           whichever the binder sees first, so the one you edited can silently lose. *@
-                        <div class="map-property-hint">
-                            Autoplay, the slide duration and the page indicator sit next to the slide list on the
-                            <strong>Editor</strong> tab. They drive the public wallboard when a board has more than
-                            one slide; the in-app viewer stays on manual controls.
-                        </div>
-                        <div class="map-property-switches">
-                            <label class="map-switch">
-                                <input asp-for="Input.ShowSlideHeaders" data-map-show-slide-headers />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Show slide headings on the board</span>
-                            </label>
-                        </div>
-                    </section>
-                </div>
-            </div>
-
-            @* --- Settings ------------------------------------------------------------------------------ *@
+            @* --- Board -------------------------------------------------------------------------------- *@
             <div class="map-tab-panel" data-sensor-tab="settings">
                 <div class="map-settings-grid">
                     <section class="panel-subcard">
@@ -667,6 +602,23 @@
                             <span class="workspace-label">Description</span>
                             <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
                         </label>
+                        @* Round-trip only. A flow has no fixed canvas and no letterbox, so these three no
+                           longer decide anything - they are posted back so an older board's stored values
+                           survive a save instead of being silently reset. *@
+                        <input type="hidden" asp-for="Input.AspectRatioWidth" />
+                        <input type="hidden" asp-for="Input.AspectRatioHeight" />
+                        <input type="hidden" asp-for="Input.WallboardFit" />
+                        <label class="workspace-field">
+                            <span class="workspace-label">Board timezone</span>
+                            <input asp-for="Input.DisplayTimeZoneId" class="form-control workspace-input" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
+                            <datalist id="map-timezone-list">
+                                @foreach (var zone in TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
+                                {
+                                    <option value="@zone"></option>
+                                }
+                            </datalist>
+                            <span class="workspace-inline-note">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
+                        </label>
                         <div class="map-property-checks">
                             <label><input asp-for="Input.PublicEnabled" data-map-public-enabled /> <span>Publish an anonymous link</span></label>
                         </div>
@@ -698,7 +650,7 @@
                                 <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="form-control workspace-input" data-map-outer-margin />
                             </label>
                         </div>
-                        <span class="workspace-inline-note">Gap and margin are in logical canvas pixels (the canvas is 1920 wide whatever the screen), so they scale with the board. Widgets are re-clamped into the new grid when you commit a change.</span>
+                        <span class="workspace-inline-note">Gap and margin are CSS pixels. Changing the column count reflows every widget - a widget wider than the new grid is clamped into it, and growing the grid back cannot undo that, so the change is committed when you leave the field.</span>
                     </section>
                 </div>
             </div>
@@ -733,19 +685,28 @@
                          data-state="unknown"
                          data-kind="__kindLower__"
                          data-visual="__visual__"
+                         data-density="__density__"
                          style="--tile-span: __colSpan__; --tile-rows: __rowSpan__;">
                     <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
                     <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
                     <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
                     <input type="hidden" name="Input.Tiles[__index__].Order" value="__order__" data-map-tile-order />
 
+                    @* First paint only - the designer immediately asks ?handler=TileMarkup for the real
+                       server render. It still mirrors _MapTile's anatomy (head / body / foot, and the density
+                       the row span implies), because a placeholder shaped differently from the thing it
+                       stands in for flashes a visibly different widget for one round trip. *@
                     <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
                         <span class="map-tile-icon">@MatmonIcons.Render("square")</span>
                         <strong data-tile-title>__title__</strong>
                         <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
                     </div>
-                    <p data-tile-subtitle>No target selected</p>
-                    <small data-map-tile-kind-label>__kindLabel__</small>
+                    <div class="map-tile-body">
+                        <p data-tile-subtitle>No target selected</p>
+                    </div>
+                    <div class="map-tile-foot">
+                        <small data-map-tile-kind-label>__kindLabel__</small>
+                    </div>
                     <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__colSpan__ × __rowSpan__</span>
                     <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
                 </article>

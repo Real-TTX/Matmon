@@ -8132,18 +8132,16 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   min-width: min(20rem, 70vw);
 }
 
-/* --- Logical-canvas map scaling (Phase A) + strict cell grid (v2) ---
-   Every map has a fixed LOGICAL canvas (--map-w x --map-h, in px - e.g. 1920x1080). A tile's Column/Row/
-   ColumnSpan/RowSpan (the v2 cell geometry) is converted to a px rect ONCE, server-side, via
-   MonitoringMapGeometry.PixelRect (Ui/MapTileRender.cs) - the resulting --tile-x/y/w/h custom properties are
-   all this CSS ever sees, so the scaling pipeline below is unchanged from Phase A. .map-stage is the
-   responsive container (sized by its page context); .map-slide is the canvas itself, always exactly
-   --map-w x --map-h, uniformly scaled into the stage via transform: translate + scale (kx/ky/ox/oy, computed
-   by initializeMapStages/fitMapStages in site.js). Because the editor, /Maps and /Maps/Public all render the
-   SAME .map-stage > .map-slide > .map-tile markup - only kx/ky differs - they are WYSIWYG by construction
-   rather than by three parallel CSS/grid systems staying in sync by hand. Below ~640 CSS px of stage width,
-   fitMapStages switches a slide to [data-layout="stack"] instead (see further down) - a single-column,
-   reading-order list for narrow/mobile screens, skipping the transform math entirely. */
+/* --- Map layout v3: a column FLOW, no canvas ---
+   There is no logical canvas and no transform scaling any more. A slide is a real CSS grid of --map-columns
+   columns; a tile declares only how many columns it spans (--tile-span) and how many row units tall it is
+   (--tile-rows), and the grid's own auto-placement decides where it lands. Row height is --map-row-unit: a
+   fixed size in the editor (so a widget is shown at the size it will be) and, on a wallboard, a pure CSS
+   calc that divides the viewport by --map-rows. Editor, /Maps and /Maps/Public render the SAME
+   .map-stage > .map-slide > .map-tile markup, so they are WYSIWYG by construction rather than by three
+   parallel systems staying in sync by hand. Below ~640 CSS px of STAGE width (not viewport - that is right
+   inside an embedded console too), fitMapStages sets [data-layout="stack"] and the slide becomes a
+   single-column reading list. */
 .map-stage {
   position: relative;
   overflow: hidden;
@@ -9725,10 +9723,49 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   gap: 0.35rem;
   margin-top: 0.3rem;
 }
-.map-slide-panel .map-toolbox-templates {
+/* The empty slide, and the only place a layout is offered: it spans the whole flow, so it reads as the
+   board being empty rather than as a widget sitting in the first cell. */
+.map-canvas-empty {
+  grid-column: 1 / -1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.55rem;
+  min-height: calc(var(--map-row-unit, 4.6rem) * 3);
+  padding: 1.1rem;
+  border: 1px dashed color-mix(in srgb, var(--matmon-border) 80%, var(--matmon-accent));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--matmon-surface) 60%, transparent);
+  text-align: center;
+}
+.map-canvas-empty > strong {
+  color: var(--matmon-text);
+  font-size: 0.95rem;
+}
+.map-canvas-empty .map-toolbox-templates {
+  justify-items: center;
+  gap: 0.35rem;
+  width: min(44rem, 100%);
+  padding-top: 0;
+  border-top: 0;
+}
+.map-canvas-empty .map-layout-cards {
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  width: 100%;
+}
+.map-canvas-empty-title {
+  color: var(--matmon-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* A named, deliberate action - it sits apart from the slide's fields because it throws work away. */
+.map-slide-clear {
+  justify-self: start;
   margin-top: 0.7rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid var(--matmon-border);
+  border-color: color-mix(in srgb, var(--matmon-critical) 45%, var(--matmon-border));
+  color: var(--matmon-critical);
 }
 .map-layout-card {
   display: grid;
