@@ -213,6 +213,34 @@
         </div>
     }
 
+    @if (tile.Kind == MonitoringMapTileKind.MultiGraph && Model.Series is { Count: > 0 } series)
+    {
+        @* Chart over legend. Every line is already drawn on ONE shared scale by MapDisplayProvider, which is
+           what lets you see which sensor moved - and preserveAspectRatio="none" is fine for exactly the same
+           reason the single graph uses it: the shape is comparative, not metric. *@
+        <div class="map-tile-multigraph">
+            <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                @foreach (var line in series)
+                {
+                    @if (!string.IsNullOrWhiteSpace(line.LinePath))
+                    {
+                        <path class="map-graph-line" d="@line.LinePath" style="stroke: @line.Color"></path>
+                    }
+                }
+            </svg>
+            <ul class="map-graph-legend">
+                @foreach (var line in series)
+                {
+                    <li>
+                        <span class="map-graph-swatch" style="background: @line.Color" aria-hidden="true"></span>
+                        <span class="map-graph-legend-name">@line.Label</span>
+                        <span class="map-graph-legend-value">@line.Value</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
     @if (Model.ProgressPercent.HasValue && Model.EffectiveVisualType == MonitoringMapTileVisualType.Gauge)
     {
         @* A real dial: a 180-degree arc carrying pathLength="100", so the fill is set straight from the
@@ -263,6 +291,9 @@
     @* ONE detail line, and only when it says something the eyebrow did not. An SLA tile already prints its
        window under the percentage; a subtitle that repeats the sensor type under a tile named after the
        sensor is a line of wallboard height spent on nothing. *@
+    @* A multi-graph KEEPS the footer: its subtitle says how many sensors, on which channel, over what
+       window - three facts you cannot get from the lines. Only the SLA tile suppresses it, because there the
+       subtitle and the caption under the percentage are the same string. *@
     @if (!isChrome && Model.Sla is null)
     {
         // The kind label only earns a line when nothing else names the tile ("State" under every state tile

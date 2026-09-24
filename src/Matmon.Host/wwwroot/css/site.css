@@ -8755,6 +8755,63 @@ html[data-theme="light"] .workspace-textarea::placeholder {
 .map-tile-canvas-empty {
   place-self: center;
 }
+
+/* Chart on top, legend under it: the chart gets the space left over (minmax(0, 1fr)) so adding a series
+   shortens the lines rather than pushing them out of the tile. */
+.map-tile-multigraph {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: calc(var(--map-type, 0.95rem) * 0.35);
+  min-height: 0;
+}
+.map-tile-multigraph .map-tile-graph {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+/* Each line carries its own stroke colour inline, so the shared rule must not set one. */
+.map-tile-multigraph .map-graph-line {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+/* Two across where there is room: a legend is read by colour first, and one item per line wastes the height
+   the chart wants. */
+.map-graph-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0 calc(var(--map-type, 0.95rem) * 0.6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(var(--map-type, 0.95rem) * 0.78);
+}
+.map-graph-legend li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.3);
+  min-width: 0;
+}
+.map-graph-swatch {
+  flex: 0 0 auto;
+  width: calc(var(--map-type, 0.95rem) * 0.42);
+  height: calc(var(--map-type, 0.95rem) * 0.42);
+  border-radius: 2px;
+}
+.map-graph-legend-name {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--matmon-text) 80%, var(--matmon-muted));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-graph-legend-value {
+  margin-left: auto;
+  color: var(--matmon-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
 .map-tile-canvas-empty {
   color: var(--matmon-muted);
   font-size: calc(var(--map-type, 0.95rem) * 1.25);

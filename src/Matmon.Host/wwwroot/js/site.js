@@ -949,6 +949,22 @@ function initializeMapLiveData() {
       bars.setAttribute("d", data.graphBarPath);
     }
 
+    // A multi-graph's lines ARE its values, so the paths themselves are patched. Matched by POSITION:
+    // the payload is built from the same ordered series the markup was rendered from, and a change to the
+    // series COUNT bumps the revision and forces a full reload rather than being patched in.
+    if (Array.isArray(data.series)) {
+      const paths = tile.querySelectorAll(".map-tile-multigraph .map-graph-line");
+      const values = tile.querySelectorAll(".map-graph-legend-value");
+      data.series.forEach((entry, index) => {
+        if (entry.linePath) {
+          paths[index]?.setAttribute("d", entry.linePath);
+        }
+        if (values[index] && entry.value) {
+          values[index].textContent = entry.value;
+        }
+      });
+    }
+
     const sla = tile.querySelector(".map-tile-sla");
     if (sla && data.sla) {
       setText(sla, "strong", data.sla.percent === null || data.sla.percent === undefined
@@ -4124,6 +4140,7 @@ function initializeMapDesigner() {
     const isList = kind === "SensorList";
     const isRows = isList || kind === "AlertFeed";
     const isSla = kind === "Sla";
+    const isSeries = kind === "MultiGraph";
     const isImage = kind === "Image";
     const isPinned = isImage || kind === "GeoMap";
     // A clock has no target at all; a heading and a text tile carry their own copy instead of one.
@@ -4144,13 +4161,14 @@ function initializeMapDesigner() {
     panel.querySelectorAll("[data-map-property-list-only]").forEach((field) => { field.hidden = !isList; });
     panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !isRows; });
     panel.querySelectorAll("[data-map-property-sla-only]").forEach((field) => { field.hidden = !isSla; });
+    panel.querySelectorAll("[data-map-property-series-only]").forEach((field) => { field.hidden = !isSeries; });
     panel.querySelectorAll("[data-map-property-image-only]").forEach((field) => { field.hidden = !isImage; });
     panel.querySelectorAll("[data-map-property-pins-only]").forEach((field) => { field.hidden = !isPinned; });
     if (isPinned) {
       renderPinRows(panel);
     }
     if (visualField) {
-      visualField.hidden = isText || isGraph || isRows || isSla || isPinned || kind === "Clock";
+      visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock";
     }
     if (textField) {
       textField.hidden = !isText;

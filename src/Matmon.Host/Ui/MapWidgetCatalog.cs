@@ -29,6 +29,8 @@ public static class MapWidgetCatalog
             MonitoringMapTileKind.Value, MonitoringMapTileVisualType.Auto, "automatic default channel visual"),
         new("graph", "Graph", "Sensor trend sparkline", "chart", MapWidgetCategory.Metrics,
             MonitoringMapTileKind.Graph, SearchTerms: "chart trend history sparkline line area bars"),
+        new("multi-graph", "Multi graph", "Several sensors as lines in one chart, with a legend", "chart", MapWidgetCategory.Metrics,
+            MonitoringMapTileKind.MultiGraph, SearchTerms: "chart compare lines legend series multi overlay trend"),
 
         new("list", "Sensor list", "Ranked list of the sensors under a target", "list", MapWidgetCategory.Metrics,
             MonitoringMapTileKind.SensorList, SearchTerms: "top talkers worst ranking table rows busiest"),
@@ -63,6 +65,7 @@ public static class MapWidgetCatalog
         { VisualType: MonitoringMapTileVisualType.Gauge } => "gauge",
         { VisualType: MonitoringMapTileVisualType.ProgressBar } => "progress",
         { Kind: MonitoringMapTileKind.Graph } => "graph",
+        { Kind: MonitoringMapTileKind.MultiGraph } => "multigraph",
         { Kind: MonitoringMapTileKind.SensorList } => "list",
         { Kind: MonitoringMapTileKind.AlertFeed } => "alerts",
         { Kind: MonitoringMapTileKind.Sla } => "sla",

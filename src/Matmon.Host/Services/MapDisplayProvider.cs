@@ -304,7 +304,8 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Clock
              or MonitoringMapTileKind.Heading
              or MonitoringMapTileKind.Image
-             or MonitoringMapTileKind.GeoMap;
+             or MonitoringMapTileKind.GeoMap
+             or MonitoringMapTileKind.MultiGraph;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
     /// understands - an element id or "tag:name". Null when the tile has no target at all, which for an alert
@@ -328,8 +329,94 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Image => BuildImageTile(tile, element, latest, geo: false),
             MonitoringMapTileKind.GeoMap => BuildImageTile(tile, element, latest, geo: true),
             MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
+            MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element),
             _ => BuildSensorListTile(tile, element, latest)
         };
+    }
+
+    /// <summary>At most this many lines. Each one is its own history query, and past a handful of lines a
+    /// chart stops answering "which is moving?" and starts being a plate of spaghetti - which is the only
+    /// question this widget exists to answer.</summary>
+    private const int MultiGraphMaxSeries = 8;
+
+    /// <summary>Deliberately fixed and deterministic by index, so a series keeps its colour from one render
+    /// to the next - a legend whose colours reshuffle is worse than no legend. Picked to stay apart on a dark
+    /// wall at distance, including for the common red/green confusions.</summary>
+    private static readonly string[] MultiGraphPalette =
+    [
+        "#4FB3FF", "#F2B138", "#7BD88F", "#E36D9B", "#B79BFF", "#4FD8D2", "#FF8A5B", "#9FB3C8"
+    ];
+
+    /// <summary>Several sensors as lines in one chart. The one thing that makes it useful is that every line
+    /// is drawn on ONE scale (<see cref="SparklineGeometry.Scale"/>): normalised per series they would all
+    /// look the same and the spike would be invisible. That also means the series have to be comparable,
+    /// which is what the tile's channel key is for - with it, the SAME channel is read from every sensor.</summary>
+    private MapDisplayTileViewModel BuildMultiGraphTile(MonitoringMapTile tile, MonitoringElement? element)
+    {
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile));
+        if (sensors.Count == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", string.Empty, KindLabel(tile.Kind), "chart");
+        }
+
+        var limit = Math.Clamp(tile.ListLimit, 1, MultiGraphMaxSeries);
+        var channelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim();
+
+        var collected = sensors
+            .OrderBy(sensor => sensor.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .Select(sensor => (sensor, values: ReadSeries(sensor.Id, channelKey)))
+            .Where(entry => entry.values.Count >= 2)
+            .ToArray();
+
+        if (collected.Length == 0)
+        {
+            var missing = channelKey is null
+                ? "No history for these sensors yet"
+                : $"No history on channel \"{channelKey}\" yet";
+            return CreateTile(tile, element, "unknown", "No data", missing, string.Empty, KindLabel(tile.Kind), "chart");
+        }
+
+        var (min, max) = SparklineGeometry.Scale(collected.Select(entry => entry.values));
+
+        // Biggest last reading first: the legend is read top-down, and the line you are looking for is
+        // almost always the one that is currently highest.
+        var series = collected
+            .Select((entry, index) => new
+            {
+                entry.sensor,
+                entry.values,
+                Color = MultiGraphPalette[index % MultiGraphPalette.Length]
+            })
+            .OrderByDescending(entry => entry.values[^1])
+            .Select(entry => new MapGraphSeriesDto(
+                entry.sensor.Name,
+                entry.Color,
+                SparklineGeometry.Line(entry.values, min, max),
+                Format(entry.values[^1])))
+            .ToArray();
+
+        var subtitle = channelKey is null
+            ? $"{series.Length} sensors · last 24h"
+            : $"{series.Length} sensors · {channelKey} · last 24h";
+
+        return CreateTile(tile, element, "ok", "Chart", subtitle, string.Empty, KindLabel(tile.Kind), "chart")
+            with { Series = series };
+    }
+
+    /// <summary>One sensor's numbers over the window. With a channel key it reads THAT channel from every
+    /// observation (so the lines share a unit); without one it falls back to the observation's own value,
+    /// which is the same thing the single-sensor graph plots.</summary>
+    private IReadOnlyList<double> ReadSeries(Guid sensorId, string? channelKey)
+    {
+        return _workspaceStore.GetSensorHistory(sensorId, TimeSpan.FromHours(24), 64)
+            .Select(observation => channelKey is null
+                ? observation.Value ?? observation.Channels.FirstOrDefault(channel => channel.Value.HasValue)?.Value
+                : observation.Channels.FirstOrDefault(channel =>
+                    string.Equals(channel.Key, channelKey, StringComparison.OrdinalIgnoreCase))?.Value)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToArray();
     }
 
     private MapDisplayTileViewModel BuildSensorListTile(
@@ -887,7 +974,15 @@ public sealed record MapDisplayTileViewModel(
     /// field (state, icon, colours, card chrome) is shared.</summary>
     IReadOnlyList<MapTileRowDto>? Rows = null,
     MapSlaDto? Sla = null,
-    IReadOnlyList<MapPinDto>? Pins = null);
+    IReadOnlyList<MapPinDto>? Pins = null,
+    /// <summary>Lines of a multi-series chart, already drawn against one shared scale and ordered by their
+    /// last reading. Null for every other kind.</summary>
+    IReadOnlyList<MapGraphSeriesDto>? Series = null);
+
+/// <param name="Color">Fixed per series index so a line keeps its colour between renders - a legend whose
+/// colours reshuffle every poll is worse than no legend at all.</param>
+/// <param name="LinePath">Already on the chart's SHARED scale, so the lines can be compared by eye.</param>
+public sealed record MapGraphSeriesDto(string Label, string Color, string? LinePath, string? Value);
 
 /// <param name="X">Position as a PERCENT of the tile (0..100) - an image pin is stored that way and a geo pin
 /// is projected into it, so the renderer has one case and the pin holds at any rendered size.</param>

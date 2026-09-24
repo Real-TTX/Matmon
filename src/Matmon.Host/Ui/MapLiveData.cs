@@ -38,6 +38,7 @@ public static class MapLiveData
         tile.GraphLinePath,
         tile.GraphAreaPath,
         tile.GraphBarPath,
+        tile.Series?.Select(line => new MapLiveSeries(line.Color, line.LinePath, line.Value)).ToArray(),
         tile.Rows?.Select(row => new MapLiveRow(row.Label, row.Detail, row.Value, row.Tone, row.TimeText)).ToArray(),
         tile.Sla is { } sla ? new MapLiveSla(sla.Percent, sla.Label) : null,
         tile.Pins?.Select(pin => new MapLivePin(pin.Label, pin.Tone, pin.Value)).ToArray());
@@ -66,7 +67,10 @@ public static class MapLiveData
                     .Append(tile.Tile.ColumnSpan).Append('/').Append(tile.Tile.RowSpan).Append(':')
                     // Pin COUNT, not pin state: adding a pin changes the markup, a pin turning red does not.
                     .Append(tile.Pins?.Count ?? 0).Append(':')
-                    .Append(tile.Rows?.Count ?? 0);
+                    .Append(tile.Rows?.Count ?? 0).Append(':')
+                    // Series COUNT, same reasoning: a sensor appearing under the target changes the markup,
+                    // its line moving does not.
+                    .Append(tile.Series?.Count ?? 0);
             }
         }
 
@@ -94,9 +98,15 @@ public sealed record MapLiveTile(
     string? GraphLinePath,
     string? GraphAreaPath,
     string? GraphBarPath,
+    /// <summary>A multi-graph's lines. Their PATHS travel, unlike everything else here, because a line IS
+    /// the value - there is nothing else about it to patch. The series COUNT is part of the revision hash,
+    /// so a sensor appearing or disappearing under the target still forces one honest reload.</summary>
+    IReadOnlyList<MapLiveSeries>? Series,
     IReadOnlyList<MapLiveRow>? Rows,
     MapLiveSla? Sla,
     IReadOnlyList<MapLivePin>? Pins);
+
+public sealed record MapLiveSeries(string Color, string? LinePath, string? Value);
 
 public sealed record MapLiveRow(string Label, string? Detail, string? Value, string Tone, string? TimeText);
 

@@ -184,6 +184,9 @@ public sealed class MapTileRenderModel
     /// <summary>Status markers on an image / world-map tile, already positioned as a percent of the tile.</summary>
     public IReadOnlyList<MapPinDto>? Pins { get; init; }
 
+    /// <summary>Lines of a multi-series chart, already on one shared scale; null for every other kind.</summary>
+    public IReadOnlyList<MapGraphSeriesDto>? Series { get; init; }
+
     /// <summary>IANA timezone the board renders times in - carried down to the clock widget, which ticks
     /// client-side and therefore needs the MAP timezone rather than the browser one.</summary>
     public string? TimeZoneId { get; init; }
@@ -224,6 +227,7 @@ public sealed class MapTileRenderModel
             Rows = vm.Rows,
             Sla = vm.Sla,
             Pins = vm.Pins,
+            Series = vm.Series,
             TimeZoneId = map.DisplayTimeZoneId
         };
     }

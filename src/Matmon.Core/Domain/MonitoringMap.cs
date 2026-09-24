@@ -402,7 +402,12 @@ public enum MonitoringMapTileKind
     Image = 10,
 
     /// <summary>The shipped offline world map with pins placed by latitude/longitude.</summary>
-    GeoMap = 11
+    GeoMap = 11,
+
+    /// <summary>Several sensors as lines in ONE chart, on one shared scale, with a legend. A
+    /// <see cref="Graph"/> shows a trend; this one answers "which of these is the one moving?", which needs
+    /// the lines to be comparable - see <c>SparklineGeometry.Scale</c>.</summary>
+    MultiGraph = 12
 }
 
 public enum MonitoringMapListMode
@@ -485,6 +490,9 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Value => (2, 2, 2, 2),
             MonitoringMapTileKind.Status => (3, 2, 4, 2),
             MonitoringMapTileKind.Graph => (4, 3, 4, 3),
+            // A chart AND a legend: narrower than this and the legend truncates every name, shorter and the
+            // chart is a smudge under it.
+            MonitoringMapTileKind.MultiGraph => (4, 3, 6, 4),
             // Rows need width to be readable and height to show more than one line, so the list-style widgets
             // start larger than a value tile - a 2x2 "top talkers" would show exactly one truncated row.
             MonitoringMapTileKind.SensorList => (3, 3, 4, 4),
