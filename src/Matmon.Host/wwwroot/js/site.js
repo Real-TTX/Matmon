@@ -3938,6 +3938,94 @@ function initializeMapDesigner() {
   const isGeoPanel = (panel) =>
     normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value) === "GeoMap";
 
+  const targetTemplate = form?.querySelector("[data-map-target-template]");
+
+  const readTargets = (panel) => (panel?.querySelector("[data-map-targets-value]")?.value || "")
+    .split(/[\n\r,;]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const writeTargets = (panel, tokens) => {
+    const field = panel?.querySelector("[data-map-targets-value]");
+    if (!field) {
+      return;
+    }
+    // De-duplicated on write, so two rows pointing at the same host cannot become two identical lines.
+    field.value = [...new Set(tokens.map((token) => token.trim()).filter(Boolean))].join("\n");
+  };
+
+  // A target change has to re-run the tile's server render, or the canvas keeps showing the old series.
+  const refreshTargetedTile = (panel) => {
+    const tile = getTile(panel?.dataset.tileIndex || "");
+    if (tile) {
+      structureCache.delete(tile);
+      // syncTileFromPanel takes the PANEL, not (tile, panel) - passing the tile made every field lookup
+      // inside it return null, so the re-render asked the server for a default Element tile.
+      syncTileFromPanel(panel);
+    }
+  };
+
+  // The extra targets of a multi-series widget. Rendered from the ONE hidden field rather than bound as
+  // indexed inputs: the designer clones whole tiles by rewriting field names, and a nested indexed collection
+  // would have to be re-indexed on every clone and delete.
+  //
+  // There is always one empty row at the end - that IS the "add" affordance, so there is no button whose
+  // only job is to create a row you then have to fill in anyway.
+  const renderTargetRows = (panel) => {
+    const host = panel?.querySelector("[data-map-targets-editor]");
+    if (!host || !targetTemplate) {
+      return;
+    }
+
+    const tokens = readTargets(panel);
+    host.replaceChildren();
+
+    [...tokens, ""].forEach((token, index) => {
+      const isNew = index === tokens.length;
+      // Unique picker id per row - a duplicated DOM id would make one row's picker drive another's value.
+      const html = targetTemplate.innerHTML.replaceAll(
+        "__rowId__",
+        `${panel.dataset.tileIndex || "t"}-${index}-${Math.random().toString(36).slice(2, 8)}`);
+      const row = document.createRange().createContextualFragment(html).querySelector("[data-map-target-row]");
+      if (!row) {
+        return;
+      }
+
+      const value = row.querySelector("[data-map-target-value]");
+      if (value) {
+        value.value = token;
+        value.addEventListener("change", () => {
+          const current = readTargets(panel);
+          if (isNew) {
+            current.push(value.value);
+          } else {
+            current[index] = value.value;
+          }
+          writeTargets(panel, current);
+          renderTargetRows(panel);
+          refreshTargetedTile(panel);
+        });
+      }
+
+      const remove = row.querySelector("[data-map-target-remove]");
+      if (remove) {
+        // Nothing to remove on the trailing invitation row.
+        remove.hidden = isNew;
+        remove.addEventListener("click", () => {
+          const current = readTargets(panel);
+          current.splice(index, 1);
+          writeTargets(panel, current);
+          renderTargetRows(panel);
+          refreshTargetedTile(panel);
+        });
+      }
+
+      host.appendChild(row);
+    });
+
+    initializeElementPickers();
+  };
+
   const renderPinRows = (panel) => {
     const host = panel?.querySelector("[data-map-pin-editor]");
     if (!host || !pinTemplate) {
@@ -4162,6 +4250,9 @@ function initializeMapDesigner() {
     panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !isRows; });
     panel.querySelectorAll("[data-map-property-sla-only]").forEach((field) => { field.hidden = !isSla; });
     panel.querySelectorAll("[data-map-property-series-only]").forEach((field) => { field.hidden = !isSeries; });
+    if (isSeries) {
+      renderTargetRows(panel);
+    }
     panel.querySelectorAll("[data-map-property-image-only]").forEach((field) => { field.hidden = !isImage; });
     panel.querySelectorAll("[data-map-property-pins-only]").forEach((field) => { field.hidden = !isPinned; });
     if (isPinned) {
@@ -4247,6 +4338,9 @@ function initializeMapDesigner() {
     }
   };
 
+  // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph"]);
+
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {
       return;
@@ -4258,6 +4352,14 @@ function initializeMapDesigner() {
     previewKeyCache.set(tile, info.key);
     if (info.kind === "Text" || !info.token) {
       return; // no live value to resolve; keep the placeholder mock
+    }
+    // The cheap JSON preview carries ONE value and ONE subtitle, which is all a single-element tile has. A
+    // collection widget's content is built from its own options (targets, channel, limit, window) that this
+    // endpoint knows nothing about, so its answer for them is an element name where the tile had computed
+    // something better - it overwrote a multi-graph's "3 sensors - last 24h" with the probe's name. Those
+    // kinds are rendered in full by the TileMarkup partial anyway, so there is nothing here to add.
+    if (CollectionTileKinds.has(info.kind)) {
+      return;
     }
     const url = `${window.location.pathname}?handler=TilePreview`
       + `&token=${encodeURIComponent(info.token)}`
@@ -4282,6 +4384,11 @@ function initializeMapDesigner() {
   // preview; a structure change means the markup itself is different (a gauge has an arc, a list has rows),
   // and the only honest source for that is the same partial the viewer renders.
   const structureKeyFor = (panel) => [
+    // The series inputs change WHAT the tile is made of, not just a value, so they belong in the key that
+    // decides whether the body has to be re-fetched.
+    panel.querySelector("[data-map-targets-value]")?.value || "",
+    panel.querySelector('[name$=".ListLimit"]')?.value || "",
+    panel.querySelector('[name$=".ListChannelKey"]')?.value || "",
     normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || "Element"),
     panel?.querySelector("[data-map-property-visual-type]")?.value || "",
     panel?.querySelector("[data-map-property-graph-type]")?.value || "",
@@ -4326,7 +4433,10 @@ function initializeMapDesigner() {
       imageFit: panel.querySelector("[data-map-property-image-fit]")?.value || "Contain",
       channelKey: panel.querySelector('[name$=".ChannelKey"]')?.value || "",
       gaugeMin: panel.querySelector('[name$=".GaugeMin"]')?.value || "",
-      gaugeMax: panel.querySelector('[name$=".GaugeMax"]')?.value || ""
+      gaugeMax: panel.querySelector('[name$=".GaugeMax"]')?.value || "",
+      listLimit: panel.querySelector('[name$=".ListLimit"]')?.value || "",
+      listChannelKey: panel.querySelector('[name$=".ListChannelKey"]')?.value || "",
+      targets: panel.querySelector("[data-map-targets-value]")?.value || ""
     });
 
     fetch(`${window.location.pathname}?${params}`, { headers: { Accept: "text/html" } })
@@ -4386,11 +4496,13 @@ function initializeMapDesigner() {
       titleElement.hidden = !showTitle;
       titleElement.replaceChildren(document.createTextNode(title));
     }
-    if (subtitle) {
+    // A collection widget computes its own subtitle server-side ("3 sensors - last 24h"), and the whole
+    // tile is re-rendered from that partial - so writing a provisional element name here would simply be
+    // wrong until the render lands, and stays wrong now that the cheap JSON preview is skipped for them.
+    if (subtitle && !CollectionTileKinds.has(String(kind))) {
       const isText = kind === "Text";
-      // The target is now an element picker: its name lives on the hidden value
-      // input's data-selected-name (set when chosen / server-rendered). A resolved live preview (once the
-      // TilePreview fetch below lands) overwrites this with the real subtitle via applyLivePreview.
+      // The target is an element picker: its name lives on the hidden value input's data-selected-name (set
+      // when chosen / server-rendered), and a resolved live preview replaces it via applyLivePreview.
       const selectedText = (elementSelect?.dataset.selectedName || "").trim();
       subtitle.textContent = isText
         ? (text.trim() || "Text tile")

@@ -254,6 +254,13 @@ public sealed class MonitoringMapTile
     [JsonPropertyName("y")]
     public int Row { get; set; }
 
+    /// <summary>EXTRA targets, beyond <see cref="ElementId"/>/<see cref="TargetTag"/>. Only a multi-series
+    /// widget reads them: a chart comparing "these four switches" is a set the tree does not have a single
+    /// node for, and a tag would mean labelling the estate first. Each entry is the same token the element
+    /// picker writes - an element id or "tag:name" - and the sensors they resolve to are UNIONED with the
+    /// main target's, deduplicated, in the order given.</summary>
+    public List<string> TargetTokens { get; set; } = [];
+
     /// <summary>How many of the slide's columns this tile occupies (&gt;= 1, floored to the kind's minimum by
     /// <see cref="MonitoringMapTileConstraints.Clamp"/> and capped at <see cref="MonitoringMap.Columns"/>).</summary>
     [JsonPropertyName("width")]
@@ -349,6 +356,7 @@ public sealed class MonitoringMapTile
         Column = Column,
         Row = Row,
         Order = Order,
+        TargetTokens = [.. TargetTokens],
         ColumnSpan = ColumnSpan,
         RowSpan = RowSpan,
         BackgroundColor = BackgroundColor,

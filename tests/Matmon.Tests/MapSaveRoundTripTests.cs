@@ -55,6 +55,7 @@ public sealed class MapSaveRoundTripTests : IDisposable
         ElementId = Guid.NewGuid(),
         TargetTag = null,                     // mutually exclusive with ElementId
         Text = "Server room",
+        TargetTokens = ["tag:core", Guid.NewGuid().ToString()],
         IconKey = "probe",
         ShowCard = false,
         Column = 2,
@@ -137,6 +138,9 @@ public sealed class MapSaveRoundTripTests : IDisposable
             {
                 (IDictionary<string, string> left, IDictionary<string, string> right) =>
                     left.Count == right.Count && left.All(entry => right.TryGetValue(entry.Key, out var value) && value == entry.Value),
+                // Same reasoning for lists: a List<string> compares by reference, so a field that round-trips
+                // perfectly would fail here and nothing would ever pass.
+                (IReadOnlyList<string> left, IReadOnlyList<string> right) => left.SequenceEqual(right),
                 _ => Equals(expected, actual)
             };
 

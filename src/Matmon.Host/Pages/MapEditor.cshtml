@@ -363,6 +363,18 @@
                                         <input asp-for="Input.Tiles[index].ListChannelKey" class="form-control workspace-input" placeholder="Each sensor's default" />
                                         <span class="workspace-inline-note">All lines share one scale, so they only compare if they share a unit. Name the channel to read from every sensor (e.g. <code>cpu</code>); left empty each sensor plots its own default channel, which may mix units.</span>
                                     </label>
+                                    @* More than one target. A chart comparing "these four switches" is a set
+                                       the tree has no single node for, and a tag would mean labelling the
+                                       estate first - so the extra targets are their own list. Each row is the
+                                       same element picker used everywhere else; the rows are rendered by the
+                                       designer from the one hidden field below, for the same reason the pins
+                                       are one field: the editor clones whole tiles by rewriting field names. *@
+                                    <div class="workspace-field" data-map-property-series-only>
+                                        <span class="workspace-label">More targets</span>
+                                        <input type="hidden" asp-for="Input.Tiles[index].TargetTokensText" data-map-targets-value />
+                                        <div class="map-target-rows" data-map-targets-editor></div>
+                                        <span class="workspace-inline-note">Each target contributes every sensor under it, all unioned with the one above and de-duplicated. A folder or a tag counts as many.</span>
+                                    </div>
                                     <label class="workspace-field" data-map-property-series-only>
                                         <span class="workspace-label">Lines</span>
                                         <input asp-for="Input.Tiles[index].ListLimit" type="number" min="1" max="8" class="form-control workspace-input" />
@@ -690,6 +702,15 @@
                     </div>
                 </div>
             </template>
+            @* One extra-target row, cloned per token by the designer. Same element picker as everywhere else,
+               with its DOM id rewritten per row - a duplicated id would make one row's picker drive another
+               row's value. *@
+            <template data-map-target-template>
+                <div class="map-target-row" data-map-target-row>
+                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-target-__rowId__", AllowTags = true, Placeholder = "Pick an element or tag", Options = Model.TilePickerOptions, ValueAttribute = "data-map-target-value" })" />
+                    <button type="button" class="map-target-remove" data-map-target-remove aria-label="Remove target">@MatmonIcons.Render("trash")</button>
+                </div>
+            </template>
             <template data-map-tile-template>
                 <article class="map-tile map-tile-editor"
                          data-map-tile
@@ -818,6 +839,12 @@
                             <input name="Input.Tiles[__index__].ListChannelKey" class="form-control workspace-input" placeholder="Each sensor's default" />
                             <span class="workspace-inline-note">All lines share one scale, so they only compare if they share a unit. Name the channel to read from every sensor; left empty each sensor plots its own default channel.</span>
                         </label>
+                        <div class="workspace-field" data-map-property-series-only>
+                            <span class="workspace-label">More targets</span>
+                            <input type="hidden" name="Input.Tiles[__index__].TargetTokensText" data-map-targets-value />
+                            <div class="map-target-rows" data-map-targets-editor></div>
+                            <span class="workspace-inline-note">Each target contributes every sensor under it, unioned and de-duplicated.</span>
+                        </div>
                         <label class="workspace-field" data-map-property-series-only>
                             <span class="workspace-label">Lines</span>
                             <input name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="8" value="4" class="form-control workspace-input" />

@@ -8784,6 +8784,38 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   place-self: center;
 }
 
+/* Extra targets: one picker per row, each with its own remove. */
+.map-target-rows {
+  display: grid;
+  gap: 0.35rem;
+}
+.map-target-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+.map-target-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 8px;
+  background: var(--matmon-surface);
+  color: var(--matmon-muted);
+  cursor: pointer;
+}
+.map-target-remove:hover {
+  border-color: color-mix(in srgb, var(--matmon-critical) 50%, var(--matmon-border));
+  color: var(--matmon-critical);
+}
+.map-target-add {
+  justify-self: start;
+  margin-top: 0.35rem;
+}
+
 /* Chart on top, legend under it: the chart gets the space left over (minmax(0, 1fr)) so adding a series
    shortens the lines rather than pushing them out of the tile. */
 .map-tile-multigraph {

@@ -353,10 +353,10 @@ public sealed class MapDisplayProvider
     /// which is what the tile's channel key is for - with it, the SAME channel is read from every sensor.</summary>
     private MapDisplayTileViewModel BuildMultiGraphTile(MonitoringMapTile tile, MonitoringElement? element)
     {
-        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile));
+        var sensors = ResolveMultiTargetSensors(tile);
         if (sensors.Count == 0)
         {
-            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", string.Empty, KindLabel(tile.Kind), "chart");
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under these targets", string.Empty, KindLabel(tile.Kind), "chart");
         }
 
         var limit = Math.Clamp(tile.ListLimit, 1, MultiGraphMaxSeries);
@@ -402,6 +402,33 @@ public sealed class MapDisplayProvider
 
         return CreateTile(tile, element, "ok", "Chart", subtitle, string.Empty, KindLabel(tile.Kind), "chart")
             with { Series = series };
+    }
+
+    /// <summary>Every sensor behind the tile's main target AND its extra ones, in the order the targets were
+    /// given and deduplicated - the same host picked twice, or a host inside a folder that is also listed,
+    /// must not become two identical lines.</summary>
+    private IReadOnlyList<SensorElement> ResolveMultiTargetSensors(MonitoringMapTile tile)
+    {
+        var seen = new HashSet<Guid>();
+        var result = new List<SensorElement>();
+
+        foreach (var token in new[] { TargetToken(tile) }.Concat(tile.TargetTokens))
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                continue;
+            }
+
+            foreach (var sensor in _workspaceStore.ResolveTargetSensors(token))
+            {
+                if (seen.Add(sensor.Id))
+                {
+                    result.Add(sensor);
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>One sensor's numbers over the window. With a channel key it reads THAT channel from every

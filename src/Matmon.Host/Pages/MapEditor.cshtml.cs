@@ -110,7 +110,13 @@ public sealed class MapEditorModel : PageModel
         MonitoringMapImageFit imageFit,
         string? channelKey,
         double? gaugeMin,
-        double? gaugeMax)
+        double? gaugeMax,
+        // A multi-series widget is nothing without these: how many lines, which channel, and the extra
+        // targets. Left out, the preview asked for a single line from one sensor and rendered "No data"
+        // while the viewer showed the real chart - the same class of bug the gauge scale had.
+        int listLimit = 0,
+        string? listChannelKey = null,
+        string? targets = null)
     {
         var tile = new MonitoringMapTile
         {
@@ -132,7 +138,10 @@ public sealed class MapEditorModel : PageModel
             // in the editor while being fine in the viewer - see ResolveSensorProgressPercent.
             ChannelKey = string.IsNullOrWhiteSpace(channelKey) ? null : channelKey.Trim(),
             GaugeMin = gaugeMin,
-            GaugeMax = gaugeMax
+            GaugeMax = gaugeMax,
+            ListLimit = listLimit <= 0 ? 4 : listLimit,
+            ListChannelKey = string.IsNullOrWhiteSpace(listChannelKey) ? null : listChannelKey.Trim(),
+            TargetTokens = SplitTargetTokens(targets)
         };
         MonitoringMapTileConstraints.Clamp(tile, Math.Max(1, Input.Columns), Math.Max(1, Input.Rows));
 
@@ -285,6 +294,7 @@ public sealed class MapEditorModel : PageModel
         ImageAssetId = tile.ImageAssetId,
         ImageFit = tile.ImageFit,
         Pins = ParsePins(tile.PinsJson),
+        TargetTokens = SplitTargetTokens(tile.TargetTokensText),
         // Only real #rrggbb values are stored - an unparseable one would just be ignored at render time, so
         // keeping it would leave the user staring at a value that does nothing.
         ColorRules = tile.ColorRules
@@ -295,6 +305,15 @@ public sealed class MapEditorModel : PageModel
 
     /// <summary>Parses the designer's pin JSON defensively - a malformed blob costs the tile its pins, never
     /// the whole save.</summary>
+    /// <summary>The extra-target field into tokens. Blank lines are dropped and duplicates collapsed here
+    /// rather than at render time, so what is stored is what the editor showed.</summary>
+    private static List<string> SplitTargetTokens(string? text) =>
+        string.IsNullOrWhiteSpace(text)
+            ? []
+            : text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
     private List<MonitoringMapPin> ParsePins(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -395,6 +414,7 @@ public sealed class MapEditorModel : PageModel
                     ImageAssetId = tile.ImageAssetId,
                     ImageFit = tile.ImageFit,
                     PinsJson = tile.Pins.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Pins, PinJsonOptions),
+                    TargetTokensText = tile.TargetTokens.Count == 0 ? null : string.Join("\n", tile.TargetTokens),
                     ColorRules = new Dictionary<string, string>(tile.ColorRules),
                     RefreshSeconds = tile.RefreshSeconds
                 })).ToList()
@@ -664,6 +684,13 @@ public sealed class MapTileInput
     /// designer clones whole tiles by rewriting their field names - index-based binding would mean
     /// re-indexing a nested collection on every clone and delete. One opaque string moves with the tile.</summary>
     public string? PinsJson { get; set; }
+
+    /// <summary>Extra targets for a multi-series widget, one token per line. A plain joined string rather
+    /// than indexed <c>TargetTokens[i]</c> fields for the same reason the pins are one JSON blob: the
+    /// designer clones whole tiles by rewriting field names, and a nested indexed collection would have to be
+    /// re-indexed on every clone and delete. A token is a GUID or "tag:name", so it never contains a
+    /// separator.</summary>
+    public string? TargetTokensText { get; set; }
 
     /// <summary>Per-state colour overrides, keyed by the MonitoringMapColorRules buckets. Bound as an indexed
     /// dictionary (Input.Tiles[i].ColorRules[up]) - it is a fixed, tiny key set, so unlike the pins it does
