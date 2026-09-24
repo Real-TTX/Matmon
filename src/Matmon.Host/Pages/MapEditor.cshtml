@@ -556,43 +556,6 @@
             <div class="map-tab-panel" data-sensor-tab="settings">
                 <div class="map-settings-grid">
                     <section class="panel-subcard">
-                        <div class="map-subcard-head">
-                            <h3 class="map-settings-title">Slide rotation</h3>
-                        </div>
-                        <p class="map-toolbox-note">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</p>
-                        <label class="map-switch">
-                            <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
-                            <span class="map-switch-track" aria-hidden="true"></span>
-                            <span>Autoplay</span>
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Default duration</span>
-                            @* The stored value is folded into the option list: a select can only post one of
-                               its own options, so a board saved at 25 s would have been silently rewritten to
-                               the first entry the moment anything else on this page was saved. *@
-                            @{
-                                var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
-                                    .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
-                            }
-                            <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
-                                @foreach (var seconds in rotationChoices)
-                                {
-                                    <option value="@seconds">@seconds seconds</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Page indicator</span>
-                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
-                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
-                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
-                            </select>
-                        </label>
-                    </section>
-
-                    <section class="panel-subcard">
                         <h3 class="map-settings-title">Board</h3>
                         <label class="workspace-field">
                             <span class="workspace-label">Name</span>
@@ -651,6 +614,43 @@
                             </label>
                         </div>
                         <span class="workspace-inline-note">Gap and margin are CSS pixels. Changing the column count reflows every widget - a widget wider than the new grid is clamped into it, and growing the grid back cannot undo that, so the change is committed when you leave the field.</span>
+                    </section>
+
+                    <section class="panel-subcard">
+                        <div class="map-subcard-head">
+                            <h3 class="map-settings-title">Slide rotation</h3>
+                        </div>
+                        <p class="map-toolbox-note">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</p>
+                        <label class="map-switch">
+                            <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
+                            <span class="map-switch-track" aria-hidden="true"></span>
+                            <span>Autoplay</span>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Default duration</span>
+                            @* The stored value is folded into the option list: a select can only post one of
+                               its own options, so a board saved at 25 s would have been silently rewritten to
+                               the first entry the moment anything else on this page was saved. *@
+                            @{
+                                var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
+                                    .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
+                            }
+                            <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
+                                @foreach (var seconds in rotationChoices)
+                                {
+                                    <option value="@seconds">@seconds seconds</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="workspace-field">
+                            <span class="workspace-label">Page indicator</span>
+                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
+                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
+                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
+                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
+                            </select>
+                        </label>
                     </section>
                 </div>
             </div>
