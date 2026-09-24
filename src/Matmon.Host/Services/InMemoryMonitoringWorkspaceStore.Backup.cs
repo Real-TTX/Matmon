@@ -499,11 +499,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// boot. Must hold <c>_gate</c>. Deliberately skips one-time + demo/provision seeders.</summary>
     private void NormalizeAfterRestoreLocked()
     {
-        MigrateRetiredProxmoxSensors();
+        // A restored package carries ITS OWN schema version, which may be older than this build - so the
+        // same pipeline the boot path runs brings it forward, rather than a hand-picked subset that has to
+        // be remembered whenever a migration is added.
+        RunSchemaMigrations();
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
-        MigrateAppliedTemplatesToCopies();
-        MigrateSslCertificateThresholds();
         EnsureDefaultNotificationConfiguration();
         EnsureDefaultAlertCollection();
         EnsureBackupJobsCollection();

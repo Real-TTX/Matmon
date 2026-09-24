@@ -73,14 +73,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         _document = LoadDocument();
         HydrateCredentialBundles(_document);
-        MigrateDocumentTelemetryIntoRepository();
-        // Rewrite retired sensor types before the catalog is rebuilt: the catalog only prunes a retired
-        // definition once nothing references it, so migrating first drops it in the same startup.
-        MigrateRetiredProxmoxSensors();
+
+        // Every one-time migration, in one ordered and numbered place - see
+        // InMemoryMonitoringWorkspaceStore.Migrations.cs. What follows are INVARIANTS: they are meant to run
+        // on every boot, which is exactly why they do not belong in that list.
+        RunSchemaMigrations();
+
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
-        MigrateAppliedTemplatesToCopies();
-        MigrateSslCertificateThresholds();
         EnsureDefaultProbeMetadata(_runtimeOptions.AutoCreateProbeSystemSensors);
         if (_runtimeOptions.ProvisionLocalDockerProbe)
         {
@@ -4285,6 +4285,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
     private sealed class WorkspaceDocument
     {
+        /// <summary>How far the schema-migration pipeline has taken this document - see
+        /// <see cref="InMemoryMonitoringWorkspaceStore.CurrentSchemaVersion"/> and the registry beside it.
+        /// 0 (absent) means "written before the pipeline existed", which runs every step once.</summary>
+        public int SchemaVersion { get; set; }
+
         public ProbeElement RootProbe { get; set; } = default!;
 
         public List<MonitoringTemplate> Templates { get; set; } = [];
