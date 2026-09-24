@@ -9727,6 +9727,9 @@ html[data-theme="light"] .workspace-textarea::placeholder {
    board being empty rather than as a widget sitting in the first cell. */
 .map-canvas-empty {
   grid-column: 1 / -1;
+  /* The slide fixes its rows at --map-row-unit, so an item taller than one row is clipped by the stage.
+     Claim three of them - the same height the cards actually need - instead of overflowing one. */
+  grid-row: span 3;
   display: grid;
   align-content: center;
   justify-items: center;
