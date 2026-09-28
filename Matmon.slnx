@@ -2,6 +2,8 @@
   <Folder Name="/src/">
     <Project Path="src/Matmon.Core/Matmon.Core.csproj" />
     <Project Path="src/Matmon.Host/Matmon.Host.csproj" />
+    <Project Path="src/Matmon.Agent/Matmon.Agent.csproj" />
+    <Project Path="src/Matmon.Probe/Matmon.Probe.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Matmon.Tests/Matmon.Tests.csproj" />

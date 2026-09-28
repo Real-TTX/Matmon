@@ -1,6 +1,6 @@
 using Matmon.Core.Domain;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 public sealed class SlaveProbeRuntimeState
 {

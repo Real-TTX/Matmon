@@ -327,7 +327,7 @@
 
                     <a class="sidebar-version" asp-area="" asp-page="/About" title="@(CloudUpdate.UpdateAvailable ? $"A newer build is available{(CloudUpdate.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : $"About {brandName}")">
                         <span class="sidebar-version-brand">@brandName</span>
-                        <span class="sidebar-version-tag">@Matmon.Host.Services.MatmonVersion.Current</span>
+                        <span class="sidebar-version-tag">@Matmon.Probe.MatmonVersion.Current</span>
                         @if (CloudUpdate.UpdateAvailable)
                         {
                             <span class="sidebar-version-tag" style="background:rgba(95,141,255,.18);color:var(--matmon-accent,#5f8dff);font-weight:700;">Update</span>

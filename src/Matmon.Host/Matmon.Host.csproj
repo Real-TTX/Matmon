@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Matmon.Core\Matmon.Core.csproj" />
+    <ProjectReference Include="..\Matmon.Probe\Matmon.Probe.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +23,8 @@
   <ItemGroup>
     <!-- Display-timezone extensions (ToDisplay) are used across pages/services. -->
     <Using Include="Matmon.Core.Domain" />
+    <!-- The probe side (Secondary mode, discovery, version) lives in Matmon.Probe, which the agent shares. -->
+    <Using Include="Matmon.Probe" />
   </ItemGroup>
 
 </Project>

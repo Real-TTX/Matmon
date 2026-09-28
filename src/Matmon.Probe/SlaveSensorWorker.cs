@@ -2,9 +2,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Matmon.Core;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Matmon.Core.Domain;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 public sealed class SlaveSensorWorker : BackgroundService
 {
@@ -15,7 +17,7 @@ public sealed class SlaveSensorWorker : BackgroundService
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IReadOnlyDictionary<string, ISensorExecutor> _executors;
-    private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ProbeRuntimeOptions _runtimeOptions;
     private readonly SlaveProbeRuntimeState _runtimeState;
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly ILogger<SlaveSensorWorker> _logger;
@@ -28,7 +30,7 @@ public sealed class SlaveSensorWorker : BackgroundService
     public SlaveSensorWorker(
         IHttpClientFactory httpClientFactory,
         IEnumerable<ISensorExecutor> executors,
-        MatmonRuntimeOptions runtimeOptions,
+        ProbeRuntimeOptions runtimeOptions,
         SlaveProbeRuntimeState runtimeState,
         NetworkDiscoveryService discoveryService,
         ILogger<SlaveSensorWorker> logger)

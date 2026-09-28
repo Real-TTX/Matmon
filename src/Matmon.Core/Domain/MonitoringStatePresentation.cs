@@ -1,6 +1,5 @@
-using Matmon.Core.Domain;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Core.Domain;
 
 public enum MonitoringSeverity
 {

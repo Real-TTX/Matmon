@@ -4,6 +4,9 @@ WORKDIR /src
 COPY Matmon.slnx ./
 COPY src/Matmon.Core/Matmon.Core.csproj src/Matmon.Core/
 COPY src/Matmon.Host/Matmon.Host.csproj src/Matmon.Host/
+# The Host references Matmon.Probe, so the restore layer needs its project file too - without this line
+# "dotnet restore" fails and with it every image build (and therefore every deploy).
+COPY src/Matmon.Probe/Matmon.Probe.csproj src/Matmon.Probe/
 RUN dotnet restore src/Matmon.Host/Matmon.Host.csproj
 
 COPY . .

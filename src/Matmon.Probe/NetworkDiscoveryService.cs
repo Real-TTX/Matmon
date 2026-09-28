@@ -7,7 +7,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using Matmon.Core.Domain;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 public sealed class NetworkDiscoveryService
 {
@@ -665,7 +665,9 @@ public sealed record NetworkDiscoveryProgress(
     int TotalHosts,
     int Percent);
 
-internal static class NetworkTargetParser
+/// <summary>Parses a discovery target (single host, CIDR, range). Public since the move into Matmon.Probe: the
+/// primary still validates targets with it (Discovery page, DiscoveryJobStore), and it is no longer the same assembly.</summary>
+public static class NetworkTargetParser
 {
     public static IReadOnlyList<string> Parse(string rawTargets, int maxHosts)
     {

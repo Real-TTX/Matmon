@@ -51,7 +51,7 @@ if (runtimeOptions.Mode == AppMode.Executor)
         }
         // The executor shares the instance image, so its version is the cloud's reference for "latest released
         // version" - the cloud reads this header to flag instances that are behind (see the update-check feature).
-        request.HttpContext.Response.Headers["X-Matmon-Version"] = Matmon.Host.Services.MatmonVersion.Current;
+        request.HttpContext.Response.Headers["X-Matmon-Version"] = Matmon.Probe.MatmonVersion.Current;
         return Results.Ok(runner.Catalog);
     });
 
@@ -88,6 +88,8 @@ Directory.CreateDirectory(dataProtectionDirectory);
 var telemetryDatabasePath = ResolveTelemetryPath(builder.Environment, runtimeOptions, workspaceDirectory);
 
 builder.Services.AddSingleton(runtimeOptions);
+// The probe services (Secondary mode) depend on the probe slice only; same instance, so there is one truth.
+builder.Services.AddSingleton<ProbeRuntimeOptions>(runtimeOptions);
 builder.Services.AddSingleton(authOptions);
 builder.Services.AddDataProtection()
     .SetApplicationName("Matmon")
@@ -248,8 +250,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
 }
 else
 {
-    builder.Services.AddHostedService<SlaveHeartbeatService>();
-    builder.Services.AddHostedService<SlaveSensorWorker>();
+    // The same probe wiring Matmon.Agent uses - see ProbeServiceRegistration.
+    builder.Services.AddMatmonProbe();
 }
 
 builder.Services.AddHttpContextAccessor();
@@ -421,7 +423,7 @@ app.MapGet("/api/branding/favicon", (HttpContext http, IMonitoringWorkspaceStore
 app.MapGet("/api/sensor-types", () => Results.Ok(new
 {
     generatedUtc = DateTimeOffset.UtcNow,
-    version = Matmon.Host.Services.MatmonVersion.Current,
+    version = Matmon.Probe.MatmonVersion.Current,
     sensorTypes = SensorDefinitionCatalog.BuiltIns
         .Select(definition => new
         {
@@ -727,48 +729,9 @@ static bool IsExecutorAuthorized(HttpRequest request, string? expectedToken)
 
 static void RegisterSensorExecutors(IServiceCollection services, bool includeProbeSensors = true)
 {
-    services.AddTransient<ISensorExecutor, PingSensorExecutor>();
-    services.AddHttpClient<HttpSensorExecutor>();
-    services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<HttpSensorExecutor>());
-    services.AddHttpClient<HttpAdvancedSensorExecutor>();
-    services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<HttpAdvancedSensorExecutor>());
-    services.AddTransient<ISensorExecutor, SnmpSensorExecutor>();
-    services.AddTransient<ISensorExecutor, SynologyNasSensorExecutor>();
-    services.AddTransient<ISensorExecutor, SynologyHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, SynologyDiskSensorExecutor>();
-    services.AddTransient<ISensorExecutor, SynologyUpdateSensorExecutor>();
-    services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
-    services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
-    // NB: ProxmoxPveSensorExecutor is intentionally NOT registered as a selectable type - the legacy scope-based
-    // "proxmox" type was retired in favour of proxmox-health / proxmox-node-health, which instantiate it directly
-    // as the shared REST/auth engine.
-    services.AddTransient<ISensorExecutor, ProxmoxHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, ProxmoxNodeHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, ProxmoxDiskSensorExecutor>();
-    services.AddTransient<ISensorExecutor, VMwareHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, VMwareHostHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, UnifiHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, PowerShellRemoteSensorExecutor>();
-    services.AddTransient<ISensorExecutor, LocalScriptSensorExecutor>();
-    services.AddTransient<ISensorExecutor, LocalProgramSensorExecutor>();
-    services.AddTransient<ISensorExecutor, WindowsHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, WindowsDiskSensorExecutor>();
-    services.AddTransient<ISensorExecutor, WindowsUpdateSensorExecutor>();
-    services.AddTransient<ISensorExecutor, WindowsServiceSensorExecutor>();
-    services.AddTransient<ISensorExecutor, WindowsProcessSensorExecutor>();
-    services.AddTransient<ISensorExecutor, LinuxSshHealthSensorExecutor>();
-    services.AddTransient<ISensorExecutor, LinuxDiskSensorExecutor>();
-    services.AddTransient<ISensorExecutor, LinuxUpdateSensorExecutor>();
-    services.AddTransient<ISensorExecutor, SslCertificateSensorExecutor>();
-    services.AddTransient<ISensorExecutor, CertificateChainSensorExecutor>();
-    services.AddTransient<ISensorExecutor, MssqlSensorExecutor>();
-    services.AddTransient<ISensorExecutor, PostgreSqlSensorExecutor>();
-    services.AddTransient<ISensorExecutor, MySqlSensorExecutor>();
-    services.AddTransient<ISensorExecutor, TcpPortSensorExecutor>();
-    services.AddTransient<ISensorExecutor, DnsSensorExecutor>();
-    services.AddTransient<ISensorExecutor, NtpSensorExecutor>();
-    services.AddTransient<ISensorExecutor, DockerContainerSensorExecutor>();
-    services.AddTransient<ISensorExecutor, WindowsEventLogSensorExecutor>();
+    // Every sensor that lives in Matmon.Core - shared with Matmon.Agent, so an agent can never offer a
+    // different set of sensors than the primary that assigns it work.
+    services.AddMatmonSensorExecutors();
 
     // Probe heartbeat/health report the probe's OWN state (need probe infra) and are meaningless as cloud
     // sensors - the stateless Executor mode skips them so its executor set resolves without that plumbing.

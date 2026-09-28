@@ -2,18 +2,14 @@ using Matmon.Core;
 
 namespace Matmon.Host.Services;
 
-public sealed class MatmonRuntimeOptions
+/// <summary>
+/// The Host's options, bound from the <c>Matmon</c> config section. The eight settings a probe needs (mode,
+/// probe id/name/token, primary URL, heartbeat cadence, offline buffer) are inherited from
+/// <see cref="Matmon.Probe.ProbeRuntimeOptions"/> rather than declared here, so the probe library that
+/// Matmon.Agent also ships does not have to carry this whole bag - and each setting is declared once.
+/// </summary>
+public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
 {
-    public AppMode Mode { get; set; } = AppMode.Primary;
-
-    public string? ProbeId { get; set; }
-
-    public string? ProbeName { get; set; }
-
-    public string? PrimaryUrl { get; set; }
-
-    public int HeartbeatIntervalSeconds { get; set; } = 30;
-
     /// <summary>
     /// Default cadence for the Primary's heartbeat to Matmon.Cloud (dead-man-switch + aggregate metadata),
     /// independent of the probe <see cref="HeartbeatIntervalSeconds"/>. This is only the fallback: a per-instance
@@ -30,22 +26,6 @@ public sealed class MatmonRuntimeOptions
     /// to 1..256. Default 8 (polling is I/O-bound, so a handful of workers helps even on small hosts).
     /// </summary>
     public int PollingWorkers { get; set; } = 8;
-
-    public string? ProbeToken { get; set; }
-
-    /// <summary>
-    /// Secondary store-and-forward: when the primary is unreachable, the probe keeps executing its
-    /// <b>cached</b> assignments on schedule and buffers the observations, then flushes them (oldest first,
-    /// with their original timestamps) once the link returns. This caps how far back the buffer is kept -
-    /// observations older than this are dropped. Default 7 days; <b>0 disables buffering</b> (unsent results
-    /// are dropped immediately, the pre-buffer behaviour). Set via <c>Matmon__OfflineBufferRetentionDays</c>.
-    /// The buffer is in memory, so it survives a primary outage while the probe keeps running (not a probe restart).
-    /// </summary>
-    public int OfflineBufferRetentionDays { get; set; } = 7;
-
-    /// <summary>Hard cap on buffered observations (RAM safety for a long outage); the oldest are dropped past it.
-    /// Set via <c>Matmon__OfflineBufferMaxObservations</c>. Default 100000; ≤0 = no count cap (retention only).</summary>
-    public int OfflineBufferMaxObservations { get; set; } = 100_000;
 
     /// <summary>Shared secret that authenticates callers of the Executor run-mode's <c>/api/execute</c> and
     /// <c>/api/sensor-catalog</c> (<c>Matmon__ExecutorToken</c>). Only relevant when <see cref="Mode"/> is

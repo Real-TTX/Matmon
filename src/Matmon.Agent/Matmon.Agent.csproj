@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <!--
+    The Matmon agent: a probe installed ON the monitored machine, as a Windows service or a systemd unit,
+    instead of in a Docker container. Same code as the Docker probe - it is Matmon.Probe plus the Core
+    sensors in a generic host - so it can never drift from what a primary expects a probe to do.
+
+    One binary for both platforms: AddWindowsService and AddSystemd are no-ops when the process was not
+    started by the Service Control Manager or systemd, so the same build also runs interactively.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>matmon-agent</AssemblyName>
+    <RootNamespace>Matmon.Agent</RootNamespace>
+    <!-- Shipped to machines that have no .NET installed, so it is PUBLISHED self-contained - but that is
+         set at publish time (dotnet publish with a runtime identifier and self-contained on), not here: SelfContained without a
+         RuntimeIdentifier fails the plain solution build (NETSDK1031). -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Matmon.Probe\Matmon.Probe.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

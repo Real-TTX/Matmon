@@ -1,4 +1,4 @@
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 public sealed record ProbeHeartbeatRequest(
     string ProbeId,

@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Bakes the build version INTO the assembly when one is supplied: dotnet build/publish -p:MatmonVersion=0.1.42-...
+
+    The Docker image gets its version from the MATMON_VERSION environment variable, which CI sets on the
+    image - and that still wins. But the agent runs on a customer's machine where nobody sets that variable,
+    and it has to know its own version for sure: the auto-update compares it against the instance's manifest.
+    An explicit metadata attribute rather than InformationalVersion, because the SDK defaults that to "1.0.0",
+    and "the default happens to look like a version" is not something to build an updater on.
+
+    Absent the property, nothing is emitted and MatmonVersion falls back exactly as before.
+  -->
+  <ItemGroup Condition="'$(MatmonVersion)' != ''">
+    <AssemblyMetadata Include="MatmonVersion" Value="$(MatmonVersion)" />
+  </ItemGroup>
+
+</Project>

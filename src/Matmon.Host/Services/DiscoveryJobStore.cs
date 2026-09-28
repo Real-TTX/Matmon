@@ -483,28 +483,6 @@ public enum DiscoveryJobStatus
     Cancelled = 4
 }
 
-public sealed record ProbeDiscoveryJobAssignmentsResponse(
-    IReadOnlyList<ProbeDiscoveryJobAssignment> Jobs);
-
-public sealed record ProbeDiscoveryJobAssignment(
-    Guid JobId,
-    string Network,
-    NetworkDiscoveryOptions Options);
-
-public sealed record ProbeDiscoveryJobResultBatch(
-    IReadOnlyList<ProbeDiscoveryJobResult> Results);
-
-public sealed record ProbeDiscoveryJobResult(
-    Guid JobId,
-    IReadOnlyList<NetworkDiscoveryResult> Hosts,
-    string? ErrorMessage,
-    bool IsComplete,
-    int? ScannedHosts = null,
-    int? TotalHosts = null);
-
-public sealed record ProbeDiscoveryJobResultPostResponse(
-    int Recorded,
-    bool Cancelled);
 
 public sealed record DiscoveryJobStatusResponse(
     Guid JobId,

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Everything a probe needs to work for a primary - pull assignments and on-demand jobs, run them, post the
+    results back, buffer through an outage, beat - and nothing a primary needs to BE one: no workspace store,
+    no UI, no PDF or mail stack. Shared by two hosts: Matmon.Host in Secondary mode (the Docker probe), and
+    Matmon.Agent (the service installed on the monitored machine). The sensors themselves live in Matmon.Core.
+
+    The Microsoft.Extensions references are pinned to the LOWEST 10.0 release on purpose: this is a library.
+    Inside Matmon.Host the ASP.NET Core shared framework supplies newer copies and wins; inside Matmon.Agent the
+    agent's own Hosting package lifts them. Pinning a patch here would force that patch onto both.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Matmon.Core\Matmon.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

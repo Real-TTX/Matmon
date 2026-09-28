@@ -1,4 +1,4 @@
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 /// <summary>
 /// A secondary probe's store-and-forward buffer for sensor observations it produced while the primary was

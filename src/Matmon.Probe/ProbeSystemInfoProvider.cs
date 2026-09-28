@@ -3,7 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 /// <summary>System details a probe reports about itself in the heartbeat "full sync".</summary>
 public sealed record ProbeSystemInfo(string OperatingSystem, string Host, IReadOnlyList<string> Networks);

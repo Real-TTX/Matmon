@@ -1,19 +1,21 @@
 using System.Net.Http.Json;
 using Matmon.Core;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 public sealed class SlaveHeartbeatService : BackgroundService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SlaveHeartbeatService> _logger;
-    private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ProbeRuntimeOptions _runtimeOptions;
     private readonly SlaveProbeRuntimeState _runtimeState;
 
     public SlaveHeartbeatService(
         IHttpClientFactory httpClientFactory,
         ILogger<SlaveHeartbeatService> logger,
-        MatmonRuntimeOptions runtimeOptions,
+        ProbeRuntimeOptions runtimeOptions,
         SlaveProbeRuntimeState runtimeState)
     {
         _httpClientFactory = httpClientFactory;
