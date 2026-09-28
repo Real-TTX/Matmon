@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Matmon.Core;
 using Matmon.Core.Domain;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe;
 
 public sealed class ProbeHealthSensorExecutor : ISensorExecutor
 {
@@ -42,18 +42,18 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
         ]
     };
 
-    private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ProbeRuntimeOptions _runtimeOptions;
     private readonly SlaveProbeRuntimeState _slaveRuntimeState;
-    private readonly StorageOverviewProvider _storageOverviewProvider;
+    private readonly IProbeStorageSource _storageSource;
 
     public ProbeHealthSensorExecutor(
-        MatmonRuntimeOptions runtimeOptions,
+        ProbeRuntimeOptions runtimeOptions,
         SlaveProbeRuntimeState slaveRuntimeState,
-        StorageOverviewProvider storageOverviewProvider)
+        IProbeStorageSource storageSource)
     {
         _runtimeOptions = runtimeOptions;
         _slaveRuntimeState = slaveRuntimeState;
-        _storageOverviewProvider = storageOverviewProvider;
+        _storageSource = storageSource;
     }
 
     public string SensorTypeKey => Definition.Key;
@@ -67,7 +67,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
         var watch = Stopwatch.StartNew();
         try
         {
-            var storage = _storageOverviewProvider.GetOverview();
+            var storage = _storageSource.GetSnapshot();
             var secondaryRuntime = _slaveRuntimeState.Snapshot();
             var isPrimary = _runtimeOptions.Mode == AppMode.Primary;
             var connected = isPrimary || secondaryRuntime.IsConnected;
@@ -118,7 +118,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
     }
 
     private static IReadOnlyList<SensorChannelValue> BuildChannels(
-        StorageOverview storage,
+        ProbeStorageSnapshot storage,
         bool connected,
         bool isPrimary,
         bool criticalWhenDisconnected,
@@ -209,7 +209,7 @@ public sealed class ProbeHealthSensorExecutor : ISensorExecutor
     }
 
     private static string BuildMessage(
-        StorageOverview storage,
+        ProbeStorageSnapshot storage,
         bool isPrimary,
         bool connected,
         SlaveProbeRuntimeSnapshot secondaryRuntime,

@@ -136,6 +136,7 @@ builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemor
     provider.GetService<INotificationSink>(),
     provider.GetRequiredService<MapAssetStore>()));
 builder.Services.AddSingleton<StorageOverviewProvider>();
+builder.Services.AddSingleton<IProbeStorageSource>(provider => provider.GetRequiredService<StorageOverviewProvider>());
 builder.Services.AddSingleton<IConfigurationOverviewProvider, ConfigurationOverviewProvider>();
 builder.Services.AddSingleton<SlaveProbeRuntimeState>();
 builder.Services.AddSingleton<ProbeSensorAssignmentProvider>();
@@ -744,8 +745,7 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
 
         services.AddTransient<ProbeHeartbeatSensorExecutor>();
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHeartbeatSensorExecutor>());
-        services.AddTransient<ProbeHealthSensorExecutor>();
-        services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHealthSensorExecutor>());
+        services.AddMatmonProbeHealthSensor();
         // Instance self-monitoring, driven by the cloud heartbeat's update signal - not a cloud sensor.
         services.AddTransient<MatmonUpdateSensorExecutor>();
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<MatmonUpdateSensorExecutor>());

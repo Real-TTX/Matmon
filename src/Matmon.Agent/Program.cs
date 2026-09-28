@@ -18,13 +18,26 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "Matmon Agent");
 builder.Services.AddSystemd();
 
+// The agent polls its primary every few seconds; at Information, HttpClient logs four lines per request,
+// which on a customer's event log / journal buries everything the agent itself says. In code rather than in
+// an appsettings.json, because a single-file publish does not ship one next to the executable.
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
 // Same "Matmon" section and the same Matmon__* environment names as the Docker probe, so a probe config
 // moves over unchanged. An agent is always a secondary - there is no mode to get wrong.
 var options = builder.Configuration.GetSection("Matmon").Get<ProbeRuntimeOptions>() ?? new ProbeRuntimeOptions();
 options.Mode = AppMode.Secondary;
 builder.Services.AddSingleton(options);
 
+// What "storage" means for an agent: the directory it is installed in and the drive under it. It keeps no
+// workspace, telemetry or backups - the primary does - so that is the only disk the agent itself can fill.
+// Matmon__DataPath points it elsewhere, e.g. at a data directory an installer created.
+var dataPath = builder.Configuration["Matmon:DataPath"];
+builder.Services.AddSingleton<IProbeStorageSource>(new DirectoryProbeStorageSource(
+    string.IsNullOrWhiteSpace(dataPath) ? AppContext.BaseDirectory : Path.GetFullPath(dataPath)));
+
 builder.Services.AddMatmonSensorExecutors();
+builder.Services.AddMatmonProbeHealthSensor();
 builder.Services.AddMatmonProbe();
 
 builder.Build().Run();

@@ -2,7 +2,11 @@ using System.Globalization;
 
 namespace Matmon.Host.Services;
 
-public sealed class StorageOverviewProvider
+/// <summary>
+/// The Host's full storage picture (workspace, telemetry, backups, data directory). Also the Host's
+/// <see cref="IProbeStorageSource"/>: probe-health on a primary or a Docker probe judges this data directory.
+/// </summary>
+public sealed class StorageOverviewProvider : IProbeStorageSource
 {
     private readonly IHostEnvironment _environment;
     private readonly MatmonRuntimeOptions _runtimeOptions;
@@ -22,11 +26,11 @@ public sealed class StorageOverviewProvider
 
         var telemetryPath = ResolveTelemetryPath(dataPath);
 
-        var scan = ScanDirectory(dataPath);
+        var scan = ProbeStorageScanner.ScanDirectory(dataPath);
         var workspaceFileBytes = GetFileSize(workspacePath);
         var backupFileBytes = GetPathSize(backupPath);
         var telemetryFileBytes = GetTelemetrySize(telemetryPath);
-        var drive = ResolveDrive(dataPath);
+        var drive = ProbeStorageScanner.ResolveDrive(dataPath);
 
         return new StorageOverview(
             workspacePath,
@@ -44,8 +48,20 @@ public sealed class StorageOverviewProvider
             drive?.Name ?? Path.GetPathRoot(dataPath) ?? string.Empty,
             drive?.TotalSize,
             drive?.AvailableFreeSpace,
-            CalculateFreePercent(drive),
+            ProbeStorageScanner.CalculateFreePercent(drive),
             scan.ErrorMessage);
+    }
+
+    public ProbeStorageSnapshot GetSnapshot()
+    {
+        var overview = GetOverview();
+        return new ProbeStorageSnapshot(
+            overview.DataDirectoryExists,
+            overview.DataDirectoryBytes,
+            overview.DataFileCount,
+            overview.DriveAvailableBytes,
+            overview.DriveFreePercent,
+            overview.ErrorMessage);
     }
 
     private string ResolveTelemetryPath(string dataPath)
@@ -98,53 +114,6 @@ public sealed class StorageOverviewProvider
             : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configuredPath));
     }
 
-    private static DirectoryScanResult ScanDirectory(string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            return new DirectoryScanResult(0, 0, "data directory does not exist");
-        }
-
-        long totalBytes = 0;
-        var fileCount = 0;
-        string? firstError = null;
-        var pending = new Stack<string>();
-        pending.Push(path);
-
-        while (pending.Count > 0)
-        {
-            var current = pending.Pop();
-
-            try
-            {
-                foreach (var file in Directory.EnumerateFiles(current))
-                {
-                    try
-                    {
-                        var info = new FileInfo(file);
-                        totalBytes += info.Exists ? info.Length : 0;
-                        fileCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        firstError ??= ex.Message;
-                    }
-                }
-
-                foreach (var directory in Directory.EnumerateDirectories(current))
-                {
-                    pending.Push(directory);
-                }
-            }
-            catch (Exception ex)
-            {
-                firstError ??= ex.Message;
-            }
-        }
-
-        return new DirectoryScanResult(totalBytes, fileCount, firstError);
-    }
-
     private static long? GetFileSize(string path)
     {
         try
@@ -164,7 +133,7 @@ public sealed class StorageOverviewProvider
         {
             if (Directory.Exists(path))
             {
-                return ScanDirectory(path).TotalBytes;
+                return ProbeStorageScanner.ScanDirectory(path).TotalBytes;
             }
 
             return GetFileSize(path);
@@ -175,36 +144,6 @@ public sealed class StorageOverviewProvider
         }
     }
 
-    private static DriveInfo? ResolveDrive(string path)
-    {
-        try
-        {
-            var root = Path.GetPathRoot(Path.GetFullPath(path));
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                return null;
-            }
-
-            var drive = new DriveInfo(root);
-            return drive.IsReady ? drive : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static double? CalculateFreePercent(DriveInfo? drive)
-    {
-        if (drive is null || drive.TotalSize <= 0)
-        {
-            return null;
-        }
-
-        return Math.Round((double)drive.AvailableFreeSpace / drive.TotalSize * 100.0, 2);
-    }
-
-    private sealed record DirectoryScanResult(long TotalBytes, int FileCount, string? ErrorMessage);
 }
 
 public sealed record StorageOverview(
