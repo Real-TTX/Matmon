@@ -1,0 +1,235 @@
+@page "/agents"
+@model Matmon.Host.Pages.AgentsModel
+@{
+    ViewData["Title"] = "Agents";
+    var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
+    var issuedExpires = Model.IssuedExpiresUtc is { } expiresUtc
+        ? new DateTimeOffset(DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc))
+        : (DateTimeOffset?)null;
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("probe")
+            <div>
+                <div class="eyebrow">Sensors</div>
+                <h1>Agents</h1>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.IssuedCode))
+    {
+        <section class="panel panel-stack workspace-panel agent-issued">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("lock")<span>Enrolment code@(string.IsNullOrWhiteSpace(Model.IssuedName) ? string.Empty : $" for {Model.IssuedName}")</span></h2>
+                @if (issuedExpires is { } expires)
+                {
+                    <span class="panel-hint">single use · valid until @expires.ToDisplay().ToString("g")</span>
+                }
+            </div>
+            <p class="panel-hint">Shown only now - Matmon keeps just a fingerprint of it. If you lose it, create a new one.</p>
+            <div class="agent-issued-code">
+                <code id="agent-issued-code">@Model.IssuedCode</code>
+                <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-issued-code">
+                    @MatmonIcons.Render("copy")
+                    <span data-copy-label>Copy</span>
+                </button>
+            </div>
+
+            <div class="probe-install-grid agent-install-grid">
+                <section class="probe-install-method">
+                    <div class="probe-install-method-header">
+                        <div class="probe-install-method-title">
+                            <h2 class="section-title">@MatmonIcons.Render("host")<span>Windows</span></h2>
+                            <span class="panel-hint">service</span>
+                        </div>
+                        <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-install-windows">
+                            @MatmonIcons.Render("copy")
+                            <span data-copy-label>Copy</span>
+                        </button>
+                    </div>
+                    <pre class="config-code probe-install-code" id="agent-install-windows">@Model.BuildWindowsCommands(Model.IssuedCode)</pre>
+                </section>
+
+                <section class="probe-install-method">
+                    <div class="probe-install-method-header">
+                        <div class="probe-install-method-title">
+                            <h2 class="section-title">@MatmonIcons.Render("host")<span>Linux</span></h2>
+                            <span class="panel-hint">systemd</span>
+                        </div>
+                        <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-install-linux">
+                            @MatmonIcons.Render("copy")
+                            <span data-copy-label>Copy</span>
+                        </button>
+                    </div>
+                    <pre class="config-code probe-install-code" id="agent-install-linux">@Model.BuildLinuxCommands(Model.IssuedCode)</pre>
+                </section>
+            </div>
+        </section>
+    }
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("probe")<span>Installed agents</span></h2>
+            <span class="panel-hint">@Model.Agents.Count enrolled</span>
+        </div>
+
+        @if (Model.Agents.Count == 0)
+        {
+            <div class="empty-state">No agents yet. An agent is a probe that runs on the machine it monitors, as a Windows service or a systemd unit - create an enrolment code below to add one.</div>
+        }
+        else
+        {
+            <div class="system-table system-probe-table probe-overview-table" role="table" aria-label="Agents">
+                <div class="system-table-row system-table-head probe-overview-row" role="row">
+                    <span role="columnheader">Agent</span>
+                    <span role="columnheader">System</span>
+                    <span role="columnheader">Status</span>
+                    <span role="columnheader">Last seen</span>
+                    <span role="columnheader">Sensors</span>
+                    <span role="columnheader">Actions</span>
+                </div>
+
+                @foreach (var agent in Model.Agents)
+                {
+                    var state = agent.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+                        ? "error"
+                        : agent.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
+
+                    <div class="system-table-row probe-overview-row" role="row">
+                        <span role="cell">
+                            <strong>@agent.Name</strong>
+                            <small>@agent.ProbeId</small>
+                            @if (!string.IsNullOrWhiteSpace(agent.DuplicateWarning))
+                            {
+                                <small class="system-probe-duplicate">@MatmonIcons.Render("warning") Duplicate agent: @agent.DuplicateWarning</small>
+                            }
+                        </span>
+                        <span role="cell">
+                            @(string.IsNullOrWhiteSpace(agent.Host) || agent.Host == "-" ? "-" : agent.Host)
+                            @if (!string.IsNullOrWhiteSpace(agent.OperatingSystem) && agent.OperatingSystem != "-")
+                            {
+                                <small>@agent.OperatingSystem</small>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(agent.Version))
+                            {
+                                <small class="system-probe-os">@agent.Version</small>
+                            }
+                        </span>
+                        <span role="cell">
+                            <span class="state-pill" data-state="@state">@agent.State</span>
+                            <small>@agent.Message</small>
+                        </span>
+                        <span role="cell">@(agent.LastSeenUtc.HasValue ? agent.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</span>
+                        <span role="cell">@agent.SensorCount</span>
+                        <span role="cell" class="probe-overview-actions">
+                            <details class="workspace-action-menu">
+                                <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Agent actions" title="Agent actions">
+                                    @MatmonIcons.Render("more")
+                                    <span>Actions</span>
+                                </summary>
+                                <div class="workspace-action-menu-panel">
+                                    <a class="workspace-action-menu-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">
+                                        @MatmonIcons.Render("sensor")
+                                        <span>Sensors</span>
+                                    </a>
+                                    <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@agent.ElementId">
+                                        @MatmonIcons.Render("chart")
+                                        <span>Usage</span>
+                                    </a>
+                                    @if (isAdmin)
+                                    {
+                                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@agent.ElementId" asp-route-returnUrl="/agents">
+                                            @MatmonIcons.Render("pencil")
+                                            <span>Edit</span>
+                                        </a>
+                                    }
+                                </div>
+                            </details>
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    @if (isAdmin)
+    {
+        <section class="panel panel-stack workspace-panel">
+            <div class="panel-header">
+                <h2 class="section-title">@MatmonIcons.Render("plus")<span>Add an agent</span></h2>
+                <span class="panel-hint">creates a single-use enrolment code</span>
+            </div>
+
+            @if (Model.ProbeLimitReason is { } limitReason)
+            {
+                <div class="workspace-banner workspace-banner-error">@limitReason An agent enrolling now would be refused.</div>
+            }
+
+            <form method="post" asp-page-handler="Create" class="workspace-form agent-create-form">
+                <label class="workspace-field workspace-field-primary">
+                    <span class="workspace-label">Name <em>optional - defaults to the machine's host name</em></span>
+                    <input asp-for="NewName" class="form-control workspace-input" placeholder="e.g. FILESRV-01" maxlength="120" />
+                </label>
+                <label class="workspace-field">
+                    <span class="workspace-label">Valid for</span>
+                    <select asp-for="NewValidityHours" class="form-select workspace-select">
+                        @foreach (var hours in Model.ValidityChoices)
+                        {
+                            <option value="@hours">@(hours switch { 1 => "1 hour", 24 => "24 hours", 168 => "7 days", _ => $"{hours} hours" })</option>
+                        }
+                    </select>
+                </label>
+                <div class="workspace-form-actions">
+                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create enrolment code</span></button>
+                </div>
+            </form>
+        </section>
+
+        @if (Model.PendingEnrollments.Count > 0)
+        {
+            <section class="panel panel-stack workspace-panel">
+                <div class="panel-header">
+                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Unused codes</span></h2>
+                    <span class="panel-hint">@Model.PendingEnrollments.Count waiting for an agent</span>
+                </div>
+                <form method="post" asp-page-handler="Revoke">
+                    <div class="system-table agent-pending-table" role="table" aria-label="Unused enrolment codes">
+                        <div class="system-table-row system-table-head agent-pending-row" role="row">
+                            <span role="columnheader">For</span>
+                            <span role="columnheader">Created</span>
+                            <span role="columnheader">Expires</span>
+                            <span role="columnheader"></span>
+                        </div>
+                        @foreach (var pending in Model.PendingEnrollments)
+                        {
+                            <div class="system-table-row agent-pending-row" role="row">
+                                <span role="cell"><strong>@(pending.Name ?? "host name of the machine")</strong></span>
+                                <span role="cell">@pending.CreatedUtc.ToDisplay().ToString("g")@(string.IsNullOrWhiteSpace(pending.CreatedBy) ? string.Empty : $" · {pending.CreatedBy}")</span>
+                                <span role="cell">@pending.ExpiresUtc.ToDisplay().ToString("g")</span>
+                                <span role="cell">
+                                    <button type="submit" class="workspace-secondary-submit" name="enrollmentId" value="@pending.Id">
+                                        @MatmonIcons.Render("x")
+                                        <span>Revoke</span>
+                                    </button>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </form>
+            </section>
+        }
+    }
+</section>

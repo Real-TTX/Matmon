@@ -70,7 +70,13 @@
                                 </span>
                             }
                         </span>
-                        <span role="cell">@probe.Role</span>
+                        <span role="cell">
+                            @probe.Role
+                            @if (probe.IsAgent)
+                            {
+                                <span class="sensor-chip" title="Enrolled agent - installed on the machine it monitors">Agent</span>
+                            }
+                        </span>
                         <span role="cell">
                             <span class="state-pill" data-state="@state">@probe.State</span>
                             <small>@probe.Message</small>

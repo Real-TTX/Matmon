@@ -4334,6 +4334,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         public List<AlertMute> AlertMutes { get; set; } = [];
 
+        /// <summary>Pending agent enrolment codes (hashed). Instance-bound and short-lived: never in a backup.</summary>
+        public List<AgentEnrollment> AgentEnrollments { get; set; } = [];
+
         public List<WorkspaceBackupJob> BackupJobs { get; set; } = [];
 
         public List<SensorObservation> SensorHistory { get; set; } = [];

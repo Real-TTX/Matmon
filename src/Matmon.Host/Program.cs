@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -198,6 +200,17 @@ builder.Services.AddAuthorization(options =>
 RegisterSensorExecutors(builder.Services);
 builder.Services.AddScoped<ISensorExecutionService, SensorExecutionService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
+
+// The agent enrolment endpoint is anonymous by nature (the agent has no identity yet - that is what it is
+// asking for), so the only thing between a guesser and a probe token is the code's entropy and this: a few
+// attempts per client address per minute.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("agent-enroll", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizePage("/Wizard", MatmonSecurity.AdminPolicy);
@@ -354,6 +367,7 @@ app.UseAuthentication();
 // before authorization so the request is treated as signed-in).
 app.UseTunnelAutoLogin();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapStaticAssets().AllowAnonymous();
 
@@ -498,6 +512,33 @@ if (runtimeOptions.Mode == AppMode.Primary)
             job.Oids,
             job.Error));
     });
+
+    // An agent trades a one-time enrolment code (issued on the Agents page) for a probe of its own. Wrong,
+    // used and expired codes all answer the same 400 - which codes once existed is not the caller's business.
+    app.MapPost("/api/agents/enroll", (AgentEnrollRequest request, IMonitoringWorkspaceStore workspaceStore, ILicenseService licenseService, ILogger<Program> logger) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Code))
+        {
+            return Results.BadRequest(new { error = "code_required" });
+        }
+
+        if (!licenseService.CanAddProbe(out var reason))
+        {
+            return Results.Json(new { error = "probe_limit", message = reason }, statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var redemption = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName);
+        if (redemption is null)
+        {
+            logger.LogWarning("Agent enrolment rejected: invalid, used or expired code (host {Host})", request.HostName);
+            return Results.BadRequest(new { error = "invalid_code" });
+        }
+
+        logger.LogInformation(
+            "Agent {Host} ({OperatingSystem}, {Version}) enrolled as probe {ProbeName} ({ProbeId})",
+            request.HostName, request.OperatingSystem, request.AgentVersion, redemption.ProbeName, redemption.ProbeId);
+        return Results.Ok(new AgentEnrollResponse(redemption.ProbeId, redemption.ProbeToken, redemption.ProbeName));
+    }).AllowAnonymous().RequireRateLimiting("agent-enroll");
 
     app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore) =>
     {

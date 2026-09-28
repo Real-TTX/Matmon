@@ -654,6 +654,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             document.MapAssets.Clear();
         }
 
+        // A pending enrolment code belongs to this instance and today: restored elsewhere (or next month) it
+        // would let an agent enrol against a workspace whose admin never issued it.
+        document.AgentEnrollments = [];
+
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {
             document.BackupJobs = [];

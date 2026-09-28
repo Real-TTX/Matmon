@@ -380,8 +380,28 @@ public interface IMonitoringWorkspaceStore
 
     bool TryValidateProbe(string probeId, string? probeToken);
 
+    /// <summary>Issues a single-use agent enrolment code (returned once, stored only as a hash).</summary>
+    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy);
+
+    /// <summary>Unexpired, unused codes - expired ones are pruned on the way.</summary>
+    IReadOnlyList<AgentEnrollment> GetPendingAgentEnrollments();
+
+    bool RevokeAgentEnrollment(Guid enrollmentId);
+
+    /// <summary>
+    /// Consumes a code and creates the probe the agent becomes. Null for a wrong, used or expired code -
+    /// deliberately indistinguishable. The caller checks the probe licence limit first.
+    /// </summary>
+    AgentEnrollmentRedemption? RedeemAgentEnrollment(string? code, string? hostName);
+
     void Save();
 }
+
+/// <summary>A freshly issued enrolment and its code - the only time the code exists in the clear.</summary>
+public sealed record AgentEnrollmentIssue(AgentEnrollment Enrollment, string Code);
+
+/// <summary>What an agent receives for a valid code: the identity it runs under from then on.</summary>
+public sealed record AgentEnrollmentRedemption(Guid ElementId, string ProbeId, string ProbeToken, string ProbeName);
 
 /// <summary>A currently-muted element for the Alerts page (name/path resolved, timing for display).</summary>
 public sealed record AlertMuteInfo(

@@ -84,6 +84,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.NotificationRules ??= [];
         document.Alerts ??= [];
         document.AlertMutes ??= [];
+        document.AgentEnrollments ??= [];
         document.BackupJobs ??= [];
         document.SensorHistory ??= [];
         document.Events ??= [];

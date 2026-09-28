@@ -6468,6 +6468,37 @@ body.element-picker-open {
   margin-top: 0.7rem;
 }
 
+/* Agents page: two install recipes (Windows / Linux) instead of the probe page's three. Collapses with the
+   probe grid on narrow screens, which is declared later in the mobile block. */
+.agent-install-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The freshly issued code - big, monospaced, selectable in one go: it gets read out over the phone. */
+.agent-issued-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.agent-issued-code code {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--matmon-border);
+  background: var(--matmon-surface-soft);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.agent-pending-row {
+  grid-template-columns: minmax(10rem, 1.2fr) minmax(10rem, 1fr) minmax(8rem, 0.8fr) auto;
+  align-items: center;
+}
+
 .probe-install-method {
   display: grid;
   grid-template-rows: auto minmax(14rem, 1fr);

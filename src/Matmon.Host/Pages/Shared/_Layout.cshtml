@@ -92,6 +92,7 @@
         // must be exact - it is a prefix of every path.
         var dashboardActive = string.Equals(currentPath, "/", StringComparison.OrdinalIgnoreCase);
         var probesActive = PathStarts("/probes") || PathStarts("/system/probes") || PathStarts("/monitoring/probe");
+        var agentsActive = PathStarts("/agents");
         var templatesActive = PathStarts("/templates") || PathStarts("/monitoring/template");
         var mapsActive = PathStarts("/maps");
         var notificationsActive = PathStarts("/notifications");
@@ -254,6 +255,7 @@
                             <a asp-area="" asp-page="/Index" class="topnav-link @Active(dashboardActive)">Dashboard</a>
                             <a asp-area="" asp-page="/Monitoring" class="topnav-link @Active(sensorsActive)">Sensors</a>
                             <a asp-area="" asp-page="/Probes" class="topnav-link @Active(probesActive)">Probes</a>
+                            <a asp-area="" asp-page="/Agents" class="topnav-link @Active(agentsActive)">Agents</a>
                             <a asp-area="" asp-page="/Discovery" class="topnav-link @Active(discoveryActive)">Discovery</a>
                             <a asp-area="" asp-page="/Maps" class="topnav-link @Active(mapsActive)">Maps</a>
                             <a asp-area="" asp-page="/Templates" class="topnav-link @Active(templatesActive)">Templates</a>

@@ -1,3 +1,4 @@
+using Matmon.Agent;
 using Matmon.Core;
 using Matmon.Probe;
 
@@ -8,10 +9,22 @@ if (args.Contains("--version"))
 {
     // What an install script, a support call or an update check needs, without starting the service.
     Console.WriteLine(MatmonVersion.Current);
-    return;
+    return 0;
+}
+
+var configPath = AgentConfigFile.Resolve(args);
+if (args.FirstOrDefault() == "enroll")
+{
+    return await EnrollCommand.RunAsync(args, configPath);
 }
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// The identity enroll wrote. Environment variables and switches are re-added AFTER it so they still win -
+// the Docker-probe way of configuring (Matmon__PrimaryUrl, ...) keeps working and can override a field.
+builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
 
 // Both are no-ops unless the process was actually started by the Service Control Manager / systemd, so one
 // binary runs as a Windows service, as a systemd unit, and interactively from a terminal.
@@ -27,6 +40,15 @@ builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 // moves over unchanged. An agent is always a secondary - there is no mode to get wrong.
 var options = builder.Configuration.GetSection("Matmon").Get<ProbeRuntimeOptions>() ?? new ProbeRuntimeOptions();
 options.Mode = AppMode.Secondary;
+if (string.IsNullOrWhiteSpace(options.PrimaryUrl) || string.IsNullOrWhiteSpace(options.ProbeId) || string.IsNullOrWhiteSpace(options.ProbeToken))
+{
+    // Without an identity every request would be a 401, forever, in a service log nobody reads. Failing to
+    // start says it where it is seen: in the service manager, with the fix in the message.
+    Console.Error.WriteLine($"Not enrolled: no primary URL / probe id / probe token in {configPath} or the Matmon__* environment.");
+    Console.Error.WriteLine("Run: matmon-agent enroll --url <instance url> --code <code from the Agents page>");
+    return 1;
+}
+
 builder.Services.AddSingleton(options);
 
 // What "storage" means for an agent: the directory it is installed in and the drive under it. It keeps no
@@ -40,4 +62,5 @@ builder.Services.AddMatmonSensorExecutors();
 builder.Services.AddMatmonProbeHealthSensor();
 builder.Services.AddMatmonProbe();
 
-builder.Build().Run();
+await builder.Build().RunAsync();
+return 0;
