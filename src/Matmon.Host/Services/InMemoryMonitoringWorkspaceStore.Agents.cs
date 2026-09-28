@@ -68,6 +68,23 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
+    public bool IsAgentEnrollmentCodeValid(string? code)
+    {
+        var hash = AgentEnrollmentCode.Hash(code);
+        if (hash.Length == 0)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            _document.AgentEnrollments ??= [];
+            var now = DateTimeOffset.UtcNow;
+            return _document.AgentEnrollments.Any(candidate =>
+                !candidate.IsExpired(now) && string.Equals(candidate.CodeHash, hash, StringComparison.Ordinal));
+        }
+    }
+
     public AgentEnrollmentRedemption? RedeemAgentEnrollment(string? code, string? hostName)
     {
         var hash = AgentEnrollmentCode.Hash(code);

@@ -38,6 +38,10 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
 
     public string? BackupPath { get; set; }
 
+    /// <summary>Where the bundled agent binaries live (<c>&lt;rid&gt;/matmon-agent[.exe]</c>); default
+    /// <c>agent</c> under the content root, which is where the Docker image puts them.</summary>
+    public string? AgentPackagesPath { get; set; }
+
     public string? DataProtectionPath { get; set; }
 
     public bool SeedSampleData { get; set; }

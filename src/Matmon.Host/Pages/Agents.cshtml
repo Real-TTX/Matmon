@@ -165,6 +165,47 @@
         }
     </section>
 
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("download")<span>Download</span></h2>
+            <span class="panel-hint">the agent build that matches this instance · @Matmon.Probe.MatmonVersion.Current</span>
+        </div>
+
+        @if (Model.Packages.Count == 0)
+        {
+            <div class="empty-state">
+                This instance carries no agent packages - a plain local build does not include them, the Docker image does.
+                To add them here, run <code>./scripts/publish-agent.ps1</code>, which publishes the agent into <code>@Model.PackagesPath</code>.
+            </div>
+        }
+        else
+        {
+            <div class="system-table agent-package-table" role="table" aria-label="Agent downloads">
+                <div class="system-table-row system-table-head agent-package-row" role="row">
+                    <span role="columnheader">Platform</span>
+                    <span role="columnheader">Size</span>
+                    <span role="columnheader">SHA-256</span>
+                    <span role="columnheader"></span>
+                </div>
+                @foreach (var package in Model.Packages)
+                {
+                    <div class="system-table-row agent-package-row" role="row">
+                        <span role="cell"><strong>@package.Platform.DisplayName</strong><small>@package.Platform.FileName</small></span>
+                        <span role="cell">@package.Megabytes.ToString("0.0") MB</span>
+                        <span role="cell"><code class="agent-package-hash" title="@package.Sha256">@package.Sha256[..16]…</code></span>
+                        <span role="cell">
+                            <a class="workspace-secondary-submit" href="/api/agent/packages/@package.Platform.RuntimeId" download="@package.Platform.FileName">
+                                @MatmonIcons.Render("download")
+                                <span>Download</span>
+                            </a>
+                        </span>
+                    </div>
+                }
+            </div>
+            <p class="panel-hint">The install commands shown with a new enrolment code download the agent straight from here, so you rarely need these buttons.</p>
+        }
+    </section>
+
     @if (isAdmin)
     {
         <section class="panel panel-stack workspace-panel">

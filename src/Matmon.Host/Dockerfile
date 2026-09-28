@@ -13,6 +13,16 @@ COPY . .
 WORKDIR /src/src/Matmon.Host
 RUN dotnet publish Matmon.Host.csproj -c Release -o /app/publish /p:UseAppHost=false
 
+# The agent binaries the instance hands out on its Agents page (and, later, to the auto-update) - built
+# here so an image always carries exactly the agent that matches it, versioned with the same build number.
+# Packaging (self-contained single file) is set in Matmon.Agent.csproj; this only picks the platforms.
+FROM build AS agent
+ARG MATMON_VERSION=""
+WORKDIR /src/src/Matmon.Agent
+RUN for rid in win-x64 linux-x64 linux-arm64; do \
+        dotnet publish Matmon.Agent.csproj -c Release -r "$rid" -o "/app/agent/$rid" -p:MatmonVersion="$MATMON_VERSION" || exit 1; \
+    done
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 RUN apt-get update \
@@ -32,5 +42,6 @@ ARG MATMON_VERSION=""
 ENV MATMON_VERSION=${MATMON_VERSION}
 EXPOSE 8099
 COPY --from=build /app/publish .
+COPY --from=agent /app/agent ./agent
 USER root
 ENTRYPOINT ["dotnet", "Matmon.Host.dll"]

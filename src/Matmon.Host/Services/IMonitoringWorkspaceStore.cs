@@ -388,6 +388,10 @@ public interface IMonitoringWorkspaceStore
 
     bool RevokeAgentEnrollment(Guid enrollmentId);
 
+    /// <summary>Whether a code is currently valid, WITHOUT consuming it - lets the install recipe download
+    /// the agent binary with the same code it is about to enrol with.</summary>
+    bool IsAgentEnrollmentCodeValid(string? code);
+
     /// <summary>
     /// Consumes a code and creates the probe the agent becomes. Null for a wrong, used or expired code -
     /// deliberately indistinguishable. The caller checks the probe licence limit first.

@@ -11,6 +11,8 @@
 # already set: first-run setup never ran and nobody could sign in.
 **/data/
 tmp/
+# Locally published agent packages - the image's own build stage produces them.
+src/Matmon.Host/agent/
 
 # Not needed to build the runtime image - excluding them keeps the COPY layer
 # stable so only real source changes trigger an image rebuild.

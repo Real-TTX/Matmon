@@ -14,6 +14,8 @@ matmon-data/
 !.env.master.example
 
 # Local dev artifacts
+# Agent packages published for a local run (scripts/publish-agent.ps1); the image builds its own.
+src/Matmon.Host/agent/
 cookies.txt
 tmp/
 docker-compose.override.yml

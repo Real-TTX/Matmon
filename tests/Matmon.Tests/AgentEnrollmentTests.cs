@@ -61,6 +61,20 @@ public sealed class AgentEnrollmentTests : IDisposable
     }
 
     [Fact]
+    public void CheckingACodeForTheDownloadDoesNotConsumeIt()
+    {
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
+
+        Assert.True(_store.IsAgentEnrollmentCodeValid(issue.Code));
+        Assert.True(_store.IsAgentEnrollmentCodeValid(issue.Code.ToLowerInvariant()));
+        Assert.False(_store.IsAgentEnrollmentCodeValid(AgentEnrollmentCode.Generate()));
+        Assert.False(_store.IsAgentEnrollmentCodeValid(null));
+
+        Assert.NotNull(_store.RedeemAgentEnrollment(issue.Code, "host"));
+        Assert.False(_store.IsAgentEnrollmentCodeValid(issue.Code));
+    }
+
+    [Fact]
     public void WithoutANameTheProbeIsNamedAfterTheMachine()
     {
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);

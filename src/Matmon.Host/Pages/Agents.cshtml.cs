@@ -17,20 +17,28 @@ public sealed class AgentsModel : PageModel
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly ILicenseService _licenseService;
+    private readonly AgentPackageStore _packageStore;
 
     public AgentsModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
-        ILicenseService licenseService)
+        ILicenseService licenseService,
+        AgentPackageStore packageStore)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
         _licenseService = licenseService;
+        _packageStore = packageStore;
     }
 
     public IReadOnlyList<SystemProbeOverview> Agents { get; private set; } = [];
 
     public IReadOnlyList<AgentEnrollment> PendingEnrollments { get; private set; } = [];
+
+    /// <summary>The agent binaries this instance carries (none on a plain local dev run).</summary>
+    public IReadOnlyList<AgentPackage> Packages { get; private set; } = [];
+
+    public string PackagesPath => _packageStore.RootPath;
 
     [BindProperty]
     public string? NewName { get; set; }
@@ -90,38 +98,69 @@ public sealed class AgentsModel : PageModel
         return RedirectToPage();
     }
 
-    public string BuildWindowsCommands(string code) =>
-        $"""
-        # PowerShell as Administrator, in the folder holding matmon-agent.exe
-        New-Item -ItemType Directory -Force "$env:ProgramFiles\Matmon Agent" | Out-Null
-        Copy-Item .\matmon-agent.exe "$env:ProgramFiles\Matmon Agent\"
-        & "$env:ProgramFiles\Matmon Agent\matmon-agent.exe" enroll --url {InstanceUrl} --code {code}
-        New-Service -Name "Matmon Agent" -BinaryPathName "`"$env:ProgramFiles\Matmon Agent\matmon-agent.exe`"" -StartupType Automatic
-        Start-Service "Matmon Agent"
-        """;
+    // Each recipe downloads the binary FROM this instance with the same code it then enrols with - the code
+    // is checked but not consumed by the download. Without bundled packages (a local dev run) the recipe says
+    // where the binary has to come from instead of pointing at a URL that 404s.
+    public string BuildWindowsCommands(string code)
+    {
+        var fetch = HasPackage("win-x64")
+            ? $$"""
+              $ProgressPreference = 'SilentlyContinue'
+              Invoke-WebRequest -UseBasicParsing -Uri "{{InstanceUrl}}/api/agent/packages/win-x64" -Headers @{ "X-Matmon-Enrollment-Code" = "{{code}}" } -OutFile "$dir\matmon-agent.exe"
+              """
+            : """
+              # This instance ships no agent packages - copy matmon-agent.exe into $dir first.
+              """;
 
-    public string BuildLinuxCommands(string code) =>
-        $"""
-        # as root, in the folder holding matmon-agent
-        install -m 0755 matmon-agent /usr/local/bin/matmon-agent
-        matmon-agent enroll --url {InstanceUrl} --code {code}
-        cat > /etc/systemd/system/matmon-agent.service <<'UNIT'
-        [Unit]
-        Description=Matmon Agent
-        After=network-online.target
-        Wants=network-online.target
+        return $$"""
+            # PowerShell as Administrator
+            $dir = "$env:ProgramFiles\Matmon Agent"
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            {{fetch}}
+            & "$dir\matmon-agent.exe" enroll --url {{InstanceUrl}} --code {{code}}
+            New-Service -Name "Matmon Agent" -BinaryPathName "`"$dir\matmon-agent.exe`"" -StartupType Automatic
+            Start-Service "Matmon Agent"
+            """;
+    }
 
-        [Service]
-        Type=notify
-        ExecStart=/usr/local/bin/matmon-agent
-        Restart=always
-        RestartSec=10
+    public string BuildLinuxCommands(string code)
+    {
+        var fetch = HasPackage("linux-x64") || HasPackage("linux-arm64")
+            ? $"""
+              case "$(uname -m)" in aarch64|arm64) rid=linux-arm64 ;; *) rid=linux-x64 ;; esac
+              curl -fsSL -H "X-Matmon-Enrollment-Code: {code}" "{InstanceUrl}/api/agent/packages/$rid" -o /usr/local/bin/matmon-agent
+              chmod 0755 /usr/local/bin/matmon-agent
+              """
+            : """
+              # This instance ships no agent packages - copy matmon-agent to /usr/local/bin first.
+              install -m 0755 matmon-agent /usr/local/bin/matmon-agent
+              """;
 
-        [Install]
-        WantedBy=multi-user.target
-        UNIT
-        systemctl daemon-reload && systemctl enable --now matmon-agent
-        """;
+        return $"""
+            # as root
+            {fetch}
+            matmon-agent enroll --url {InstanceUrl} --code {code}
+            cat > /etc/systemd/system/matmon-agent.service <<'UNIT'
+            [Unit]
+            Description=Matmon Agent
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=notify
+            ExecStart=/usr/local/bin/matmon-agent
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+            systemctl daemon-reload && systemctl enable --now matmon-agent
+            """;
+    }
+
+    private bool HasPackage(string runtimeId) =>
+        Packages.Any(package => string.Equals(package.Platform.RuntimeId, runtimeId, StringComparison.OrdinalIgnoreCase));
 
     private void Load()
     {
@@ -130,6 +169,7 @@ public sealed class AgentsModel : PageModel
             .OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         PendingEnrollments = _workspaceStore.GetPendingAgentEnrollments();
+        Packages = _packageStore.GetPackages();
 
         // Said up front rather than discovered at install time: the code would be issued fine and then
         // refused at the endpoint, on a customer's machine, in a terminal.

@@ -14,9 +14,21 @@
     <Nullable>enable</Nullable>
     <AssemblyName>matmon-agent</AssemblyName>
     <RootNamespace>Matmon.Agent</RootNamespace>
-    <!-- Shipped to machines that have no .NET installed, so it is PUBLISHED self-contained - but that is
-         set at publish time (dotnet publish with a runtime identifier and self-contained on), not here: SelfContained without a
-         RuntimeIdentifier fails the plain solution build (NETSDK1031). -->
+  </PropertyGroup>
+
+  <!--
+    How the agent is SHIPPED, in one place: publishing for a platform (dotnet publish with a runtime
+    identifier) yields one self-contained, compressed executable - no .NET on the target machine, nothing
+    next to it, so the instance can hand it out as a single download. Both the Docker image and
+    scripts/publish-agent.ps1 only pass the runtime identifier. Conditional because a plain solution build has
+    no runtime identifier, and SelfContained without one fails (NETSDK1031).
+  -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>

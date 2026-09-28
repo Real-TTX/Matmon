@@ -6494,6 +6494,16 @@ body.element-picker-open {
   overflow-wrap: anywhere;
 }
 
+.agent-package-row {
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(5rem, 0.4fr) minmax(9rem, 1fr) auto;
+  align-items: center;
+}
+
+.agent-package-hash {
+  font-size: 0.78rem;
+  color: var(--matmon-muted);
+}
+
 .agent-pending-row {
   grid-template-columns: minmax(10rem, 1.2fr) minmax(10rem, 1fr) minmax(8rem, 0.8fr) auto;
   align-items: center;
