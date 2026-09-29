@@ -23,6 +23,21 @@ if (args.FirstOrDefault() == "apply-update")
     return await ApplyUpdateCommand.RunAsync(args);
 }
 
+if (args.FirstOrDefault() == "setup")
+{
+    return await SetupCommand.RunAsync(args, configPath);
+}
+
+// The tray: "matmon-agent.exe tray" (how sign-in starts it) - and a plain double-click on a machine that is
+// not set up yet, because a downloaded agent opened from Explorer has nothing to run as a service; the
+// useful thing to show is the setup dialog, not a console window that exits with "not enrolled".
+if (args.FirstOrDefault() == "tray" ||
+    (OperatingSystem.IsWindows() && args.Length == 0 && !AgentServiceControl.IsRunningAsService() &&
+     AgentConfigFile.ReadEnrolledProbeName(configPath) is null))
+{
+    return RunTray();
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // The identity enroll wrote. Environment variables and switches are re-added AFTER it so they still win -
@@ -77,5 +92,24 @@ builder.Services.AddSingleton(new AgentUpdateSettings(
     AgentConfigFile.ResolveStateDirectory(configPath)));
 builder.Services.AddHostedService<AgentUpdateService>();
 
+// The tray's read-only window into this service (Windows; a no-op elsewhere).
+builder.Services.AddSingleton(new AgentConfigLocation(configPath));
+builder.Services.AddHostedService<AgentStatusPipeServer>();
+
 await builder.Build().RunAsync();
 return 0;
+
+static int RunTray()
+{
+#if WINDOWS
+    // WinForms needs a single-threaded apartment; top-level statements run on an MTA thread.
+    var thread = new Thread(Matmon.Agent.Tray.TrayApplication.Run);
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join();
+    return 0;
+#else
+    Console.Error.WriteLine("The tray icon is part of the Windows agent.");
+    return 2;
+#endif
+}

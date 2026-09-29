@@ -27,7 +27,9 @@ foreach ($rid in $RuntimeIds) {
     Write-Host "Publishing matmon-agent for $rid -> $output" -ForegroundColor Cyan
     if (Test-Path $output) { Remove-Item -Recurse -Force $output }
 
-    $arguments = @('publish', $agentProject, '-c', 'Release', '-r', $rid, '-o', $output, '-nologo', '-v', 'q')
+    # The Windows package is the net10.0-windows build (it carries the tray icon), everything else net10.0.
+    $framework = if ($rid -like 'win-*') { 'net10.0-windows' } else { 'net10.0' }
+    $arguments = @('publish', $agentProject, '-c', 'Release', '-f', $framework, '-r', $rid, '-o', $output, '-nologo', '-v', 'q')
     if ($Version) { $arguments += "-p:MatmonVersion=$Version" }
     & dotnet @arguments
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $rid" }

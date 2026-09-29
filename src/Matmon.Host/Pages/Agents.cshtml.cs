@@ -114,25 +114,23 @@ public sealed class AgentsModel : PageModel
     // Each recipe downloads the binary FROM this instance with the same code it then enrols with - the code
     // is checked but not consumed by the download. Without bundled packages (a local dev run) the recipe says
     // where the binary has to come from instead of pointing at a URL that 404s.
+    // Windows: "setup" does the rest - it installs itself to Program Files, creates (or restarts) the service
+    // and registers the tray. The same thing a double-click on the downloaded file walks the user through.
     public string BuildWindowsCommands(string code)
     {
         var fetch = HasPackage("win-x64")
             ? $$"""
               $ProgressPreference = 'SilentlyContinue'
-              Invoke-WebRequest -UseBasicParsing -Uri "{{InstanceUrl}}/api/agent/packages/win-x64" -Headers @{ "X-Matmon-Enrollment-Code" = "{{code}}" } -OutFile "$dir\matmon-agent.exe"
+              Invoke-WebRequest -UseBasicParsing -Uri "{{InstanceUrl}}/api/agent/packages/win-x64" -Headers @{ "X-Matmon-Enrollment-Code" = "{{code}}" } -OutFile "$env:TEMP\matmon-agent.exe"
               """
             : """
-              # This instance ships no agent packages - copy matmon-agent.exe into $dir first.
+              # This instance ships no agent packages - copy matmon-agent.exe to $env:TEMP first.
               """;
 
         return $$"""
-            # PowerShell as Administrator
-            $dir = "$env:ProgramFiles\Matmon Agent"
-            New-Item -ItemType Directory -Force $dir | Out-Null
+            # PowerShell as Administrator - or download the agent and double-click it
             {{fetch}}
-            & "$dir\matmon-agent.exe" enroll --url {{InstanceUrl}} --code {{code}}
-            New-Service -Name "Matmon Agent" -BinaryPathName "`"$dir\matmon-agent.exe`"" -StartupType Automatic
-            Start-Service "Matmon Agent"
+            & "$env:TEMP\matmon-agent.exe" setup --url {{InstanceUrl}} --code {{code}}
             """;
     }
 

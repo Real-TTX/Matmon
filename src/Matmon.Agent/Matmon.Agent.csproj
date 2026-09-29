@@ -9,18 +9,27 @@
     started by the Service Control Manager or systemd, so the same build also runs interactively.
   -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Two builds of one agent: net10.0 is the Linux (and everything-else) agent, net10.0-windows the SAME
+         agent plus its tray icon (WinForms) - so a Windows install is still one file. Publishing picks the
+         framework by platform (-f), see the Dockerfile and scripts/publish-agent.ps1. -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <!-- The Linux-based Docker build publishes the Windows package too. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>matmon-agent</AssemblyName>
     <RootNamespace>Matmon.Agent</RootNamespace>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
   <!--
     How the agent is SHIPPED, in one place: publishing for a platform (dotnet publish with a runtime
     identifier) yields one self-contained, compressed executable - no .NET on the target machine, nothing
     next to it, so the instance can hand it out as a single download. Both the Docker image and
-    scripts/publish-agent.ps1 only pass the runtime identifier. Conditional because a plain solution build has
+    scripts/publish-agent.ps1 only pass the runtime identifier (and the framework: net10.0-windows for win-*). Conditional because a plain solution build has
     no runtime identifier, and SelfContained without one fails (NETSDK1031).
   -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
@@ -30,6 +39,10 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <DebugType>none</DebugType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Matmon.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Matmon.Probe\Matmon.Probe.csproj" />

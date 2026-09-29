@@ -66,6 +66,7 @@ public sealed class AgentUpdateService : BackgroundService
             // Leftovers of a finished update. A still-running updater keeps its file locked on Windows, and the
             // delete fails quietly - the next start tidies up.
             AgentUpdateFiles.TryDelete(UpdaterPath(self));
+            ApplyUpdateCommand.DeleteSetAside(self);
         }
 
         await ConfirmPendingUpdateAsync(stoppingToken);

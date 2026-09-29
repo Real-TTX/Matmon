@@ -134,7 +134,7 @@ public static class AgentServiceControl
     }
 
     [SupportedOSPlatform("windows")]
-    private static string? ResolveWindowsServiceName(string? processPath)
+    internal static string? ResolveWindowsServiceName(string? processPath)
     {
         if (string.IsNullOrWhiteSpace(processPath))
         {

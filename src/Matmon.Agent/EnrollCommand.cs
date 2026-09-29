@@ -10,6 +10,7 @@ namespace Matmon.Agent;
 ///
 /// Trades a one-time code from the instance's Agents page for a probe identity and writes it to the agent's
 /// config file. Run once at install time, as administrator / root (the file is only readable by those).
+/// The tray's setup dialog goes through <see cref="EnrollAsync"/> as well, so both paths enrol identically.
 /// </summary>
 public static class EnrollCommand
 {
@@ -24,28 +25,33 @@ public static class EnrollCommand
             return 2;
         }
 
+        var result = await EnrollAsync(url, code, args.Contains("--force"), args.Contains("--allow-http"), configPath);
+        (result.Success ? Console.Out : Console.Error).WriteLine(result.Message);
+        return result.ExitCode;
+    }
+
+    public static async Task<EnrollResult> EnrollAsync(string url, string code, bool force, bool allowHttp, string configPath)
+    {
         if (!Uri.TryCreate(url.Trim().TrimEnd('/') + "/", UriKind.Absolute, out var baseUri) ||
             baseUri.Scheme is not ("http" or "https"))
         {
-            Console.Error.WriteLine($"'{url}' is not an http(s) URL.");
-            return 2;
+            return new EnrollResult(2, $"'{url}' is not an http(s) URL.");
         }
 
         // The answer carries the agent's lifelong credential. In the clear that is fine on a LAN, not across
         // the internet - the same rule the instance applies to its own cloud link.
-        if (baseUri.Scheme == "http" && !CloudUrlPolicy.IsPlainHttpAllowed(baseUri) && !args.Contains("--allow-http"))
+        if (baseUri.Scheme == "http" && !CloudUrlPolicy.IsPlainHttpAllowed(baseUri) && !allowHttp)
         {
-            Console.Error.WriteLine($"Refusing to enrol over plain http with a public host ({baseUri.Host}): the probe token would travel unencrypted.");
-            Console.Error.WriteLine("Use https, or pass --allow-http if you really mean it.");
-            return 2;
+            return new EnrollResult(2,
+                $"Refusing to enrol over plain http with a public host ({baseUri.Host}): the probe token would travel unencrypted. " +
+                "Use https, or pass --allow-http if you really mean it.");
         }
 
         var existing = AgentConfigFile.ReadEnrolledProbeName(configPath);
-        if (existing is not null && !args.Contains("--force"))
+        if (existing is not null && !force)
         {
-            Console.Error.WriteLine($"This machine is already enrolled as '{existing}' ({configPath}).");
-            Console.Error.WriteLine("Pass --force to replace that identity with a new probe.");
-            return 3;
+            return new EnrollResult(3,
+                $"This machine is already enrolled as '{existing}' ({configPath}). Pass --force to replace that identity with a new probe.");
         }
 
         var system = ProbeSystemInfoProvider.Collect();
@@ -60,29 +66,26 @@ public static class EnrollCommand
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            Console.Error.WriteLine($"Could not reach {baseUri}: {ex.Message}");
-            return 4;
+            return new EnrollResult(4, $"Could not reach {baseUri}: {ex.Message}");
         }
 
         using (response)
         {
             if (!response.IsSuccessStatusCode)
             {
-                Console.Error.WriteLine(DescribeFailure(response.StatusCode, await ReadErrorAsync(response)));
-                return 5;
+                return new EnrollResult(5, DescribeFailure(response.StatusCode, await ReadErrorAsync(response)));
             }
 
             var enrolled = await response.Content.ReadFromJsonAsync<AgentEnrollResponse>();
             if (enrolled is null || string.IsNullOrWhiteSpace(enrolled.ProbeId) || string.IsNullOrWhiteSpace(enrolled.ProbeToken))
             {
-                Console.Error.WriteLine("The instance answered, but not with an enrolment. Is the URL a Matmon instance?");
-                return 5;
+                return new EnrollResult(5, "The instance answered, but not with an enrolment. Is the URL a Matmon instance?");
             }
 
             AgentConfigFile.Write(configPath, baseUri.ToString().TrimEnd('/'), enrolled.ProbeId, enrolled.ProbeToken, enrolled.ProbeName);
-            Console.WriteLine($"Enrolled as probe '{enrolled.ProbeName}' ({enrolled.ProbeId}).");
-            Console.WriteLine($"Identity written to {configPath}. Start (or restart) the Matmon Agent service.");
-            return 0;
+            return new EnrollResult(0,
+                $"Enrolled as probe '{enrolled.ProbeName}' ({enrolled.ProbeId}). Identity written to {configPath}. Start (or restart) the Matmon Agent service.",
+                enrolled.ProbeName);
         }
     }
 
@@ -108,11 +111,16 @@ public static class EnrollCommand
         }
     }
 
-    private static string? ReadOption(string[] args, string name)
+    internal static string? ReadOption(string[] args, string name)
     {
         var index = Array.IndexOf(args, name);
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
 
     private sealed record ErrorBody(string? Error);
+}
+
+public sealed record EnrollResult(int ExitCode, string Message, string? ProbeName = null)
+{
+    public bool Success => ExitCode == 0;
 }

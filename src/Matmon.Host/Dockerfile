@@ -19,8 +19,10 @@ RUN dotnet publish Matmon.Host.csproj -c Release -o /app/publish /p:UseAppHost=f
 FROM build AS agent
 ARG MATMON_VERSION=""
 WORKDIR /src/src/Matmon.Agent
+# The Windows package is the net10.0-windows build: the same agent plus its tray icon (WinForms).
 RUN for rid in win-x64 linux-x64 linux-arm64; do \
-        dotnet publish Matmon.Agent.csproj -c Release -r "$rid" -o "/app/agent/$rid" -p:MatmonVersion="$MATMON_VERSION" || exit 1; \
+        case "$rid" in win-*) tfm=net10.0-windows ;; *) tfm=net10.0 ;; esac; \
+        dotnet publish Matmon.Agent.csproj -c Release -f "$tfm" -r "$rid" -o "/app/agent/$rid" -p:MatmonVersion="$MATMON_VERSION" || exit 1; \
     done
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final

@@ -46,7 +46,7 @@ public static class ApplyUpdateCommand
             await RetryAsync(() =>
             {
                 File.Copy(target, backup, overwrite: true);
-                File.Move(staged, target, overwrite: true);
+                Replace(staged, target, move: true);
             });
             swapped = true;
             if (!OperatingSystem.IsWindows())
@@ -106,7 +106,7 @@ public static class ApplyUpdateCommand
                 files.Log($"stopping the new build failed ({ex.Message}); swapping anyway");
             }
 
-            await RetryAsync(() => File.Copy(backup, target, overwrite: true));
+            await RetryAsync(() => Replace(backup, target, move: false));
             TryStart(files, service);
             files.Log("rolled back");
         }
@@ -130,6 +130,58 @@ public static class ApplyUpdateCommand
         catch (Exception ex)
         {
             files.Log($"starting '{service}' failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Puts <paramref name="source"/> where <paramref name="target"/> is, even while something still RUNS the
+    /// target: the tray icon is a second process on the same executable, and Windows refuses to overwrite or
+    /// delete a running executable - but lets it be renamed. So the old file steps aside as
+    /// <c>&lt;target&gt;.old-&lt;time&gt;</c> (unique, because an older one may itself still be running; the next
+    /// agent start deletes whatever nothing runs any more) and the new one takes its name. The tray notices the
+    /// version change and restarts itself onto the new file.
+    /// </summary>
+    internal static void Replace(string source, string target, bool move)
+    {
+        var old = $"{target}.old-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+        var setAside = false;
+        if (File.Exists(target))
+        {
+            File.Move(target, old);
+            setAside = true;
+        }
+
+        try
+        {
+            if (move)
+            {
+                File.Move(source, target);
+            }
+            else
+            {
+                File.Copy(source, target);
+            }
+        }
+        catch when (setAside)
+        {
+            // Never leave the service without an executable: put the old one back before the retry.
+            File.Move(old, target);
+            throw;
+        }
+    }
+
+    /// <summary>Deletes the executables earlier updates set aside - those nothing runs any more.</summary>
+    internal static void DeleteSetAside(string target)
+    {
+        var directory = Path.GetDirectoryName(target);
+        if (directory is null || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        foreach (var old in Directory.EnumerateFiles(directory, Path.GetFileName(target) + ".old-*"))
+        {
+            AgentUpdateFiles.TryDelete(old);
         }
     }
 
