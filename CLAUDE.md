@@ -11,7 +11,7 @@ A lightweight, self-hosted network monitoring platform (a compact PRTG-style alt
 - **Requirements:** .NET 10 SDK (developed against `10.0.203`), Docker Desktop or compatible runtime.
 - **Build:** `dotnet build Matmon.slnx` (note: `.slnx`, not a classic `.sln`).
 - **Run locally (dev):** `dotnet run --project src/Matmon.Host` → http://localhost:5084 (`ASPNETCORE_ENVIRONMENT=Development`). Default login `admin` / `admin`. For a live loop use `./scripts/dev.ps1` (`dotnet watch run`) - rebuilds/reloads on every change so the browser always shows current code.
-- **Run via Docker:** `docker compose up --build` → primary on http://localhost:8099, sample secondary probe on http://localhost:8100.
+- **Run via Docker:** `docker compose up --build` → a plain single-node primary on http://localhost:8099. The **dev/review stack** (primary with `./data` bind-mounted + sample secondary probe on :8100) is `./scripts/docker-refresh.ps1` - it runs `docker-compose.dev.yml` plus the local, gitignored `docker-compose.dev.override.yml` when present (joins the local Matmon.Cloud's `matmon-net` + cloud bootstrap). Don't start the dev file without the override: every rebuild then drops the cloud link.
 - **Health check:** `GET /healthz` and `GET /api/mode` (both anonymous).
 - **Tests:** `dotnet test tests/Matmon.Tests/Matmon.Tests.csproj` (xunit). Baseline covers the pure core logic (threshold parsing/evaluation, channel-threshold escalation, schedule calculator, settings inheritance). Coverage grows with each refactor.
 
