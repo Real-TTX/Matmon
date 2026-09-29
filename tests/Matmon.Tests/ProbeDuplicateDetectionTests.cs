@@ -34,12 +34,29 @@ public class ProbeDuplicateDetectionTests
         var registry = CreateRegistry();
         var start = DateTimeOffset.UtcNow;
 
+        // Old and new container both beating every 30 s, 5 s apart: 42, 7, 42 ...
         registry.Record(Beat("milla", "nightly-42"), start);
-        var flagged = registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5));
+        registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5));
+        var flagged = registry.Record(Beat("milla", "nightly-42"), start.AddSeconds(30));
 
         Assert.NotNull(flagged.DuplicateWarning);
         Assert.Contains("two processes", flagged.DuplicateWarning);
         Assert.Contains("nightly-7", flagged.DuplicateWarning);
+    }
+
+    [Fact]
+    public void An_upgrade_is_not_a_duplicate()
+    {
+        var registry = CreateRegistry();
+        var start = DateTimeOffset.UtcNow;
+
+        // The old build's last beat, then the new build beats seconds later as it starts - and keeps beating.
+        registry.Record(Beat("milla", "nightly-42"), start);
+        var upgraded = registry.Record(Beat("milla", "nightly-43"), start.AddSeconds(4));
+        var next = registry.Record(Beat("milla", "nightly-43"), start.AddSeconds(34));
+
+        Assert.Null(upgraded.DuplicateWarning);
+        Assert.Null(next.DuplicateWarning);
     }
 
     [Fact]
@@ -63,10 +80,11 @@ public class ProbeDuplicateDetectionTests
         var start = DateTimeOffset.UtcNow;
 
         registry.Record(Beat("milla", "nightly-42"), start);
-        registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5)); // flags
+        registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5));
+        registry.Record(Beat("milla", "nightly-42"), start.AddSeconds(30)); // flags
 
         // The next beat on its own looks perfectly normal - the warning must not disappear right away.
-        var afterNormalBeat = registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(35));
+        var afterNormalBeat = registry.Record(Beat("milla", "nightly-42"), start.AddSeconds(60));
         Assert.NotNull(afterNormalBeat.DuplicateWarning);
     }
 
@@ -77,10 +95,11 @@ public class ProbeDuplicateDetectionTests
         var start = DateTimeOffset.UtcNow;
 
         registry.Record(Beat("milla", "nightly-42"), start);
-        registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5)); // flags
+        registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5));
+        registry.Record(Beat("milla", "nightly-42"), start.AddSeconds(30)); // flags
 
         // Stale container removed: only one process keeps beating, well past the sticky window (6 intervals).
-        var recovered = registry.Record(Beat("milla", "nightly-7"), start.AddSeconds(5 + 30 * 7));
+        var recovered = registry.Record(Beat("milla", "nightly-42"), start.AddSeconds(30 + 30 * 7));
         Assert.Null(recovered.DuplicateWarning);
     }
 

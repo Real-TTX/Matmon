@@ -71,6 +71,19 @@ public sealed class AgentsModel : PageModel
     /// <summary>The URL an agent should enrol against: the one this page was opened on.</summary>
     public string InstanceUrl => $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
+    public string InstanceVersion => Matmon.Probe.MatmonVersion.Current;
+
+    /// <summary>
+    /// The agent will update itself: it runs a different build than the instance offers. Mirrors the agent's
+    /// own rule (AgentUpdatePolicy) closely enough for a hint - an unversioned local instance build offers
+    /// nothing, and without a package for the agent's platform there is nothing to update to.
+    /// </summary>
+    public bool IsUpdatePending(SystemProbeOverview agent) =>
+        Packages.Count > 0 &&
+        !string.IsNullOrWhiteSpace(agent.Version) &&
+        !InstanceVersion.StartsWith("local-", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(agent.Version, InstanceVersion, StringComparison.OrdinalIgnoreCase);
+
     public void OnGet() => Load();
 
     public IActionResult OnPostCreate()

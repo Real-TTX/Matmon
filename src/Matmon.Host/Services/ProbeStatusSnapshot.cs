@@ -11,4 +11,5 @@ public sealed record ProbeStatusSnapshot(
     IReadOnlyList<string>? Networks = null,
     string? Version = null,
     /// <summary>Set when two processes appear to share this probe id (see InMemoryProbeRegistry.DetectDuplicate).</summary>
-    string? DuplicateWarning = null);
+    string? DuplicateWarning = null,
+    string? UpdateStatus = null);

@@ -18,6 +18,11 @@ if (args.FirstOrDefault() == "enroll")
     return await EnrollCommand.RunAsync(args, configPath);
 }
 
+if (args.FirstOrDefault() == "apply-update")
+{
+    return await ApplyUpdateCommand.RunAsync(args);
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // The identity enroll wrote. Environment variables and switches are re-added AFTER it so they still win -
@@ -61,6 +66,16 @@ builder.Services.AddSingleton<IProbeStorageSource>(new DirectoryProbeStorageSour
 builder.Services.AddMatmonSensorExecutors();
 builder.Services.AddMatmonProbeHealthSensor();
 builder.Services.AddMatmonProbe();
+
+// Auto-update: follow the instance's agent build (see AgentUpdateService). On unless switched off; the check
+// interval has a floor so a typo cannot turn it into a download loop.
+var autoUpdate = !bool.TryParse(builder.Configuration["Matmon:AgentAutoUpdate"], out var autoUpdateSetting) || autoUpdateSetting;
+var checkMinutes = int.TryParse(builder.Configuration["Matmon:AgentUpdateCheckMinutes"], out var configuredMinutes) ? configuredMinutes : 60;
+builder.Services.AddSingleton(new AgentUpdateSettings(
+    autoUpdate,
+    TimeSpan.FromMinutes(Math.Max(5, checkMinutes)),
+    AgentConfigFile.ResolveStateDirectory(configPath)));
+builder.Services.AddHostedService<AgentUpdateService>();
 
 await builder.Build().RunAsync();
 return 0;

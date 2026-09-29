@@ -90,7 +90,8 @@ public sealed class SlaveHeartbeatService : BackgroundService
             MatmonVersion.Current,
             system.OperatingSystem,
             system.Host,
-            system.Networks);
+            system.Networks,
+            _runtimeState.AgentUpdateStatus);
 
         try
         {

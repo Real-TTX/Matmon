@@ -37,6 +37,15 @@ public static class AgentConfigFile
             : "/etc/matmon-agent/agent.json";
     }
 
+    /// <summary>
+    /// Where the agent keeps state that is not configuration - the auto-update's hand-shake files and its log.
+    /// On Linux that is /var/lib, not /etc; everywhere else (and with an explicit --config) the config's folder.
+    /// </summary>
+    public static string ResolveStateDirectory(string configPath) =>
+        OperatingSystem.IsLinux() && configPath == "/etc/matmon-agent/agent.json"
+            ? "/var/lib/matmon-agent"
+            : Path.GetDirectoryName(configPath)!;
+
     /// <summary>The probe this machine is already enrolled as, or null when it is not.</summary>
     public static string? ReadEnrolledProbeName(string path)
     {

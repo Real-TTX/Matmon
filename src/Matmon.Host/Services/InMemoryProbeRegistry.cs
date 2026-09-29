@@ -24,7 +24,8 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             request.Host,
             request.Networks,
             request.AgentVersion,
-            duplicateWarning);
+            duplicateWarning,
+            request.UpdateStatus);
 
         _probes[request.ProbeId] = snapshot;
         return snapshot;
@@ -36,8 +37,11 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
     /// comes from the other build - sensors flip between healthy and error for no apparent reason. Catch it here,
     /// where every heartbeat converges, and surface it on the Probes page instead of letting it look like a
     /// flapping sensor. Two independent signals, either is enough:
-    /// (a) the reported identity (host or build version) alternates between beats - different processes;
-    /// (b) beats arrive far faster than the configured interval - more senders than one.
+    /// (a) the reported identity (host or build version) ALTERNATES - A, B, A within a couple of intervals.
+    ///     A single change is an upgrade (a new container, an agent auto-update), not a duplicate: the new
+    ///     process beats right after starting, so "changed AND fast" fired on a large share of ordinary
+    ///     updates. It takes the third beat to tell the two apart, which costs one interval of detection;
+    /// (b) the SAME identity beats far faster than the configured interval - more senders than one.
     /// The warning is sticky for a few intervals so it survives the beat that looks normal in between.
     /// </summary>
     private string? DetectDuplicate(ProbeHeartbeatRequest request, DateTimeOffset receivedAtUtc)
@@ -47,24 +51,29 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
 
         var watch = _duplicateWatch.AddOrUpdate(
             request.ProbeId,
-            _ => new DuplicateWatch(identity, receivedAtUtc, null, DateTimeOffset.MinValue),
+            _ => new DuplicateWatch(identity, null, receivedAtUtc, DateTimeOffset.MinValue, null, DateTimeOffset.MinValue),
             (_, previous) =>
             {
                 var gap = receivedAtUtc - previous.LastSeenUtc;
                 string? reason = null;
 
-                if (!string.Equals(previous.Identity, identity, StringComparison.OrdinalIgnoreCase) && gap < interval * 2)
+                var changed = !string.Equals(previous.Identity, identity, StringComparison.OrdinalIgnoreCase);
+
+                if (changed &&
+                    string.Equals(previous.PreviousIdentity, identity, StringComparison.OrdinalIgnoreCase) &&
+                    receivedAtUtc - previous.ChangedUtc < interval * 2)
                 {
                     reason = $"two processes report as this probe ({Describe(previous.Identity)} and {Describe(identity)}) - remove the stale container";
                 }
-                else if (gap > TimeSpan.Zero && gap < interval * 0.4)
+                else if (!changed && gap > TimeSpan.Zero && gap < interval * 0.4)
                 {
                     reason = "heartbeats arrive faster than the configured interval - more than one process uses this probe id";
                 }
 
-                return reason is not null
-                    ? previous with { Identity = identity, LastSeenUtc = receivedAtUtc, Warning = reason, WarningUtc = receivedAtUtc }
-                    : previous with { Identity = identity, LastSeenUtc = receivedAtUtc };
+                var next = changed
+                    ? previous with { Identity = identity, PreviousIdentity = previous.Identity, ChangedUtc = receivedAtUtc, LastSeenUtc = receivedAtUtc }
+                    : previous with { LastSeenUtc = receivedAtUtc };
+                return reason is not null ? next with { Warning = reason, WarningUtc = receivedAtUtc } : next;
             });
 
         // Keep an existing warning visible for a few intervals - the duplicate only shows on the beats it "wins".
@@ -101,5 +110,11 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
         return false;
     }
 
-    private sealed record DuplicateWatch(string Identity, DateTimeOffset LastSeenUtc, string? Warning, DateTimeOffset WarningUtc);
+    private sealed record DuplicateWatch(
+        string Identity,
+        string? PreviousIdentity,
+        DateTimeOffset LastSeenUtc,
+        DateTimeOffset ChangedUtc,
+        string? Warning,
+        DateTimeOffset WarningUtc);
 }

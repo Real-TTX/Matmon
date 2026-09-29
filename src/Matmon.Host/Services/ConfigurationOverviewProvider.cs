@@ -106,7 +106,8 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             // out-of-date (or duplicate old) probe container visible at a glance on the Probes page.
             isRoot ? MatmonVersion.Current : liveProbe?.Version,
             isRoot ? null : liveProbe?.DuplicateWarning,
-            probe.AgentEnrolledUtc is not null);
+            probe.AgentEnrolledUtc is not null,
+            isRoot ? null : liveProbe?.UpdateStatus);
     }
 
     /// <summary>System "full sync": the local primary reports itself; a secondary reports OS / host /

@@ -32,4 +32,5 @@ public sealed record SystemProbeOverview(
     IReadOnlyList<string>? Networks = null,
     string? Version = null,
     string? DuplicateWarning = null,
-    bool IsAgent = false);
+    bool IsAgent = false,
+    string? UpdateStatus = null);

@@ -18,6 +18,7 @@ public sealed class SlaveProbeRuntimeState
     private DateTimeOffset? _lastResultTransferAttemptUtc;
     private bool _isConnected;
     private string _statusMessage = "starting";
+    private string? _agentUpdateStatus;
     private string _lastResultTransferStatus = "No results transferred yet.";
     private bool? _lastResultTransferSucceeded;
     private int _assignedSensorCount;
@@ -42,6 +43,13 @@ public sealed class SlaveProbeRuntimeState
                 _resultTransfers.OrderByDescending(entry => entry.ExecutedUtc).ToArray(),
                 _events.OrderByDescending(entry => entry.TimestampUtc).ToArray());
         }
+    }
+
+    /// <summary>Set by the agent's auto-update; carried to the primary on every heartbeat.</summary>
+    public string? AgentUpdateStatus
+    {
+        get { lock (_gate) { return _agentUpdateStatus; } }
+        set { lock (_gate) { _agentUpdateStatus = value; } }
     }
 
     public void RecordHeartbeat(bool success, string message)

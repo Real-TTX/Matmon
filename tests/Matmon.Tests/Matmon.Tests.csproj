@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Matmon.Core\Matmon.Core.csproj" />
     <ProjectReference Include="..\..\src\Matmon.Host\Matmon.Host.csproj" />
+    <ProjectReference Include="..\..\src\Matmon.Agent\Matmon.Agent.csproj" />
   </ItemGroup>
 
 </Project>

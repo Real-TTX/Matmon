@@ -126,6 +126,14 @@
                             @if (!string.IsNullOrWhiteSpace(agent.Version))
                             {
                                 <small class="system-probe-os">@agent.Version</small>
+                                @if (Model.IsUpdatePending(agent))
+                                {
+                                    <span class="sensor-chip" title="The agent updates itself to this instance's build within about an hour">Update pending → @Model.InstanceVersion</span>
+                                }
+                            }
+                            @if (!string.IsNullOrWhiteSpace(agent.UpdateStatus))
+                            {
+                                <small class="agent-update-status@(agent.UpdateStatus.Contains("rolled back") || agent.UpdateStatus.Contains("failed") ? " is-problem" : string.Empty)">@agent.UpdateStatus</small>
                             }
                         </span>
                         <span role="cell">
