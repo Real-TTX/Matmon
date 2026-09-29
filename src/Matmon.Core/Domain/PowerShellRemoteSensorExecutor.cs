@@ -167,6 +167,14 @@ if ($physical) {
         SensorExecutionContext context,
         CancellationToken cancellationToken = default)
     {
+        // A Windows probe (an agent, above all) whose target is its own machine runs the script right here -
+        // no WinRM listener, no credential. Every Windows sensor built on this engine (health, disk, update,
+        // event log, services) works on an agent that way without anyone opening WinRM on the box.
+        if (OperatingSystem.IsWindows() && IsLocalTarget(context.Target))
+        {
+            return await ExecuteLocallyAsync(context, cancellationToken);
+        }
+
         if (string.IsNullOrWhiteSpace(context.Target))
         {
             return SensorExecutionResult.Critical(TimeSpan.Zero, "target is required");
@@ -271,49 +279,7 @@ if ($physical) {
                     return SensorExecutionResult.Critical(watch.Elapsed, BuildRemoteFailureHint(lastFailureMessage, context.Target, port, useSsl));
                 }
 
-                var defaultChannel = SelectDefaultChannel(parse.Channels, defaultChannelKey);
-                if (defaultChannel is null || !defaultChannel.Value.HasValue)
-                {
-                    return SensorExecutionResult.Critical(
-                        watch.Elapsed,
-                        "no numeric default channel could be selected from the script output");
-                }
-
-                var sensorState = ResolveState(process.ExitCode, failOnStderr, stderr, parse.StateHint);
-                if (sensorState == SensorState.Critical && process.ExitCode != 0 && string.IsNullOrWhiteSpace(stderr))
-                {
-                    stderr = $"remote execution exited with code {process.ExitCode}";
-                }
-
-                if (sensorState == SensorState.Critical)
-                {
-                    var result = SensorExecutionResult.Critical(
-                        watch.Elapsed,
-                        BuildMessage(defaultChannel, parse.Message, stderr, parse.Channels.Count),
-                        defaultChannel.Value,
-                        defaultChannel.Key,
-                        MarkDefault(parse.Channels, defaultChannel.Key));
-                    return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
-                }
-
-                if (sensorState == SensorState.Warning)
-                {
-                    var result = SensorExecutionResult.Warning(
-                        watch.Elapsed,
-                        BuildMessage(defaultChannel, parse.Message, stderr, parse.Channels.Count),
-                        defaultChannel.Value,
-                        defaultChannel.Key,
-                        MarkDefault(parse.Channels, defaultChannel.Key));
-                    return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
-                }
-
-                var healthyResult = SensorExecutionResult.Healthy(
-                    watch.Elapsed,
-                    BuildMessage(defaultChannel, parse.Message, stderr, parse.Channels.Count),
-                    defaultChannel.Value,
-                    defaultChannel.Key,
-                    MarkDefault(parse.Channels, defaultChannel.Key));
-                return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, healthyResult);
+                return BuildScriptResult(context, parse, stderr, process.ExitCode, watch.Elapsed, failOnStderr, defaultChannelKey, "remote execution");
             }
 
             return SensorExecutionResult.Critical(
@@ -348,6 +314,194 @@ if ($physical) {
             process?.Dispose();
         }
     }
+
+    /// <summary>
+    /// Channels, state and thresholds from a finished script run - ONE place for the remote and the local path,
+    /// so a sensor reads the same whether its script ran over WinRM or on the agent itself.
+    /// </summary>
+    private static SensorExecutionResult BuildScriptResult(
+        SensorExecutionContext context,
+        ParsedPowerShellOutput parse,
+        string stderr,
+        int exitCode,
+        TimeSpan elapsed,
+        bool failOnStderr,
+        string defaultChannelKey,
+        string executionLabel)
+    {
+        var defaultChannel = SelectDefaultChannel(parse.Channels, defaultChannelKey);
+        if (defaultChannel is null || !defaultChannel.Value.HasValue)
+        {
+            return SensorExecutionResult.Critical(elapsed, "no numeric default channel could be selected from the script output");
+        }
+
+        var sensorState = ResolveState(exitCode, failOnStderr, stderr, parse.StateHint);
+        if (sensorState == SensorState.Critical && exitCode != 0 && string.IsNullOrWhiteSpace(stderr))
+        {
+            stderr = $"{executionLabel} exited with code {exitCode}";
+        }
+
+        var message = BuildMessage(defaultChannel, parse.Message, stderr, parse.Channels.Count);
+        var channels = MarkDefault(parse.Channels, defaultChannel.Key);
+        var result = sensorState switch
+        {
+            SensorState.Critical => SensorExecutionResult.Critical(elapsed, message, defaultChannel.Value, defaultChannel.Key, channels),
+            SensorState.Warning => SensorExecutionResult.Warning(elapsed, message, defaultChannel.Value, defaultChannel.Key, channels),
+            _ => SensorExecutionResult.Healthy(elapsed, message, defaultChannel.Value, defaultChannel.Key, channels)
+        };
+        return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
+    }
+
+    /// <summary>
+    /// "This machine": no target, localhost/loopback/".", or the machine's own name (bare or as the first
+    /// label of an FQDN). Anything else - including another host's IP - stays remote.
+    /// </summary>
+    public static bool IsLocalTarget(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return true;
+        }
+
+        var host = target.Trim();
+        if (host is "." or "localhost" or "127.0.0.1" or "::1" or "[::1]")
+        {
+            return true;
+        }
+
+        var machine = Environment.MachineName;
+        return string.Equals(host, machine, StringComparison.OrdinalIgnoreCase) ||
+            host.StartsWith(machine + ".", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Runs the script in the local Windows PowerShell 5.1 - the same version the default WinRM endpoint
+    /// (Microsoft.PowerShell) hosts, so a script behaves exactly as it does remotely. It runs as the account
+    /// the probe runs as (LocalSystem for the agent service), which is why no credential is asked for.
+    /// </summary>
+    private static async Task<SensorExecutionResult> ExecuteLocallyAsync(SensorExecutionContext context, CancellationToken cancellationToken)
+    {
+        if (!MonitoringSettings.TryReadParameter(context.Settings, "script", out var script) ||
+            string.IsNullOrWhiteSpace(script))
+        {
+            return SensorExecutionResult.Critical(TimeSpan.Zero, "script is required");
+        }
+
+        var timeout = context.Settings.Timeout ?? TimeSpan.FromSeconds(30);
+        var outputFormat = ResolveOutputFormat(context.Settings);
+        var regexPattern = MonitoringSettings.TryReadParameter(context.Settings, "regexPattern", out var configuredRegexPattern)
+            ? configuredRegexPattern
+            : string.Empty;
+        var defaultChannelKey = MonitoringSettings.TryReadParameter(context.Settings, "defaultChannelKey", out var configuredDefaultChannelKey)
+            ? configuredDefaultChannelKey.Trim()
+            : string.Empty;
+        var failOnStderr = !MonitoringSettings.TryReadParameterBool(context.Settings, "failOnStderr", out var configuredFailOnStderr) ||
+            configuredFailOnStderr;
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.Environment["MATMON_TARGET"] = Environment.MachineName;
+        startInfo.Environment["MATMON_OUTPUT_FORMAT"] = outputFormat;
+        startInfo.Environment["MATMON_PS_SCRIPT_B64"] = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-EncodedCommand");
+        startInfo.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(LocalWrapperCommand)));
+
+        var watch = Stopwatch.StartNew();
+        Process? process = null;
+        try
+        {
+            process = Process.Start(startInfo) ?? throw new InvalidOperationException("powershell.exe could not be started.");
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeout);
+            using var registration = timeoutCts.Token.Register(() => TryKill(process));
+            await process.WaitForExitAsync(timeoutCts.Token);
+
+            var stdout = await stdoutTask;
+            var stderr = NormalizeRemoteStderr(await stderrTask);
+            watch.Stop();
+
+            var parse = ParseOutput(stdout, outputFormat, regexPattern, defaultChannelKey);
+            if (!parse.Channels.Any())
+            {
+                return SensorExecutionResult.Critical(watch.Elapsed, BuildParseFailureMessage(stdout, stderr, process.ExitCode));
+            }
+
+            return BuildScriptResult(context, parse, stderr, process.ExitCode, watch.Elapsed, failOnStderr, defaultChannelKey, "local execution");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return SensorExecutionResult.Unknown("execution cancelled");
+        }
+        catch (OperationCanceledException)
+        {
+            return SensorExecutionResult.Critical(watch.Elapsed, $"execution timed out after {timeout.TotalSeconds:0.#} seconds");
+        }
+        catch (Exception ex)
+        {
+            return SensorExecutionResult.Critical(watch.Elapsed, $"local PowerShell failed: {ex.Message}");
+        }
+        finally
+        {
+            TryKill(process);
+            process?.Dispose();
+        }
+    }
+
+    /// <summary>The local twin of the remoting wrapper - written for Windows PowerShell 5.1, which has no
+    /// "??" operator (the remoting wrapper runs in pwsh 7 and uses it).</summary>
+    private const string LocalWrapperCommand = """
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+$outputFormat = "$env:MATMON_OUTPUT_FORMAT".Trim().ToLowerInvariant()
+if ([string]::IsNullOrWhiteSpace($outputFormat)) { $outputFormat = 'auto' }
+$script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:MATMON_PS_SCRIPT_B64))
+
+try {
+    $result = & ([scriptblock]::Create($script))
+
+    switch ($outputFormat) {
+        'json' {
+            $result | ConvertTo-Json -Depth 20 -Compress -ErrorAction Stop
+        }
+        'xml' {
+            $result | ConvertTo-Xml -As String -Depth 20 -ErrorAction Stop
+        }
+        default {
+            if ($null -eq $result) {
+                ''
+            }
+            elseif ($result -is [string]) {
+                $result
+            }
+            else {
+                $result | ConvertTo-Json -Depth 20 -Compress -ErrorAction Stop
+            }
+        }
+    }
+}
+catch {
+    Write-Error $_
+    exit 1
+}
+""";
 
     private static Process StartPowerShellRemotingProcess(
         string target,
