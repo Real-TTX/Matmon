@@ -522,6 +522,8 @@ public sealed class MapDisplayProvider
     private static string WindowLabel(int hours) => hours switch
     {
         72 => "3 days",
+        168 => "7 days",
+        336 => "14 days",
         _ => $"{hours} h"
     };
 
@@ -573,6 +575,11 @@ public sealed class MapDisplayProvider
     /// </summary>
     private IReadOnlyList<(double X, double Value)> ReadSeries(Guid sensorId, string? channelKey, DateTimeOffset startUtc, TimeSpan window)
     {
+        if (window.TotalHours > MonitoringMapTile.RawGraphWindowLimitHours)
+        {
+            return ReadStatisticsSeries(sensorId, channelKey, startUtc, window);
+        }
+
         var windowMs = window.TotalMilliseconds;
         var raw = ReadWindow(sensorId, window)
             .Select(observation => (
@@ -588,6 +595,57 @@ public sealed class MapDisplayProvider
 
         return SparklineGeometry.Downsample(raw, MultiGraphPointsPerLine);
     }
+
+    /// <summary>
+    /// A long window from the statistics buckets: one point per bucket, placed at the MIDDLE of its span, with
+    /// the bucket's average. Buckets are per channel, so the channel's own series is read ("default" or the
+    /// best-covered channel when none is named); if a sensor has buckets of more than one size, the finest
+    /// wins. Cached like the raw history - five minutes, since buckets only change on the 5-minute rollup.
+    /// </summary>
+    private IReadOnlyList<(double X, double Value)> ReadStatisticsSeries(Guid sensorId, string? channelKey, DateTimeOffset startUtc, TimeSpan window)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cacheKey = (sensorId, (int)window.TotalHours);
+        if (!_statisticsCache.TryGetValue(cacheKey, out var cached) || now - cached.ReadUtc >= TimeSpan.FromMinutes(5))
+        {
+            cached = (now, _workspaceStore.GetSensorStatistics(sensorId, startUtc));
+            if (_statisticsCache.Count > 512)
+            {
+                _statisticsCache.Clear();
+            }
+
+            _statisticsCache[cacheKey] = cached;
+        }
+
+        var buckets = cached.Buckets.Where(bucket => bucket.Average.HasValue && bucket.BucketStartUtc >= startUtc).ToArray();
+        if (buckets.Length == 0)
+        {
+            return [];
+        }
+
+        var channel = channelKey
+            ?? (buckets.Any(bucket => string.Equals(bucket.DefaultChannelKey, "default", StringComparison.OrdinalIgnoreCase))
+                ? "default"
+                : buckets.GroupBy(bucket => bucket.DefaultChannelKey, StringComparer.OrdinalIgnoreCase).MaxBy(group => group.Count())!.Key);
+        var ofChannel = buckets.Where(bucket => string.Equals(bucket.DefaultChannelKey, channel, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (ofChannel.Length == 0)
+        {
+            return [];
+        }
+
+        var finest = ofChannel.Min(bucket => bucket.BucketMinutes);
+        var windowMs = window.TotalMilliseconds;
+        return ofChannel
+            .Where(bucket => bucket.BucketMinutes == finest)
+            .Select(bucket => (
+                X: (bucket.BucketStartUtc.AddMinutes(bucket.BucketMinutes / 2d) - startUtc).TotalMilliseconds / windowMs,
+                Value: bucket.Average!.Value))
+            .Where(point => point.X <= 1)
+            .OrderBy(point => point.X)
+            .ToArray();
+    }
+
+    private readonly ConcurrentDictionary<(Guid SensorId, int WindowHours), (DateTimeOffset ReadUtc, IReadOnlyList<SensorStatisticsBucket> Buckets)> _statisticsCache = new();
 
     private readonly ConcurrentDictionary<(Guid SensorId, int WindowHours), (DateTimeOffset ReadUtc, IReadOnlyList<SensorObservation> Observations)> _historyCache = new();
 

@@ -37,8 +37,8 @@
     <select name="@(Model.NamePrefix).GraphWindowHours" class="form-select workspace-select" data-map-graph-window>
         @foreach (var hours in Matmon.Core.Domain.MonitoringMapTile.GraphWindowChoices)
         {
-            <option value="@hours" selected="@(hours == Model.WindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", _ => $"Last {hours} hours" })</option>
+            <option value="@hours" selected="@(hours == Model.WindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", 168 => "Last 7 days (averages)", 336 => "Last 14 days (averages)", _ => $"Last {hours} hours" })</option>
         }
     </select>
-    <span class="workspace-inline-note">Up to three days: the chart reads raw readings, which are kept about that long by default.</span>
+    <span class="workspace-inline-note">Up to three days the chart shows raw readings; 7 and 14 days show the statistics averages (hourly or daily, depending on the sensor type), which are kept about two weeks.</span>
 </label>

@@ -323,7 +323,7 @@
                                         <select name="Input.Tiles[@index].GraphWindowHours" class="form-select workspace-select">
                                             @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
                                             {
-                                                <option value="@hours" selected="@(hours == Model.Input.Tiles[index].GraphWindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", _ => $"Last {hours} hours" })</option>
+                                                <option value="@hours" selected="@(hours == Model.Input.Tiles[index].GraphWindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", 168 => "Last 7 days (averages)", 336 => "Last 14 days (averages)", _ => $"Last {hours} hours" })</option>
                                             }
                                         </select>
                                     </label>
@@ -813,7 +813,7 @@
                             <select name="Input.Tiles[__index__].GraphWindowHours" class="form-select workspace-select">
                                             @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
                                             {
-                                                <option value="@hours" selected="@(hours == 24)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", _ => $"Last {hours} hours" })</option>
+                                                <option value="@hours" selected="@(hours == 24)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", 168 => "Last 7 days (averages)", 336 => "Last 14 days (averages)", _ => $"Last {hours} hours" })</option>
                                             }
                             </select>
                         </label>

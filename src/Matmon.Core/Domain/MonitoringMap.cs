@@ -325,14 +325,17 @@ public sealed class MonitoringMapTile
     public int SlaWindowDays { get; set; } = 7;
 
     /// <summary>
-    /// How far back a <see cref="MonitoringMapTileKind.MultiGraph"/> looks, in hours - one of
-    /// <see cref="GraphWindowChoices"/>. It stops at three days on purpose: the chart reads raw observations,
-    /// and raw observations are kept for about three days by default (statistics buckets live longer, but a
-    /// line that silently switches to hourly averages halfway through is not the same chart).
+    /// How far back a Graph / MultiGraph tile looks, in hours - one of <see cref="GraphWindowChoices"/>. Up to
+    /// three days it reads raw observations (kept about that long by default); the 7- and 14-day windows read
+    /// the statistics buckets instead (hourly or daily averages, kept ~14 days) - one source per window, never
+    /// a line that silently switches from raw readings to averages halfway through.
     /// </summary>
     public int GraphWindowHours { get; set; } = 24;
 
-    public static readonly int[] GraphWindowChoices = [1, 6, 24, 72];
+    public static readonly int[] GraphWindowChoices = [1, 6, 24, 72, 168, 336];
+
+    /// <summary>Beyond this the chart reads statistics buckets rather than raw observations.</summary>
+    public const int RawGraphWindowLimitHours = 72;
 
     /// <summary>A stored or posted window snapped to the nearest offered choice.</summary>
     public static int NormalizeGraphWindowHours(int hours) =>
