@@ -9,7 +9,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// <summary>Upper bound on how long a code may live - a code is for an install that is about to happen.</summary>
     public static readonly TimeSpan MaxAgentEnrollmentValidity = TimeSpan.FromDays(7);
 
-    public AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy)
+    public AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? probeElementId = null)
     {
         var now = DateTimeOffset.UtcNow;
         var clamped = validity <= TimeSpan.Zero
@@ -27,6 +27,19 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
         lock (_gate)
         {
+            if (probeElementId is Guid targetId)
+            {
+                // Only a remote probe can be re-enrolled - the local root is this instance itself.
+                var target = FindElement(targetId) as ProbeElement;
+                if (target is null || target.ParentId is null)
+                {
+                    throw new InvalidOperationException("Only an existing remote probe can be re-enrolled as an agent.");
+                }
+
+                enrollment.ProbeElementId = target.Id;
+                enrollment.Name = target.Name;
+            }
+
             _document.AgentEnrollments ??= [];
             PruneExpiredAgentEnrollmentsLocked(now);
             _document.AgentEnrollments.Add(enrollment);
@@ -85,12 +98,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
-    public AgentEnrollmentRedemption? RedeemAgentEnrollment(string? code, string? hostName)
+    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe)
     {
+        var invalid = new AgentEnrollmentResult(AgentEnrollmentStatus.Invalid);
         var hash = AgentEnrollmentCode.Hash(code);
         if (hash.Length == 0)
         {
-            return null;
+            return invalid;
         }
 
         lock (_gate)
@@ -106,7 +120,33 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 string.Equals(candidate.CodeHash, hash, StringComparison.Ordinal));
             if (enrollment is null)
             {
-                return null;
+                return invalid;
+            }
+
+            if (enrollment.ProbeElementId is Guid targetId)
+            {
+                // Single use either way; a code whose probe was deleted meanwhile is simply dead.
+                _document.AgentEnrollments.Remove(enrollment);
+                QueueSave(SavePriority.Configuration);
+                if (FindElement(targetId) is not ProbeElement existing || existing.ParentId is null)
+                {
+                    return invalid;
+                }
+
+                // A NEW token, not the old one handed out again: the previous install (a replaced machine, the
+                // Docker container this agent takes over from) is locked out on its next request, so two
+                // processes can never report as one probe.
+                existing.EnrollmentToken = CreateToken();
+                existing.AgentEnrolledUtc = now;
+                return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
+                    new AgentEnrollmentRedemption(existing.Id, existing.ProbeId, existing.EnrollmentToken, existing.Name, Reenrolled: true));
+            }
+
+            // Checked BEFORE the code is consumed: a full licence must not burn the code on an install that
+            // is going to be refused anyway.
+            if (!allowNewProbe)
+            {
+                return new AgentEnrollmentResult(AgentEnrollmentStatus.ProbeLimit);
             }
 
             // Single use: gone before the probe exists, so a second agent racing the same code cannot also win.
@@ -118,7 +158,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             probe.AgentEnrolledUtc = now;
             QueueSave(SavePriority.Configuration);
 
-            return new AgentEnrollmentRedemption(probe.Id, probe.ProbeId, probe.EnrollmentToken ?? string.Empty, probe.Name);
+            return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
+                new AgentEnrollmentRedemption(probe.Id, probe.ProbeId, probe.EnrollmentToken ?? string.Empty, probe.Name));
         }
     }
 
@@ -130,6 +171,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         Id = source.Id,
         CodeHash = source.CodeHash,
         Name = source.Name,
+        ProbeElementId = source.ProbeElementId,
         CreatedUtc = source.CreatedUtc,
         ExpiresUtc = source.ExpiresUtc,
         CreatedBy = source.CreatedBy

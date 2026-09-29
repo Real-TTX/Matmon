@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Probes";
     var probes = Model.Probes;
+    var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
 }
 
 <section class="dashboard-shell">
@@ -98,6 +99,18 @@
                                         @MatmonIcons.Render("chart")
                                         <span>Usage</span>
                                     </a>
+                                    @if (isAdmin && probe.Role != "Primary")
+                                    {
+                                        @* A Docker probe moving onto the machine it monitors, or an agent being reinstalled: a code that
+                                           hands the new install THIS probe (and its sensors), not a new, empty one. *@
+                                        <form method="post" asp-page="/Agents" asp-page-handler="CreateForProbe">
+                                            <input type="hidden" name="probeElementId" value="@probe.ElementId" />
+                                            <button type="submit" class="workspace-action-menu-link">
+                                                @MatmonIcons.Render("lock")
+                                                <span>@(probe.IsAgent ? "New install code" : "Move to an agent")</span>
+                                            </button>
+                                        </form>
+                                    }
                                 </div>
                             </details>
                         </span>

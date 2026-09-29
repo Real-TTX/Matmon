@@ -23,6 +23,14 @@ public sealed class AgentEnrollment
     /// <summary>Name for the probe the agent becomes; null = the agent's host name.</summary>
     public string? Name { get; set; }
 
+    /// <summary>
+    /// Set when the code re-enrols an EXISTING probe instead of creating one: a reinstalled machine, or a
+    /// Docker probe moving onto an agent. Redeeming it gives that probe a new token - sensors, history and
+    /// alerts stay where they are, and whatever still runs under the old token is locked out, so two agents
+    /// never share one identity.
+    /// </summary>
+    public Guid? ProbeElementId { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset ExpiresUtc { get; set; }

@@ -381,7 +381,8 @@ public interface IMonitoringWorkspaceStore
     bool TryValidateProbe(string probeId, string? probeToken);
 
     /// <summary>Issues a single-use agent enrolment code (returned once, stored only as a hash).</summary>
-    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy);
+    /// <param name="probeElementId">An existing (non-root) probe to re-enrol; null creates a new probe on redemption.</param>
+    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? probeElementId = null);
 
     /// <summary>Unexpired, unused codes - expired ones are pruned on the way.</summary>
     IReadOnlyList<AgentEnrollment> GetPendingAgentEnrollments();
@@ -393,10 +394,13 @@ public interface IMonitoringWorkspaceStore
     bool IsAgentEnrollmentCodeValid(string? code);
 
     /// <summary>
-    /// Consumes a code and creates the probe the agent becomes. Null for a wrong, used or expired code -
-    /// deliberately indistinguishable. The caller checks the probe licence limit first.
+    /// Consumes a code: creates the probe the agent becomes, or - for a re-enrolment code - gives the existing
+    /// probe a new token. Wrong, used, expired and orphaned codes are all <see cref="AgentEnrollmentStatus.Invalid"/>,
+    /// deliberately indistinguishable. With <paramref name="allowNewProbe"/> false (licence full) a NEW-probe
+    /// code answers <see cref="AgentEnrollmentStatus.ProbeLimit"/> and is NOT consumed; a re-enrolment code
+    /// still works, because it adds no probe.
     /// </summary>
-    AgentEnrollmentRedemption? RedeemAgentEnrollment(string? code, string? hostName);
+    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe);
 
     void Save();
 }
@@ -405,7 +409,16 @@ public interface IMonitoringWorkspaceStore
 public sealed record AgentEnrollmentIssue(AgentEnrollment Enrollment, string Code);
 
 /// <summary>What an agent receives for a valid code: the identity it runs under from then on.</summary>
-public sealed record AgentEnrollmentRedemption(Guid ElementId, string ProbeId, string ProbeToken, string ProbeName);
+public sealed record AgentEnrollmentRedemption(Guid ElementId, string ProbeId, string ProbeToken, string ProbeName, bool Reenrolled = false);
+
+public enum AgentEnrollmentStatus
+{
+    Invalid,
+    ProbeLimit,
+    Enrolled
+}
+
+public sealed record AgentEnrollmentResult(AgentEnrollmentStatus Status, AgentEnrollmentRedemption? Redemption = null);
 
 /// <summary>A currently-muted element for the Alerts page (name/path resolved, timing for display).</summary>
 public sealed record AlertMuteInfo(

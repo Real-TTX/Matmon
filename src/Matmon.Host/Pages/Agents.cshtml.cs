@@ -53,6 +53,10 @@ public sealed class AgentsModel : PageModel
     [TempData]
     public string? IssuedName { get; set; }
 
+    /// <summary>The issued code re-enrols an existing probe - the page then says what that replaces.</summary>
+    [TempData]
+    public bool IssuedReplaces { get; set; }
+
     // A DateTime, not an ISO string: the TempData serializer turns any date-shaped string back into a
     // DateTime on read, and the string property then fails to take it.
     [TempData]
@@ -94,6 +98,29 @@ public sealed class AgentsModel : PageModel
         IssuedCode = issue.Code;
         IssuedName = issue.Enrollment.Name;
         IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
+        return RedirectToPage();
+    }
+
+    /// <summary>
+    /// A code that re-enrols an EXISTING probe: a reinstalled machine gets its probe back (sensors, history,
+    /// alerts) instead of a new, empty one - and a Docker probe can move onto an agent the same way. Reached
+    /// from an agent's row here and from a remote probe's row on the Probes page.
+    /// </summary>
+    public IActionResult OnPostCreateForProbe(Guid probeElementId)
+    {
+        try
+        {
+            var issue = _workspaceStore.CreateAgentEnrollment(null, TimeSpan.FromHours(24), User.Identity?.Name, probeElementId);
+            IssuedCode = issue.Code;
+            IssuedName = issue.Enrollment.Name;
+            IssuedReplaces = true;
+            IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
         return RedirectToPage();
     }
 

@@ -40,6 +40,12 @@
                 }
             </div>
             <p class="panel-hint">Shown only now - Matmon keeps just a fingerprint of it. If you lose it, create a new one.</p>
+            @if (Model.IssuedReplaces)
+            {
+                <div class="workspace-banner workspace-banner-warning">
+                    This code takes over the existing probe <strong>@Model.IssuedName</strong> - its sensors, history and alerts stay. Whatever runs as that probe today (the old install, or the Docker container it replaces) is locked out the moment the new agent enrols, so remove it afterwards.
+                </div>
+            }
             <div class="agent-issued-code">
                 <code id="agent-issued-code">@Model.IssuedCode</code>
                 <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-issued-code">
@@ -163,6 +169,13 @@
                                             @MatmonIcons.Render("pencil")
                                             <span>Edit</span>
                                         </a>
+                                        <form method="post" asp-page="/Agents" asp-page-handler="CreateForProbe">
+                                            <input type="hidden" name="probeElementId" value="@agent.ElementId" />
+                                            <button type="submit" class="workspace-action-menu-link" title="Reinstalling this machine? A code that gives the new install this probe back.">
+                                                @MatmonIcons.Render("lock")
+                                                <span>New install code</span>
+                                            </button>
+                                        </form>
                                     }
                                 </div>
                             </details>
@@ -265,7 +278,13 @@
                         @foreach (var pending in Model.PendingEnrollments)
                         {
                             <div class="system-table-row agent-pending-row" role="row">
-                                <span role="cell"><strong>@(pending.Name ?? "host name of the machine")</strong></span>
+                                <span role="cell">
+                                    <strong>@(pending.Name ?? "host name of the machine")</strong>
+                                    @if (pending.ProbeElementId is not null)
+                                    {
+                                        <span class="sensor-chip" title="Takes over this existing probe instead of creating a new one">re-install</span>
+                                    }
+                                </span>
                                 <span role="cell">@pending.CreatedUtc.ToDisplay().ToString("g")@(string.IsNullOrWhiteSpace(pending.CreatedBy) ? string.Empty : $" · {pending.CreatedBy}")</span>
                                 <span role="cell">@pending.ExpiresUtc.ToDisplay().ToString("g")</span>
                                 <span role="cell">

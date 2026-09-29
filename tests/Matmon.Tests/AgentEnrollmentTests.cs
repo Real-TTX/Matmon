@@ -30,6 +30,74 @@ public sealed class AgentEnrollmentTests : IDisposable
             _telemetry,
             NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
 
+    private static AgentEnrollmentRedemption? Redeem(InMemoryMonitoringWorkspaceStore store, string? code, string? host) =>
+        store.RedeemAgentEnrollment(code, host, allowNewProbe: true).Redemption;
+
+    private ProbeElement RemoteProbe(string name)
+    {
+        var rootId = _store.GetAllElements().OfType<ProbeElement>().First(probe => probe.ParentId is null).Id;
+        return _store.CreateProbe(rootId, name, null);
+    }
+
+    [Fact]
+    public void AReenrolmentCodeHandsTheExistingProbeANewToken()
+    {
+        var probe = RemoteProbe("Docker probe 01");
+        var oldToken = probe.EnrollmentToken!;
+        var probesBefore = _store.GetAllElements().OfType<ProbeElement>().Count();
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), "admin", probe.Id);
+
+        Assert.Equal("Docker probe 01", issue.Enrollment.Name);
+
+        var redeemed = Redeem(_store, issue.Code, "SOME-OTHER-HOSTNAME");
+
+        Assert.NotNull(redeemed);
+        Assert.True(redeemed.Reenrolled);
+        Assert.Equal(probe.Id, redeemed.ElementId);
+        Assert.Equal(probe.ProbeId, redeemed.ProbeId);
+        Assert.Equal("Docker probe 01", redeemed.ProbeName);
+        Assert.Equal(probesBefore, _store.GetAllElements().OfType<ProbeElement>().Count());
+
+        // The install it takes over from is locked out; the agent is in.
+        Assert.False(_store.TryValidateProbe(probe.ProbeId, oldToken));
+        Assert.True(_store.TryValidateProbe(probe.ProbeId, redeemed.ProbeToken));
+        Assert.NotNull(((ProbeElement)_store.FindElement(probe.Id)!).AgentEnrolledUtc);
+    }
+
+    [Fact]
+    public void AFullLicenceStopsANewProbeButNotAReenrolment()
+    {
+        var probe = RemoteProbe("Existing");
+        var newProbeCode = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
+        var reenrolCode = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
+
+        var refused = _store.RedeemAgentEnrollment(newProbeCode.Code, "x", allowNewProbe: false);
+        Assert.Equal(AgentEnrollmentStatus.ProbeLimit, refused.Status);
+        Assert.True(_store.IsAgentEnrollmentCodeValid(newProbeCode.Code)); // not burnt by the refusal
+
+        var reenrolled = _store.RedeemAgentEnrollment(reenrolCode.Code, "x", allowNewProbe: false);
+        Assert.Equal(AgentEnrollmentStatus.Enrolled, reenrolled.Status);
+    }
+
+    [Fact]
+    public void ACodeForADeletedProbeIsDead()
+    {
+        var probe = RemoteProbe("Gone soon");
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
+        _store.DeleteElement(probe.Id);
+
+        Assert.Equal(AgentEnrollmentStatus.Invalid, _store.RedeemAgentEnrollment(issue.Code, "x", allowNewProbe: true).Status);
+        Assert.Empty(_store.GetPendingAgentEnrollments());
+    }
+
+    [Fact]
+    public void TheLocalRootCannotBeReenrolled()
+    {
+        var rootId = _store.GetAllElements().OfType<ProbeElement>().First(probe => probe.ParentId is null).Id;
+
+        Assert.Throws<InvalidOperationException>(() => _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, rootId));
+    }
+
     [Fact]
     public void CodesAreReadableAndNormalisationIgnoresCaseAndDashes()
     {
@@ -47,7 +115,7 @@ public sealed class AgentEnrollmentTests : IDisposable
     {
         var issue = _store.CreateAgentEnrollment("FILESRV-01", TimeSpan.FromHours(24), "admin");
 
-        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "ignored-host");
+        var redeemed = Redeem(_store, issue.Code, "ignored-host");
 
         Assert.NotNull(redeemed);
         Assert.Equal("FILESRV-01", redeemed.ProbeName);
@@ -56,7 +124,7 @@ public sealed class AgentEnrollmentTests : IDisposable
         var probe = Assert.IsType<ProbeElement>(_store.FindElement(redeemed.ElementId));
         Assert.NotNull(probe.AgentEnrolledUtc);
 
-        Assert.Null(_store.RedeemAgentEnrollment(issue.Code, "second-machine"));
+        Assert.Null(Redeem(_store, issue.Code, "second-machine"));
         Assert.Empty(_store.GetPendingAgentEnrollments());
     }
 
@@ -70,7 +138,7 @@ public sealed class AgentEnrollmentTests : IDisposable
         Assert.False(_store.IsAgentEnrollmentCodeValid(AgentEnrollmentCode.Generate()));
         Assert.False(_store.IsAgentEnrollmentCodeValid(null));
 
-        Assert.NotNull(_store.RedeemAgentEnrollment(issue.Code, "host"));
+        Assert.NotNull(Redeem(_store, issue.Code, "host"));
         Assert.False(_store.IsAgentEnrollmentCodeValid(issue.Code));
     }
 
@@ -79,24 +147,24 @@ public sealed class AgentEnrollmentTests : IDisposable
     {
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
 
-        Assert.Equal("WS-17", _store.RedeemAgentEnrollment(issue.Code, "WS-17")?.ProbeName);
+        Assert.Equal("WS-17", Redeem(_store, issue.Code, "WS-17")?.ProbeName);
     }
 
     [Fact]
     public void WrongRevokedAndExpiredCodesAllFailTheSameWay()
     {
         _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
-        Assert.Null(_store.RedeemAgentEnrollment(AgentEnrollmentCode.Generate(), "x"));
-        Assert.Null(_store.RedeemAgentEnrollment("", "x"));
+        Assert.Null(Redeem(_store, AgentEnrollmentCode.Generate(), "x"));
+        Assert.Null(Redeem(_store, "", "x"));
 
         var revoked = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
         Assert.True(_store.RevokeAgentEnrollment(revoked.Enrollment.Id));
-        Assert.Null(_store.RedeemAgentEnrollment(revoked.Code, "x"));
+        Assert.Null(Redeem(_store, revoked.Code, "x"));
 
         // A code whose time has passed is gone, not merely refused.
         var expired = _store.CreateAgentEnrollment(null, TimeSpan.FromMilliseconds(1), null);
         Thread.Sleep(20);
-        Assert.Null(_store.RedeemAgentEnrollment(expired.Code, "x"));
+        Assert.Null(Redeem(_store, expired.Code, "x"));
         Assert.DoesNotContain(_store.GetPendingAgentEnrollments(), pending => pending.Id == expired.Enrollment.Id);
     }
 
@@ -120,7 +188,7 @@ public sealed class AgentEnrollmentTests : IDisposable
         Assert.Contains(AgentEnrollmentCode.Hash(issue.Code), json);
 
         using var reopened = NewStore();
-        Assert.Equal("NAS", reopened.RedeemAgentEnrollment(issue.Code, "x")?.ProbeName);
+        Assert.Equal("NAS", Redeem(reopened, issue.Code, "x")?.ProbeName);
     }
 
     [Fact]

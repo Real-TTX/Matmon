@@ -523,21 +523,24 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.BadRequest(new { error = "code_required" });
         }
 
-        if (!licenseService.CanAddProbe(out var reason))
+        // The licence only matters for a code that CREATES a probe; re-enrolling an existing one adds nothing.
+        var allowNewProbe = licenseService.CanAddProbe(out var reason);
+        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, allowNewProbe);
+        if (result.Status == AgentEnrollmentStatus.ProbeLimit)
         {
             return Results.Json(new { error = "probe_limit", message = reason }, statusCode: StatusCodes.Status403Forbidden);
         }
 
-        var redemption = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName);
-        if (redemption is null)
+        if (result.Redemption is not { } redemption)
         {
             logger.LogWarning("Agent enrolment rejected: invalid, used or expired code (host {Host})", request.HostName);
             return Results.BadRequest(new { error = "invalid_code" });
         }
 
         logger.LogInformation(
-            "Agent {Host} ({OperatingSystem}, {Version}) enrolled as probe {ProbeName} ({ProbeId})",
-            request.HostName, request.OperatingSystem, request.AgentVersion, redemption.ProbeName, redemption.ProbeId);
+            "Agent {Host} ({OperatingSystem}, {Version}) {Action} probe {ProbeName} ({ProbeId})",
+            request.HostName, request.OperatingSystem, request.AgentVersion,
+            redemption.Reenrolled ? "took over" : "enrolled as", redemption.ProbeName, redemption.ProbeId);
         return Results.Ok(new AgentEnrollResponse(redemption.ProbeId, redemption.ProbeToken, redemption.ProbeName));
     }).AllowAnonymous().RequireRateLimiting("agent-enroll");
 
