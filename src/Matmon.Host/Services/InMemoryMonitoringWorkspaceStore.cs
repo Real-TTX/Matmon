@@ -2504,6 +2504,91 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
 
         HydrateNotificationSecrets(document, secretProtector);
+        HydrateSecretParameters(document, secretProtector);
+    }
+
+    // ---- Secret sensor PARAMETERS (e.g. an inline "winrm.password") are DataProtection-encrypted at rest ----
+    // Credential bundles were encrypted, but a password typed straight into a sensor's own parameter fields
+    // sat in workspace.json in the clear. Parameters are a plain string dictionary, so the ciphertext lives in
+    // the value itself behind a marker: the in-memory document always holds the plaintext (executors, the probe
+    // assignment path and the editors read it unchanged) and only the serialized form is sealed.
+    public const string ProtectedParameterPrefix = "enc:dp1:";
+
+    private static readonly string[] SecretParameterSuffixes = ["password", "secret", "apikey", "token", "passphrase", "privatekey"];
+
+    /// <summary>
+    /// A parameter is secret when a sensor type DECLARES it so (<see cref="SensorParameterKind.Secret"/>) - or
+    /// when its name says so: a retired type's parameters, or ones a user typed by key, are not in any
+    /// definition, and guessing "not secret" there is the expensive mistake.
+    /// </summary>
+    public static bool IsSecretParameter(string key, IReadOnlySet<string> declaredSecretKeys)
+    {
+        if (declaredSecretKeys.Contains(key))
+        {
+            return true;
+        }
+
+        var name = key[(key.LastIndexOf('.') + 1)..];
+        return SecretParameterSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static HashSet<string> DeclaredSecretParameterKeys(WorkspaceDocument document) =>
+        (document.SensorDefinitions ?? [])
+            .SelectMany(definition => definition.Parameters)
+            .Where(parameter => parameter.Kind == SensorParameterKind.Secret)
+            .Select(parameter => parameter.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private void ProtectSecretParameters(WorkspaceDocument document, IDataProtector secretProtector)
+    {
+        var declared = DeclaredSecretParameterKeys(document);
+        foreach (var settings in EnumerateSettings(document))
+        {
+            foreach (var (key, value) in settings.Parameters.ToArray())
+            {
+                // Already sealed = a value that failed to decrypt on load: keep that ciphertext, never re-seal it.
+                if (string.IsNullOrEmpty(value) ||
+                    value.StartsWith(ProtectedParameterPrefix, StringComparison.Ordinal) ||
+                    !IsSecretParameter(key, declared))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    settings.Parameters[key] = ProtectedParameterPrefix + secretProtector.Protect(value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to protect secret parameter {Key}", key);
+                }
+            }
+        }
+    }
+
+    private void HydrateSecretParameters(WorkspaceDocument document, IDataProtector secretProtector)
+    {
+        foreach (var settings in EnumerateSettings(document))
+        {
+            foreach (var (key, value) in settings.Parameters.ToArray())
+            {
+                if (string.IsNullOrEmpty(value) || !value.StartsWith(ProtectedParameterPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    settings.Parameters[key] = secretProtector.Unprotect(value[ProtectedParameterPrefix.Length..]);
+                }
+                catch (Exception ex)
+                {
+                    // Keep the ciphertext (see ProtectSecretParameters): a missing key ring must not turn into
+                    // the secret being re-saved as garbage - the sensor fails visibly until it is re-entered.
+                    _logger.LogWarning(ex, "Failed to decrypt secret parameter {Key}", key);
+                }
+            }
+        }
     }
 
     // ---- Notification secrets (SMTP passwords, webhook secrets) are DataProtection-encrypted at rest ----
@@ -2626,6 +2711,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
 
         ProtectNotificationSecrets(document, secretProtector);
+        ProtectSecretParameters(document, secretProtector);
     }
 
     private static IEnumerable<MonitoringSettings> EnumerateSettings(WorkspaceDocument document)
