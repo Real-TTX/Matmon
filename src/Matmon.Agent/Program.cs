@@ -40,6 +40,15 @@ if (args.FirstOrDefault() == "tray" ||
     return RunTray();
 }
 
+// Sensor messages are text the PRIMARY stores and shows ("storage free 5.43%"). A Docker probe runs with the
+// invariant culture; an agent on a German Windows wrote "5,43%" - the same sensor type read differently
+// depending on which probe ran it. The service path therefore formats invariantly. (Only here: the tray above
+// is UI for the person at this machine and keeps their locale.)
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // The identity enroll wrote. Environment variables and switches are re-added AFTER it so they still win -
