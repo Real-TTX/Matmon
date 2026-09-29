@@ -27,8 +27,12 @@ public static class ChannelFamilies
             ["cpu", "cpuload", "cpuutilization", "cpuusage", "cpupercent", "cpuusedpercent", "processorload", "processor"]),
         new("memory", "Memory usage", "%", SensorMeasurementKind.Percent,
             ["memoryusedpercent", "memory", "memoryutilization", "memoryusage", "memusedpercent", "mem", "ram", "rampercent"]),
+        // Some sensors only report FREE space (Windows health: systemDriveFreePercent, Probe Health and
+        // Synology: storageFreePercent). Used = 100 - free puts them on the same axis as everyone else;
+        // a real "used" channel always wins over the derived one.
         new("disk", "Disk usage", "%", SensorMeasurementKind.Percent,
-            ["diskusedpercent", "storageusedpercent", "diskusage", "volumeusedpercent", "rootfs", "disk", "storage"]),
+            ["diskusedpercent", "storageusedpercent", "diskusage", "volumeusedpercent", "rootfs", "disk", "storage"],
+            ["systemdrivefreepercent", "diskfreepercent", "storagefreepercent", "volumefreepercent", "rootfreepercent", "freepercent"]),
         new("latency", "Latency", "ms", SensorMeasurementKind.Duration,
             ["latency", "responsetime", "roundtrip", "rtt", "avglatency", "pinglatency"]),
         new("temperature", "Temperature", "°C", SensorMeasurementKind.Temperature,
@@ -53,11 +57,36 @@ public static class ChannelFamilies
     /// This sensor's channel for the family, from one observation's channels - or null when it has none.
     /// Ranked: a TOP-LEVEL key before a per-object one (a Proxmox node's own <c>cpu</c>, not
     /// <c>vm.101.cpu</c> of one of its guests), then the order of the candidate list, then the shorter key.
+    /// Only a DIRECT match - see <see cref="Match"/> for the derived complement.
     /// </summary>
     public static SensorChannelValue? Pick(IEnumerable<SensorChannelValue> channels, ChannelFamily family) =>
+        PickFrom(channels, family, family.Names);
+
+    /// <summary>
+    /// The channel to read for the family: a direct match, else - for a family that has one - the channel of
+    /// the COMPLEMENT ("free %" for "used %"), whose readings then plot as <c>100 - value</c> (<see cref="ValueOf"/>).
+    /// </summary>
+    public static ChannelFamilyMatch? Match(IEnumerable<SensorChannelValue> channels, ChannelFamily family)
+    {
+        var list = channels as IReadOnlyCollection<SensorChannelValue> ?? channels.ToArray();
+        if (PickFrom(list, family, family.Names) is { } direct)
+        {
+            return new ChannelFamilyMatch(direct, Complement: false);
+        }
+
+        return family.ComplementNames is { Length: > 0 } complementNames && PickFrom(list, family, complementNames) is { } complement
+            ? new ChannelFamilyMatch(complement, Complement: true)
+            : null;
+    }
+
+    /// <summary>A reading of the matched channel as the family's measurement.</summary>
+    public static double ValueOf(ChannelFamilyMatch match, double reading) =>
+        match.Complement ? Math.Round(100 - reading, 2) : reading;
+
+    private static SensorChannelValue? PickFrom(IEnumerable<SensorChannelValue> channels, ChannelFamily family, string[] names) =>
         channels
             .Where(channel => !channel.IsVirtual && channel.Value.HasValue && UnitFits(channel, family))
-            .Select(channel => (channel, rank: Array.IndexOf(family.Names, Normalize(LastSegment(channel.Key)))))
+            .Select(channel => (channel, rank: Array.IndexOf(names, Normalize(LastSegment(channel.Key)))))
             .Where(entry => entry.rank >= 0)
             .OrderBy(entry => entry.channel.Key.Contains('.') ? 1 : 0)
             .ThenBy(entry => entry.rank)
@@ -96,4 +125,8 @@ public sealed record ChannelFamily(
     string Label,
     string Unit,
     SensorMeasurementKind MeasurementKind,
-    string[] Names);
+    string[] Names,
+    string[]? ComplementNames = null);
+
+/// <param name="Complement">The channel measures the complement (free instead of used): plot 100 - value.</param>
+public sealed record ChannelFamilyMatch(SensorChannelValue Channel, bool Complement);

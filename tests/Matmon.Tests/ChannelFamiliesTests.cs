@@ -62,6 +62,27 @@ public sealed class ChannelFamiliesTests
     }
 
     [Fact]
+    public void FreeSpaceStandsInForUsedSpaceInverted()
+    {
+        var disk = ChannelFamilies.Parse("family:disk")!;
+
+        // Windows health reports only the free share of the system drive.
+        var derived = ChannelFamilies.Match([Channel("systemdrivefreepercent", 5.2), Channel("cpuload", 30)], disk);
+        Assert.NotNull(derived);
+        Assert.True(derived.Complement);
+        Assert.Equal(94.8, ChannelFamilies.ValueOf(derived, 5.2), 6);
+
+        // A real "used" channel always wins over the derived one.
+        var direct = ChannelFamilies.Match([Channel("storageFreePercent", 40, "%"), Channel("diskUsedPercent", 61, "%")], disk);
+        Assert.False(direct!.Complement);
+        Assert.Equal("diskUsedPercent", direct.Channel.Key);
+
+        // Pick stays direct-only; families without a complement never derive.
+        Assert.Null(ChannelFamilies.Pick([Channel("systemdrivefreepercent", 5.2)], disk));
+        Assert.Null(ChannelFamilies.Match([Channel("memoryFreePercent", 40, "%")], Memory));
+    }
+
+    [Fact]
     public void ACpuFanIsNotACpu()
     {
         Assert.Null(ChannelFamilies.Pick([Channel("cpuFanStatusOk", 1, kind: SensorMeasurementKind.Boolean)], Cpu));

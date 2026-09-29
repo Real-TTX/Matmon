@@ -394,14 +394,14 @@ public sealed class MapDisplayProvider
                 // The family's channel from the LATEST reading - or, when that one carries none (a timeout, a
                 // failed run: no channels at all), from the newest reading in the window that does. Otherwise
                 // one failed poll removed a machine from the chart although its whole day is right there.
-                var channel = family is null
+                var match = family is null
                     ? null
-                    : (observation is null ? null : ChannelFamilies.Pick(observation.Channels, family))
+                    : (observation is null ? null : ChannelFamilies.Match(observation.Channels, family))
                         ?? ReadWindow(sensor.Id, window)
                             .Reverse()
-                            .Select(candidate => ChannelFamilies.Pick(candidate.Channels, family))
+                            .Select(candidate => ChannelFamilies.Match(candidate.Channels, family))
                             .FirstOrDefault(candidate => candidate is not null);
-                var key = family is not null ? channel?.Key : exactKey;
+                var key = family is not null ? match?.Channel.Key : exactKey;
                 var unit = family?.Unit
                     ?? (exactKey is not null
                         ? observation?.Channels.FirstOrDefault(candidate => string.Equals(candidate.Key, exactKey, StringComparison.OrdinalIgnoreCase))?.Unit
@@ -409,6 +409,11 @@ public sealed class MapDisplayProvider
                 IReadOnlyList<(double X, double Value)> points = family is not null && key is null
                     ? []
                     : ReadSeries(sensor.Id, key, startUtc, window);
+                if (match is { Complement: true })
+                {
+                    // A "free %" channel standing in for "used %": same axis, inverted readings.
+                    points = points.Select(point => (point.X, ChannelFamilies.ValueOf(match, point.Value))).ToArray();
+                }
                 return (sensor, key, unit, points);
             })
             .Where(entry => entry.points.Count >= 2)
@@ -803,7 +808,18 @@ public sealed class MapDisplayProvider
         // A family ranks a mixed list ("top CPU across these machines") by each sensor's own channel for it.
         if (ChannelFamilies.Parse(channelKey) is { } family)
         {
-            return ChannelFamilies.Pick(observation.Channels, family);
+            // A derived match (free % standing in for used %) is handed out already inverted, so the list
+            // ranks and shows the family's measurement.
+            return ChannelFamilies.Match(observation.Channels, family) switch
+            {
+                { Complement: true } derived => derived.Channel with
+                {
+                    Value = ChannelFamilies.ValueOf(derived, derived.Channel.Value!.Value),
+                    Label = $"{family.Label} (from {derived.Channel.Label})"
+                },
+                { } direct => direct.Channel,
+                null => null
+            };
         }
 
         if (!string.IsNullOrWhiteSpace(channelKey))
