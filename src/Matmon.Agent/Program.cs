@@ -5,9 +5,11 @@ using Matmon.Probe;
 // The whole agent. Everything it does is what the Docker probe does - pull assignments and on-demand jobs
 // from its primary, run them, post the results back, buffer through an outage, beat - because it IS that
 // code, via Matmon.Probe. What makes it an agent rather than a container is only how it is hosted.
-if (args.Contains("--version"))
+if (args is ["--version"])
 {
     // What an install script, a support call or an update check needs, without starting the service.
+    // ONLY as the sole argument: "--version" anywhere used to win, and the updater's own command line
+    // (apply-update ... --version <target>) printed a version and exited - the update silently never ran.
     Console.WriteLine(MatmonVersion.Current);
     return 0;
 }

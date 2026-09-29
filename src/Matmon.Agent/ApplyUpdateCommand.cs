@@ -1,7 +1,7 @@
 namespace Matmon.Agent;
 
 /// <summary>
-/// <c>matmon-agent apply-update --target … --staged … --version … --from … --state … --service …</c>
+/// <c>matmon-agent apply-update --target … --staged … --to … --from … --state … --service …</c>
 ///
 /// The updater. It runs from a COPY of the agent build that was working (never from the new one), outside the
 /// service's lifetime, so it can do what the running service cannot: stop it, swap the executable, start the
@@ -19,7 +19,7 @@ public static class ApplyUpdateCommand
     {
         var target = Option(args, "--target");
         var staged = Option(args, "--staged");
-        var version = Option(args, "--version");
+        var version = Option(args, "--to");
         var from = Option(args, "--from") ?? "unknown";
         var state = Option(args, "--state");
         var service = Option(args, "--service");
@@ -82,10 +82,11 @@ public static class ApplyUpdateCommand
                 return await RollBackAsync(files, service, target, backup, version, from, ex.Message);
             }
 
-            // Nothing was replaced - just make sure the old build is running again.
-            TryStart(files, service);
+            // Nothing was replaced - just make sure the old build is running again. The outcome is written
+            // BEFORE the start, so the build that comes up already reads it (see RollBackAsync).
             files.WriteLastUpdate(new AgentUpdateRecord(version, from, AgentUpdateOutcome.Failed, ex.Message, DateTimeOffset.UtcNow));
             AgentUpdateFiles.TryDelete(files.PendingPath);
+            TryStart(files, service);
             AgentUpdateFiles.TryDelete(staged);
             return 1;
         }
@@ -107,6 +108,12 @@ public static class ApplyUpdateCommand
             }
 
             await RetryAsync(() => Replace(backup, target, move: false));
+
+            // Recorded BEFORE the restored build starts: it reads the outcome once at start-up to report it on
+            // its heartbeat. Written after, the restored agent announced the PREVIOUS update instead of this
+            // rollback (seen in the first real test).
+            files.WriteLastUpdate(new AgentUpdateRecord(version, from, AgentUpdateOutcome.RolledBack, reason, DateTimeOffset.UtcNow));
+            AgentUpdateFiles.TryDelete(files.PendingPath);
             TryStart(files, service);
             files.Log("rolled back");
         }
@@ -114,10 +121,10 @@ public static class ApplyUpdateCommand
         {
             // The worst case: neither build is running. Said loudly in the log, which is where support looks.
             files.Log($"ROLLBACK FAILED: {ex.Message} - restore {backup} to {target} by hand and start '{service}'");
+            files.WriteLastUpdate(new AgentUpdateRecord(version, from, AgentUpdateOutcome.RolledBack, $"{reason}; rollback failed: {ex.Message}", DateTimeOffset.UtcNow));
+            AgentUpdateFiles.TryDelete(files.PendingPath);
         }
 
-        files.WriteLastUpdate(new AgentUpdateRecord(version, from, AgentUpdateOutcome.RolledBack, reason, DateTimeOffset.UtcNow));
-        AgentUpdateFiles.TryDelete(files.PendingPath);
         return 1;
     }
 

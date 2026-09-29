@@ -90,6 +90,9 @@ public sealed class AgentUpdateService : BackgroundService
             {
                 try
                 {
+                    // Re-read each time: the file is written by another process (the updater), and a status the
+                    // agent read once at start-up can be stale.
+                    _runtimeState.AgentUpdateStatus = AgentUpdatePolicy.Describe(_files.ReadLastUpdate());
                     await CheckAsync(stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -121,6 +124,19 @@ public sealed class AgentUpdateService : BackgroundService
             if (_runtimeState.Snapshot().IsConnected)
             {
                 _files.Confirm(MatmonVersion.Current);
+                // The updater records "updated" only once it has seen this confirmation - pick that up for the
+                // heartbeat rather than keep reporting whatever the previous update was.
+                for (var attempt = 0; attempt < 15 && !stoppingToken.IsCancellationRequested; attempt++)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                    if (_files.ReadLastUpdate() is { } record &&
+                        string.Equals(record.Version, MatmonVersion.Current, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _runtimeState.AgentUpdateStatus = AgentUpdatePolicy.Describe(record);
+                        break;
+                    }
+                }
+
                 _logger.LogInformation("Agent update {From} -> {Version} confirmed: the primary answered", pending.FromVersion, pending.Version);
                 return;
             }
@@ -179,11 +195,25 @@ public sealed class AgentUpdateService : BackgroundService
             "apply-update",
             "--target", target,
             "--staged", staged,
-            "--version", decision.Version!,
+            "--to", decision.Version!,
             "--from", MatmonVersion.Current,
             "--state", _settings.StateDirectory,
             "--service", service
         ]);
+
+        // The updater stops this service within seconds (the delay then ends with the stopping token). Still
+        // running after that, with no pending.json written, means the updater never took over - say so and
+        // record it, instead of silently downloading the same build again at every check.
+        await Task.Delay(TimeSpan.FromSeconds(90), stoppingToken);
+        if (_files.ReadPending() is null)
+        {
+            var record = new AgentUpdateRecord(decision.Version!, MatmonVersion.Current, AgentUpdateOutcome.Failed,
+                "the updater did not take over", DateTimeOffset.UtcNow);
+            _files.WriteLastUpdate(record);
+            _files.Log($"update to {decision.Version} failed: the updater did not take over");
+            _runtimeState.AgentUpdateStatus = AgentUpdatePolicy.Describe(record);
+            _logger.LogWarning("Agent update to {Version} failed: the updater did not take over", decision.Version);
+        }
     }
 
     private static async Task DownloadAsync(HttpClient client, AgentManifestPackage package, string staged, CancellationToken stoppingToken)
