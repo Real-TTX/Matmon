@@ -117,8 +117,10 @@ public sealed class MapDisplayProvider
         var subtitle = string.IsNullOrWhiteSpace(observation.Message)
             ? sensor.SensorTypeKey
             : observation.Message;
+        // The line plots the SAME channel the tile's number shows - it used to plot the observation's bare
+        // value, so a graph tile pointed at "memory" drew CPU under a memory reading.
         var graph = tile.Kind == MonitoringMapTileKind.Graph
-            ? BuildSparkline(sensor.Id)
+            ? BuildSparkline(sensor.Id, channel?.Key, MonitoringMapTile.NormalizeGraphWindowHours(tile.GraphWindowHours))
             : Sparkline.Empty;
         var progressPercent = ResolveSensorProgressPercent(tile, channel);
         // The dial's big figure is the reading itself, so this caption says what the dial is SCALED to -
@@ -259,35 +261,36 @@ public sealed class MapDisplayProvider
             tile.VisualType == MonitoringMapTileVisualType.Auto ? MonitoringMapTileVisualType.ProgressBar : tile.VisualType);
     }
 
-    private Sparkline BuildSparkline(Guid sensorId)
+    /// <summary>
+    /// A single sensor's trend over the tile's window (<see cref="MonitoringMapTile.GraphWindowHours"/>),
+    /// placed by TIME - the same reading path as the multi-graph. It used to be the newest 64 readings spaced
+    /// evenly, which is "the last half hour" for a 30 s ping and "the last five hours" for a 5 min sensor,
+    /// with nothing on the tile saying which. The Y range stays the line's own (a single line has nothing to
+    /// be compared against), padded so a flat line sits in the middle.
+    /// </summary>
+    private Sparkline BuildSparkline(Guid sensorId, string? channelKey, int windowHours)
     {
-        var points = _workspaceStore.GetSensorHistory(sensorId, TimeSpan.FromHours(24), 64)
-            .Select(observation => observation.Value
-                ?? observation.Channels.FirstOrDefault(channel => channel.Value.HasValue)?.Value)
-            .Where(value => value.HasValue)
-            .Select(value => value!.Value)
-            .ToArray();
-        if (points.Length < 2)
+        var window = TimeSpan.FromHours(windowHours);
+        var points = ReadSeries(sensorId, channelKey, DateTimeOffset.UtcNow - window, window);
+        if (points.Count < 2)
         {
             return Sparkline.Empty;
         }
 
-        var min = points.Min();
-        var max = points.Max();
+        var min = points.Min(point => point.Value);
+        var max = points.Max(point => point.Value);
         var range = Math.Abs(max - min) < 0.00001 ? 1 : max - min;
-        var step = SparklineWidth / Math.Max(1, points.Length - 1);
         var coordinates = points
-            .Select((value, index) =>
-            {
-                var x = index * step;
-                var y = SparklineHeight - ((value - min) / range * (SparklineHeight - 4)) - 2;
-                return (X: x, Y: y);
-            })
+            .Select(point => (
+                X: Math.Clamp(point.X, 0, 1) * SparklineWidth,
+                Y: SparklineHeight - ((point.Value - min) / range * (SparklineHeight - 4)) - 2))
             .ToArray();
 
         var line = "M " + string.Join(" L ", coordinates.Select(point => FormatPoint(point.X, point.Y)));
         var smoothLine = BuildSmoothLine(coordinates);
-        var area = $"{line} L {Format(SparklineWidth)} {Format(SparklineHeight)} L 0 {Format(SparklineHeight)} Z";
+        // Closed under the line's OWN span: with a real time axis the first reading need not sit at the left
+        // edge (a sensor added an hour ago), and closing at 0..100 painted a wedge where there was no data.
+        var area = $"{line} L {Format(coordinates[^1].X)} {Format(SparklineHeight)} L {Format(coordinates[0].X)} {Format(SparklineHeight)} Z";
         var bars = string.Join(" ", coordinates.Select(point => $"M {Format(point.X)} {Format(point.Y)} V {Format(SparklineHeight)}"));
         return new Sparkline(line, smoothLine, area, bars);
     }

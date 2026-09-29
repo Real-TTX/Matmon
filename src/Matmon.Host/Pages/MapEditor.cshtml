@@ -316,6 +316,17 @@
                                         <span class="workspace-label">Graph type</span>
                                         <select asp-for="Input.Tiles[index].GraphType" asp-items="Model.GraphTypeOptions" class="form-select workspace-select" data-map-property-graph-type></select>
                                     </label>
+                                    @* The same property as the multi-graph's window (its field is in _MapCompareFields); only the
+                                       field of the current kind is enabled, see syncDuplicateFields. *@
+                                    <label class="workspace-field" data-map-property-graph-only>
+                                        <span class="workspace-label">Time window</span>
+                                        <select name="Input.Tiles[@index].GraphWindowHours" class="form-select workspace-select">
+                                            @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
+                                            {
+                                                <option value="@hours" selected="@(hours == Model.Input.Tiles[index].GraphWindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", _ => $"Last {hours} hours" })</option>
+                                            }
+                                        </select>
+                                    </label>
                                     <label class="workspace-field" data-map-property-list-only>
                                         <span class="workspace-label">Order</span>
                                         <select asp-for="Input.Tiles[index].ListMode" class="form-select workspace-select">
@@ -795,6 +806,15 @@
                                 <option value="@MonitoringMapTileGraphType.Area">Area</option>
                                 <option value="@MonitoringMapTileGraphType.Bars">Bars</option>
                                 <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
+                            </select>
+                        </label>
+                        <label class="workspace-field" data-map-property-graph-only>
+                            <span class="workspace-label">Time window</span>
+                            <select name="Input.Tiles[__index__].GraphWindowHours" class="form-select workspace-select">
+                                            @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
+                                            {
+                                                <option value="@hours" selected="@(hours == 24)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", _ => $"Last {hours} hours" })</option>
+                                            }
                             </select>
                         </label>
                         <label class="workspace-field" data-map-property-value-only>

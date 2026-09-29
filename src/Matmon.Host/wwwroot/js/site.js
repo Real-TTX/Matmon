@@ -4452,7 +4452,7 @@ function initializeMapDesigner() {
     const targetField = panel.querySelector("[data-map-property-target]");
     const visualField = panel.querySelector("[data-map-property-visual]");
     const textField = panel.querySelector("[data-map-property-text-only]");
-    const graphField = panel.querySelector("[data-map-property-graph-only]");
+    const graphFields = panel.querySelectorAll("[data-map-property-graph-only]");
     const hint = panel.querySelector("[data-map-property-hint]");
     if (targetField) {
       targetField.hidden = isTargetless;
@@ -4478,9 +4478,8 @@ function initializeMapDesigner() {
     if (textField) {
       textField.hidden = !isText;
     }
-    if (graphField) {
-      graphField.hidden = !isGraph;
-    }
+    // ALL graph-only fields (type and window) - a single querySelector toggled only the first.
+    graphFields.forEach((field) => { field.hidden = !isGraph; });
     syncDuplicateFields(panel);
     if (hint) {
       const limits = getLimits(kind);
@@ -4604,7 +4603,7 @@ function initializeMapDesigner() {
     panel.querySelector("[data-map-targets-value]")?.value || "",
     panel.querySelector('[name$=".ListLimit"]:not(:disabled)')?.value || "",
     panel.querySelector('[name$=".ListChannelKey"]:not(:disabled)')?.value || "",
-    panel.querySelector('[name$=".GraphWindowHours"]')?.value || "",
+    panel.querySelector('[name$=".GraphWindowHours"]:not(:disabled)')?.value || "",
     normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || "Element"),
     panel?.querySelector("[data-map-property-visual-type]")?.value || "",
     panel?.querySelector("[data-map-property-graph-type]")?.value || "",
@@ -4652,7 +4651,7 @@ function initializeMapDesigner() {
       gaugeMax: panel.querySelector('[name$=".GaugeMax"]')?.value || "",
       listLimit: panel.querySelector('[name$=".ListLimit"]:not(:disabled)')?.value || "",
       listChannelKey: panel.querySelector('[name$=".ListChannelKey"]:not(:disabled)')?.value || "",
-      graphWindowHours: panel.querySelector('[name$=".GraphWindowHours"]')?.value || "24",
+      graphWindowHours: panel.querySelector('[name$=".GraphWindowHours"]:not(:disabled)')?.value || "24",
       targets: panel.querySelector("[data-map-targets-value]")?.value || ""
     });
 
