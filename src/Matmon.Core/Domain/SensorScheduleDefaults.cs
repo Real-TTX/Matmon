@@ -28,6 +28,9 @@ public static class SensorScheduleDefaults
         // Fast reachability check.
         ["ping"] = TimeSpan.FromSeconds(30),
 
+        // The probe's own machine, read locally: next to free, and CPU/memory are only interesting close up.
+        ["local-health"] = TimeSpan.FromMinutes(1),
+
         // Slow-changing hardware/health: SMART attributes and backup outcomes barely move between
         // polls, so 6 h keeps the noise/overhead down while still catching failures within hours.
         ["synology-disk"] = SixHours,

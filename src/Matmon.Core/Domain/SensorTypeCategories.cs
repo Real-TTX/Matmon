@@ -75,6 +75,7 @@ public static class SensorTypeCategories
 
         ["probe-heartbeat"] = "Probe",
         ["probe-health"] = "Probe",
+        ["local-health"] = "Probe",
         ["matmon-update"] = "Probe",
     };
 

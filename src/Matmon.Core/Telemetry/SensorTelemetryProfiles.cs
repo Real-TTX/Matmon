@@ -82,6 +82,7 @@ public static class SensorTelemetryProfiles
         // Probe infrastructure.
         ["probe-heartbeat"] = Infrastructure,
         ["probe-health"] = Infrastructure,
+        ["local-health"] = Responsive,
         ["matmon-update"] = Availability,
     };
 

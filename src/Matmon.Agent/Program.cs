@@ -90,7 +90,7 @@ builder.Services.AddSingleton<IProbeStorageSource>(new DirectoryProbeStorageSour
     string.IsNullOrWhiteSpace(dataPath) ? AppContext.BaseDirectory : Path.GetFullPath(dataPath)));
 
 builder.Services.AddMatmonSensorExecutors();
-builder.Services.AddMatmonProbeHealthSensor();
+builder.Services.AddMatmonProbeLocalSensors();
 builder.Services.AddMatmonProbe();
 
 // Auto-update: follow the instance's agent build (see AgentUpdateService). On unless switched off; the check

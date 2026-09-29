@@ -27,17 +27,20 @@ public static class ProbeServiceRegistration
     }
 
     /// <summary>
-    /// The Probe Health sensor: the probe's own connection to its primary and the storage it runs on. Kept
-    /// out of AddMatmonSensorExecutors on purpose - it needs probe infrastructure (the runtime
-    /// state and an <see cref="IProbeStorageSource"/>), which the stateless cloud Executor does not have -
-    /// and out of <see cref="AddMatmonProbe"/> because a primary runs it too without being a probe.
+    /// The sensors about the machine the probe itself runs on: Probe Health (its connection to its primary and
+    /// the storage it runs on) and System Health (local) (CPU / memory / disks read straight from the OS). Kept
+    /// out of AddMatmonSensorExecutors on purpose - the stateless cloud Executor must not offer them (it would
+    /// report on its own container) and Probe Health needs probe infrastructure (the runtime state and an
+    /// <see cref="IProbeStorageSource"/>) - and out of <see cref="AddMatmonProbe"/> because a primary runs them
+    /// too without being a probe.
     /// The caller registers the <see cref="IProbeStorageSource"/>: the Host's is its data directory, the
     /// agent's is its own. SlaveProbeRuntimeState comes from AddMatmonProbe (or the Host, which registers it in every mode).
     /// </summary>
-    public static IServiceCollection AddMatmonProbeHealthSensor(this IServiceCollection services)
+    public static IServiceCollection AddMatmonProbeLocalSensors(this IServiceCollection services)
     {
         services.AddTransient<ProbeHealthSensorExecutor>();
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<ProbeHealthSensorExecutor>());
+        services.AddTransient<ISensorExecutor, LocalHealthSensorExecutor>();
         return services;
     }
 }

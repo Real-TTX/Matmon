@@ -62,6 +62,7 @@ public static class SensorDefinitionCatalog
         MailHealthSensorExecutor.Definition,
         ProbeHeartbeatSensorExecutor.Definition,
         ProbeHealthSensorExecutor.Definition,
+        LocalHealthSensorExecutor.Definition,
         MatmonUpdateSensorExecutor.Definition
     ];
 }

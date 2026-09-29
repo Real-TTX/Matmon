@@ -138,6 +138,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 // processes can never report as one probe.
                 existing.EnrollmentToken = CreateToken();
                 existing.AgentEnrolledUtc = now;
+                EnsureLocalHealthSensorLocked(existing);
                 return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
                     new AgentEnrollmentRedemption(existing.Id, existing.ProbeId, existing.EnrollmentToken, existing.Name, Reenrolled: true));
             }
@@ -156,10 +157,28 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 ?? (string.IsNullOrWhiteSpace(hostName) ? "Agent" : hostName.Trim());
             var probe = CreateProbe(null, name, "Matmon agent");
             probe.AgentEnrolledUtc = now;
+            EnsureLocalHealthSensorLocked(probe);
             QueueSave(SavePriority.Configuration);
 
             return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
                 new AgentEnrollmentRedemption(probe.Id, probe.ProbeId, probe.EnrollmentToken ?? string.Empty, probe.Name));
+        }
+    }
+
+    /// <summary>
+    /// An agent's whole point is the machine it sits on, so it arrives measuring it: one "System Health"
+    /// sensor (local CPU / memory / disks, no credentials needed) unless the probe already has one - a
+    /// re-enrolled probe keeps what it had. Created through CreateSensor, so the default thresholds apply.
+    /// </summary>
+    private void EnsureLocalHealthSensorLocked(ProbeElement probe)
+    {
+        var hasOne = EnumerateElements(probe)
+            .OfType<SensorElement>()
+            .Any(sensor => string.Equals(sensor.SensorTypeKey, LocalHealthSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+        if (!hasOne)
+        {
+            CreateSensor(probe.Id, "System Health", LocalHealthSensorExecutor.Definition.Key, string.Empty,
+                "CPU, memory and disks of this machine, measured by the agent itself.");
         }
     }
 

@@ -51,6 +51,14 @@ public static class SensorThresholdDefaults
         new("ups-snmp", "load_percent", "critical", ThresholdDirection.Above, 90),
 
         // ── Windows health / disk / updates ───────────────────────────────────────────────────
+        // ── The probe's own machine (read locally) ────────────────────────────────────────────────
+        new("local-health", "cpu", "warning", ThresholdDirection.Above, 85),
+        new("local-health", "cpu", "critical", ThresholdDirection.Above, 95),
+        new("local-health", "memoryUsedPercent", "warning", ThresholdDirection.Above, 85),
+        new("local-health", "memoryUsedPercent", "critical", ThresholdDirection.Above, 95),
+        new("local-health", "diskUsedPercent", "warning", ThresholdDirection.Above, 85),
+        new("local-health", "diskUsedPercent", "critical", ThresholdDirection.Above, 95),
+
         new("windows-health", "cpuLoad", "warning", ThresholdDirection.Above, 85),
         new("windows-health", "cpuLoad", "critical", ThresholdDirection.Above, 95),
         new("windows-health", "memoryUsedPercent", "warning", ThresholdDirection.Above, 85),

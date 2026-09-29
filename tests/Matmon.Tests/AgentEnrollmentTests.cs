@@ -65,6 +65,24 @@ public sealed class AgentEnrollmentTests : IDisposable
     }
 
     [Fact]
+    public void ANewAgentArrivesMeasuringItsOwnMachine_AndAReenrolmentDoesNotDuplicateIt()
+    {
+        var issue = _store.CreateAgentEnrollment("WS-01", TimeSpan.FromHours(1), null);
+        var redeemed = Redeem(_store, issue.Code, "WS-01")!;
+
+        int LocalHealthUnder(Guid probeId) => _store.GetAllElements().OfType<SensorElement>()
+            .Count(sensor => sensor.ParentId == probeId && sensor.SensorTypeKey == "local-health");
+
+        Assert.Equal(1, LocalHealthUnder(redeemed.ElementId));
+        var sensor = _store.GetAllElements().OfType<SensorElement>().Single(s => s.ParentId == redeemed.ElementId && s.SensorTypeKey == "local-health");
+        Assert.NotEmpty(sensor.Settings.Thresholds); // created through CreateSensor, so the defaults apply
+
+        var again = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, redeemed.ElementId);
+        Redeem(_store, again.Code, "WS-01");
+        Assert.Equal(1, LocalHealthUnder(redeemed.ElementId));
+    }
+
+    [Fact]
     public void AFullLicenceStopsANewProbeButNotAReenrolment()
     {
         var probe = RemoteProbe("Existing");
