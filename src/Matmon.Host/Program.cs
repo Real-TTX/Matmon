@@ -525,7 +525,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
         // The licence only matters for a code that CREATES a probe; re-enrolling an existing one adds nothing.
         var allowNewProbe = licenseService.CanAddProbe(out var reason);
-        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, allowNewProbe);
+        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, allowNewProbe, request.OperatingSystem);
         if (result.Status == AgentEnrollmentStatus.ProbeLimit)
         {
             return Results.Json(new { error = "probe_limit", message = reason }, statusCode: StatusCodes.Status403Forbidden);

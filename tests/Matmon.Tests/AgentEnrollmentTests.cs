@@ -82,6 +82,34 @@ public sealed class AgentEnrollmentTests : IDisposable
         Assert.Equal(1, LocalHealthUnder(redeemed.ElementId));
     }
 
+    [Theory]
+    [InlineData("Microsoft Windows 10.0.26200", "windows-update")]
+    [InlineData("Ubuntu 24.04.1 LTS", "linux-update")]
+    [InlineData("Linux 6.8.0-45-generic #45-Ubuntu SMP", "linux-update")]
+    [InlineData("Darwin 23.6.0", null)]
+    [InlineData(null, null)]
+    public void AnAgentGetsTheUpdateSensorForItsOperatingSystem(string? operatingSystem, string? expectedUpdateType)
+    {
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
+        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "box", allowNewProbe: true, operatingSystem).Redemption!;
+
+        var types = _store.GetAllElements().OfType<SensorElement>()
+            .Where(sensor => sensor.ParentId == redeemed.ElementId)
+            .Select(sensor => sensor.SensorTypeKey)
+            .ToArray();
+
+        Assert.Contains("local-health", types);
+        var updateTypes = types.Where(type => type is "windows-update" or "linux-update").ToArray();
+        if (expectedUpdateType is null)
+        {
+            Assert.Empty(updateTypes);
+        }
+        else
+        {
+            Assert.Equal([expectedUpdateType], updateTypes);
+        }
+    }
+
     [Fact]
     public void AFullLicenceStopsANewProbeButNotAReenrolment()
     {

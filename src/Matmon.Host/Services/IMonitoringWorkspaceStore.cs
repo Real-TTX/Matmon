@@ -400,7 +400,8 @@ public interface IMonitoringWorkspaceStore
     /// code answers <see cref="AgentEnrollmentStatus.ProbeLimit"/> and is NOT consumed; a re-enrolment code
     /// still works, because it adds no probe.
     /// </summary>
-    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe);
+    /// <param name="operatingSystem">What the agent reported (e.g. "Microsoft Windows 10.0.26200"); picks its baseline sensors.</param>
+    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe, string? operatingSystem = null);
 
     void Save();
 }

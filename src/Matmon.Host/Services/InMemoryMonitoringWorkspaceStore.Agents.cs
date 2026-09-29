@@ -98,7 +98,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
-    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe)
+    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe, string? operatingSystem = null)
     {
         var invalid = new AgentEnrollmentResult(AgentEnrollmentStatus.Invalid);
         var hash = AgentEnrollmentCode.Hash(code);
@@ -138,7 +138,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 // processes can never report as one probe.
                 existing.EnrollmentToken = CreateToken();
                 existing.AgentEnrolledUtc = now;
-                EnsureLocalHealthSensorLocked(existing);
+                EnsureAgentBaselineSensorsLocked(existing, operatingSystem);
                 return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
                     new AgentEnrollmentRedemption(existing.Id, existing.ProbeId, existing.EnrollmentToken, existing.Name, Reenrolled: true));
             }
@@ -157,7 +157,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 ?? (string.IsNullOrWhiteSpace(hostName) ? "Agent" : hostName.Trim());
             var probe = CreateProbe(null, name, "Matmon agent");
             probe.AgentEnrolledUtc = now;
-            EnsureLocalHealthSensorLocked(probe);
+            EnsureAgentBaselineSensorsLocked(probe, operatingSystem);
             QueueSave(SavePriority.Configuration);
 
             return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
@@ -166,19 +166,57 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     }
 
     /// <summary>
-    /// An agent's whole point is the machine it sits on, so it arrives measuring it: one "System Health"
-    /// sensor (local CPU / memory / disks, no credentials needed) unless the probe already has one - a
-    /// re-enrolled probe keeps what it had. Created through CreateSensor, so the default thresholds apply.
+    /// An agent's whole point is the machine it sits on, so it arrives measuring it: "System Health" (local
+    /// CPU / memory / disks) and, for an OS it recognises, the pending-updates sensor for it - both run locally
+    /// on the agent (empty target = this machine), so neither needs a credential. Each only if the probe has no
+    /// sensor of that type yet - a re-enrolled probe keeps what it had. Created through CreateSensor, so the
+    /// default thresholds and schedule apply.
     /// </summary>
-    private void EnsureLocalHealthSensorLocked(ProbeElement probe)
+    private void EnsureAgentBaselineSensorsLocked(ProbeElement probe, string? operatingSystem)
+    {
+        EnsureSensorOfTypeLocked(probe, LocalHealthSensorExecutor.Definition.Key, "System Health",
+            "CPU, memory and disks of this machine, measured by the agent itself.");
+
+        switch (AgentOperatingSystem(operatingSystem))
+        {
+            case "windows":
+                EnsureSensorOfTypeLocked(probe, WindowsUpdateSensorExecutor.Definition.Key, "Windows Update",
+                    "Pending Windows updates on this machine, checked locally by the agent.");
+                break;
+            case "linux":
+                EnsureSensorOfTypeLocked(probe, LinuxUpdateSensorExecutor.Definition.Key, "Package Updates",
+                    "Pending package updates on this machine, checked locally by the agent.");
+                break;
+        }
+    }
+
+    /// <summary>"windows" / "linux" / null from the agent's reported OS description.</summary>
+    public static string? AgentOperatingSystem(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return null;
+        }
+
+        if (description.Contains("Windows", StringComparison.OrdinalIgnoreCase))
+        {
+            return "windows";
+        }
+
+        // RuntimeInformation.OSDescription on Linux is the distro ("Ubuntu 24.04.1 LTS", "Debian GNU/Linux 12")
+        // or the kernel ("Linux 6.8.0-..."); macOS says "Darwin" and has no update sensor.
+        string[] linux = ["Linux", "Ubuntu", "Debian", "Fedora", "CentOS", "Red Hat", "Rocky", "Alma", "SUSE", "Alpine", "Raspbian", "Arch"];
+        return linux.Any(name => description.Contains(name, StringComparison.OrdinalIgnoreCase)) ? "linux" : null;
+    }
+
+    private void EnsureSensorOfTypeLocked(ProbeElement probe, string sensorTypeKey, string name, string description)
     {
         var hasOne = EnumerateElements(probe)
             .OfType<SensorElement>()
-            .Any(sensor => string.Equals(sensor.SensorTypeKey, LocalHealthSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+            .Any(sensor => string.Equals(sensor.SensorTypeKey, sensorTypeKey, StringComparison.OrdinalIgnoreCase));
         if (!hasOne)
         {
-            CreateSensor(probe.Id, "System Health", LocalHealthSensorExecutor.Definition.Key, string.Empty,
-                "CPU, memory and disks of this machine, measured by the agent itself.");
+            CreateSensor(probe.Id, name, sensorTypeKey, string.Empty, description);
         }
     }
 
