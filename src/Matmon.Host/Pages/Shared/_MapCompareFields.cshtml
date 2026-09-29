@@ -1,0 +1,44 @@
+@model Matmon.Host.Pages.MapCompareFieldsModel
+@{
+    // One partial for the server-rendered tile panels AND the tile <template> the designer clones, so the two
+    // markups cannot drift. A select can only post one of its options, so a stored value that is no longer
+    // reported anywhere (the sensor was removed, a typed key) is folded in - otherwise any unrelated save
+    // would silently switch the chart to the first option.
+    var current = Model.ChannelValue ?? string.Empty;
+    var known = Model.Options.Any(option => string.Equals(option.Value, current, StringComparison.OrdinalIgnoreCase));
+    var ungrouped = Model.Options.Where(option => option.Group is null);
+    var groups = Model.Options.Where(option => option.Group is not null).GroupBy(option => option.Group!.Name);
+}
+<label class="workspace-field" data-map-property-series-only>
+    <span class="workspace-label">Compare</span>
+    <select name="@(Model.NamePrefix).ListChannelKey" class="form-select workspace-select" data-map-compare-channel>
+        @foreach (var option in ungrouped)
+        {
+            <option value="@option.Value" selected="@(string.Equals(option.Value, current, StringComparison.OrdinalIgnoreCase))">@option.Text</option>
+        }
+        @foreach (var group in groups)
+        {
+            <optgroup label="@group.Key">
+                @foreach (var option in group)
+                {
+                    <option value="@option.Value" selected="@(string.Equals(option.Value, current, StringComparison.OrdinalIgnoreCase))">@option.Text</option>
+                }
+            </optgroup>
+        }
+        @if (!known && current.Length > 0)
+        {
+            <option value="@current" selected>@current (not reported right now)</option>
+        }
+    </select>
+    <span class="workspace-inline-note">All lines share one scale, so they must measure the same thing. <strong>Same measurement</strong> reads each sensor's own channel for it - CPU is <code>cpuLoad</code> on Windows, <code>cpu</code> on Proxmox, <code>cpuUtilization</code> on a Synology - which is how you compare different machines. An exact channel only matches sensors that report that key.</span>
+</label>
+<label class="workspace-field" data-map-property-series-only>
+    <span class="workspace-label">Time window</span>
+    <select name="@(Model.NamePrefix).GraphWindowHours" class="form-select workspace-select" data-map-graph-window>
+        @foreach (var hours in Matmon.Core.Domain.MonitoringMapTile.GraphWindowChoices)
+        {
+            <option value="@hours" selected="@(hours == Model.WindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", _ => $"Last {hours} hours" })</option>
+        }
+    </select>
+    <span class="workspace-inline-note">Up to three days: the chart reads raw readings, which are kept about that long by default.</span>
+</label>

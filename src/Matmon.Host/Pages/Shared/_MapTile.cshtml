@@ -215,19 +215,47 @@
 
     @if (tile.Kind == MonitoringMapTileKind.MultiGraph && Model.Series is { Count: > 0 } series)
     {
-        @* Chart over legend. Every line is already drawn on ONE shared scale by MapDisplayProvider, which is
-           what lets you see which sensor moved - and preserveAspectRatio="none" is fine for exactly the same
-           reason the single graph uses it: the shape is comparative, not metric. *@
+        @* Chart over legend. Every line is drawn on ONE shared, rounded scale by MapDisplayProvider - that is
+           what lets you see which sensor moved - and the Y labels say what that scale is, so the chart also
+           says how busy. preserveAspectRatio="none" is fine: the labels are HTML beside the plot, not text
+           inside the stretched SVG. The grid lines sit where the scale's bounds and middle land (y 2 / 20 / 38
+           of the 40-unit viewBox - SparklineGeometry pads 2 units top and bottom). Every path is emitted, even
+           an empty one, so the live patch and the tooltip can match lines by position. *@
+        var axis = Model.Axis;
         <div class="map-tile-multigraph">
-            <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-                @foreach (var line in series)
+            <div class="map-multigraph-chart" data-map-multigraph data-window-start="@axis?.StartMs" data-window-end="@axis?.EndMs" data-unit="@axis?.Unit">
+                @if (axis is not null)
                 {
-                    @if (!string.IsNullOrWhiteSpace(line.LinePath))
-                    {
-                        <path class="map-graph-line" d="@line.LinePath" style="stroke: @line.Color"></path>
-                    }
+                    <div class="map-multigraph-yaxis" aria-hidden="true">
+                        @* The labels are placed absolutely, on the grid lines; this invisible copy of the longest
+                           one is what gives the column its width. *@
+                        <span class="map-multigraph-ysizer">@(new[] { axis.Top, axis.Middle, axis.Bottom }.MaxBy(label => label.Length))</span>
+                        <span data-axis-top>@axis.Top</span>
+                        <span data-axis-middle>@axis.Middle</span>
+                        <span data-axis-bottom>@axis.Bottom</span>
+                    </div>
                 }
-            </svg>
+                <div class="map-multigraph-plot">
+                    <svg class="map-tile-graph" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                        <line class="map-multigraph-grid" x1="0" x2="100" y1="2" y2="2"></line>
+                        <line class="map-multigraph-grid" x1="0" x2="100" y1="20" y2="20"></line>
+                        <line class="map-multigraph-grid" x1="0" x2="100" y1="38" y2="38"></line>
+                        @foreach (var line in series)
+                        {
+                            <path class="map-graph-line" d="@(line.LinePath ?? string.Empty)" style="stroke: @line.Color" data-series-points="@line.Points" data-series-label="@line.Label"></path>
+                        }
+                    </svg>
+                    <span class="map-multigraph-cursor" aria-hidden="true" hidden></span>
+                    <div class="map-multigraph-tooltip" hidden></div>
+                </div>
+                @if (axis is not null)
+                {
+                    <div class="map-multigraph-xaxis" aria-hidden="true">
+                        <span>-@axis.WindowLabel</span>
+                        <span>now</span>
+                    </div>
+                }
+            </div>
             <ul class="map-graph-legend">
                 @foreach (var line in series)
                 {

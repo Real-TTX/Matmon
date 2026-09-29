@@ -38,10 +38,11 @@ public static class MapLiveData
         tile.GraphLinePath,
         tile.GraphAreaPath,
         tile.GraphBarPath,
-        tile.Series?.Select(line => new MapLiveSeries(line.Color, line.LinePath, line.Value)).ToArray(),
+        tile.Series?.Select(line => new MapLiveSeries(line.Label, line.Color, line.LinePath, line.Value, line.Points)).ToArray(),
         tile.Rows?.Select(row => new MapLiveRow(row.Label, row.Detail, row.Value, row.Tone, row.TimeText)).ToArray(),
         tile.Sla is { } sla ? new MapLiveSla(sla.Percent, sla.Label) : null,
-        tile.Pins?.Select(pin => new MapLivePin(pin.Label, pin.Tone, pin.Value)).ToArray());
+        tile.Pins?.Select(pin => new MapLivePin(pin.Label, pin.Tone, pin.Value)).ToArray(),
+        tile.Axis is { } axis ? new MapLiveAxis(axis.Top, axis.Middle, axis.Bottom, axis.StartMs, axis.EndMs) : null);
 
     /// <summary>
     /// A short hash over everything the markup bakes in: which tiles exist, on which slide, of what kind, and
@@ -104,9 +105,16 @@ public sealed record MapLiveTile(
     IReadOnlyList<MapLiveSeries>? Series,
     IReadOnlyList<MapLiveRow>? Rows,
     MapLiveSla? Sla,
-    IReadOnlyList<MapLivePin>? Pins);
+    IReadOnlyList<MapLivePin>? Pins,
+    /// <summary>A multi-graph's Y labels and window: the scale follows the data, so it moves with the lines.</summary>
+    MapLiveAxis? Axis = null);
 
-public sealed record MapLiveSeries(string Color, string? LinePath, string? Value);
+/// <summary>Label and Color travel too: the legend is ordered by the LAST reading, so when another sensor
+/// becomes the highest the positions swap - patched by position alone, a name ended up next to someone
+/// else's value and line.</summary>
+public sealed record MapLiveSeries(string Label, string Color, string? LinePath, string? Value, string? Points);
+
+public sealed record MapLiveAxis(string Top, string Middle, string Bottom, long StartMs, long EndMs);
 
 public sealed record MapLiveRow(string Label, string? Detail, string? Value, string Tone, string? TimeText);
 

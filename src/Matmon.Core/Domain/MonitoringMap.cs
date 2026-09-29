@@ -314,13 +314,29 @@ public sealed class MonitoringMapTile
     /// <inheritdoc cref="GaugeMin"/>
     public double? GaugeMax { get; set; }
 
-    /// <summary>Channel key a <see cref="MonitoringMapListMode.TopValue"/> list ranks by. Null = the sensor's
-    /// default channel. Channel keys differ per sensor type and there is no cross-type catalog, so the editor
-    /// fills this picker from the channels actually observed under the target.</summary>
+    /// <summary>Channel a <see cref="MonitoringMapListMode.TopValue"/> list ranks by, or a multi-graph reads
+    /// from every sensor. Either an exact channel key, or a FAMILY token (<c>family:cpu</c>, see
+    /// <c>Matmon.Core.Telemetry.ChannelFamilies</c>) that picks each sensor's own channel for that measurement -
+    /// the only way to compare CPU across a Windows box, a Proxmox node and a NAS, which all name it
+    /// differently. Null = the sensor's default channel.</summary>
     public string? ListChannelKey { get; set; }
 
     /// <summary>Window a <see cref="MonitoringMapTileKind.Sla"/> tile reports uptime over.</summary>
     public int SlaWindowDays { get; set; } = 7;
+
+    /// <summary>
+    /// How far back a <see cref="MonitoringMapTileKind.MultiGraph"/> looks, in hours - one of
+    /// <see cref="GraphWindowChoices"/>. It stops at three days on purpose: the chart reads raw observations,
+    /// and raw observations are kept for about three days by default (statistics buckets live longer, but a
+    /// line that silently switches to hourly averages halfway through is not the same chart).
+    /// </summary>
+    public int GraphWindowHours { get; set; } = 24;
+
+    public static readonly int[] GraphWindowChoices = [1, 6, 24, 72];
+
+    /// <summary>A stored or posted window snapped to the nearest offered choice.</summary>
+    public static int NormalizeGraphWindowHours(int hours) =>
+        GraphWindowChoices.OrderBy(choice => Math.Abs(choice - hours)).First();
 
     /// <summary>The uploaded picture behind an <see cref="MonitoringMapTileKind.Image"/> tile. Only the ID is
     /// stored - the bytes live in the MapAssetStore on disk, never in workspace.json, which is fully
@@ -374,6 +390,7 @@ public sealed class MonitoringMapTile
         GaugeMax = GaugeMax,
         ListChannelKey = ListChannelKey,
         SlaWindowDays = SlaWindowDays,
+        GraphWindowHours = GraphWindowHours,
         ImageAssetId = ImageAssetId,
         ImageFit = ImageFit,
         Pins = Pins.Select(pin => pin.Clone()).ToList(),

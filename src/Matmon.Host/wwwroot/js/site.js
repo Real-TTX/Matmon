@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMapCarousel();
   initializeMapClocks();
   initializeMapLiveData();
+  initializeMultiGraphTooltips();
   initializeElementPickers();
   initializeIconPicker();
   initializeTagInputs();
@@ -860,6 +861,200 @@ function initializeMapClocks() {
 // Only VALUES are patched. Anything structural (a tile added, removed, moved, resized) is baked into the
 // server-rendered markup, so the payload carries a revision over exactly that shape and a change there does
 // one honest full reload.
+/**
+ * The multi-graph's hover read-out: a hairline at the pointer and a card with the time there and every line's
+ * value at that moment. It reads the SAME points the lines were drawn from (data-series-points, "x,value;..."
+ * with x = 0..1 across the window) - not a value guessed back out of the SVG path - and the window from the
+ * chart, which the live patch keeps current. Delegated on the document, so charts re-rendered by the designer
+ * or a revision reload need no re-wiring. Never in the designer, where the pointer is busy dragging tiles.
+ */
+/**
+ * A tile panel carries some properties TWICE, one field per widget kind that uses it - "Rank by channel" and
+ * "Compare" are both ListChannelKey, "Rows" and "Lines" both ListLimit. Hiding the unused one is not enough:
+ * a hidden input still posts, the model binder takes the FIRST value, and the first in the DOM was the hidden
+ * one - so an edit to a multi-graph's channel or line count was silently thrown away on save (and the live
+ * preview read the stale one too). Of each same-named group only the visible field stays enabled; typing into
+ * it mirrors the value into its twins, so switching the kind keeps what was entered.
+ */
+function syncDuplicateFields(panel) {
+  const groups = new Map();
+  panel.querySelectorAll("input[name], select[name], textarea[name]").forEach((field) => {
+    if (field.type === "hidden" || field.type === "checkbox" || field.type === "radio" || field.type === "file") {
+      return;
+    }
+    const list = groups.get(field.name) || [];
+    list.push(field);
+    groups.set(field.name, list);
+  });
+
+  // "Unused" means hidden by a KIND group (data-map-property-*-only) - not merely inside a closed tab: the
+  // Data tab being shut while the kind changes must not disable the very field that tab is about to show.
+  const unusedForKind = (field) => {
+    for (let element = field.parentElement; element && element !== panel; element = element.parentElement) {
+      if (element.hidden && [...element.attributes].some((attribute) => /^data-map-property-.+-only$/.test(attribute.name))) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  groups.forEach((fields) => {
+    if (fields.length < 2) {
+      return;
+    }
+    const used = fields.filter((field) => !unusedForKind(field));
+    const keep = used[0] || fields[0];
+    fields.forEach((field) => {
+      field.disabled = field !== keep;
+    });
+  });
+
+  if (panel.dataset.duplicateSync !== "1") {
+    panel.dataset.duplicateSync = "1";
+    const mirror = (event) => {
+      const source = event.target;
+      if (!(source instanceof HTMLInputElement || source instanceof HTMLSelectElement || source instanceof HTMLTextAreaElement) || !source.name) {
+        return;
+      }
+      panel.querySelectorAll(`[name="${CSS.escape(source.name)}"]`).forEach((twin) => {
+        if (twin === source || twin.type === "hidden" || twin.type === "checkbox") {
+          return;
+        }
+        if (twin instanceof HTMLSelectElement && ![...twin.options].some((option) => option.value === source.value)) {
+          // A select can only hold one of its options; offer the typed value rather than lose it.
+          twin.add(new Option(source.value, source.value));
+        }
+        twin.value = source.value;
+      });
+    };
+    panel.addEventListener("input", mirror);
+    panel.addEventListener("change", mirror);
+  }
+}
+
+function initializeMultiGraphTooltips() {
+  const parsed = new WeakMap();
+  const pointsOf = (path) => {
+    const raw = path.dataset.seriesPoints || "";
+    const cached = parsed.get(path);
+    if (cached && cached.raw === raw) {
+      return cached.points;
+    }
+    const points = raw.split(";").map((pair) => pair.split(",").map(Number)).filter((pair) => pair.length === 2 && pair.every(Number.isFinite));
+    parsed.set(path, { raw, points });
+    return points;
+  };
+
+  const nearest = (points, x) => {
+    let best = null;
+    for (const point of points) {
+      if (!best || Math.abs(point[0] - x) < Math.abs(best[0] - x)) {
+        best = point;
+      }
+    }
+    return best;
+  };
+
+  const formatValue = (value, unit) => {
+    const digits = Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 2;
+    const number = value.toLocaleString(undefined, { maximumFractionDigits: digits });
+    return !unit ? number : unit === "%" ? `${number}%` : `${number} ${unit}`;
+  };
+
+  const hide = (plot) => {
+    const tooltip = plot.querySelector(".map-multigraph-tooltip");
+    const cursor = plot.querySelector(".map-multigraph-cursor");
+    if (tooltip) {
+      tooltip.hidden = true;
+    }
+    if (cursor) {
+      cursor.hidden = true;
+    }
+  };
+
+  const show = (plot, event) => {
+    const chart = plot.closest("[data-map-multigraph]");
+    const svg = plot.querySelector("svg");
+    const tooltip = plot.querySelector(".map-multigraph-tooltip");
+    const cursor = plot.querySelector(".map-multigraph-cursor");
+    if (!chart || !svg || !tooltip || !cursor) {
+      return;
+    }
+
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const start = Number(chart.dataset.windowStart);
+    const end = Number(chart.dataset.windowEnd);
+    const unit = chart.dataset.unit || "";
+
+    // A point more than ~4 % of the window away is a gap in that sensor's data, not its reading here.
+    const entries = [...plot.querySelectorAll(".map-graph-line")]
+      .map((path) => ({ path, point: nearest(pointsOf(path), x) }))
+      .filter((entry) => entry.point && Math.abs(entry.point[0] - x) <= 0.04)
+      .map((entry) => ({
+        label: entry.path.dataset.seriesLabel || "",
+        color: entry.path.style.stroke,
+        value: entry.point[1]
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    if (entries.length === 0 || !Number.isFinite(start) || !Number.isFinite(end)) {
+      hide(plot);
+      return;
+    }
+
+    // Built with textContent only - the labels are sensor names, which a user typed.
+    const time = document.createElement("time");
+    const at = new Date(start + x * (end - start));
+    time.textContent = at.toLocaleString(undefined, end - start > 36 * 3600e3
+      ? { weekday: "short", hour: "2-digit", minute: "2-digit" }
+      : { hour: "2-digit", minute: "2-digit" });
+    const rows = entries.map((entry) => {
+      const row = document.createElement("span");
+      row.className = "map-multigraph-tooltip-row";
+      const swatch = document.createElement("span");
+      swatch.className = "map-graph-swatch";
+      swatch.style.background = entry.color;
+      const name = document.createElement("span");
+      name.textContent = entry.label;
+      const value = document.createElement("strong");
+      value.textContent = formatValue(entry.value, unit);
+      row.append(swatch, name, value);
+      return row;
+    });
+    tooltip.replaceChildren(time, ...rows);
+
+    cursor.style.left = `${x * 100}%`;
+    cursor.hidden = false;
+    tooltip.hidden = false;
+    // Beside the pointer, on whichever side has the room.
+    if (x > 0.55) {
+      tooltip.style.left = "";
+      tooltip.style.right = `calc(${(1 - x) * 100}% + 8px)`;
+    } else {
+      tooltip.style.right = "";
+      tooltip.style.left = `calc(${x * 100}% + 8px)`;
+    }
+  };
+
+  document.addEventListener("pointermove", (event) => {
+    const plot = event.target instanceof Element ? event.target.closest(".map-multigraph-plot") : null;
+    if (!plot || plot.closest("[data-map-designer]")) {
+      return;
+    }
+    show(plot, event);
+  });
+  document.addEventListener("pointerout", (event) => {
+    const plot = event.target instanceof Element ? event.target.closest(".map-multigraph-plot") : null;
+    if (plot && !(event.relatedTarget instanceof Node && plot.contains(event.relatedTarget))) {
+      hide(plot);
+    }
+  });
+}
+
 function initializeMapLiveData() {
   const root = document.querySelector("[data-map-live]");
   if (!root) {
@@ -949,20 +1144,39 @@ function initializeMapLiveData() {
       bars.setAttribute("d", data.graphBarPath);
     }
 
-    // A multi-graph's lines ARE its values, so the paths themselves are patched. Matched by POSITION:
-    // the payload is built from the same ordered series the markup was rendered from, and a change to the
-    // series COUNT bumps the revision and forces a full reload rather than being patched in.
+    // A multi-graph's lines ARE its values, so the paths themselves are patched, by POSITION (a change to
+    // the series COUNT bumps the revision and reloads instead). Everything of a position travels together -
+    // name, colour, line, value, tooltip points - because the legend is ordered by the last reading and two
+    // sensors swap places whenever another becomes the highest.
     if (Array.isArray(data.series)) {
       const paths = tile.querySelectorAll(".map-tile-multigraph .map-graph-line");
-      const values = tile.querySelectorAll(".map-graph-legend-value");
+      const items = tile.querySelectorAll(".map-graph-legend li");
       data.series.forEach((entry, index) => {
-        if (entry.linePath) {
-          paths[index]?.setAttribute("d", entry.linePath);
+        const path = paths[index];
+        if (path) {
+          path.setAttribute("d", entry.linePath || "");
+          path.style.stroke = entry.color;
+          path.dataset.seriesPoints = entry.points || "";
+          path.dataset.seriesLabel = entry.label || "";
         }
-        if (values[index] && entry.value) {
-          values[index].textContent = entry.value;
+        const item = items[index];
+        if (item) {
+          setText(item, ".map-graph-legend-name", entry.label || "");
+          setText(item, ".map-graph-legend-value", entry.value || "");
+          const swatch = item.querySelector(".map-graph-swatch");
+          if (swatch) {
+            swatch.style.background = entry.color;
+          }
         }
       });
+    }
+    const chart = tile.querySelector("[data-map-multigraph]");
+    if (chart && data.axis) {
+      setText(chart, "[data-axis-top]", data.axis.top);
+      setText(chart, "[data-axis-middle]", data.axis.middle);
+      setText(chart, "[data-axis-bottom]", data.axis.bottom);
+      chart.dataset.windowStart = String(data.axis.startMs);
+      chart.dataset.windowEnd = String(data.axis.endMs);
     }
 
     const sla = tile.querySelector(".map-tile-sla");
@@ -4267,6 +4481,7 @@ function initializeMapDesigner() {
     if (graphField) {
       graphField.hidden = !isGraph;
     }
+    syncDuplicateFields(panel);
     if (hint) {
       const limits = getLimits(kind);
       hint.textContent = `${kindHints[kind] || "Select a target and place the tile on the canvas."} Drag to move, resize from the bottom-right corner. Minimum size: ${limits.minColumns} x ${limits.minRows} cells.`;
@@ -4387,8 +4602,9 @@ function initializeMapDesigner() {
     // The series inputs change WHAT the tile is made of, not just a value, so they belong in the key that
     // decides whether the body has to be re-fetched.
     panel.querySelector("[data-map-targets-value]")?.value || "",
-    panel.querySelector('[name$=".ListLimit"]')?.value || "",
-    panel.querySelector('[name$=".ListChannelKey"]')?.value || "",
+    panel.querySelector('[name$=".ListLimit"]:not(:disabled)')?.value || "",
+    panel.querySelector('[name$=".ListChannelKey"]:not(:disabled)')?.value || "",
+    panel.querySelector('[name$=".GraphWindowHours"]')?.value || "",
     normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value || "Element"),
     panel?.querySelector("[data-map-property-visual-type]")?.value || "",
     panel?.querySelector("[data-map-property-graph-type]")?.value || "",
@@ -4434,8 +4650,9 @@ function initializeMapDesigner() {
       channelKey: panel.querySelector('[name$=".ChannelKey"]')?.value || "",
       gaugeMin: panel.querySelector('[name$=".GaugeMin"]')?.value || "",
       gaugeMax: panel.querySelector('[name$=".GaugeMax"]')?.value || "",
-      listLimit: panel.querySelector('[name$=".ListLimit"]')?.value || "",
-      listChannelKey: panel.querySelector('[name$=".ListChannelKey"]')?.value || "",
+      listLimit: panel.querySelector('[name$=".ListLimit"]:not(:disabled)')?.value || "",
+      listChannelKey: panel.querySelector('[name$=".ListChannelKey"]:not(:disabled)')?.value || "",
+      graphWindowHours: panel.querySelector('[name$=".GraphWindowHours"]')?.value || "24",
       targets: panel.querySelector("[data-map-targets-value]")?.value || ""
     });
 

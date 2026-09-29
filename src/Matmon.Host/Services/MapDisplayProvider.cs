@@ -329,7 +329,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Image => BuildImageTile(tile, element, latest, geo: false),
             MonitoringMapTileKind.GeoMap => BuildImageTile(tile, element, latest, geo: true),
             MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
-            MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element),
+            MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element, latest),
             _ => BuildSensorListTile(tile, element, latest)
         };
     }
@@ -347,11 +347,25 @@ public sealed class MapDisplayProvider
         "#4FB3FF", "#F2B138", "#7BD88F", "#E36D9B", "#B79BFF", "#4FD8D2", "#FF8A5B", "#9FB3C8"
     ];
 
-    /// <summary>Several sensors as lines in one chart. The one thing that makes it useful is that every line
-    /// is drawn on ONE scale (<see cref="SparklineGeometry.Scale"/>): normalised per series they would all
-    /// look the same and the spike would be invisible. That also means the series have to be comparable,
-    /// which is what the tile's channel key is for - with it, the SAME channel is read from every sensor.</summary>
-    private MapDisplayTileViewModel BuildMultiGraphTile(MonitoringMapTile tile, MonitoringElement? element)
+    /// <summary>
+    /// Several sensors as lines in one chart - "which of these machines is busy?". Three things make that
+    /// question answerable, and each was once wrong:
+    /// <list type="bullet">
+    /// <item>ONE scale for every line (<see cref="SparklineGeometry.NiceScale"/>): normalised per series they
+    /// all look the same and the spike is invisible. It is rounded to readable bounds and labelled, so the
+    /// chart says how busy, not just which.</item>
+    /// <item>the SAME measurement from every sensor, even when their types name it differently - a channel
+    /// FAMILY (<see cref="ChannelFamilies"/>) picks each sensor's own CPU / memory / ... channel. An exact
+    /// key still works for a set of identical sensors.</item>
+    /// <item>X by TIME over the real window: the old chart spaced the newest 64 readings evenly and labelled
+    /// them "last 24h" - for a 30 s ping that was the last half hour, and a sensor that only started an hour
+    /// ago was stretched over the whole width.</item>
+    /// </list>
+    /// </summary>
+    private MapDisplayTileViewModel BuildMultiGraphTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
     {
         var sensors = ResolveMultiTargetSensors(tile);
         if (sensors.Count == 0)
@@ -359,49 +373,156 @@ public sealed class MapDisplayProvider
             return CreateTile(tile, element, "unknown", "No target", "No sensors under these targets", string.Empty, KindLabel(tile.Kind), "chart");
         }
 
+        var family = ChannelFamilies.Parse(tile.ListChannelKey);
+        var exactKey = family is null && !string.IsNullOrWhiteSpace(tile.ListChannelKey) ? tile.ListChannelKey.Trim() : null;
+        var windowHours = MonitoringMapTile.NormalizeGraphWindowHours(tile.GraphWindowHours);
+        var window = TimeSpan.FromHours(windowHours);
+        var endUtc = DateTimeOffset.UtcNow;
+        var startUtc = endUtc - window;
         var limit = Math.Clamp(tile.ListLimit, 1, MultiGraphMaxSeries);
-        var channelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim();
 
+        // Filter FIRST, limit after: a host carries a ping, a health sensor, a disk sensor... and taking the
+        // first N by name before asking which of them has the channel regularly cut the one line that did.
         var collected = sensors
             .OrderBy(sensor => sensor.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(sensor =>
+            {
+                latest.TryGetValue(sensor.Id, out var observation);
+                // The family's channel from the LATEST reading - or, when that one carries none (a timeout, a
+                // failed run: no channels at all), from the newest reading in the window that does. Otherwise
+                // one failed poll removed a machine from the chart although its whole day is right there.
+                var channel = family is null
+                    ? null
+                    : (observation is null ? null : ChannelFamilies.Pick(observation.Channels, family))
+                        ?? ReadWindow(sensor.Id, window)
+                            .Reverse()
+                            .Select(candidate => ChannelFamilies.Pick(candidate.Channels, family))
+                            .FirstOrDefault(candidate => candidate is not null);
+                var key = family is not null ? channel?.Key : exactKey;
+                var unit = family?.Unit
+                    ?? (exactKey is not null
+                        ? observation?.Channels.FirstOrDefault(candidate => string.Equals(candidate.Key, exactKey, StringComparison.OrdinalIgnoreCase))?.Unit
+                        : null);
+                IReadOnlyList<(double X, double Value)> points = family is not null && key is null
+                    ? []
+                    : ReadSeries(sensor.Id, key, startUtc, window);
+                return (sensor, key, unit, points);
+            })
+            .Where(entry => entry.points.Count >= 2)
             .Take(limit)
-            .Select(sensor => (sensor, values: ReadSeries(sensor.Id, channelKey)))
-            .Where(entry => entry.values.Count >= 2)
             .ToArray();
 
         if (collected.Length == 0)
         {
-            var missing = channelKey is null
-                ? "No history for these sensors yet"
-                : $"No history on channel \"{channelKey}\" yet";
+            var missing = family is not null
+                ? $"None of these sensors reports {family.Label.ToLowerInvariant()} yet"
+                : exactKey is not null
+                    ? $"No history on channel \"{exactKey}\" in the last {WindowLabel(windowHours)}"
+                    : $"No history in the last {WindowLabel(windowHours)}";
             return CreateTile(tile, element, "unknown", "No data", missing, string.Empty, KindLabel(tile.Kind), "chart");
         }
 
-        var (min, max) = SparklineGeometry.Scale(collected.Select(entry => entry.values));
+        // One unit for the axis: the family's, or the exact channel's when every line agrees on it.
+        var units = collected
+            .Select(entry => entry.unit?.Trim())
+            .Where(unit => !string.IsNullOrEmpty(unit))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var axisUnit = family?.Unit ?? (units.Length == 1 ? units[0] : null);
+
+        var (rawMin, rawMax) = SparklineGeometry.Scale(collected.Select(entry => (IReadOnlyList<double>)entry.points.Select(point => point.Value).ToArray()));
+        var (min, max) = SparklineGeometry.NiceScale(rawMin, rawMax, percent: axisUnit == "%");
+
+        var labels = SeriesLabels(collected.Select(entry => entry.sensor).ToArray());
 
         // Biggest last reading first: the legend is read top-down, and the line you are looking for is
-        // almost always the one that is currently highest.
+        // almost always the one that is currently highest. Colours stay tied to the (name-ordered) index.
         var series = collected
-            .Select((entry, index) => new
-            {
-                entry.sensor,
-                entry.values,
-                Color = MultiGraphPalette[index % MultiGraphPalette.Length]
-            })
-            .OrderByDescending(entry => entry.values[^1])
-            .Select(entry => new MapGraphSeriesDto(
-                entry.sensor.Name,
-                entry.Color,
-                SparklineGeometry.Line(entry.values, min, max),
-                Format(entry.values[^1])))
+            .Select((entry, index) => new { entry, Color = MultiGraphPalette[index % MultiGraphPalette.Length], Label = labels[index] })
+            .OrderByDescending(item => item.entry.points[^1].Value)
+            .Select(item => new MapGraphSeriesDto(
+                item.Label,
+                item.Color,
+                SparklineGeometry.TimeLine(item.entry.points, min, max),
+                FormatWithUnit(item.entry.points[^1].Value, item.entry.unit ?? axisUnit),
+                string.Join(";", item.entry.points.Select(point =>
+                    $"{point.X.ToString("0.####", CultureInfo.InvariantCulture)},{Format(point.Value)}"))))
             .ToArray();
 
-        var subtitle = channelKey is null
-            ? $"{series.Length} sensors · last 24h"
-            : $"{series.Length} sensors · {channelKey} · last 24h";
+        var measured = family?.Label ?? exactKey;
+        var subtitle = measured is null
+            ? $"{series.Length} sensors · last {WindowLabel(windowHours)}"
+            : $"{series.Length} sensors · {measured} · last {WindowLabel(windowHours)}";
+        var axis = new MapGraphAxisDto(
+            FormatWithUnit(max, axisUnit),
+            FormatWithUnit((min + max) / 2, axisUnit),
+            FormatWithUnit(min, axisUnit),
+            axisUnit,
+            startUtc.ToUnixTimeMilliseconds(),
+            endUtc.ToUnixTimeMilliseconds(),
+            WindowLabel(windowHours));
 
         return CreateTile(tile, element, "ok", "Chart", subtitle, string.Empty, KindLabel(tile.Kind), "chart")
-            with { Series = series };
+            with { Series = series, Axis = axis };
+    }
+
+    /// <summary>
+    /// What each line is called. The chart compares MACHINES, and every machine's health sensor has the same
+    /// name - a legend reading "Windows Health, Windows Health, Synology Health" names nothing. So a line is
+    /// named after its machine: the host it sits under, else the sensor's own target, else its parent. The
+    /// sensor's name is added only where that is still ambiguous (two sensors on one host), and a number only
+    /// where even that repeats.
+    /// </summary>
+    private string[] SeriesLabels(IReadOnlyList<SensorElement> sensors)
+    {
+        var machines = sensors.Select(MachineName).ToArray();
+        var labels = sensors
+            .Select((sensor, index) => machines.Count(name => string.Equals(name, machines[index], StringComparison.OrdinalIgnoreCase)) > 1
+                ? $"{machines[index]} · {sensor.Name}"
+                : machines[index])
+            .ToArray();
+
+        return labels
+            .Select((label, index) =>
+            {
+                var before = labels.Take(index).Count(other => string.Equals(other, label, StringComparison.OrdinalIgnoreCase));
+                return before == 0 ? label : $"{label} ({before + 1})";
+            })
+            .ToArray();
+    }
+
+    private string MachineName(SensorElement sensor)
+    {
+        // Walk up to the nearest host: that IS the machine. Bounded, in case of a malformed tree.
+        var parentId = sensor.ParentId;
+        MonitoringElement? parent = null;
+        for (var depth = 0; parentId is Guid id && depth < 16; depth++)
+        {
+            var element = _workspaceStore.FindElement(id);
+            parent ??= element;
+            if (element is HostElement host)
+            {
+                return host.Name;
+            }
+
+            parentId = element?.ParentId;
+        }
+
+        return !string.IsNullOrWhiteSpace(sensor.Target) ? sensor.Target : parent?.Name ?? sensor.Name;
+    }
+
+    private static string WindowLabel(int hours) => hours switch
+    {
+        72 => "3 days",
+        _ => $"{hours} h"
+    };
+
+    private static string FormatWithUnit(double value, string? unit)
+    {
+        var number = Math.Abs(value) >= 100 ? value.ToString("0", CultureInfo.InvariantCulture)
+            : Math.Abs(value) >= 10 ? value.ToString("0.#", CultureInfo.InvariantCulture)
+            : value.ToString("0.##", CultureInfo.InvariantCulture);
+        return string.IsNullOrWhiteSpace(unit) ? number : unit == "%" ? $"{number}%" : $"{number} {unit}";
     }
 
     /// <summary>Every sensor behind the tile's main target AND its extra ones, in the order the targets were
@@ -431,19 +552,54 @@ public sealed class MapDisplayProvider
         return result;
     }
 
-    /// <summary>One sensor's numbers over the window. With a channel key it reads THAT channel from every
-    /// observation (so the lines share a unit); without one it falls back to the observation's own value,
-    /// which is the same thing the single-sensor graph plots.</summary>
-    private IReadOnlyList<double> ReadSeries(Guid sensorId, string? channelKey)
+    /// <summary>At most this many points per line: enough for a smooth line at wallboard size, few enough
+    /// that eight lines stay a small payload on every live poll.</summary>
+    private const int MultiGraphPointsPerLine = 120;
+
+    /// <summary>
+    /// One sensor's readings over the window as (position in window 0..1, value), averaged into
+    /// <see cref="MultiGraphPointsPerLine"/> time buckets. The WHOLE window is read - the old query asked for
+    /// the newest 64 observations, which is not a time window at all. Raw history is cached per sensor and
+    /// window for a minute: a wallboard polls every 30 s, and three days of a 30 s ping is thousands of rows.
+    /// With a channel key it reads that channel; without one the observation's own value.
+    /// </summary>
+    private IReadOnlyList<(double X, double Value)> ReadSeries(Guid sensorId, string? channelKey, DateTimeOffset startUtc, TimeSpan window)
     {
-        return _workspaceStore.GetSensorHistory(sensorId, TimeSpan.FromHours(24), 64)
-            .Select(observation => channelKey is null
-                ? observation.Value ?? observation.Channels.FirstOrDefault(channel => channel.Value.HasValue)?.Value
-                : observation.Channels.FirstOrDefault(channel =>
-                    string.Equals(channel.Key, channelKey, StringComparison.OrdinalIgnoreCase))?.Value)
-            .Where(value => value.HasValue)
-            .Select(value => value!.Value)
+        var windowMs = window.TotalMilliseconds;
+        var raw = ReadWindow(sensorId, window)
+            .Select(observation => (
+                observation.TimestampUtc,
+                Value: channelKey is null
+                    ? observation.Value ?? observation.Channels.FirstOrDefault(channel => channel.Value.HasValue && !channel.IsVirtual)?.Value
+                    : observation.Channels.FirstOrDefault(channel =>
+                        string.Equals(channel.Key, channelKey, StringComparison.OrdinalIgnoreCase))?.Value))
+            .Where(entry => entry.Value.HasValue && entry.TimestampUtc >= startUtc)
+            .Select(entry => (X: (entry.TimestampUtc - startUtc).TotalMilliseconds / windowMs, Value: entry.Value!.Value))
+            .OrderBy(point => point.X)
             .ToArray();
+
+        return SparklineGeometry.Downsample(raw, MultiGraphPointsPerLine);
+    }
+
+    private readonly ConcurrentDictionary<(Guid SensorId, int WindowHours), (DateTimeOffset ReadUtc, IReadOnlyList<SensorObservation> Observations)> _historyCache = new();
+
+    private IReadOnlyList<SensorObservation> ReadWindow(Guid sensorId, TimeSpan window)
+    {
+        var key = (sensorId, (int)window.TotalHours);
+        var now = DateTimeOffset.UtcNow;
+        if (_historyCache.TryGetValue(key, out var cached) && now - cached.ReadUtc < TimeSpan.FromMinutes(1))
+        {
+            return cached.Observations;
+        }
+
+        var observations = _workspaceStore.GetSensorHistory(sensorId, window);
+        if (_historyCache.Count > 512)
+        {
+            _historyCache.Clear();
+        }
+
+        _historyCache[key] = (now, observations);
+        return observations;
     }
 
     private MapDisplayTileViewModel BuildSensorListTile(
@@ -639,6 +795,12 @@ public sealed class MapDisplayProvider
         if (observation is null)
         {
             return null;
+        }
+
+        // A family ranks a mixed list ("top CPU across these machines") by each sensor's own channel for it.
+        if (ChannelFamilies.Parse(channelKey) is { } family)
+        {
+            return ChannelFamilies.Pick(observation.Channels, family);
         }
 
         if (!string.IsNullOrWhiteSpace(channelKey))
@@ -1004,12 +1166,21 @@ public sealed record MapDisplayTileViewModel(
     IReadOnlyList<MapPinDto>? Pins = null,
     /// <summary>Lines of a multi-series chart, already drawn against one shared scale and ordered by their
     /// last reading. Null for every other kind.</summary>
-    IReadOnlyList<MapGraphSeriesDto>? Series = null);
+    IReadOnlyList<MapGraphSeriesDto>? Series = null,
+    /// <summary>The multi-graph's shared Y scale (rounded, labelled) and its time window. Null elsewhere.</summary>
+    MapGraphAxisDto? Axis = null);
 
 /// <param name="Color">Fixed per series index so a line keeps its colour between renders - a legend whose
 /// colours reshuffle every poll is worse than no legend at all.</param>
 /// <param name="LinePath">Already on the chart's SHARED scale, so the lines can be compared by eye.</param>
-public sealed record MapGraphSeriesDto(string Label, string Color, string? LinePath, string? Value);
+/// <param name="Points">The same points the line is drawn from, as "x,value;x,value" (x = 0..1 across the
+/// window) - what the hover tooltip reads, so it shows the real reading rather than one guessed from the path.</param>
+public sealed record MapGraphSeriesDto(string Label, string Color, string? LinePath, string? Value, string? Points = null);
+
+/// <param name="Top">Label of the scale's upper bound (with unit), likewise Middle and Bottom - the bounds are
+/// already rounded to readable numbers.</param>
+/// <param name="StartMs">Window start / end as Unix milliseconds, so the tooltip can turn a position into a time.</param>
+public sealed record MapGraphAxisDto(string Top, string Middle, string Bottom, string? Unit, long StartMs, long EndMs, string WindowLabel);
 
 /// <param name="X">Position as a PERCENT of the tile (0..100) - an image pin is stored that way and a geo pin
 /// is projected into it, so the renderer has one case and the pin holds at any rendered size.</param>

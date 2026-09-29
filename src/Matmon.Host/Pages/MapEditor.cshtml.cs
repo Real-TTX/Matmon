@@ -28,6 +28,14 @@ public sealed class MapEditorModel : PageModel
 
     public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> TilePickerOptions { get; private set; } = [];
 
+    /// <summary>
+    /// What a multi-graph can compare: the channel FAMILIES first (each sensor's own CPU / memory / ...
+    /// channel, whatever its type calls it - the way to compare a mixed set of machines), then every exact
+    /// channel key actually reported somewhere in the workspace. Built from the latest observations, so the
+    /// list only offers channels that exist; a stored key that no longer does is folded in by the view.
+    /// </summary>
+    public IReadOnlyList<SelectListItem> CompareChannelOptions { get; private set; } = [];
+
     /// <summary>Designer render models for the CURRENT tiles, index-aligned with <see cref="MapEditorInput.Tiles"/>
     /// - combines each bound tile's own position/appearance with its live display data (state/value/graph) when
     /// one is already resolvable, so the designer shows the real tile instead of a hand-built mock.</summary>
@@ -116,7 +124,8 @@ public sealed class MapEditorModel : PageModel
         // while the viewer showed the real chart - the same class of bug the gauge scale had.
         int listLimit = 0,
         string? listChannelKey = null,
-        string? targets = null)
+        string? targets = null,
+        int graphWindowHours = 24)
     {
         var tile = new MonitoringMapTile
         {
@@ -141,6 +150,7 @@ public sealed class MapEditorModel : PageModel
             GaugeMax = gaugeMax,
             ListLimit = listLimit <= 0 ? 4 : listLimit,
             ListChannelKey = string.IsNullOrWhiteSpace(listChannelKey) ? null : listChannelKey.Trim(),
+            GraphWindowHours = MonitoringMapTile.NormalizeGraphWindowHours(graphWindowHours),
             TargetTokens = SplitTargetTokens(targets)
         };
         MonitoringMapTileConstraints.Clamp(tile, Math.Max(1, Input.Columns), Math.Max(1, Input.Rows));
@@ -291,6 +301,7 @@ public sealed class MapEditorModel : PageModel
         GaugeMax = tile.GaugeMax,
         ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim(),
         SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365),
+        GraphWindowHours = MonitoringMapTile.NormalizeGraphWindowHours(tile.GraphWindowHours),
         ImageAssetId = tile.ImageAssetId,
         ImageFit = tile.ImageFit,
         Pins = ParsePins(tile.PinsJson),
@@ -411,6 +422,7 @@ public sealed class MapEditorModel : PageModel
                     GaugeMax = tile.GaugeMax,
                     ListChannelKey = tile.ListChannelKey,
                     SlaWindowDays = tile.SlaWindowDays,
+                    GraphWindowHours = tile.GraphWindowHours,
                     ImageAssetId = tile.ImageAssetId,
                     ImageFit = tile.ImageFit,
                     PinsJson = tile.Pins.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Pins, PinJsonOptions),
@@ -491,6 +503,35 @@ public sealed class MapEditorModel : PageModel
     {
         var root = _workspaceStore.GetAllElements().FirstOrDefault(element => element.ParentId is null);
         TilePickerOptions = Matmon.Host.Ui.ElementPickerOptions.Build(root);
+        CompareChannelOptions = BuildCompareChannelOptions();
+    }
+
+    private IReadOnlyList<SelectListItem> BuildCompareChannelOptions()
+    {
+        var families = new SelectListGroup { Name = "Same measurement, any sensor type" };
+        var exact = new SelectListGroup { Name = "Exact channel" };
+
+        var observed = _workspaceStore.GetLatestSensorObservations().Values
+            .SelectMany(observation => observation.Channels)
+            .Where(channel => !channel.IsVirtual && channel.Value.HasValue && !string.IsNullOrWhiteSpace(channel.Key))
+            // Per-object channels (vm.101.cpu, volume.2.used...) would bury the list; a family covers them.
+            .Where(channel => !channel.Key.Contains('.'))
+            .GroupBy(channel => channel.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(channel => channel.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(channel => new SelectListItem(
+                string.IsNullOrWhiteSpace(channel.Label) || string.Equals(channel.Label, channel.Key, StringComparison.OrdinalIgnoreCase)
+                    ? channel.Key
+                    : $"{channel.Label} ({channel.Key})",
+                channel.Key) { Group = exact });
+
+        return
+        [
+            new SelectListItem("Each sensor's default channel", string.Empty),
+            .. Matmon.Core.Telemetry.ChannelFamilies.All.Select(family => new SelectListItem(
+                $"{family.Label} ({family.Unit})", Matmon.Core.Telemetry.ChannelFamilies.Token(family)) { Group = families }),
+            .. observed
+        ];
     }
 
     private static IReadOnlyDictionary<string, object> BuildDesignerConfigJson()
@@ -604,6 +645,14 @@ public sealed class MapSlideInput
     public bool ShowHeader { get; set; } = true;
 }
 
+/// <summary>The multi-graph's "Compare" + "Time window" fields (<c>_MapCompareFields</c>), for a real tile panel
+/// or the <c>__index__</c> template alike.</summary>
+public sealed record MapCompareFieldsModel(
+    string NamePrefix,
+    string? ChannelValue,
+    int WindowHours,
+    IReadOnlyList<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> Options);
+
 public sealed class MapTileInput
 {
     public Guid Id { get; set; }
@@ -674,6 +723,8 @@ public sealed class MapTileInput
     public string? ListChannelKey { get; set; }
 
     public int SlaWindowDays { get; set; } = 7;
+
+    public int GraphWindowHours { get; set; } = 24;
 
     public Guid? ImageAssetId { get; set; }
 

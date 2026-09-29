@@ -358,11 +358,7 @@
                                     @* A multi-graph reuses ListChannelKey/ListLimit rather than growing two
                                        more properties, but its labels have to say what they mean HERE: the
                                        channel is what makes the lines comparable, not a ranking key. *@
-                                    <label class="workspace-field" data-map-property-series-only>
-                                        <span class="workspace-label">Compare channel</span>
-                                        <input asp-for="Input.Tiles[index].ListChannelKey" class="form-control workspace-input" placeholder="Each sensor's default" />
-                                        <span class="workspace-inline-note">All lines share one scale, so they only compare if they share a unit. Name the channel to read from every sensor (e.g. <code>cpu</code>); left empty each sensor plots its own default channel, which may mix units.</span>
-                                    </label>
+                                    <partial name="_MapCompareFields" model="@(new Matmon.Host.Pages.MapCompareFieldsModel($"Input.Tiles[{index}]", Model.Input.Tiles[index].ListChannelKey, Model.Input.Tiles[index].GraphWindowHours, Model.CompareChannelOptions))" />
                                     @* More than one target. A chart comparing "these four switches" is a set
                                        the tree has no single node for, and a tag would mean labelling the
                                        estate first - so the extra targets are their own list. Each row is the
@@ -834,11 +830,7 @@
                             <span class="workspace-label">Rows</span>
                             <input name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="50" value="5" class="form-control workspace-input" />
                         </label>
-                        <label class="workspace-field" data-map-property-series-only>
-                            <span class="workspace-label">Compare channel</span>
-                            <input name="Input.Tiles[__index__].ListChannelKey" class="form-control workspace-input" placeholder="Each sensor's default" />
-                            <span class="workspace-inline-note">All lines share one scale, so they only compare if they share a unit. Name the channel to read from every sensor; left empty each sensor plots its own default channel.</span>
-                        </label>
+                        <partial name="_MapCompareFields" model="@(new Matmon.Host.Pages.MapCompareFieldsModel("Input.Tiles[__index__]", null, 24, Model.CompareChannelOptions))" />
                         <div class="workspace-field" data-map-property-series-only>
                             <span class="workspace-label">More targets</span>
                             <input type="hidden" name="Input.Tiles[__index__].TargetTokensText" data-map-targets-value />

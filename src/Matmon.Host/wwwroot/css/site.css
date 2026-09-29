@@ -8879,6 +8879,109 @@ html[data-theme="light"] .workspace-textarea::placeholder {
   height: 100%;
   min-height: 0;
 }
+/* Y labels | plot, time labels under the plot. The labels are HTML beside the stretched SVG, never text
+   inside it - preserveAspectRatio="none" would squash them. */
+.map-multigraph-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  column-gap: calc(var(--map-type, 0.95rem) * 0.35);
+  min-height: 0;
+}
+.map-multigraph-yaxis {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--matmon-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.62);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+}
+.map-multigraph-ysizer {
+  display: block;
+  visibility: hidden;
+  white-space: nowrap;
+}
+/* On the grid lines: 2 / 20 / 38 of the 40-unit viewBox = 5 % / 50 % / 95 % of the plot's height. */
+.map-multigraph-yaxis [data-axis-top],
+.map-multigraph-yaxis [data-axis-middle],
+.map-multigraph-yaxis [data-axis-bottom] {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.map-multigraph-yaxis [data-axis-top] { top: 5%; }
+.map-multigraph-yaxis [data-axis-middle] { top: 50%; }
+.map-multigraph-yaxis [data-axis-bottom] { top: 95%; }
+.map-multigraph-plot {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+}
+.map-multigraph-grid {
+  stroke: color-mix(in srgb, var(--matmon-muted) 28%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.map-multigraph-xaxis {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: space-between;
+  color: var(--matmon-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.58);
+  line-height: 1.2;
+}
+/* Hover read-out: a hairline at the pointer and a card with the time and every line's value there. Only
+   where there is a pointer - a wallboard nobody touches never shows it. */
+.map-multigraph-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--matmon-text) 45%, transparent);
+  pointer-events: none;
+}
+.map-multigraph-tooltip {
+  position: absolute;
+  top: 4%;
+  z-index: 3;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 9rem;
+  max-width: 16rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--matmon-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--matmon-surface) 94%, transparent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  color: var(--matmon-text);
+  font-size: 0.74rem;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.map-multigraph-tooltip time {
+  color: var(--matmon-muted);
+  font-size: 0.68rem;
+}
+.map-multigraph-tooltip-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+.map-multigraph-tooltip-row span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-multigraph-tooltip-row strong {
+  font-variant-numeric: tabular-nums;
+}
 /* Each line carries its own stroke colour inline, so the shared rule must not set one. */
 .map-tile-multigraph .map-graph-line {
   fill: none;

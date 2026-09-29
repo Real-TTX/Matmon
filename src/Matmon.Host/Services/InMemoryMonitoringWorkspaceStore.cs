@@ -4292,6 +4292,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 normalized.TextColor = NormalizeColor(tile.TextColor);
                 normalized.ListLimit = Math.Clamp(tile.ListLimit, 1, 50);
                 normalized.SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365);
+                normalized.GraphWindowHours = MonitoringMapTile.NormalizeGraphWindowHours(tile.GraphWindowHours);
                 normalized.ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim();
                 // Extra targets: trimmed, de-duplicated and capped. The cap is the series cap - more targets
                 // than lines would silently drop the ones past it, which reads as "the widget lost my host".
