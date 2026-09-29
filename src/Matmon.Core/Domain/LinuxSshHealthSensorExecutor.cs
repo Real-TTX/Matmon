@@ -104,13 +104,16 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         SensorExecutionContext context,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(context.Target))
+        // On a Linux probe (an agent) whose target is its own machine the script runs locally - no SSH
+        // server, no key, no username (see LinuxSshHealthSensorExecutor.StartSshProcess).
+        var local = OperatingSystem.IsLinux() && LocalTarget.Is(context.Target);
+        if (!local && string.IsNullOrWhiteSpace(context.Target))
         {
             return SensorExecutionResult.Critical(TimeSpan.Zero, "target is required");
         }
 
-        if (!MonitoringSettings.TryReadParameter(context.Settings, "ssh.username", out var username) ||
-            string.IsNullOrWhiteSpace(username))
+        if ((!MonitoringSettings.TryReadParameter(context.Settings, "ssh.username", out var username) ||
+            string.IsNullOrWhiteSpace(username)) && !local)
         {
             return SensorExecutionResult.Critical(TimeSpan.Zero, "ssh username is required");
         }
@@ -123,7 +126,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
 
         try
         {
-            using var process = StartSshProcess(context.Target.Trim(), username.Trim(), port, context.Settings, timeout, RemoteScript);
+            using var process = StartSshProcess((context.Target ?? string.Empty).Trim(), (username ?? string.Empty).Trim(), port, context.Settings, timeout, RemoteScript);
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
             // Fires on both caller cancellation and the timeout deadline, so a hung ssh child is
@@ -197,6 +200,31 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
         TimeSpan timeout,
         string script)
     {
+        // Scripts live as raw string literals in C# source, and a Windows checkout (core.autocrlf) gives them
+        // CRLF line ends - a bash then reads "do\r" and fails with a syntax error. CI builds on Linux (LF) so
+        // released images were fine, but any image built from a Windows working tree shipped broken scripts,
+        // over SSH as much as locally. Normalise before the script leaves this process.
+        script = script.Replace("\r\n", "\n").Replace('\r', '\n');
+
+        // The probe's own machine on Linux: run the very same script in a local login shell instead of over
+        // SSH. Bash where there is one: over SSH the arguments are joined into ONE command line that the remote
+        // login shell (almost always bash) parses, so the scripts quietly grew bash syntax - handed to plain sh
+        // (dash on Debian/Ubuntu) as one argument they fail with "Syntax error: word unexpected".
+        if (OperatingSystem.IsLinux() && LocalTarget.Is(target))
+        {
+            var shell = File.Exists("/bin/bash") ? "/bin/bash" : "sh";
+            var local = new ProcessStartInfo(shell)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            local.ArgumentList.Add("-lc");
+            local.ArgumentList.Add(script);
+            return Process.Start(local) ?? throw new InvalidOperationException("failed to start sh");
+        }
+
         // Prevent SSH option injection: a target or username beginning with '-' would be parsed by
         // ssh as an option (e.g. "-oProxyCommand=..."), not as the destination.
         if (target.StartsWith('-') || username.StartsWith('-'))

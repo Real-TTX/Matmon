@@ -219,7 +219,9 @@ public sealed class LocalScriptSensorExecutor : ISensorExecutor
         {
             startInfo.FileName = shell;
             startInfo.ArgumentList.Add("-c");
-            startInfo.ArgumentList.Add(script);
+            // A browser posts a textarea with CRLF line ends - always - and a shell reads the trailing \r as part
+            // of every word ("do\r", "fi\r"), so a script typed into the editor failed with a syntax error.
+            startInfo.ArgumentList.Add(script.Replace("\r\n", "\n").Replace('\r', '\n'));
         }
         else
         {

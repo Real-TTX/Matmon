@@ -72,13 +72,16 @@ if [ -n "$maxtemp" ]; then printf 'maxTemperature=%s\n' "$maxtemp"; fi
         SensorExecutionContext context,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(context.Target))
+        // On a Linux probe (an agent) whose target is its own machine the script runs locally - no SSH
+        // server, no key, no username (see LinuxSshHealthSensorExecutor.StartSshProcess).
+        var local = OperatingSystem.IsLinux() && LocalTarget.Is(context.Target);
+        if (!local && string.IsNullOrWhiteSpace(context.Target))
         {
             return SensorExecutionResult.Critical(TimeSpan.Zero, "target is required");
         }
 
-        if (!MonitoringSettings.TryReadParameter(context.Settings, "ssh.username", out var username) ||
-            string.IsNullOrWhiteSpace(username))
+        if ((!MonitoringSettings.TryReadParameter(context.Settings, "ssh.username", out var username) ||
+            string.IsNullOrWhiteSpace(username)) && !local)
         {
             return SensorExecutionResult.Critical(TimeSpan.Zero, "ssh username is required");
         }
@@ -92,7 +95,7 @@ if [ -n "$maxtemp" ]; then printf 'maxTemperature=%s\n' "$maxtemp"; fi
         try
         {
             using var process = LinuxSshHealthSensorExecutor.StartSshProcess(
-                context.Target.Trim(), username.Trim(), port, context.Settings, timeout, DiskScript);
+                (context.Target ?? string.Empty).Trim(), (username ?? string.Empty).Trim(), port, context.Settings, timeout, DiskScript);
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
             // Fires on both caller cancellation and the timeout deadline, so a hung ssh child is

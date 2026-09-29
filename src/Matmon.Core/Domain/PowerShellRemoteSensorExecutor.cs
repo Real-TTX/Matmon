@@ -352,27 +352,8 @@ if ($physical) {
         return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
     }
 
-    /// <summary>
-    /// "This machine": no target, localhost/loopback/".", or the machine's own name (bare or as the first
-    /// label of an FQDN). Anything else - including another host's IP - stays remote.
-    /// </summary>
-    public static bool IsLocalTarget(string? target)
-    {
-        if (string.IsNullOrWhiteSpace(target))
-        {
-            return true;
-        }
-
-        var host = target.Trim();
-        if (host is "." or "localhost" or "127.0.0.1" or "::1" or "[::1]")
-        {
-            return true;
-        }
-
-        var machine = Environment.MachineName;
-        return string.Equals(host, machine, StringComparison.OrdinalIgnoreCase) ||
-            host.StartsWith(machine + ".", StringComparison.OrdinalIgnoreCase);
-    }
+    /// <summary>"This machine" - see <see cref="LocalTarget"/>.</summary>
+    public static bool IsLocalTarget(string? target) => LocalTarget.Is(target);
 
     /// <summary>
     /// Runs the script in the local Windows PowerShell 5.1 - the same version the default WinRM endpoint
