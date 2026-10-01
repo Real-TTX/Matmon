@@ -184,7 +184,12 @@ public sealed class CreateNotificationRuleInput
 
     public Guid? ReceiverId { get; set; }
 
-    public Guid? TargetElementId { get; set; }
+    /// <summary>The rule target as the picker posts it: an element id, a <c>tag:&lt;name&gt;</c>, or empty (all).</summary>
+    public string? TargetToken { get; set; }
+
+    public Guid? TargetElementId => MonitoringTargetResolver.ElementId(TargetToken);
+
+    public string? TargetTag => MonitoringTargetResolver.TagName(TargetToken);
 
     public bool IncludeDescendants { get; set; } = true;
 
@@ -664,7 +669,12 @@ public sealed class WorkspaceNotificationRuleEditorInput
 
     public Guid? ReceiverId { get; set; }
 
-    public Guid? TargetElementId { get; set; }
+    /// <summary>The rule target as the picker posts it: an element id, a <c>tag:&lt;name&gt;</c>, or empty (all).</summary>
+    public string? TargetToken { get; set; }
+
+    public Guid? TargetElementId => MonitoringTargetResolver.ElementId(TargetToken);
+
+    public string? TargetTag => MonitoringTargetResolver.TagName(TargetToken);
 
     public bool IncludeDescendants { get; set; } = true;
 

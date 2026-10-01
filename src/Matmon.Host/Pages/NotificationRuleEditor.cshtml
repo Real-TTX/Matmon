@@ -59,7 +59,7 @@
                     </label>
                     <label>
                         <span>Target</span>
-                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewNotificationRule.TargetElementId", DomId = "picker-new-rule-target", SelectedId = Model.NewNotificationRule.TargetElementId, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewNotificationRule.TargetToken", DomId = "picker-new-rule-target", SelectedValue = Model.NewNotificationRule.TargetToken, AllowTags = true, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
                     </label>
                     <label>
                         <span>Enabled</span>
@@ -175,7 +175,7 @@
                     </label>
                     <label>
                         <span>Target</span>
-                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NotificationRuleEditor.TargetElementId", DomId = "picker-edit-rule-target", SelectedId = Model.NotificationRuleEditor.TargetElementId, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NotificationRuleEditor.TargetToken", DomId = "picker-edit-rule-target", SelectedValue = Model.NotificationRuleEditor.TargetToken, AllowTags = true, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
                     </label>
                     <label>
                         <span>Enabled</span>

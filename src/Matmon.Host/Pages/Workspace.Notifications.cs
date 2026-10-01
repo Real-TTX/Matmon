@@ -294,7 +294,9 @@ public sealed partial class WorkspaceModel
             Enabled = rule.Enabled,
             SenderId = rule.SenderId,
             ReceiverId = rule.ReceiverId,
-            TargetElementId = rule.TargetElementId,
+            TargetToken = rule.TargetTag is { Length: > 0 } tag
+                ? MonitoringTargetResolver.ForTag(tag)
+                : rule.TargetElementId is Guid elementId ? MonitoringTargetResolver.ForElement(elementId) : null,
             IncludeDescendants = rule.IncludeDescendants,
             TriggerStates = rule.TriggerStates.ToList(),
             CooldownMinutes = rule.CooldownMinutes,
@@ -353,6 +355,7 @@ public sealed partial class WorkspaceModel
             editor.SenderId,
             editor.ReceiverId,
             editor.TargetElementId,
+            editor.TargetTag,
             editor.IncludeDescendants,
             editor.TriggerStates,
             editor.CooldownMinutes,
@@ -443,6 +446,7 @@ public sealed partial class WorkspaceModel
             editor.SenderId,
             editor.ReceiverId,
             editor.TargetElementId,
+            editor.TargetTag,
             editor.IncludeDescendants,
             editor.TriggerStates,
             editor.CooldownMinutes,
@@ -459,6 +463,7 @@ public sealed partial class WorkspaceModel
         Guid? senderId,
         Guid? receiverId,
         Guid? targetElementId,
+        string? targetTag,
         bool includeDescendants,
         IEnumerable<SensorState>? triggerStates,
         int? cooldownMinutes,
@@ -477,7 +482,10 @@ public sealed partial class WorkspaceModel
         rule.Enabled = enabled;
         rule.SenderId = senderId;
         rule.ReceiverId = receiverId;
-        rule.TargetElementId = targetElementId;
+        // One target or the other: a tag wins and clears the element, so a rule never carries both.
+        var tag = MonitoringTagResolver.Normalize(string.IsNullOrWhiteSpace(targetTag) ? [] : [targetTag]).FirstOrDefault();
+        rule.TargetTag = tag;
+        rule.TargetElementId = tag is null ? targetElementId : null;
         rule.IncludeDescendants = includeDescendants;
         rule.CooldownMinutes = cooldownMinutes is int cooldown && cooldown > 0 ? cooldown : null;
         rule.Threshold = threshold is int t && t > 0 ? t : null;
@@ -689,6 +697,11 @@ public sealed partial class WorkspaceModel
 
     private static string BuildNotificationTargetSummary(NotificationRule rule, IReadOnlyList<WorkspaceNodeRow> nodes)
     {
+        if (rule.TargetTag is { Length: > 0 } tag)
+        {
+            return $"tag #{tag}";
+        }
+
         if (rule.TargetElementId is not Guid targetId)
         {
             return "all workspace";

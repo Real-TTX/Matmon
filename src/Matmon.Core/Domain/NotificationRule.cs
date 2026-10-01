@@ -18,6 +18,14 @@ public sealed class NotificationRule
 
     public Guid? TargetElementId { get; set; }
 
+    /// <summary>
+    /// Alternative to <see cref="TargetElementId"/>: the rule covers every sensor whose EFFECTIVE tags (its own
+    /// plus every ancestor's) include this tag - "production" across folders, probes and sites the tree has no
+    /// single node for. Mutually exclusive with the element target; <see cref="IncludeDescendants"/> does not
+    /// apply, because tags already cascade.
+    /// </summary>
+    public string? TargetTag { get; set; }
+
     public bool IncludeDescendants { get; set; } = true;
 
     public List<SensorState> TriggerStates { get; set; } = [];

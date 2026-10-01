@@ -109,7 +109,7 @@ public sealed class NotificationDispatchService : BackgroundService
                 continue;
             }
 
-            if (!RuleTargetsElement(rule, notificationEvent.ElementId, elementsById))
+            if (!NotificationRuleTargeting.Matches(rule, notificationEvent.ElementId, elementsById))
             {
                 continue;
             }
@@ -324,38 +324,6 @@ public sealed class NotificationDispatchService : BackgroundService
                 }
             }
         }
-    }
-
-    private static bool RuleTargetsElement(NotificationRule rule, Guid elementId, IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
-    {
-        if (rule.TargetElementId is not Guid targetId)
-        {
-            return true; // no target = all elements
-        }
-
-        if (targetId == elementId)
-        {
-            return true;
-        }
-
-        if (!rule.IncludeDescendants)
-        {
-            return false;
-        }
-
-        var current = elementId;
-        var guard = 0;
-        while (elementsById.TryGetValue(current, out var element) && element.ParentId is Guid parent && guard++ < 256)
-        {
-            if (parent == targetId)
-            {
-                return true;
-            }
-
-            current = parent;
-        }
-
-        return false;
     }
 
     private static EmailNotificationSettings? ResolveSmtp(NotificationRule rule, MonitoringWorkspaceSnapshot workspace)
