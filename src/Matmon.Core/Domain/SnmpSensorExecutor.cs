@@ -75,12 +75,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 DefaultValue = "sha1",
                 VisibleWhenParameterKey = "snmp.version",
                 VisibleWhenValues = ["v3"],
-                Options =
-                [
-                    new SensorParameterOption { Value = "none", Label = "none" },
-                    new SensorParameterOption { Value = "md5", Label = "md5" },
-                    new SensorParameterOption { Value = "sha1", Label = "sha1" }
-                ]
+                Options = [.. SnmpV3Crypto.AuthOptions.Select(option => new SensorParameterOption { Value = option.Value, Label = option.Label })]
             },
             new SensorParameterDefinition
             {
@@ -99,12 +94,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 DefaultValue = "none",
                 VisibleWhenParameterKey = "snmp.version",
                 VisibleWhenValues = ["v3"],
-                Options =
-                [
-                    new SensorParameterOption { Value = "none", Label = "none" },
-                    new SensorParameterOption { Value = "des", Label = "des" },
-                    new SensorParameterOption { Value = "aes128", Label = "aes128" }
-                ]
+                Options = [.. SnmpV3Crypto.PrivOptions.Select(option => new SensorParameterOption { Value = option.Value, Label = option.Label })]
             },
             new SensorParameterDefinition
             {
@@ -1114,9 +1104,10 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         var privacyParameters = securityLevel == SnmpSecurityLevel.AuthPriv
             ? RandomNumberGenerator.GetBytes(8)
             : [];
+        // A placeholder exactly as long as the truncated MAC - 12 bytes for MD5/SHA-1, up to 48 for SHA-512.
         var authParameters = securityLevel == SnmpSecurityLevel.NoAuthNoPriv
             ? []
-            : new byte[12];
+            : new byte[SnmpV3Crypto.MacLength(session.Config.AuthProtocol)];
         var scopedPdu = BuildV3ScopedPdu(session.EngineId, session.Config.ContextName, pduType, requestId, oids);
         var dataBytes = BuildV3DataBytes(scopedPdu, securityLevel, session, privacyParameters);
         var header = new SnmpV3Header(requestId, 65507, ResolveV3Flags(securityLevel), 3);
@@ -1135,8 +1126,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
 
         if (securityLevel != SnmpSecurityLevel.NoAuthNoPriv)
         {
-            var digest = ComputeAuthenticationDigest(session.Config.AuthProtocol, session.AuthKey, message);
-            authParameters = digest[..12].ToArray();
+            authParameters = SnmpV3Crypto.Mac(session.Config.AuthProtocol, session.AuthKey, message);
             securityParameters = securityParameters with { AuthParameters = authParameters };
             message = BuildV3MessageBytes(header, securityParameters, dataBytes);
         }
@@ -1255,11 +1245,11 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
     {
         var authKey = config.AuthProtocol == SnmpV3AuthProtocol.None
             ? []
-            : DeriveLocalizedKey(config.AuthPassword, engineId, config.AuthProtocol);
+            : SnmpV3Crypto.LocalizedKey(config.AuthProtocol, config.AuthPassword, engineId);
         var privSourcePassword = string.IsNullOrWhiteSpace(config.PrivPassword) ? config.AuthPassword : config.PrivPassword;
         var privKey = config.PrivProtocol == SnmpV3PrivProtocol.None
             ? []
-            : DeriveLocalizedKey(privSourcePassword, engineId, config.AuthProtocol);
+            : SnmpV3Crypto.PrivacyKey(config.AuthProtocol, config.PrivProtocol, privSourcePassword, engineId);
 
         return new SnmpV3Session(
             config,
@@ -1350,9 +1340,9 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             zeroAuth,
             EncodeTagged(parts.DataElement.Tag, parts.DataElement.Content));
 
-        var digest = ComputeAuthenticationDigest(session.Config.AuthProtocol, session.AuthKey, reconstructed);
+        var digest = SnmpV3Crypto.Mac(session.Config.AuthProtocol, session.AuthKey, reconstructed);
         var expected = parts.SecurityParameters.AuthParameters;
-        if (expected.Length < 12 || !expected.Take(12).SequenceEqual(digest.Take(12)))
+        if (expected.Length != digest.Length || !CryptographicOperations.FixedTimeEquals(expected, digest))
         {
             throw new InvalidOperationException("SNMP v3 authentication failed.");
         }
@@ -1418,9 +1408,11 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         SnmpV3Session session,
         byte[] privacyParameters)
     {
+        // Without privacy msgData IS the plaintext ScopedPDU SEQUENCE (RFC 3412). It used to be wrapped in an
+        // extra [0] tag, which agents silently drop - so authNoPriv never worked with any algorithm.
         return securityLevel == SnmpSecurityLevel.AuthPriv
             ? EncodeOctetString(EncryptScopedPdu(scopedPdu, session, privacyParameters))
-            : EncodeTagged(0xA0, scopedPdu);
+            : scopedPdu;
     }
 
     private static SnmpSecurityLevel ResolveSecurityLevel(SnmpV3Config config)
@@ -1440,13 +1432,8 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             return SnmpV3AuthProtocol.Sha1;
         }
 
-        return protocol.Trim().ToLowerInvariant() switch
-        {
-            "none" => SnmpV3AuthProtocol.None,
-            "md5" => SnmpV3AuthProtocol.Md5,
-            "sha1" => SnmpV3AuthProtocol.Sha1,
-            _ => throw new InvalidOperationException($"Unsupported SNMP v3 auth protocol '{protocol}'.")
-        };
+        return SnmpV3Crypto.ParseAuth(protocol)
+            ?? throw new InvalidOperationException($"Unsupported SNMP v3 auth protocol '{protocol}'.");
     }
 
     private static SnmpV3PrivProtocol ResolveV3PrivProtocol(MonitoringSettings settings)
@@ -1457,280 +1444,15 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             return SnmpV3PrivProtocol.None;
         }
 
-        return protocol.Trim().ToLowerInvariant() switch
-        {
-            "none" => SnmpV3PrivProtocol.None,
-            "des" => SnmpV3PrivProtocol.Des,
-            "aes128" => SnmpV3PrivProtocol.Aes128,
-            _ => throw new InvalidOperationException($"Unsupported SNMP v3 privacy protocol '{protocol}'.")
-        };
+        return SnmpV3Crypto.ParsePriv(protocol)
+            ?? throw new InvalidOperationException($"Unsupported SNMP v3 privacy protocol '{protocol}'.");
     }
 
-    private static byte[] ComputeAuthenticationDigest(SnmpV3AuthProtocol protocol, byte[] key, byte[] message)
-    {
-        return protocol switch
-        {
-            SnmpV3AuthProtocol.Md5 => ComputeHmacMD5(key, message),
-            SnmpV3AuthProtocol.Sha1 => ComputeHmacSHA1(key, message),
-            SnmpV3AuthProtocol.None => [],
-            _ => throw new InvalidOperationException("Unsupported SNMP v3 authentication protocol.")
-        };
-    }
+    private static byte[] DecryptScopedPdu(byte[] ciphertext, SnmpV3Session session, byte[] privParameters) =>
+        SnmpV3Crypto.Decrypt(session.Config.PrivProtocol, session.PrivKey, session.EngineBoots, session.EngineTime, privParameters, ciphertext);
 
-    private static byte[] ComputeHmacMD5(byte[] key, byte[] message)
-    {
-        using var hmac = new HMACMD5(key);
-        return hmac.ComputeHash(message);
-    }
-
-    private static byte[] ComputeHmacSHA1(byte[] key, byte[] message)
-    {
-        using var hmac = new HMACSHA1(key);
-        return hmac.ComputeHash(message);
-    }
-
-    private static byte[] DeriveLocalizedKey(string passphrase, byte[] engineId, SnmpV3AuthProtocol protocol)
-    {
-        var algorithmName = protocol switch
-        {
-            SnmpV3AuthProtocol.Md5 => HashAlgorithmName.MD5,
-            SnmpV3AuthProtocol.Sha1 => HashAlgorithmName.SHA1,
-            _ => throw new InvalidOperationException("SNMP v3 key localization requires an authentication algorithm.")
-        };
-
-        var ku = DerivePasswordKey(passphrase, algorithmName);
-        using var hash = IncrementalHash.CreateHash(algorithmName);
-        hash.AppendData(ku);
-        hash.AppendData(engineId);
-        hash.AppendData(ku);
-        return hash.GetHashAndReset();
-    }
-
-    private static byte[] DerivePasswordKey(string passphrase, HashAlgorithmName algorithmName)
-    {
-        var passBytes = Encoding.UTF8.GetBytes(passphrase);
-        if (passBytes.Length == 0)
-        {
-            return [];
-        }
-
-        using var hash = IncrementalHash.CreateHash(algorithmName);
-        var remaining = 1_048_576;
-        while (remaining > 0)
-        {
-            var chunk = Math.Min(passBytes.Length, remaining);
-            hash.AppendData(passBytes.AsSpan(0, chunk));
-            remaining -= chunk;
-        }
-
-        return hash.GetHashAndReset();
-    }
-
-    private static byte[] DecryptScopedPdu(byte[] ciphertext, SnmpV3Session session, byte[] privParameters)
-    {
-        return session.Config.PrivProtocol switch
-        {
-            SnmpV3PrivProtocol.Des => DecryptDes(ciphertext, session, privParameters),
-            SnmpV3PrivProtocol.Aes128 => DecryptAes128(ciphertext, session, privParameters),
-            SnmpV3PrivProtocol.None => ciphertext,
-            _ => throw new InvalidOperationException("Unsupported SNMP v3 privacy protocol.")
-        };
-    }
-
-    private static byte[] EncryptScopedPdu(byte[] plaintext, SnmpV3Session session, byte[] privParameters)
-    {
-        return session.Config.PrivProtocol switch
-        {
-            SnmpV3PrivProtocol.Des => EncryptDes(plaintext, session, privParameters),
-            SnmpV3PrivProtocol.Aes128 => EncryptAes128(plaintext, session, privParameters),
-            SnmpV3PrivProtocol.None => plaintext,
-            _ => throw new InvalidOperationException("Unsupported SNMP v3 privacy protocol.")
-        };
-    }
-
-    private static byte[] EncryptAes128(byte[] plaintext, SnmpV3Session session, byte[] privParameters)
-    {
-        if (session.PrivKey.Length < 16)
-        {
-            throw new InvalidOperationException("SNMP v3 AES privacy key is too short.");
-        }
-
-        if (privParameters.Length != 8)
-        {
-            throw new InvalidOperationException("SNMP v3 AES privacy parameters must be 8 bytes.");
-        }
-
-        var iv = BuildAesIv(session.EngineBoots, session.EngineTime, privParameters);
-        using var aes = Aes.Create();
-        aes.KeySize = 128;
-        aes.BlockSize = 128;
-        aes.Mode = CipherMode.CFB;
-        aes.FeedbackSize = 128;
-        aes.Padding = PaddingMode.None;
-        aes.Key = session.PrivKey.Take(16).ToArray();
-        aes.IV = iv;
-
-        using var encryptor = aes.CreateEncryptor();
-        return TransformAesCfb(encryptor, plaintext);
-    }
-
-    /// <summary>
-    /// SNMP AES (RFC 3826) uses 128-bit CFB as a stream cipher: the ciphertext length equals the
-    /// plaintext length and need not be block-aligned. .NET's CFB-128 with no padding requires
-    /// whole blocks, so pad to the next block boundary, transform, then truncate back.
-    /// </summary>
-    private static byte[] TransformAesCfb(ICryptoTransform transform, byte[] data)
-    {
-        const int blockSize = 16;
-        if (data.Length % blockSize == 0)
-        {
-            return transform.TransformFinalBlock(data, 0, data.Length);
-        }
-
-        var paddedLength = ((data.Length / blockSize) + 1) * blockSize;
-        var padded = new byte[paddedLength];
-        Buffer.BlockCopy(data, 0, padded, 0, data.Length);
-        var transformed = transform.TransformFinalBlock(padded, 0, paddedLength);
-        return transformed[..data.Length];
-    }
-
-    private static byte[] EncryptDes(byte[] plaintext, SnmpV3Session session, byte[] privParameters)
-    {
-        if (session.PrivKey.Length < 16)
-        {
-            throw new InvalidOperationException("SNMP v3 DES privacy key is too short.");
-        }
-
-        if (privParameters.Length != 8)
-        {
-            throw new InvalidOperationException("SNMP v3 DES privacy parameters must be 8 bytes.");
-        }
-
-        var keyMaterial = session.PrivKey.Take(16).ToArray();
-        var desKey = AdjustDesParity(keyMaterial.Take(8).ToArray());
-        var preIv = keyMaterial.Skip(8).Take(8).ToArray();
-        var iv = XorBytes(preIv, privParameters);
-        var padded = PadZeroToBlockSize(plaintext, 8);
-
-        using var des = DES.Create();
-        des.Mode = CipherMode.CBC;
-        des.Padding = PaddingMode.None;
-        des.Key = desKey;
-        des.IV = iv;
-
-        using var encryptor = des.CreateEncryptor();
-        return encryptor.TransformFinalBlock(padded, 0, padded.Length);
-    }
-
-    private static byte[] DecryptAes128(byte[] ciphertext, SnmpV3Session session, byte[] privParameters)
-    {
-        if (session.PrivKey.Length < 16)
-        {
-            throw new InvalidOperationException("SNMP v3 AES privacy key is too short.");
-        }
-
-        if (privParameters.Length != 8)
-        {
-            throw new InvalidOperationException("SNMP v3 AES privacy parameters must be 8 bytes.");
-        }
-
-        var iv = BuildAesIv(session.EngineBoots, session.EngineTime, privParameters);
-        using var aes = Aes.Create();
-        aes.KeySize = 128;
-        aes.BlockSize = 128;
-        aes.Mode = CipherMode.CFB;
-        aes.FeedbackSize = 128;
-        aes.Padding = PaddingMode.None;
-        aes.Key = session.PrivKey.Take(16).ToArray();
-        aes.IV = iv;
-
-        using var decryptor = aes.CreateDecryptor();
-        return TransformAesCfb(decryptor, ciphertext);
-    }
-
-    private static byte[] DecryptDes(byte[] ciphertext, SnmpV3Session session, byte[] privParameters)
-    {
-        if (session.PrivKey.Length < 16)
-        {
-            throw new InvalidOperationException("SNMP v3 DES privacy key is too short.");
-        }
-
-        if (privParameters.Length != 8)
-        {
-            throw new InvalidOperationException("SNMP v3 DES privacy parameters must be 8 bytes.");
-        }
-
-        var keyMaterial = session.PrivKey.Take(16).ToArray();
-        var desKey = AdjustDesParity(keyMaterial.Take(8).ToArray());
-        var preIv = keyMaterial.Skip(8).Take(8).ToArray();
-        var iv = XorBytes(preIv, privParameters);
-
-        using var des = DES.Create();
-        des.Mode = CipherMode.CBC;
-        des.Padding = PaddingMode.None;
-        des.Key = desKey;
-        des.IV = iv;
-
-        using var decryptor = des.CreateDecryptor();
-        return decryptor.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
-    }
-
-    private static byte[] BuildAesIv(int engineBoots, int engineTime, byte[] privParameters)
-    {
-        var iv = new byte[16];
-        BinaryPrimitives.WriteInt32BigEndian(iv.AsSpan(0, 4), engineBoots);
-        BinaryPrimitives.WriteInt32BigEndian(iv.AsSpan(4, 4), engineTime);
-        Buffer.BlockCopy(privParameters, 0, iv, 8, 8);
-        return iv;
-    }
-
-    private static byte[] AdjustDesParity(byte[] key)
-    {
-        var adjusted = new byte[8];
-        for (var index = 0; index < adjusted.Length; index++)
-        {
-            var value = key[index];
-            var parity = 0;
-            for (var bit = 1; bit < 8; bit++)
-            {
-                parity ^= (value >> bit) & 1;
-            }
-
-            var lsb = parity == 0 ? (byte)1 : (byte)0;
-            adjusted[index] = (byte)((value & 0xFE) | lsb);
-        }
-
-        return adjusted;
-    }
-
-    private static byte[] XorBytes(byte[] left, byte[] right)
-    {
-        var result = new byte[Math.Min(left.Length, right.Length)];
-        for (var index = 0; index < result.Length; index++)
-        {
-            result[index] = (byte)(left[index] ^ right[index]);
-        }
-
-        return result;
-    }
-
-    private static byte[] PadZeroToBlockSize(byte[] value, int blockSize)
-    {
-        if (blockSize <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(blockSize));
-        }
-
-        var remainder = value.Length % blockSize;
-        if (remainder == 0)
-        {
-            return value;
-        }
-
-        var padded = new byte[value.Length + (blockSize - remainder)];
-        Buffer.BlockCopy(value, 0, padded, 0, value.Length);
-        return padded;
-    }
+    private static byte[] EncryptScopedPdu(byte[] plaintext, SnmpV3Session session, byte[] privParameters) =>
+        SnmpV3Crypto.Encrypt(session.Config.PrivProtocol, session.PrivKey, session.EngineBoots, session.EngineTime, privParameters, plaintext);
 
     private sealed record SnmpV3Config(
         string Username,
@@ -2019,20 +1741,6 @@ internal enum SnmpSecurityLevel
     NoAuthNoPriv = 0,
     AuthNoPriv = 1,
     AuthPriv = 2
-}
-
-internal enum SnmpV3AuthProtocol
-{
-    None = 0,
-    Md5 = 1,
-    Sha1 = 2
-}
-
-internal enum SnmpV3PrivProtocol
-{
-    None = 0,
-    Des = 1,
-    Aes128 = 2
 }
 
 internal sealed record SnmpOidSelection(string Oid, string Label);

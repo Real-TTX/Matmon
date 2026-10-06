@@ -356,7 +356,11 @@
                                                 </label>
                                                 <label>
                                                     <span>v3 auth protocol</span>
-                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3AuthProtocol" class="form-control workspace-input" placeholder="sha1" />
+                                                    <select asp-for="TemplateEditor.CredentialBundles[i].SnmpV3AuthProtocol" class="form-select workspace-select">
+                                                        <option value="">Not set</option>
+                                                        @foreach (var option in Matmon.Core.Domain.SnmpV3Crypto.AuthOptions) { <option value="@option.Value">@option.Label</option> }
+                                                        @if (Model.TemplateEditor.CredentialBundles[i].SnmpV3AuthProtocol is { Length: > 0 } stored && !Matmon.Core.Domain.SnmpV3Crypto.AuthOptions.Any(o => string.Equals(o.Value, stored, StringComparison.OrdinalIgnoreCase))) { <option value="@stored">@stored</option> }
+                                                    </select>
                                                 </label>
                                                 <label>
                                                     <span>v3 auth password</span>
@@ -364,7 +368,11 @@
                                                 </label>
                                                 <label>
                                                     <span>v3 privacy protocol</span>
-                                                    <input asp-for="TemplateEditor.CredentialBundles[i].SnmpV3PrivacyProtocol" class="form-control workspace-input" placeholder="aes128" />
+                                                    <select asp-for="TemplateEditor.CredentialBundles[i].SnmpV3PrivacyProtocol" class="form-select workspace-select">
+                                                        <option value="">Not set</option>
+                                                        @foreach (var option in Matmon.Core.Domain.SnmpV3Crypto.PrivOptions) { <option value="@option.Value">@option.Label</option> }
+                                                        @if (Model.TemplateEditor.CredentialBundles[i].SnmpV3PrivacyProtocol is { Length: > 0 } stored && !Matmon.Core.Domain.SnmpV3Crypto.PrivOptions.Any(o => string.Equals(o.Value, stored, StringComparison.OrdinalIgnoreCase))) { <option value="@stored">@stored</option> }
+                                                    </select>
                                                 </label>
                                                 <label>
                                                     <span>v3 privacy password</span>
