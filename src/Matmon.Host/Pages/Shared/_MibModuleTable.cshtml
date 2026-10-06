@@ -1,0 +1,76 @@
+@model IReadOnlyList<Matmon.Core.Domain.MibModuleStatus>
+@{
+    var uploadedAt = ViewData["MibUploadedAt"] as IReadOnlyDictionary<string, DateTimeOffset>;
+    var canDelete = ViewData["MibCanDelete"] is true;
+}
+<div class="mib-table-wrap">
+    <table class="mib-table">
+        <thead>
+            <tr>
+                <th>Module</th>
+                <th>Objects</th>
+                <th>Revision</th>
+                <th>State</th>
+                @if (uploadedAt is not null) { <th>Uploaded</th> }
+                @if (canDelete) { <th></th> }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var module in Model)
+            {
+                var problems = module.MissingImports.Count + module.Errors.Count + module.UnresolvedCount;
+                <tr>
+                    <td><code>@module.Name</code></td>
+                    <td class="mib-number">@module.NodeCount</td>
+                    <td class="mib-muted">@FormatRevision(module.LastUpdated)</td>
+                    <td>
+                        @if (problems == 0)
+                        {
+                            <span class="mib-state is-ok">OK</span>
+                        }
+                        else
+                        {
+                            <span class="mib-state is-warning">@problems issue@(problems == 1 ? "" : "s")</span>
+                            <div class="mib-issues">
+                                @if (module.MissingImports.Count > 0) { <div>Missing: @string.Join(", ", module.MissingImports)</div> }
+                                @if (module.UnresolvedCount > 0) { <div>@module.UnresolvedCount object@(module.UnresolvedCount == 1 ? "" : "s") without a known parent</div> }
+                                @foreach (var error in module.Errors.Take(3)) { <div>@error</div> }
+                                @if (module.Errors.Count > 3) { <div>… and @(module.Errors.Count - 3) more</div> }
+                            </div>
+                        }
+                    </td>
+                    @if (uploadedAt is not null)
+                    {
+                        <td class="mib-muted">@(uploadedAt.TryGetValue(module.Name, out var at) ? at.ToDisplay().ToString("yyyy-MM-dd HH:mm") : "")</td>
+                    }
+                    @if (canDelete)
+                    {
+                        <td class="mib-actions">
+                            <form method="post" asp-page="/Mibs" asp-page-handler="Delete">
+                                <input type="hidden" name="module" value="@module.Name" />
+                                <button type="submit" class="workspace-danger-submit" onclick="return confirm('Remove @module.Name?')">Remove</button>
+                            </form>
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+@functions {
+    // LAST-UPDATED is "YYYYMMDDHHMMZ" (or the SMIv1-era "YYMMDDHHMMZ").
+    private static string FormatRevision(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+        var digits = value.TrimEnd('Z', 'z');
+        return digits.Length switch
+        {
+            >= 8 when digits.Length == 12 => $"{digits[..4]}-{digits[4..6]}-{digits[6..8]}",
+            10 => $"19{digits[..2]}-{digits[2..4]}-{digits[4..6]}",
+            _ => value
+        };
+    }
+}

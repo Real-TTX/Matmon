@@ -331,11 +331,13 @@ public sealed partial class WorkspaceModel
             return;
         }
 
+        // "oid|label": with a MIB loaded the label is the MIB name, so the channel reads "ifInOctets.3".
         var selectedOids = editor.SnmpWalkItems
             .Where(item => item.Selected && !string.IsNullOrWhiteSpace(item.Oid))
-            .Select(item => item.Oid.Trim().TrimStart('.'))
-            .Where(oid => !string.IsNullOrWhiteSpace(oid))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(item => (Oid: item.Oid.Trim().TrimStart('.'), item.Name))
+            .Where(item => !string.IsNullOrWhiteSpace(item.Oid))
+            .DistinctBy(item => item.Oid, StringComparer.OrdinalIgnoreCase)
+            .Select(item => string.IsNullOrWhiteSpace(item.Name) ? item.Oid : $"{item.Oid}|{item.Name}")
             .ToList();
 
         var parameterField = editor.SensorParameterFields.FirstOrDefault(field =>
@@ -357,26 +359,20 @@ public sealed partial class WorkspaceModel
             .Select(item => item.Oid.Trim().TrimStart('.'))
             .Where(oid => !string.IsNullOrWhiteSpace(oid))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var manualOids = ParseSnmpOidLines(parameterField.Value)
-            .Where(oid => !discoveredOids.Contains(oid))
+        // Hand-written lines keep their full text (and with it any label the user gave them).
+        var manualOids = (parameterField.Value ?? string.Empty)
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => ParseSnmpOidLines(line) is [var oid] && !discoveredOids.Contains(oid))
             .ToList();
 
         var mergedOids = new List<string>(manualOids.Count + selectedOids.Count);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var oid in manualOids)
+        foreach (var line in manualOids.Concat(selectedOids))
         {
-            if (seen.Add(oid))
+            if (seen.Add(ParseSnmpOidLines(line)[0]))
             {
-                mergedOids.Add(oid);
-            }
-        }
-
-        foreach (var oid in selectedOids)
-        {
-            if (seen.Add(oid))
-            {
-                mergedOids.Add(oid);
+                mergedOids.Add(line);
             }
         }
 

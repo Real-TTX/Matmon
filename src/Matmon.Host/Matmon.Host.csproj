@@ -21,6 +21,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The standard MIBs (IETF + Net-SNMP, see mibs/README.md) ship next to the binaries; uploads go to data/mibs. -->
+    <None Include="mibs\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Display-timezone extensions (ToDisplay) are used across pages/services. -->
     <Using Include="Matmon.Core.Domain" />
     <!-- The probe side (Secondary mode, discovery, version) lives in Matmon.Probe, which the agent shares. -->

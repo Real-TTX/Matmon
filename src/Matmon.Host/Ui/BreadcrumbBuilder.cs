@@ -78,6 +78,10 @@ public static class BreadcrumbBuilder
             case "/config":
                 items.Add(new("System"));
                 break;
+            case "/system/mibs":
+                items.Add(new("System", "/Config"));
+                items.Add(new("SNMP MIBs"));
+                break;
             case "/monitoring/sensor/new":
                 items.Add(new("Sensors", "/Monitoring"));
                 items.Add(new("New sensor"));

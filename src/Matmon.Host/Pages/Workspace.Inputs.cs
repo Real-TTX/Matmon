@@ -488,6 +488,9 @@ public sealed class WorkspaceSnmpWalkItemInput
 
     public string Oid { get; set; } = string.Empty;
 
+    /// <summary>The MIB name (<c>ifInOctets.3</c>) when a loaded MIB knows the OID - becomes the channel label.</summary>
+    public string? Name { get; set; }
+
     public string Syntax { get; set; } = string.Empty;
 
     public string Value { get; set; } = string.Empty;

@@ -98,7 +98,7 @@
         var notificationsActive = PathStarts("/notifications");
         var eventsActive = PathStarts("/events");
         var discoveryActive = PathStarts("/discovery");
-        var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/backup");
+        var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/system/mibs") || PathStarts("/backup");
         var logsActive = PathStarts("/logs");
         var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive;
         string Active(bool on) => on ? "is-active" : string.Empty;

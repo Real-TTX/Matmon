@@ -198,11 +198,13 @@ public sealed partial class WorkspaceModel
                 TimeSpan.FromSeconds(5),
                 HttpContext.RequestAborted);
 
+            var mibs = HttpContext.RequestServices.GetService<MibLibrary>();
             NewSensor.SnmpWalkItems = discovered
                 .Select(item => new WorkspaceSnmpWalkItemInput
                 {
                     Selected = item.SelectedByDefault || previousSelections.Contains(item.Oid.Trim().TrimStart('.')),
                     Oid = item.Oid,
+                    Name = mibs?.Translate(item.Oid) is { IsObject: true } known ? known.Name : null,
                     Syntax = item.Syntax,
                     Value = item.Value,
                     IsNumeric = item.IsNumeric

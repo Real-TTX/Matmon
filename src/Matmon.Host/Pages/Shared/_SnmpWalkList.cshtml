@@ -1,0 +1,63 @@
+@model WorkspaceModel
+@inject Matmon.Host.Services.MibLibrary Mibs
+@{
+    // The walk result, shared by SensorCreate and SensorAssistant. Names, enum labels, units and descriptions come
+    // from the instance's MIBs at render time; the MIB bar uploads more MIBs and relabels these rows in place
+    // (initializeSnmpWalkMibs), so nobody has to walk again after adding a vendor MIB.
+    var items = Model.NewSensor.SnmpWalkItems;
+    var named = items.Count(item => Mibs.Translate(item.Oid) is { IsObject: true });
+    var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
+}
+<div class="snmp-mib-bar" data-snmp-mib-bar>
+    <span class="snmp-mib-summary" data-snmp-mib-summary>
+        @MatmonIcons.Render("list")
+        <span>@Mibs.Registry.Modules.Count MIBs loaded@(items.Count > 0 ? $" · names for {named} of {items.Count} OIDs" : "")</span>
+    </span>
+    @if (isAdmin)
+    {
+        <label class="workspace-secondary-submit snmp-mib-upload">
+            @MatmonIcons.Render("upload")
+            <span>Upload MIB</span>
+            <input type="file" multiple accept=".mib,.my,.txt,.zip" hidden data-snmp-mib-upload data-upload-url="/system/mibs?handler=Upload" />
+        </label>
+        <a class="workspace-secondary-submit" href="/system/mibs" target="_blank" rel="noopener">Manage MIBs</a>
+    }
+    <span class="snmp-mib-status" data-snmp-mib-status role="status" aria-live="polite"></span>
+</div>
+
+@if (items.Count > 0)
+{
+    @if (items.Count > 12)
+    {
+        <input type="search" class="form-control workspace-input snmp-walk-filter" placeholder="Filter by name, OID or value…" data-snmp-walk-filter />
+    }
+    <div class="snmp-walk-list" data-snmp-walk-list>
+        @for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var translation = Mibs.Translate(item.Oid) is { IsObject: true } known ? known : null;
+            var units = translation?.Node.Units;
+            <label class="snmp-walk-row @(item.IsNumeric ? "is-numeric" : "is-text")" data-snmp-walk-row data-oid="@item.Oid" data-raw-value="@item.Value" title="@translation?.Node.Description">
+                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Oid" />
+                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Syntax" />
+                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Value" />
+                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].IsNumeric" />
+                <input type="hidden" name="NewSensor.SnmpWalkItems[@i].Name" value="@translation?.Name" data-snmp-walk-name-input />
+                <input asp-for="NewSensor.SnmpWalkItems[i].Selected" type="checkbox" class="form-check-input" />
+                <div class="snmp-walk-main">
+                    <div class="snmp-walk-name" data-snmp-walk-name @(translation is null ? "hidden" : null)>@translation?.Name</div>
+                    <div class="snmp-walk-oid @(translation is null ? null : "is-secondary")" data-snmp-walk-oid>@item.Oid</div>
+                    <div class="snmp-walk-value" data-snmp-walk-value>@(translation?.FormatValue(item.Value) ?? item.Value)@(units is null ? null : $" {units}")</div>
+                </div>
+                <div class="snmp-walk-meta">
+                    <span class="snmp-walk-module" data-snmp-walk-module @(translation is null ? "hidden" : null)>@translation?.Node.Module</span>
+                    <span class="snmp-walk-type">@item.Syntax</span>
+                    @if (item.IsNumeric)
+                    {
+                        <span class="sensor-required">numeric</span>
+                    }
+                </div>
+            </label>
+        }
+    </div>
+}

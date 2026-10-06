@@ -1,0 +1,81 @@
+@page "/system/mibs"
+@model Matmon.Host.Pages.MibsModel
+@{
+    ViewData["Title"] = "SNMP MIBs";
+    var uploaded = Model.Modules.Where(module => module.Source == "Uploaded").ToList();
+    var builtIn = Model.Modules.Where(module => module.Source != "Uploaded").ToList();
+}
+
+<section class="dashboard-shell">
+    <div class="page-header">
+        <div class="page-title">
+            @MatmonIcons.Render("network")
+            <div>
+                <div class="eyebrow">System</div>
+                <h1>SNMP MIBs</h1>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("upload")<span>Upload</span></h2>
+            <span class="panel-hint">@Model.Modules.Count modules · @Model.NodeCount.ToString("N0") named OIDs</span>
+        </div>
+        <p class="panel-hint">
+            A MIB turns a walk's numbers into names: <code>1.3.6.1.2.1.2.2.1.10.3</code> becomes <code>ifInOctets.3</code>, status codes get their meaning
+            and values their unit. Names are resolved here on the instance, so a MIB works for walks on every probe and agent at once, and older walk
+            results get the names too. Upload the vendor's MIB files (.mib, .my, .txt) or a .zip of them; a newer upload of the same module replaces the old one.
+        </p>
+        <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="mib-upload-form">
+            <input type="file" name="files" multiple accept=".mib,.my,.txt,.zip" class="form-control workspace-input" required />
+            <button type="submit" class="workspace-submit">@MatmonIcons.Render("upload")<span>Upload</span></button>
+        </form>
+    </section>
+
+    @if (Model.Missing.Count > 0)
+    {
+        <div class="workspace-banner workspace-banner-warning">
+            <strong>Missing dependencies.</strong> These modules are imported by a loaded MIB but not loaded themselves - the objects that depend on
+            them may stay unnamed. They usually come in the same download from the vendor:
+            <ul class="mib-missing-list">
+                @foreach (var (module, neededBy) in Model.Missing)
+                {
+                    <li><code>@module</code> <span class="panel-hint">needed by @string.Join(", ", neededBy)</span></li>
+                }
+            </ul>
+        </div>
+    }
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("list")<span>Uploaded</span></h2>
+            <span class="panel-hint">@uploaded.Count</span>
+        </div>
+        @if (uploaded.Count == 0)
+        {
+            <p class="panel-hint">No MIBs uploaded yet - the standard set below covers interfaces, system, storage, IP and Linux (Net-SNMP / UCD) agents.</p>
+        }
+        else
+        {
+            <partial name="_MibModuleTable" model="uploaded" view-data="@(new ViewDataDictionary(ViewData) { ["MibUploadedAt"] = Model.UploadedAt, ["MibCanDelete"] = true })" />
+        }
+    </section>
+
+    <section class="panel panel-stack workspace-panel">
+        <div class="panel-header">
+            <h2 class="section-title">@MatmonIcons.Render("check")<span>Built in</span></h2>
+            <span class="panel-hint">@builtIn.Count standard modules (IETF, Net-SNMP)</span>
+        </div>
+        <partial name="_MibModuleTable" model="builtIn" view-data="@(new ViewDataDictionary(ViewData) { ["MibCanDelete"] = false })" />
+    </section>
+</section>

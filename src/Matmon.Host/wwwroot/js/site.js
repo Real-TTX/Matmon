@@ -45,6 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeTagOverflow();
   initializeAlertsTable();
   initializeRemoteRunPreviews();
+  initializeSnmpWalkMibs();
   initializeRunLoadingIndicator();
 });
 
@@ -6331,11 +6332,13 @@ function renderRemoteRunResult(container, kind, job) {
     }
 
     const rows = oids
-      .map((item) => `<li><code>${escapeHtml(item.oid || "")}</code> <span>${escapeHtml(item.value || "")}</span> <em>${escapeHtml(item.syntax || "")}</em></li>`)
+      .map((item) => `<li data-oid="${escapeHtml(item.oid || "")}" data-raw-value="${escapeHtml(item.value || "")}"><strong data-snmp-walk-name hidden></strong> <code>${escapeHtml(item.oid || "")}</code> <span data-snmp-walk-value>${escapeHtml(item.value || "")}</span> <em>${escapeHtml(item.syntax || "")}</em></li>`)
       .join("");
     container.innerHTML =
       `<div class="remote-run-preview-status">Discovered ${oids.length} OID${oids.length === 1 ? "" : "s"} on the probe. Re-open the editor after saving to pick channels.</div>` +
       `<ul class="remote-run-preview-oids">${rows}</ul>`;
+    // The probe knows no MIBs - the instance names what it found.
+    labelSnmpWalkRows(container.querySelectorAll("li[data-oid]"));
     return;
   }
 
@@ -6360,4 +6363,122 @@ function renderRemoteRunResult(container, kind, job) {
   container.innerHTML =
     `<div class="remote-run-preview-status">Test on probe: <strong>${state}</strong>${message}</div>` +
     (channelRows ? `<ul class="remote-run-preview-channels">${channelRows}</ul>` : "");
+}
+
+// ---- SNMP walk + MIBs -------------------------------------------------------------------------------------
+// The walk list (_SnmpWalkList) is rendered with names from the instance's MIBs. Uploading a MIB from the walk
+// relabels the rows in place through /api/mibs/translate, so nobody has to walk again; the filter narrows long
+// walks by name, OID or value.
+function initializeSnmpWalkMibs() {
+  document.querySelectorAll("[data-snmp-walk-filter]").forEach((input) => {
+    const list = input.parentElement?.querySelector("[data-snmp-walk-list]");
+    input.addEventListener("input", () => {
+      const needle = input.value.trim().toLowerCase();
+      list?.querySelectorAll("[data-snmp-walk-row]").forEach((row) => {
+        row.hidden = needle.length > 0 && !row.textContent.toLowerCase().includes(needle);
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-snmp-mib-upload]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      if (!input.files || input.files.length === 0) {
+        return;
+      }
+      const bar = input.closest("[data-snmp-mib-bar]");
+      const status = bar?.querySelector("[data-snmp-mib-status]");
+      const form = input.closest("form");
+      const token = form?.querySelector('input[name="__RequestVerificationToken"]')?.value;
+      const body = new FormData();
+      Array.from(input.files).forEach((file) => body.append("files", file));
+      if (token) {
+        body.append("__RequestVerificationToken", token);
+      }
+      if (status) {
+        status.textContent = "Uploading…";
+      }
+
+      try {
+        const response = await fetch(input.dataset.uploadUrl, { method: "POST", headers: { Accept: "application/json" }, body });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        const parts = [];
+        if (result.added?.length) {
+          parts.push(`Loaded ${result.added.join(", ")}.`);
+        }
+        if (result.missing?.length) {
+          parts.push(`Still missing: ${result.missing.join(", ")}.`);
+        }
+        if (result.rejected?.length) {
+          parts.push(result.rejected.join(" "));
+        }
+        const rows = bar?.parentElement?.querySelectorAll("[data-snmp-walk-row]") ?? [];
+        const named = await labelSnmpWalkRows(rows);
+        const summary = bar?.querySelector("[data-snmp-mib-summary] span");
+        if (summary) {
+          summary.textContent = `${result.modules} MIBs loaded${rows.length ? ` · names for ${named} of ${rows.length} OIDs` : ""}`;
+        }
+        if (status) {
+          status.textContent = parts.join(" ") || "Nothing loaded.";
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = `Upload failed: ${error.message}`;
+        }
+      } finally {
+        input.value = "";
+      }
+    });
+  });
+}
+
+/// Names walk rows (elements with data-oid + data-raw-value) from the instance's MIBs. Returns how many got a name.
+async function labelSnmpWalkRows(rows) {
+  const list = Array.from(rows);
+  if (list.length === 0) {
+    return 0;
+  }
+  const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+  const response = await fetch("/api/mibs/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { RequestVerificationToken: token } : {}) },
+    body: JSON.stringify({ items: list.map((row) => ({ oid: row.dataset.oid, value: row.dataset.rawValue ?? "" })) })
+  });
+  if (!response.ok) {
+    return 0;
+  }
+  const result = await response.json();
+  let named = 0;
+  (result.items ?? []).forEach((item, index) => {
+    const row = list[index];
+    if (!row || !item.name) {
+      return;
+    }
+    named++;
+    const name = row.querySelector("[data-snmp-walk-name]");
+    if (name) {
+      name.textContent = item.name;
+      name.hidden = false;
+    }
+    row.querySelector("[data-snmp-walk-oid]")?.classList.add("is-secondary");
+    const value = row.querySelector("[data-snmp-walk-value]");
+    if (value) {
+      value.textContent = item.units ? `${item.value} ${item.units}` : item.value;
+    }
+    const module = row.querySelector("[data-snmp-walk-module]");
+    if (module) {
+      module.textContent = item.module || "";
+      module.hidden = !item.module;
+    }
+    const hidden = row.querySelector("[data-snmp-walk-name-input]");
+    if (hidden) {
+      hidden.value = item.name;
+    }
+    if (item.description) {
+      row.title = item.description;
+    }
+  });
+  return named;
 }

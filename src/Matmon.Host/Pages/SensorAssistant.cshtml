@@ -127,33 +127,7 @@
                         </div>
                     </div>
 
-                    @if (Model.NewSensor.SnmpWalkItems.Count > 0)
-                    {
-                        <div class="snmp-walk-list">
-                            @for (var i = 0; i < Model.NewSensor.SnmpWalkItems.Count; i++)
-                            {
-                                var item = Model.NewSensor.SnmpWalkItems[i];
-                                <label class="snmp-walk-row @(item.IsNumeric ? "is-numeric" : "is-text")">
-                                    <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Oid" />
-                                    <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Syntax" />
-                                    <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Value" />
-                                    <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].IsNumeric" />
-                                    <input asp-for="NewSensor.SnmpWalkItems[i].Selected" type="checkbox" class="form-check-input" />
-                                    <div class="snmp-walk-main">
-                                        <div class="snmp-walk-oid">@item.Oid</div>
-                                        <div class="snmp-walk-value">@item.Value</div>
-                                    </div>
-                                    <div class="snmp-walk-meta">
-                                        <span class="snmp-walk-type">@item.Syntax</span>
-                                        @if (item.IsNumeric)
-                                        {
-                                            <span class="sensor-required">numeric</span>
-                                        }
-                                    </div>
-                                </label>
-                            }
-                        </div>
-                    }
+                    <partial name="_SnmpWalkList" model="Model" />
                 </div>
             }
 

@@ -152,6 +152,12 @@ builder.Services.AddSingleton<MapDisplayProvider>();
 builder.Services.AddSingleton(provider => new MapAssetStore(
     workspaceDirectory,
     provider.GetRequiredService<ILogger<MapAssetStore>>()));
+// SNMP MIBs: shipped standard set + admin uploads (data/mibs). Names are resolved on the instance when a walk is
+// shown, so probes never need a MIB.
+builder.Services.AddSingleton(provider => new MibLibrary(
+    workspaceDirectory,
+    Path.Combine(AppContext.BaseDirectory, "mibs"),
+    provider.GetRequiredService<ILogger<MibLibrary>>()));
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -216,6 +222,7 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizePage("/Wizard", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/Config", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/Mibs", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/CloudClaim", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/MapEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationReportEditor", MatmonSecurity.AdminPolicy);
@@ -497,6 +504,24 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
     // UI poll for an on-demand run routed to a remote probe (a "Test" or SNMP-discover preview). Mirrors
     // the accessibility of GET /api/discovery-jobs/{jobId} (authenticated user, no probe token).
+    // Names for walked OIDs from the loaded MIBs - used to relabel a walk in place right after a MIB upload and to
+    // name the OIDs a remote probe reports (the probe itself knows no MIBs).
+    app.MapPost("/api/mibs/translate", (MibTranslateRequest request, MibLibrary mibs) =>
+    {
+        var items = (request.Items ?? []).Take(5000).Select(item =>
+        {
+            var translation = mibs.Translate(item.Oid) is { IsObject: true } known ? known : null;
+            return new MibTranslateItem(
+                item.Oid,
+                translation?.Name,
+                translation?.Node.Module,
+                translation?.Node.Description,
+                translation?.Node.Units,
+                translation is null ? item.Value : translation.FormatValue(item.Value));
+        }).ToList();
+        return Results.Ok(new { modules = mibs.Registry.Modules.Count, items });
+    });
+
     app.MapGet("/api/run-jobs/{jobId:guid}", (Guid jobId, IOnDemandRunStore onDemandRunStore) =>
     {
         var job = onDemandRunStore.TryGet(jobId);
@@ -922,3 +947,9 @@ static string ResolveTelemetryPath(IHostEnvironment environment, MatmonRuntimeOp
         ? configuredPath
         : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
 }
+
+internal sealed record MibTranslateRequest(IReadOnlyList<MibTranslateRequestItem>? Items);
+
+internal sealed record MibTranslateRequestItem(string Oid, string? Value);
+
+internal sealed record MibTranslateItem(string Oid, string? Name, string? Module, string? Description, string? Units, string? Value);
