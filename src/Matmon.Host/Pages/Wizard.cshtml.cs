@@ -17,19 +17,22 @@ public class WizardModel : PageModel
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly ILicenseService _licenseService;
     private readonly CloudBackupClient _cloudBackups;
+    private readonly MatmonRuntimeOptions _runtimeOptions;
 
     public WizardModel(
         IMonitoringWorkspaceStore workspaceStore,
         DiscoveryJobStore discoveryJobs,
         NetworkDiscoveryService discoveryService,
         ILicenseService licenseService,
-        CloudBackupClient cloudBackups)
+        CloudBackupClient cloudBackups,
+        MatmonRuntimeOptions runtimeOptions)
     {
         _workspaceStore = workspaceStore;
         _discoveryJobs = discoveryJobs;
         _discoveryService = discoveryService;
         _licenseService = licenseService;
         _cloudBackups = cloudBackups;
+        _runtimeOptions = runtimeOptions;
     }
 
     // Reworked flow: the cloud decision comes first (it determines whether SMTP + a manual license are even
@@ -86,6 +89,15 @@ public class WizardModel : PageModel
 
     /// <summary>Whether this instance is already linked to Matmon.Cloud.</summary>
     public bool CloudConnected { get; private set; }
+
+    /// <summary>This installation is ALREADY linked to a cloud instance - not by anything stored here, but by the
+    /// environment (<c>Matmon__CloudInstanceId</c>/<c>CloudInstanceToken</c>): a fresh data folder started with the same
+    /// environment becomes that instance again, license included. The wizard used to show "not connected" for this
+    /// while the link and the license were in fact active.</summary>
+    public bool CloudEnvLinkActive { get; private set; }
+
+    /// <summary>The cloud instance the environment links to (for display).</summary>
+    public string CloudEnvLinkInstanceId { get; private set; } = string.Empty;
 
     /// <summary>Restore step: backups available on this instance's cloud account (its own + sibling instances),
     /// the pool a fresh instance can restore from. Empty when the account has none.</summary>
@@ -444,7 +456,9 @@ public class WizardModel : PageModel
         {
             var cloud = _workspaceStore.GetCloudConnectionSettings();
             CloudConnected = cloud.Enabled && cloud.HasToken;
-            CloudLinkUrl = cloud.Url ?? string.Empty;
+            CloudEnvLinkActive = !cloud.Configured && _runtimeOptions.HasCloudBootstrapLink;
+            CloudEnvLinkInstanceId = CloudEnvLinkActive ? _runtimeOptions.CloudInstanceId ?? string.Empty : string.Empty;
+            CloudLinkUrl = CloudEnvLinkActive ? _runtimeOptions.CloudUrl ?? string.Empty : cloud.Url ?? string.Empty;
             SuggestedInstanceName = PrimaryNode()?.Name ?? Environment.MachineName;
             License = _licenseService.Current;
             CloudManagesLicense = CloudConnected;

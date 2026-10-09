@@ -96,4 +96,13 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
 
     /// <summary>The secret instance token issued by Matmon.Cloud (<c>Matmon__CloudInstanceToken</c>).</summary>
     public string? CloudInstanceToken { get; set; }
+
+    /// <summary>
+    /// True when the environment carries a COMPLETE cloud link - URL, a valid instance id and a token. A workspace
+    /// that has not taken over in the UI (<see cref="Matmon.Core.Domain.CloudConnectionSettings.Configured"/>) then
+    /// links itself to that instance on its own, so a fresh installation started with the same environment IS that
+    /// instance again, license included. A bare <c>Matmon__CloudUrl</c> is not a link (it only prefills the form).
+    /// </summary>
+    public bool HasCloudBootstrapLink =>
+        !string.IsNullOrWhiteSpace(CloudUrl) && Guid.TryParse(CloudInstanceId, out _) && !string.IsNullOrWhiteSpace(CloudInstanceToken);
 }

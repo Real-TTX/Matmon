@@ -62,7 +62,29 @@
 
                 case "cloud":
                     <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Connect to Matmon Cloud</span></h2>
-                    @if (Model.CloudConnected)
+                    @if (Model.CloudEnvLinkActive)
+                    {
+                        <div class="workspace-banner workspace-banner-warning">
+                            <div>
+                                This installation is <strong>already linked</strong> to the cloud instance <code>@Model.CloudEnvLinkInstanceId</code> at <strong>@Model.CloudLinkUrl</strong> -
+                                by the <em>environment</em> it was started with (<code>Matmon__CloudInstanceId</code> / <code>Matmon__CloudInstanceToken</code>), not by this setup.
+                                That is why it was connected without you doing anything, and why the license of that instance (currently <strong>@Model.License.DisplayName</strong>) is already here:
+                                a new installation started with this environment always becomes that same instance again.
+                            </div>
+                        </div>
+                        <p>Keep that link, or unlink and register this installation under your account yourself - as a <strong>new</strong> instance, or by taking an old one over.</p>
+                        <div class="setup-wizard-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <form method="post" asp-page="/Config" asp-page-handler="CloudKeepEnvLink" class="setup-wizard-form">
+                                <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
+                                <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Keep this link</span></button>
+                            </form>
+                            <form method="post" asp-page="/Config" asp-page-handler="CloudUnlinkEnvLink" class="setup-wizard-form" onsubmit="return confirm('Unlink this installation from that cloud instance?');">
+                                <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
+                                <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("x")<span>Unlink and connect as new</span></button>
+                            </form>
+                        </div>
+                    }
+                    else if (Model.CloudConnected)
                     {
                         <p class="setup-wizard-muted">@MatmonIcons.Render("check") Connected to <strong>@Model.CloudLinkUrl</strong>. Your license is managed automatically (currently <strong>@Model.License.DisplayName</strong>), and you can relay alert e-mail through the cloud in the next step - no SMTP needed.</p>
                         <form method="post" asp-page-handler="CloudMonitoring" class="setup-wizard-form">

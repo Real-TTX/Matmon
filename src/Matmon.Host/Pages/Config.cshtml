@@ -710,6 +710,20 @@
                 @if (linkActive)
                 {
                     @* Connected: connection identity is locked (disconnect to change). Only the display name is editable. *@
+                    @if (Model.CloudEnvLinkActive)
+                    {
+                        <div class="workspace-banner workspace-banner-warning" style="max-width:640px;margin-bottom:14px;">
+                            <div>
+                                <strong>This link comes from environment variables</strong> (<code>Matmon__CloudInstanceId</code> and <code>Matmon__CloudInstanceToken</code>),
+                                not from this instance's own data. A fresh installation started with the same environment links itself to the same cloud
+                                instance again - license included. Keep the link here, or unlink to make this installation a different instance.
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+                                    <form method="post" asp-page-handler="CloudKeepEnvLink"><button type="submit" class="workspace-submit">Keep this link</button></form>
+                                    <form method="post" asp-page-handler="CloudUnlinkEnvLink"><button type="submit" class="workspace-secondary-submit" onclick="return confirm('Unlink this installation from the cloud instance set in the environment?');">Unlink</button></form>
+                                </div>
+                            </div>
+                        </div>
+                    }
                     <dl class="config-list" style="max-width:640px;">
                         <div class="config-row"><dt>Cloud URL</dt><dd>@(Model.CloudUrl ?? "–")</dd></div>
                         <div class="config-row"><dt>Instance id</dt><dd>@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</dd></div>
@@ -777,6 +791,10 @@
                             <label class="workspace-field"><span>Cloud account e-mail</span><input asp-for="CloudProvision.Email" type="email" class="workspace-input" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Password</span><input asp-for="CloudProvision.Password" type="password" class="workspace-input" autocomplete="off" /></label>
                             <label class="workspace-field"><span>Instance name</span><input asp-for="CloudProvision.Name" class="workspace-input" /></label>
+                            <label style="display:flex;gap:8px;align-items:flex-start;margin:6px 0 12px;">
+                                <input asp-for="CloudProvision.TakeOver" type="checkbox" style="margin-top:0.25rem;" />
+                                <span>Take over my existing <em>offline</em> instance with this name <small style="color:var(--matmon-muted);display:block;">Keeps its plan, license and history; the installation that used it before can no longer connect. Unchecked, this becomes a new instance.</small></span>
+                            </label>
                             <button type="submit" class="workspace-submit">Connect with password</button>
                         </form>
                         <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:16px;">

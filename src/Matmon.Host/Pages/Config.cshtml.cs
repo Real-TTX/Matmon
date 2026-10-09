@@ -61,6 +61,10 @@ public class ConfigModel : PageModel
     /// <summary>Whether the env-var bootstrap is set (shown as a hint; the UI takes over once used).</summary>
     public bool CloudEnvBootstrapSet { get; private set; }
 
+    /// <summary>The cloud link in effect comes from environment variables only, not from this instance's own data -
+    /// so a fresh installation started with the same environment links to the same cloud instance again.</summary>
+    public bool CloudEnvLinkActive { get; private set; }
+
     /// <summary>True when the cloud link is actively managing the license (connected via the UI, or the env
     /// bootstrap is set). While active, manual token entry is disabled - the cloud re-issues it on each heartbeat.</summary>
     public bool CloudLinkActive { get; private set; }
@@ -425,7 +429,7 @@ public class ConfigModel : PageModel
         // While the cloud link is active it OWNS the license (re-issued each heartbeat), so a manual token would
         // just be overwritten - refuse it and tell the admin to disconnect first for offline licensing.
         var cloud = _workspaceStore.GetCloudConnectionSettings();
-        var cloudActive = cloud.Configured ? cloud.Enabled : !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
+        var cloudActive = cloud.Configured ? cloud.Enabled : _runtimeOptions.HasCloudBootstrapLink;
         if (cloudActive)
         {
             ErrorMessage = "Manual license entry is disabled while connected to Matmon.Cloud - the cloud manages the license and would overwrite it on the next heartbeat. Disconnect the cloud first (System → Cloud).";
@@ -654,17 +658,21 @@ public class ConfigModel : PageModel
     {
         try
         {
+            // The link in EFFECT: the stored one once the UI took over, else the environment's.
             var settings = _workspaceStore.GetCloudConnectionSettings();
-            var token = _workspaceStore.GetCloudConnectionToken();
-            if (!settings.Enabled
-                || string.IsNullOrWhiteSpace(settings.Url)
-                || !Guid.TryParse(settings.InstanceId, out var instanceId)
+            var active = settings.Configured ? settings.Enabled : _runtimeOptions.HasCloudBootstrapLink;
+            var url = settings.Configured ? settings.Url : _runtimeOptions.CloudUrl;
+            var instanceIdRaw = settings.Configured ? settings.InstanceId : _runtimeOptions.CloudInstanceId;
+            var token = settings.Configured ? _workspaceStore.GetCloudConnectionToken() : _runtimeOptions.CloudInstanceToken;
+            if (!active
+                || string.IsNullOrWhiteSpace(url)
+                || !Guid.TryParse(instanceIdRaw, out var instanceId)
                 || string.IsNullOrWhiteSpace(token))
             {
                 return;
             }
 
-            var baseUrl = settings.Url.Trim().TrimEnd('/');
+            var baseUrl = url.Trim().TrimEnd('/');
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/instances/{instanceId}/disconnect");
             request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
@@ -679,7 +687,8 @@ public class ConfigModel : PageModel
 
     /// <summary>Recover from a cloud-side sever ("unauthorized" - the cloud rotated/revoked this instance's token):
     /// drop the dead link locally, then re-enter the claim flow with the same cloud URL + name so the admin gets a
-    /// fresh token in one click. A same-name reconnect reuses the existing cloud instance (see CreateAsync).</summary>
+    /// fresh token in one click. The consent page is told which instance this box just dropped and offers to take
+    /// exactly that one over (preselected - the admin did ask to reconnect); it is never guessed from the name.</summary>
     public IActionResult OnPostCloudReconnect()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -696,11 +705,53 @@ public class ConfigModel : PageModel
         }
 
         var name = _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
+        var previousInstanceId = settings.InstanceId;
         _workspaceStore.DisconnectCloud(); // drop the dead token/link before re-claiming
         CloudProvision.Url = url;
         CloudProvision.Name = name;
-        return OnPostCloudClaim(null); // starts the PKCE claim + redirects to the cloud consent page
+        return StartCloudClaim(null, previousInstanceId); // starts the PKCE claim + redirects to the cloud consent page
     }
+
+    /// <summary>The link in effect comes from environment variables only. KEEP it: store it, so it is managed in the
+    /// UI from now on (and no longer depends on the environment carrying the instance id and token).</summary>
+    public IActionResult OnPostCloudKeepEnvLink(string? returnUrl)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        if (_workspaceStore.GetCloudConnectionSettings().Configured || !_runtimeOptions.HasCloudBootstrapLink)
+        {
+            StatusMessage = "There is no environment link to keep.";
+            return ReturnTo(returnUrl);
+        }
+
+        _workspaceStore.SetCloudConnectionSettings(_runtimeOptions.CloudUrl, _runtimeOptions.CloudInstanceId, _runtimeOptions.CloudInstanceToken, enabled: true);
+        StatusMessage = "Kept: the link to Matmon.Cloud is now stored in this instance and managed here.";
+        return ReturnTo(returnUrl);
+    }
+
+    /// <summary>The link in effect comes from environment variables only. UNLINK it - this instance stops being that
+    /// cloud instance (the cloud is told, so it shows offline at once) and the environment's id + token are ignored
+    /// from now on. Connecting again then asks the cloud for a NEW instance, or to take the old one over.</summary>
+    public async Task<IActionResult> OnPostCloudUnlinkEnvLinkAsync(string? returnUrl)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        await NotifyCloudDisconnectAsync();
+        _workspaceStore.DisconnectCloud();
+        StatusMessage = "Unlinked from the cloud instance set in the environment. Connect below to register this installation as a new instance.";
+        return ReturnTo(returnUrl);
+    }
+
+    private IActionResult ReturnTo(string? returnUrl) =>
+        !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)
+            ? LocalRedirect(returnUrl)
+            : RedirectToPage(new { tab = "cloud" });
 
     /// <summary>
     /// UniFi-style connect (OAuth): redirect the admin's browser to the cloud consent page to claim this
@@ -708,7 +759,9 @@ public class ConfigModel : PageModel
     /// callback (<see cref="CloudClaimModel"/>) redeems the returned code for the id + token. The account
     /// password never touches this instance.
     /// </summary>
-    public IActionResult OnPostCloudClaim(string? returnUrl)
+    public IActionResult OnPostCloudClaim(string? returnUrl) => StartCloudClaim(returnUrl, reconnectInstanceId: null);
+
+    private IActionResult StartCloudClaim(string? returnUrl, string? reconnectInstanceId)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -758,7 +811,10 @@ public class ConfigModel : PageModel
             ["redirect_uri"] = redirectUri,
             ["state"] = nonce,
             ["name"] = name,
-            ["code_challenge"] = challenge
+            ["code_challenge"] = challenge,
+            // Only a "disconnect & reconnect" knows which instance it is re-linking; a fresh install sends nothing,
+            // and the cloud then asks the admin instead of guessing from the name.
+            ["reconnect"] = Guid.TryParse(reconnectInstanceId, out var reconnectId) ? reconnectId.ToString() : null
         });
         return Redirect(target);
     }
@@ -795,7 +851,7 @@ public class ConfigModel : PageModel
 
         try
         {
-            using var response = await CloudHttp.PostAsJsonAsync($"{url}/api/provision", new { email, password, name }, cancellationToken);
+            using var response = await CloudHttp.PostAsJsonAsync($"{url}/api/provision", new { email, password, name, takeOver = CloudProvision.TakeOver }, cancellationToken);
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 ErrorMessage = "Cloud sign-in failed - check your e-mail and password.";
@@ -810,7 +866,7 @@ public class ConfigModel : PageModel
 
             if (response.StatusCode == HttpStatusCode.Conflict)
             {
-                ErrorMessage = "An instance with this name is already connected to your cloud account (or was deactivated by its administrator) - choose a different name, or stop the other instance first.";
+                ErrorMessage = "The instance you chose to take over is still online or was deactivated by its administrator, so it can't be taken over. Stop the old installation first (it reads offline within a couple of minutes), or connect as a new instance.";
                 return RedirectToPage(new { tab = "cloud" });
             }
 
@@ -834,7 +890,10 @@ public class ConfigModel : PageModel
             }
 
             _workspaceStore.SetCloudConnectionSettings(url, result.InstanceId, result.Token, enabled: true);
-            StatusMessage = $"Connected to Matmon.Cloud as '{name}'.";
+            var cloudName = string.IsNullOrWhiteSpace(result.Name) ? name : result.Name;
+            StatusMessage = result.TookOver
+                ? $"Connected - this installation took over the existing cloud instance '{cloudName}' (its plan and license come with it)."
+                : $"Connected to Matmon.Cloud as a new instance '{cloudName}'.";
         }
         catch (Exception ex)
         {
@@ -887,7 +946,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "cloud" });
     }
 
-    private sealed record ProvisionResult(string? InstanceId, string? Token);
+    private sealed record ProvisionResult(string? InstanceId, string? Token, string? Name = null, bool TookOver = false);
 
     public IActionResult OnPostCloudRelay()
     {
@@ -1020,7 +1079,9 @@ public class ConfigModel : PageModel
         CloudConnection = _workspaceStore.GetCloudConnection();
         CloudSettings = _workspaceStore.GetCloudConnectionSettings();
         CloudEnvBootstrapSet = !string.IsNullOrWhiteSpace(_runtimeOptions.CloudUrl);
-        CloudLinkActive = CloudSettings.Configured ? CloudSettings.Enabled : CloudEnvBootstrapSet;
+        // Only a COMPLETE environment link (URL + id + token) is a link; a bare URL just prefills the form.
+        CloudEnvLinkActive = !CloudSettings.Configured && _runtimeOptions.HasCloudBootstrapLink;
+        CloudLinkActive = CloudSettings.Configured ? CloudSettings.Enabled : CloudEnvLinkActive;
         DisplayTimeZoneId = _workspaceStore.GetDisplayTimeZoneId();
         TimeZoneItems = TimeZoneOptions.Build(DisplayTimeZoneId, "Server local");
         ServicePartnerInfo = _workspaceStore.GetServicePartnerInfo();
@@ -1082,6 +1143,10 @@ public sealed class CloudProvisionInput
     public string? Password { get; set; }
 
     public string? Name { get; set; }
+
+    /// <summary>Take over the account's existing OFFLINE instance of that name (keeping its plan and license) instead
+    /// of becoming a new instance.</summary>
+    public bool TakeOver { get; set; }
 }
 
 public sealed class CloudConnectInput
