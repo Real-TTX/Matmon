@@ -706,7 +706,8 @@ public class ConfigModel : PageModel
             return RedirectToPage(new { tab = "cloud" });
         }
 
-        var name = _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
+        var name = Matmon.Host.Ui.CloudInstanceNameSuggestion.Suggest(
+            Request.Host.Host, _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name, Environment.MachineName);
         var previousInstanceId = settings.InstanceId;
         _workspaceStore.DisconnectCloud(); // drop the dead token/link before re-claiming
         CloudProvision.Url = url;
@@ -1098,7 +1099,8 @@ public class ConfigModel : PageModel
         CloudConnect.Url ??= string.IsNullOrWhiteSpace(CloudUrl) ? DefaultCloudUrl : CloudUrl;
         CloudConnect.InstanceId ??= CloudSettings.Configured ? CloudSettings.InstanceId : _runtimeOptions.CloudInstanceId;
         CloudProvision.Url ??= string.IsNullOrWhiteSpace(CloudUrl) ? DefaultCloudUrl : CloudUrl;
-        CloudProvision.Name ??= _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name ?? Environment.MachineName;
+        CloudProvision.Name ??= Matmon.Host.Ui.CloudInstanceNameSuggestion.Suggest(
+            Request.Host.Host, _workspaceStore.GetAllElements().OfType<ProbeElement>().FirstOrDefault()?.Name, Environment.MachineName);
         if (!Request.HasFormContentType)
         {
             CloudRelay.RelayAlerts = CloudSettings.RelayAlerts;

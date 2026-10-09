@@ -459,7 +459,7 @@ public class WizardModel : PageModel
             CloudEnvLinkActive = !cloud.Configured && _runtimeOptions.HasCloudBootstrapLink;
             CloudEnvLinkInstanceId = CloudEnvLinkActive ? _runtimeOptions.CloudInstanceId ?? string.Empty : string.Empty;
             CloudLinkUrl = CloudEnvLinkActive ? _runtimeOptions.CloudUrl ?? string.Empty : cloud.Url ?? string.Empty;
-            SuggestedInstanceName = PrimaryNode()?.Name ?? Environment.MachineName;
+            SuggestedInstanceName = Matmon.Host.Ui.CloudInstanceNameSuggestion.Suggest(Request.Host.Host, PrimaryNode()?.Name, Environment.MachineName);
             License = _licenseService.Current;
             CloudManagesLicense = CloudConnected;
         }

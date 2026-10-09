@@ -99,7 +99,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     {
         return new WorkspaceDocument
         {
-            RootProbe = new ProbeElement("Primary Probe")
+            RootProbe = new ProbeElement(ProbeElement.DefaultRootName)
             {
                 ProbeId = "primary",
                 Description = "Local primary probe"

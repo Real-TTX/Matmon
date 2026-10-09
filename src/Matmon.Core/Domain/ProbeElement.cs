@@ -2,6 +2,9 @@ namespace Matmon.Core.Domain;
 
 public sealed class ProbeElement : MonitoringContainerElement
 {
+    /// <summary>What the root probe of a fresh installation is called - the same on every install.</summary>
+    public const string DefaultRootName = "Primary Probe";
+
     public ProbeElement(string name) : base(name)
     {
     }
