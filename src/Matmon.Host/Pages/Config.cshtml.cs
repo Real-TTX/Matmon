@@ -83,6 +83,8 @@ public class ConfigModel : PageModel
     /// <summary>Human-readable Full Access status line for the Cloud tab.</summary>
     public string TunnelStatusText => !TunnelStatus.Enabled
         ? "Off"
+        : TunnelStatus.NotIncludedInPlan
+            ? "Switched on, but not included in this plan - it connects as soon as the plan includes Full Access"
         : TunnelStatus.Connected
             ? (TunnelStatus.ConnectedSinceUtc is { } since ? $"Connected since {FormatDateTime(since)}" : "Connected")
             : string.IsNullOrWhiteSpace(TunnelStatus.LastError)
@@ -90,7 +92,7 @@ public class ConfigModel : PageModel
                 : $"Not connected — {TunnelStatus.LastError} (retrying…)";
 
     /// <summary>Colour token for <see cref="TunnelStatusText"/>.</summary>
-    public string TunnelStatusColor => !TunnelStatus.Enabled
+    public string TunnelStatusColor => !TunnelStatus.Enabled || TunnelStatus.NotIncludedInPlan
         ? "var(--matmon-muted)"
         : TunnelStatus.Connected ? "var(--matmon-success)" : "var(--matmon-warning)";
 

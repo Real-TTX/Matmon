@@ -17,6 +17,7 @@ public sealed class TunnelState
     private int _consecutiveFailures;
     private long _requestsServed;
     private DateTimeOffset? _lastRequestUtc;
+    private bool _notIncluded;
 
     /// <summary>Whether Full Access is switched on for this instance (independent of whether it is connected).</summary>
     public void SetEnabled(bool enabled)
@@ -30,6 +31,28 @@ public sealed class TunnelState
                 _connectedSinceUtc = null;
             }
         }
+    }
+
+    /// <summary>Full Access is switched on and linked, but the current plan does not include it - so the client does
+    /// not even knock on the cloud's door. It lifts itself the moment the plan does include it.</summary>
+    public void SetNotIncluded(bool notIncluded)
+    {
+        lock (_gate)
+        {
+            _notIncluded = notIncluded;
+            if (notIncluded)
+            {
+                _connected = false;
+                _connectedSinceUtc = null;
+                _lastError = null;
+                _consecutiveFailures = 0;
+            }
+        }
+    }
+
+    public bool NotIncluded
+    {
+        get { lock (_gate) { return _notIncluded; } }
     }
 
     public void MarkAttempt()
@@ -79,7 +102,7 @@ public sealed class TunnelState
     {
         lock (_gate)
         {
-            return new TunnelStatusSnapshot(_enabled, _connected, _connectedSinceUtc, _lastAttemptUtc, _lastError, _consecutiveFailures, _requestsServed, _lastRequestUtc);
+            return new TunnelStatusSnapshot(_enabled, _connected, _connectedSinceUtc, _lastAttemptUtc, _lastError, _consecutiveFailures, _requestsServed, _lastRequestUtc, _notIncluded);
         }
     }
 }
@@ -93,4 +116,5 @@ public sealed record TunnelStatusSnapshot(
     string? LastError,
     int ConsecutiveFailures,
     long RequestsServed,
-    DateTimeOffset? LastRequestUtc);
+    DateTimeOffset? LastRequestUtc,
+    bool NotIncludedInPlan = false);

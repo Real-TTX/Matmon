@@ -29,6 +29,7 @@ public sealed class TunnelClient : BackgroundService
     private readonly ILogger<TunnelClient> _logger;
     private readonly TunnelAuthSecret _tunnelSecret;
     private readonly TunnelState _tunnelState;
+    private readonly IServiceScopeFactory _scopes;
     // Decompress the local response so the tunnel always carries plain bytes: the cloud rewrites text
     // bodies and the browser gets a decodable stream (the static-asset handler otherwise returns brotli/gzip
     // that, once Content-Encoding is dropped in transit, the browser can't decode → "CSS doesn't load").
@@ -48,8 +49,10 @@ public sealed class TunnelClient : BackgroundService
         IServer server,
         ILogger<TunnelClient> logger,
         TunnelAuthSecret tunnelSecret,
-        TunnelState tunnelState)
+        TunnelState tunnelState,
+        IServiceScopeFactory scopes)
     {
+        _scopes = scopes;
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
         _server = server;
@@ -70,12 +73,30 @@ public sealed class TunnelClient : BackgroundService
             var settings = _workspaceStore.GetCloudConnectionSettings();
             var token = _workspaceStore.GetCloudConnectionToken();
             _tunnelState.SetEnabled(settings.FullAccessEnabled && settings.Enabled);
-            var ready = settings.FullAccessEnabled && settings.Enabled &&
-                !string.IsNullOrWhiteSpace(settings.Url) && !string.IsNullOrWhiteSpace(settings.InstanceId) && !string.IsNullOrWhiteSpace(token);
+            var hasCredentials = !string.IsNullOrWhiteSpace(settings.Url) && !string.IsNullOrWhiteSpace(settings.InstanceId) && !string.IsNullOrWhiteSpace(token);
 
-            if (!ready)
+            // The plan is only looked at when there is something to connect - it is a signature check per look.
+            var plan = !(settings.FullAccessEnabled && settings.Enabled && hasCredentials) || PlanIncludesFullAccess();
+            var decision = TunnelConnectPolicy.Decide(settings.FullAccessEnabled, settings.Enabled, hasCredentials, plan);
+
+            var wasNotIncluded = _tunnelState.NotIncluded;
+            _tunnelState.SetNotIncluded(decision == TunnelDecision.NotIncluded);
+            if (decision == TunnelDecision.Idle)
             {
                 await DelayAsync(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
+            if (decision == TunnelDecision.NotIncluded)
+            {
+                // Don't knock on the cloud's door every minute to be told no: the plan is known locally (the licence
+                // arrives with every heartbeat), so say it once and look again when the licence may have changed.
+                if (!wasNotIncluded)
+                {
+                    _logger.LogInformation("Full Access is switched on, but the current plan does not include it - not connecting until it does");
+                }
+
+                await DelayAsync(TunnelConnectPolicy.NotIncludedPoll, stoppingToken);
                 continue;
             }
 
@@ -94,9 +115,33 @@ public sealed class TunnelClient : BackgroundService
                 var reason = DescribeConnectFailure(ex);
                 _tunnelState.MarkDisconnected(reason, failure: true);
                 var failures = _tunnelState.ConsecutiveFailures;
+
+                if (TunnelConnectPolicy.IsDefinitiveRefusal(ex))
+                {
+                    // The cloud ANSWERED no (401 / 403). Retrying every minute changes nothing and, as a warning with
+                    // a stack trace each time, buries the log: say it once, loudly - then wait long, but end the wait
+                    // the moment the plan, the token or the setting changes (an upgrade connects within ~15 s).
+                    if (failures == 1)
+                    {
+                        _logger.LogWarning("Full Access tunnel refused by the cloud ({Reason}); trying again in {Minutes} min, or as soon as the plan, the token or the setting changes",
+                            reason, (int)TunnelConnectPolicy.RefusedRetry.TotalMinutes);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Full Access tunnel still refused by the cloud ({Reason})", reason);
+                    }
+
+                    await TunnelConnectPolicy.WaitForChangeAsync(
+                        () => TunnelConnectPolicy.Signature(_workspaceStore.GetCloudConnectionSettings(), _workspaceStore.GetCloudConnectionToken(), PlanIncludesFullAccess()),
+                        TunnelConnectPolicy.RefusedRetry,
+                        TunnelConnectPolicy.ChangePoll,
+                        stoppingToken);
+                    continue;
+                }
+
                 // First failure at Information, escalate to Warning once it clearly isn't a blip - so an admin who
                 // enabled Full Access but sees "not connected" in the cloud has something to diagnose with (a proxy
-                // that drops WS upgrades, or a 401/403 handshake) instead of silence at Debug.
+                // that drops WS upgrades) instead of silence at Debug.
                 if (failures >= 3)
                 {
                     _logger.LogWarning(ex, "Full Access tunnel failing ({Reason}); {Failures} attempts in a row", reason, failures);
@@ -108,20 +153,17 @@ public sealed class TunnelClient : BackgroundService
             }
 
             // Exponential backoff with jitter (5→10→20→40→60s cap), reset once a connection succeeds. A tight 5s
-            // retry against a cloud that keeps refusing the handshake (401/403, proxy) is just noise.
-            await DelayAsync(BackoffFor(_tunnelState.ConsecutiveFailures), stoppingToken);
+            // retry against a proxy that keeps dropping the upgrade is just noise.
+            await DelayAsync(TunnelConnectPolicy.Backoff(_tunnelState.ConsecutiveFailures, Environment.TickCount64), stoppingToken);
         }
     }
 
-    private static TimeSpan BackoffFor(int consecutiveFailures)
+    /// <summary>Whether the current licence includes Full Access. <see cref="ILicenseService"/> is scoped, this service
+    /// is a singleton - so each look takes its own scope.</summary>
+    private bool PlanIncludesFullAccess()
     {
-        if (consecutiveFailures <= 0)
-        {
-            return TimeSpan.FromSeconds(5);
-        }
-        var seconds = Math.Min(60, 5 * Math.Pow(2, Math.Min(consecutiveFailures - 1, 4))); // 5,10,20,40,60
-        var jitter = (Environment.TickCount64 % 1000) / 1000.0; // 0..1s, no RNG dependency
-        return TimeSpan.FromSeconds(seconds) + TimeSpan.FromSeconds(jitter);
+        using var scope = _scopes.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<ILicenseService>().Current.TunnelEnabled;
     }
 
     private static string DescribeConnectFailure(Exception ex)
