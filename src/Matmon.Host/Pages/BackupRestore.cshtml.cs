@@ -172,43 +172,15 @@ public class BackupRestoreModel : PageModel
         return true;
     }
 
-    private bool IsSectionSelected(WorkspaceBackupSection section)
-    {
-        return section switch
-        {
-            WorkspaceBackupSection.Topology => Input.Sections.Topology,
-            WorkspaceBackupSection.Templates => Input.Sections.Templates,
-            WorkspaceBackupSection.SensorDefinitions => Input.Sections.SensorDefinitions,
-            WorkspaceBackupSection.Notifications => Input.Sections.Notifications,
-            WorkspaceBackupSection.Maps => Input.Sections.Maps,
-            WorkspaceBackupSection.Users => Input.Sections.Users,
-            WorkspaceBackupSection.Alerts => Input.Sections.Alerts,
-            WorkspaceBackupSection.SensorHistory => Input.Sections.SensorHistory,
-            WorkspaceBackupSection.Events => Input.Sections.Events,
-            WorkspaceBackupSection.Statistics => Input.Sections.Statistics,
-            WorkspaceBackupSection.BackupJobs => Input.Sections.BackupJobs,
-            _ => false
-        };
-    }
+    // Both derive from the section itself instead of listing the sections again: this page used to switch over
+    // eleven of them, so the two that came later (map images, MIBs) got an empty field name and were never
+    // restorable from here. The posted name is the model's property, which is named after the section - and a
+    // test fails the day a section has no such property.
+    private bool IsSectionSelected(WorkspaceBackupSection section) =>
+        Input.Sections.ToSections(defaultToAll: false).HasFlag(section);
 
-    private static string GetSectionFieldName(WorkspaceBackupSection section)
-    {
-        return section switch
-        {
-            WorkspaceBackupSection.Topology => "Input.Sections.Topology",
-            WorkspaceBackupSection.Templates => "Input.Sections.Templates",
-            WorkspaceBackupSection.SensorDefinitions => "Input.Sections.SensorDefinitions",
-            WorkspaceBackupSection.Notifications => "Input.Sections.Notifications",
-            WorkspaceBackupSection.Maps => "Input.Sections.Maps",
-            WorkspaceBackupSection.Users => "Input.Sections.Users",
-            WorkspaceBackupSection.Alerts => "Input.Sections.Alerts",
-            WorkspaceBackupSection.SensorHistory => "Input.Sections.SensorHistory",
-            WorkspaceBackupSection.Events => "Input.Sections.Events",
-            WorkspaceBackupSection.Statistics => "Input.Sections.Statistics",
-            WorkspaceBackupSection.BackupJobs => "Input.Sections.BackupJobs",
-            _ => string.Empty
-        };
-    }
+    private static string GetSectionFieldName(WorkspaceBackupSection section) =>
+        "Input.Sections." + section;
 
     private IActionResult RedirectToConfig()
     {
@@ -224,7 +196,10 @@ public class BackupRestoreModel : PageModel
 
 public sealed class BackupRestoreInput
 {
-    public BackupSectionSelectionModel Sections { get; set; } = new();
+    // Nothing selected until the form says so. The page's own checkboxes post only when ticked, so starting from the
+    // editor's "everything" default meant a section could not be unticked: restoring "just the MIBs" restored all of
+    // it - users, topology and notification rules included.
+    public BackupSectionSelectionModel Sections { get; set; } = BackupSectionSelectionModel.None();
 }
 
 public sealed record BackupRestoreSectionItem(

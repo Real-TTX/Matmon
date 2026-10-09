@@ -95,7 +95,7 @@
         </div>
 
         <p class="panel-hint" data-cloud-note hidden style="margin:4px 2px 0;">
-            Cloud backups store <strong>configuration only</strong> (no telemetry, no local user accounts) and Matmon.Cloud keeps the newest 10 automatically - so the sections and retention above don't apply. Restore one on any of your instances during setup.
+            Cloud backups store <strong>configuration only</strong> (no telemetry, no local user accounts, no uploaded files such as map images or MIBs) and Matmon.Cloud keeps the newest 10 automatically - so the sections and retention above don't apply. Restore one on any of your instances during setup.
         </p>
 
         <section class="panel config-block" data-local-only>
@@ -116,6 +116,8 @@
                 <label class="backup-section-item"><input asp-for="Input.Sections.Events" /> <span>Events</span></label>
                 <label class="backup-section-item"><input asp-for="Input.Sections.Statistics" /> <span>Statistics</span></label>
                 <label class="backup-section-item"><input asp-for="Input.Sections.BackupJobs" /> <span>Backup jobs</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.MapAssets" /> <span>Map images</span></label>
+                <label class="backup-section-item"><input asp-for="Input.Sections.Mibs" /> <span>MIBs</span></label>
             </div>
         </section>
 

@@ -22,7 +22,12 @@ public enum WorkspaceBackupSection
     /// they are binary and bulky: a map restores its pins and layout from Maps alone, but without this its
     /// floorplan comes back blank.</summary>
     MapAssets = 1 << 11,
-    All = Topology | Templates | SensorDefinitions | Notifications | Maps | Users | Alerts | SensorHistory | Events | Statistics | BackupJobs | MapAssets
+
+    /// <summary>The SNMP MIB files an admin uploaded. The standard set ships with the image, so it belongs to the
+    /// build rather than to the data. Files on disk like <see cref="MapAssets"/>, and a library of vendor MIBs
+    /// can be large.</summary>
+    Mibs = 1 << 12,
+    All = Topology | Templates | SensorDefinitions | Notifications | Maps | Users | Alerts | SensorHistory | Events | Statistics | BackupJobs | MapAssets | Mibs
 }
 
 /// <summary>Where a scheduled backup job writes its snapshot: a local disk file (default) or a push to the
@@ -39,10 +44,11 @@ public static class WorkspaceBackupSections
     /// <summary>The section set pushed to / restored from the cloud: everything EXCEPT the bulky telemetry
     /// sections AND local Users. Users are excluded so a cross-instance / DR restore can never overwrite the
     /// local accounts and lock out the admin doing the restore.</summary>
-    /// <para>MapAssets is excluded too: it is megabytes of pictures, and a nightly cloud job would re-upload
-    /// every floorplan on every run. A local backup carries them.</para>
+    /// <para>MapAssets and Mibs are excluded too: they are UPLOADED FILES - megabytes of pictures, and a vendor MIB
+    /// library can run to tens of megabytes - and a nightly cloud job would re-upload them on every run. A local
+    /// backup carries them.</para>
     public const WorkspaceBackupSection CloudConfig =
-        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets);
+        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs);
 }
 
 public sealed class WorkspaceBackupJob
@@ -182,5 +188,16 @@ public sealed class WorkspaceMapAsset
 
     /// <summary>Base64 image bytes. Re-validated by magic bytes on restore, so a tampered package cannot
     /// smuggle a script-bearing file into a directory that is served anonymously.</summary>
+    public string? Data { get; set; }
+}
+
+/// <summary>An uploaded MIB file inside a backup package. Transport only, like <see cref="WorkspaceMapAsset"/>: the
+/// live files are in data/mibs, so this list is always empty outside a snapshot. Only the BYTES travel, never a
+/// file name - a restore names the file after the module inside it, exactly as an upload does, so a tampered
+/// package has no path to write to.</summary>
+public sealed class WorkspaceMibFile
+{
+    /// <summary>Base64 of the file as stored, byte for byte - a vendor MIB can be Latin-1, which would not
+    /// survive being carried as JSON text.</summary>
     public string? Data { get; set; }
 }

@@ -126,8 +126,8 @@ builder.Services.AddSingleton<SummaryReportSender>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
-// Constructed explicitly rather than by convention so the store gets the MapAssetStore - it needs it to put
-// uploaded map pictures into a local backup and to write them back on restore.
+// Constructed explicitly rather than by convention so the store gets the MapAssetStore and the MibLibrary - it
+// needs them to put uploaded map pictures and MIB files into a local backup and to write them back on restore.
 builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemoryMonitoringWorkspaceStore(
     provider.GetRequiredService<IHostEnvironment>(),
     provider.GetRequiredService<MatmonRuntimeOptions>(),
@@ -136,7 +136,8 @@ builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemor
     provider.GetRequiredService<ITelemetryRepository>(),
     provider.GetRequiredService<ILogger<InMemoryMonitoringWorkspaceStore>>(),
     provider.GetService<INotificationSink>(),
-    provider.GetRequiredService<MapAssetStore>()));
+    provider.GetRequiredService<MapAssetStore>(),
+    provider.GetRequiredService<MibLibrary>()));
 builder.Services.AddSingleton<StorageOverviewProvider>();
 builder.Services.AddSingleton<AgentPackageStore>();
 builder.Services.AddSingleton<IProbeStorageSource>(provider => provider.GetRequiredService<StorageOverviewProvider>());

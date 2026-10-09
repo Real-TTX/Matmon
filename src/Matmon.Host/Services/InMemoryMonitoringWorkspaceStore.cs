@@ -31,6 +31,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private readonly Timer _saveTimer;
     private readonly ITelemetryRepository _telemetry;
     private readonly MapAssetStore? _mapAssets;
+    private readonly MibLibrary? _mibLibrary;
     private readonly INotificationSink? _notificationSink;
     private WorkspaceDocument _document;
     private DateTimeOffset? _firstDirtyUtc;
@@ -48,11 +49,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         ITelemetryRepository telemetry,
         ILogger<InMemoryMonitoringWorkspaceStore> logger,
         INotificationSink? notificationSink = null,
-        MapAssetStore? mapAssets = null)
+        MapAssetStore? mapAssets = null,
+        MibLibrary? mibLibrary = null)
     {
-        // Optional: a store built without one simply does not carry uploaded map pictures in its backups,
-        // which is the honest behaviour for the unit tests that construct it directly.
+        // Optional: a store built without them simply does not carry uploaded map pictures or MIB files in its
+        // backups, which is the honest behaviour for the unit tests that construct it directly.
         _mapAssets = mapAssets;
+        _mibLibrary = mibLibrary;
         _logger = logger;
         _authOptions = authOptions;
         _runtimeOptions = runtimeOptions;
@@ -4435,6 +4438,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         /// <summary>Backup transport only - the live pictures are files in the MapAssetStore. Cleared on load
         /// like the telemetry sections, so workspace.json never carries image bytes.</summary>
         public List<WorkspaceMapAsset> MapAssets { get; set; } = [];
+
+        /// <summary>Backup transport only - the live MIB files are in data/mibs (MibLibrary). Cleared on load like
+        /// the map pictures, so workspace.json never carries them.</summary>
+        public List<WorkspaceMibFile> Mibs { get; set; } = [];
     }
 
 

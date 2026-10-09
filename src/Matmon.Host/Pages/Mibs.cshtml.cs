@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Matmon.Host.Pages;
 
 /// <summary>System → SNMP MIBs: the shipped standard set plus uploads, with what each module is missing.</summary>
+// On the page model, not on the upload handler: RequestSizeLimit is ignored on a handler method (MVC1001), which
+// left the attribute that used to sit there doing nothing.
+[RequestSizeLimit(25 * 1024 * 1024)]
 public sealed class MibsModel(MibLibrary mibs) : PageModel
 {
     public IReadOnlyList<Matmon.Core.Domain.MibModuleStatus> Modules { get; private set; } = [];
@@ -31,7 +34,6 @@ public sealed class MibsModel(MibLibrary mibs) : PageModel
     }
 
     /// <summary>Upload one or more MIB files or zips. Answers JSON when called from the walk (fetch), else redirects.</summary>
-    [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> OnPostUploadAsync(List<IFormFile> files, CancellationToken cancellationToken)
     {
         var contents = new List<(string, byte[])>();

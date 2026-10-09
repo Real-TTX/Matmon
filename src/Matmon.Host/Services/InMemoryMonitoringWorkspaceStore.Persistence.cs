@@ -56,6 +56,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 BackupJobs = [],
                 SensorHistory = [],
                 MapAssets = [],
+                Mibs = [],
                 Events = [],
                 SensorStatistics = []
             };
@@ -92,6 +93,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // Backup transport only - the live pictures are files on disk. Cleared rather than null-coalesced, so a
         // hand-edited or legacy workspace.json can never leave image bytes in the saved document.
         document.MapAssets = [];
+        document.Mibs = [];
         return document;
     }
 
@@ -116,6 +118,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             Events = [],
             SensorStatistics = [],
             MapAssets = [],
+            Mibs = [],
             Maps = [],
             Users = []
         };

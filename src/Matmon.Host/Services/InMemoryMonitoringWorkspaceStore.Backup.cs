@@ -514,6 +514,24 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         MigrateMapLayouts();
     }
 
+    /// <summary>
+    /// Migration 5. The job editor used to offer eleven sections, so a job with all eleven ticked meant "everything"
+    /// - but it was stored as exactly those eleven, and "everything" has grown since (map images, MIBs). A job
+    /// stored as the word "All" picks the new ones up by itself; one stored as the list does not, so it is brought
+    /// up to date here. A job the admin narrowed down is left alone, and a cloud job ignores its sections anyway.
+    /// </summary>
+    private void MigrateBackupJobsToAllSections()
+    {
+        const WorkspaceBackupSection original = WorkspaceBackupSection.All & ~(WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs);
+        foreach (var job in _document.BackupJobs ?? [])
+        {
+            if (job.Destination == BackupDestination.Local && (job.Sections & original) == original)
+            {
+                job.Sections |= WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs;
+            }
+        }
+    }
+
     private void EnsureBackupJobsCollection()
     {
         _document.BackupJobs ??= [];
@@ -581,6 +599,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             {
                 documentClone.MapAssets = assets.EnumerateAll()
                     .Select(asset => new WorkspaceMapAsset { Id = asset.Id, Data = Convert.ToBase64String(asset.Bytes) })
+                    .ToList();
+            }
+
+            // The MIB files an admin uploaded are files too. The standard set is not carried: it ships with the
+            // image, so a restore onto any build already has it.
+            if (job.Sections.HasFlag(WorkspaceBackupSection.Mibs) && _mibLibrary is { } mibs)
+            {
+                documentClone.Mibs = mibs.ReadUploadedFiles()
+                    .Select(content => new WorkspaceMibFile { Data = Convert.ToBase64String(content) })
                     .ToList();
             }
 
@@ -652,6 +679,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (!sections.HasFlag(WorkspaceBackupSection.MapAssets))
         {
             document.MapAssets.Clear();
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.Mibs))
+        {
+            document.Mibs.Clear();
         }
 
         // A pending enrolment code belongs to this instance and today: restored elsewhere (or next month) it
@@ -812,6 +844,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 WorkspaceBackupSection.MapAssets => (
                     document.MapAssets.Count,
                     $"{document.MapAssets.Count} map image(s)"),
+                WorkspaceBackupSection.Mibs => (
+                    document.Mibs.Count,
+                    $"{document.Mibs.Count} MIB file(s)"),
                 WorkspaceBackupSection.BackupJobs => (
                     document.BackupJobs.Count,
                     $"{document.BackupJobs.Count} backup jobs"),
@@ -939,6 +974,35 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 {
                     _logger.LogWarning("Map asset {AssetId} in the backup was not valid base64 and was skipped.", asset.Id);
                 }
+            }
+        }
+
+        // Added to what is there, like the pictures - a restore never deletes a MIB the admin uploaded since. The
+        // file name is taken from the MODULE inside each file, never from the package: MibLibrary.Restore runs the
+        // same checks as an upload, so a tampered package cannot choose what is written or where.
+        if (sections.HasFlag(WorkspaceBackupSection.Mibs) && _mibLibrary is { } library)
+        {
+            var files = new List<byte[]>();
+            foreach (var file in source.Mibs ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(file.Data))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    files.Add(Convert.FromBase64String(file.Data));
+                }
+                catch (FormatException)
+                {
+                    _logger.LogWarning("A MIB file in the backup was not valid base64 and was skipped.");
+                }
+            }
+
+            foreach (var rejection in library.Restore(files).Rejected)
+            {
+                _logger.LogWarning("A MIB in the backup was not restored: {Reason}", rejection);
             }
         }
     }

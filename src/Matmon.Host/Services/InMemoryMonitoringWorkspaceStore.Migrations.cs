@@ -33,7 +33,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -59,7 +59,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }),
 
         new(4, "Move legacy ssl.warningDays/criticalDays parameters onto channel thresholds",
-            store => store.MigrateSslCertificateThresholds())
+            store => store.MigrateSslCertificateThresholds()),
+
+        new(5, "Local backup jobs that selected every section also get the sections added since (map images, MIBs)",
+            store => store.MigrateBackupJobsToAllSections())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step

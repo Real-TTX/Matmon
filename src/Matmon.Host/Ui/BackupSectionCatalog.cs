@@ -26,19 +26,20 @@ public sealed class BackupSectionSelectionModel
 
     public bool BackupJobs { get; set; } = true;
 
-    public bool HasAnySelected()
+    public bool MapAssets { get; set; } = true;
+
+    public bool Mibs { get; set; } = true;
+
+    public bool HasAnySelected() => ToSections(defaultToAll: false) != WorkspaceBackupSection.None;
+
+    /// <summary>A selection with nothing ticked. The job editor starts from "everything" (the property defaults), but
+    /// a RESTORE has to start from nothing: a browser does not post an unticked checkbox at all, so for a model that
+    /// defaults to true "not posted" means "ticked" - and unticking a section on the restore page did nothing.</summary>
+    public static BackupSectionSelectionModel None()
     {
-        return Topology
-            || Templates
-            || SensorDefinitions
-            || Notifications
-            || Maps
-            || Users
-            || Alerts
-            || SensorHistory
-            || Events
-            || Statistics
-            || BackupJobs;
+        var model = new BackupSectionSelectionModel();
+        model.ApplySections(WorkspaceBackupSection.None);
+        return model;
     }
 
     public void ApplySections(WorkspaceBackupSection sections)
@@ -54,6 +55,8 @@ public sealed class BackupSectionSelectionModel
         Events = sections.HasFlag(WorkspaceBackupSection.Events);
         Statistics = sections.HasFlag(WorkspaceBackupSection.Statistics);
         BackupJobs = sections.HasFlag(WorkspaceBackupSection.BackupJobs);
+        MapAssets = sections.HasFlag(WorkspaceBackupSection.MapAssets);
+        Mibs = sections.HasFlag(WorkspaceBackupSection.Mibs);
     }
 
     public WorkspaceBackupSection ToSections(bool defaultToAll = true)
@@ -70,6 +73,8 @@ public sealed class BackupSectionSelectionModel
         if (Events) sections |= WorkspaceBackupSection.Events;
         if (Statistics) sections |= WorkspaceBackupSection.Statistics;
         if (BackupJobs) sections |= WorkspaceBackupSection.BackupJobs;
+        if (MapAssets) sections |= WorkspaceBackupSection.MapAssets;
+        if (Mibs) sections |= WorkspaceBackupSection.Mibs;
 
         if (sections == WorkspaceBackupSection.None && defaultToAll)
         {
@@ -97,6 +102,7 @@ public static class BackupSectionCatalog
         new(WorkspaceBackupSection.Events, "Events", "Event log and audit trail"),
         new(WorkspaceBackupSection.Statistics, "Statistics", "Aggregated sensor statistics buckets"),
         new(WorkspaceBackupSection.MapAssets, "Map images", "Pictures uploaded onto maps (floorplans, photos)"),
+        new(WorkspaceBackupSection.Mibs, "MIBs", "SNMP MIB files you uploaded (the standard set ships with Matmon)"),
         new(WorkspaceBackupSection.BackupJobs, "Backup jobs", "Scheduled backup definitions")
     ];
 

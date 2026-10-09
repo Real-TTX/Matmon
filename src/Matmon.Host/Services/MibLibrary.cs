@@ -139,6 +139,42 @@ public sealed partial class MibLibrary
         return new MibUploadResult(added, rejected);
     }
 
+    /// <summary>The uploaded files exactly as they sit on disk, for a backup. The standard set shipped with the
+    /// image is part of the build, not of the data, so it is not included.</summary>
+    public IReadOnlyList<byte[]> ReadUploadedFiles()
+    {
+        lock (_writeGate)
+        {
+            var files = new List<byte[]>();
+            if (!Directory.Exists(UploadDirectory))
+            {
+                return files;
+            }
+
+            foreach (var file in Directory.GetFiles(UploadDirectory).Order(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    files.Add(File.ReadAllBytes(file));
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogWarning(exception, "MIB file {File} could not be read for the backup.", file);
+                }
+            }
+
+            return files;
+        }
+    }
+
+    /// <summary>
+    /// Puts the files of a backup back. It goes through <see cref="Upload"/> on purpose: the same size limit, the
+    /// same "must contain a module", the same file name taken from the module - so a tampered package has no say
+    /// over what ends up in the directory or what it is called.
+    /// </summary>
+    public MibUploadResult Restore(IEnumerable<byte[]> files) =>
+        Upload(files.Select((content, index) => ($"backup entry {index + 1}", content)));
+
     /// <summary>Removes an uploaded module. Shipped modules cannot be deleted (only overridden).</summary>
     public bool Delete(string moduleName)
     {
@@ -210,17 +246,22 @@ public sealed partial class MibLibrary
         }
     }
 
-    /// <summary>MIBs are ASCII in theory; vendors ship UTF-8 and Latin-1 in practice.</summary>
+    /// <summary>MIBs are ASCII in theory; vendors ship UTF-8 and Latin-1 in practice. A leading byte order mark is
+    /// dropped: it is not part of the text, and the file is written back with one of its own - so without this a
+    /// backup and restore would stack another one every time.</summary>
     private static string Decode(byte[] content)
     {
+        string text;
         try
         {
-            return new UTF8Encoding(false, throwOnInvalidBytes: true).GetString(content);
+            text = new UTF8Encoding(false, throwOnInvalidBytes: true).GetString(content);
         }
         catch (DecoderFallbackException)
         {
-            return Encoding.Latin1.GetString(content);
+            text = Encoding.Latin1.GetString(content);
         }
+
+        return text.StartsWith('\uFEFF') ? text[1..] : text;
     }
 
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_-]{0,127}$")]
