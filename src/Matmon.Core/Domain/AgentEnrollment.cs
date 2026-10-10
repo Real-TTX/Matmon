@@ -31,6 +31,14 @@ public sealed class AgentEnrollment
     /// </summary>
     public Guid? ProbeElementId { get; set; }
 
+    /// <summary>
+    /// The existing host this agent is to be bound to: redeeming the code moves it under the agent's probe, so its
+    /// sensors run on the agent - from the machine itself. Null = Matmon creates a host named after the machine.
+    /// A host that is gone (or taken by another agent) by redemption is not an error: the agent still enrols,
+    /// with a host of its own.
+    /// </summary>
+    public Guid? HostElementId { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset ExpiresUtc { get; set; }

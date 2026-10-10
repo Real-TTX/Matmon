@@ -33,4 +33,6 @@ public sealed record SystemProbeOverview(
     string? Version = null,
     string? DuplicateWarning = null,
     bool IsAgent = false,
-    string? UpdateStatus = null);
+    string? UpdateStatus = null,
+    Guid? BoundHostId = null,
+    string? BoundHostName = null);

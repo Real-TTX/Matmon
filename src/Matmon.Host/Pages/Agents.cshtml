@@ -46,6 +46,14 @@
                     This code takes over the existing probe <strong>@Model.IssuedName</strong> - its sensors, history and alerts stay. Whatever runs as that probe today (the old install, or the Docker container it replaces) is locked out the moment the new agent enrols, so remove it afterwards.
                 </div>
             }
+            @if (!string.IsNullOrWhiteSpace(Model.IssuedHostName))
+            {
+                <div class="workspace-banner workspace-banner-warning">
+                    <div>
+                        This agent will measure the host <strong>@Model.IssuedHostName</strong>. When it enrols, that host moves under the agent's probe: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply.
+                    </div>
+                </div>
+            }
             <div class="agent-issued-code">
                 <code id="agent-issued-code">@Model.IssuedCode</code>
                 <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-issued-code">
@@ -118,6 +126,24 @@
                         <span role="cell">
                             <strong>@agent.Name</strong>
                             <small>@agent.ProbeId</small>
+                            @if (!string.IsNullOrWhiteSpace(agent.BoundHostName))
+                            {
+                                <small class="agent-bound-host" title="The machine this agent runs on - its sensors live under this host">
+                                    @MatmonIcons.Render("host") Host:
+                                    @if (isAdmin)
+                                    {
+                                        <a asp-page="/ElementEditor" asp-route-selectedId="@agent.BoundHostId" asp-route-returnUrl="/agents">@agent.BoundHostName</a>
+                                    }
+                                    else
+                                    {
+                                        @agent.BoundHostName
+                                    }
+                                </small>
+                            }
+                            else
+                            {
+                                <small class="system-probe-duplicate" title="Its host was deleted or moved out of the agent. A new install code gives it a host again.">@MatmonIcons.Render("warning") Not bound to a host</small>
+                            }
                             @if (!string.IsNullOrWhiteSpace(agent.DuplicateWarning))
                             {
                                 <small class="system-probe-duplicate">@MatmonIcons.Render("warning") Duplicate agent: @agent.DuplicateWarning</small>
@@ -254,6 +280,11 @@
                         }
                     </select>
                 </label>
+                <div class="workspace-field">
+                    <span class="workspace-label">Host <em>optional - an existing host this agent belongs to</em></span>
+                    <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewHostId", DomId = "picker-agent-host", SelectedId = Model.NewHostId, Placeholder = "A new host, named after the machine", Options = Model.HostOptions })" />
+                    <small class="panel-hint">An agent always belongs to a host - the machine it runs on. Pick one that is already in your tree and Matmon moves it under the agent: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply. Leave it empty and the agent brings a host of its own, named after the machine.</small>
+                </div>
                 <div class="workspace-form-actions">
                     <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create enrolment code</span></button>
                 </div>
@@ -283,6 +314,10 @@
                                     @if (pending.ProbeElementId is not null)
                                     {
                                         <span class="sensor-chip" title="Takes over this existing probe instead of creating a new one">re-install</span>
+                                    }
+                                    @if (pending.HostElementId is not null)
+                                    {
+                                        <span class="sensor-chip" title="Binds the agent to this existing host - it moves under the agent's probe">existing host</span>
                                     }
                                 </span>
                                 <span role="cell">@pending.CreatedUtc.ToDisplay().ToString("g")@(string.IsNullOrWhiteSpace(pending.CreatedBy) ? string.Empty : $" · {pending.CreatedBy}")</span>

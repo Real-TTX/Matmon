@@ -382,7 +382,9 @@ public interface IMonitoringWorkspaceStore
 
     /// <summary>Issues a single-use agent enrolment code (returned once, stored only as a hash).</summary>
     /// <param name="probeElementId">An existing (non-root) probe to re-enrol; null creates a new probe on redemption.</param>
-    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? probeElementId = null);
+    /// <param name="hostElementId">The existing host the agent belongs to - it moves under the agent's probe when the code is
+    /// redeemed. Null: a new host named after the machine. A host that already has an agent is refused.</param>
+    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? probeElementId = null, Guid? hostElementId = null);
 
     /// <summary>Unexpired, unused codes - expired ones are pruned on the way.</summary>
     IReadOnlyList<AgentEnrollment> GetPendingAgentEnrollments();

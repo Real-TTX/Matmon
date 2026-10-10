@@ -81,6 +81,7 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             : liveProbe?.Message ?? "waiting for probe heartbeat";
 
         var system = ResolveSystemInfo(isRoot, liveProbe);
+        var boundHost = probe.FindBoundHost();
 
         // Admin-configured subnets first (what you want this probe to scan), then the
         // auto-detected interfaces it reported.
@@ -107,7 +108,9 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             isRoot ? MatmonVersion.Current : liveProbe?.Version,
             isRoot ? null : liveProbe?.DuplicateWarning,
             probe.AgentEnrolledUtc is not null,
-            isRoot ? null : liveProbe?.UpdateStatus);
+            isRoot ? null : liveProbe?.UpdateStatus,
+            boundHost?.Id,
+            boundHost?.Name);
     }
 
     /// <summary>System "full sync": the local primary reports itself; a secondary reports OS / host /

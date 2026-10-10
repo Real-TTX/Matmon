@@ -76,7 +76,12 @@ public sealed partial class WorkspaceModel
         IReadOnlySet<Guid> acknowledgedElementIds)
     {
         var rows = new List<WorkspaceNodeRow>();
-        BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, depth: 0, parentPath: string.Empty, inheritedTags: []);
+        var agentHostIds = MonitoringTopology.EnumerateSelfAndDescendants(root)
+            .OfType<ProbeElement>()
+            .Select(probe => probe.FindBoundHost()?.Id)
+            .OfType<Guid>()
+            .ToHashSet();
+        BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, agentHostIds, depth: 0, parentPath: string.Empty, inheritedTags: []);
         return rows;
     }
 
@@ -86,6 +91,7 @@ public sealed partial class WorkspaceModel
         IReadOnlyDictionary<Guid, MonitoringTemplate> templateMap,
         IReadOnlyDictionary<Guid, TelemetrySeriesSnapshot> telemetrySeriesMap,
         IReadOnlySet<Guid> acknowledgedElementIds,
+        IReadOnlySet<Guid> agentHostIds,
         int depth,
         string parentPath,
         IReadOnlyList<string> inheritedTags)
@@ -100,6 +106,8 @@ public sealed partial class WorkspaceModel
         {
             ProbeElement probe when !string.IsNullOrWhiteSpace(probe.Description) => probe.Description!,
             FolderElement folder when !string.IsNullOrWhiteSpace(folder.Description) => folder.Description!,
+            // The machine an agent is installed on says so - the tree is where "which of these has an agent" gets read.
+            HostElement host when agentHostIds.Contains(host.Id) => $"{(string.IsNullOrWhiteSpace(host.Address) ? "host" : host.Address)} · {ProbeElement.AgentLabel}",
             HostElement host when !string.IsNullOrWhiteSpace(host.Address) => host.Address,
             SensorElement sensorElement => $"{sensorElement.SensorTypeKey} -> {FormatSensorTarget(sensorElement)}",
             _ => string.Empty
@@ -144,7 +152,7 @@ public sealed partial class WorkspaceModel
         {
             foreach (var child in container.Children)
             {
-                BuildNodeRows(child, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, depth + 1, path, effectiveTags);
+                BuildNodeRows(child, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, agentHostIds, depth + 1, path, effectiveTags);
             }
         }
     }

@@ -1,5 +1,6 @@
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -46,6 +47,14 @@ public sealed class AgentsModel : PageModel
     [BindProperty]
     public int NewValidityHours { get; set; } = 24;
 
+    /// <summary>The existing host the new agent belongs to (it moves under the agent's probe); empty = a new host,
+    /// named after the machine. An agent is bound to a host either way.</summary>
+    [BindProperty]
+    public Guid? NewHostId { get; set; }
+
+    /// <summary>What the host picker offers: every host that has no agent yet.</summary>
+    public IReadOnlyList<ElementPickerOption> HostOptions { get; private set; } = [];
+
     /// <summary>The code just issued - shown on exactly one render, then gone for good (only its hash is kept).</summary>
     [TempData]
     public string? IssuedCode { get; set; }
@@ -56,6 +65,10 @@ public sealed class AgentsModel : PageModel
     /// <summary>The issued code re-enrols an existing probe - the page then says what that replaces.</summary>
     [TempData]
     public bool IssuedReplaces { get; set; }
+
+    /// <summary>The existing host the issued code binds the agent to - the page then says what moving it means.</summary>
+    [TempData]
+    public string? IssuedHostName { get; set; }
 
     // A DateTime, not an ISO string: the TempData serializer turns any date-shaped string back into a
     // DateTime on read, and the string property then fails to take it.
@@ -93,11 +106,21 @@ public sealed class AgentsModel : PageModel
     public IActionResult OnPostCreate()
     {
         var hours = ValidityHours.Contains(NewValidityHours) ? NewValidityHours : 24;
-        var issue = _workspaceStore.CreateAgentEnrollment(NewName, TimeSpan.FromHours(hours), User.Identity?.Name);
+        try
+        {
+            var issue = _workspaceStore.CreateAgentEnrollment(NewName, TimeSpan.FromHours(hours), User.Identity?.Name, hostElementId: NewHostId);
 
-        IssuedCode = issue.Code;
-        IssuedName = issue.Enrollment.Name;
-        IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
+            IssuedCode = issue.Code;
+            IssuedName = issue.Enrollment.Name;
+            IssuedHostName = issue.Enrollment.HostElementId is Guid hostId ? _workspaceStore.FindElement(hostId)?.Name : null;
+            IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
+        }
+        catch (InvalidOperationException ex)
+        {
+            // An unknown host, or one that already has an agent: said on the page, nothing issued.
+            ErrorMessage = ex.Message;
+        }
+
         return RedirectToPage();
     }
 
@@ -206,6 +229,17 @@ public sealed class AgentsModel : PageModel
             .Where(probe => probe.IsAgent)
             .OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var elements = _workspaceStore.GetAllElements();
+        var hostsWithAnAgent = elements.OfType<ProbeElement>()
+            .Where(probe => probe.FindBoundHost() is not null)
+            .Select(probe => probe.BoundHostId!.Value)
+            .ToHashSet();
+        HostOptions = ElementPickerOptions.Build(
+                elements.FirstOrDefault(element => element.ParentId is null),
+                new HashSet<MonitoringElementKind> { MonitoringElementKind.Host })
+            .Where(option => !hostsWithAnAgent.Contains(option.Id))
+            .ToArray();
+
         PendingEnrollments = _workspaceStore.GetPendingAgentEnrollments();
         Packages = _packageStore.GetPackages();
 

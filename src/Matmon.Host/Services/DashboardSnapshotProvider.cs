@@ -848,10 +848,20 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         {
             ProbeElement probe => probe.Description ?? "probe root",
             FolderElement folder => folder.Description ?? "folder",
-            HostElement host => string.IsNullOrWhiteSpace(host.Address) ? "host" : host.Address,
+            HostElement host => HostDetails(host, lineage),
             SensorElement sensor => $"{sensor.SensorTypeKey} -> {FormatSensorTarget(sensor, lineage)}",
             _ => string.Empty
         };
+    }
+
+    private static string HostDetails(HostElement host, IReadOnlyList<MonitoringElement> lineage)
+    {
+        var address = string.IsNullOrWhiteSpace(host.Address) ? "host" : host.Address;
+
+        // The machine an agent is installed on says so: the tree is where "which of these has an agent" gets read.
+        return lineage.OfType<ProbeElement>().Any(probe => probe.BoundHostId == host.Id)
+            ? $"{address} · {ProbeElement.AgentLabel}"
+            : address;
     }
 
     private static string FormatSensorTarget(SensorElement sensor, IReadOnlyList<MonitoringElement> lineage)

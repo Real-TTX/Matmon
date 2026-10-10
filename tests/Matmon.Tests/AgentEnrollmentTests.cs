@@ -39,6 +39,11 @@ public sealed class AgentEnrollmentTests : IDisposable
         return _store.CreateProbe(rootId, name, null);
     }
 
+    // An agent is bound to a host (the machine it sits on) and its machine sensors live under it.
+    private Guid BoundHostOf(Guid probeId) =>
+        ((ProbeElement)_store.FindElement(probeId)!).FindBoundHost()?.Id
+        ?? throw new InvalidOperationException("The agent probe has no bound host.");
+
     [Fact]
     public void AReenrolmentCodeHandsTheExistingProbeANewToken()
     {
@@ -71,10 +76,10 @@ public sealed class AgentEnrollmentTests : IDisposable
         var redeemed = Redeem(_store, issue.Code, "WS-01")!;
 
         int LocalHealthUnder(Guid probeId) => _store.GetAllElements().OfType<SensorElement>()
-            .Count(sensor => sensor.ParentId == probeId && sensor.SensorTypeKey == "local-health");
+            .Count(sensor => sensor.ParentId == BoundHostOf(probeId) && sensor.SensorTypeKey == "local-health");
 
         Assert.Equal(1, LocalHealthUnder(redeemed.ElementId));
-        var sensor = _store.GetAllElements().OfType<SensorElement>().Single(s => s.ParentId == redeemed.ElementId && s.SensorTypeKey == "local-health");
+        var sensor = _store.GetAllElements().OfType<SensorElement>().Single(s => s.ParentId == BoundHostOf(redeemed.ElementId) && s.SensorTypeKey == "local-health");
         Assert.NotEmpty(sensor.Settings.Thresholds); // created through CreateSensor, so the defaults apply
 
         var again = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, redeemed.ElementId);
@@ -94,7 +99,7 @@ public sealed class AgentEnrollmentTests : IDisposable
         var redeemed = _store.RedeemAgentEnrollment(issue.Code, "box", allowNewProbe: true, operatingSystem).Redemption!;
 
         var types = _store.GetAllElements().OfType<SensorElement>()
-            .Where(sensor => sensor.ParentId == redeemed.ElementId)
+            .Where(sensor => sensor.ParentId == BoundHostOf(redeemed.ElementId))
             .Select(sensor => sensor.SensorTypeKey)
             .ToArray();
 
