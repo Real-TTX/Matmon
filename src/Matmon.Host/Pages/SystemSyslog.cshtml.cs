@@ -1,4 +1,3 @@
-using System.Globalization;
 using Matmon.Core.Domain;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
@@ -7,20 +6,20 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Matmon.Host.Pages;
 
-/// <summary>One line of the Senders tab: the sender, the host in the tree it was matched to, what to tell a new sensor to look
-/// for (<see cref="WatchSender"/> - the NAME that made the match, null when the address did and the host's own address will
-/// do) and the syslog sensors already on that host.</summary>
+/// <summary>One line of the Senders list: the sender, the host in the tree it was matched to, what to tell a new sensor to
+/// look for (<see cref="WatchSender"/> - the NAME that made the match, null when the address did and the host's own address
+/// will do) and the syslog sensors already on that host.</summary>
 public sealed record SyslogSourceRow(SyslogSender Sender, HostElement? Host, string? WatchSender, IReadOnlyList<SensorElement> Sensors);
 
 /// <summary>
-/// The central log. Three tabs: Messages (the log itself, filterable, live), Sources (who has been sending, and which of
-/// them are in the tree and watched by a sensor) and Settings (the receiver: on/off, ports, who may send, how long to keep
-/// it, plus its status). Operators and admins read it; every change is admin-only (the page write guard).
+/// System > Syslog (admins): the receiver - on/off, ports, who may send, how long to keep the log - its status, and who has
+/// been sending, with a button that puts a sensor on a device that turned up. Reading the log itself is the Syslog tab of
+/// the Events page. A system setting lives here rather than next to the log because the log is for everybody who works
+/// with alerts, and the receiver is for whoever runs the machine.
 ///
-/// The log is rendered client-side from <see cref="OnGetData"/> like the application log, and every message is put on the
-/// page as TEXT: anything on the network can send a syslog line, so its content is never markup.
+/// Every change is an admin's (the page is admin-only and the page write guard agrees).
 /// </summary>
-public sealed class SyslogModel : PageModel
+public sealed class SystemSyslogModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspace;
     private readonly ILicenseService _license;
@@ -28,7 +27,7 @@ public sealed class SyslogModel : PageModel
     private readonly SyslogReceiverState? _state;
 
     // The store and the receiver state exist on a primary only; on a probe the page is simply not there.
-    public SyslogModel(
+    public SystemSyslogModel(
         IMonitoringWorkspaceStore workspace,
         ILicenseService license,
         ISyslogStore? store = null,
@@ -40,28 +39,9 @@ public sealed class SyslogModel : PageModel
         _state = state;
     }
 
-    // ---- the filter bar (so a link can open the page already filtered) -----------------------------------------------
-
-    [BindProperty(SupportsGet = true)]
-    public int Window { get; set; } = 60;
-
-    [BindProperty(SupportsGet = true)]
-    public string? Source { get; set; }
-
-    [BindProperty(SupportsGet = true)]
-    public string? Severity { get; set; }
-
-    [BindProperty(SupportsGet = true)]
-    public string? Q { get; set; }
-
-    [BindProperty(SupportsGet = true)]
-    public bool Regex { get; set; }
-
-    /// <summary>How far back the Sources tab looks (days, 0 = everything kept).</summary>
+    /// <summary>How far back the Senders list looks (days, 0 = everything kept).</summary>
     [BindProperty(SupportsGet = true)]
     public int Days { get; set; } = 7;
-
-    // ---- the settings form -------------------------------------------------------------------------------------------
 
     [BindProperty]
     public SyslogSettingsInput Input { get; set; } = new();
@@ -75,8 +55,6 @@ public sealed class SyslogModel : PageModel
     /// <summary>Why the settings form was refused - shown with the form, which keeps what was typed.</summary>
     public string? FormError { get; private set; }
 
-    public bool IsAdmin => MatmonSecurity.IsAdmin(User);
-
     public SyslogSettings Settings { get; private set; } = new();
 
     public SyslogReceiverSnapshot Receiver { get; private set; } = EmptyReceiver;
@@ -85,19 +63,10 @@ public sealed class SyslogModel : PageModel
 
     public IReadOnlyList<SyslogSourceRow> Sources { get; private set; } = [];
 
-    /// <summary>The names senders are known by, for the sender filter's suggestions.</summary>
-    public IReadOnlyList<string> KnownSenders { get; private set; } = [];
-
     /// <summary>The name devices should be pointed at: the one this page was opened on.</summary>
     public string ReceiverHost => Request.Host.Host;
 
-    public IReadOnlyList<(int Minutes, string Label)> Windows => SyslogPageSupport.Windows;
-
-    public IReadOnlyList<(string Value, string Label)> SeverityChoices => SyslogPageSupport.SeverityChoices;
-
     public IReadOnlyList<(int Days, string Label)> SourceWindows => SyslogPageSupport.SourceWindows;
-
-    public int PageSize => SyslogPageSupport.PageSize;
 
     public string Ago(DateTimeOffset when) => SyslogPageSupport.Ago(when, DateTimeOffset.UtcNow);
 
@@ -110,56 +79,6 @@ public sealed class SyslogModel : PageModel
 
         Load(resetInput: true);
         return Page();
-    }
-
-    /// <summary>The log as JSON, newest first, one page at a time (<paramref name="before"/> is the id of the oldest row the
-    /// client already has). The totals are only asked for when the filter changes - a live refresh every few seconds must
-    /// not count a big window each time.</summary>
-    public IActionResult OnGetData(int window = 60, string? source = null, string? severity = null, string? q = null, bool regex = false, long? before = null, bool counts = true)
-    {
-        if (_store is null)
-        {
-            return NotFound();
-        }
-
-        if (!SyslogPageSupport.TryBuildQuery(window, source, severity, q, regex, before, DateTimeOffset.UtcNow, out var query, out var error))
-        {
-            return new JsonResult(new { items = Array.Empty<object>(), hasMore = false, counts = (object?)null, error });
-        }
-
-        var items = _store.Search(query, SyslogPageSupport.PageSize);
-        object? summary = null;
-        if (counts)
-        {
-            var totals = _store.Count(query with { BeforeId = null });
-            summary = new { total = totals.Total, errors = totals.Errors, warnings = totals.Warnings };
-        }
-
-        return new JsonResult(new
-        {
-            items = items.Select(Row),
-            hasMore = items.Count >= SyslogPageSupport.PageSize,
-            counts = summary,
-            error = (string?)null
-        });
-    }
-
-    /// <summary>Just the totals for a filter - what the live view asks for after new rows arrived, instead of paying for
-    /// them on every tick.</summary>
-    public IActionResult OnGetCounts(int window = 60, string? source = null, string? severity = null, string? q = null, bool regex = false)
-    {
-        if (_store is null)
-        {
-            return NotFound();
-        }
-
-        if (!SyslogPageSupport.TryBuildQuery(window, source, severity, q, regex, beforeId: null, DateTimeOffset.UtcNow, out var query, out var error))
-        {
-            return new JsonResult(new { counts = (object?)null, error });
-        }
-
-        var totals = _store.Count(query);
-        return new JsonResult(new { counts = new { total = totals.Total, errors = totals.Errors, warnings = totals.Warnings }, error = (string?)null });
     }
 
     public IActionResult OnPostSaveSettings()
@@ -183,9 +102,10 @@ public sealed class SyslogModel : PageModel
             ? "Saved. The receiver applies it within a few seconds." +
               (string.IsNullOrWhiteSpace(settings.AllowedSources)
                   ? " Anyone who can reach the port can send messages - restrict it with Allowed sources."
-                  : string.Empty)
+                  : string.Empty) +
+              " The log is on the Syslog tab of Events."
             : "Saved. The receiver is off - nothing is collected, and what is already stored stays until it ages out.";
-        return ToTab("settings");
+        return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostTestAsync(CancellationToken cancellationToken)
@@ -205,7 +125,7 @@ public sealed class SyslogModel : PageModel
             ErrorMessage = message;
         }
 
-        return ToTab("settings");
+        return RedirectToPage();
     }
 
     public IActionResult OnPostClear()
@@ -217,10 +137,10 @@ public sealed class SyslogModel : PageModel
 
         _store.Clear();
         StatusMessage = "All stored syslog messages were deleted.";
-        return ToTab("settings");
+        return RedirectToPage();
     }
 
-    /// <summary>Puts a "Syslog Messages" sensor on a host that has been sending - from the Sources tab, so a device that
+    /// <summary>Puts a "Syslog Messages" sensor on a host that has been sending - from the Senders list, so a device that
     /// turned up in the log is one click from being watched.</summary>
     public IActionResult OnPostMonitor(Guid hostId, string? source)
     {
@@ -232,7 +152,7 @@ public sealed class SyslogModel : PageModel
         if (_workspace.FindElement(hostId) is not HostElement host)
         {
             ErrorMessage = "That host no longer exists.";
-            return ToTab("senders");
+            return RedirectToPage(new { days = Days });
         }
 
         var existing = _workspace.GetAllElements().OfType<SensorElement>()
@@ -240,17 +160,17 @@ public sealed class SyslogModel : PageModel
         if (existing)
         {
             ErrorMessage = $"{host.Name} already has a Syslog Messages sensor.";
-            return ToTab("senders");
+            return RedirectToPage(new { days = Days });
         }
 
         if (!_license.CanAddSensor(out var reason))
         {
             ErrorMessage = reason;
-            return ToTab("senders");
+            return RedirectToPage(new { days = Days });
         }
 
         // The sensor looks for the host's own address unless told otherwise. When the host was matched by NAME - the log
-        // records another address - the sensor has to be told which address to look for, or it would find nothing.
+        // records another address - the sensor has to be told which name to look for, or it would find nothing.
         MonitoringSettings? settings = null;
         var sender = source?.Trim();
         if (!string.IsNullOrWhiteSpace(sender) && sender.Length <= 200 &&
@@ -262,10 +182,8 @@ public sealed class SyslogModel : PageModel
 
         var sensor = _workspace.CreateSensor(host.Id, "Syslog Messages", SyslogSensorTypes.Messages, string.Empty, null, settings);
         StatusMessage = $"Added \"{sensor.Name}\" to {host.Name}: it counts what the device logs in the last hour and warns on the first error.";
-        return ToTab("senders");
+        return RedirectToPage(new { days = Days });
     }
-
-    private IActionResult ToTab(string tab) => RedirectToPage(pageName: null, pageHandler: null, routeValues: null, fragment: tab);
 
     private void Load(bool resetInput)
     {
@@ -295,33 +213,7 @@ public sealed class SyslogModel : PageModel
                 return new SyslogSourceRow(sender, match?.Host, match?.MatchedName, sensors);
             })
             .ToArray();
-
-        KnownSenders = senders
-            .SelectMany(sender => new[] { sender.SourceAddress, sender.Hostname })
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(200)
-            .ToArray();
     }
-
-    private static object Row(SyslogMessage message) => new
-    {
-        id = message.Id,
-        ts = message.ReceivedUtc.ToString("o", CultureInfo.InvariantCulture),
-        time = message.ReceivedUtc.ToDisplay().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-        sev = message.Severity,
-        sevName = SyslogSeverity.ShortName(message.Severity),
-        sevClass = SyslogPageSupport.SeverityClass(message.Severity),
-        source = message.SourceAddress,
-        host = message.Hostname,
-        app = message.AppName,
-        procId = message.ProcId,
-        msgId = message.MsgId,
-        facility = SyslogFacility.Name(message.Facility),
-        deviceTime = message.DeviceTime,
-        text = message.Message
-    };
 
     private static readonly SyslogReceiverSnapshot EmptyReceiver =
         new(SyslogListenerStatus.Off, SyslogListenerStatus.Off, 0, 0, 0, null, null);

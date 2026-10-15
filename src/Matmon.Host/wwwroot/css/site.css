@@ -14175,6 +14175,7 @@ html[data-theme="dark"] .syslog-count-warning { color: #fbbf24; }
   gap: 1rem;
   align-items: start;
 }
+.syslog-wide,
 .syslog-howto { grid-column: 1 / -1; }
 /* A checkbox's own label reads as a sentence, not as a field caption. */
 .workspace-form label.syslog-check { cursor: pointer; min-height: 0; }

@@ -140,7 +140,7 @@ internal static class SyslogSensorSupport
     public static SensorExecutionResult? ReceiverOff(IMonitoringWorkspaceStore workspace) =>
         workspace.GetSyslogSettings().Enabled
             ? null
-            : SensorExecutionResult.Unknown("The syslog receiver is switched off - turn it on on the Syslog page, otherwise no messages are collected.");
+            : SensorExecutionResult.Unknown("The syslog receiver is switched off - turn it on under System > Syslog, otherwise no messages are collected.");
 
     public static SensorExecutionResult NoSender() =>
         SensorExecutionResult.Critical(TimeSpan.Zero, "No sender to look for: fill in Sender, or put the sensor under a host that has an address.");

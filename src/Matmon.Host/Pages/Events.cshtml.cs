@@ -1,4 +1,5 @@
 using Matmon.Core.Domain;
+using Matmon.Core.Syslog;
 using Matmon.Host.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,15 +7,45 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Matmon.Host.Pages;
 
+/// <summary>
+/// Events: what Matmon saw happen (state changes, alerts, edits) - and, as a second tab once syslog is on, what the
+/// network's devices said. The syslog half is read here by operators and admins; the receiver itself is set up under
+/// System > Syslog.
+/// </summary>
 [Authorize]
 public sealed class EventsModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly ISyslogStore? _syslog;
+    private readonly SyslogReceiverState? _syslogState;
 
-    public EventsModel(IMonitoringWorkspaceStore workspaceStore)
+    // The syslog store and receiver state exist on a primary only; on a probe the tab is simply not there.
+    public EventsModel(IMonitoringWorkspaceStore workspaceStore, ISyslogStore? syslog = null, SyslogReceiverState? syslogState = null)
     {
         _workspaceStore = workspaceStore;
+        _syslog = syslog;
+        _syslogState = syslogState;
     }
+
+    // ---- the Syslog tab's filter, so a link can open the tab already filtered (a sensor's "Log" button, a sender) -------
+
+    [BindProperty(SupportsGet = true, Name = "source")]
+    public string? SyslogSource { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "window")]
+    public int SyslogWindow { get; set; } = 60;
+
+    [BindProperty(SupportsGet = true, Name = "severity")]
+    public string? SyslogMinSeverity { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "q")]
+    public string? SyslogText { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "regex")]
+    public bool SyslogUseRegex { get; set; }
+
+    /// <summary>The Syslog tab - null when it is not offered (receiver off and nothing logged, a viewer, a probe).</summary>
+    public SyslogMessagesViewModel? SyslogView { get; private set; }
 
     [BindProperty(SupportsGet = true)]
     public string? Kind { get; set; }
@@ -45,9 +76,108 @@ public sealed class EventsModel : PageModel
             Take = Take,
             Events = events.Select(BuildRow).ToArray()
         };
+        SyslogView = BuildSyslogView();
 
         return Page();
     }
+
+    // ---- the Syslog tab ----------------------------------------------------------------------------------------------
+
+    private bool CanReadSyslog => _syslog is not null && MatmonSecurity.CanOperateAlerts(User);
+
+    private SyslogMessagesViewModel? BuildSyslogView()
+    {
+        if (!CanReadSyslog)
+        {
+            return null;
+        }
+
+        var settings = _workspaceStore.GetSyslogSettings();
+        var hasMessages = _syslog!.Latest(new SyslogQuery()) is not null;
+        if (!SyslogPageSupport.ShowSyslogTab(canRead: true, settings.Enabled, hasMessages))
+        {
+            return null;
+        }
+
+        var receiver = _syslogState?.Snapshot() ?? EmptyReceiver;
+        return new SyslogMessagesViewModel(
+            SyslogWindow,
+            SyslogSource,
+            SyslogMinSeverity,
+            SyslogText,
+            SyslogUseRegex,
+            settings.Enabled,
+            hasMessages,
+            CanConfigure: MatmonSecurity.IsAdmin(User),
+            SyslogPageSupport.DescribeReceiver(settings, receiver),
+            receiver.LastReceivedUtc is { } at ? "last message " + SyslogPageSupport.Ago(at, DateTimeOffset.UtcNow) : null);
+    }
+
+    /// <summary>The log as JSON, newest first, one page at a time (<paramref name="before"/> is the id of the oldest row the
+    /// client already has). The totals are only asked for when the filter changes - a live refresh every few seconds must
+    /// not count a big window each time.</summary>
+    public IActionResult OnGetSyslogData(int window = 60, string? source = null, string? severity = null, string? q = null, bool regex = false, long? before = null, bool counts = true)
+    {
+        if (!CanReadSyslog)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        if (!SyslogPageSupport.TryBuildQuery(window, source, severity, q, regex, before, DateTimeOffset.UtcNow, out var query, out var error))
+        {
+            return new JsonResult(new { items = Array.Empty<object>(), hasMore = false, counts = (object?)null, error });
+        }
+
+        var items = _syslog!.Search(query, SyslogPageSupport.PageSize);
+        object? summary = null;
+        if (counts)
+        {
+            var totals = _syslog.Count(query with { BeforeId = null });
+            summary = new { total = totals.Total, errors = totals.Errors, warnings = totals.Warnings };
+        }
+
+        return new JsonResult(new
+        {
+            items = items.Select(SyslogPageSupport.ToRow),
+            hasMore = items.Count >= SyslogPageSupport.PageSize,
+            counts = summary,
+            error = (string?)null
+        });
+    }
+
+    /// <summary>Just the totals for a filter - what the live view asks for after new rows arrived, instead of paying for
+    /// them on every tick.</summary>
+    public IActionResult OnGetSyslogCounts(int window = 60, string? source = null, string? severity = null, string? q = null, bool regex = false)
+    {
+        if (!CanReadSyslog)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        if (!SyslogPageSupport.TryBuildQuery(window, source, severity, q, regex, beforeId: null, DateTimeOffset.UtcNow, out var query, out var error))
+        {
+            return new JsonResult(new { counts = (object?)null, error });
+        }
+
+        var totals = _syslog!.Count(query);
+        return new JsonResult(new { counts = new { total = totals.Total, errors = totals.Errors, warnings = totals.Warnings }, error = (string?)null });
+    }
+
+    /// <summary>The names senders are known by (addresses and host names of the last 30 days), for the sender filter's
+    /// suggestions. An aggregate over the log, so the tab asks for it only when someone starts to type a sender.</summary>
+    public IActionResult OnGetSyslogSenders()
+    {
+        if (!CanReadSyslog)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        var senders = SyslogPageSupport.BuildSenders(_syslog!.GetSenders(DateTimeOffset.UtcNow.AddDays(-30)));
+        return new JsonResult(new { names = SyslogPageSupport.KnownSenderNames(senders) });
+    }
+
+    private static readonly SyslogReceiverSnapshot EmptyReceiver =
+        new(SyslogListenerStatus.Off, SyslogListenerStatus.Off, 0, 0, 0, null, null);
 
     private IEnumerable<MonitoringEvent> ApplyFilters(IEnumerable<MonitoringEvent> events)
     {
@@ -123,6 +253,23 @@ public sealed class EventsModel : PageModel
             _ => "Info"
         };
     }
+}
+
+/// <summary>What the Syslog tab of the Events page is rendered from: the filter it opens with, whether the receiver is on,
+/// whether the log holds anything, and the receiver's one-line state.</summary>
+public sealed record SyslogMessagesViewModel(
+    int Window,
+    string? Source,
+    string? Severity,
+    string? Q,
+    bool Regex,
+    bool ReceiverEnabled,
+    bool HasMessages,
+    bool CanConfigure,
+    SyslogReceiverHead Head,
+    string? LastReceivedText)
+{
+    public int PageSize => SyslogPageSupport.PageSize;
 }
 
 public sealed record EventsViewModel

@@ -1,7 +1,7 @@
 namespace Matmon.Core.Syslog;
 
 /// <summary>
-/// The syslog receiver's configuration - edited on the Syslog page, stored in workspace.json. OFF by default: it opens
+/// The syslog receiver's configuration - edited under System > Syslog, stored in workspace.json. OFF by default: it opens
 /// a network listener that accepts unauthenticated input, which an admin should switch on deliberately.
 /// </summary>
 public sealed class SyslogSettings

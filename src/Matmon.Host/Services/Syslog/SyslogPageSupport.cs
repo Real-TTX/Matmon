@@ -53,8 +53,11 @@ public sealed record SyslogSender(
 /// <summary>The host a sender was matched to, and the NAME that linked them - null when its address did.</summary>
 public sealed record SyslogHostMatch(HostElement Host, string? MatchedName);
 
+/// <summary>The receiver in one line: the state pill's key (ok / warning / error / paused), its label and a sentence.</summary>
+public sealed record SyslogReceiverHead(string State, string Label, string Text);
+
 /// <summary>
-/// What the Syslog page decides without a request: the filter bar becomes a query, a posted form becomes settings (or a
+/// What the syslog UI (the Events tab and System > Syslog) decides without a request: the filter bar becomes a query, a posted form becomes settings (or a
 /// reason why not), and a sender is matched to the host it belongs to in the tree. Pure, so it is tested without a server.
 /// </summary>
 internal static class SyslogPageSupport
@@ -318,7 +321,7 @@ internal static class SyslogPageSupport
     }
 
     /// <summary>
-    /// The route values that open the Syslog page on the messages a syslog sensor is looking at - the same sender(s), time
+    /// The route values that open the Syslog tab of Events on the messages a syslog sensor is looking at - the same sender(s), time
     /// window, phrase and minimum severity - so an alert's "Latest error: ..." is one click from the log around it. Null for
     /// any other sensor type. (Route values rather than a URL: the page builds the link, so a path prefix - the cloud
     /// console's - is honoured.)
@@ -362,6 +365,80 @@ internal static class SyslogPageSupport
         }
 
         return route;
+    }
+
+    /// <summary>The names senders are known by - every address and host name once, newest sender first - for the sender
+    /// filter's suggestions.</summary>
+    public static IReadOnlyList<string> KnownSenderNames(IReadOnlyList<SyslogSender> senders) =>
+        senders
+            .SelectMany(sender => new[] { sender.SourceAddress, sender.Hostname })
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(200)
+            .ToArray();
+
+    /// <summary>
+    /// Whether the Events page offers its Syslog tab: to someone who may read the log, once the receiver is on or the log
+    /// holds something - what was collected stays readable after the receiver is switched off again. Until then the page
+    /// is exactly what it was, and the admin who wants it finds the switch under System > Syslog.
+    /// </summary>
+    public static bool ShowSyslogTab(bool canRead, bool receiverEnabled, bool logHasMessages) =>
+        canRead && (receiverEnabled || logHasMessages);
+
+    /// <summary>One message as the page's script receives it - everything it shows, nothing it should not trust: the text
+    /// travels as a JSON string and goes onto the page as text.</summary>
+    public static object ToRow(SyslogMessage message) => new
+    {
+        id = message.Id,
+        ts = message.ReceivedUtc.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+        time = message.ReceivedUtc.ToDisplay().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+        sev = message.Severity,
+        sevName = SyslogSeverity.ShortName(message.Severity),
+        sevClass = SeverityClass(message.Severity),
+        source = message.SourceAddress,
+        host = message.Hostname,
+        app = message.AppName,
+        procId = message.ProcId,
+        msgId = message.MsgId,
+        facility = SyslogFacility.Name(message.Facility),
+        deviceTime = message.DeviceTime,
+        text = message.Message
+    };
+
+    /// <summary>The receiver in one line - state pill, label, sentence - for the Syslog tab and the System page alike, so
+    /// they cannot tell two stories. Worst first: an unusable log, then off, then a listener that could not start.</summary>
+    public static SyslogReceiverHead DescribeReceiver(SyslogSettings settings, SyslogReceiverSnapshot receiver, bool storageAvailable = true, string? storageError = null)
+    {
+        if (!storageAvailable)
+        {
+            return new SyslogReceiverHead("error", "Log unusable", "The log database cannot be used: " + storageError);
+        }
+
+        if (!settings.Enabled)
+        {
+            return new SyslogReceiverHead("paused", "Receiver off", "Nothing new is collected. Messages that are already stored can still be read.");
+        }
+
+        if (receiver.Udp.State == "error" || receiver.Tcp.State == "error")
+        {
+            return new SyslogReceiverHead("error", "Problem", "A listener could not start - the details are under System > Syslog.");
+        }
+
+        var listening = new List<string>();
+        if (receiver.Udp.IsListening)
+        {
+            listening.Add($"UDP {settings.UdpPort}");
+        }
+
+        if (receiver.Tcp.IsListening)
+        {
+            listening.Add($"TCP {settings.TcpPort}");
+        }
+
+        return listening.Count > 0
+            ? new SyslogReceiverHead("ok", "Receiving", "Listening on " + string.Join(" and ", listening) + ".")
+            : new SyslogReceiverHead("warning", "Starting", "The receiver is starting - this page shows its state again in a few seconds.");
     }
 
     /// <summary>"3 min ago" - how long since a sender last spoke.</summary>

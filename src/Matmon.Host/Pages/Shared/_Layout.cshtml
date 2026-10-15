@@ -97,15 +97,13 @@
         var mapsActive = PathStarts("/maps");
         var notificationsActive = PathStarts("/notifications");
         var eventsActive = PathStarts("/events");
-        var syslogActive = PathStarts("/syslog");
         var discoveryActive = PathStarts("/discovery");
-        var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/system/mibs") || PathStarts("/backup");
+        var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/system/mibs") || PathStarts("/system/syslog") || PathStarts("/backup");
         var logsActive = PathStarts("/logs");
         var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive;
         string Active(bool on) => on ? "is-active" : string.Empty;
         var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
         var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
-        var canReadSyslog = isAdmin || User.IsInRole(MatmonUserRole.User.ToString());
         var suppressWorkspaceSummary = string.Equals(ViewData["WorkspaceSummarySuppress"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         Matmon.Host.Services.WorkspaceSummary? workspaceSummary = null;
 
@@ -167,7 +165,6 @@
             embedNav.Add(new { label = "Templates", path = "Templates" });
             embedNav.Add(new { label = "Notifications", path = "Notifications" });
             embedNav.Add(new { label = "Events", path = "Events" });
-            if (canReadSyslog) { embedNav.Add(new { label = "Syslog", path = "Syslog" }); }
             if (isAdmin) { embedNav.Add(new { label = "System", path = "Config" }); }
             if (isAdmin) { embedNav.Add(new { label = "Logs", path = "Logs" }); }
         }
@@ -264,10 +261,6 @@
                             <a asp-area="" asp-page="/Templates" class="topnav-link @Active(templatesActive)">Templates</a>
                             <a asp-area="" asp-page="/Notifications" class="topnav-link @Active(notificationsActive)">Notifications</a>
                             <a asp-area="" asp-page="/Events" class="topnav-link @Active(eventsActive)">Events</a>
-                            @if (canReadSyslog)
-                            {
-                                <a asp-area="" asp-page="/Syslog" class="topnav-link @Active(syslogActive)">Syslog</a>
-                            }
                             @if (isAdmin)
                             {
                                 <a asp-area="" asp-page="/Config" class="topnav-link @Active(systemActive)">System</a>

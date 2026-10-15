@@ -5,7 +5,7 @@ using Matmon.Host.Services;
 namespace Matmon.Tests;
 
 /// <summary>
-/// What the Syslog page decides without a request: how the filter bar becomes a query, when a posted settings form is
+/// What the syslog UI (the Events tab and System > Syslog) decides without a request: how the filter bar becomes a query, when a posted settings form is
 /// refused (and why), and which host in the tree a sender belongs to.
 /// </summary>
 public sealed class SyslogPageSupportTests
@@ -221,6 +221,141 @@ public sealed class SyslogPageSupportTests
         Assert.Equal(stored.ListenerSignature(), roundTripped.ListenerSignature());
         Assert.Equal(7, roundTripped.RetentionDays);
         Assert.Equal(20_000, roundTripped.MaxMessages);
+    }
+
+    // ---- when the Events page shows the Syslog tab ----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(true, true, false, true)]    // the receiver is on, nothing arrived yet: the tab says so
+    [InlineData(true, false, true, true)]    // switched off again, but what was collected stays readable
+    [InlineData(true, true, true, true)]
+    [InlineData(true, false, false, false)]  // never used: the Events page is what it always was
+    [InlineData(false, true, true, false)]   // a viewer does not get device logs, however much is there
+    [InlineData(false, false, false, false)]
+    public void TheSyslogTabAppearsForSomeoneWhoMayReadItOnceThereIsAnythingToRead(bool canRead, bool enabled, bool hasMessages, bool expected) =>
+        Assert.Equal(expected, SyslogPageSupport.ShowSyslogTab(canRead, enabled, hasMessages));
+
+    // ---- the receiver in one line ---------------------------------------------------------------------------------------
+
+    private static SyslogReceiverSnapshot Receiver(SyslogListenerStatus udp, SyslogListenerStatus tcp) =>
+        new(udp, tcp, Received: 0, Rejected: 0, TcpConnections: 0, LastReceivedUtc: null, Warning: null);
+
+    private static readonly SyslogListenerStatus Listening = new("listening", "Listening.");
+    private static readonly SyslogListenerStatus Broken = new("error", "port in use");
+
+    [Fact]
+    public void AReceiverThatListensIsReceivingAndSaysOnWhat()
+    {
+        var settings = new SyslogSettings { Enabled = true, UdpPort = 5514, TcpPort = 5515 };
+
+        var both = SyslogPageSupport.DescribeReceiver(settings, Receiver(Listening, Listening));
+        Assert.Equal(("ok", "Receiving"), (both.State, both.Label));
+        Assert.Contains("UDP 5514 and TCP 5515", both.Text);
+
+        var onlyTcp = SyslogPageSupport.DescribeReceiver(settings, Receiver(SyslogListenerStatus.Off, Listening));
+        Assert.Equal("ok", onlyTcp.State);
+        Assert.Contains("TCP 5515", onlyTcp.Text);
+        Assert.DoesNotContain("UDP", onlyTcp.Text);
+    }
+
+    [Fact]
+    public void ASwitchedOffReceiverSaysSoAndStillOffersWhatIsStored()
+    {
+        var head = SyslogPageSupport.DescribeReceiver(new SyslogSettings { Enabled = false }, Receiver(SyslogListenerStatus.Off, SyslogListenerStatus.Off));
+
+        Assert.Equal(("paused", "Receiver off"), (head.State, head.Label));
+        Assert.Contains("already stored", head.Text);
+    }
+
+    [Fact]
+    public void AListenerThatCouldNotStartIsAProblemAndPointsToTheSettings()
+    {
+        var settings = new SyslogSettings { Enabled = true };
+
+        var head = SyslogPageSupport.DescribeReceiver(settings, Receiver(Broken, Listening));
+
+        Assert.Equal(("error", "Problem"), (head.State, head.Label));
+        Assert.Contains("System > Syslog", head.Text);
+    }
+
+    [Fact]
+    public void AReceiverThatHasNotOpenedItsSocketsYetIsStartingNotBroken()
+    {
+        var head = SyslogPageSupport.DescribeReceiver(new SyslogSettings { Enabled = true }, Receiver(SyslogListenerStatus.Off, SyslogListenerStatus.Off));
+
+        Assert.Equal(("warning", "Starting"), (head.State, head.Label));
+    }
+
+    [Fact]
+    public void TheWorstThingIsSaidFirst()
+    {
+        var off = new SyslogSettings { Enabled = false };
+        var on = new SyslogSettings { Enabled = true };
+
+        // an unusable log beats everything - nothing else matters if it cannot be read or written
+        var unusable = SyslogPageSupport.DescribeReceiver(off, Receiver(Broken, Broken), storageAvailable: false, storageError: "disk full");
+        Assert.Equal("Log unusable", unusable.Label);
+        Assert.Contains("disk full", unusable.Text);
+
+        // off beats a stale listener error: nobody asked it to listen
+        Assert.Equal("Receiver off", SyslogPageSupport.DescribeReceiver(off, Receiver(Broken, SyslogListenerStatus.Off)).Label);
+        Assert.Equal("Problem", SyslogPageSupport.DescribeReceiver(on, Receiver(Broken, SyslogListenerStatus.Off)).Label);
+    }
+
+    // ---- the contract with the page's script ----------------------------------------------------------------------------
+
+    [Fact]
+    public void ARowCarriesEveryFieldTheScriptReads()
+    {
+        var message = new SyslogMessage
+        {
+            Id = 42,
+            ReceivedUtc = Now,
+            SourceAddress = "192.168.1.2",
+            Facility = 23,
+            Severity = SyslogSeverity.Error,
+            DeviceTime = "Oct 15 11:59:58",
+            Hostname = "sw-core",
+            AppName = "sshd",
+            ProcId = "812",
+            MsgId = "LINK-3-UPDOWN",
+            Message = "<b>not markup</b>"
+        };
+
+        using var document = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(SyslogPageSupport.ToRow(message)));
+        var row = document.RootElement;
+
+        // the names _SyslogMessages.cshtml reads - renaming one here breaks the page without breaking the build
+        foreach (var name in new[] { "id", "ts", "time", "sev", "sevName", "sevClass", "source", "host", "app", "procId", "msgId", "facility", "deviceTime", "text" })
+        {
+            Assert.True(row.TryGetProperty(name, out _), $"the row has no \"{name}\"");
+        }
+
+        Assert.Equal(42, row.GetProperty("id").GetInt64());
+        Assert.Equal("error", row.GetProperty("sevClass").GetString());
+        Assert.Equal("err", row.GetProperty("sevName").GetString());
+        Assert.Equal("local7", row.GetProperty("facility").GetString());
+        Assert.Equal("<b>not markup</b>", row.GetProperty("text").GetString()); // text stays text; the page never makes it markup
+    }
+
+    [Fact]
+    public void TheSenderSuggestionsNameEveryAddressAndHostNameOnce()
+    {
+        var senders = SyslogPageSupport.BuildSenders(
+        [
+            Seen("172.17.0.1", "sw-core", minutesAgo: 1),
+            Seen("172.17.0.1", "NAS-01", minutesAgo: 2),
+            Seen("172.17.0.1", "nas-01", minutesAgo: 3), // the same name in another spelling
+            Seen("10.0.0.7", null, minutesAgo: 4)
+        ]);
+
+        var names = SyslogPageSupport.KnownSenderNames(senders);
+
+        Assert.Equal(1, names.Count(name => string.Equals(name, "172.17.0.1", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(1, names.Count(name => string.Equals(name, "nas-01", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains("sw-core", names);
+        Assert.Contains("10.0.0.7", names);
+        Assert.DoesNotContain(names, string.IsNullOrWhiteSpace);
     }
 
     // ---- severity colours -----------------------------------------------------------------------------------------------

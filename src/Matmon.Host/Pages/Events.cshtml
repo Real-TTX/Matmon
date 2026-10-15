@@ -13,6 +13,17 @@
         </div>
     </div>
 
+    @if (Model.SyslogView is not null)
+    {
+        @* Two sources of events: what Matmon saw happen, and what the network's devices said. The second only appears
+           once syslog is switched on (System > Syslog) or the log holds something. *@
+        <div class="sensor-tabs" data-sensor-tabs data-tab-hash="true">
+            <button type="button" class="sensor-tab is-active" data-sensor-tab-target="matmon">@MatmonIcons.Render("monitoring")<span>Matmon</span></button>
+            <button type="button" class="sensor-tab" data-sensor-tab-target="syslog">@MatmonIcons.Render("list")<span>Syslog</span></button>
+        </div>
+    }
+
+    <div data-sensor-tab="matmon">
     <section class="panel panel-stack monitoring-controls">
         <form method="get" class="monitoring-filter-bar">
             <label class="monitoring-filter-field">
@@ -128,4 +139,12 @@
             </div>
         }
     </section>
+    </div>
+
+    @if (Model.SyslogView is { } syslogView)
+    {
+        <div data-sensor-tab="syslog" hidden>
+            <partial name="_SyslogMessages" model="syslogView" />
+        </div>
+    }
 </section>

@@ -171,7 +171,7 @@ The probe then appears in the tree; assign sensors to it and it executes them fr
 ### 3. Receive syslog from your devices (optional)
 
 Matmon can be the syslog server for your switches, routers and servers. It is **off until you switch it on**
-(*Syslog → Settings*), and a container only receives what you publish, so add the port next to `8099`:
+(*System → Syslog*), and a container only receives what you publish, so add the port next to `8099`:
 
 ```yaml
     ports:
@@ -181,7 +181,7 @@ Matmon can be the syslog server for your switches, routers and servers. It is **
 ```
 
 Then enter the Matmon host as the syslog server in each device and give it a *Syslog Messages* sensor (the
-*Senders* tab adds one with a click). Messages are kept for 14 days by default and ordered by the time they
+*Senders* list there adds one with a click; the log itself is the *Syslog* tab on *Events*). Messages are kept for 14 days by default and ordered by the time they
 **arrive** - a switch that has just rebooted often has a wrong clock. Two things worth knowing: on Docker Desktop
 (Windows, macOS) every message arrives from Docker's own gateway address instead of the device's, so identify
 devices by the *host name* they put in the message; and syslog has no login, so use *Allowed sources* to say

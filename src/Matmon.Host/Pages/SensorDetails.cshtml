@@ -92,7 +92,7 @@
                 </a>
                 @if (Model.SyslogLogRoute is { } syslogRoute)
                 {
-                    <a class="workspace-action-link" asp-page="/Syslog" asp-all-route-data="@syslogRoute" title="The messages this sensor counts" aria-label="Open the log">
+                    <a class="workspace-action-link" asp-page="/Events" asp-all-route-data="@syslogRoute" asp-fragment="syslog" title="The messages this sensor counts" aria-label="Open the log">
                         @MatmonIcons.Render("list")
                         <span>Log</span>
                     </a>

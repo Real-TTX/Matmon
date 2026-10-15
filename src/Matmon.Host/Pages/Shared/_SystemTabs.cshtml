@@ -1,0 +1,29 @@
+@model string
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore Workspace
+@* The tab strip of the System section. System is one page (Config) with a tab per area and a few areas that are
+   pages of their own (Syslog): both render this strip, so the section looks like one place whichever it is on.
+   Model = the active tab's name. *@
+@{
+    var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
+    var active = Model ?? "general";
+    string Active(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
+}
+
+<div class="sensor-tabs system-tabs" role="tablist" aria-label="System sections">
+    <a class="sensor-tab @Active("general")" asp-page="/Config" asp-route-tab="general">Overview</a>
+    <a class="sensor-tab @Active("probes")" asp-page="/Config" asp-route-tab="probes">Probes</a>
+    <a class="sensor-tab @Active("storage")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+    @if (canManage)
+    {
+        <a class="sensor-tab @Active("syslog")" asp-page="/SystemSyslog">Syslog</a>
+        <a class="sensor-tab @Active("backup")" asp-page="/Config" asp-route-tab="backup">Backup</a>
+        <a class="sensor-tab @Active("cloud")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
+        <a class="sensor-tab @Active("license")" asp-page="/Config" asp-route-tab="license">License</a>
+        @if (Workspace.GetServicePartnerInfo()?.HasPartner == true)
+        {
+            <a class="sensor-tab @Active("partner")" asp-page="/Config" asp-route-tab="partner">Service partner</a>
+        }
+
+        <a class="sensor-tab @Active("users")" asp-page="/Config" asp-route-tab="users">Users</a>
+    }
+</div>

@@ -19,25 +19,7 @@
         </div>
     </div>
 
-    <div class="sensor-tabs system-tabs" role="tablist" aria-label="System sections">
-        <a class="sensor-tab @(Model.IsActiveTab("general") ? "is-active" : "")" asp-page="/Config" asp-route-tab="general">Overview</a>
-        <a class="sensor-tab @(Model.IsActiveTab("probes") ? "is-active" : "")" asp-page="/Config" asp-route-tab="probes">Probes</a>
-        <a class="sensor-tab @(Model.IsActiveTab("storage") ? "is-active" : "")" asp-page="/Config" asp-route-tab="storage">Storage</a>
-        @if (canManageSystem)
-        {
-            <a class="sensor-tab @(Model.IsActiveTab("backup") ? "is-active" : "")" asp-page="/Config" asp-route-tab="backup">Backup</a>
-            <a class="sensor-tab @(Model.IsActiveTab("cloud") ? "is-active" : "")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
-            <a class="sensor-tab @(Model.IsActiveTab("license") ? "is-active" : "")" asp-page="/Config" asp-route-tab="license">License</a>
-            @if (Model.ServicePartnerInfo?.HasPartner == true)
-            {
-                <a class="sensor-tab @(Model.IsActiveTab("partner") ? "is-active" : "")" asp-page="/Config" asp-route-tab="partner">Service partner</a>
-            }
-        }
-        @if (canManageUsers)
-        {
-            <a class="sensor-tab @(Model.IsActiveTab("users") ? "is-active" : "")" asp-page="/Config" asp-route-tab="users">Users</a>
-        }
-    </div>
+    <partial name="_SystemTabs" model="Model.ActiveTab" />
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {

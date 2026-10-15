@@ -60,7 +60,7 @@ public sealed class SensorDetailsModel : PageModel
 
     public SensorDetailsViewModel View { get; private set; } = default!;
 
-    /// <summary>For a syslog sensor, the Syslog page filtered to what the sensor looks at - null for every other type and
+    /// <summary>For a syslog sensor, the Syslog tab of Events filtered to what the sensor looks at - null for every other type and
     /// for a viewer, who cannot open the log.</summary>
     public IDictionary<string, string>? SyslogLogRoute { get; private set; }
 
