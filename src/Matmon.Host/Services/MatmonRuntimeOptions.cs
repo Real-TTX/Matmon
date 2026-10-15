@@ -36,6 +36,9 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
 
     public string? TelemetryPath { get; set; }
 
+    /// <summary>Path of the syslog database (<c>Matmon__SyslogPath</c>); default <c>syslog.db</c> beside the workspace.</summary>
+    public string? SyslogPath { get; set; }
+
     public string? BackupPath { get; set; }
 
     /// <summary>Where the bundled agent binaries live (<c>&lt;rid&gt;/matmon-agent[.exe]</c>); default

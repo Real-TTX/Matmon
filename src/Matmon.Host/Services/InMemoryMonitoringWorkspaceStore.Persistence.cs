@@ -74,6 +74,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     {
         document.NotificationConfiguration ??= new();
         document.SummaryReport ??= new();
+        document.Syslog ??= new();
         document.Cloud ??= new();
         document.CloudSettings ??= new();
         document.Templates ??= [];

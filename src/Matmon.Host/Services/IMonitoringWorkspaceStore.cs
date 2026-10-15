@@ -266,6 +266,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Records that the scheduled summary report was sent at the given time.</summary>
     void MarkSummaryReportSent(DateTimeOffset sentUtc);
 
+    /// <summary>The syslog receiver's settings (a detached, normalised copy). Off by default.</summary>
+    Matmon.Core.Syslog.SyslogSettings GetSyslogSettings();
+
+    /// <summary>Stores the settings, pulled into their legal ranges. The receiver notices within seconds.</summary>
+    void UpdateSyslogSettings(Matmon.Core.Syslog.SyslogSettings settings);
+
     /// <summary>This instance's persisted Matmon.Cloud link credentials (a detached clone).</summary>
     CloudConnectionState GetCloudConnection();
 

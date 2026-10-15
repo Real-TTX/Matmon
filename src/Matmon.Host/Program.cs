@@ -270,6 +270,16 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<ReportSchedulerService>();
     builder.Services.AddHostedService<CloudConnectionService>();
     builder.Services.AddHostedService<TunnelClient>();
+
+    // Syslog: the central log of the network's devices. The database is its own file (syslog.db) so a chatty switch
+    // can never bloat or lock the sensor history, and the receiver follows the settings live - off until an admin
+    // switches it on, because it listens for unauthenticated input.
+    var syslogDatabasePath = ResolveSyslogPath(builder.Environment, runtimeOptions, workspaceDirectory);
+    builder.Services.AddSingleton<ISyslogStore>(provider =>
+        new SyslogStore(syslogDatabasePath, provider.GetRequiredService<ILogger<SyslogStore>>()));
+    builder.Services.AddSingleton<SyslogReceiverState>();
+    builder.Services.AddSingleton<SyslogIngest>();
+    builder.Services.AddHostedService<SyslogReceiverService>();
 }
 else
 {
@@ -932,6 +942,17 @@ static string ResolveDataProtectionDirectory(IHostEnvironment environment, Matmo
     var configuredPath = string.IsNullOrWhiteSpace(options.DataProtectionPath)
         ? Path.Combine(workspaceDirectory, "dataprotection-keys")
         : options.DataProtectionPath;
+
+    return Path.IsPathRooted(configuredPath)
+        ? configuredPath
+        : Path.GetFullPath(Path.Combine(environment.ContentRootPath, configuredPath));
+}
+
+static string ResolveSyslogPath(IHostEnvironment environment, MatmonRuntimeOptions options, string workspaceDirectory)
+{
+    var configuredPath = string.IsNullOrWhiteSpace(options.SyslogPath)
+        ? Path.Combine(workspaceDirectory, "syslog.db")
+        : options.SyslogPath;
 
     return Path.IsPathRooted(configuredPath)
         ? configuredPath

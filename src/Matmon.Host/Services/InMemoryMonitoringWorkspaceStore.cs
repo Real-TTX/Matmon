@@ -1309,6 +1309,23 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public Matmon.Core.Syslog.SyslogSettings GetSyslogSettings()
+    {
+        lock (_gate)
+        {
+            return (_document.Syslog ?? new()).Normalized();
+        }
+    }
+
+    public void UpdateSyslogSettings(Matmon.Core.Syslog.SyslogSettings settings)
+    {
+        lock (_gate)
+        {
+            _document.Syslog = settings.Normalized();
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public SummaryReportSettings GetSummaryReportSettings()
     {
         lock (_gate)
@@ -4400,6 +4417,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public NotificationWorkspaceConfiguration NotificationConfiguration { get; set; } = new();
 
         public SummaryReportSettings SummaryReport { get; set; } = new();
+
+        /// <summary>The syslog receiver's configuration (off by default). The messages themselves are in syslog.db.</summary>
+        public Matmon.Core.Syslog.SyslogSettings Syslog { get; set; } = new();
 
         public CloudConnectionState Cloud { get; set; } = new();
 
