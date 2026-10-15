@@ -24,7 +24,7 @@ public sealed class ProbeSensorAssignmentProvider
 
         var sensors = MonitoringTopology.EnumerateDescendants(probe)
             .OfType<SensorElement>()
-            .Where(sensor => !string.Equals(sensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+            .Where(sensor => !SensorPlacement.RunsOnPrimaryOnly(sensor.SensorTypeKey))
             .Select(sensor =>
             {
                 var lineage = MonitoringTopology.BuildLineage(sensor, elementsById);
@@ -74,8 +74,7 @@ public sealed class ProbeSensorAssignmentProvider
         var foundSensor = MonitoringTopology.EnumerateDescendants(foundProbe)
             .OfType<SensorElement>()
             .FirstOrDefault(candidate => candidate.Id == sensorId);
-        if (foundSensor is null ||
-            string.Equals(foundSensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+        if (foundSensor is null || SensorPlacement.RunsOnPrimaryOnly(foundSensor.SensorTypeKey))
         {
             return false;
         }
@@ -129,9 +128,12 @@ public sealed class ProbeSensorAssignmentProvider
         target = SensorTargetResolver.Resolve(sensor, lineage);
 
         // The nearest ProbeElement in the lineage owns the sensor; a probe with no parent is the local
-        // primary root (runs in-process), any other probe is remote (must run there).
+        // primary root (runs in-process), any other probe is remote (must run there) - except a sensor that
+        // only the primary can run (SensorPlacement), which stays here whatever probe it sits under.
         var probe = lineage.OfType<ProbeElement>().LastOrDefault();
-        owningProbeId = probe is { ParentId: not null } ? probe.ProbeId : null;
+        owningProbeId = probe is { ParentId: not null } && !SensorPlacement.RunsOnPrimaryOnly(sensorTypeKey)
+            ? probe.ProbeId
+            : null;
         return true;
     }
 

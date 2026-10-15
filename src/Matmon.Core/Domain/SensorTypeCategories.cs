@@ -13,6 +13,7 @@ public static class SensorTypeCategories
     public static readonly IReadOnlyList<string> Order =
     [
         "Network",
+        "Logs",
         "Certificates",
         "Windows",
         "Linux",
@@ -36,6 +37,9 @@ public static class SensorTypeCategories
         ["snmp-interface"] = "Network",
         ["ups-snmp"] = "Network",
         ["mail-health"] = "Network",
+
+        ["syslog-messages"] = "Logs",
+        ["syslog-match"] = "Logs",
 
         ["ssl-certificate"] = "Certificates",
         ["certificate-chain"] = "Certificates",

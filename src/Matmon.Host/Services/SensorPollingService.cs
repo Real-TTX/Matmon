@@ -148,12 +148,15 @@ public sealed class SensorPollingService : BackgroundService
 
         _logger.LogInformation("Polled {Count} sensors ({Workers} workers)", due.Count, workers);
     }
-    private static bool IsLocalSensor(
+    /// <summary>Whether the primary itself polls this element: it sits under the local root probe, or is a sensor only the
+    /// primary can run (see <see cref="SensorPlacement"/>).</summary>
+    internal static bool IsLocalSensor(
         MonitoringElement element,
         IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
     {
-        if (element is SensorElement sensor &&
-            string.Equals(sensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+        // A sensor that reads something only the primary has (the probe heartbeat, the syslog log) runs here whatever
+        // probe it sits under.
+        if (element is SensorElement sensor && SensorPlacement.RunsOnPrimaryOnly(sensor.SensorTypeKey))
         {
             return true;
         }

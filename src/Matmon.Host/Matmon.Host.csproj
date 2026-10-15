@@ -26,6 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The few decisions that are internal on purpose but worth a unit test of their own (where a sensor is polled). -->
+    <InternalsVisibleTo Include="Matmon.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Display-timezone extensions (ToDisplay) are used across pages/services. -->
     <Using Include="Matmon.Core.Domain" />
     <!-- The probe side (Secondary mode, discovery, version) lives in Matmon.Probe, which the agent shares. -->

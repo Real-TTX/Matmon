@@ -144,6 +144,15 @@ public static class SensorThresholdDefaults
         // (governed by the tolerance parameter), so only a warning threshold is seeded here.
         new("mail-health", "roundTripSeconds", "warning", ThresholdDirection.Above, 300),
 
+        // ── Syslog ────────────────────────────────────────────────────────────────────────────────
+        // A device's errors in the sensor's window (an hour unless changed): one is worth a look, ten is a problem.
+        // Deliberately NOTHING on "since last message" - plenty of devices only log when something happens, so
+        // silence means a problem only for the ones the user knows are chatty (they set that themselves) - and the
+        // match sensor warns on the first hit, since looking for a phrase at all means its appearance matters.
+        new("syslog-messages", "errors", "warning", ThresholdDirection.Above, 0),
+        new("syslog-messages", "errors", "critical", ThresholdDirection.Above, 9),
+        new("syslog-match", "matches", "warning", ThresholdDirection.Above, 0),
+
         // ── Backup job / disk SMART / probe heartbeat ─────────────────────────────────────────
         new("probe-heartbeat", "ageSeconds", "warning", ThresholdDirection.Above, 30),
         new("probe-heartbeat", "ageSeconds", "critical", ThresholdDirection.Above, 60),

@@ -84,6 +84,10 @@ public static class SensorTelemetryProfiles
         ["probe-health"] = Infrastructure,
         ["local-health"] = Responsive,
         ["matmon-update"] = Availability,
+
+        // Counts per window: a number that moves, so hourly averages of it are worth keeping.
+        ["syslog-messages"] = Responsive,
+        ["syslog-match"] = Responsive,
     };
 
     /// <summary>All distinct profiles, for documentation/UI listing.</summary>

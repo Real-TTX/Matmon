@@ -126,9 +126,11 @@ public interface IMonitoringWorkspaceStore
     /// <summary>
     /// Walks an element's lineage to its owning <see cref="ProbeElement"/> and returns that probe's id
     /// when it is a REMOTE probe (has a parent), or null for the local primary root / unknown element.
-    /// Used to route an on-demand run for a not-yet-saved sensor by its selected parent.
+    /// Used to route an on-demand run for a not-yet-saved sensor by its selected parent. Pass the sensor type when it
+    /// is known: a type only the primary can run (<see cref="SensorPlacement"/>) has no remote owner, whatever probe
+    /// it is placed under.
     /// </summary>
-    string? ResolveOwningRemoteProbeId(Guid elementId);
+    string? ResolveOwningRemoteProbeId(Guid elementId, string? sensorTypeKey = null);
 
     /// <summary>
     /// A fully detached workspace snapshot with a deep-cloned element tree and templates - for

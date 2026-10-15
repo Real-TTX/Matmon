@@ -35,7 +35,7 @@ public sealed partial class WorkspaceModel
                 var sensorTypeKey = ElementEditor.SensorTypeKey ?? sensor.SensorTypeKey;
                 var executionSettings = BuildTransientSensorExecutionSettings(ElementEditor);
                 var executionTarget = ResolveEffectiveSensorTarget(ElementEditor, sensor);
-                var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(ElementEditor.ParentId ?? sensor.ParentId ?? Guid.Empty);
+                var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(ElementEditor.ParentId ?? sensor.ParentId ?? Guid.Empty, sensorTypeKey);
 
                 if (owningProbeId is not null)
                 {
@@ -61,7 +61,7 @@ public sealed partial class WorkspaceModel
                 ApplySnmpWalkSelectionsToParameters(NewSensor);
                 var executionSettings = BuildTransientSensorExecutionSettings(NewSensor);
                 var executionTarget = ResolveEffectiveSensorTarget(NewSensor);
-                var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(NewSensor.ParentId ?? Guid.Empty);
+                var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(NewSensor.ParentId ?? Guid.Empty, NewSensor.SensorTypeKey);
 
                 if (owningProbeId is not null)
                 {

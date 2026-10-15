@@ -63,6 +63,8 @@ public static class SensorDefinitionCatalog
         ProbeHeartbeatSensorExecutor.Definition,
         ProbeHealthSensorExecutor.Definition,
         LocalHealthSensorExecutor.Definition,
-        MatmonUpdateSensorExecutor.Definition
+        MatmonUpdateSensorExecutor.Definition,
+        SyslogMessagesSensorExecutor.Definition,
+        SyslogMatchSensorExecutor.Definition
     ];
 }

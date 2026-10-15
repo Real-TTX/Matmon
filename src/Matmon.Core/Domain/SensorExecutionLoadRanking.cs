@@ -23,8 +23,10 @@ public static class SensorExecutionLoadRanking
         ["probe-heartbeat"] = Light,
         ["probe-health"] = Light,
         ["matmon-update"] = Light,
+        ["syslog-messages"] = Light,
 
         // Moderate - a single API/cert/query round-trip.
+        ["syslog-match"] = Moderate,
         ["ssl-certificate"] = Moderate,
         ["certificate-chain"] = Moderate,
         ["docker-container"] = Moderate,

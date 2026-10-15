@@ -829,10 +829,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     /// <summary>
     /// Walks an element's lineage to its owning probe under <c>_gate</c> and returns that probe's id when it
     /// is a REMOTE probe (has a parent). Null for the local primary root or an unknown element. Lets the
-    /// create/test paths route an on-demand run for a not-yet-saved sensor by its selected parent.
+    /// create/test paths route an on-demand run for a not-yet-saved sensor by its selected parent. A sensor type that
+    /// only the primary can run (<see cref="SensorPlacement"/>) never has a remote owner.
     /// </summary>
-    public string? ResolveOwningRemoteProbeId(Guid elementId)
+    public string? ResolveOwningRemoteProbeId(Guid elementId, string? sensorTypeKey = null)
     {
+        if (SensorPlacement.RunsOnPrimaryOnly(sensorTypeKey))
+        {
+            return null;
+        }
+
         lock (_gate)
         {
             if (FindElementInternal(elementId) is not { } element)

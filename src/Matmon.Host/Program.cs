@@ -205,7 +205,7 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 
-RegisterSensorExecutors(builder.Services);
+RegisterSensorExecutors(builder.Services, includePrimaryOnlySensors: runtimeOptions.Mode == AppMode.Primary);
 builder.Services.AddScoped<ISensorExecutionService, SensorExecutionService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
 
@@ -861,7 +861,7 @@ static bool IsExecutorAuthorized(HttpRequest request, string? expectedToken)
             System.Text.Encoding.UTF8.GetBytes(expectedToken));
 }
 
-static void RegisterSensorExecutors(IServiceCollection services, bool includeProbeSensors = true)
+static void RegisterSensorExecutors(IServiceCollection services, bool includeProbeSensors = true, bool includePrimaryOnlySensors = false)
 {
     // Every sensor that lives in Matmon.Core - shared with Matmon.Agent, so an agent can never offer a
     // different set of sensors than the primary that assigns it work.
@@ -882,6 +882,14 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
         // Instance self-monitoring, driven by the cloud heartbeat's update signal - not a cloud sensor.
         services.AddTransient<MatmonUpdateSensorExecutor>();
         services.AddTransient<ISensorExecutor>(sp => sp.GetRequiredService<MatmonUpdateSensorExecutor>());
+    }
+
+    // The syslog sensors query the log the PRIMARY's receiver keeps (SensorPlacement.RunsOnPrimaryOnly), so only a
+    // primary has the store they need - on a secondary probe or in the stateless Executor they would not resolve.
+    if (includePrimaryOnlySensors)
+    {
+        services.AddTransient<ISensorExecutor, SyslogMessagesSensorExecutor>();
+        services.AddTransient<ISensorExecutor, SyslogMatchSensorExecutor>();
     }
 }
 

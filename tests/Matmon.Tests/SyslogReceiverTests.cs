@@ -47,13 +47,30 @@ public sealed class SyslogReceiverTests : IDisposable
         }
     }
 
+    // The receiver opens the same number on UDP and on TCP, so a port is only usable when it is free on BOTH. A number
+    // that was free for TCP can still be somebody's ephemeral UDP port - a DNS query from another test class running at
+    // the same time is enough - so each candidate is tried the way the service binds it, on both protocols.
     private static int FreePort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            try
+            {
+                using var udp = OccupyUdp(port);
+                using var tcp = OccupyTcp(port);
+                return port;
+            }
+            catch (SocketException)
+            {
+                // taken on the other protocol (or in the other address family): try another number
+            }
+        }
+
+        throw new InvalidOperationException("No port is free on both TCP and UDP.");
     }
 
     private static byte[] Bytes(string text) => Encoding.UTF8.GetBytes(text);

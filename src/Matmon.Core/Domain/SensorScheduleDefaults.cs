@@ -31,6 +31,10 @@ public static class SensorScheduleDefaults
         // The probe's own machine, read locally: next to free, and CPU/memory are only interesting close up.
         ["local-health"] = TimeSpan.FromMinutes(1),
 
+        // A query of the log the primary already holds: cheap, and a minute is as stale as "three errors ago" should get.
+        ["syslog-messages"] = TimeSpan.FromMinutes(1),
+        ["syslog-match"] = TimeSpan.FromMinutes(1),
+
         // Slow-changing hardware/health: SMART attributes and backup outcomes barely move between
         // polls, so 6 h keeps the noise/overhead down while still catching failures within hours.
         ["synology-disk"] = SixHours,

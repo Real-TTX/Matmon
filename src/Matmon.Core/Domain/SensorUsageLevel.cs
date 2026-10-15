@@ -18,6 +18,8 @@ public static class SensorUsageCatalog
             ["ntp"] = SensorUsageLevel.Low,
             ["probe-heartbeat"] = SensorUsageLevel.Low,
             ["matmon-update"] = SensorUsageLevel.Low,
+            ["syslog-messages"] = SensorUsageLevel.Low,
+            ["syslog-match"] = SensorUsageLevel.Low,
 
             ["http"] = SensorUsageLevel.Moderate,
             ["http-advanced"] = SensorUsageLevel.Moderate,
