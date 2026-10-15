@@ -27,6 +27,10 @@ RUN for rid in win-x64 linux-x64 linux-arm64; do \
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
+# PSWSMan (the WinRM client the PowerShell sensors use from Linux) is pinned to the last 2.x on purpose. 3.0.0,
+# published 2026-10-13, no longer has Install-WSMan - an unpinned install failed this layer, and with it every image
+# build (CI, "docker compose up --build"), the morning after. Moving to 3.x is a change to test against a Windows
+# target, not a version bump to make here.
 RUN apt-get update \
         && apt-get install -y --no-install-recommends wget ca-certificates gpg apt-transport-https \
         && . /etc/os-release \
@@ -35,7 +39,7 @@ RUN apt-get update \
     && rm packages-microsoft-prod.deb \
     && apt-get update \
     && apt-get install -y --no-install-recommends openssh-client sshpass powershell gss-ntlmssp \
-    && pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module PSWSMan -Scope AllUsers -Force -AllowClobber; Install-WSMan" \
+    && pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module PSWSMan -RequiredVersion 2.3.1 -Scope AllUsers -Force -AllowClobber; Install-WSMan" \
     && rm -rf /var/lib/apt/lists/*
 ENV ASPNETCORE_URLS=http://+:8099
 # Baked-in build version shown in the UI (see MatmonVersion). CI passes this as
