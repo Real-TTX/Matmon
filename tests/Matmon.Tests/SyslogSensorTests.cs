@@ -364,6 +364,24 @@ public sealed class SyslogSensorTests : IDisposable
         Assert.Contains("switched off", result.Message);
     }
 
+    // ---- the receiver's settings and backups --------------------------------------------------------------------------
+
+    [Fact]
+    public void ABackupNeverCarriesTheReceiversSettingsAndRestoringOneNeverSwitchesTheReceiverOn()
+    {
+        _workspace.UpdateSyslogSettings(new SyslogSettings { Enabled = true, UdpPort = 5514, AllowedSources = "203.0.113.0/24" });
+
+        var backup = _workspace.CreateBackupBytes(WorkspaceBackupSection.All);
+
+        Assert.DoesNotContain("203.0.113.0/24", System.Text.Encoding.UTF8.GetString(backup));
+        Assert.True(_workspace.GetSyslogSettings().Enabled); // taking the backup changed nothing here
+
+        // ...and a restore - onto this machine or any other - leaves the receiver as its admin set it
+        _workspace.UpdateSyslogSettings(new SyslogSettings { Enabled = false });
+        _workspace.RestoreBackupBytes(backup, WorkspaceBackupSection.All);
+        Assert.False(_workspace.GetSyslogSettings().Enabled);
+    }
+
     // ---- what the catalog and the defaults say ------------------------------------------------------------------------
 
     [Fact]

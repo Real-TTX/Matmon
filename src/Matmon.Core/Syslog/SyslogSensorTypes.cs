@@ -10,4 +10,9 @@ public static class SyslogSensorTypes
 
     /// <summary>Counts the messages of a device that match a phrase or a regular expression.</summary>
     public const string Match = "syslog-match";
+
+    /// <summary>Whether a sensor type is one of the syslog sensors.</summary>
+    public static bool IsSyslog(string? sensorTypeKey) =>
+        string.Equals(sensorTypeKey?.Trim(), Messages, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(sensorTypeKey?.Trim(), Match, StringComparison.OrdinalIgnoreCase);
 }

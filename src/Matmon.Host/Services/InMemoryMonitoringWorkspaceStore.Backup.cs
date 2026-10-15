@@ -690,6 +690,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // would let an agent enrol against a workspace whose admin never issued it.
         document.AgentEnrollments = [];
 
+        // The receiver's settings say which ports THIS machine opens and who may write to its log. No section restores
+        // them - switching a network listener on is a decision made on the machine it runs on - so they are not carried.
+        document.Syslog = new();
+
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {
             document.BackupJobs = [];

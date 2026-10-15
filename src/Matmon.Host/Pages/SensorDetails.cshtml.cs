@@ -60,6 +60,10 @@ public sealed class SensorDetailsModel : PageModel
 
     public SensorDetailsViewModel View { get; private set; } = default!;
 
+    /// <summary>For a syslog sensor, the Syslog page filtered to what the sensor looks at - null for every other type and
+    /// for a viewer, who cannot open the log.</summary>
+    public IDictionary<string, string>? SyslogLogRoute { get; private set; }
+
     public IActionResult OnGet()
     {
         return LoadView() ? Page() : NotFound();
@@ -188,6 +192,10 @@ public sealed class SensorDetailsModel : PageModel
         var unitConversion = BuildUnitConversion(rawUnit, displayScale, measurementKind, currentValue ?? scaleReferenceValue);
         var isAcknowledged = workspace.Alerts
             .Any(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementId == sensor.Id);
+
+        SyslogLogRoute = MatmonSecurity.CanOperateAlerts(User)
+            ? SyslogPageSupport.BuildLogRoute(sensor.SensorTypeKey, SensorTargetResolver.Resolve(sensor, lineage), effectiveSettings)
+            : null;
 
         View = new SensorDetailsViewModel(
             sensor.Id,

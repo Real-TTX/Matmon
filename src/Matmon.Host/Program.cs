@@ -243,6 +243,8 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/BackupJobEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/BackupRestore", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/Logs", MatmonSecurity.AdminPolicy);
+    // Device logs can name users and addresses: operators read them (to act on an alert), a read-only viewer does not.
+    options.Conventions.AuthorizePage("/Syslog", MatmonSecurity.AlertOperatorPolicy);
 }).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the

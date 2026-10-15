@@ -42,6 +42,8 @@ optional and connect outbound, so they work behind firewalls and NAT.
   Linux (SSH) / **health & disk & update** sensors
 - Data & services: **MSSQL, PostgreSQL, MySQL/MariaDB, Docker, Windows Event Log, Mail round-trip**
 - Scripting: **PowerShell Remote, Local Script, Local Program** (allow-listed)
+- Logs: **Syslog Messages** (a device's errors and warnings in the last hour, and how long it has been quiet)
+  and **Syslog Match** (a phrase or regular expression in its messages) - read from Matmon's own syslog server
 
 **Alerts & notifications**
 - Alerts are **Alerta-style**: they stay until acknowledged, with **mute** (timed or permanent) and
@@ -52,6 +54,8 @@ optional and connect outbound, so they work behind firewalls and NAT.
 
 **Operations**
 - **Remote probes** connect outbound to the primary — no inbound ports at the remote site
+- A built-in **syslog server** (UDP + TCP, off until you switch it on) keeps the logs of your switches, routers and
+  servers searchable - including what a switch forgets when it reboots
 - **Maps / wallboards** with tiles that roll up sensor state (element- or tag-targeted)
 - **Dark & light** themes, a mobile-responsive UI, users with **Viewer / User / Admin** roles and
   optional two-factor sign-in
@@ -164,7 +168,26 @@ it at your primary:
 
 The probe then appears in the tree; assign sensors to it and it executes them from its own network.
 
-### 3. From source
+### 3. Receive syslog from your devices (optional)
+
+Matmon can be the syslog server for your switches, routers and servers. It is **off until you switch it on**
+(*Syslog → Settings*), and a container only receives what you publish, so add the port next to `8099`:
+
+```yaml
+    ports:
+      - "8099:8099"
+      - "514:514/udp"   # what most devices send
+      - "514:514/tcp"   # optional
+```
+
+Then enter the Matmon host as the syslog server in each device and give it a *Syslog Messages* sensor (the
+*Senders* tab adds one with a click). Messages are kept for 14 days by default and ordered by the time they
+**arrive** - a switch that has just rebooted often has a wrong clock. Two things worth knowing: on Docker Desktop
+(Windows, macOS) every message arrives from Docker's own gateway address instead of the device's, so identify
+devices by the *host name* they put in the message; and syslog has no login, so use *Allowed sources* to say
+who may write to the log.
+
+### 4. From source
 
 The repository's `docker-compose.yml` also carries a `build:` section, so you can build the image
 locally instead of pulling it:
@@ -194,6 +217,7 @@ of them are optional:
 | `Matmon__CloudHeartbeatIntervalSeconds` | `30` | How often the primary checks in with Matmon.Cloud (if linked) |
 | `Matmon__AllowedProgramPaths` | – | Allow-list for the *Local Program* sensor (`;`-separated) |
 | `Matmon__WorkspacePath` | `data/workspace.json` | Where state is stored (inside `/app/data`) |
+| `Matmon__SyslogPath` | `data/syslog.db` | Where received syslog messages are stored |
 
 Secondary probes additionally take `Matmon__ProbeId`, `Matmon__ProbeName`, `Matmon__ProbeToken`
 and `Matmon__PrimaryUrl` (see the remote-probe example above). The Matmon.Cloud link is set up in
@@ -207,6 +231,7 @@ Everything Matmon owns lives under one directory — one volume to back up or mo
 /app/data
 ├─ workspace.json          topology, templates, notifications, maps, users, settings
 ├─ telemetry.db            SQLite: observations, events, statistics (WAL)
+├─ syslog.db               SQLite: received syslog messages (only once the receiver is on)
 ├─ dataprotection-keys/    encryption keys (credentials + secrets at rest)
 └─ backups/                local config backups
 ```

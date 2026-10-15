@@ -90,6 +90,13 @@
                     @MatmonIcons.Render("pencil")
                     <span>Edit</span>
                 </a>
+                @if (Model.SyslogLogRoute is { } syslogRoute)
+                {
+                    <a class="workspace-action-link" asp-page="/Syslog" asp-all-route-data="@syslogRoute" title="The messages this sensor counts" aria-label="Open the log">
+                        @MatmonIcons.Render("list")
+                        <span>Log</span>
+                    </a>
+                }
                 <form method="post" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
                     <button type="submit" class="workspace-secondary-submit" title="Run now" aria-label="Run now">
                         @MatmonIcons.Render("spark")

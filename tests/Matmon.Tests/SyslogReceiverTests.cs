@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -490,6 +491,32 @@ public sealed class SyslogReceiverTests : IDisposable
 
         Assert.True(ok, message);
         Assert.Contains("syslog self test", message);
+    }
+
+    [Fact]
+    public async Task TheSelfTestSendsAProperlyDatedLineWhateverLanguageTheMachineSpeaks()
+    {
+        // The first version stamped the line with the machine's own month name - "Okt." on a German one - which no
+        // syslog parser reads as a time stamp, so the stored message had no host and no program.
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+        try
+        {
+            var settings = Settings();
+            _service.Reconcile(settings);
+
+            var (ok, message) = await SyslogSelfTest.RunAsync(settings, _store, _state);
+
+            Assert.True(ok, message);
+            var stored = Assert.Single(await WaitForMessages(1));
+            Assert.Equal("matmon", stored.Hostname);
+            Assert.Equal("matmon-test", stored.AppName);
+            Assert.StartsWith("syslog self test", stored.Message);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
     }
 
     [Fact]

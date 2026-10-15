@@ -37,7 +37,8 @@ public interface ISyslogStore
     /// <summary>When the newest retained message from any of these senders arrived - the "has it gone quiet?" signal.</summary>
     DateTimeOffset? LastReceived(IReadOnlyList<string> sources);
 
-    IReadOnlyList<SyslogSourceSummary> GetSources(DateTimeOffset sinceUtc);
+    /// <summary>Who has been sending since then, one entry per (address, host name) pair, newest first.</summary>
+    IReadOnlyList<SyslogSenderSummary> GetSenders(DateTimeOffset sinceUtc);
 
     SyslogStorageInfo GetStorageInfo();
 
@@ -322,35 +323,33 @@ public sealed class SyslogStore : ISyslogStore, IDisposable
             null);
     }
 
-    public IReadOnlyList<SyslogSourceSummary> GetSources(DateTimeOffset sinceUtc) =>
+    public IReadOnlyList<SyslogSenderSummary> GetSenders(DateTimeOffset sinceUtc) =>
         Read(
             connection =>
             {
                 using var command = connection.CreateCommand();
                 command.CommandText =
                     """
-                    SELECT source, COUNT(*), SUM(CASE WHEN severity <= 3 THEN 1 ELSE 0 END), MAX(received_ms), group_concat(DISTINCT hostname)
+                    SELECT source, hostname, COUNT(*), SUM(CASE WHEN severity <= 3 THEN 1 ELSE 0 END), MAX(received_ms)
                     FROM syslog_message WHERE received_ms >= $since
-                    GROUP BY source ORDER BY MAX(received_ms) DESC LIMIT 500
+                    GROUP BY source COLLATE NOCASE, hostname COLLATE NOCASE
+                    ORDER BY MAX(received_ms) DESC LIMIT 1000
                     """;
                 command.Parameters.AddWithValue("$since", sinceUtc.ToUnixTimeMilliseconds());
 
-                var result = new List<SyslogSourceSummary>();
+                var result = new List<SyslogSenderSummary>();
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    var hostnames = reader.IsDBNull(4)
-                        ? []
-                        : reader.GetString(4).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    result.Add(new SyslogSourceSummary(
+                    result.Add(new SyslogSenderSummary(
                         reader.GetString(0),
-                        hostnames,
-                        reader.GetInt64(1),
-                        reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
-                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(3))));
+                        reader.IsDBNull(1) || string.IsNullOrWhiteSpace(reader.GetString(1)) ? null : reader.GetString(1),
+                        reader.GetInt64(2),
+                        reader.IsDBNull(3) ? 0 : reader.GetInt64(3),
+                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(4))));
                 }
 
-                return (IReadOnlyList<SyslogSourceSummary>)result;
+                return (IReadOnlyList<SyslogSenderSummary>)result;
             },
             []);
 

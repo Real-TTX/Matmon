@@ -10,6 +10,10 @@ services:
     restart: unless-stopped
     ports:
       - "8099:8099"
+      # Receive syslog from your switches, routers and servers: switch the receiver on under
+      # Syslog > Settings, then publish its port. UDP is what most devices send; TCP is optional.
+      # - "514:514/udp"
+      # - "514:514/tcp"
     environment:
       TZ: Europe/Berlin
     volumes:

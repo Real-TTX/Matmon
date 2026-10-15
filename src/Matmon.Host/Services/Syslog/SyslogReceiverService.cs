@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -222,8 +223,12 @@ public static class SyslogSelfTest
             return (false, "Neither the UDP nor the TCP listener is running: " + (snapshot.Udp.Detail ?? snapshot.Tcp.Detail ?? "see the status above."));
         }
 
+        // RFC 3164 time stamp, which is English whatever the language of this machine is ("Okt." is not a month a
+        // syslog parser knows): the test must send what a real device sends, or it proves nothing about the parser.
         var marker = Guid.NewGuid().ToString("N")[..8];
-        var line = $"<14>{DateTime.Now:MMM d HH:mm:ss} matmon matmon-test: syslog self test {marker}";
+        var local = DateTime.Now;
+        var stamp = string.Create(CultureInfo.InvariantCulture, $"{local:MMM} {local.Day,2} {local:HH:mm:ss}");
+        var line = $"<14>{stamp} matmon matmon-test: syslog self test {marker}";
         var bytes = Encoding.UTF8.GetBytes(line);
         var rejectedBefore = snapshot.Rejected;
         var sentAt = DateTimeOffset.UtcNow.AddSeconds(-1);

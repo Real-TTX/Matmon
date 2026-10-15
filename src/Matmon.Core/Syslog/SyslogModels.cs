@@ -177,10 +177,15 @@ public sealed record SyslogCounts(long Total, IReadOnlyList<long> BySeverity)
     }
 }
 
-/// <summary>One sender as the Sources tab shows it.</summary>
-public sealed record SyslogSourceSummary(
+/// <summary>
+/// What one (address, host name) pair has sent: the building block of the Senders tab. The pair, not the address alone,
+/// because the address is only where the packet came FROM - behind a syslog relay, or Docker's gateway, many devices
+/// share one, and then the host name in their messages is the only thing that tells them apart. A message with no host
+/// name has a null <see cref="Hostname"/>.
+/// </summary>
+public sealed record SyslogSenderSummary(
     string SourceAddress,
-    IReadOnlyList<string> Hostnames,
+    string? Hostname,
     long Messages,
     long Errors,
     DateTimeOffset LastReceivedUtc);

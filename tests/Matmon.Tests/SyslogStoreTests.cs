@@ -360,25 +360,31 @@ public sealed class SyslogStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task TheSourcesTabSummarisesEachSender()
+    public async Task TheSendersTabSummarisesEachAddressAndHostNamePair()
     {
         var store = NewStore();
         await Fill(store,
             Message("a", source: "10.0.0.2", hostname: "sw1", severity: 3, minutesAgo: 20),
-            Message("b", source: "10.0.0.2", hostname: "sw1", severity: 6, minutesAgo: 10),
+            Message("b", source: "10.0.0.2", hostname: "SW1", severity: 6, minutesAgo: 10),
             Message("c", source: "10.0.0.2", hostname: "sw1-alias", severity: 6, minutesAgo: 5),
             Message("d", source: "10.0.0.7", severity: 6, minutesAgo: 1),
             Message("old", source: "10.0.0.8", minutesAgo: 600));
 
-        var sources = store.GetSources(Now.AddHours(-1));
+        var senders = store.GetSenders(Now.AddHours(-1));
 
-        Assert.Equal(["10.0.0.7", "10.0.0.2"], sources.Select(s => s.SourceAddress)); // newest first; the stale one is outside the window
-        var first = sources.Single(s => s.SourceAddress == "10.0.0.2");
-        Assert.Equal(3, first.Messages);
-        Assert.Equal(1, first.Errors);
-        Assert.Equal(["sw1", "sw1-alias"], first.Hostnames.Order());
-        Assert.Equal(Now.AddMinutes(-5), first.LastReceivedUtc);
-        Assert.Empty(sources.Single(s => s.SourceAddress == "10.0.0.7").Hostnames);
+        // newest first; the stale one is outside the window
+        Assert.Equal(["10.0.0.7", "10.0.0.2", "10.0.0.2"], senders.Select(s => s.SourceAddress));
+        Assert.Null(senders[0].Hostname);
+
+        // one entry per host name behind an address - sw1 and SW1 are one name - so a relay's devices stay apart
+        var alias = senders.Single(s => s.Hostname == "sw1-alias");
+        Assert.Equal(1, alias.Messages);
+        Assert.Equal(Now.AddMinutes(-5), alias.LastReceivedUtc);
+
+        var sw1 = senders.Single(s => string.Equals(s.Hostname, "sw1", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, sw1.Messages);
+        Assert.Equal(1, sw1.Errors);
+        Assert.Equal(Now.AddMinutes(-10), sw1.LastReceivedUtc);
     }
 
     [Fact]
@@ -491,7 +497,7 @@ public sealed class SyslogStoreTests : IDisposable
         Assert.Empty(store.Search(new SyslogQuery(), 10));
         Assert.Equal(SyslogCounts.Empty, store.Count(new SyslogQuery()));
         Assert.Null(store.LastReceived(["10.0.0.2"]));
-        Assert.Empty(store.GetSources(Now.AddDays(-1)));
+        Assert.Empty(store.GetSenders(Now.AddDays(-1)));
         Assert.Equal(0, store.Prune(Now, 10));
     }
 

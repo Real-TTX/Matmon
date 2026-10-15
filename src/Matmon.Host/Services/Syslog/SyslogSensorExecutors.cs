@@ -111,7 +111,8 @@ internal static class SyslogSensorSupport
             ? text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(20).ToArray()
             : [];
 
-    private static IReadOnlyList<string> SplitList(string? text) =>
+    /// <summary>A list typed into one field: commas, semicolons, spaces or new lines between the entries.</summary>
+    public static IReadOnlyList<string> SplitList(string? text) =>
         (text ?? string.Empty)
             .Split([',', ';', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
