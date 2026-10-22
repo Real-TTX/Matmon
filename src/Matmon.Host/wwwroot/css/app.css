@@ -8,7 +8,10 @@
 
 /* ---- Inside the Matmon.Cloud console: no menu and no header bar, the cloud draws one menu around the frame ---- */
 .mat-app.mm-embedded { display: block; }
-.mat-app.mm-embedded > .mat-main { min-height: 100vh; min-height: 100dvh; }
+/* The shell is exactly one window high and clips (MatUi: the page never scrolls, .mat-main does). Without the menu's grid
+   track .mat-main has to be given that height itself - with only a min-height it grew with its content, never became
+   the scroller, and everything below the first screen was cut off and unreachable in the console. */
+.mat-app.mm-embedded > .mat-main { height: 100%; }
 
 /* ---- A partner's logo above its name instead of beside it (the white label's "stacked" sidebar style) ---- */
 .mat-nav__brand .mm-brand--stacked { flex-direction: column; align-items: flex-start; gap: var(--mat-space-2); }
