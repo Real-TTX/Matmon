@@ -51,7 +51,7 @@
                         <span class="mat-switch__track"></span>
                         <span><strong>Receive SNMP traps</strong></span>
                     </label>
-                    <span class="mat-hint" id="traps-enabled-hint">Off by default: switching it on opens a UDP port that takes traps from the sources allowed below. SNMPv1 and v2c traps and informs; v3 is not supported yet.</span>
+                    <span class="mat-hint" id="traps-enabled-hint">Off by default: switching it on opens a UDP port that takes traps from the sources allowed below. SNMPv1 and v2c traps and informs, and SNMPv3 traps from the users set up below.</span>
                 </div>
 
                 <div class="mat-form__grid">
@@ -109,7 +109,7 @@
                 <dt>Refused</dt>
                 <dd><span class="mat-mono">@receiver.Rejected.ToString("N0")</span> <span class="mat-text-muted">not in Allowed sources, or another community</span></dd>
                 <dt>Unreadable</dt>
-                <dd><span class="mat-mono">@receiver.Unreadable.ToString("N0")</span> <span class="mat-text-muted">not a v1/v2c trap (an SNMPv3 trap counts here)</span></dd>
+                <dd><span class="mat-mono">@receiver.Unreadable.ToString("N0")</span> <span class="mat-text-muted">not a trap, or an SNMPv3 trap that failed its check (unknown user, wrong password)</span></dd>
                 <dt>Sensors polled</dt>
                 <dd><span class="mat-mono">@receiver.WokenSensors.ToString("N0")</span> <span class="mat-text-muted">because their device sent a trap</span></dd>
             </dl>
@@ -122,10 +122,73 @@
     </section>
 </div>
 
+<section class="mat-card" id="v3-users">
+    <div class="mat-card__head">@MatUi.Icon("lock")<h2 class="mat-card__title">SNMPv3 users</h2><span class="mat-text-muted mm-push-end">optional</span></div>
+    <div class="mat-card__body">
+        <form method="post" asp-page-handler="SaveUsers" class="mat-form" novalidate>
+            @if (!string.IsNullOrWhiteSpace(Model.UsersFormError))
+            {
+                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.UsersFormError</div></div>
+            }
+
+            <p class="mat-text-muted">An SNMPv3 trap is signed (and optionally encrypted) with a user's passwords - unlike a community, which travels in clear text. Enter the same user, protocols and passwords as on the device; the device's engine ID is taken from each trap, nothing to enter here. Empty a user name to remove it. Without any user, v3 traps are refused.</p>
+
+            @for (var i = 0; i < Model.V3Users.Count; i++)
+            {
+                var row = Model.V3Users[i];
+                if (i > 0)
+                {
+                    <hr class="mat-divider" />
+                }
+                <input type="hidden" asp-for="V3Users[i].OriginalUsername" />
+                <div class="mat-form__grid mat-form__grid--3">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="V3Users[i].Username">User name</label>
+                        <input asp-for="V3Users[i].Username" class="mat-input mat-mono" maxlength="32" autocomplete="off" placeholder="@(string.IsNullOrEmpty(row.OriginalUsername) ? "new user" : string.Empty)" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="V3Users[i].AuthProtocol">Authentication</label>
+                        <select asp-for="V3Users[i].AuthProtocol" class="mat-select">
+                            @foreach (var (value, label) in Matmon.Core.Domain.SnmpV3Crypto.AuthOptions)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="V3Users[i].AuthPassword">Authentication password</label>
+                        <input asp-for="V3Users[i].AuthPassword" type="password" class="mat-input" autocomplete="new-password" placeholder="@(row.HasAuthPassword ? "stored - leave empty to keep" : "at least 8 characters")" />
+                    </div>
+                </div>
+                <div class="mat-form__grid mat-form__grid--3">
+                    <div aria-hidden="true"></div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="V3Users[i].PrivProtocol">Privacy (encryption)</label>
+                        <select asp-for="V3Users[i].PrivProtocol" class="mat-select">
+                            @foreach (var (value, label) in Matmon.Core.Domain.SnmpV3Crypto.PrivOptions)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="V3Users[i].PrivPassword">Privacy password</label>
+                        <input asp-for="V3Users[i].PrivPassword" type="password" class="mat-input" autocomplete="new-password" placeholder="@(row.HasPrivPassword ? "stored - leave empty to keep" : "empty = the authentication password")" />
+                    </div>
+                </div>
+            }
+
+            <div class="mat-btn-row">
+                <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save users</span></button>
+            </div>
+        </form>
+    </div>
+</section>
+
 <section class="mat-card">
     <div class="mat-card__head">@MatUi.Icon("help-circle")<h2 class="mat-card__title">Pointing a device at it</h2></div>
     <div class="mat-card__body mat-prose">
-        <p>In the device's SNMP settings, add a trap receiver (also called trap destination or trap host): <code>@Model.ReceiverHost</code>, UDP port <code>@settings.Port</code>, version v2c (or v1), with the community set above. A UPS network card usually lists the events it sends a trap for - "on battery" and "battery low" are the ones to tick.</p>
+        <p>In the device's SNMP settings, add a trap receiver (also called trap destination or trap host): <code>@Model.ReceiverHost</code>, UDP port <code>@settings.Port</code>, version v2c (or v1) with the community set above - or v3 with one of the users above (v3 informs are not supported: choose "trap"). A UPS network card usually lists the events it sends a trap for - "on battery" and "battery low" are the ones to tick.</p>
         <p>Every trap lands in the central log with the names from the MIB library (upload a vendor's MIB under System > MIBs to get readable names for its traps). A <strong>Syslog Match</strong> sensor on the phrase - for example <code>upsTrapOnBattery</code> - turns a trap into an alert of its own; the device's other sensors poll at once when the switch above is on.</p>
         <p>In Docker the port has to be published: <code>-p 162:162/udp</code> (or the commented line in <code>docker-compose.yml</code>). On Docker Desktop (Windows, macOS) a trap then arrives from the gateway address, not from the device - the sensors of that device cannot be told apart and are not polled; on Linux the device's own address arrives.</p>
     </div>

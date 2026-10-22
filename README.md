@@ -63,7 +63,7 @@ optional and connect outbound, so they work behind firewalls and NAT.
 - **Remote probes** connect outbound to the primary — no inbound ports at the remote site
 - A built-in **syslog server** (UDP + TCP, off until you switch it on) keeps the logs of your switches, routers and
   servers searchable - including what a switch forgets when it reboots
-- A built-in **SNMP trap receiver** (v1, v2c and informs; off until you switch it on): a trap lands in the same
+- A built-in **SNMP trap receiver** (v1, v2c, informs and signed/encrypted SNMPv3 traps; off until you switch it on): a trap lands in the same
   log, and the sending device's sensors poll at once - a UPS that sends "on battery" is red within seconds
 - **Maps / wallboards** with tiles that roll up sensor state (element- or tag-targeted)
 - **Dark & light** themes, a mobile-responsive UI, users with **Viewer / User / Admin** roles and

@@ -646,7 +646,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return (double)value;
     }
 
-    private static string DecodeOctetString(ReadOnlySpan<byte> content)
+    internal static string DecodeOctetString(ReadOnlySpan<byte> content)
     {
         if (content.Length == 0)
         {
@@ -1260,7 +1260,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             privKey);
     }
 
-    private static SnmpV3MessageParts ParseV3Message(byte[] payload)
+    internal static SnmpV3MessageParts ParseV3Message(byte[] payload)
     {
         var reader = new BerReader(payload);
         var messageElement = reader.ReadElement();
@@ -1348,7 +1348,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         }
     }
 
-    private static byte[] BuildV3MessageBytes(
+    internal static byte[] BuildV3MessageBytes(
         SnmpV3Header header,
         SnmpV3SecurityParameters securityParameters,
         byte[] dataBytes)
@@ -1477,9 +1477,9 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         byte[] AuthKey,
         byte[] PrivKey);
 
-    private sealed record SnmpV3Header(int MessageId, int MaxMessageSize, byte Flags, int SecurityModel);
+    internal sealed record SnmpV3Header(int MessageId, int MaxMessageSize, byte Flags, int SecurityModel);
 
-    private sealed record SnmpV3SecurityParameters(
+    internal sealed record SnmpV3SecurityParameters(
         byte[] EngineId,
         int EngineBoots,
         int EngineTime,
@@ -1487,7 +1487,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         byte[] AuthParameters,
         byte[] PrivParameters);
 
-    private sealed record SnmpV3MessageParts(
+    internal sealed record SnmpV3MessageParts(
         SnmpV3Header Header,
         SnmpV3SecurityParameters SecurityParameters,
         BerElement DataElement);

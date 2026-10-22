@@ -2682,6 +2682,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 () => job.Passphrase, v => job.Passphrase = v, () => job.ProtectedPassphrase, v => job.ProtectedPassphrase = v,
                 () => job.PassphraseHydrationFailed, v => job.PassphraseHydrationFailed = v);
         }
+        // SNMPv3 trap users: their authentication and privacy passwords.
+        foreach (var user in document.SnmpTraps?.V3Users ?? [])
+        {
+            yield return new SecretSlot(
+                () => user.AuthPassword, v => user.AuthPassword = v, () => user.ProtectedAuthPassword, v => user.ProtectedAuthPassword = v,
+                () => user.AuthPasswordHydrationFailed, v => user.AuthPasswordHydrationFailed = v);
+            yield return new SecretSlot(
+                () => user.PrivPassword, v => user.PrivPassword = v, () => user.ProtectedPrivPassword, v => user.ProtectedPrivPassword = v,
+                () => user.PrivPasswordHydrationFailed, v => user.PrivPasswordHydrationFailed = v);
+        }
     }
 
     private void HydrateNotificationSecrets(WorkspaceDocument document, IDataProtector? protector = null)

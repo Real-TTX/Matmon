@@ -132,6 +132,7 @@ public sealed class SnmpTrapIngest
     private volatile IpAllowList _allowList = IpAllowList.Parse(null, out _);
     private volatile IReadOnlyList<string> _communities = [];
     private volatile bool _pollOnTrap = true;
+    private volatile IReadOnlyList<SnmpTrapV3User> _v3Users = [];
 
     public SnmpTrapIngest(ISyslogStore store, SnmpTrapReceiverState state, ILogger<SnmpTrapIngest> logger, MibLibrary? mibs = null, SensorWakeService? wake = null)
     {
@@ -142,11 +143,12 @@ public sealed class SnmpTrapIngest
         _wake = wake;
     }
 
-    public void Configure(IpAllowList allowList, IReadOnlyList<string> communities, bool pollOnTrap)
+    public void Configure(IpAllowList allowList, IReadOnlyList<string> communities, bool pollOnTrap, IReadOnlyList<SnmpTrapV3User>? v3Users = null)
     {
         _allowList = allowList;
         _communities = communities;
         _pollOnTrap = pollOnTrap;
+        _v3Users = v3Users ?? [];
     }
 
     /// <summary>Handles one datagram; returns the bytes to send back (an inform's response) or null.</summary>
@@ -160,13 +162,14 @@ public sealed class SnmpTrapIngest
             return null;
         }
 
-        if (!SnmpTrapParser.TryParse(datagram, out var trap, out var error) || trap is null)
+        if (!SnmpTrapParser.TryParse(datagram, _v3Users, out var trap, out var error) || trap is null)
         {
             _state.Unreadable($"{source}: {error}", now);
             return null;
         }
 
-        if (_communities.Count > 0 && !_communities.Contains(trap.Community, StringComparer.Ordinal))
+        // A v3 trap has no community: the user it came from passed authentication, which is the stronger check.
+        if (trap.Version != 3 && _communities.Count > 0 && !_communities.Contains(trap.Community, StringComparer.Ordinal))
         {
             _state.Rejected();
             return null;
@@ -560,7 +563,7 @@ public sealed class SnmpTrapReceiverService : BackgroundService
         var normalized = settings.Normalized();
         var allowList = IpAllowList.Parse(normalized.AllowedSources, out var invalid);
         // Communities and the poll switch change without touching the socket.
-        _ingest.Configure(allowList, normalized.CommunityList(), normalized.PollOnTrap);
+        _ingest.Configure(allowList, normalized.CommunityList(), normalized.PollOnTrap, normalized.V3Users);
 
         var signature = normalized.ListenerSignature();
         if (signature == _signature)

@@ -30,13 +30,20 @@ public sealed class SnmpTrapSettings
     /// On by default: a UPS that sends "on battery" should be red within seconds, not 30 s later.</summary>
     public bool PollOnTrap { get; set; } = true;
 
+    /// <summary>SNMPv3 users a v3 trap may come from (USM: authentication and privacy keyed to the SENDER's engine id).
+    /// Their passwords are encrypted at rest like every other secret.</summary>
+    public List<SnmpTrapV3User> V3Users { get; set; } = [];
+
+    public const int MaxV3Users = 10;
+
     public SnmpTrapSettings Clone() => new()
     {
         Enabled = Enabled,
         Port = Port,
         AllowedSources = AllowedSources,
         Communities = Communities,
-        PollOnTrap = PollOnTrap
+        PollOnTrap = PollOnTrap,
+        V3Users = V3Users.Select(user => user.Clone()).ToList()
     };
 
     public SnmpTrapSettings Normalized()
@@ -45,6 +52,18 @@ public sealed class SnmpTrapSettings
         copy.Port = copy.Port is >= 1 and <= 65535 ? copy.Port : DefaultPort;
         copy.AllowedSources = string.IsNullOrWhiteSpace(copy.AllowedSources) ? null : copy.AllowedSources.Trim();
         copy.Communities = string.IsNullOrWhiteSpace(copy.Communities) ? null : copy.Communities.Trim();
+        copy.V3Users = copy.V3Users
+            .Where(user => !string.IsNullOrWhiteSpace(user.Username))
+            .Select(user =>
+            {
+                user.Username = user.Username.Trim();
+                user.AuthProtocol = SnmpV3Crypto.ParseAuth(user.AuthProtocol) is null ? "sha1" : (user.AuthProtocol ?? "sha1").Trim().ToLowerInvariant();
+                user.PrivProtocol = SnmpV3Crypto.ParsePriv(user.PrivProtocol) is null || SnmpV3Crypto.ParseAuth(user.AuthProtocol) == SnmpV3AuthProtocol.None ? "none" : (user.PrivProtocol ?? "none").Trim().ToLowerInvariant();
+                return user;
+            })
+            .DistinctBy(user => user.Username, StringComparer.Ordinal)
+            .Take(MaxV3Users)
+            .ToList();
         return copy;
     }
 
@@ -57,6 +76,44 @@ public sealed class SnmpTrapSettings
 
     /// <summary>Everything that decides which socket is open and who may use it - a change means a new listener.</summary>
     public string ListenerSignature() => $"{Enabled}|{Port}|{AllowedSources?.Trim()}";
+}
+
+/// <summary>One SNMPv3 user of the trap receiver. The passwords live in memory in the clear and are written to
+/// workspace.json only DataProtection-encrypted (<see cref="ProtectedAuthPassword"/> / <see cref="ProtectedPrivPassword"/>).</summary>
+public sealed class SnmpTrapV3User
+{
+    public string Username { get; set; } = string.Empty;
+
+    /// <summary>none, md5, sha1, sha224, sha256, sha384, sha512 (<see cref="SnmpV3Crypto.ParseAuth"/>).</summary>
+    public string AuthProtocol { get; set; } = "sha1";
+
+    public string? AuthPassword { get; set; }
+
+    public string? ProtectedAuthPassword { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore] public bool AuthPasswordHydrationFailed { get; set; }
+
+    /// <summary>none, des, 3des, aes128, aes192, aes256, aes192c, aes256c (<see cref="SnmpV3Crypto.ParsePriv"/>).</summary>
+    public string PrivProtocol { get; set; } = "none";
+
+    public string? PrivPassword { get; set; }
+
+    public string? ProtectedPrivPassword { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore] public bool PrivPasswordHydrationFailed { get; set; }
+
+    public SnmpTrapV3User Clone() => new()
+    {
+        Username = Username,
+        AuthProtocol = AuthProtocol,
+        AuthPassword = AuthPassword,
+        ProtectedAuthPassword = ProtectedAuthPassword,
+        AuthPasswordHydrationFailed = AuthPasswordHydrationFailed,
+        PrivProtocol = PrivProtocol,
+        PrivPassword = PrivPassword,
+        ProtectedPrivPassword = ProtectedPrivPassword,
+        PrivPasswordHydrationFailed = PrivPasswordHydrationFailed
+    };
 }
 
 public enum SnmpTrapPduType
@@ -98,7 +155,11 @@ public static class SnmpTrapParser
     public const string SnmpTrapAddressOid = "1.3.6.1.6.3.18.1.3.0";
     private const string GenericTrapPrefix = "1.3.6.1.6.3.1.1.5.";
 
-    public static bool TryParse(ReadOnlySpan<byte> datagram, out SnmpTrap? trap, out string? error)
+    public static bool TryParse(ReadOnlySpan<byte> datagram, out SnmpTrap? trap, out string? error) =>
+        TryParse(datagram, [], out trap, out error);
+
+    /// <param name="v3Users">The users an SNMPv3 trap is checked against; without any, a v3 trap is refused.</param>
+    public static bool TryParse(ReadOnlySpan<byte> datagram, IReadOnlyList<SnmpTrapV3User> v3Users, out SnmpTrap? trap, out string? error)
     {
         trap = null;
         error = null;
@@ -113,8 +174,7 @@ public static class SnmpTrapParser
             var version = SnmpSensorExecutor.DecodeSignedInteger(versionElement.Content);
             if (version == 3)
             {
-                error = "SNMPv3 traps are not supported yet - send v2c (or v1) traps.";
-                return false;
+                return TryParseV3(datagram.ToArray(), v3Users, out trap, out error);
             }
 
             if (version is not (0 or 1))
@@ -143,11 +203,147 @@ public static class SnmpTrapParser
 
             return true;
         }
-        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or IndexOutOfRangeException)
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or IndexOutOfRangeException or System.Security.Cryptography.CryptographicException)
         {
             error = $"Not a readable SNMP message: {exception.Message}";
             return false;
         }
+    }
+
+    /// <summary>
+    /// An SNMPv3 trap (RFC 3414 USM). The sender of a trap is the authoritative engine, so the keys are localised with
+    /// the engine id the MESSAGE carries; the user and its protocols come from the settings. The authentication is the
+    /// HMAC over the whole message with the auth parameters zeroed, the privacy part decrypts the ScopedPDU. A message
+    /// asking for less security than its user is configured for is refused (no downgrade), and so is an inform - its
+    /// receiver would have to be the authoritative engine, which needs engine-id discovery. Not checked: the time
+    /// window against replays (the receiver keeps no notion of each sender's engine time yet).
+    /// </summary>
+    private static bool TryParseV3(byte[] datagram, IReadOnlyList<SnmpTrapV3User> users, out SnmpTrap? trap, out string? error)
+    {
+        trap = null;
+        if (users.Count == 0)
+        {
+            error = "An SNMPv3 trap arrived, but no SNMPv3 user is set up under System > SNMP traps.";
+            return false;
+        }
+
+        var parts = SnmpSensorExecutor.ParseV3Message(datagram);
+        var security = parts.SecurityParameters;
+        var user = users.FirstOrDefault(candidate => string.Equals(candidate.Username, security.UserName, StringComparison.Ordinal));
+        if (user is null)
+        {
+            error = $"An SNMPv3 trap from the unknown user '{security.UserName}'.";
+            return false;
+        }
+
+        var auth = SnmpV3Crypto.ParseAuth(user.AuthProtocol) ?? SnmpV3AuthProtocol.None;
+        var priv = SnmpV3Crypto.ParsePriv(user.PrivProtocol) ?? SnmpV3PrivProtocol.None;
+        var hasAuth = (parts.Header.Flags & 0x01) != 0;
+        var hasPriv = (parts.Header.Flags & 0x02) != 0;
+        if ((auth != SnmpV3AuthProtocol.None && !hasAuth) || (priv != SnmpV3PrivProtocol.None && !hasPriv))
+        {
+            error = $"The SNMPv3 trap from '{user.Username}' is less protected than the user is set up for (authentication/privacy) - refused.";
+            return false;
+        }
+
+        if (hasAuth)
+        {
+            if (auth == SnmpV3AuthProtocol.None)
+            {
+                error = $"The SNMPv3 trap from '{user.Username}' is authenticated, but the user has no authentication protocol set up.";
+                return false;
+            }
+
+            var key = SnmpV3Crypto.LocalizedKey(auth, user.AuthPassword ?? string.Empty, security.EngineId);
+            var zeroed = security with { AuthParameters = new byte[security.AuthParameters.Length] };
+            var reconstructed = SnmpSensorExecutor.BuildV3MessageBytes(parts.Header, zeroed, SnmpSensorExecutor.EncodeTagged(parts.DataElement.Tag, parts.DataElement.Content));
+            var digest = SnmpV3Crypto.Mac(auth, key, reconstructed);
+            if (digest.Length != security.AuthParameters.Length || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(digest, security.AuthParameters))
+            {
+                error = $"The SNMPv3 trap from '{user.Username}' failed authentication - wrong password or protocol.";
+                return false;
+            }
+        }
+
+        byte[] scoped;
+        if (hasPriv)
+        {
+            if (priv == SnmpV3PrivProtocol.None || auth == SnmpV3AuthProtocol.None)
+            {
+                error = $"The SNMPv3 trap from '{user.Username}' is encrypted, but the user has no privacy protocol set up.";
+                return false;
+            }
+
+            SnmpSensorExecutor.EnsureTag(parts.DataElement.Tag, 0x04, "SNMP v3 encrypted PDU");
+            var privKey = SnmpV3Crypto.PrivacyKey(auth, priv, string.IsNullOrEmpty(user.PrivPassword) ? user.AuthPassword ?? string.Empty : user.PrivPassword, security.EngineId);
+            scoped = SnmpV3Crypto.Decrypt(priv, privKey, security.EngineBoots, security.EngineTime, security.PrivParameters, parts.DataElement.Content);
+        }
+        else
+        {
+            scoped = SnmpSensorExecutor.EncodeTagged(parts.DataElement.Tag, parts.DataElement.Content);
+        }
+
+        // ScopedPDU ::= SEQUENCE { contextEngineID, contextName, data }. A decrypted one may carry padding after it.
+        var scopedReader = new SnmpSensorExecutor.BerReader(scoped);
+        var scopedPdu = scopedReader.ReadElement();
+        SnmpSensorExecutor.EnsureTag(scopedPdu.Tag, 0x30, "SNMP v3 scoped PDU");
+        var fields = new SnmpSensorExecutor.BerReader(scopedPdu.Content);
+        _ = fields.ReadElement(); // contextEngineID
+        _ = fields.ReadElement(); // contextName
+        var pdu = fields.ReadElement();
+        if (pdu.Tag == 0xA6)
+        {
+            error = "SNMPv3 informs are not supported - set the device to send v3 traps (or v2c informs).";
+            return false;
+        }
+
+        if (pdu.Tag != 0xA7)
+        {
+            error = $"Not a trap (PDU type 0x{pdu.Tag:X2}).";
+            return false;
+        }
+
+        var v2 = ParseV2(user.Username, pdu.Content, SnmpTrapPduType.TrapV2);
+        trap = v2 with { Version = 3 };
+        error = null;
+        return true;
+    }
+
+    /// <summary>An SNMPv3 trap as a device sends it - for the tests (and the interop check with Net-SNMP).</summary>
+    public static byte[] BuildV3Trap(SnmpTrapV3User user, byte[] engineId, int engineBoots, int engineTime, string trapOid, TimeSpan uptime, IEnumerable<(string Oid, string Value)> values, byte[]? privSalt = null)
+    {
+        var auth = SnmpV3Crypto.ParseAuth(user.AuthProtocol) ?? SnmpV3AuthProtocol.None;
+        var priv = SnmpV3Crypto.ParsePriv(user.PrivProtocol) ?? SnmpV3PrivProtocol.None;
+
+        // The v2 trap PDU, taken out of a v2c message built the usual way.
+        var v2 = new SnmpSensorExecutor.BerReader(BuildV2Trap("x", trapOid, uptime, values));
+        var v2Fields = new SnmpSensorExecutor.BerReader(v2.ReadElement().Content);
+        _ = v2Fields.ReadElement();
+        _ = v2Fields.ReadElement();
+        var pdu = v2Fields.ReadElement();
+
+        var scoped = new List<byte>();
+        scoped.AddRange(SnmpSensorExecutor.EncodeOctetString(engineId));
+        scoped.AddRange(SnmpSensorExecutor.EncodeOctetString([]));
+        scoped.AddRange(SnmpSensorExecutor.EncodeTagged(pdu.Tag, pdu.Content));
+        var scopedPdu = SnmpSensorExecutor.EncodeSequence(scoped.ToArray());
+
+        var salt = priv == SnmpV3PrivProtocol.None ? [] : privSalt ?? System.Security.Cryptography.RandomNumberGenerator.GetBytes(8);
+        var data = priv == SnmpV3PrivProtocol.None
+            ? scopedPdu
+            : SnmpSensorExecutor.EncodeOctetString(SnmpV3Crypto.Encrypt(priv, SnmpV3Crypto.PrivacyKey(auth, priv, string.IsNullOrEmpty(user.PrivPassword) ? user.AuthPassword ?? string.Empty : user.PrivPassword, engineId), engineBoots, engineTime, salt, scopedPdu));
+        var flags = (byte)(auth == SnmpV3AuthProtocol.None ? 0x00 : priv == SnmpV3PrivProtocol.None ? 0x01 : 0x03);
+        var header = new SnmpSensorExecutor.SnmpV3Header(4711, 65507, flags, 3);
+        var authLength = auth == SnmpV3AuthProtocol.None ? 0 : SnmpV3Crypto.MacLength(auth);
+        var security = new SnmpSensorExecutor.SnmpV3SecurityParameters(engineId, engineBoots, engineTime, user.Username, new byte[authLength], salt);
+        var message = SnmpSensorExecutor.BuildV3MessageBytes(header, security, data);
+        if (auth == SnmpV3AuthProtocol.None)
+        {
+            return message;
+        }
+
+        var mac = SnmpV3Crypto.Mac(auth, SnmpV3Crypto.LocalizedKey(auth, user.AuthPassword ?? string.Empty, engineId), message);
+        return SnmpSensorExecutor.BuildV3MessageBytes(header, security with { AuthParameters = mac }, data);
     }
 
     private static SnmpTrap ParseV1(string community, byte[] content)
