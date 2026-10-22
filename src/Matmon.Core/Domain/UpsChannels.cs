@@ -190,6 +190,37 @@ public static class UpsChannels
         };
     }
 
+    /// <summary>
+    /// The values an APC card returned through its PowerNet-MIB (<see cref="UpsSnmpSensorExecutor.ApcOids"/>), with the
+    /// status codes the NUT snmp-ups driver uses for APC: upsBasicOutputStatus 3 = on battery, 9 / 10 / 16 / 17 = bypass;
+    /// upsBasicBatteryStatus 3 low, 4 fault, 5 = low battery; upsAdvBatteryReplaceIndicator 2 = replace. The runtime is a
+    /// TimeTicks value, read as seconds.
+    /// </summary>
+    public static UpsReading FromApc(IReadOnlyList<SensorChannelValue> channels)
+    {
+        ArgumentNullException.ThrowIfNull(channels);
+        double? Value(string key) => channels.FirstOrDefault(channel => string.Equals(channel.Key, key, StringComparison.OrdinalIgnoreCase))?.Value;
+
+        var outputStatus = Value("apc_output_status");
+        var batteryStatus = Value("apc_battery_status");
+        var replace = Value("apc_replace_battery");
+        var runtimeSeconds = Value("apc_runtime");
+        return new UpsReading
+        {
+            OnBattery = outputStatus is null ? null : outputStatus == 3,
+            OnBypass = outputStatus is null ? null : outputStatus is 9 or 10 or 16 or 17,
+            LowBattery = batteryStatus is null ? null : batteryStatus is 3 or 4 or 5,
+            ReplaceBattery = replace is null ? null : replace == 2,
+            ChargePercent = Value(BatteryCharge),
+            RuntimeMinutes = runtimeSeconds is double seconds ? Math.Round(seconds / 60.0, 1) : null,
+            LoadPercent = Value(LoadPercent),
+            InputVoltage = Value(InputVoltage),
+            OutputVoltage = Value(OutputVoltage),
+            BatteryVoltage = Value(BatteryVoltage),
+            TemperatureCelsius = Value(Temperature)
+        };
+    }
+
     /// <summary>The UPS channels added to (or, for a key it already has, merged into) what a read returned: the flags
     /// derived from the raw UPS-MIB values, and a unit and a readable label on the values it read.</summary>
     public static List<SensorChannelValue> Merge(IReadOnlyList<SensorChannelValue> existing, UpsReading reading)

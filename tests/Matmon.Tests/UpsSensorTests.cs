@@ -130,6 +130,68 @@ public sealed class UpsSensorTests : IDisposable
     }
 
     [Fact]
+    public void An_apc_card_read_through_powernet_gets_the_same_flags_and_runtime_in_minutes()
+    {
+        var settings = new MonitoringSettings();
+        SensorThresholdDefaults.Apply("ups-snmp", settings);
+        var read = SensorExecutionResult.Healthy(
+            TimeSpan.FromMilliseconds(30),
+            "Battery Charge: 96",
+            96,
+            "battery_charge",
+            [
+                new SensorChannelValue { Key = "battery_charge", Label = "Battery Charge", Value = 96, IsDefault = true },
+                new SensorChannelValue { Key = "apc_runtime", Label = "APC Runtime", Value = 1530, Unit = "s" },
+                new SensorChannelValue { Key = "apc_output_status", Label = "APC Output Status", Value = 3 },
+                new SensorChannelValue { Key = "apc_battery_status", Label = "APC Battery Status", Value = 2 },
+                new SensorChannelValue { Key = "apc_replace_battery", Label = "APC Replace Battery", Value = 2 }
+            ]);
+
+        var result = UpsSnmpSensorExecutor.ToUpsResult(read, settings);
+
+        Assert.Equal(SensorState.Critical, result.State);
+        Assert.Equal(1, Channel(result.Channels, UpsChannels.OnBattery));
+        Assert.Equal(0, Channel(result.Channels, UpsChannels.LowBattery));
+        Assert.Equal(1, Channel(result.Channels, UpsChannels.ReplaceBattery));
+        Assert.Equal(25.5, Channel(result.Channels, UpsChannels.RuntimeMinutes));
+        Assert.StartsWith("On battery - 96 % - 25.5 min left", result.Message);
+    }
+
+    [Theory]
+    [InlineData(2, false, false)]
+    [InlineData(3, true, false)]
+    [InlineData(9, false, true)]
+    [InlineData(17, false, true)]
+    [InlineData(12, false, false)] // on smart trim = still on mains
+    public void The_apc_output_status_codes_follow_the_nut_driver(int status, bool onBattery, bool onBypass)
+    {
+        var reading = UpsChannels.FromApc([new SensorChannelValue { Key = "apc_output_status", Value = status }]);
+
+        Assert.Equal(onBattery, reading.OnBattery);
+        Assert.Equal(onBypass, reading.OnBypass);
+        Assert.Null(reading.LowBattery); // not read, not guessed
+    }
+
+    [Fact]
+    public void The_mib_choice_picks_the_oid_list_unless_someone_edited_it()
+    {
+        var apc = new MonitoringSettings();
+        apc.Parameters[UpsSnmpSensorExecutor.ProfileParameter] = "apc";
+        // The editor fills the field with the standard list on create - switching to APC must still read APC.
+        apc.Parameters["snmp.oids"] = UpsSnmpSensorExecutor.DefaultOids.Replace("\n", "\r\n");
+        Assert.Equal(UpsSnmpSensorExecutor.ApcOids, UpsSnmpSensorExecutor.ResolveOids(apc));
+
+        var back = new MonitoringSettings();
+        back.Parameters["snmp.oids"] = UpsSnmpSensorExecutor.ApcOids;
+        Assert.Equal(UpsSnmpSensorExecutor.DefaultOids, UpsSnmpSensorExecutor.ResolveOids(back));
+
+        apc.Parameters["snmp.oids"] = "1.3.6.1.4.1.318.1.1.1.2.2.1.0|Battery Charge";
+        Assert.Equal("1.3.6.1.4.1.318.1.1.1.2.2.1.0|Battery Charge", UpsSnmpSensorExecutor.ResolveOids(apc));
+        Assert.All(UpsSnmpSensorExecutor.ApcOids.Split('\n', StringSplitOptions.RemoveEmptyEntries),
+            line => Assert.StartsWith("1.3.6.1.4.1.318.1.1.1.", line.Trim()));
+    }
+
+    [Fact]
     public void A_failed_snmp_read_is_passed_through_untouched()
     {
         var failed = SensorExecutionResult.Critical(TimeSpan.FromSeconds(3), "timeout");

@@ -41,7 +41,7 @@ optional and connect outbound, so they work behind firewalls and NAT.
 - Platforms: **Synology, Proxmox** (cluster + per-node), **VMware/vSphere, UniFi**, Windows /
   Linux (SSH) / **health & disk & update** sensors
 - Data & services: **MSSQL, PostgreSQL, MySQL/MariaDB, Docker, Windows Event Log, Mail round-trip**
-- Power: **UPS** over SNMP (network card, standard UPS-MIB) or **NUT** (a UPS on the USB port of a NAS,
+- Power: **UPS** over SNMP (network card, standard UPS-MIB or APC PowerNet) or **NUT** (a UPS on the USB port of a NAS,
   Proxmox, a firewall or Home Assistant) - a power cut is critical at once, not when the battery runs low
 - Scripting: **PowerShell Remote, Local Script, Local Program** (allow-listed)
 - Logs: **Syslog Messages** (a device's errors and warnings in the last hour, and how long it has been quiet)
