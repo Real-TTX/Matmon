@@ -60,10 +60,15 @@
   content: "";
   position: absolute; inset: 0; margin: auto;
   width: 1.1em; height: 1.1em;
-  border: 2px solid var(--mat-on-accent); border-right-color: transparent;
+  border: 2px solid var(--mat-text-muted); border-right-color: transparent;
   border-radius: 50%;
   animation: mat-spin .7s linear infinite;
 }
+/* The ring takes the colour that stands on the button: on a filled one the colour on its fill, on a light one (secondary,
+   ghost, danger) a text colour. It used to be the colour on the accent everywhere: white on the white of a secondary button. */
+.mat-btn--primary.is-loading::after { border-color: var(--mat-on-accent); border-right-color: transparent; }
+.mat-btn--danger.is-loading::after { border-color: var(--mat-danger-text); border-right-color: transparent; }
+.mat-btn--danger.mat-btn--solid.is-loading::after { border-color: var(--mat-on-danger); border-right-color: transparent; }
 @keyframes mat-spin { to { transform: rotate(360deg); } }
 
 /* ---- Button row ------------------------------------------------------------------------------------------------
@@ -244,8 +249,10 @@ a.mat-card:hover, .mat-card--link:hover { border-color: var(--mat-text-faint); b
 .mat-empty__icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--mat-accent-soft); color: var(--mat-accent-text); font-size: 1.8rem; }
 .mat-empty__title { font-size: var(--mat-fs-lg); font-weight: 650; color: var(--mat-text); }
 
-.mat-kv { display: grid; grid-template-columns: minmax(110px, 200px) minmax(0, 1fr); gap: var(--mat-space-3) var(--mat-space-5); margin: 0; }
-.mat-kv dt { color: var(--mat-text-muted); }
+/* The label column is 200 px (or 40 % of a narrow list) and grows with the longest label; the value keeps at least 40 %, so a long label wraps
+   instead of pushing the value out, and a list in a narrow card (a side panel, a two-column grid on a tablet) still has room for its values. */
+.mat-kv { display: grid; grid-template-columns: minmax(min(200px, 40%), max-content) minmax(40%, 1fr); gap: var(--mat-space-3) var(--mat-space-5); margin: 0; }
+.mat-kv dt { color: var(--mat-text-muted); min-width: 0; overflow-wrap: anywhere; }
 .mat-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .mat-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; } .mat-kv dd { margin-bottom: var(--mat-space-3); } }
 

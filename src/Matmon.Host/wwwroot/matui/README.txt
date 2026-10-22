@@ -1,4 +1,4 @@
-MatUi 0.8.1 (29fac427c0)
+MatUi 0.9.1 (98a4619b06)
 Made by MatDesign local-20261022.
 The UI toolkit of the Mat apps. Rules, documentation and live examples: the MatDesign site.
 

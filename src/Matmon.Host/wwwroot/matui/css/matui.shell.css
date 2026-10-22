@@ -18,6 +18,16 @@
   background: var(--mat-bg);
 }
 
+/* The shell scrolls inside (the content, the list of the menu); the document itself never does. Without this a wheel over a part that does not
+   scroll (the foot of the menu with the account) is handed on to the document, and any pixel of overflow (rounding at a zoom, a popover, a toast,
+   a touchpad) lets the whole app slide out of the window. Pages without the shell (sign-in, .mat-auth) still scroll. */
+html:has(> body > .mat-app),
+html:has(> body > .mat-app) > body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* ---- The menu ---- */
 .mat-nav {
   position: relative;
@@ -29,6 +39,7 @@
   border-right: 1px solid var(--mat-border);
   padding-top: var(--mat-safe-top);
   padding-left: var(--mat-safe-left);
+  overscroll-behavior: contain;
 }
 
 .mat-nav__brand {
@@ -328,7 +339,12 @@ button.mat-nav__item:hover { background: var(--mat-surface-3); }
 }
 
 /* ---- The content side ---- */
+/* position: relative makes the content the box an absolutely placed element inside it is placed in. Without it a visually hidden caption
+   (mat-sr-only) or a table head hidden on a phone, far down a long page, was placed against the document and made the document as tall as
+   the content: invisible since the document is locked (SHELL-07), but focusing such an element or searching the page still scrolled the
+   locked document and slid the whole app out of the window. */
 .mat-main {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;

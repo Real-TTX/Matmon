@@ -40,13 +40,6 @@
 .mm-snippet { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--mat-space-2); align-items: start; }
 .mm-snippet > .mat-code { margin: 0; }
 
-/* ---- A button that is busy ---- */
-/* MatUi draws its busy spinner in the colour that stands on the accent: right on a primary button, white on white on a
-   light secondary one. Run now / Test / Walk - the buttons that show it most - are secondary, so there it takes the
-   muted text colour. Only the token changes; the toolkit's rule stays as it is. */
-.mat-btn--secondary.is-loading,
-.mat-btn--ghost.is-loading { --mat-on-accent: var(--mat-text-muted); }
-
 /* ---- A status block at the top of the menu (_NavInfo, Ui/NavInfo.cs) ----
    MatUi's menu only has count badges (SHELL-14); a badge cannot say Error / Warning / Ack at a glance or open the list
    filtered. This block can: a titled link with one big number and its state word, and a row of small linked counts.

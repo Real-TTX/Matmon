@@ -96,6 +96,10 @@ kbd {
 .mat-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 900px) { .mat-grid--3, .mat-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .mat-grid--2, .mat-grid--3, .mat-grid--4 { grid-template-columns: minmax(0, 1fr); } }
+/* A grid of figures (mat-stat, bare or as the body of a card) keeps two columns on a phone: a figure is short, and one per line turned a row of
+   key figures into a long column of mostly empty cards. Only on the narrowest screens does it go to one. */
+@media (max-width: 600px) { .mat-grid:has(> .mat-stat, > .mat-card > .mat-stat) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 340px) { .mat-grid:has(> .mat-stat, > .mat-card > .mat-stat) { grid-template-columns: minmax(0, 1fr); } }
 .mat-muted { color: var(--mat-text-muted); }
 .mat-faint { color: var(--mat-text-faint); }
 .mat-mono { font-family: var(--mat-mono); }

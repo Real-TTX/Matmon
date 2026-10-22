@@ -13,6 +13,32 @@ A change that an app can see is written down under **Unreleased** in the pull re
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-22
+### Fixed
+
+- A key-and-value list in a narrow card has room for its values again (`mat-kv`): 0.9.0 gave every label a `min-width` of 200 px, so in a card of 250 px (a side panel, a two-column grid on a tablet) the value got 33 px and broke after every few letters. The label column is now `minmax(min(200px, 40%), max-content)` and the value column `minmax(40%, 1fr)`: 200 px in a normal list as before, 40 % of a narrow one, growing with a long label while the value keeps at least 40 % (a longer label still wraps). Nothing to do for an app but copy the files.
+- The busy ring of a button (`.mat-btn.is-loading`) takes the colour that stands on the button: the colour on the accent on a primary button, the colour on the danger colour on a solid danger button, the danger text colour on a danger button and the muted text colour on every other (secondary, ghost). It was the colour on the accent everywhere, so on a secondary button it was white on white and the button looked dead while it worked. An app that set `--mat-on-accent` on its light buttons for this can drop those lines.
+- A table that fills a card no longer draws a doubled edge: a `.mat-table-wrap` straight under a `.mat-card` (or alone in the body of a `.mat-card--flush`) drops its own border, radius, shadow and background - the card is its frame - and its last row keeps inside the card's round corners. Nothing to do for an app.
+- A visually hidden element far down a long page no longer makes the document taller (`SHELL-07`): `.mat-main` is `position: relative`, so a `.mat-sr-only` caption or a table head hidden on a phone is placed inside the content, not against the document. Since 0.9.0 the taller document could not be scrolled by hand, but focusing such an element (or searching the page) still scrolled it and slid the whole app out of the window - measured in an app: a hidden table caption moved it by 1227 px. Menus, pickers and dialogs are `position: fixed` and are not affected. One browser check more in run.js.
+
+### Changed
+
+- A grid of key figures keeps two columns on a phone (`MOBILE-02`): a `.mat-grid` whose items are `.mat-stat`, or cards whose body is a `.mat-stat`, has two columns below 600 px and one only below 340 px. Before, `mat-grid--2/3/4` went to one column, and a row of key figures became a long column of mostly empty cards. Nothing to do for an app; a grid that should stay one column on a phone is not a grid of figures.
+
+## [0.9.0] - 2026-10-22
+### Added
+
+- A new icon in the sprite, `list-checks` (two checks, each with a line beside it): the glyph of the MatDo logo, the short checklist of its new app icon (`IDENT-03`, one glyph per app logo, like `whale` for MatDock). `<svg class="mat-icon"><use href="#mat-i-list-checks"></use></svg>`. Nothing to do for an app but copy the files; `check-square` stays.
+
+### Changed
+
+- The colour of MatDo: `[data-app="matdo"]` sets `--mat-app-accent: #d03d33` (it was the purple `#8300bc`), the red of the rewritten task app and of its new logo; white text on it reaches 4.78:1 (AA). The registry of this site writes the name MatDo and draws its logo with `list-checks`. MatDo takes it with its next copy of the toolkit; the other apps have nothing to do but copy the files.
+- A long label in a key-and-value list no longer runs over its value (`mat-kv`): the label column was capped at 200 px and the label did not wrap, so a label such as a Docker option name (`com.docker.compose.project.working_dir`) lay on top of the value. The column is now at least 200 px (as it was in effect) and grows with the longest label up to 60 % of the list, and a label that is longer still wraps (`overflow-wrap: anywhere`). Lists with short labels look as before; on a phone the label stays above the value. Nothing to do for an app but copy the files.
+
+### Fixed
+
+- The document of a page with the shell no longer scrolls (`SHELL-07`): `html` and `body` around `body > .mat-app` get `height: 100%`, `overflow: hidden` and `overscroll-behavior: none`, and `.mat-nav` gets `overscroll-behavior: contain`. Before, a wheel over a part of the shell that does not scroll itself (the foot of the menu with the user) was handed on to the document, and when the document was a pixel higher than the window (rounding at a zoom, a popover, a toast, a touchpad) the whole app slid out of the window. The content and the menu list scroll as before; a page without the shell (sign-in, `.mat-auth`) still scrolls. Nothing to do for an app but copy the files; an app that locked the document in its own CSS can drop those lines.
+
 ## [0.8.1] - 2026-10-22
 ### Fixed
 

@@ -65,6 +65,15 @@
   border-radius: var(--mat-table-radius, var(--mat-radius-lg));
   box-shadow: var(--mat-shadow-1);
 }
+/* A table that fills a card (straight under the card, or alone in the body of a flush card): the card is its frame, so the table drops its own -
+   two 1 px edges side by side read as a thick, doubled line. Its last row keeps inside the card's round corners. */
+.mat-card > .mat-table-wrap,
+.mat-card--flush > .mat-card__body > .mat-table-wrap:only-child { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.mat-card > .mat-table-wrap:last-child,
+.mat-card--flush > .mat-card__body:last-child > .mat-table-wrap:only-child {
+  border-bottom-left-radius: calc(var(--mat-card-radius, var(--mat-radius-lg)) - 1px);
+  border-bottom-right-radius: calc(var(--mat-card-radius, var(--mat-radius-lg)) - 1px);
+}
 /* The empty state takes the place of the table or the gallery in a list: the same frame, so a list without rows keeps its shape and the way to fill it
    stands where the rows will be (LIST-11). Outside a list mat-empty--framed gives it the frame; in a card it needs none (the card is the frame). */
 .mat-list > .mat-empty,
