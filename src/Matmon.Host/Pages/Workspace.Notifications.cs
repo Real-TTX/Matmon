@@ -371,6 +371,7 @@ public sealed partial class WorkspaceModel
             TextTemplate = string.IsNullOrWhiteSpace(rule.TextTemplate) ? NotificationTemplateCatalog.DefaultTextTemplate : rule.TextTemplate,
             HtmlTemplate = string.IsNullOrWhiteSpace(rule.HtmlTemplate) ? NotificationTemplateCatalog.DefaultHtmlTemplate : rule.HtmlTemplate,
             ShortTemplate = string.IsNullOrWhiteSpace(rule.ShortTemplate) ? NotificationTemplateCatalog.DefaultShortTemplate : rule.ShortTemplate,
+            Escalations = NotificationEscalationInput.Rows(rule.Escalations),
             SenderOptions = BuildNotificationSenderOptions(snapshot.NotificationSenders, rule.SenderId),
             ReceiverOptions = BuildNotificationReceiverOptions(snapshot.NotificationReceivers, rule.ReceiverId),
             TargetOptions = BuildNotificationTargetOptions(nodes, rule.TargetElementId),
@@ -437,7 +438,8 @@ public sealed partial class WorkspaceModel
             editor.SubjectTemplate,
             editor.TextTemplate,
             editor.HtmlTemplate,
-            editor.ShortTemplate);
+            editor.ShortTemplate,
+            editor.Escalations);
     }
 
     private static void ApplyNotificationSenderEditor(NotificationSender sender, CreateNotificationSenderInput editor)
@@ -568,7 +570,8 @@ public sealed partial class WorkspaceModel
             editor.SubjectTemplate,
             editor.TextTemplate,
             editor.HtmlTemplate,
-            editor.ShortTemplate);
+            editor.ShortTemplate,
+            editor.Escalations);
     }
 
     private static void ApplyNotificationRuleValues(
@@ -586,7 +589,8 @@ public sealed partial class WorkspaceModel
         string? subjectTemplate,
         string? textTemplate,
         string? htmlTemplate,
-        string? shortTemplate)
+        string? shortTemplate,
+        IEnumerable<NotificationEscalationInput>? escalations)
     {
         var triggerStateList = (triggerStates ?? Enumerable.Empty<SensorState>()).Distinct().ToList();
         if (triggerStateList.Count == 0)
@@ -610,6 +614,7 @@ public sealed partial class WorkspaceModel
         rule.HtmlTemplate = string.IsNullOrWhiteSpace(htmlTemplate) ? string.Empty : htmlTemplate;
         // The default is stored as empty, so a rule keeps following the default when it changes.
         rule.ShortTemplate = string.IsNullOrWhiteSpace(shortTemplate) || shortTemplate.Trim() == NotificationTemplateCatalog.DefaultShortTemplate ? string.Empty : shortTemplate.Trim();
+        rule.Escalations = NotificationEscalationInput.ToSteps(escalations);
         rule.TriggerStates.Clear();
 
         foreach (var state in triggerStateList)
@@ -771,7 +776,8 @@ public sealed partial class WorkspaceModel
                 BuildNotificationReceiverSummary(snapshot.NotificationReceivers, rule.ReceiverId, rule.ChannelKind, rule.Recipient),
                 BuildNotificationTargetSummary(rule, nodes),
                 BuildNotificationTriggerSummary(rule.TriggerStates),
-                BuildNotificationCooldownSummary(rule.CooldownMinutes, rule.Threshold),
+                BuildNotificationCooldownSummary(rule.CooldownMinutes, rule.Threshold)
+                    + (rule.Escalations.Count == 0 ? string.Empty : $" · escalates after {string.Join(", ", rule.Escalations.Select(step => FormatEscalationMinutes(step.AfterMinutes)))}"),
                 rule.ChannelKind.ToString()))
             .ToArray();
     }
@@ -880,6 +886,9 @@ public sealed partial class WorkspaceModel
             _ => $"{receiver.Name} · email"
         };
     }
+
+    private static string FormatEscalationMinutes(int minutes) =>
+        minutes % 60 == 0 ? $"{minutes / 60}h" : $"{minutes}m";
 
     private static string BuildNotificationTriggerSummary(IEnumerable<SensorState> triggerStates)
     {

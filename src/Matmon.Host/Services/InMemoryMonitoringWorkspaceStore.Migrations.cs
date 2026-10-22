@@ -34,7 +34,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -69,7 +69,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             store => store.MigrateAgentProbesToBoundHosts()),
 
         new(7, "UPS SNMP sensors read the on-battery values and alarm on a power cut",
-            store => store.MigrateUpsSensorsToPowerChannels())
+            store => store.MigrateUpsSensorsToPowerChannels()),
+
+        new(8, "Rules the load fix-up had pointed at a webhook sender while they mail a user group go back to the default SMTP",
+            store => store.MigrateGuessedWebhookSendersOffUserGroupRules())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step
@@ -134,6 +137,26 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 {
                     MonitoringSettings.SetChannelThreshold(sensor.Settings, channel, severity, new ThresholdRule(ThresholdDirection.Above, 0));
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Migration 8. The load-time fix-up gave every rule without a sender "the first sender there is" - a webhook sender
+    /// too - so the seeded default rule (no sender = the default SMTP, to the built-in "All users") became a webhook rule
+    /// the moment an admin created one, and its e-mail alerts stopped. A webhook sender with a built-in user group as the
+    /// receiver is that mistake and nothing else (a group expands to e-mail addresses, which no webhook takes), so such a
+    /// rule goes back to no sender. The fix-up itself no longer guesses.
+    /// </summary>
+    private void MigrateGuessedWebhookSendersOffUserGroupRules()
+    {
+        foreach (var rule in _document.NotificationRules ?? [])
+        {
+            var sender = rule.SenderId is Guid senderId ? (_document.NotificationSenders ?? []).FirstOrDefault(candidate => candidate.Id == senderId) : null;
+            if (sender is { Kind: NotificationEndpointKind.Webhook } && NotificationReceiverDefaults.IsBuiltIn(rule.ReceiverId))
+            {
+                rule.SenderId = null;
+                rule.ChannelKind = NotificationChannelKind.Email;
             }
         }
     }

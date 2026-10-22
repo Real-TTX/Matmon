@@ -82,7 +82,8 @@ Channels: {{channels.summary}}
             new NotificationTemplatePlaceholder("alert.last_seen", "Alert last seen", "31.05.2026 12:44"),
             new NotificationTemplatePlaceholder("alert.acknowledged_at", "Acknowledged at", "31.05.2026 12:43"),
             new NotificationTemplatePlaceholder("alert.acknowledged_by", "Acknowledged by", "Matthias"),
-            new NotificationTemplatePlaceholder("alert.resolved_at", "Resolved at", "31.05.2026 12:58")
+            new NotificationTemplatePlaceholder("alert.resolved_at", "Resolved at", "31.05.2026 12:58"),
+            new NotificationTemplatePlaceholder("escalation.level", "The escalation step (1-3) - empty in the first notification", "1")
         ]),
         new NotificationTemplatePlaceholderGroup("Probe", [
             new NotificationTemplatePlaceholder("probe.name", "Probe name", "remote-probe-01"),

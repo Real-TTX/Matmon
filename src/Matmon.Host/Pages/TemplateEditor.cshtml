@@ -206,6 +206,12 @@ else
                                 <input asp-for="TemplateEditor.RetryCount" type="number" min="0" class="mat-input" placeholder="@Model.TemplateEditor.RetryCountPlaceholder" />
                                 <span class="mat-error" aria-live="polite"></span>
                             </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="TemplateEditor.AlertDelaySeconds">Alert after (seconds)</label>
+                                <input asp-for="TemplateEditor.AlertDelaySeconds" type="number" min="0" class="mat-input" placeholder="@Model.TemplateEditor.AlertDelaySecondsPlaceholder" data-msg-range="Zero or more seconds." />
+                                <span class="mat-hint">Raise the alert only once the problem has lasted this long - a blip never alarms. The state shows at once; 0 = alert at once.</span>
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
                         </div>
                         <p class="mat-muted">Parent templates are living defaults. Empty fields keep inheriting from the parent or from higher elements.</p>
                     </div>

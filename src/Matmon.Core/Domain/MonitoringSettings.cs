@@ -32,6 +32,12 @@ public sealed class MonitoringSettings
 
     public int? RetryCount { get; set; }
 
+    /// <summary>Raise an alert only once the problem has lasted this long (seconds) - a UPS that switches to battery for
+    /// two seconds, or a ping that drops one packet, then never alarms. Checked at each poll, so the alert comes at the
+    /// first poll after the delay. Null / 0 = alert at once. The sensor still SHOWS its state at once; only the alert and
+    /// its notification wait.</summary>
+    public int? AlertDelaySeconds { get; set; }
+
     public int? EventRetentionDays { get; set; }
 
     public int? ObservationRetentionDays { get; set; }
@@ -85,6 +91,7 @@ public sealed class MonitoringSettings
 
         Timeout = source.Timeout ?? Timeout;
         RetryCount = source.RetryCount ?? RetryCount;
+        AlertDelaySeconds = source.AlertDelaySeconds ?? AlertDelaySeconds;
         EventRetentionDays = source.EventRetentionDays ?? EventRetentionDays;
         ObservationRetentionDays = source.ObservationRetentionDays ?? ObservationRetentionDays;
         StatisticsRetentionDays = source.StatisticsRetentionDays ?? StatisticsRetentionDays;
@@ -164,6 +171,11 @@ public sealed class MonitoringSettings
         if (target.RetryCount == inherited.RetryCount)
         {
             target.RetryCount = null;
+        }
+
+        if (target.AlertDelaySeconds == inherited.AlertDelaySeconds)
+        {
+            target.AlertDelaySeconds = null;
         }
 
         if (target.EventRetentionDays == inherited.EventRetentionDays)
@@ -296,6 +308,11 @@ public sealed class MonitoringSettings
         if (RetryCount is not null)
         {
             parts.Add($"retries {RetryCount}");
+        }
+
+        if (AlertDelaySeconds is > 0)
+        {
+            parts.Add($"alert after {AlertDelaySeconds}s");
         }
 
         if (EventRetentionDays is not null || ObservationRetentionDays is not null || StatisticsRetentionDays is not null || StatisticsBucketMinutes is not null)

@@ -13,6 +13,9 @@ public sealed class NotificationDispatchService : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(5);
 
+    // Escalation is about minutes, not seconds - looking every 15 s is plenty and keeps the element clone off most ticks.
+    private static readonly TimeSpan EscalationInterval = TimeSpan.FromSeconds(15);
+
     // Delay before each retry, indexed by attempt count. Attempt 0 = immediate; length caps total tries.
     private static readonly TimeSpan[] RetryBackoff =
     [
@@ -33,6 +36,8 @@ public sealed class NotificationDispatchService : BackgroundService
     // Anti-spam / flap suppression: cooldown per (rule, element) + one-recovery-per-episode gating.
     // Owned by the single dispatch loop (not thread-safe by design).
     private readonly NotificationThrottle _throttle = new();
+
+    private DateTimeOffset _nextEscalationCheck = DateTimeOffset.MinValue;
 
     public NotificationDispatchService(
         NotificationSpooler spooler,
@@ -56,6 +61,7 @@ public sealed class NotificationDispatchService : BackgroundService
             try
             {
                 DrainEvents();
+                ProcessEscalations();
                 await ProcessPendingAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -158,6 +164,88 @@ public sealed class NotificationDispatchService : BackgroundService
         }
 
         return deliveries;
+    }
+
+    /// <summary>
+    /// Sends the escalation steps that are due: an alert still open, unacknowledged and not recovered after a step's
+    /// minutes goes again - through the step's sender to the step's receiver (each falls back to the rule's own), with
+    /// "[Escalation n]" in front of the subject. The step is marked on the alert BEFORE it is queued (persisted), so a
+    /// restart neither forgets it nor sends it twice; the throttle does not apply - an escalation is rare by design.
+    /// </summary>
+    private void ProcessEscalations()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now < _nextEscalationCheck)
+        {
+            return;
+        }
+
+        _nextEscalationCheck = now + EscalationInterval;
+        var workspace = _workspaceStore.Workspace;
+        var rules = workspace.NotificationRules.Where(rule => rule.Enabled && rule.Escalations.Count > 0).ToArray();
+        var open = rules.Length == 0 ? [] : workspace.Alerts.Where(alert => alert.IsActive && !alert.IsAcknowledged && !alert.IsRecovered).ToArray();
+        if (open.Length == 0)
+        {
+            return;
+        }
+
+        Dictionary<Guid, MonitoringElement>? elementsById = null;
+        IReadOnlyDictionary<Guid, SensorObservation>? latest = null;
+        foreach (var alert in open)
+        {
+            foreach (var rule in rules)
+            {
+                var due = NotificationEscalation.DueSteps(rule, alert, now);
+                if (due.Count == 0)
+                {
+                    continue;
+                }
+
+                elementsById ??= _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
+                if (!NotificationRuleTargeting.Matches(rule, alert.ElementId, elementsById))
+                {
+                    continue;
+                }
+
+                latest ??= _workspaceStore.GetLatestSensorObservations();
+                foreach (var index in due)
+                {
+                    if (!_workspaceStore.TryMarkAlertEscalated(alert.Id, rule.Id, index, now))
+                    {
+                        continue;
+                    }
+
+                    var step = rule.Escalations[index];
+                    var level = index + 1;
+                    elementsById.TryGetValue(alert.ElementId, out var element);
+                    latest.TryGetValue(alert.ElementId, out var observation);
+                    var notificationEvent = new AlertNotificationEvent(alert.Id, alert.ElementId, alert.State, alert.Message, now, NotificationTransition.Raised);
+                    var context = BuildContext(notificationEvent, rule, element, alert, observation, elementsById);
+                    context.SetValue("escalation.level", level.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                    var prefix = $"[Escalation {level}] ";
+                    var route = new NotificationRoute(
+                        rule.Name,
+                        step.SenderId ?? rule.SenderId,
+                        step.ReceiverId ?? rule.ReceiverId,
+                        step.ReceiverId is null ? rule.Recipient : null,
+                        prefix + (string.IsNullOrWhiteSpace(rule.SubjectTemplate) ? NotificationTemplateCatalog.DefaultSubjectTemplate : rule.SubjectTemplate),
+                        rule.TextTemplate,
+                        rule.HtmlTemplate,
+                        prefix + (string.IsNullOrWhiteSpace(rule.ShortTemplate) ? NotificationTemplateCatalog.DefaultShortTemplate : rule.ShortTemplate));
+                    var (delivery, problem) = _deliveryFactory.Create(route, context, workspace, label: $"escalation {level}");
+                    if (delivery is null)
+                    {
+                        _logger.LogWarning("Escalation {Level} of rule {Rule} for {Element} was not sent: {Problem}", level, rule.Name, alert.ElementPath, problem);
+                        continue;
+                    }
+
+                    _pending.Add(delivery);
+                    _logger.LogInformation("Escalation {Level} of rule {Rule} for {Element} queued - unacknowledged for {Minutes} min",
+                        level, rule.Name, alert.ElementPath, (int)(now - alert.FirstSeenUtc).TotalMinutes);
+                }
+            }
+        }
     }
 
     private async Task ProcessPendingAsync(CancellationToken cancellationToken)

@@ -20,6 +20,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private static readonly TimeSpan BackupRefreshInterval = TimeSpan.FromMinutes(5);
 
     private readonly object _gate = new();
+
+    // When each sensor's current problem streak began (its first Warning/Critical observation since it was last fine) -
+    // what an alert delay (MonitoringSettings.AlertDelaySeconds) is measured from. In memory: after a restart a streak
+    // starts again, which can only delay an alert by one delay more, never raise a premature one. Guarded by _gate.
+    private readonly Dictionary<Guid, DateTimeOffset> _problemSince = [];
     private readonly object _saveGate = new();
     private readonly ILogger<InMemoryMonitoringWorkspaceStore> _logger;
     private readonly IDataProtector _credentialProtector;
@@ -2182,6 +2187,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 }
 
                 var existing = _document.Alerts.FirstOrDefault(alert => alert.IsActive && alert.ElementId == candidate.ElementId);
+                // A sensor whose alert delay has not run out yet stays without an alert here too: this path does not
+                // notify, so an alert it raised first would be found by the poll path as already existing and the
+                // notification would never go out.
+                if (existing is null && FindElementInternal(candidate.ElementId) is SensorElement delayed && IsAlertDelayPendingLocked(delayed, now))
+                {
+                    continue;
+                }
+
                 if (existing is null)
                 {
                     _document.Alerts.Add(new MonitoringAlert
@@ -2789,9 +2802,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     rule.TriggerStates.Add(SensorState.Critical);
                 }
 
-                if (rule.SenderId is null || _document.NotificationSenders.All(sender => sender.Id != rule.SenderId))
+                // No sender is a deliberate state - the workspace's default SMTP (the seeded default rule has none).
+                // Only a sender that no longer exists is cleared; this used to hand every sender-less rule "the first
+                // sender there is", so the default rule became a webhook rule as soon as a webhook sender existed and
+                // its e-mail alerts stopped (migration 8 repairs that).
+                if (rule.SenderId is Guid senderId && _document.NotificationSenders.All(sender => sender.Id != senderId))
                 {
-                    rule.SenderId = ResolveSenderIdForRule(rule.ChannelKind);
+                    rule.SenderId = null;
                 }
 
                 // A built-in (virtual) receiver like "All users" is not in NotificationReceivers, so guard it
@@ -3088,18 +3105,6 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    private Guid? ResolveSenderIdForRule(NotificationChannelKind channelKind)
-    {
-        var kind = channelKind == NotificationChannelKind.Webhook
-            ? NotificationEndpointKind.Webhook
-            : NotificationEndpointKind.Email;
-
-        var sender = _document.NotificationSenders.FirstOrDefault(candidate => candidate.Kind == kind)
-            ?? _document.NotificationSenders.FirstOrDefault();
-
-        return sender?.Id;
-    }
-
     private Guid? ResolveReceiverIdForRule(NotificationChannelKind channelKind, string recipient)
     {
         var kind = channelKind == NotificationChannelKind.Webhook
@@ -3117,10 +3122,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             return receiver.Id;
         }
 
+        // No recipient to go by: leave the rule without a receiver (it says so when it fires) rather than guess one -
+        // the guess used to fall back to ANY receiver, of any kind.
         if (string.IsNullOrWhiteSpace(normalizedRecipient))
         {
-            return _document.NotificationReceivers.FirstOrDefault(candidate => candidate.Kind == kind)?.Id
-                ?? _document.NotificationReceivers.FirstOrDefault()?.Id;
+            return null;
         }
 
         receiver = new NotificationReceiver
@@ -4059,6 +4065,35 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     /// <summary>Returns true when it made a persist-worthy change to <c>_document.Alerts</c> (so the caller only
     /// re-saves workspace.json when something actually changed - a healthy poll of a sensor with no active alert
     /// changes nothing and must not churn the file).</summary>
+    public bool TryMarkAlertEscalated(Guid alertId, Guid ruleId, int step, DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            var alert = _document.Alerts.FirstOrDefault(candidate => candidate.Id == alertId);
+            if (alert is null || alert.Escalations.Any(mark => mark.RuleId == ruleId && mark.Step == step))
+            {
+                return false;
+            }
+
+            alert.Escalations.Add(new AlertEscalationMark { RuleId = ruleId, Step = step, SentUtc = now });
+            QueueSave(SavePriority.Configuration);
+            return true;
+        }
+    }
+
+    /// <summary>True while a sensor with an alert delay has been in trouble for less than that delay (or its streak is not
+    /// known yet - the poll path records it). Must hold <c>_gate</c>.</summary>
+    private bool IsAlertDelayPendingLocked(SensorElement sensor, DateTimeOffset now)
+    {
+        var delaySeconds = _telemetryInheritanceResolver.Resolve(BuildLineage(sensor), _document.Templates.ToDictionary(template => template.Id)).AlertDelaySeconds;
+        if (delaySeconds is not > 0)
+        {
+            return false;
+        }
+
+        return !_problemSince.TryGetValue(sensor.Id, out var since) || now - since < TimeSpan.FromSeconds(delaySeconds.Value);
+    }
+
     private bool MarkAlertsRecoveredForElement(Guid elementId, DateTimeOffset recoveredAt)
     {
         var changed = false;
@@ -4106,7 +4141,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     {
         if (result.State is not (SensorState.Warning or SensorState.Critical))
         {
+            _problemSince.Remove(sensorId);
             return MarkAlertsRecoveredForElement(sensorId, timestampUtc);
+        }
+
+        if (!_problemSince.ContainsKey(sensorId))
+        {
+            _problemSince[sensorId] = timestampUtc;
         }
 
         // Muted element: the operator worked it off and asked not to be re-alarmed - don't raise/re-open
@@ -4127,6 +4168,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             ? MonitoringStatePresentation.Label(result.State)
             : result.Message;
         var existing = _document.Alerts.FirstOrDefault(alert => alert.IsActive && alert.ElementId == sensorId);
+        if (existing is null && IsAlertDelayPendingLocked(sensor, timestampUtc))
+        {
+            return false; // the problem has not lasted long enough yet - the sensor shows it, the alert waits
+        }
+
         if (existing is null)
         {
             var raised = new MonitoringAlert

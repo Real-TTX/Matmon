@@ -208,6 +208,12 @@ else
                                 <input asp-for="ElementEditor.RetryCount" type="number" min="0" class="mat-input" placeholder="@Model.ElementEditor.RetryCountPlaceholder" />
                                 <span class="mat-error" aria-live="polite"></span>
                             </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.AlertDelaySeconds">Alert after (seconds)</label>
+                                <input asp-for="ElementEditor.AlertDelaySeconds" type="number" min="0" class="mat-input" placeholder="@Model.ElementEditor.AlertDelaySecondsPlaceholder" data-msg-range="Zero or more seconds." />
+                                <span class="mat-hint">Raise the alert only once the problem has lasted this long - a blip never alarms. The state shows at once; 0 = alert at once.</span>
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
                         </div>
                     </div>
                 </section>

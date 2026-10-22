@@ -152,6 +152,10 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Lift an element's mute so it can alarm again. Returns false when it wasn't muted.</summary>
     bool UnmuteElement(Guid elementId, string? by);
 
+    /// <summary>Records that escalation step <paramref name="step"/> of a rule went out for an alert - false when it already
+    /// had (so two callers never both send it) or the alert is gone. Persisted with the alert.</summary>
+    bool TryMarkAlertEscalated(Guid alertId, Guid ruleId, int step, DateTimeOffset now);
+
     /// <summary>The currently-muted elements (expired mutes pruned), for the Alerts page.</summary>
     IReadOnlyList<AlertMuteInfo> GetActiveAlertMutes();
 

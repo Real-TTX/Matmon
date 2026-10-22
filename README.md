@@ -55,6 +55,8 @@ optional and connect outbound, so they work behind firewalls and NAT.
 - **Push and chat** through webhooks with ready-made presets for **ntfy, Pushover, Gotify, Telegram,
   Microsoft Teams, Slack and Discord** (or any HTTP service: templated address, headers and body, optional
   HMAC signature) - and a **Send test** button on every rule
+- **Alert delay** (a blip never alarms) and **escalation** (unacknowledged after N minutes: notify someone
+  else, up to three steps)
 - Optional **cloud alert relay** as just another notification sender
 
 **Operations**

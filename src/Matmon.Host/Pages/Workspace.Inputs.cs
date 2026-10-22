@@ -207,6 +207,8 @@ public sealed class CreateNotificationRuleInput
 
     public string ShortTemplate { get; set; } = NotificationTemplateCatalog.DefaultShortTemplate;
 
+    public List<NotificationEscalationInput> Escalations { get; set; } = NotificationEscalationInput.Rows(null);
+
     public List<SelectListItem> SenderOptions { get; set; } = [];
 
     public List<SelectListItem> ReceiverOptions { get; set; } = [];
@@ -347,7 +349,11 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
 
     public int? RetryCount { get; set; }
 
+    public int? AlertDelaySeconds { get; set; }
+
     public string? RetryCountPlaceholder { get; set; }
+
+    public string? AlertDelaySecondsPlaceholder { get; set; }
 
     public int? EventRetentionDays { get; set; }
 
@@ -539,6 +545,8 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISens
 
     public int? RetryCount { get; set; }
 
+    public int? AlertDelaySeconds { get; set; }
+
     public int? EventRetentionDays { get; set; }
 
     public int? ObservationRetentionDays { get; set; }
@@ -586,6 +594,8 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISens
     public string? TimeoutSecondsPlaceholder { get; set; }
 
     public string? RetryCountPlaceholder { get; set; }
+
+    public string? AlertDelaySecondsPlaceholder { get; set; }
 
     public string? EventRetentionDaysPlaceholder { get; set; }
 
@@ -710,6 +720,8 @@ public sealed class WorkspaceNotificationRuleEditorInput
 
     public string ShortTemplate { get; set; } = NotificationTemplateCatalog.DefaultShortTemplate;
 
+    public List<NotificationEscalationInput> Escalations { get; set; } = NotificationEscalationInput.Rows(null);
+
     public List<SelectListItem> SenderOptions { get; set; } = [];
 
     public List<SelectListItem> ReceiverOptions { get; set; } = [];
@@ -752,4 +764,37 @@ public sealed class WebhookNotificationSettingsInput
     public string? Secret { get; set; }
 
     public int? TimeoutSeconds { get; set; }
+}
+
+/// <summary>One escalation row of the rule editor; a row without minutes is no step. The editor always shows
+/// <see cref="NotificationEscalation.MaxSteps"/> rows, so there is no add/remove script.</summary>
+public sealed class NotificationEscalationInput
+{
+    public int? AfterMinutes { get; set; }
+
+    public Guid? SenderId { get; set; }
+
+    public Guid? ReceiverId { get; set; }
+
+    public static List<NotificationEscalationInput> Rows(IEnumerable<NotificationEscalationStep>? steps)
+    {
+        var rows = (steps ?? [])
+            .Take(NotificationEscalation.MaxSteps)
+            .Select(step => new NotificationEscalationInput { AfterMinutes = step.AfterMinutes, SenderId = step.SenderId, ReceiverId = step.ReceiverId })
+            .ToList();
+        while (rows.Count < NotificationEscalation.MaxSteps)
+        {
+            rows.Add(new NotificationEscalationInput());
+        }
+
+        return rows;
+    }
+
+    public static List<NotificationEscalationStep> ToSteps(IEnumerable<NotificationEscalationInput>? rows) =>
+        NotificationEscalation.Normalize((rows ?? []).Select(row => new NotificationEscalationStep
+        {
+            AfterMinutes = row.AfterMinutes ?? 0,
+            SenderId = row.SenderId,
+            ReceiverId = row.ReceiverId
+        }));
 }

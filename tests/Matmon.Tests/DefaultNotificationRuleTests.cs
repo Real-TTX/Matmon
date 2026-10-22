@@ -81,6 +81,62 @@ public sealed class DefaultNotificationRuleTests : IDisposable
         Assert.Null(rule.SenderId);
     }
 
+    [Theory]
+    [InlineData(NotificationEndpointKind.Webhook)]
+    [InlineData(NotificationEndpointKind.Email)]
+    public void A_sender_created_later_is_not_forced_onto_the_default_rule(NotificationEndpointKind kind)
+    {
+        // The fix-up used to give every sender-less rule "the first sender there is": the default rule became a webhook
+        // rule as soon as a webhook sender existed, and its e-mail alerts stopped.
+        using (var telemetry = new SqliteTelemetryRepository(_dbPath))
+        using (var store = NewStore(telemetry))
+        {
+            store.CompleteInitialSetup("admin@example.com", "password123");
+            var sender = store.CreateNotificationSender("Push");
+            sender.Kind = kind;
+            store.Save();
+        }
+
+        using var telemetry2 = new SqliteTelemetryRepository(_dbPath);
+        using var reloaded = NewStore(telemetry2);
+
+        Assert.Null(reloaded.Workspace.NotificationRules.Single().SenderId);
+    }
+
+    [Fact]
+    public void Migration_8_takes_the_guessed_webhook_sender_off_a_rule_that_mails_a_user_group()
+    {
+        var path = Path.Combine(_dir, "ws-mig8.json");
+        File.WriteAllText(path, """
+            {
+              "schemaVersion": 7,
+              "rootProbe": { "$kind": "probe", "probeId": "primary", "id": "11111111-1111-1111-1111-111111111111", "name": "Primary Probe", "children": [] },
+              "notificationSenders": [ { "id": "aaaaaaaa-0000-0000-0000-000000000001", "name": "ntfy", "kind": "Webhook", "webhook": { "endpointUrl": "https://ntfy.sh" } } ],
+              "notificationReceivers": [ { "id": "bbbbbbbb-0000-0000-0000-000000000001", "name": "topic", "kind": "Webhook", "target": "alerts" } ],
+              "notificationRules": [
+                { "id": "cccccccc-0000-0000-0000-000000000001", "name": "Default alerts", "channelKind": "Webhook", "senderId": "aaaaaaaa-0000-0000-0000-000000000001", "receiverId": "00000000-0000-0000-0000-00000000a11c", "triggerStates": [ "Warning", "Critical" ] },
+                { "id": "cccccccc-0000-0000-0000-000000000002", "name": "Push", "channelKind": "Webhook", "senderId": "aaaaaaaa-0000-0000-0000-000000000001", "receiverId": "bbbbbbbb-0000-0000-0000-000000000001", "triggerStates": [ "Critical" ] }
+              ]
+            }
+            """);
+
+        using var telemetry = new SqliteTelemetryRepository(_dbPath);
+        using var store = new InMemoryMonitoringWorkspaceStore(
+            new TestHostEnvironment(_dir),
+            new MatmonRuntimeOptions { WorkspacePath = path },
+            new MatmonAuthOptions(),
+            new EphemeralDataProtectionProvider(),
+            telemetry,
+            NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+
+        var rules = store.Workspace.NotificationRules;
+        var repaired = rules.Single(rule => rule.Name == "Default alerts");
+        Assert.Null(repaired.SenderId);
+        Assert.Equal(NotificationChannelKind.Email, repaired.ChannelKind);
+        // A real webhook rule (a webhook sender with a webhook value as the receiver) is left alone.
+        Assert.Equal(new Guid("aaaaaaaa-0000-0000-0000-000000000001"), rules.Single(rule => rule.Name == "Push").SenderId);
+    }
+
     public void Dispose()
     {
         try

@@ -222,6 +222,8 @@ public sealed partial class WorkspaceModel
             TimeoutSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.Timeout),
             RetryCount = localSettings.RetryCount,
             RetryCountPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.RetryCount),
+            AlertDelaySeconds = localSettings.AlertDelaySeconds,
+            AlertDelaySecondsPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.AlertDelaySeconds),
             EventRetentionDays = localSettings.EventRetentionDays,
             EventRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.EventRetentionDays),
             ObservationRetentionDays = localSettings.ObservationRetentionDays,
@@ -263,6 +265,7 @@ public sealed partial class WorkspaceModel
             // editor), so don't let the raw ParametersText clear them here.
             var existingParameters = new Dictionary<string, string>(template.Settings.Parameters, StringComparer.OrdinalIgnoreCase);
             ApplySettings(template.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, editor.Highlight, parametersText: null, thresholdsText: null);
+            template.Settings.AlertDelaySeconds = editor.AlertDelaySeconds is int alertDelay && alertDelay >= 0 ? alertDelay : null;
             var definition = FindSensorDefinition(_workspaceStore.Workspace.SensorDefinitions, editor.SensorTypeKey);
             if (definition is not null)
             {
@@ -273,6 +276,7 @@ public sealed partial class WorkspaceModel
         else
         {
             ApplySettings(template.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, null, editor.ParametersText, editor.ThresholdsText);
+            template.Settings.AlertDelaySeconds = editor.AlertDelaySeconds is int alertDelay && alertDelay >= 0 ? alertDelay : null;
         }
 
         ApplyScheduleSettings(
@@ -384,6 +388,7 @@ public sealed partial class WorkspaceModel
 
         target.Timeout ??= source.Timeout;
         target.RetryCount ??= source.RetryCount;
+        target.AlertDelaySeconds ??= source.AlertDelaySeconds;
 
         foreach (var threshold in source.Thresholds)
         {
@@ -420,6 +425,7 @@ public sealed partial class WorkspaceModel
 
         target.Timeout = source.Timeout ?? target.Timeout;
         target.RetryCount = source.RetryCount ?? target.RetryCount;
+        target.AlertDelaySeconds = source.AlertDelaySeconds ?? target.AlertDelaySeconds;
         target.EventRetentionDays = source.EventRetentionDays ?? target.EventRetentionDays;
         target.ObservationRetentionDays = source.ObservationRetentionDays ?? target.ObservationRetentionDays;
         target.StatisticsRetentionDays = source.StatisticsRetentionDays ?? target.StatisticsRetentionDays;

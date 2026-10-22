@@ -12,6 +12,11 @@
     var newRuleStates = Model.NewNotificationRule.TriggerStates.Select(state => state.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
     var editRuleStates = Model.NotificationRuleEditor.TriggerStates.Select(state => state.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    // An escalation row picks a sender/receiver or keeps the rule's own (empty value). The select tag helper marks the
+    // row's own value, so the lists carry no selection of their own.
+    List<SelectListItem> SameAsRule(IEnumerable<SelectListItem> options) =>
+        [new SelectListItem("Same as the rule", string.Empty), .. options.Where(option => !string.IsNullOrEmpty(option.Value)).Select(option => new SelectListItem(option.Text, option.Value))];
+
     // The placeholders and the preview, the same for the create and the edit form (beside each other, under the templates).
     void RenderTemplateHelp()
     {
@@ -125,6 +130,31 @@
         </section>
 
         <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("alert")<h2 class="mat-card__title">Escalation</h2><span class="mat-text-muted mm-push-end">optional</span></div>
+            <div class="mat-card__body mat-stack">
+                <p class="mat-muted">When nobody acknowledges an alert, notify again - someone else, or another channel. It stops as soon as the alert is acknowledged or the problem has recovered. Leave the minutes empty for no step.</p>
+                @for (var step = 0; step < Model.NewNotificationRule.Escalations.Count; step++)
+                {
+                    <div class="mat-form__grid mat-form__grid--3">
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="NewNotificationRule.Escalations[step].AfterMinutes">Step @(step + 1): after (minutes)</label>
+                            <input asp-for="NewNotificationRule.Escalations[step].AfterMinutes" type="number" min="1" max="@NotificationEscalation.MaxAfterMinutes" class="mat-input mat-mono" data-msg-range="1 minute to 7 days." />
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="NewNotificationRule.Escalations[step].SenderId">Sender</label>
+                            <select asp-for="NewNotificationRule.Escalations[step].SenderId" class="mat-select" asp-items="SameAsRule(Model.NewNotificationRule.SenderOptions)"></select>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="NewNotificationRule.Escalations[step].ReceiverId">Receiver</label>
+                            <select asp-for="NewNotificationRule.Escalations[step].ReceiverId" class="mat-select" asp-items="SameAsRule(Model.NewNotificationRule.ReceiverOptions)"></select>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("file-text")<h2 class="mat-card__title">Message templates</h2></div>
             <div class="mat-card__body mat-form">
                 <p class="mat-muted">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets.</p>
@@ -218,6 +248,31 @@ else
                         </div>
                     </fieldset>
                 </div>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("alert")<h2 class="mat-card__title">Escalation</h2><span class="mat-text-muted mm-push-end">optional</span></div>
+            <div class="mat-card__body mat-stack">
+                <p class="mat-muted">When nobody acknowledges an alert, notify again - someone else, or another channel. It stops as soon as the alert is acknowledged or the problem has recovered. Leave the minutes empty for no step.</p>
+                @for (var step = 0; step < Model.NotificationRuleEditor.Escalations.Count; step++)
+                {
+                    <div class="mat-form__grid mat-form__grid--3">
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="NotificationRuleEditor.Escalations[step].AfterMinutes">Step @(step + 1): after (minutes)</label>
+                            <input asp-for="NotificationRuleEditor.Escalations[step].AfterMinutes" type="number" min="1" max="@NotificationEscalation.MaxAfterMinutes" class="mat-input mat-mono" data-msg-range="1 minute to 7 days." />
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="NotificationRuleEditor.Escalations[step].SenderId">Sender</label>
+                            <select asp-for="NotificationRuleEditor.Escalations[step].SenderId" class="mat-select" asp-items="SameAsRule(Model.NotificationRuleEditor.SenderOptions)"></select>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="NotificationRuleEditor.Escalations[step].ReceiverId">Receiver</label>
+                            <select asp-for="NotificationRuleEditor.Escalations[step].ReceiverId" class="mat-select" asp-items="SameAsRule(Model.NotificationRuleEditor.ReceiverOptions)"></select>
+                        </div>
+                    </div>
+                }
             </div>
         </section>
 

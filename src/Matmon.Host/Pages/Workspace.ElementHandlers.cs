@@ -600,6 +600,8 @@ public sealed partial class WorkspaceModel
             TimeoutSecondsPlaceholder = FormatSecondsPlaceholder(effectiveSettings.Timeout),
             RetryCount = localSettings.RetryCount,
             RetryCountPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.RetryCount),
+            AlertDelaySeconds = localSettings.AlertDelaySeconds,
+            AlertDelaySecondsPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.AlertDelaySeconds),
             EventRetentionDays = localSettings.EventRetentionDays,
             EventRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.EventRetentionDays ?? telemetryProfile?.EventRetentionDays),
             ObservationRetentionDays = localSettings.ObservationRetentionDays,
@@ -719,10 +721,12 @@ public sealed partial class WorkspaceModel
         if (element is SensorElement)
         {
             ApplySettings(element.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, editor.Highlight, null, null);
+            element.Settings.AlertDelaySeconds = editor.AlertDelaySeconds is int alertDelay && alertDelay >= 0 ? alertDelay : null;
         }
         else
         {
             ApplySettings(element.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, null, editor.ParametersText, editor.ThresholdsText);
+            element.Settings.AlertDelaySeconds = editor.AlertDelaySeconds is int alertDelay && alertDelay >= 0 ? alertDelay : null;
         }
 
         ApplyScheduleSettings(

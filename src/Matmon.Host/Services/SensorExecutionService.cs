@@ -86,6 +86,7 @@ public sealed class SensorExecutionService : ISensorExecutionService
         target.PollingInterval = source.PollingInterval ?? target.PollingInterval;
         target.Timeout = source.Timeout ?? target.Timeout;
         target.RetryCount = source.RetryCount ?? target.RetryCount;
+        target.AlertDelaySeconds = source.AlertDelaySeconds ?? target.AlertDelaySeconds;
         target.EventRetentionDays = source.EventRetentionDays ?? target.EventRetentionDays;
         target.ObservationRetentionDays = source.ObservationRetentionDays ?? target.ObservationRetentionDays;
         target.StatisticsRetentionDays = source.StatisticsRetentionDays ?? target.StatisticsRetentionDays;

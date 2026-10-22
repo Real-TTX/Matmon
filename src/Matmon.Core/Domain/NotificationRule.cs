@@ -52,4 +52,22 @@ public sealed class NotificationRule
     /// <summary>The one-line message for channels that show a line, not a mail - push, chat (<c>{{summary}}</c> in a
     /// webhook template). Empty = <see cref="NotificationTemplateCatalog.DefaultShortTemplate"/>.</summary>
     public string ShortTemplate { get; set; } = string.Empty;
+
+    /// <summary>Who else hears about an alert nobody acknowledges (see <see cref="NotificationEscalation"/>). Empty = no
+    /// escalation.</summary>
+    public List<NotificationEscalationStep> Escalations { get; set; } = [];
+}
+
+/// <summary>
+/// One escalation step: when an alert this rule covers is still open, unacknowledged and not recovered
+/// <see cref="AfterMinutes"/> after it was raised, notify again - through <see cref="SenderId"/> to
+/// <see cref="ReceiverId"/> (each null = the rule's own), e.g. the team lead's phone after 15 minutes.
+/// </summary>
+public sealed class NotificationEscalationStep
+{
+    public int AfterMinutes { get; set; }
+
+    public Guid? SenderId { get; set; }
+
+    public Guid? ReceiverId { get; set; }
 }
