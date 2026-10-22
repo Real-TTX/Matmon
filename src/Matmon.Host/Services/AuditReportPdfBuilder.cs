@@ -74,7 +74,9 @@ public sealed class AuditReportPdfBuilder
                 }
             });
 
-            outer.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+            // A white-label partner's second colour draws the rule under the header (see SummaryReportBranding).
+            var secondary = BrandingSafety.SafeHexColor(data.Partner?.SecondaryColor);
+            outer.Item().PaddingTop(6).LineHorizontal(secondary is null ? 1 : 2).LineColor(secondary ?? Colors.Grey.Lighten2);
         });
     }
 
@@ -92,6 +94,7 @@ public sealed class AuditReportPdfBuilder
 
     private static void ComposeContent(IContainer container, SummaryReportData data)
     {
+        var sectionColor = BrandingSafety.SafeHexColor(data.Partner?.SecondaryColor) ?? Colors.Black;
         container.Column(column =>
         {
             column.Spacing(16);
@@ -110,7 +113,7 @@ public sealed class AuditReportPdfBuilder
             {
                 column.Item().Column(section =>
                 {
-                    section.Item().PaddingBottom(4).Text("Sensor uptime").FontSize(13).Bold();
+                    section.Item().PaddingBottom(4).Text("Sensor uptime").FontSize(13).Bold().FontColor(sectionColor);
                     section.Item().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
@@ -144,7 +147,7 @@ public sealed class AuditReportPdfBuilder
             {
                 column.Item().Column(section =>
                 {
-                    section.Item().PaddingBottom(4).Text("Recent events").FontSize(13).Bold();
+                    section.Item().PaddingBottom(4).Text("Recent events").FontSize(13).Bold().FontColor(sectionColor);
                     section.Item().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>

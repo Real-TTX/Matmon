@@ -35,7 +35,10 @@ public sealed record SummaryReportData(
 
 /// <summary>Optional reseller co-branding stamped onto the report (logo + "Managed by" line). <see cref="ProductName"/>
 /// is the white-label product name that replaces "Matmon" in the report footer (a "powered by Matmon" note stays).</summary>
-public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl, string? ProductName = null, string? Slogan = null);
+/// <param name="SecondaryColor">A white-label partner's second colour: the rule under the heading and the section
+/// headings (the main colour stays on the title and the links). Since the MatUi conversion the app itself derives every
+/// shade from the one accent, so the report and the e-mail are where this colour shows.</param>
+public sealed record SummaryReportBranding(string? PartnerName, byte[]? LogoPng, string? LogoContentType, string? BrandColor, string? ContactUrl, string? ProductName = null, string? Slogan = null, string? SecondaryColor = null);
 
 public sealed record SummaryReport(string Subject, string TextBody, string HtmlBody);
 
@@ -113,11 +116,14 @@ public static class SummaryReportBuilder
         // (both re-validated - #RRGGBB / absolute http(s) - so a garbage cached value can't inject CSS or a
         // javascript: href). Semantic state colours below stay fixed; only the brand accent is partner-driven.
         var accent = BrandingSafety.SafeHexColor(data.Partner?.BrandColor);
+        var secondary = BrandingSafety.SafeHexColor(data.Partner?.SecondaryColor);
         var contactUrl = BrandingSafety.SafeContactUrl(data.Partner?.ContactUrl);
+        var headingRule = secondary is null ? string.Empty : $"padding-bottom:6px;border-bottom:3px solid {secondary};";
+        var sectionColor = secondary is null ? string.Empty : $"color:{secondary};";
 
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#111827;max-width:720px;\">");
-        sb.Append($"<h2 style=\"margin:0 0 4px 0;color:{accent ?? "#111827"};\">{Enc(data.WorkspaceName)} - summary report</h2>");
+        sb.Append($"<h2 style=\"margin:0 0 4px 0;{headingRule}color:{accent ?? "#111827"};\">{Enc(data.WorkspaceName)} - summary report</h2>");
         sb.Append($"<div style=\"color:#6b7280;margin-bottom:16px;\">{Enc(period)}</div>");
 
         if (data.Partner is { } brand && (brand.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(brand.PartnerName) || contactUrl is not null))
@@ -157,7 +163,7 @@ public static class SummaryReportBuilder
 
         if (data.LowestUptime.Count > 0)
         {
-            sb.Append("<h3 style=\"margin:0 0 8px 0;\">Lowest uptime</h3>");
+            sb.Append($"<h3 style=\"margin:0 0 8px 0;{sectionColor}\">Lowest uptime</h3>");
             sb.Append("<table style=\"width:100%;border-collapse:collapse;margin-bottom:18px;\">");
             sb.Append("<tr><th style=\"text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;\">Sensor</th><th style=\"text-align:right;padding:6px 8px;border-bottom:1px solid #e5e7eb;\">Uptime</th><th style=\"text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;\">State</th></tr>");
             foreach (var line in data.LowestUptime)
@@ -177,7 +183,7 @@ public static class SummaryReportBuilder
 
         if (data.RecentEvents.Count > 0)
         {
-            sb.Append("<h3 style=\"margin:0 0 8px 0;\">Recent events</h3>");
+            sb.Append($"<h3 style=\"margin:0 0 8px 0;{sectionColor}\">Recent events</h3>");
             sb.Append("<table style=\"width:100%;border-collapse:collapse;\">");
             foreach (var line in data.RecentEvents)
             {

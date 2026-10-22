@@ -150,6 +150,23 @@ public class SummaryReportBuilderTests
     }
 
     [Fact]
+    public void A_white_label_second_colour_draws_the_heading_rule_and_the_section_headings()
+    {
+        var data = new SummaryReportData(
+            "HQ", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 0, 0, 0, 0, 0, 0, 0,
+            [new SummaryReportSensorLine("HQ / Ping", SensorState.Healthy, 99.5, 3, "ms", 10)], [],
+            new SummaryReportBranding("ACME MSP", null, null, "#AABBCC", null, SecondaryColor: "#112233"));
+
+        var html = SummaryReportBuilder.Build(data).HtmlBody;
+
+        Assert.Contains("border-bottom:3px solid #112233", html);
+        Assert.Contains("color:#112233;\">Lowest uptime", html);
+
+        var unsafeColour = Branded(new SummaryReportBranding("Evil", null, null, null, null, SecondaryColor: "red;background:url(x)"));
+        Assert.DoesNotContain("background:url", SummaryReportBuilder.Build(unsafeColour).HtmlBody);
+    }
+
+    [Fact]
     public void Build_drops_unsafe_partner_colour_and_url()
     {
         var data = Branded(new SummaryReportBranding(
