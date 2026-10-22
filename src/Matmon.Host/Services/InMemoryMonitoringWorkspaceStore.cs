@@ -1337,6 +1337,24 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public Matmon.Core.SnmpTraps.SnmpTrapSettings GetSnmpTrapSettings()
+    {
+        lock (_gate)
+        {
+            return (_document.SnmpTraps ?? new()).Normalized();
+        }
+    }
+
+    public void UpdateSnmpTrapSettings(Matmon.Core.SnmpTraps.SnmpTrapSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        lock (_gate)
+        {
+            _document.SnmpTraps = settings.Normalized();
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public SummaryReportSettings GetSummaryReportSettings()
     {
         lock (_gate)
@@ -4472,6 +4490,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>The syslog receiver's configuration (off by default). The messages themselves are in syslog.db.</summary>
         public Matmon.Core.Syslog.SyslogSettings Syslog { get; set; } = new();
+
+        /// <summary>The SNMP trap receiver - like <see cref="Syslog"/>, decided on this machine and never carried in a backup.</summary>
+        public Matmon.Core.SnmpTraps.SnmpTrapSettings SnmpTraps { get; set; } = new();
 
         public CloudConnectionState Cloud { get; set; } = new();
 

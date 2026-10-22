@@ -693,6 +693,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // The receiver's settings say which ports THIS machine opens and who may write to its log. No section restores
         // them - switching a network listener on is a decision made on the machine it runs on - so they are not carried.
         document.Syslog = new();
+        document.SnmpTraps = new();
 
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {

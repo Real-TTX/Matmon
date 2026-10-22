@@ -579,7 +579,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return DecodeSignedInteger(element.Content.AsSpan());
     }
 
-    private static SnmpValue DecodeValue(byte tag, ReadOnlySpan<byte> content)
+    internal static SnmpValue DecodeValue(byte tag, ReadOnlySpan<byte> content)
     {
         return tag switch
         {
@@ -624,7 +624,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return new SnmpValue("TimeTicks", $"{FormatNumber(seconds)} s", seconds, "s", false);
     }
 
-    private static long DecodeSignedInteger(ReadOnlySpan<byte> content)
+    internal static long DecodeSignedInteger(ReadOnlySpan<byte> content)
     {
         if (content.Length == 0)
         {
@@ -659,7 +659,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             : text.TrimEnd('\0');
     }
 
-    private static string DecodeObjectIdentifier(ReadOnlySpan<byte> content)
+    internal static string DecodeObjectIdentifier(ReadOnlySpan<byte> content)
     {
         if (content.Length == 0)
         {
@@ -1514,12 +1514,12 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             : value.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
-    private static byte[] EncodeSequence(byte[] content)
+    internal static byte[] EncodeSequence(byte[] content)
     {
         return EncodeTagged(0x30, content);
     }
 
-    private static byte[] EncodeTagged(byte tag, byte[] content)
+    internal static byte[] EncodeTagged(byte tag, byte[] content)
     {
         var output = new List<byte>(content.Length + 8)
         {
@@ -1554,7 +1554,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return buffer.ToArray();
     }
 
-    private static byte[] EncodeInteger(long value)
+    internal static byte[] EncodeInteger(long value)
     {
         var bytes = new List<byte>();
         var remaining = value;
@@ -1577,17 +1577,17 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return EncodeTagged(0x02, bytes.ToArray());
     }
 
-    private static byte[] EncodeOctetString(byte[] bytes)
+    internal static byte[] EncodeOctetString(byte[] bytes)
     {
         return EncodeTagged(0x04, bytes);
     }
 
-    private static byte[] EncodeNull()
+    internal static byte[] EncodeNull()
     {
         return [0x05, 0x00];
     }
 
-    private static byte[] EncodeObjectIdentifier(string oid)
+    internal static byte[] EncodeObjectIdentifier(string oid)
     {
         var normalizedOid = NormalizeOid(oid);
         var parts = normalizedOid
@@ -1639,7 +1639,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return stack;
     }
 
-    private static void EnsureTag(byte actualTag, byte expectedTag, string label)
+    internal static void EnsureTag(byte actualTag, byte expectedTag, string label)
     {
         if (actualTag != expectedTag)
         {
@@ -1647,7 +1647,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         }
     }
 
-    private sealed class BerReader
+    internal sealed class BerReader
     {
         private readonly ReadOnlyMemory<byte> _data;
         private int _offset;

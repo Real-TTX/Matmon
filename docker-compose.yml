@@ -11,9 +11,11 @@ services:
     ports:
       - "8099:8099"
       # Receive syslog from your switches, routers and servers: switch the receiver on under
-      # Syslog > Settings, then publish its port. UDP is what most devices send; TCP is optional.
+      # System > Syslog, then publish its port. UDP is what most devices send; TCP is optional.
       # - "514:514/udp"
       # - "514:514/tcp"
+      # Receive SNMP traps (a UPS on battery, a link down): switch the receiver on under System > SNMP traps.
+      # - "162:162/udp"
     environment:
       TZ: Europe/Berlin
     volumes:

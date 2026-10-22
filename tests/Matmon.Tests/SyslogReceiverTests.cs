@@ -467,16 +467,24 @@ public sealed class SyslogReceiverTests : IDisposable
     {
         var open = Settings(udp: true, tcp: false);
         _service.Reconcile(open);
-        await SendUdp(open.UdpPort, "<13>Oct 15 10:11:12 sw1 app: while open");
-        Assert.Single(await WaitForMessages(1));
+        // UDP may lose a datagram - Windows does drop one on loopback under a busy test run - so the "open" message is
+        // sent again until it is stored; what this test is about is the CLOSED one never getting in.
+        for (var send = 0; send < 5 && _store.Search(new SyslogQuery { Contains = "while open" }, 10).Count == 0; send++)
+        {
+            await SendUdp(open.UdpPort, "<13>Oct 15 10:11:12 sw1 app: while open");
+            await WaitForMessages(1, timeoutMs: 1000);
+        }
+
+        Assert.NotEmpty(_store.Search(new SyslogQuery { Contains = "while open" }, 10));
 
         var closed = open.Clone();
         closed.AllowedSources = "10.0.0.0/8";
         _service.Reconcile(closed);
         await SendUdp(closed.UdpPort, "<13>Oct 15 10:11:12 sw1 app: while closed");
         await Task.Delay(300);
+        await _store.FlushAsync();
 
-        Assert.Single(_store.Search(new SyslogQuery(), 10));
+        Assert.Empty(_store.Search(new SyslogQuery { Contains = "while closed" }, 10));
     }
 
     // ---- "Send a test message" --------------------------------------------------------------------------------------

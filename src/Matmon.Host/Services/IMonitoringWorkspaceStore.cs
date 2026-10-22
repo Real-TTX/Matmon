@@ -278,6 +278,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Stores the settings, pulled into their legal ranges. The receiver notices within seconds.</summary>
     void UpdateSyslogSettings(Matmon.Core.Syslog.SyslogSettings settings);
 
+    /// <summary>The SNMP trap receiver's settings (a detached, normalised copy). Off by default.</summary>
+    Matmon.Core.SnmpTraps.SnmpTrapSettings GetSnmpTrapSettings();
+
+    /// <summary>Stores the trap receiver's settings; the receiver notices within seconds.</summary>
+    void UpdateSnmpTrapSettings(Matmon.Core.SnmpTraps.SnmpTrapSettings settings);
+
     /// <summary>This instance's persisted Matmon.Cloud link credentials (a detached clone).</summary>
     CloudConnectionState GetCloudConnection();
 

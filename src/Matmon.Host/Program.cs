@@ -250,6 +250,7 @@ builder.Services.AddRazorPages(options =>
     // The receiver is a system setting. (Reading the log is a tab of Events; its handlers refuse a viewer themselves -
     // device logs can name users and addresses.)
     options.Conventions.AuthorizePage("/SystemSyslog", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SystemSnmpTraps", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the
@@ -290,6 +291,13 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddSingleton<SyslogReceiverState>();
     builder.Services.AddSingleton<SyslogIngest>();
     builder.Services.AddHostedService<SyslogReceiverService>();
+
+    // SNMP traps: off until an admin switches it on (System > SNMP traps). A trap lands in the same central log and makes
+    // the sending device's sensors poll at once. Self-contained like the syslog receiver - both are to become plugins.
+    builder.Services.AddSingleton<SnmpTrapReceiverState>();
+    builder.Services.AddSingleton<SensorWakeService>();
+    builder.Services.AddSingleton<SnmpTrapIngest>();
+    builder.Services.AddHostedService<SnmpTrapReceiverService>();
 }
 else
 {
