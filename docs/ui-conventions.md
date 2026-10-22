@@ -89,7 +89,7 @@ renders no menu and no header bar - nothing for a page to do.
 ```
 
 The tab is `id="tab-<name>"`, its panel `id="panel-<name>"`; `#<name>` in the address opens it. A form posted back to the
-same page carries the open tab's `#name` on its action (core.js), so Save, Test or a validation error come back on the tab
+same page carries the open tab's `#name` on its action (core.js; not the first tab, which the page opens on anyway), so Save, Test or a validation error come back on the tab
 the user was on - nothing to do per page. A tab the server wants open regardless gets `aria-selected="true"` and its panel
 loses `hidden`. A partial that brings its own tab panel (the sensor editors' thresholds, schedule, credentials) is a
 `mat-tabpanel` with the matching ids.

@@ -110,12 +110,14 @@ function initializeTabHash() {
     if (!group) {
       return;
     }
-    // The tab that is open now - also one the server opened without "#name" in the address.
-    const selected = group.querySelector('[role="tab"][aria-selected="true"]');
-    const hash = selected && selected.id.startsWith("tab-") ? "#" + selected.id.slice(4) : location.hash;
-    if (!hash) {
+    // The tab that is open now - also one the server opened without "#name" in the address. The first tab is what the
+    // page opens on anyway, so it adds nothing (and would ride along on the redirect to another page after a create).
+    const tabs = Array.from(group.querySelectorAll('[role="tab"]'));
+    const selected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+    if (!selected || selected === tabs[0] || !selected.id.startsWith("tab-")) {
       return;
     }
+    const hash = "#" + selected.id.slice(4);
     const submitter = event.submitter;
     const viaSubmitter = !!submitter && submitter.hasAttribute("formaction");
     const target = new URL(viaSubmitter ? submitter.formAction : form.action, location.href);
