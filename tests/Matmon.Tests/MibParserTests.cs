@@ -52,6 +52,18 @@ public class MibParserTests
     }
 
     [Fact]
+    public void TheUpsMibNamesUpsValuesAndTraps()
+    {
+        var registry = Shipped();
+
+        Assert.Equal("upsEstimatedMinutesRemaining.0", registry.Translate("1.3.6.1.2.1.33.1.2.3.0")!.Name);
+        Assert.Equal("battery (5)", registry.Translate("1.3.6.1.2.1.33.1.4.1.0")!.FormatValue("5")); // upsOutputSource
+        var trap = registry.Translate("1.3.6.1.2.1.33.2.1");
+        Assert.Equal("upsTrapOnBattery", trap!.Name);
+        Assert.Equal("UPS-MIB", trap.Node.Module);
+    }
+
+    [Fact]
     public void EnumsResolveDirectlyAndThroughTextualConventions()
     {
         var registry = Shipped();

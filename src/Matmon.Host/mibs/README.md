@@ -3,7 +3,8 @@
 Standard MIB modules shipped with Matmon so SNMP walks show names out of the box. Uploaded MIBs
 (System → SNMP MIBs, stored in `data/mibs`) are loaded after these and replace a module of the same name.
 
-Source: the MIB set distributed with Net-SNMP 5.9.4 (Alpine `net-snmp` package).
+Source: the MIB set distributed with Net-SNMP 5.9.4 (Alpine `net-snmp` package), plus UPS-MIB (RFC 1628) from the
+libsmi MIB collection (Alpine `libsmi` package) - UPS values and the UPS traps (upsTrapOnBattery, ...) get their names.
 
 - IETF modules (SNMPv2-*, IF-MIB, HOST-RESOURCES-MIB, IP-MIB, ...): published in the RFCs; MIB modules are
   "Code Components" under the IETF Trust Legal Provisions and may be redistributed under the Simplified BSD License.
