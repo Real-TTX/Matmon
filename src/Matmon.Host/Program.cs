@@ -501,6 +501,21 @@ if (runtimeOptions.Mode == AppMode.Primary)
     app.MapGet("/api/dashboard", (IDashboardSnapshotProvider provider) =>
         Results.Ok(provider.CreateSnapshot()));
 
+    // The menu's alert status on every page: the counts only, with the same names as the dashboard snapshot (which
+    // clones the workspace twice and builds a graph series per sensor - far too much for a 5 s poll on every page).
+    app.MapGet("/api/alerts/summary", (IMonitoringWorkspaceStore store) =>
+    {
+        var (open, acknowledged, error, warning) = store.GetActiveAlertCounts();
+        return Results.Ok(new
+        {
+            activeAlertCount = open,
+            acknowledgedAlertCount = acknowledged,
+            errorAlertCount = error,
+            warningAlertCount = warning,
+            pausedSensorCount = store.CountPausedSensors()
+        });
+    });
+
     app.MapGet("/api/topology", (IDashboardSnapshotProvider provider) =>
         Results.Ok(provider.CreateSnapshot()));
 

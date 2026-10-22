@@ -890,6 +890,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public int CountPausedSensors()
+    {
+        lock (_gate)
+        {
+            return EnumerateElements(_document.RootProbe).OfType<SensorElement>().Count(sensor => sensor.IsPaused);
+        }
+    }
+
     public (int Open, int Acknowledged, int Error, int Warning) GetActiveAlertCounts()
     {
         lock (_gate)

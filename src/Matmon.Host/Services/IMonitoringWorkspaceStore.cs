@@ -162,6 +162,9 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Cheap counts of the persisted active alerts (open vs. acknowledged, plus the error/warning severity split) - no snapshot clone.</summary>
     (int Open, int Acknowledged, int Error, int Warning) GetActiveAlertCounts();
 
+    /// <summary>How many sensors are paused - counted under the lock, without cloning the tree (the menu's alert status polls it).</summary>
+    int CountPausedSensors();
+
     void RecordSensorObservation(
         Guid sensorId,
         SensorExecutionResult result,

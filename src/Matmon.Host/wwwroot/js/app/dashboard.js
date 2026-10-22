@@ -1,18 +1,20 @@
 // Matmon - the dashboard's live refresh and the counts on the menu.
 // Part of what was one site.js; the parts are classic scripts sharing one global scope (core.js first).
 
-// Polls /api/dashboard while there is something on the page that shows its numbers: the counts on the menu (every page
-// with the menu), the dashboard's sensors, or a monitoring-tree node that carries a live value (data-series-key).
+// Polls while there is something on the page that shows live numbers: the dashboard (its sensors, status chart and
+// highlight strip) or a monitoring-tree node that carries a live value (data-series-key) need the full /api/dashboard
+// snapshot; a page that only has the menu's alert status polls the light /api/alerts/summary (the same count names,
+// none of the per-sensor graphs).
 function initializeDashboardRefresh() {
-  const graphCards = document.querySelectorAll("[data-series-key]");
+  const needsSnapshot = document.querySelector("[data-series-key], [data-dashboard-status-chart], [data-dashboard-highlight-strip]") !== null;
   const navBadges = document.querySelectorAll("[data-navinfo], [data-nav-badge]");
-  if (graphCards.length === 0 && navBadges.length === 0) {
+  if (!needsSnapshot && navBadges.length === 0) {
     return;
   }
 
   const refresh = async () => {
     try {
-      const response = await fetch("/api/dashboard", {
+      const response = await fetch(needsSnapshot ? "/api/dashboard" : "/api/alerts/summary", {
         headers: {
           Accept: "application/json"
         }
@@ -28,7 +30,11 @@ function initializeDashboardRefresh() {
       }
 
       const snapshot = await response.json();
-      renderDashboard(snapshot);
+      if (needsSnapshot) {
+        renderDashboard(snapshot);
+      } else {
+        renderNavCounters(snapshot);
+      }
     } catch {
       // The UI stays usable even if one refresh fails.
     }
