@@ -1,0 +1,24 @@
+@model Matmon.Host.Ui.NavInfo
+@* A compact status block at the top of the menu (Ui/NavInfo.cs): the title links to the list, the big number and its
+   state say how it stands, the small counts below open the list filtered. The same partial exists in Matmon.Cloud. *@
+<section class="mm-navinfo" data-navinfo="@Model.Key" data-tone="@Model.Tone" aria-label="@Model.Title">
+    <a class="mm-navinfo__main@(Model.Active ? " is-active" : string.Empty)" href="@Model.Href" target="@Model.Target" aria-current="@(Model.Active ? "page" : null)" title="@Model.Description" data-menu-path="@Model.MenuPath">
+        @MatUi.Icon(Model.Icon)
+        <span class="mm-navinfo__title">@Model.Title</span>
+        <span class="mm-navinfo__value" data-navinfo-value>@Model.Value</span>
+        <span class="mm-navinfo__state" data-navinfo-state>@Model.State</span>
+    </a>
+    @if (Model.Stats.Count > 0)
+    {
+        <ul class="mm-navinfo__stats">
+            @foreach (var stat in Model.Stats)
+            {
+                <li>
+                    <a class="mm-navinfo__stat@(stat.Value == 0 ? " is-zero" : null)" href="@stat.Href" target="@stat.Target" title="@stat.Title" data-tone="@stat.Tone" data-navinfo-stat="@stat.Key">
+                        <strong>@stat.Value</strong><span>@stat.Label</span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</section>

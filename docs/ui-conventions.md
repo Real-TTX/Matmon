@@ -106,6 +106,22 @@ presses it; a field that handles Enter itself - a tag input, a picker's search -
 is reported in the console and the others still start. A new feature = a `function initializeX()` in its file (a function
 declaration, so it is on `window`) + its name in that list.
 
+
+## The alert status at the top of the menu (`_NavInfo`)
+
+MatUi's menu only has count badges (SHELL-14). The alert status is an app component above the menu items -
+`Ui/NavInfo.cs` (record) + `Pages/Shared/_NavInfo.cshtml` (markup) + `.mm-navinfo` (app.css), the SAME three
+pieces in the instance and in Matmon.Cloud: a titled link with one big number and its state word (Error / Warning / Ack /
+Paused / OK - the most severe first), and a row of small linked counts (Err / Warn / Ack / Pause); a count that is not zero
+takes its tone, a zero stays quiet (`.is-zero`). It IS the menu's entry to the alerts - there is no separate Alerts item.
+`InstanceShellBuilder` builds it, `dashboard.js` (`renderNavCounters` -> `setNavInfo`) keeps it current from `/api/dashboard`. The tone/state
+rule exists twice (C# `AlertStatus` and the script's `alertStatus`) - change both. Written generically (key, title, icon,
+value, tone, state, stats) so another summary can use it, and so it can move into MatUi as a menu component one day.
+
+⚠️ Razor drops an ordinary attribute whose value is null, but writes a **data-* attribute as `data-x=""`**, so
+`data-x="@(cond ? "" : null)"` is always present. Give such an attribute a value ("true"/"false"), use a class, or emit
+it with `@(cond ? Html.Raw("data-x") : HtmlString.Empty)`. `MatUiMarkupContractTests` fails on the pattern.
+
 ## Confirmations and messages (DIALOG-*)
 
 `data-confirm="Delete this sensor? Its history goes with it."` + `data-confirm-ok="Delete"` on the submit button (or the

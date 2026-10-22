@@ -136,6 +136,16 @@ public sealed partial class MatUiMarkupContractTests
     }
 
     [Fact]
+    public void Data_attributes_do_not_rely_on_a_null_value_to_disappear()
+    {
+        // Razor drops an ordinary attribute whose value is null, but writes a data-* attribute as data-x="" - so
+        // data-x="@(cond ? "" : null)" is ALWAYS present. Code that tests for presence then always fires (the public
+        // wallboard rotated its slides whatever the map said). Give such an attribute a value ("true"/"false") or a class.
+        var problems = Views().SelectMany(v => NullableDataAttribute().Matches(v.Text).Select(m => $"{v.File}: {m.Value}")).ToList();
+        Assert.True(problems.Count == 0, "data-* attribute with a null branch:\n" + string.Join("\n", problems));
+    }
+
+    [Fact]
     public void Scripts_use_no_browser_dialogs()
     {
         var problems = new List<string>();
@@ -185,6 +195,7 @@ public sealed partial class MatUiMarkupContractTests
     [GeneratedRegex(@"MatUi\.Icon\(""([a-z0-9-]+)""")] private static partial Regex IconCall();
     [GeneratedRegex(@"<td\b[^>]*>")] private static partial Regex TableCell();
     [GeneratedRegex(@"<table\b[^>]*>")] private static partial Regex TableTag();
+    [GeneratedRegex(@"data-[a-z-]+=""@\((?:[^()""]|""[^""]*""|\([^()]*\))*\bnull\b(?:[^()""]|""[^""]*""|\([^()]*\))*\)""")] private static partial Regex NullableDataAttribute();
     [GeneratedRegex(@"<table\b[^>]*class=""mm-[^>]*>.*?</table>", RegexOptions.Singleline)] private static partial Regex OwnTable();
     [GeneratedRegex(@"window\.(confirm|alert|prompt)\s*\(|(?<![\w.])(confirm|alert|prompt)\s*\(")] private static partial Regex BrowserDialog();
     [GeneratedRegex(@"@\*.*?\*@", RegexOptions.Singleline)] private static partial Regex RazorComment();

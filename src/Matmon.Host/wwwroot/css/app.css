@@ -43,3 +43,80 @@
    muted text colour. Only the token changes; the toolkit's rule stays as it is. */
 .mat-btn--secondary.is-loading,
 .mat-btn--ghost.is-loading { --mat-on-accent: var(--mat-text-muted); }
+
+/* ---- A status block at the top of the menu (_NavInfo, Ui/NavInfo.cs) ----
+   MatUi's menu only has count badges (SHELL-14); a badge cannot say Error / Warning / Ack at a glance or open the list
+   filtered. This block can: a titled link with one big number and its state word, and a row of small linked counts.
+   Built only from MatUi tokens and shaped like a menu item, so it reads as part of the menu, not as a widget dropped
+   into it. The same rules are in Matmon.Cloud's cloud.css - keep the two in step. */
+.mm-navinfo {
+  flex: none;
+  display: grid;
+  gap: var(--mat-space-1);
+  margin: 0 var(--mat-space-3) var(--mat-space-2);
+  padding: var(--mat-space-1);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius-lg);
+  background: var(--mat-surface);
+}
+.mm-navinfo[data-tone="error"] { border-color: color-mix(in srgb, var(--mat-danger) 45%, var(--mat-border)); }
+.mm-navinfo[data-tone="warn"] { border-color: color-mix(in srgb, var(--mat-warning) 45%, var(--mat-border)); }
+.mm-navinfo__main {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  min-height: var(--mat-nav-item-height, var(--mat-control-h));
+  padding: 0 var(--mat-space-2);
+  border-radius: var(--mat-radius);
+  color: var(--mat-text);
+  font-weight: 500;
+  text-decoration: none;
+}
+.mm-navinfo__main:hover { background: var(--mat-surface-3); text-decoration: none; }
+.mm-navinfo__main.is-active { background: var(--mat-accent-soft-strong); font-weight: 600; }
+.mm-navinfo__main:focus-visible { outline: none; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mat-accent) 70%, transparent); }
+.mm-navinfo__main .mat-icon { flex: none; font-size: 1.2rem; color: var(--mat-text-muted); }
+.mm-navinfo__main.is-active .mat-icon { color: var(--mat-accent-text); }
+.mm-navinfo__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-navinfo__value { font-size: var(--mat-fs-xl); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.mm-navinfo__state {
+  min-width: 3.4rem;
+  font-size: var(--mat-fs-xs);
+  font-weight: 650;
+  text-align: end;
+  color: var(--mat-text-muted);
+}
+.mm-navinfo[data-tone="error"] :is(.mm-navinfo__value, .mm-navinfo__state) { color: var(--mat-danger-text); }
+.mm-navinfo[data-tone="warn"] :is(.mm-navinfo__value, .mm-navinfo__state) { color: var(--mat-warning-text); }
+.mm-navinfo[data-tone="info"] .mm-navinfo__state { color: var(--mat-info-text); }
+.mm-navinfo[data-tone="ok"] .mm-navinfo__state { color: var(--mat-success-text); }
+.mm-navinfo__stats {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--mat-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mm-navinfo__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--mat-space-1) 0;
+  border-radius: var(--mat-radius-sm);
+  background: var(--mat-surface-2);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  line-height: 1.25;
+  text-decoration: none;
+}
+.mm-navinfo__stat strong { font-size: var(--mat-fs-sm); font-weight: 650; color: var(--mat-text); font-variant-numeric: tabular-nums; }
+.mm-navinfo__stat:hover { background: var(--mat-surface-3); text-decoration: none; }
+.mm-navinfo__stat:focus-visible { outline: none; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mat-accent) 70%, transparent); }
+/* A count that is not zero takes its tone; a zero stays quiet, whatever its tone. */
+.mm-navinfo__stat[data-tone="error"]:not(.is-zero) { background: var(--mat-danger-bg); color: var(--mat-danger-text); }
+.mm-navinfo__stat[data-tone="warn"]:not(.is-zero) { background: var(--mat-warning-bg); color: var(--mat-warning-text); }
+.mm-navinfo__stat[data-tone="info"]:not(.is-zero) { background: var(--mat-info-bg); color: var(--mat-info-text); }
+.mm-navinfo__stat:not(.is-zero):is([data-tone="error"], [data-tone="warn"], [data-tone="info"]) strong { color: inherit; }
+.mm-navinfo__stat.is-zero strong { color: var(--mat-text-muted); font-weight: 500; }

@@ -33,7 +33,7 @@
     @Html.Raw(Toolkit.Sprite)
     <main class="public-map-shell">
         <div class="map-stage" data-map-stage>
-            <div class="map-carousel" data-map-carousel data-map-carousel-autoplay="@(map.AutoRotateEnabled ? "" : null)" data-map-carousel-interval="@map.AutoRotateSeconds">
+            <div class="map-carousel" data-map-carousel data-map-carousel-autoplay="@(map.AutoRotateEnabled ? "true" : "false")" data-map-carousel-interval="@map.AutoRotateSeconds">
                 @for (var slideIndex = 0; slideIndex < display.Slides.Count; slideIndex++)
                 {
                     var slide = display.Slides[slideIndex];

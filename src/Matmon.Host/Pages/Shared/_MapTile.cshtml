@@ -72,7 +72,7 @@
        class when the state changes (setMapTilePillTone in maps.js). *@
     @if (showHead)
     {
-        <div class="map-tile-head@(Model.Editable ? " map-tile-drag-handle" : "")" data-map-drag-handle="@(Model.Editable ? "" : null)">
+        <div class="map-tile-head@(Model.Editable ? " map-tile-drag-handle" : "")">
             <span class="map-tile-icon">@MatmonIcons.Render(Model.IconKey)</span>
             @if (tile.ShowTitle)
             {

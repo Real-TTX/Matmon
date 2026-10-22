@@ -54,7 +54,7 @@
 
 @* Two sources of events: what Matmon saw happen, and what the network's devices said. The second only appears once syslog
    is switched on (System > Syslog) or the log holds something; until then the page is the Matmon list alone. *@
-<div class="mat-stack" data-tabs="@(hasSyslog ? string.Empty : null)" data-tab-hash="@(hasSyslog ? string.Empty : null)">
+<div class="mat-stack" @(hasSyslog ? Html.Raw("data-tabs data-tab-hash") : Microsoft.AspNetCore.Html.HtmlString.Empty)>
     @if (hasSyslog)
     {
         <div class="mat-tabs" role="tablist" aria-label="Event sources">

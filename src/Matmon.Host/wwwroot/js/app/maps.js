@@ -457,7 +457,9 @@ function initializeMapCarousel() {
     const dots = Array.from(scope.querySelectorAll("[data-map-carousel-dot]"));
     const prev = scope.querySelector("[data-map-carousel-prev]");
     const next = scope.querySelector("[data-map-carousel-next]");
-    const autoplay = carousel.hasAttribute("data-map-carousel-autoplay");
+    // By value: Razor writes a null data-* attribute as data-x="" instead of dropping it, so presence meant nothing and
+    // the public wallboard turned its slides whatever the map said.
+    const autoplay = carousel.dataset.mapCarouselAutoplay === "true";
     const intervalSeconds = parseInt(carousel.dataset.mapCarouselInterval || "", 10);
     const intervalMs = Math.max(3, Number.isFinite(intervalSeconds) ? intervalSeconds : 12) * 1000;
     let active = 0;

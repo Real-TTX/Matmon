@@ -65,6 +65,9 @@ public sealed class InstanceShell
 
     public IReadOnlyList<InstanceNavGroup> Menu { get; init; } = [];
 
+    /// <summary>The alert status at the top of the menu - it IS the menu's entry to the Alerts page (null on a secondary).</summary>
+    public NavInfo? Info { get; init; }
+
     public string UserName { get; init; } = "Account";
 
     public string UserRole { get; init; } = string.Empty;
@@ -112,11 +115,27 @@ public sealed class InstanceShellBuilder(
             catch { summary = null; }
         }
 
-        // The counts on the menu agree with the Alerts page: the number is the open (unacknowledged) alerts, the tone
-        // is red when one of them is an error. Paused sensors are a quiet count on Sensors.
+        // The alert status at the top of the menu agrees with the Alerts page: the big number is the open
+        // (unacknowledged) alerts, Err/Warn are the active alerts by severity (they outlive the sensor's recovery,
+        // Alerta-style), Ack the acknowledged ones, Pause the paused sensors. dashboard.js keeps it current.
         var open = summary?.OpenAlertCount ?? 0;
-        var alertTone = (summary?.ErrorAlertCount ?? 0) > 0 ? "error" : open > 0 ? "warn" : null;
+        var errors = summary?.ErrorAlertCount ?? 0;
+        var warnings = summary?.WarningAlertCount ?? 0;
+        var acknowledged = summary?.AcknowledgedAlertCount ?? 0;
         var paused = summary?.PausedSensorCount ?? 0;
+        NavInfo? info = null;
+        if (authed && !secondary)
+        {
+            var (tone, state) = AlertStatus(errors, warnings, acknowledged, paused);
+            info = new NavInfo("alerts", "Alerts", "bell", "/Alerts?alertFilter=open", open, tone, state, alertsActive,
+            [
+                new("error", "Err", errors, "/Alerts?alertFilter=error", "error", "Active error alerts"),
+                new("warning", "Warn", warnings, "/Alerts?alertFilter=warning", "warn", "Active warning alerts"),
+                new("ack", "Ack", acknowledged, "/Alerts?alertFilter=ack", "info", "Acknowledged alerts"),
+                new("paused", "Pause", paused, "/Paused", "plain", "Paused sensors")
+            ],
+            Description: "Open alerts");
+        }
 
         var menu = new List<InstanceNavGroup>();
         if (authed)
@@ -129,9 +148,9 @@ public sealed class InstanceShellBuilder(
             {
                 menu.Add(new InstanceNavGroup(null,
                 [
+                    // No "Alerts" item: the alert status above the menu is the entry to that page.
                     new("Dashboard", "/Index", "dashboard", dashboardActive),
-                    new("Alerts", "/Alerts", "bell", alertsActive, BadgeKey: "alerts", BadgeCount: open, BadgeTone: alertTone),
-                    new("Sensors", "/Monitoring", "activity", sensorsActive, BadgeKey: "paused", BadgeCount: paused),
+                    new("Sensors", "/Monitoring", "activity", sensorsActive),
                     new("Maps", "/Maps", "globe", Starts("/maps")),
                     new("Events", "/Events", "list", Starts("/events"))
                 ]));
@@ -210,6 +229,7 @@ public sealed class InstanceShellBuilder(
             ManagedBy = !whiteLabel && !string.IsNullOrWhiteSpace(partnerName) ? partnerName : null,
             PoweredBy = whiteLabel,
             Menu = menu,
+            Info = info,
             UserName = user.Identity?.Name ?? "Account",
             UserRole = role,
             UpdateAvailable = cloudUpdate.UpdateAvailable,
@@ -217,4 +237,13 @@ public sealed class InstanceShellBuilder(
             EmbedNav = embedNav
         };
     }
+
+    /// <summary>The tone and the state word of the alert status - the most severe thing first. The same rule runs in
+    /// dashboard.js (<c>alertStatus</c>) for the live update; change both together.</summary>
+    public static (string Tone, string State) AlertStatus(int errors, int warnings, int acknowledged, int paused)
+        => errors > 0 ? ("error", "Error")
+            : warnings > 0 ? ("warn", "Warning")
+            : acknowledged > 0 ? ("info", "Ack")
+            : paused > 0 ? ("plain", "Paused")
+            : ("ok", "OK");
 }

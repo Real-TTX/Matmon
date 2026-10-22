@@ -51,7 +51,7 @@
          data-tree-depth="@Model.Depth"
          data-tree-path="@Model.Path"
          data-state="@Model.StateKey"
-         data-acknowledged="@(Model.IsAcknowledged ? "true" : null)">
+         data-acknowledged="@(Model.IsAcknowledged ? "true" : "false")">
     @if (isSensorNode)
     {
         <div class="monitoring-sensor-strip is-single-sensor">
@@ -63,7 +63,7 @@
                      data-tree-depth="@Model.Depth"
                      data-tree-path="@Model.Path"
                      data-state="@Model.StateKey"
-                     data-acknowledged="@(Model.IsAcknowledged ? "true" : null)">
+                     data-acknowledged="@(Model.IsAcknowledged ? "true" : "false")">
                 <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" title="@Model.Path">
                     <span class="monitoring-sensor-status">@MatUi.Icon(StatusIcon(Model))<span class="mat-sr-only" data-role="state">@Model.StateLabel</span></span>
                     <span class="tree-name monitoring-sensor-name">@Model.Name</span>
@@ -280,7 +280,7 @@
                                      data-tree-depth="@sensor.Depth"
                                      data-tree-path="@sensor.Path"
                                      data-state="@sensor.StateKey"
-                                     data-acknowledged="@(sensor.IsAcknowledged ? "true" : null)">
+                                     data-acknowledged="@(sensor.IsAcknowledged ? "true" : "false")">
                                 <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" title="@sensor.Path">
                                     <span class="monitoring-sensor-status">@MatUi.Icon(StatusIcon(sensor))<span class="mat-sr-only" data-role="state">@sensor.StateLabel</span></span>
                                     <span class="tree-name monitoring-sensor-name">@sensor.Name</span>

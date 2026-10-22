@@ -5,7 +5,7 @@
 // with the menu), the dashboard's sensors, or a monitoring-tree node that carries a live value (data-series-key).
 function initializeDashboardRefresh() {
   const graphCards = document.querySelectorAll("[data-series-key]");
-  const navBadges = document.querySelectorAll("[data-nav-badge]");
+  const navBadges = document.querySelectorAll("[data-navinfo], [data-nav-badge]");
   if (graphCards.length === 0 && navBadges.length === 0) {
     return;
   }
@@ -225,17 +225,53 @@ function setDashboardStatusText(chart, role, value) {
   });
 }
 
-// The two counts on the menu (SHELL-14), as the layout draws them: open alerts on Alerts - red when one of them is an
-// error, amber when they are only warnings - and paused sensors on Sensors (always plain). A badge is hidden at 0.
-// Everything here is alert-based so the badge agrees with the Alerts page.
+// The alert status at the top of the menu (_NavInfo, as InstanceShellBuilder draws it): the big number is the open
+// (unacknowledged) alerts, Err/Warn the active alerts by severity, Ack the acknowledged ones, Pause the paused sensors.
+// Everything is alert-based so it agrees with the Alerts page.
 function renderNavCounters(snapshot) {
-  const openAlerts = Math.max(0, Number(snapshot.activeAlertCount ?? 0));
-  const errorAlerts = Math.max(0, Number(snapshot.errorAlertCount ?? 0));
-  const pausedSensors = Math.max(0, Number(snapshot.pausedSensorCount ?? 0));
-  const alertTone = errorAlerts > 0 ? "error" : openAlerts > 0 ? "warn" : "plain";
+  const count = (value) => Math.max(0, Number(value ?? 0));
+  const errors = count(snapshot.errorAlertCount);
+  const warnings = count(snapshot.warningAlertCount);
+  const acknowledged = count(snapshot.acknowledgedAlertCount);
+  const paused = count(snapshot.pausedSensorCount);
+  const status = alertStatus(errors, warnings, acknowledged, paused);
+  setNavInfo("alerts", count(snapshot.activeAlertCount), status.tone, status.state, { error: errors, warning: warnings, ack: acknowledged, paused });
+}
 
-  setNavBadge("alerts", openAlerts, alertTone);
-  setNavBadge("paused", pausedSensors, "plain");
+// The same rule as InstanceShellBuilder.AlertStatus - the most severe thing first. Change both together.
+function alertStatus(errors, warnings, acknowledged, paused) {
+  if (errors > 0) return { tone: "error", state: "Error" };
+  if (warnings > 0) return { tone: "warn", state: "Warning" };
+  if (acknowledged > 0) return { tone: "info", state: "Ack" };
+  if (paused > 0) return { tone: "plain", state: "Paused" };
+  return { tone: "ok", state: "OK" };
+}
+
+// Writes one menu status block (.mm-navinfo[data-navinfo=key]): the number, the state word, the tone and each small
+// count (a zero is drawn quietly - .is-zero).
+function setNavInfo(key, value, tone, state, stats) {
+  document.querySelectorAll(`[data-navinfo="${key}"]`).forEach((block) => {
+    block.dataset.tone = tone;
+    const valueElement = block.querySelector("[data-navinfo-value]");
+    if (valueElement) {
+      valueElement.textContent = String(value);
+    }
+    const stateElement = block.querySelector("[data-navinfo-state]");
+    if (stateElement) {
+      stateElement.textContent = state;
+    }
+    Object.entries(stats || {}).forEach(([statKey, statValue]) => {
+      const stat = block.querySelector(`[data-navinfo-stat="${statKey}"]`);
+      if (!stat) {
+        return;
+      }
+      const number = stat.querySelector("strong");
+      if (number) {
+        number.textContent = String(statValue);
+      }
+      stat.classList.toggle("is-zero", !(statValue > 0));
+    });
+  });
 }
 
 const navBadgeTones = ["error", "warn", "plain", "ok", "info"];

@@ -80,6 +80,11 @@
                     <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-nav__close" data-nav-close aria-label="Close the menu">@MatUi.Icon("x")</button>
                 </div>
 
+                @if (shell.Info is not null)
+                {
+                    <partial name="_NavInfo" model="shell.Info" />
+                }
+
                 @if (shell.Authed)
                 {
                     <nav class="mat-nav__scroll" aria-label="Main">

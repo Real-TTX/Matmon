@@ -251,7 +251,7 @@
                                 : "No extra information";
                         var menuId = $"list-menu-{node.Id}";
 
-                        <tr class="monitoring-list-row" data-state="@rowState" data-kind="@kindKey" data-depth="@node.Depth" data-acknowledged="@(node.IsAcknowledged ? "true" : null)">
+                        <tr class="monitoring-list-row" data-state="@rowState" data-kind="@kindKey" data-depth="@node.Depth" data-acknowledged="@(node.IsAcknowledged ? "true" : "false")">
                             <td data-label="Status">
                                 <span class="monitoring-list-status">
                                     @if (hasState)
