@@ -61,16 +61,26 @@ public sealed class LicenseInfo
 
     public string SensorLimitDisplay => IsSensorUnlimited ? "unlimited" : SensorLimit.ToString();
 
-    /// <summary>The plan's display name, or the tier as a fallback for legacy tokens.</summary>
-    public string DisplayName => string.IsNullOrWhiteSpace(PlanName) ? Tier.ToString() : PlanName;
+    /// <summary>The name of the free plan. The tier on the wire stays <see cref="LicenseTier.Free"/> (0); what a user reads
+    /// is "Personal": free, for personal use only.</summary>
+    public const string PersonalPlanName = "Personal";
 
-    /// <summary>The default license when none is present: Free - a small allowance, no premium features.</summary>
+    /// <summary>The plan's display name, or the tier as a fallback for legacy tokens.</summary>
+    public string DisplayName => string.IsNullOrWhiteSpace(PlanName) ? TierName(Tier) : PlanName;
+
+    public static string TierName(LicenseTier tier) => tier == LicenseTier.Free ? PersonalPlanName : tier.ToString();
+
+    /// <summary>
+    /// The license when none is present: the free Personal plan - personal use only, unlimited sensors, one probe (the
+    /// instance's own), no premium features. It was 1 probe / 10 sensors; the plans are told apart by the number of
+    /// probes and by the use (personal / business), not by a sensor count.
+    /// </summary>
     public static LicenseInfo Fallback() => new()
     {
         Tier = LicenseTier.Free,
         PlanName = null,
         ProbeLimit = 1,
-        SensorLimit = 10,
+        SensorLimit = Unlimited,
         CloudSensorLimit = 0,
         TunnelEnabled = false,
         CloudSensorsEnabled = false,

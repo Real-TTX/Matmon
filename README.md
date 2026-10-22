@@ -311,5 +311,5 @@ Registry.
 ## License
 
 Matmon is **proprietary** software — see the [LICENSE](LICENSE). Commercial use is governed by the
-applicable Matmon product plan (Free / Business / Enterprise). Bundled third-party components keep
+applicable Matmon product plan (Personal - free, for personal use only / Business / Enterprise). Bundled third-party components keep
 their own licenses.

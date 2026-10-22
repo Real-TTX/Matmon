@@ -5,11 +5,11 @@ namespace Matmon.Host.Services;
 /// <summary>
 /// Resolves + enforces this instance's license. The signed token is fetched from Matmon.Cloud and cached
 /// in the workspace; validation is fully offline (baked public key) so the monitor keeps enforcing the last
-/// known license even when the cloud is unreachable. Falls back to Free/limited when no valid token exists.
+/// known license even when the cloud is unreachable. Falls back to the free Personal plan when no valid token exists.
 /// </summary>
 public interface ILicenseService
 {
-    /// <summary>The current effective license (verified; expired/invalid/missing → Free fallback).</summary>
+    /// <summary>The current effective license (verified; expired/invalid/missing → the free Personal plan).</summary>
     LicenseInfo Current { get; }
 
     /// <summary>Whether another probe may be added under the current license.</summary>

@@ -622,7 +622,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "partner" });
     }
 
-    /// <summary>Clear the cached license token - the instance falls back to Free (until the cloud re-issues one).</summary>
+    /// <summary>Clear the cached license token - the instance falls back to the free Personal plan (until the cloud re-issues one).</summary>
     public IActionResult OnPostClearLicenseToken()
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -631,7 +631,7 @@ public class ConfigModel : PageModel
         }
 
         _workspaceStore.SetLicenseToken(null);
-        StatusMessage = "License token cleared - the instance is now on the Free fallback.";
+        StatusMessage = "License token cleared - the instance is now on the free Personal plan.";
         return RedirectToPage(new { tab = "license" });
     }
 

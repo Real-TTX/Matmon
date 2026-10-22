@@ -921,7 +921,7 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
 else if (Model.IsActiveTab("license") && canManageSystem)
 {
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">License</h2><span class="mat-text-muted mm-push-end">@Model.License.DisplayName@(Model.License.IsFallback ? " · unlicensed (Free)" : "")</span></div>
+        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">License</h2><span class="mat-text-muted mm-push-end">@Model.License.DisplayName@(Model.License.IsFallback ? " · unlicensed (free, personal use only)" : "")</span></div>
         <div class="mat-card__body mat-stack">
             <dl class="mat-kv">
                 <dt>Plan</dt><dd><strong>@Model.License.DisplayName</strong></dd>
@@ -935,14 +935,14 @@ else if (Model.IsActiveTab("license") && canManageSystem)
                 The license is a short <strong>lease</strong>, verified <strong>offline</strong> against Matmon's public key. While
                 connected, Matmon.Cloud renews it on every heartbeat, so the "valid until" date keeps rolling forward - you don't
                 need to do anything. If this instance can't reach the cloud for about two weeks (or its license is revoked), the
-                lease lapses and it falls back to the <strong>Free</strong> tier until it checks in again.
+                lease lapses and it falls back to the free <strong>Personal</strong> plan (personal use only, one probe) until it checks in again.
             </p>
 
             @if (Model.CloudLinkActive && Model.License.IsFallback)
             {
                 <div class="mat-alert mat-alert--warning" role="status">
                     @MatUi.Icon("alert")
-                    <div class="mat-alert__body">Connected to Matmon.Cloud, but no valid license token has arrived yet - this instance is on the <strong>Free</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.</div>
+                    <div class="mat-alert__body">Connected to Matmon.Cloud, but no valid license token has arrived yet - this instance is on the free <strong>Personal</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.</div>
                 </div>
             }
 
@@ -975,7 +975,7 @@ else if (Model.IsActiveTab("license") && canManageSystem)
                         {
                             <span class="mat-btn-row__spacer"></span>
                             <button type="submit" form="license-clear" class="mat-btn mat-btn--danger"
-                                    data-confirm="Clear the cached license token? The instance drops to the Free fallback until the cloud re-issues one." data-confirm-ok="Clear">@MatUi.Icon("trash")<span>Clear license token</span></button>
+                                    data-confirm="Clear the cached license token? The instance drops to the free Personal plan until the cloud re-issues one." data-confirm-ok="Clear">@MatUi.Icon("trash")<span>Clear license token</span></button>
                         }
                     </div>
                 </form>
