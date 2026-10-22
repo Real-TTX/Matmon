@@ -251,7 +251,11 @@ builder.Services.AddRazorPages(options =>
     // device logs can name users and addresses.)
     options.Conventions.AuthorizePage("/SystemSyslog", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemSnmpTraps", MatmonSecurity.AdminPolicy);
-}).AddMvcOptions(options => options.Filters.Add<MatmonPageWriteGuard>());
+}).AddMvcOptions(options =>
+{
+    options.Filters.Add<MatmonPageWriteGuard>();
+    options.Filters.Add<RenderedTempDataFilter>();
+});
 builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvider>();
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the
 // auto-login middleware (trusts the cloud's identity assertion only when this secret accompanies it).
