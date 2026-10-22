@@ -144,7 +144,10 @@ public sealed class SensorExecutionService : ISensorExecutionService
             ? _workspaceStore.GetLatestObservation(previousId)
             : null;
         var context = new SensorExecutionContext(sensorTypeKey, target, settings, sensorId, previousObservation);
-        var result = await executor.ExecuteAsync(context, cancellationToken);
+        // A recorded check honours Retries; a transient one (an editor's test) runs once and answers quickly.
+        var result = recordObservation
+            ? await SensorRetry.ExecuteAsync(executor, context, cancellationToken)
+            : await executor.ExecuteAsync(context, cancellationToken);
         result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(settings, result);
 
         if (recordObservation && sensorId is Guid id)

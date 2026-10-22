@@ -203,7 +203,8 @@ else
                             </div>
                             <div class="mat-field">
                                 <label class="mat-label" asp-for="TemplateEditor.RetryCount">Retries</label>
-                                <input asp-for="TemplateEditor.RetryCount" type="number" min="0" class="mat-input" placeholder="@Model.TemplateEditor.RetryCountPlaceholder" />
+                                <input asp-for="TemplateEditor.RetryCount" type="number" min="0" max="@Matmon.Core.Domain.SensorRetry.MaxRetries" class="mat-input" placeholder="@Model.TemplateEditor.RetryCountPlaceholder" />
+                                <span class="mat-hint">A check that fails is run again this many times (2 s apart) before it counts.</span>
                                 <span class="mat-error" aria-live="polite"></span>
                             </div>
                             <div class="mat-field">

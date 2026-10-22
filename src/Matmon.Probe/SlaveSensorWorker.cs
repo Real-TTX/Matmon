@@ -350,7 +350,8 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         try
         {
-            var result = await executor.ExecuteAsync(
+            var result = await SensorRetry.ExecuteAsync(
+                executor,
                 new SensorExecutionContext(
                     assignment.SensorTypeKey,
                     assignment.Target,
@@ -461,14 +462,16 @@ public sealed class SlaveSensorWorker : BackgroundService
 
             // Same execution path as a scheduled assignment (see ExecuteAssignmentAsync), including the
             // default-channel selection. No previous observation is threaded through for an on-demand run.
-            var result = await executor.ExecuteAsync(
-                new SensorExecutionContext(
-                    job.SensorTypeKey,
-                    job.Target,
-                    job.Settings,
-                    job.SensorId,
-                    previousObservation: null),
-                cancellationToken);
+            // A recorded run job (Run now) honours Retries like a scheduled check; a test runs once.
+            var context = new SensorExecutionContext(
+                job.SensorTypeKey,
+                job.Target,
+                job.Settings,
+                job.SensorId,
+                previousObservation: null);
+            var result = job.RecordObservation
+                ? await SensorRetry.ExecuteAsync(executor, context, cancellationToken)
+                : await executor.ExecuteAsync(context, cancellationToken);
             result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(job.Settings, result);
             return new ProbeRunJobResult(job.JobId, result, null, null, DateTimeOffset.UtcNow);
         }
