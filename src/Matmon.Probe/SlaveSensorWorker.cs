@@ -25,7 +25,7 @@ public sealed class SlaveSensorWorker : BackgroundService
     // Store-and-forward: the last assignments received from the primary (so the probe keeps executing on
     // schedule while the primary is unreachable) + the observations produced meanwhile (flushed on reconnect).
     private ProbeSensorAssignmentsResponse? _cachedAssignments;
-    private readonly OfflineObservationBuffer _buffer = new();
+    private readonly OfflineObservationBuffer _buffer;
 
     public SlaveSensorWorker(
         IHttpClientFactory httpClientFactory,
@@ -41,6 +41,13 @@ public sealed class SlaveSensorWorker : BackgroundService
         _runtimeState = runtimeState;
         _discoveryService = discoveryService;
         _logger = logger;
+        _buffer = new OfflineObservationBuffer(
+            runtimeOptions.Mode == AppMode.Secondary ? runtimeOptions.OfflineBufferPath : null,
+            message => logger.LogWarning("{Message}", message));
+        if (_buffer.Count > 0)
+        {
+            _logger.LogInformation("Loaded {Count} buffered observation(s) from {Path}; they are sent once the primary answers", _buffer.Count, _buffer.FilePath);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

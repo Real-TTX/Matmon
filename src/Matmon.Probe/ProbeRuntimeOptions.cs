@@ -31,9 +31,13 @@ public class ProbeRuntimeOptions
     /// with their original timestamps) once the link returns. This caps how far back the buffer is kept -
     /// observations older than this are dropped. Default 7 days; <b>0 disables buffering</b> (unsent results
     /// are dropped immediately, the pre-buffer behaviour). Set via <c>Matmon__OfflineBufferRetentionDays</c>.
-    /// The buffer is in memory, so it survives a primary outage while the probe keeps running (not a probe restart).
+    /// The buffer is kept on disk too (<see cref="OfflineBufferPath"/>), so it also survives a restart of the probe.
     /// </summary>
     public int OfflineBufferRetentionDays { get; set; } = 7;
+
+    /// <summary>The file the offline buffer is kept in (JSON lines). The Docker probe defaults to its data directory, the
+    /// agent to its state directory; set via <c>Matmon__OfflineBufferPath</c>. Empty = memory only (lost on a restart).</summary>
+    public string? OfflineBufferPath { get; set; }
 
     /// <summary>Hard cap on buffered observations (RAM safety for a long outage); the oldest are dropped past it.
     /// Set via <c>Matmon__OfflineBufferMaxObservations</c>. Default 100000; ≤0 = no count cap (retention only).</summary>

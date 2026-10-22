@@ -83,6 +83,13 @@ var workspacePath = string.IsNullOrWhiteSpace(runtimeOptions.WorkspacePath)
 var resolvedWorkspacePath = Path.IsPathRooted(workspacePath)
     ? workspacePath
     : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, workspacePath));
+// A Docker probe keeps its offline buffer beside the rest of its data, so an outage of the primary survives a
+// container restart too (Matmon__OfflineBufferPath overrides it).
+if (runtimeOptions.Mode == AppMode.Secondary && string.IsNullOrWhiteSpace(runtimeOptions.OfflineBufferPath))
+{
+    runtimeOptions.OfflineBufferPath = Path.Combine(Path.GetDirectoryName(resolvedWorkspacePath) ?? builder.Environment.ContentRootPath, "offline-observations.jsonl");
+}
+
 var workspaceDirectory = Path.GetDirectoryName(resolvedWorkspacePath)
     ?? Path.Combine(builder.Environment.ContentRootPath, "data");
 var dataProtectionDirectory = ResolveDataProtectionDirectory(builder.Environment, runtimeOptions, workspaceDirectory);

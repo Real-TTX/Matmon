@@ -80,6 +80,13 @@ if (string.IsNullOrWhiteSpace(options.PrimaryUrl) || string.IsNullOrWhiteSpace(o
     return 1;
 }
 
+// The offline buffer goes into the state directory (beside the update records), so observations made while the
+// primary was unreachable survive a restart of the agent - an update, a reboot.
+if (string.IsNullOrWhiteSpace(options.OfflineBufferPath))
+{
+    options.OfflineBufferPath = Path.Combine(AgentConfigFile.ResolveStateDirectory(configPath), "offline-observations.jsonl");
+}
+
 builder.Services.AddSingleton(options);
 
 // What "storage" means for an agent: the directory it is installed in and the drive under it. It keeps no
