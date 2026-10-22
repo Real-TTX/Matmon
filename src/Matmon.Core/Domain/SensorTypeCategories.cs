@@ -36,6 +36,7 @@ public static class SensorTypeCategories
         ["snmp"] = "Network",
         ["snmp-interface"] = "Network",
         ["ups-snmp"] = "Network",
+        ["nut-ups"] = "Network",
         ["mail-health"] = "Network",
 
         ["syslog-messages"] = "Logs",

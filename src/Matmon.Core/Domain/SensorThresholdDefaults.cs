@@ -42,13 +42,31 @@ public static class SensorThresholdDefaults
         new("ntp", "delayMs", "warning", ThresholdDirection.Above, 150),
         new("ntp", "delayMs", "critical", ThresholdDirection.Above, 800),
 
-        // ── UPS over SNMP ─────────────────────────────────────────────────────────────────────
-        new("ups-snmp", "battery_charge", "warning", ThresholdDirection.Below, 50),
-        new("ups-snmp", "battery_charge", "critical", ThresholdDirection.Below, 20),
-        new("ups-snmp", "runtime_minutes", "warning", ThresholdDirection.Below, 15),
-        new("ups-snmp", "runtime_minutes", "critical", ThresholdDirection.Below, 5),
-        new("ups-snmp", "load_percent", "warning", ThresholdDirection.Above, 70),
-        new("ups-snmp", "load_percent", "critical", ThresholdDirection.Above, 90),
+        // ── UPS (SNMP UPS-MIB and Network UPS Tools - the same channels, see UpsChannels) ─────────────
+        // A power cut is critical AT ONCE: on battery is what an admin wants to hear about, not the charge falling
+        // below 50 % half an hour later. Overload is critical too - an overloaded UPS switches its output off.
+        new("ups-snmp", UpsChannels.OnBattery, "critical", ThresholdDirection.Above, 0),
+        new("ups-snmp", UpsChannels.LowBattery, "critical", ThresholdDirection.Above, 0),
+        new("ups-snmp", UpsChannels.Overload, "critical", ThresholdDirection.Above, 0),
+        new("ups-snmp", UpsChannels.OnBypass, "warning", ThresholdDirection.Above, 0),
+        new("ups-snmp", UpsChannels.ReplaceBattery, "warning", ThresholdDirection.Above, 0),
+        new("ups-snmp", UpsChannels.BatteryCharge, "warning", ThresholdDirection.Below, 50),
+        new("ups-snmp", UpsChannels.BatteryCharge, "critical", ThresholdDirection.Below, 20),
+        new("ups-snmp", UpsChannels.RuntimeMinutes, "warning", ThresholdDirection.Below, 15),
+        new("ups-snmp", UpsChannels.RuntimeMinutes, "critical", ThresholdDirection.Below, 5),
+        new("ups-snmp", UpsChannels.LoadPercent, "warning", ThresholdDirection.Above, 70),
+        new("ups-snmp", UpsChannels.LoadPercent, "critical", ThresholdDirection.Above, 90),
+        new("nut-ups", UpsChannels.OnBattery, "critical", ThresholdDirection.Above, 0),
+        new("nut-ups", UpsChannels.LowBattery, "critical", ThresholdDirection.Above, 0),
+        new("nut-ups", UpsChannels.Overload, "critical", ThresholdDirection.Above, 0),
+        new("nut-ups", UpsChannels.OnBypass, "warning", ThresholdDirection.Above, 0),
+        new("nut-ups", UpsChannels.ReplaceBattery, "warning", ThresholdDirection.Above, 0),
+        new("nut-ups", UpsChannels.BatteryCharge, "warning", ThresholdDirection.Below, 50),
+        new("nut-ups", UpsChannels.BatteryCharge, "critical", ThresholdDirection.Below, 20),
+        new("nut-ups", UpsChannels.RuntimeMinutes, "warning", ThresholdDirection.Below, 15),
+        new("nut-ups", UpsChannels.RuntimeMinutes, "critical", ThresholdDirection.Below, 5),
+        new("nut-ups", UpsChannels.LoadPercent, "warning", ThresholdDirection.Above, 70),
+        new("nut-ups", UpsChannels.LoadPercent, "critical", ThresholdDirection.Above, 90),
 
         // ── Windows health / disk / updates ───────────────────────────────────────────────────
         // ── The probe's own machine (read locally) ────────────────────────────────────────────────

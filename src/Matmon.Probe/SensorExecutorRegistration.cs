@@ -28,6 +28,7 @@ public static class SensorExecutorRegistration
         services.AddTransient<ISensorExecutor, SynologyUpdateSensorExecutor>();
         services.AddTransient<ISensorExecutor, SnmpInterfaceSensorExecutor>();
         services.AddTransient<ISensorExecutor, UpsSnmpSensorExecutor>();
+        services.AddTransient<ISensorExecutor, NutUpsSensorExecutor>();
         // NB: ProxmoxPveSensorExecutor is intentionally NOT registered as a selectable type - the legacy
         // scope-based "proxmox" type was retired in favour of proxmox-health / proxmox-node-health, which
         // instantiate it directly as the shared REST/auth engine.

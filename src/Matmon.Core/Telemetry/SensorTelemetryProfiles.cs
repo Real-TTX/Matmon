@@ -47,6 +47,7 @@ public static class SensorTelemetryProfiles
         ["snmp"] = Responsive,
         ["snmp-interface"] = Responsive,
         ["ups-snmp"] = Responsive,
+        ["nut-ups"] = Responsive,
         ["mssql"] = Responsive,
         ["postgres"] = Responsive,
         ["mysql"] = Responsive,

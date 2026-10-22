@@ -1,3 +1,4 @@
+using Matmon.Core.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace Matmon.Host.Services;
@@ -33,7 +34,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -65,7 +66,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             store => store.MigrateBackupJobsToAllSections()),
 
         new(6, "Bind every agent to a host (its machine's sensors move under it)",
-            store => store.MigrateAgentProbesToBoundHosts())
+            store => store.MigrateAgentProbesToBoundHosts()),
+
+        new(7, "UPS SNMP sensors read the on-battery values and alarm on a power cut",
+            store => store.MigrateUpsSensorsToPowerChannels())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step
@@ -101,5 +105,36 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             CurrentSchemaVersion,
             pending.Length);
         QueueSave(SavePriority.Configuration);
+    }
+
+    /// <summary>
+    /// Migration 7. A UPS SNMP sensor used to read charge, runtime, load and battery status only, so a power cut stayed
+    /// green until the battery had drained below 50 %. A sensor that still carries exactly the old OID list gets the new
+    /// one (seconds on battery, output source, input voltage, alarms) - one whose list was edited is left alone - and
+    /// every UPS SNMP sensor gets the NEW alarms where it has none: on battery and low battery critical, on bypass a
+    /// warning. The charge/runtime/load thresholds are not touched: an admin may have removed one on purpose.
+    /// </summary>
+    private void MigrateUpsSensorsToPowerChannels()
+    {
+        var sensors = EnumerateElements(_document.RootProbe)
+            .OfType<SensorElement>()
+            .Where(sensor => string.Equals(sensor.SensorTypeKey, UpsSnmpSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (var sensor in sensors)
+        {
+            if (sensor.Settings.Parameters.TryGetValue("snmp.oids", out var oids) &&
+                UpsSnmpSensorExecutor.IsOidList(oids, UpsSnmpSensorExecutor.LegacyDefaultOids))
+            {
+                sensor.Settings.Parameters["snmp.oids"] = UpsSnmpSensorExecutor.DefaultOids;
+            }
+
+            foreach (var (channel, severity) in new[] { (UpsChannels.OnBattery, "critical"), (UpsChannels.LowBattery, "critical"), (UpsChannels.OnBypass, "warning") })
+            {
+                if (!MonitoringSettings.TryReadChannelThreshold(sensor.Settings, channel, severity, out _))
+                {
+                    MonitoringSettings.SetChannelThreshold(sensor.Settings, channel, severity, new ThresholdRule(ThresholdDirection.Above, 0));
+                }
+            }
+        }
     }
 }

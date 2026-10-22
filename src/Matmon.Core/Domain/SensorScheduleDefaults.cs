@@ -4,7 +4,7 @@ namespace Matmon.Core.Domain;
 /// Default poll interval per sensor type, used as the fallback when neither the sensor nor any
 /// ancestor sets an explicit schedule. The tiers are deliberately simple and intent-driven:
 /// <list type="bullet">
-/// <item><b>Ping</b> - 30 s (the one fast reachability check).</item>
+/// <item><b>Ping</b> and <b>UPS</b> - 30 s (reachability, and a power cut).</item>
 /// <item><b>Most sensors</b> - 5 min (the <see cref="Default"/> "current data" cadence).</item>
 /// <item><b>Slow-changing infra</b> (disk SMART, backup jobs) - 6 h.</item>
 /// <item><b>Rarely-changing</b> (pending updates, certificate expiry) - once a day.</item>
@@ -27,6 +27,10 @@ public static class SensorScheduleDefaults
     {
         // Fast reachability check.
         ["ping"] = TimeSpan.FromSeconds(30),
+
+        // A UPS: a power cut has to be noticed within seconds, not five minutes - and the read is one small request.
+        ["ups-snmp"] = TimeSpan.FromSeconds(30),
+        ["nut-ups"] = TimeSpan.FromSeconds(30),
 
         // The probe's own machine, read locally: next to free, and CPU/memory are only interesting close up.
         ["local-health"] = TimeSpan.FromMinutes(1),

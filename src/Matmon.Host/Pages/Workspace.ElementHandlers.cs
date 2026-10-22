@@ -60,6 +60,9 @@ public sealed partial class WorkspaceModel
                 NormalizeHeartbeatSensorTarget(NewSensor);
                 ApplySnmpWalkSelectionsToParameters(NewSensor);
                 var executionSettings = BuildTransientSensorExecutionSettings(NewSensor);
+                // The defaults are baked in on Create (where the form set none) - the test has to judge with them too,
+                // or it says "OK" for a UPS that is on battery and will be critical the moment it is saved.
+                SensorThresholdDefaults.Apply(NewSensor.SensorTypeKey, executionSettings);
                 var executionTarget = ResolveEffectiveSensorTarget(NewSensor);
                 var owningProbeId = _workspaceStore.ResolveOwningRemoteProbeId(NewSensor.ParentId ?? Guid.Empty, NewSensor.SensorTypeKey);
 
@@ -83,10 +86,20 @@ public sealed partial class WorkspaceModel
                 }
             }
 
-            StatusMessage = result is not null
+            var testMessage = result is not null
                 ? $"Test: {FormatSensorStateLabel(result.State)} - check {result.Duration.TotalMilliseconds:0.#} ms"
                     + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}")
                 : $"Testing on probe '{RemoteRunProbeName}'… the result will appear shortly.";
+
+            // A failing test is said in the error box - "Test: Error" in a green box with a check mark read as a pass.
+            if (result is { State: SensorState.Critical })
+            {
+                ErrorMessage = testMessage;
+            }
+            else
+            {
+                StatusMessage = testMessage;
+            }
 
             LoadViewState(populateEditorValues: false);
             return Page();

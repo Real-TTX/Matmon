@@ -32,6 +32,7 @@ public static class SensorDefinitionCatalog
         SynologyUpdateSensorExecutor.Definition,
         SnmpInterfaceSensorExecutor.Definition,
         UpsSnmpSensorExecutor.Definition,
+        NutUpsSensorExecutor.Definition,
         ProxmoxHealthSensorExecutor.Definition,
         ProxmoxNodeHealthSensorExecutor.Definition,
         ProxmoxDiskSensorExecutor.Definition,
