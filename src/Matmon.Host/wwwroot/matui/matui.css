@@ -1,4 +1,4 @@
-/* MatUi 0.8.0 (f005fb8bd4) - build local-20261022 - bundled from matui.tokens.css, matui.base.css, matui.shell.css, matui.controls.css, matui.forms.css, matui.pickers.css, matui.lists.css, matui.dialogs.css, matui.layout.css, matui.apps.css */
+/* MatUi 0.8.1 (29fac427c0) - build local-20261022 - bundled from matui.tokens.css, matui.base.css, matui.shell.css, matui.controls.css, matui.forms.css, matui.pickers.css, matui.lists.css, matui.dialogs.css, matui.layout.css, matui.apps.css */
 /* ==========================================================================
    MatUi · tokens
    The single source of the look of every Mat app. Components use only these custom properties, never a raw colour.
@@ -1903,7 +1903,8 @@ input[type="file"].mat-input { padding: 6px; }
 /* ---- An icon in the field (search), a button in the field (show the password), a counter ---- */
 .mat-input-icon { position: relative; display: flex; align-items: center; }
 .mat-input-icon > .mat-icon { position: absolute; left: var(--mat-space-3); font-size: 1.1rem; color: var(--mat-text-muted); pointer-events: none; }
-.mat-input-icon > .mat-input { padding-left: calc(var(--mat-space-3) + 1.6rem); }
+/* room at the start only for an icon that stands there: the eye of a password field is at the end and the field starts like every field */
+.mat-input-icon > .mat-input:where(.mat-icon ~ .mat-input) { padding-left: calc(var(--mat-space-3) + 1.6rem); }
 .mat-input-icon--end > .mat-input { padding-right: 48px; }
 .mat-input-icon__btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
 .mat-toggle-off { display: none; }

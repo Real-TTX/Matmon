@@ -333,7 +333,8 @@ input[type="file"].mat-input { padding: 6px; }
 /* ---- An icon in the field (search), a button in the field (show the password), a counter ---- */
 .mat-input-icon { position: relative; display: flex; align-items: center; }
 .mat-input-icon > .mat-icon { position: absolute; left: var(--mat-space-3); font-size: 1.1rem; color: var(--mat-text-muted); pointer-events: none; }
-.mat-input-icon > .mat-input { padding-left: calc(var(--mat-space-3) + 1.6rem); }
+/* room at the start only for an icon that stands there: the eye of a password field is at the end and the field starts like every field */
+.mat-input-icon > .mat-input:where(.mat-icon ~ .mat-input) { padding-left: calc(var(--mat-space-3) + 1.6rem); }
 .mat-input-icon--end > .mat-input { padding-right: 48px; }
 .mat-input-icon__btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
 .mat-toggle-off { display: none; }

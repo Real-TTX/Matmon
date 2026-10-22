@@ -13,6 +13,11 @@ A change that an app can see is written down under **Unreleased** in the pull re
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-22
+### Fixed
+
+- A field whose icon stands at its end (`mat-input-icon--end`, the eye of a password field) no longer has the room of a start icon at its left: `.mat-input-icon > .mat-input` gave every field of the wrapper `padding-left: calc(var(--mat-space-3) + 1.6rem)`, so the text of a password began far from the edge. The room is now only for a field that follows an icon (`.mat-icon ~ .mat-input`); a search field with its icon at the start is as before. Nothing to do for an app but copy the files.
+
 ## [0.8.0] - 2026-10-21
 ### Added
 
