@@ -75,6 +75,72 @@ public sealed partial class WorkspaceModel
         }
     }
 
+    /// <summary>
+    /// Sends ONE notification through the rule as it is in the form (saved or not) - its sender, its receiver, its
+    /// templates, filled with the same data as the preview and marked "[Test]". It goes out now and the page says
+    /// whether it arrived or why not; that is the only way to know a webhook token or an SMTP password works before an
+    /// alert depends on it.
+    /// </summary>
+    public async Task<IActionResult> OnPostTestNotificationRuleAsync()
+    {
+        var isEdit = Request.HasFormContentType && Request.Form.Keys.Any(key => key.StartsWith("NotificationRuleEditor.", StringComparison.Ordinal));
+        var name = isEdit ? NotificationRuleEditor.Name : NewNotificationRule.Name;
+        var route = isEdit
+            ? new NotificationRoute(name, NotificationRuleEditor.SenderId, NotificationRuleEditor.ReceiverId, null,
+                TestPrefix(NotificationRuleEditor.SubjectTemplate, NotificationTemplateCatalog.DefaultSubjectTemplate),
+                NotificationRuleEditor.TextTemplate, NotificationRuleEditor.HtmlTemplate,
+                TestPrefix(NotificationRuleEditor.ShortTemplate, NotificationTemplateCatalog.DefaultShortTemplate))
+            : new NotificationRoute(name, NewNotificationRule.SenderId, NewNotificationRule.ReceiverId, null,
+                TestPrefix(NewNotificationRule.SubjectTemplate, NotificationTemplateCatalog.DefaultSubjectTemplate),
+                NewNotificationRule.TextTemplate, NewNotificationRule.HtmlTemplate,
+                TestPrefix(NewNotificationRule.ShortTemplate, NotificationTemplateCatalog.DefaultShortTemplate));
+
+        try
+        {
+            var snapshot = _workspaceStore.Workspace;
+            var nodes = BuildNodeRows(
+                snapshot.RootProbe,
+                snapshot.Templates.ToDictionary(template => template.Id),
+                new Dictionary<Guid, TelemetrySeriesSnapshot>(),
+                new HashSet<Guid>());
+            var (_, context) = BuildNotificationPreviewContext(
+                string.IsNullOrWhiteSpace(name) ? "Test" : name,
+                isEdit ? NotificationRuleEditor.TargetElementId : NewNotificationRule.TargetElementId,
+                isEdit ? NotificationRuleEditor.IncludeDescendants : NewNotificationRule.IncludeDescendants,
+                isEdit ? NotificationRuleEditor.TriggerStates : NewNotificationRule.TriggerStates,
+                snapshot,
+                nodes,
+                _workspaceStore.GetLatestSensorObservations(),
+                DateTimeOffset.UtcNow);
+
+            var services = HttpContext.RequestServices;
+            var (delivery, problem) = services.GetRequiredService<NotificationDeliveryFactory>().Create(route, context, snapshot, label: "test");
+            if (delivery is null)
+            {
+                ErrorMessage = $"Nothing would be sent: {problem}.";
+            }
+            else
+            {
+                await services.GetRequiredService<NotificationTransportClient>().SendAsync(delivery, HttpContext.RequestAborted);
+                StatusMessage = $"Test notification sent ({delivery.Transport.ToString().ToLowerInvariant()}) to {delivery.RecipientLabel}.";
+            }
+        }
+        catch (NotificationDeliveryException ex)
+        {
+            ErrorMessage = $"The test notification did not go out: {ex.Message}";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = $"The test notification did not go out: {ex.Message}";
+        }
+
+        LoadViewState(populateEditorValues: false);
+        return Page();
+    }
+
+    private static string TestPrefix(string? template, string fallback) =>
+        "[Test] " + (string.IsNullOrWhiteSpace(template) ? fallback : template);
+
     public IActionResult OnPostDeleteNotificationRule()
     {
         try
@@ -304,6 +370,7 @@ public sealed partial class WorkspaceModel
             SubjectTemplate = string.IsNullOrWhiteSpace(rule.SubjectTemplate) ? NotificationTemplateCatalog.DefaultSubjectTemplate : rule.SubjectTemplate,
             TextTemplate = string.IsNullOrWhiteSpace(rule.TextTemplate) ? NotificationTemplateCatalog.DefaultTextTemplate : rule.TextTemplate,
             HtmlTemplate = string.IsNullOrWhiteSpace(rule.HtmlTemplate) ? NotificationTemplateCatalog.DefaultHtmlTemplate : rule.HtmlTemplate,
+            ShortTemplate = string.IsNullOrWhiteSpace(rule.ShortTemplate) ? NotificationTemplateCatalog.DefaultShortTemplate : rule.ShortTemplate,
             SenderOptions = BuildNotificationSenderOptions(snapshot.NotificationSenders, rule.SenderId),
             ReceiverOptions = BuildNotificationReceiverOptions(snapshot.NotificationReceivers, rule.ReceiverId),
             TargetOptions = BuildNotificationTargetOptions(nodes, rule.TargetElementId),
@@ -328,7 +395,14 @@ public sealed partial class WorkspaceModel
             Password = sender.Email.Password,
             EndpointUrl = sender.Webhook.EndpointUrl,
             Secret = sender.Webhook.Secret,
-            TimeoutSeconds = sender.Webhook.TimeoutSeconds
+            TimeoutSeconds = sender.Webhook.TimeoutSeconds,
+            WebhookPreset = sender.Webhook.Preset ?? WebhookPresets.GenericKey,
+            WebhookMethod = WebhookRequestBuilder.NormalizeMethod(sender.Webhook.Method),
+            WebhookContentType = WebhookContentTypes.Normalize(sender.Webhook.ContentType),
+            WebhookHeaders = sender.Webhook.Headers,
+            // A webhook sender from before the templates has no body: show the one it actually sends.
+            WebhookBody = string.IsNullOrWhiteSpace(sender.Webhook.BodyTemplate) ? WebhookRequestBuilder.DefaultJsonBody : sender.Webhook.BodyTemplate,
+            WebhookSignRequests = sender.Webhook.SignRequests
         };
     }
 
@@ -362,11 +436,14 @@ public sealed partial class WorkspaceModel
             editor.Threshold,
             editor.SubjectTemplate,
             editor.TextTemplate,
-            editor.HtmlTemplate);
+            editor.HtmlTemplate,
+            editor.ShortTemplate);
     }
 
     private static void ApplyNotificationSenderEditor(NotificationSender sender, CreateNotificationSenderInput editor)
     {
+        ValidateWebhookEditor(editor, sender.Webhook.Secret);
+
         sender.Name = string.IsNullOrWhiteSpace(editor.Name) ? "Notification sender" : editor.Name.Trim();
         sender.Enabled = editor.Enabled;
         sender.Kind = editor.Kind;
@@ -417,6 +494,43 @@ public sealed partial class WorkspaceModel
         {
             sender.Webhook.TimeoutSeconds = timeout;
         }
+
+        // The webhook fields are posted whole (the editor shows every one), so they are taken as they are - an emptied
+        // header list or body has to stay empty.
+        sender.Webhook.Preset = WebhookPresets.Find(editor.WebhookPreset)?.Key;
+        sender.Webhook.Method = WebhookRequestBuilder.NormalizeMethod(editor.WebhookMethod);
+        sender.Webhook.ContentType = WebhookContentTypes.Normalize(editor.WebhookContentType);
+        sender.Webhook.Headers = string.IsNullOrWhiteSpace(editor.WebhookHeaders) ? null : editor.WebhookHeaders.Trim();
+        sender.Webhook.BodyTemplate = string.IsNullOrWhiteSpace(editor.WebhookBody) ? null : editor.WebhookBody.Trim();
+        sender.Webhook.SignRequests = editor.WebhookSignRequests;
+    }
+
+    /// <summary>Fills a posted webhook's templates with sample values once, so a missing or broken address or a body
+    /// that is not JSON is reported while the form is open - not as a failed alert in the log weeks later. Runs BEFORE
+    /// anything is applied: the sender being edited is the live one, and a half-applied edit would stay in memory.</summary>
+    private static void ValidateWebhookEditor(CreateNotificationSenderInput editor, string? storedSecret)
+    {
+        if (editor.Kind != NotificationEndpointKind.Webhook)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(editor.EndpointUrl))
+        {
+            throw new InvalidOperationException("Enter the webhook address.");
+        }
+
+        var settings = new WebhookNotificationSettings
+        {
+            EndpointUrl = editor.EndpointUrl.Trim(),
+            Method = editor.WebhookMethod,
+            ContentType = editor.WebhookContentType,
+            Headers = editor.WebhookHeaders,
+            BodyTemplate = editor.WebhookBody,
+            SignRequests = editor.WebhookSignRequests,
+            Secret = string.IsNullOrWhiteSpace(editor.Secret) ? storedSecret ?? "sample-secret" : editor.Secret
+        };
+        WebhookRequestBuilder.Build(settings, NotificationTemplateCatalog.SampleValues(), "sample-receiver");
     }
 
     private static void ApplyNotificationReceiverEditor(NotificationReceiver receiver, CreateNotificationReceiverInput editor)
@@ -453,7 +567,8 @@ public sealed partial class WorkspaceModel
             editor.Threshold,
             editor.SubjectTemplate,
             editor.TextTemplate,
-            editor.HtmlTemplate);
+            editor.HtmlTemplate,
+            editor.ShortTemplate);
     }
 
     private static void ApplyNotificationRuleValues(
@@ -470,7 +585,8 @@ public sealed partial class WorkspaceModel
         int? threshold,
         string? subjectTemplate,
         string? textTemplate,
-        string? htmlTemplate)
+        string? htmlTemplate,
+        string? shortTemplate)
     {
         var triggerStateList = (triggerStates ?? Enumerable.Empty<SensorState>()).Distinct().ToList();
         if (triggerStateList.Count == 0)
@@ -492,6 +608,8 @@ public sealed partial class WorkspaceModel
         rule.SubjectTemplate = string.IsNullOrWhiteSpace(subjectTemplate) ? string.Empty : subjectTemplate;
         rule.TextTemplate = string.IsNullOrWhiteSpace(textTemplate) ? string.Empty : textTemplate;
         rule.HtmlTemplate = string.IsNullOrWhiteSpace(htmlTemplate) ? string.Empty : htmlTemplate;
+        // The default is stored as empty, so a rule keeps following the default when it changes.
+        rule.ShortTemplate = string.IsNullOrWhiteSpace(shortTemplate) || shortTemplate.Trim() == NotificationTemplateCatalog.DefaultShortTemplate ? string.Empty : shortTemplate.Trim();
         rule.TriggerStates.Clear();
 
         foreach (var state in triggerStateList)
@@ -758,7 +876,7 @@ public sealed partial class WorkspaceModel
 
         return receiver.Kind switch
         {
-            NotificationEndpointKind.Webhook => $"{receiver.Name} · webhook",
+            NotificationEndpointKind.Webhook => $"{receiver.Name} · webhook value",
             _ => $"{receiver.Name} · email"
         };
     }
@@ -786,11 +904,29 @@ public sealed partial class WorkspaceModel
             : $"cooldown {cooldown}m";
     }
 
-    private (string Summary, string Subject, string Text, string Html) BuildNotificationRulePreview(
+    private (string Summary, string Subject, string Text, string Html, string Short) BuildNotificationRulePreview(
         string ruleName,
         string subjectTemplate,
         string textTemplate,
         string htmlTemplate,
+        string shortTemplate,
+        Guid? targetElementId,
+        bool includeDescendants,
+        IEnumerable<SensorState> triggerStates,
+        MonitoringWorkspaceSnapshot snapshot,
+        IReadOnlyList<WorkspaceNodeRow> nodes,
+        IReadOnlyDictionary<Guid, SensorObservation> latestSensorObservations,
+        DateTimeOffset now)
+    {
+        var (summary, context) = BuildNotificationPreviewContext(ruleName, targetElementId, includeDescendants, triggerStates, snapshot, nodes, latestSensorObservations, now);
+        var rendered = NotificationRendering.Render(context, subjectTemplate, textTemplate, htmlTemplate, shortTemplate);
+        return (summary, rendered.Subject, rendered.Text, rendered.Html, rendered.Summary);
+    }
+
+    /// <summary>The data a preview (and the test button) fills the templates with: the latest matching alert, else a
+    /// sensor under the target, else any sensor with data - plus a sentence saying which it is.</summary>
+    private (string Summary, NotificationTemplateContext Context) BuildNotificationPreviewContext(
+        string ruleName,
         Guid? targetElementId,
         bool includeDescendants,
         IEnumerable<SensorState> triggerStates,
@@ -855,11 +991,7 @@ public sealed partial class WorkspaceModel
             summary += " No trigger states selected.";
         }
 
-        return (
-            summary,
-            NotificationTemplateRenderer.RenderText(subjectTemplate, templateContext, NotificationTemplateCatalog.DefaultSubjectTemplate),
-            NotificationTemplateRenderer.RenderText(textTemplate, templateContext, NotificationTemplateCatalog.DefaultTextTemplate),
-            NotificationTemplateRenderer.RenderHtml(htmlTemplate, templateContext, NotificationTemplateCatalog.DefaultHtmlTemplate));
+        return (summary, templateContext);
     }
 
     private static NotificationTemplateContext BuildNotificationTemplateContext(
@@ -903,6 +1035,7 @@ public sealed partial class WorkspaceModel
         context.SetValue("state.label", stateLabel);
         context.SetValue("state.key", stateKey);
         context.SetValue("state.color", stateColor);
+        NotificationRendering.SetStateValues(context, state, recovered: false);
         context.SetValue("message", alert?.Message ?? observation?.Message ?? elementNode?.StateMessage ?? string.Empty);
         context.SetValue("rendered_at", now);
 

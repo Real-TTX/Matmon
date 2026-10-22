@@ -383,6 +383,7 @@ public sealed partial class WorkspaceModel : PageModel
             NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.SubjectTemplate : NewNotificationRule.SubjectTemplate,
             NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.TextTemplate : NewNotificationRule.TextTemplate,
             NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.HtmlTemplate : NewNotificationRule.HtmlTemplate,
+            NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.ShortTemplate : NewNotificationRule.ShortTemplate,
             NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.TargetElementId : NewNotificationRule.TargetElementId,
             NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.IncludeDescendants : NewNotificationRule.IncludeDescendants,
             NotificationRuleEditor.Id != Guid.Empty ? NotificationRuleEditor.TriggerStates : NewNotificationRule.TriggerStates,
@@ -402,7 +403,8 @@ public sealed partial class WorkspaceModel : PageModel
             NotificationRulePreviewSummary = notificationPreview.Summary,
             NotificationRulePreviewSubject = notificationPreview.Subject,
             NotificationRulePreviewText = notificationPreview.Text,
-            NotificationRulePreviewHtml = notificationPreview.Html
+            NotificationRulePreviewHtml = notificationPreview.Html,
+            NotificationRulePreviewShort = notificationPreview.Short
         };
     }
 

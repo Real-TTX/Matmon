@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using Matmon.Core.Domain;
 using Matmon.Core.Sample;
 
@@ -6,8 +5,9 @@ namespace Matmon.Host.Services;
 
 /// <summary>
 /// Primary-only background dispatcher: drains alert transitions from the <see cref="NotificationSpooler"/>,
-/// matches them against notification rules, renders the templates and sends via SMTP - with an in-memory
-/// retry spooler (exponential-ish backoff) so a transient SMTP failure is retried instead of lost.
+/// matches them against notification rules and hands each match to <see cref="NotificationDeliveryFactory"/> (the
+/// rule's sender picks the channel: SMTP, a webhook or the Matmon Cloud gateway) - with an in-memory retry spooler
+/// (exponential-ish backoff) so a transient failure is retried instead of lost, and a refusal (a 4xx) is reported at once.
 /// </summary>
 public sealed class NotificationDispatchService : BackgroundService
 {
@@ -25,11 +25,10 @@ public sealed class NotificationDispatchService : BackgroundService
 
     private readonly NotificationSpooler _spooler;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
-    private readonly INotificationEmailSender _emailSender;
+    private readonly NotificationDeliveryFactory _deliveryFactory;
+    private readonly NotificationTransportClient _transport;
     private readonly ILogger<NotificationDispatchService> _logger;
-    private readonly List<PendingDelivery> _pending = [];
-    private readonly List<PendingRelay> _pendingRelays = [];
-    private readonly HttpClient _relayClient = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly List<NotificationDelivery> _pending = [];
 
     // Anti-spam / flap suppression: cooldown per (rule, element) + one-recovery-per-episode gating.
     // Owned by the single dispatch loop (not thread-safe by design).
@@ -38,12 +37,14 @@ public sealed class NotificationDispatchService : BackgroundService
     public NotificationDispatchService(
         NotificationSpooler spooler,
         IMonitoringWorkspaceStore workspaceStore,
-        INotificationEmailSender emailSender,
+        NotificationDeliveryFactory deliveryFactory,
+        NotificationTransportClient transport,
         ILogger<NotificationDispatchService> logger)
     {
         _spooler = spooler;
         _workspaceStore = workspaceStore;
-        _emailSender = emailSender;
+        _deliveryFactory = deliveryFactory;
+        _transport = transport;
         _logger = logger;
     }
 
@@ -84,9 +85,9 @@ public sealed class NotificationDispatchService : BackgroundService
         }
     }
 
-    private List<PendingDelivery> BuildDeliveries(AlertNotificationEvent notificationEvent)
+    private List<NotificationDelivery> BuildDeliveries(AlertNotificationEvent notificationEvent)
     {
-        var deliveries = new List<PendingDelivery>();
+        var deliveries = new List<NotificationDelivery>();
         var workspace = _workspaceStore.Workspace;
         if (workspace.NotificationRules.Count == 0)
         {
@@ -99,17 +100,11 @@ public sealed class NotificationDispatchService : BackgroundService
         _workspaceStore.GetLatestSensorObservations().TryGetValue(notificationEvent.ElementId, out var latest);
         var alert = workspace.Alerts.FirstOrDefault(candidate => candidate.Id == notificationEvent.AlertId);
 
-        // Resolved once per event: the cloud gateway target for rules that use the Cloud sender (null if relay off).
-        var cloudRelay = ResolveCloudRelay();
-
         foreach (var rule in workspace.NotificationRules)
         {
-            if (!rule.Enabled || rule.ChannelKind != NotificationChannelKind.Email)
-            {
-                continue;
-            }
-
-            if (!NotificationRuleTargeting.Matches(rule, notificationEvent.ElementId, elementsById))
+            // The sender decides the channel (e-mail, webhook, cloud) - the legacy ChannelKind used to gate this and
+            // silently dropped every rule with a webhook sender.
+            if (!rule.Enabled || !NotificationRuleTargeting.Matches(rule, notificationEvent.ElementId, elementsById))
             {
                 continue;
             }
@@ -141,69 +136,15 @@ public sealed class NotificationDispatchService : BackgroundService
                 }
             }
 
-            var recipient = ResolveRecipient(rule, workspace, _workspaceStore);
-            if (string.IsNullOrWhiteSpace(recipient))
+            var context = BuildContext(notificationEvent, rule, element, alert, latest, elementsById);
+            var (delivery, problem) = _deliveryFactory.Create(NotificationRoute.For(rule), context, workspace);
+            if (delivery is null)
             {
-                _logger.LogWarning("Notification rule {Rule} matched but has no recipient", rule.Name);
+                _logger.LogWarning("Notification rule {Rule} matched but nothing was sent: {Problem}", rule.Name, problem);
                 continue;
             }
 
-            // A rule's sender decides the transport: a Cloud sender delivers via the Matmon.Cloud gateway,
-            // anything else (or no sender) via local SMTP. Recipient + templates are identical either way.
-            var sender = rule.SenderId is Guid senderId
-                ? workspace.NotificationSenders.FirstOrDefault(candidate => candidate.Id == senderId)
-                : null;
-            var isCloud = sender is { Kind: NotificationEndpointKind.Cloud };
-
-            EmailNotificationSettings? smtp = null;
-            if (isCloud)
-            {
-                if (!sender!.Enabled || cloudRelay is null)
-                {
-                    _logger.LogWarning("Notification rule {Rule} uses the Cloud sender but cloud relay is disabled or the link is down", rule.Name);
-                    continue;
-                }
-            }
-            else
-            {
-                smtp = ResolveSmtp(rule, workspace);
-                if (smtp is null || string.IsNullOrWhiteSpace(smtp.SmtpHost))
-                {
-                    _logger.LogWarning("Notification rule {Rule} matched but has no usable SMTP sender", rule.Name);
-                    continue;
-                }
-            }
-
-            var context = BuildContext(notificationEvent, rule, element, alert, latest, elementsById);
-            var subject = NotificationTemplateRenderer.RenderText(rule.SubjectTemplate, context, NotificationTemplateCatalog.DefaultSubjectTemplate);
-            var textBody = NotificationTemplateRenderer.RenderText(rule.TextTemplate, context, NotificationTemplateCatalog.DefaultTextTemplate);
-            var htmlBody = NotificationTemplateRenderer.RenderHtml(rule.HtmlTemplate, context, NotificationTemplateCatalog.DefaultHtmlTemplate);
-
-            if (isCloud)
-            {
-                _pendingRelays.Add(new PendingRelay
-                {
-                    Url = cloudRelay!.Value.Url,
-                    Token = cloudRelay.Value.Token,
-                    Recipient = recipient,
-                    Subject = subject,
-                    TextBody = textBody,
-                    HtmlBody = htmlBody,
-                    NextAttemptUtc = DateTimeOffset.UtcNow
-                });
-            }
-            else
-            {
-                deliveries.Add(new PendingDelivery
-                {
-                    Smtp = smtp!,
-                    Recipient = recipient,
-                    Subject = subject,
-                    TextBody = textBody,
-                    HtmlBody = htmlBody,
-                    RuleName = rule.Name
-                });
-            }
+            deliveries.Add(delivery);
 
             // Update flap/cooldown state now that a notification is queued for this (rule, element).
             if (notificationEvent.Transition == NotificationTransition.Raised)
@@ -219,27 +160,6 @@ public sealed class NotificationDispatchService : BackgroundService
         return deliveries;
     }
 
-    /// <summary>The Matmon.Cloud gateway target (notify URL + token) when cloud alert-relay is enabled and the
-    /// link is connected; null otherwise. Rules whose sender is a Cloud sender deliver through this.</summary>
-    private (string Url, string Token)? ResolveCloudRelay()
-    {
-        var settings = _workspaceStore.GetCloudConnectionSettings();
-        if (!settings.RelayAlerts || !settings.Configured || !settings.Enabled ||
-            string.IsNullOrWhiteSpace(settings.Url) || string.IsNullOrWhiteSpace(settings.InstanceId))
-        {
-            return null;
-        }
-
-        var token = _workspaceStore.GetCloudConnectionToken();
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return null;
-        }
-
-        var baseUrl = settings.Url!.Trim().TrimEnd('/');
-        return ($"{baseUrl}/api/instances/{settings.InstanceId!.Trim()}/notify", token);
-    }
-
     private async Task ProcessPendingAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -251,15 +171,23 @@ public sealed class NotificationDispatchService : BackgroundService
                 continue;
             }
 
+            var what = delivery.Label is null ? delivery.Transport.ToString().ToLowerInvariant() : $"{delivery.Transport.ToString().ToLowerInvariant()}, {delivery.Label}";
             try
             {
-                await _emailSender.SendAsync(delivery.Smtp, delivery.Recipient, delivery.Subject, delivery.TextBody, delivery.HtmlBody, cancellationToken);
+                await _transport.SendAsync(delivery, cancellationToken);
                 _pending.RemoveAt(i);
-                _logger.LogInformation("Notification sent to {Recipient} for rule {Rule}", delivery.Recipient, delivery.RuleName);
+                _logger.LogInformation("Notification ({What}) sent to {Recipient} for rule {Rule}", what, delivery.RecipientLabel, delivery.RuleName);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (NotificationDeliveryException ex) when (!ex.Retryable)
+            {
+                // An answer that will not change by asking again (a 4xx): say so now instead of 40 minutes later.
+                _pending.RemoveAt(i);
+                _logger.LogError("Notification ({What}) to {Recipient} for rule {Rule} was refused - not retried: {Error}",
+                    what, delivery.RecipientLabel, delivery.RuleName, ex.Message);
             }
             catch (Exception ex)
             {
@@ -267,102 +195,17 @@ public sealed class NotificationDispatchService : BackgroundService
                 if (delivery.Attempt >= RetryBackoff.Length)
                 {
                     _pending.RemoveAt(i);
-                    _logger.LogError(ex, "Notification to {Recipient} for rule {Rule} failed after {Attempts} attempts - giving up",
-                        delivery.Recipient, delivery.RuleName, delivery.Attempt);
+                    _logger.LogError("Notification ({What}) to {Recipient} for rule {Rule} failed after {Attempts} attempts - giving up: {Error}",
+                        what, delivery.RecipientLabel, delivery.RuleName, delivery.Attempt, ex.Message);
                 }
                 else
                 {
                     delivery.NextAttemptUtc = now + RetryBackoff[delivery.Attempt];
-                    _logger.LogWarning(ex, "Notification to {Recipient} for rule {Rule} failed (attempt {Attempt}); retrying in {Delay}",
-                        delivery.Recipient, delivery.RuleName, delivery.Attempt, RetryBackoff[delivery.Attempt]);
+                    _logger.LogWarning("Notification ({What}) to {Recipient} for rule {Rule} failed (attempt {Attempt}); retrying in {Delay}: {Error}",
+                        what, delivery.RecipientLabel, delivery.RuleName, delivery.Attempt, RetryBackoff[delivery.Attempt], ex.Message);
                 }
             }
         }
-
-        await ProcessRelaysAsync(now, cancellationToken);
-    }
-
-    private async Task ProcessRelaysAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        for (var i = _pendingRelays.Count - 1; i >= 0; i--)
-        {
-            var relay = _pendingRelays[i];
-            if (relay.NextAttemptUtc > now)
-            {
-                continue;
-            }
-
-            try
-            {
-                using var request = new HttpRequestMessage(HttpMethod.Post, relay.Url)
-                {
-                    Content = JsonContent.Create(new RelayBody("email", relay.Recipient, relay.Subject, relay.TextBody, relay.HtmlBody))
-                };
-                request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", relay.Token);
-
-                using var response = await _relayClient.SendAsync(request, cancellationToken);
-                response.EnsureSuccessStatusCode();
-                _pendingRelays.RemoveAt(i);
-                _logger.LogInformation("Alert relayed to Matmon.Cloud gateway -> {Recipient}", relay.Recipient);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                relay.Attempt++;
-                if (relay.Attempt >= RetryBackoff.Length)
-                {
-                    _pendingRelays.RemoveAt(i);
-                    _logger.LogError(ex, "Cloud relay to {Recipient} failed after {Attempts} attempts - giving up", relay.Recipient, relay.Attempt);
-                }
-                else
-                {
-                    relay.NextAttemptUtc = now + RetryBackoff[relay.Attempt];
-                    _logger.LogWarning(ex, "Cloud relay to {Recipient} failed (attempt {Attempt}); retrying in {Delay}", relay.Recipient, relay.Attempt, RetryBackoff[relay.Attempt]);
-                }
-            }
-        }
-    }
-
-    private static EmailNotificationSettings? ResolveSmtp(NotificationRule rule, MonitoringWorkspaceSnapshot workspace)
-    {
-        if (rule.SenderId is Guid senderId)
-        {
-            var sender = workspace.NotificationSenders.FirstOrDefault(candidate => candidate.Id == senderId && candidate.Enabled);
-            if (sender is { Kind: NotificationEndpointKind.Email })
-            {
-                return sender.Email;
-            }
-        }
-
-        var fallback = workspace.NotificationConfiguration.Email;
-        return string.IsNullOrWhiteSpace(fallback.SmtpHost) ? null : fallback;
-    }
-
-    private static string ResolveRecipient(NotificationRule rule, MonitoringWorkspaceSnapshot workspace, IMonitoringWorkspaceStore store)
-    {
-        if (!string.IsNullOrWhiteSpace(rule.Recipient))
-        {
-            return rule.Recipient.Trim();
-        }
-
-        if (rule.ReceiverId is Guid receiverId)
-        {
-            if (NotificationReceiverDefaults.IsBuiltIn(receiverId))
-            {
-                return store.ResolveBuiltInRecipients(receiverId);
-            }
-
-            var receiver = workspace.NotificationReceivers.FirstOrDefault(candidate => candidate.Id == receiverId && candidate.Enabled);
-            if (receiver is not null)
-            {
-                return receiver.Target;
-            }
-        }
-
-        return string.Empty;
     }
 
     private static NotificationTemplateContext BuildContext(
@@ -385,6 +228,7 @@ public sealed class NotificationDispatchService : BackgroundService
         context.SetValue("rule.name", rule?.Name ?? "Matmon.Cloud relay");
         context.SetValue("state.label", stateLabel);
         context.SetValue("state.key", stateKey);
+        NotificationRendering.SetStateValues(context, notificationEvent.State, isRecovery);
         context.SetValue("message", notificationEvent.Message);
         context.SetValue("rendered_at", now);
 
@@ -535,31 +379,4 @@ public sealed class NotificationDispatchService : BackgroundService
 
         return null;
     }
-
-    private sealed class PendingDelivery
-    {
-        public required EmailNotificationSettings Smtp { get; init; }
-        public required string Recipient { get; init; }
-        public required string Subject { get; init; }
-        public required string TextBody { get; init; }
-        public required string HtmlBody { get; init; }
-        public required string RuleName { get; init; }
-        public int Attempt { get; set; }
-        public DateTimeOffset NextAttemptUtc { get; set; }
-    }
-
-    private sealed class PendingRelay
-    {
-        public required string Url { get; init; }
-        public required string Token { get; init; }
-        public required string Recipient { get; init; }
-        public required string Subject { get; init; }
-        public required string TextBody { get; init; }
-        public required string HtmlBody { get; init; }
-        public int Attempt { get; set; }
-        public DateTimeOffset NextAttemptUtc { get; set; }
-    }
-
-    // Mirrors Matmon.Cloud's NotificationRelayRequest (Channel, To, Subject, Text, Html).
-    private sealed record RelayBody(string Channel, string To, string Subject, string? Text, string? Html);
 }

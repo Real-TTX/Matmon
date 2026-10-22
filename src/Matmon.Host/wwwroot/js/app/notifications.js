@@ -131,3 +131,45 @@ function initializeNotificationFilter() {
 
   apply();
 }
+
+// A webhook sender's preset select fills the fields below it from the chosen preset (the options carry the preset in
+// data-* attributes, rendered from WebhookPresets on the server - one source). Only on a CHANGE of the select: opening
+// a saved sender must show what was saved, not the preset it once came from. The address is kept when the preset has
+// none (Teams, Slack, Discord: the address is the part only the user knows).
+function initializeWebhookPresets() {
+  document.querySelectorAll("[data-webhook-editor]").forEach((editor) => {
+    const select = editor.querySelector("[data-webhook-preset]");
+    if (!select) {
+      return;
+    }
+
+    const field = (selector) => editor.querySelector(selector);
+    const hint = field("[data-webhook-hint]");
+    select.addEventListener("change", () => {
+      const option = select.selectedOptions[0];
+      if (!option) {
+        return;
+      }
+
+      const preset = option.dataset;
+      const url = field("[data-webhook-url]");
+      if (url && preset.url) {
+        url.value = preset.url;
+      }
+      const set = (selector, value) => {
+        const element = field(selector);
+        if (element && value !== undefined) {
+          element.value = value;
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      };
+      set("[data-webhook-method]", preset.method);
+      set("[data-webhook-content-type]", preset.contentType);
+      set("[data-webhook-headers]", preset.headers);
+      set("[data-webhook-body]", preset.body);
+      if (hint) {
+        hint.textContent = preset.hint || "";
+      }
+    });
+  });
+}

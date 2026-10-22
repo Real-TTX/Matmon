@@ -205,6 +205,8 @@ public sealed class CreateNotificationRuleInput
 
     public string HtmlTemplate { get; set; } = NotificationTemplateCatalog.DefaultHtmlTemplate;
 
+    public string ShortTemplate { get; set; } = NotificationTemplateCatalog.DefaultShortTemplate;
+
     public List<SelectListItem> SenderOptions { get; set; } = [];
 
     public List<SelectListItem> ReceiverOptions { get; set; } = [];
@@ -241,6 +243,19 @@ public class CreateNotificationSenderInput
     public string? Secret { get; set; }
 
     public int? TimeoutSeconds { get; set; } = 10;
+
+    /// <summary>The webhook preset the fields were filled from (only remembered for the editor).</summary>
+    public string? WebhookPreset { get; set; } = WebhookPresets.GenericKey;
+
+    public string WebhookMethod { get; set; } = "POST";
+
+    public string WebhookContentType { get; set; } = WebhookContentTypes.Json;
+
+    public string? WebhookHeaders { get; set; }
+
+    public string? WebhookBody { get; set; } = WebhookRequestBuilder.DefaultJsonBody;
+
+    public bool WebhookSignRequests { get; set; }
 }
 
 public sealed class WorkspaceNotificationSenderEditorInput : CreateNotificationSenderInput
@@ -692,6 +707,8 @@ public sealed class WorkspaceNotificationRuleEditorInput
     public string TextTemplate { get; set; } = NotificationTemplateCatalog.DefaultTextTemplate;
 
     public string HtmlTemplate { get; set; } = NotificationTemplateCatalog.DefaultHtmlTemplate;
+
+    public string ShortTemplate { get; set; } = NotificationTemplateCatalog.DefaultShortTemplate;
 
     public List<SelectListItem> SenderOptions { get; set; } = [];
 

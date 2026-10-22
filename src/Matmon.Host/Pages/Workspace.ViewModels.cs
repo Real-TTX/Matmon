@@ -48,6 +48,8 @@ public sealed record WorkspacePageViewModel
 
     public string NotificationRulePreviewHtml { get; init; } = string.Empty;
 
+    public string NotificationRulePreviewShort { get; init; } = string.Empty;
+
     public IReadOnlyList<WorkspaceNodeRow> MonitoringTreeNodes { get; init; } = [];
 
     public IReadOnlyList<WorkspaceMonitoringTreeNode> MonitoringTreeRoots { get; init; } = [];

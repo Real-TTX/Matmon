@@ -47,7 +47,7 @@
                         <label class="mat-label" asp-for="NewNotificationSender.Kind">Type</label>
                         <select asp-for="NewNotificationSender.Kind" class="mat-select" data-notification-kind-select>
                             <option value="Email">Email</option>
-                            <option value="Webhook">Webhook</option>
+                            <option value="Webhook">Webhook (push, chat, any HTTP service)</option>
                         </select>
                     </div>
                     <div class="mat-field mat-field--full">
@@ -97,22 +97,7 @@
         <section class="mat-card" data-notification-kind-panel="webhook" hidden="@(senderKind != NotificationEndpointKind.Webhook)">
             <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Webhook</h2></div>
             <div class="mat-card__body">
-                <div class="mat-form__grid">
-                    <div class="mat-field mat-field--full">
-                        <label class="mat-label" asp-for="NewNotificationSender.EndpointUrl">Webhook URL</label>
-                        <input asp-for="NewNotificationSender.EndpointUrl" class="mat-input mat-mono" />
-                    </div>
-                    <div class="mat-field">
-                        <label class="mat-label" asp-for="NewNotificationSender.TimeoutSeconds">Timeout seconds</label>
-                        <input asp-for="NewNotificationSender.TimeoutSeconds" type="number" min="1" class="mat-input mat-mono" data-msg-range="The timeout is 1 second or more." />
-                        <span class="mat-error" aria-live="polite"></span>
-                    </div>
-                    <div class="mat-field">
-                        <label class="mat-label" asp-for="NewNotificationSender.Secret">Secret</label>
-                        <input asp-for="NewNotificationSender.Secret" type="password" class="mat-input" />
-                        <span class="mat-hint">Leave blank to keep the current one.</span>
-                    </div>
-                </div>
+                <partial name="_WebhookSenderFields" for="NewNotificationSender" />
             </div>
         </section>
 
@@ -162,7 +147,7 @@ else
                             <label class="mat-label" asp-for="NotificationSenderEditor.Kind">Type</label>
                             <select asp-for="NotificationSenderEditor.Kind" class="mat-select" data-notification-kind-select>
                                 <option value="Email">Email</option>
-                                <option value="Webhook">Webhook</option>
+                                <option value="Webhook">Webhook (push, chat, any HTTP service)</option>
                             </select>
                         }
                     </div>
@@ -213,22 +198,7 @@ else
         <section class="mat-card" data-notification-kind-panel="webhook" hidden="@(senderKind != NotificationEndpointKind.Webhook)">
             <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Webhook</h2></div>
             <div class="mat-card__body">
-                <div class="mat-form__grid">
-                    <div class="mat-field mat-field--full">
-                        <label class="mat-label" asp-for="NotificationSenderEditor.EndpointUrl">Webhook URL</label>
-                        <input asp-for="NotificationSenderEditor.EndpointUrl" class="mat-input mat-mono" />
-                    </div>
-                    <div class="mat-field">
-                        <label class="mat-label" asp-for="NotificationSenderEditor.TimeoutSeconds">Timeout seconds</label>
-                        <input asp-for="NotificationSenderEditor.TimeoutSeconds" type="number" min="1" class="mat-input mat-mono" data-msg-range="The timeout is 1 second or more." />
-                        <span class="mat-error" aria-live="polite"></span>
-                    </div>
-                    <div class="mat-field">
-                        <label class="mat-label" asp-for="NotificationSenderEditor.Secret">Secret</label>
-                        <input asp-for="NotificationSenderEditor.Secret" type="password" class="mat-input" />
-                        <span class="mat-hint">Leave blank to keep the current one.</span>
-                    </div>
-                </div>
+                <partial name="_WebhookSenderFields" for="NotificationSenderEditor" />
             </div>
         </section>
 

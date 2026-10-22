@@ -48,4 +48,8 @@ public sealed class NotificationRule
     public string TextTemplate { get; set; } = string.Empty;
 
     public string HtmlTemplate { get; set; } = string.Empty;
+
+    /// <summary>The one-line message for channels that show a line, not a mail - push, chat (<c>{{summary}}</c> in a
+    /// webhook template). Empty = <see cref="NotificationTemplateCatalog.DefaultShortTemplate"/>.</summary>
+    public string ShortTemplate { get; set; } = string.Empty;
 }

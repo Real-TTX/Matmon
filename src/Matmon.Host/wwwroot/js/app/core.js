@@ -29,6 +29,7 @@ const featureStarters = [
   "initializeThresholdEditors",
   "initializeCredentialEditors",
   "initializeNotificationKindEditors",
+  "initializeWebhookPresets",
   "initializeNotificationFilter",
   "initializeBackupJobEditor",
   "initializeDiscoveryJobRefresh",

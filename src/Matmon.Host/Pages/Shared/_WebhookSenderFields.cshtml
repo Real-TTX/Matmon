@@ -1,0 +1,65 @@
+@model CreateNotificationSenderInput
+@* The webhook fields of a notification sender - the create and the edit form render the same ones (<partial for=...>).
+   Picking a preset fills the fields below it (notifications.js, initializeWebhookPresets); the request is always built
+   from the fields, so an edited preset sends what was edited. *@
+@{
+    var preset = WebhookPresets.Find(Model.WebhookPreset);
+}
+<div class="mat-form__grid" data-webhook-editor>
+    <div class="mat-field mat-field--full">
+        <label class="mat-label" asp-for="WebhookPreset">Preset</label>
+        <select asp-for="WebhookPreset" class="mat-select" data-webhook-preset>
+            @foreach (var option in WebhookPresets.All)
+            {
+                <option value="@option.Key" data-url="@option.Url" data-method="@option.Method" data-content-type="@option.ContentType" data-headers="@option.Headers" data-body="@option.Body" data-hint="@option.Hint">@option.Name</option>
+            }
+        </select>
+        <span class="mat-hint" data-webhook-hint>@preset?.Hint</span>
+    </div>
+    <div class="mat-field mat-field--full">
+        <label class="mat-label" asp-for="EndpointUrl">Address</label>
+        <input asp-for="EndpointUrl" class="mat-input mat-mono" placeholder="https://" data-webhook-url />
+        <span class="mat-hint">Placeholders are allowed here too, e.g. <code>{{receiver.target}}</code>.</span>
+    </div>
+    <div class="mat-field">
+        <label class="mat-label" asp-for="WebhookMethod">Method</label>
+        <select asp-for="WebhookMethod" class="mat-select" data-webhook-method>
+            @foreach (var method in WebhookRequestBuilder.Methods)
+            {
+                <option value="@method">@method</option>
+            }
+        </select>
+    </div>
+    <div class="mat-field">
+        <label class="mat-label" asp-for="WebhookContentType">Body format</label>
+        <select asp-for="WebhookContentType" class="mat-select" data-webhook-content-type>
+            <option value="@WebhookContentTypes.Json">JSON</option>
+            <option value="@WebhookContentTypes.Form">Form fields (name=value per line)</option>
+            <option value="@WebhookContentTypes.Text">Plain text</option>
+        </select>
+    </div>
+    <div class="mat-field mat-field--full">
+        <label class="mat-label" asp-for="WebhookHeaders">Headers</label>
+        <textarea asp-for="WebhookHeaders" rows="3" class="mat-textarea mat-mono" placeholder="Authorization: Bearer {{secret}}" data-webhook-headers></textarea>
+        <span class="mat-hint">One <code>Name: value</code> per line. Put a token into Secret and write <code>{{secret}}</code> here - it is stored encrypted, a header is not.</span>
+    </div>
+    <div class="mat-field mat-field--full">
+        <label class="mat-label" asp-for="WebhookBody">Body</label>
+        <textarea asp-for="WebhookBody" rows="12" class="mat-textarea mat-mono" data-webhook-body></textarea>
+        <span class="mat-hint">The rule's placeholders, escaped for the body format; <code>{{subject}}</code> and <code>{{summary}}</code> are the rendered subject and short message. <code>{{{name}}}</code> inserts a value without escaping. Ignored for GET.</span>
+    </div>
+    <div class="mat-field">
+        <label class="mat-label" asp-for="Secret">Secret</label>
+        <input asp-for="Secret" type="password" class="mat-input" autocomplete="new-password" />
+        <span class="mat-hint">A token or API key, used as <code>{{secret}}</code>. Leave blank to keep the current one.</span>
+    </div>
+    <div class="mat-field">
+        <label class="mat-label" asp-for="TimeoutSeconds">Timeout seconds</label>
+        <input asp-for="TimeoutSeconds" type="number" min="1" max="60" class="mat-input mat-mono" data-msg-range="The timeout is 1 to 60 seconds." />
+        <span class="mat-error" aria-live="polite"></span>
+    </div>
+    <div class="mat-field mat-field--full">
+        <label class="mat-switch"><input asp-for="WebhookSignRequests" /><span class="mat-switch__track"></span><span>Sign requests</span></label>
+        <span class="mat-hint">Adds <code>X-Matmon-Signature: sha256=…</code>, an HMAC-SHA256 of the body with the secret, so the receiving end can check the request came from here.</span>
+    </div>
+</div>

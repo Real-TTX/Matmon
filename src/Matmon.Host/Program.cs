@@ -120,6 +120,10 @@ builder.Services.AddSingleton<ITelemetryRepository>(_ => new SqliteTelemetryRepo
 builder.Services.AddSingleton<NotificationSpooler>();
 builder.Services.AddSingleton<INotificationSink>(sp => sp.GetRequiredService<NotificationSpooler>());
 builder.Services.AddSingleton<INotificationEmailSender, MailKitEmailSender>();
+// The rule's sender picks the channel (SMTP, webhook, cloud); the factory builds a delivery, the client sends it once.
+builder.Services.AddSingleton<NotificationDeliveryFactory>();
+builder.Services.AddSingleton<NotificationTransportClient>();
+builder.Services.AddHttpClient(NotificationTransportClient.HttpClientName);
 builder.Services.AddSingleton<SummaryReportDataCollector>();
 builder.Services.AddSingleton<AuditReportPdfBuilder>();
 builder.Services.AddSingleton<SummaryReportSender>();

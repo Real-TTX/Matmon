@@ -14,6 +14,9 @@ public static class NotificationTemplateCatalog
 {
     public const string DefaultSubjectTemplate = "{{state.label}}: {{element.path}}";
 
+    /// <summary>The one line a push message or a chat post shows (<c>{{summary}}</c>).</summary>
+    public const string DefaultShortTemplate = "{{state.label}}: {{element.path}} - {{message}}";
+
     public const string DefaultTextTemplate = """
 {{state.label}} on {{element.path}}
 
@@ -45,8 +48,16 @@ Channels: {{channels.summary}}
             new NotificationTemplatePlaceholder("rule.name", "Rule name", "Disk full alert"),
             new NotificationTemplatePlaceholder("state.label", "State label", "Warning"),
             new NotificationTemplatePlaceholder("state.key", "State key", "warning"),
+            new NotificationTemplatePlaceholder("state.priority", "Priority 1-5 (critical 5, warning 4, other 3) - ntfy, Gotify", "4"),
+            new NotificationTemplatePlaceholder("state.urgent", "1 for a critical alert, else 0 - Pushover's priority", "0"),
             new NotificationTemplatePlaceholder("message", "Main message", "disk usage above threshold"),
+            new NotificationTemplatePlaceholder("subject", "The rendered subject", "Warning: Main / Office / NAS-01"),
+            new NotificationTemplatePlaceholder("summary", "The rendered short message (push, chat)", "Warning: Main / Office / NAS-01 - disk usage above threshold"),
             new NotificationTemplatePlaceholder("rendered_at", "Render time", "31.05.2026 12:45")
+        ]),
+        new NotificationTemplatePlaceholderGroup("Webhook only", [
+            new NotificationTemplatePlaceholder("receiver.target", "The rule's receiver - a topic, a user key, a chat id", "matmon-alerts"),
+            new NotificationTemplatePlaceholder("secret", "The webhook sender's secret (stored encrypted)", "••••••")
         ]),
         new NotificationTemplatePlaceholderGroup("Element", [
             new NotificationTemplatePlaceholder("element.name", "Element name", "NAS-01"),
@@ -88,4 +99,13 @@ Channels: {{channels.summary}}
     {
         return Groups;
     }
+
+    /// <summary>Every placeholder with its example value - what a template is test-filled with when it is saved.
+    /// The examples include quotes-free text with spaces and a slash, enough to show a missing escape.</summary>
+    public static IReadOnlyDictionary<string, string> SampleValues() =>
+        Groups
+            .SelectMany(group => group.Placeholders)
+            .Where(placeholder => !placeholder.IsHtmlSnippet)
+            .GroupBy(placeholder => placeholder.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Example, StringComparer.OrdinalIgnoreCase);
 }

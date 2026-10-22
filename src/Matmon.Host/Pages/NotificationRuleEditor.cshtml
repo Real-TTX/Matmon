@@ -42,6 +42,8 @@
                 <dl class="mat-kv">
                     <dt>Subject</dt>
                     <dd><strong>@Model.View.NotificationRulePreviewSubject</strong></dd>
+                    <dt>Short message</dt>
+                    <dd>@Model.View.NotificationRulePreviewShort</dd>
                 </dl>
                 <pre class="mat-code mm-prewrap mm-break"><code>@Model.View.NotificationRulePreviewText</code></pre>
                 <div class="notification-preview-html">
@@ -131,6 +133,11 @@
                     <input asp-for="NewNotificationRule.SubjectTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}}" />
                 </div>
                 <div class="mat-field">
+                    <label class="mat-label" asp-for="NewNotificationRule.ShortTemplate">Short message (push, chat)</label>
+                    <input asp-for="NewNotificationRule.ShortTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}} - {{message}}" />
+                    <span class="mat-hint">One line, at most 300 characters - what a webhook sends as <code>{{summary}}</code>.</span>
+                </div>
+                <div class="mat-field">
                     <label class="mat-label" asp-for="NewNotificationRule.TextTemplate">Text template</label>
                     <textarea asp-for="NewNotificationRule.TextTemplate" rows="6" class="mat-textarea mat-mono"></textarea>
                 </div>
@@ -147,6 +154,7 @@
 
         <div class="mat-btn-row">
             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create rule</span></button>
+            <button type="submit" asp-page-handler="TestNotificationRule" class="mat-btn mat-btn--secondary">@MatUi.Icon("bell")<span>Send test</span></button>
             <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
         </div>
     </form>
@@ -222,6 +230,11 @@ else
                     <input asp-for="NotificationRuleEditor.SubjectTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}}" />
                 </div>
                 <div class="mat-field">
+                    <label class="mat-label" asp-for="NotificationRuleEditor.ShortTemplate">Short message (push, chat)</label>
+                    <input asp-for="NotificationRuleEditor.ShortTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}} - {{message}}" />
+                    <span class="mat-hint">One line, at most 300 characters - what a webhook sends as <code>{{summary}}</code>.</span>
+                </div>
+                <div class="mat-field">
                     <label class="mat-label" asp-for="NotificationRuleEditor.TextTemplate">Text template</label>
                     <textarea asp-for="NotificationRuleEditor.TextTemplate" rows="6" class="mat-textarea mat-mono"></textarea>
                 </div>
@@ -238,6 +251,7 @@ else
 
         <div class="mat-btn-row">
             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save rule</span></button>
+            <button type="submit" asp-page-handler="TestNotificationRule" class="mat-btn mat-btn--secondary">@MatUi.Icon("bell")<span>Send test</span></button>
             <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
             <span class="mat-btn-row__spacer"></span>
             <button type="submit" asp-page-handler="DeleteNotificationRule" formnovalidate class="mat-btn mat-btn--danger" data-confirm="Delete this notification rule?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete rule</span></button>
