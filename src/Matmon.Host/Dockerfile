@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -16,14 +17,24 @@ RUN dotnet publish Matmon.Host.csproj -c Release -o /app/publish /p:UseAppHost=f
 # The agent binaries the instance hands out on its Agents page (and, later, to the auto-update) - built
 # here so an image always carries exactly the agent that matches it, versioned with the same build number.
 # Packaging (self-contained single file) is set in Matmon.Agent.csproj; this only picks the platforms.
+# With the signing key - a BuildKit secret, never a layer (CI: secrets.MATMON_AGENT_SIGNING_KEY) - every package is
+# signed and the agents are built to accept only signed updates from then on; without it (a local build) neither.
 FROM build AS agent
 ARG MATMON_VERSION=""
 WORKDIR /src/src/Matmon.Agent
 # The Windows package is the net10.0-windows build: the same agent plus its tray icon (WinForms).
-RUN for rid in win-x64 linux-x64 linux-arm64; do \
+RUN --mount=type=secret,id=agent_signing_key \
+    require=false; \
+    if [ -s /run/secrets/agent_signing_key ] && [ -n "$MATMON_VERSION" ]; then require=true; fi; \
+    for rid in win-x64 linux-x64 linux-arm64; do \
         case "$rid" in win-*) tfm=net10.0-windows ;; *) tfm=net10.0 ;; esac; \
-        dotnet publish Matmon.Agent.csproj -c Release -f "$tfm" -r "$rid" -o "/app/agent/$rid" -p:MatmonVersion="$MATMON_VERSION" || exit 1; \
-    done
+        dotnet publish Matmon.Agent.csproj -c Release -f "$tfm" -r "$rid" -o "/app/agent/$rid" -p:MatmonVersion="$MATMON_VERSION" -p:MatmonAgentRequireSignature="$require" || exit 1; \
+    done; \
+    if [ "$require" = true ]; then \
+        dotnet run --file /src/scripts/sign-agent-packages.cs -- /app/agent "$MATMON_VERSION" /run/secrets/agent_signing_key || exit 1; \
+    else \
+        echo "agent packages are NOT signed (no signing key or no version)"; \
+    fi
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

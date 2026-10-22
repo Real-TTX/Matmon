@@ -18,6 +18,8 @@ src/Matmon.Host/agent/
 # stable so only real source changes trigger an image rebuild.
 tests/
 scripts/
+# ... except the one script the image build runs: it signs the agent packages (when the signing key is given).
+!scripts/sign-agent-packages.cs
 .github/
 *.md
 LICENSE

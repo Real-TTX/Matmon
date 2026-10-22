@@ -639,6 +639,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
                 fileName = package.Platform.FileName,
                 size = package.Length,
                 sha256 = package.Sha256,
+                signature = package.Signature,
                 url = $"/api/agent/packages/{package.Platform.RuntimeId}"
             })
         });
@@ -659,6 +660,10 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
         // The hash rides as a header too, so a script (or the updater) can verify what it wrote to disk.
         http.Response.Headers["X-Matmon-Agent-Sha256"] = package.Sha256;
+        if (package.Signature is not null)
+        {
+            http.Response.Headers["X-Matmon-Agent-Signature"] = package.Signature;
+        }
         http.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(
             package.FilePath,

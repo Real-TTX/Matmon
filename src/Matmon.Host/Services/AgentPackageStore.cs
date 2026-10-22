@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Matmon.Probe;
 
 namespace Matmon.Host.Services;
 
@@ -58,7 +59,10 @@ public sealed class AgentPackageStore
             return null;
         }
 
-        return new AgentPackage(platform, file.FullName, file.Length, file.LastWriteTimeUtc, Sha256(file));
+        // The build writes the signature next to the package (scripts/sign-agent-packages.cs); a local build has none.
+        var signatureFile = file.FullName + AgentPackageSignature.SignatureSuffix;
+        var signature = File.Exists(signatureFile) ? File.ReadAllText(signatureFile).Trim() : null;
+        return new AgentPackage(platform, file.FullName, file.Length, file.LastWriteTimeUtc, Sha256(file), string.IsNullOrWhiteSpace(signature) ? null : signature);
     }
 
     // Hashing 40 MB takes a moment, and the page lists every package on each render - so once per file
@@ -81,7 +85,8 @@ public sealed class AgentPackageStore
 
 public sealed record AgentPlatform(string RuntimeId, string DisplayName, string FileName);
 
-public sealed record AgentPackage(AgentPlatform Platform, string FilePath, long Length, DateTime WrittenUtc, string Sha256)
+/// <param name="Signature">The build's signature over platform, version and hash (base64); null for an unsigned (local) build.</param>
+public sealed record AgentPackage(AgentPlatform Platform, string FilePath, long Length, DateTime WrittenUtc, string Sha256, string? Signature = null)
 {
     public double Megabytes => Math.Round(Length / 1024.0 / 1024.0, 1);
 }

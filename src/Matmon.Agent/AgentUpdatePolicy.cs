@@ -56,6 +56,22 @@ public static class AgentUpdatePolicy
         return AgentUpdateDecision.Apply(offeredVersion);
     }
 
+    /// <summary>
+    /// Null when a downloaded package may be run, else why not. A signature that is there must be valid - always. A
+    /// missing one is refused only by an agent that came signed itself (<paramref name="required"/>): stripping the
+    /// signature from the manifest must not be a way around it, while an unsigned local build keeps updating as before.
+    /// </summary>
+    public static string? CheckSignature(bool required, string? signature, Func<string, bool> verify)
+    {
+        ArgumentNullException.ThrowIfNull(verify);
+        if (!string.IsNullOrWhiteSpace(signature))
+        {
+            return verify(signature) ? null : "the package's signature is not valid - refused";
+        }
+
+        return required ? "the package is not signed - this agent only accepts signed updates" : null;
+    }
+
     /// <summary>What the agent reports on its heartbeat about the last update - shown on the Agents page.</summary>
     public static string? Describe(AgentUpdateRecord? record) => record switch
     {

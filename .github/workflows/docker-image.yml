@@ -109,5 +109,9 @@ jobs:
           tags: ${{ steps.version.outputs.tags }}
           build-args: |
             MATMON_VERSION=${{ steps.version.outputs.version }}
+          # Signs the agent packages (and makes the agents refuse unsigned updates) when the secret is set;
+          # empty = unsigned packages, exactly as before. See AgentPackageSignature.
+          secrets: |
+            agent_signing_key=${{ secrets.MATMON_AGENT_SIGNING_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

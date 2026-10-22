@@ -15,4 +15,12 @@
     <AssemblyMetadata Include="MatmonVersion" Value="$(MatmonVersion)" />
   </ItemGroup>
 
+  <!--
+    An agent built with -p:MatmonAgentRequireSignature=true (the image build sets it exactly when it signs the packages)
+    accepts only signed updates from then on - AgentPackageSignature.RequiredByThisBuild.
+  -->
+  <ItemGroup Condition="'$(MatmonAgentRequireSignature)' == 'true'">
+    <AssemblyMetadata Include="MatmonAgentRequireSignature" Value="true" />
+  </ItemGroup>
+
 </Project>

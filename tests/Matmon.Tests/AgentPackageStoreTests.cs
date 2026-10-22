@@ -50,6 +50,19 @@ public sealed class AgentPackageStoreTests : IDisposable
     }
 
     [Fact]
+    public void TheBuildsSignatureRidesWithThePackageAndALocalBuildHasNone()
+    {
+        var path = WritePackage("linux-x64", "matmon-agent", [1, 2, 3]);
+        WritePackage("win-x64", "matmon-agent.exe", [4]);
+        File.WriteAllText(path + ".sig", "c2lnbmF0dXJl\n");
+
+        var store = NewStore();
+
+        Assert.Equal("c2lnbmF0dXJl", store.TryGet("linux-x64")?.Signature);
+        Assert.Null(store.TryGet("win-x64")?.Signature);
+    }
+
+    [Fact]
     public void TheHashIsTheFilesAndFollowsAReplacement()
     {
         var path = WritePackage("win-x64", "matmon-agent.exe", [1, 2, 3]);

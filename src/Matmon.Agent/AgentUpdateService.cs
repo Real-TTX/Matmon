@@ -181,7 +181,7 @@ public sealed class AgentUpdateService : BackgroundService
         var updater = UpdaterPath(target);
 
         _logger.LogInformation("Agent update available: {Current} -> {Version}; downloading {RuntimeId}", MatmonVersion.Current, decision.Version, runtimeId);
-        await DownloadAsync(client, package!, staged, stoppingToken);
+        await DownloadAsync(client, package!, decision.Version!, staged, stoppingToken);
         await VerifyRunsAsync(staged, decision.Version!, stoppingToken);
 
         // The updater is a copy of THIS build. A copy still running from an earlier update locks the file -
@@ -216,7 +216,7 @@ public sealed class AgentUpdateService : BackgroundService
         }
     }
 
-    private static async Task DownloadAsync(HttpClient client, AgentManifestPackage package, string staged, CancellationToken stoppingToken)
+    private static async Task DownloadAsync(HttpClient client, AgentManifestPackage package, string version, string staged, CancellationToken stoppingToken)
     {
         AgentUpdateFiles.TryDelete(staged);
         using var response = await client.GetAsync(package.Url.TrimStart('/'), HttpCompletionOption.ResponseHeadersRead, stoppingToken);
@@ -235,6 +235,17 @@ public sealed class AgentUpdateService : BackgroundService
         {
             AgentUpdateFiles.TryDelete(staged);
             throw new InvalidOperationException($"the downloaded package does not match its manifest (sha256 {actual}, expected {package.Sha256})");
+        }
+
+        // Before the file is ever executed (VerifyRunsAsync starts it): the hash only proves the file matches a manifest
+        // from the same instance, the signature proves CI built it - for this platform and this version.
+        var verdict = AgentUpdatePolicy.CheckSignature(
+            AgentPackageSignature.RequiredByThisBuild, package.Signature,
+            signature => AgentPackageSignature.Verify(signature, package.RuntimeId, version, actual));
+        if (verdict is not null)
+        {
+            AgentUpdateFiles.TryDelete(staged);
+            throw new InvalidOperationException(verdict);
         }
 
         if (!OperatingSystem.IsWindows())
@@ -268,7 +279,7 @@ public sealed class AgentUpdateService : BackgroundService
 
     private sealed record AgentManifest(string? Version, IReadOnlyList<AgentManifestPackage>? Packages);
 
-    private sealed record AgentManifestPackage(string RuntimeId, string Url, string Sha256, long Size);
+    private sealed record AgentManifestPackage(string RuntimeId, string Url, string Sha256, long Size, string? Signature = null);
 }
 
 /// <summary>The agent's update settings, read once at startup.</summary>

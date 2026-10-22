@@ -250,6 +250,14 @@
                                 <div class="probe-cell">
                                     <strong>@package.Platform.DisplayName</strong>
                                     <span class="probe-cell__meta mat-mono">@package.Platform.FileName</span>
+                                    @if (package.Signature is not null)
+                                    {
+                                        <span class="@MatUi.PillClass("ok")" data-tip="Signed by the build - an agent checks the signature before it runs an update">Signed</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="@MatUi.PillClass("plain")" data-tip="An unsigned (local) build - agents verify only its SHA-256">Unsigned</span>
+                                    }
                                 </div>
                             </td>
                             <td data-label="Size" class="mat-num mat-mono">@package.Megabytes.ToString("0.0") MB</td>
