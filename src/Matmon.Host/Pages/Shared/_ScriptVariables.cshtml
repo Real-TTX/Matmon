@@ -1,28 +1,32 @@
 @using Matmon.Core.Domain
 @model string
+@*
+    The "Available variables" reference of the script sensors (ScriptSensorVariables): what the monitoring context
+    hands a script as environment variables. Rendered inside the Parameters card of every sensor editor.
+*@
 @{
     var scriptVariables = ScriptSensorVariables.For(Model);
 }
 @if (scriptVariables.Count > 0)
 {
-    <div class="script-variables">
+    <section class="script-variables" aria-labelledby="script-variables-title">
         <div class="script-variables-head">
-            @MatmonIcons.Render("spark")
-            <span class="script-variables-title">Available variables</span>
-            <span class="script-variables-hint">PowerShell <code>$env:NAME</code> &middot; shell <code>$NAME</code></span>
+            @MatUi.Icon("code")
+            <h3 class="script-variables-title" id="script-variables-title">Available variables</h3>
+            <span class="mat-text-muted script-variables-hint">PowerShell <code>$env:NAME</code> &middot; shell <code>$NAME</code></span>
         </div>
         @foreach (var variableGroup in scriptVariables.GroupBy(variable => variable.Group))
         {
-            <div class="script-variables-group">@variableGroup.Key</div>
-            <div class="script-variables-grid">
+            <h4 class="script-variables-group">@variableGroup.Key</h4>
+            <dl class="script-variables-grid">
                 @foreach (var variable in variableGroup)
                 {
                     <div class="script-variable">
-                        <code class="script-variable-name">@variable.Name</code>
-                        <span class="script-variable-desc">@variable.Description</span>
+                        <dt><code class="mat-mono">@variable.Name</code></dt>
+                        <dd class="mat-text-muted">@variable.Description</dd>
                     </div>
                 }
-            </div>
+            </dl>
         }
-    </div>
+    </section>
 }

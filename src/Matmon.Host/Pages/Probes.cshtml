@@ -3,120 +3,114 @@
 @{
     ViewData["Title"] = "Probes";
     var probes = Model.Probes;
+    ViewData["PageSub"] = $"{probes.Count} configured: the local primary, remote probes and agents - where the sensors run.";
     var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
 }
 
-<section class="dashboard-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("probe")
-            <div>
-                <div class="eyebrow">Sensors</div>
-                <h1>Probes</h1>
-            </div>
+<div class="mat-list">
+    @if (probes.Count == 0)
+    {
+        <div class="mat-empty">
+            <span class="mat-empty__icon">@MatUi.Icon("server")</span>
+            <div class="mat-empty__title">No probes configured yet</div>
+            <p>A probe runs the sensors: the local primary, a remote Docker probe or an agent on the machine it monitors.</p>
         </div>
-    </div>
+    }
+    else
+    {
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Probes with their state</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Probe</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" class="mat-hide-sm">Last seen</th>
+                        <th scope="col" class="mat-num">Sensors</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var probe in probes)
+                    {
+                        var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+                            ? "error"
+                            : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
 
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("probe")<span>Probe overview</span></h2>
-            <span class="panel-hint">@probes.Count configured</span>
-        </div>
-
-        @if (probes.Count == 0)
-        {
-            <div class="empty-state">No probes configured yet.</div>
-        }
-        else
-        {
-            <div class="system-table system-probe-table probe-overview-table" role="table" aria-label="Probe overview">
-                <div class="system-table-row system-table-head probe-overview-row" role="row">
-                    <span role="columnheader">Probe</span>
-                    <span role="columnheader">Role</span>
-                    <span role="columnheader">Status</span>
-                    <span role="columnheader">Last seen</span>
-                    <span role="columnheader">Sensors</span>
-                    <span role="columnheader">Actions</span>
-                </div>
-
-                @foreach (var probe in probes)
-                {
-                    var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
-                        ? "error"
-                        : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
-
-                    <div class="system-table-row probe-overview-row" role="row">
-                        <span role="cell">
-                            <strong>@probe.Name</strong>
-                            <small>@probe.ProbeId</small>
-                            @if (!string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-")
-                            {
-                                <small class="system-probe-os">@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")@(string.IsNullOrWhiteSpace(probe.Version) ? string.Empty : $" · {probe.Version}")</small>
-                            }
-                            else if (!string.IsNullOrWhiteSpace(probe.Version))
-                            {
-                                <small class="system-probe-os">@probe.Version</small>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(probe.DuplicateWarning))
-                            {
-                                <small class="system-probe-duplicate" title="Two processes share this probe id, so every other sensor result comes from the other one.">@MatmonIcons.Render("warning") Duplicate probe: @probe.DuplicateWarning</small>
-                            }
-                            @if (probe.Networks is { Count: > 0 })
-                            {
-                                <span class="system-probe-subnets">
-                                    @foreach (var net in probe.Networks)
+                        <tr>
+                            <td data-label="Probe">
+                                <div class="probe-cell">
+                                    <strong>@probe.Name</strong>
+                                    <span class="probe-cell__meta mat-mono">@probe.ProbeId</span>
+                                    @if (!string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-")
                                     {
-                                        <span class="sensor-chip">@net</span>
+                                        <span class="probe-cell__meta">@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")@(string.IsNullOrWhiteSpace(probe.Version) ? string.Empty : $" · {probe.Version}")</span>
                                     }
-                                </span>
-                            }
-                        </span>
-                        <span role="cell">
-                            @probe.Role
-                            @if (probe.IsAgent)
-                            {
-                                <span class="sensor-chip" title="Enrolled agent - installed on the machine it monitors">Agent</span>
-                            }
-                        </span>
-                        <span role="cell">
-                            <span class="state-pill" data-state="@state">@probe.State</span>
-                            <small>@probe.Message</small>
-                        </span>
-                        <span role="cell">@(probe.LastSeenUtc.HasValue ? probe.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</span>
-                        <span role="cell">@probe.SensorCount</span>
-                        <span role="cell" class="probe-overview-actions">
-                            <details class="workspace-action-menu">
-                                <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Probe actions" title="Probe actions">
-                                    @MatmonIcons.Render("more")
-                                    <span>Actions</span>
-                                </summary>
-                                <div class="workspace-action-menu-panel">
-                                    <a class="workspace-action-menu-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">
-                                        @MatmonIcons.Render("sensor")
-                                        <span>Sensors</span>
-                                    </a>
-                                    <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@probe.ElementId">
-                                        @MatmonIcons.Render("chart")
-                                        <span>Usage</span>
-                                    </a>
-                                    @if (isAdmin && probe.Role != "Primary")
+                                    else if (!string.IsNullOrWhiteSpace(probe.Version))
                                     {
-                                        @* A Docker probe moving onto the machine it monitors, or an agent being reinstalled: a code that
-                                           hands the new install THIS probe (and its sensors), not a new, empty one. *@
-                                        <form method="post" asp-page="/Agents" asp-page-handler="CreateForProbe">
-                                            <input type="hidden" name="probeElementId" value="@probe.ElementId" />
-                                            <button type="submit" class="workspace-action-menu-link">
-                                                @MatmonIcons.Render("lock")
-                                                <span>@(probe.IsAgent ? "New install code" : "Move to an agent")</span>
-                                            </button>
-                                        </form>
+                                        <span class="probe-cell__meta mat-mono">@probe.Version</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(probe.DuplicateWarning))
+                                    {
+                                        <span class="probe-cell__warn" title="Two processes share this probe id, so every other sensor result comes from the other one.">@MatUi.Icon("alert")<span>Duplicate probe: @probe.DuplicateWarning</span></span>
+                                    }
+                                    @if (probe.Networks is { Count: > 0 })
+                                    {
+                                        <span class="mat-chips">
+                                            @foreach (var net in probe.Networks)
+                                            {
+                                                <span class="mat-tag mat-mono">@net</span>
+                                            }
+                                        </span>
                                     }
                                 </div>
-                            </details>
-                        </span>
-                    </div>
-                }
-            </div>
+                            </td>
+                            <td data-label="Role">
+                                <div class="probe-cell">
+                                    <span>@probe.Role</span>
+                                    @if (probe.IsAgent)
+                                    {
+                                        <span class="mat-tag" title="Enrolled agent - installed on the machine it monitors">Agent</span>
+                                    }
+                                </div>
+                            </td>
+                            <td data-label="Status">
+                                <div class="probe-cell">
+                                    <span class="@MatUi.PillClass(state)">@probe.State</span>
+                                    <span class="probe-cell__meta">@probe.Message</span>
+                                </div>
+                            </td>
+                            <td data-label="Last seen" class="mat-hide-sm mat-mono">@(probe.LastSeenUtc.HasValue ? probe.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</td>
+                            <td data-label="Sensors" class="mat-num mat-mono">@probe.SensorCount</td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="probe-menu-@probe.ElementId" data-menu-place="bottom"
+                                            aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @probe.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* The row menus. A menu item that posts uses the one hidden form (it carries the anti-forgery token) and names its own
+   handler: a Docker probe moving onto the machine it monitors, or an agent being reinstalled, gets a code that hands the
+   new install THIS probe (and its sensors), not a new, empty one. *@
+<form method="post" id="probe-row-actions" hidden></form>
+@foreach (var probe in probes)
+{
+    <div class="mat-menu" id="probe-menu-@probe.ElementId" role="menu" aria-label="Actions for @probe.Name" hidden>
+        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">@MatUi.Icon("activity")<span>Sensors</span></a>
+        <a class="mat-menu__item" role="menuitem" asp-page="/ProbeUsage" asp-route-probeElementId="@probe.ElementId">@MatUi.Icon("bar-chart")<span>Usage</span></a>
+        @if (isAdmin && probe.Role != "Primary")
+        {
+            <div class="mat-menu__sep" role="separator"></div>
+            <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
+                    asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@probe.ElementId">@MatUi.Icon("key")<span>@(probe.IsAgent ? "New install code" : "Move to an agent")</span></button>
         }
-    </section>
-</section>
+    </div>
+}

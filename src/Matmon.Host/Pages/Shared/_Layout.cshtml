@@ -1,28 +1,40 @@
-<!DOCTYPE html>
-@inject Matmon.Host.Services.MatmonRuntimeOptions RuntimeOptions
-@inject Matmon.Host.Services.IDashboardSnapshotProvider DashboardSnapshotProvider
-@inject Matmon.Host.Services.CloudUpdateState CloudUpdate
-@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
+@inject Matmon.Host.Ui.InstanceShellBuilder ShellBuilder
+@inject Matmon.Host.Ui.MatUiToolkit Toolkit
 @{
-    // Embedded mode: when reached through the Matmon.Cloud "embed" tunnel, render the page chromeless
-    // (no own sidebar / mobile nav) so the cloud console can show a single menu around the iframe.
-    var embedded = string.Equals(Context.Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
-    // White-label: a managing partner can set a product name that replaces "Matmon" in the brand + title.
-    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
-    var brandName = string.IsNullOrWhiteSpace(partnerProductName) ? "Matmon" : partnerProductName;
-    var partnerName = WorkspaceStore.GetServicePartnerName();
-    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
-    var partnerIsOem = WorkspaceStore.GetServicePartnerLogoIsOem();
-    var partnerSlogan = WorkspaceStore.GetServicePartnerSlogan();
-    var partnerSidebarStyle = WorkspaceStore.GetServicePartnerSidebarStyle();
-    var partnerHasSmallLogo = WorkspaceStore.GetServicePartnerHasSmallLogo();
+    // The MatUi shell (SHELL-01..19): the menu on the left with the brand above it, the user and the theme button at its
+    // foot and the version below them, the breadcrumb in the header bar, then the page. InstanceShellBuilder decides WHAT
+    // is drawn (brand / white label, menu, counts, user); this file only draws it.
+    // A page sets: ViewData["Title"], optionally ["PageSub"] (the line under the title), ["Width"] = "narrow" | "wide",
+    // ["OwnHead"] = true when it draws its own <div class="mat-page__head">, ["Breadcrumbs"] for a custom trail.
+    // Inside the Matmon.Cloud console (X-Matmon-Embed: 1) the page renders chromeless: the cloud draws one menu around it.
+    var shell = ShellBuilder.Build(Context, ViewData);
+    var title = ViewData["Title"]?.ToString() ?? shell.BrandName;
+    var sub = ViewData["PageSub"] as string;
+    var ownHead = ViewData["OwnHead"] is true;
+    var width = ViewData["Width"] as string;
+    var pageClass = "mat-page" + (width == "narrow" ? " mat-page--narrow" : width == "wide" ? " mat-page--wide" : string.Empty);
+    var crumbs = BreadcrumbBuilder.Build(Context.Request.Path.Value ?? string.Empty, ViewData["Title"]?.ToString(), ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>);
+    var brandClass = shell.PartnerLogoOnly ? "mat-nav__brand-link--logo-only" : shell.BrandStacked ? "mm-brand--stacked" : null;
+
+    // A crumb names a page ("/Config") and may carry a query or a tab ("/Config?tab=users", "/notifications#senders"):
+    // asp-page cannot resolve those, so the page part goes through Url.Page (a plain path if it is no page name) and the
+    // rest is appended. Such crumbs used to come out without a link.
+    string CrumbHref(string page)
+    {
+        var cut = page.IndexOfAny(['?', '#']);
+        var name = cut < 0 ? page : page[..cut];
+        return (Url.Page(name) ?? name) + (cut < 0 ? string.Empty : page[cut..]);
+    }
 }
-<html lang="de" data-embedded="@(embedded ? "1" : "0")">
+<!DOCTYPE html>
+<html lang="en" data-app="matmon" data-embedded="@(shell.Embedded ? "1" : "0")" data-custom-accent="@shell.PartnerAccent">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - @brandName</title>
-    @if (partnerHasSmallLogo)
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="@(shell.PartnerAccent ?? "#295cff")" />
+    <title>@title · @shell.BrandName</title>
+    @if (shell.PartnerFavicon)
     {
         <link rel="icon" href="/api/branding/favicon" />
     }
@@ -30,396 +42,188 @@
     {
         <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
     }
-    <script>
-        (() => {
-            const storageKey = "matmon-theme";
-            let mode = "system";
-            try {
-                const stored = localStorage.getItem(storageKey);
-                if (stored === "light" || stored === "dark" || stored === "system") {
-                    mode = stored;
-                }
-            } catch {
-                mode = "system";
-            }
-
-            const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-            const dark = mode === "dark" || (mode === "system" && prefersDark);
-            document.documentElement.dataset.theme = dark ? "dark" : "light";
-            document.documentElement.dataset.themeMode = mode;
-        })();
-    </script>
-    <script type="importmap"></script>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/Matmon.Host.styles.css" asp-append-version="true" />
-    @{
-        // Reseller co-branding: re-theme the whole app to the managing partner's accent colour. Cheap accessor
-        // (no logo clone) + render-time re-validation to #RRGGBB, so a garbage/malicious cached value can never
-        // reach inline CSS. Overrides both themes with !important so it wins over the site.css :root/light rules.
-        var partnerAccent = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerBrandColor());
-        var partnerAccent2 = Matmon.Core.Domain.BrandingSafety.SafeHexColor(WorkspaceStore.GetServicePartnerSecondaryColor());
-    }
-    @if (partnerAccent is not null)
-    {
-        <style>
-            :root, html[data-theme="light"], html[data-theme="dark"] {
-                --matmon-accent: @partnerAccent !important;
-                --matmon-accent-2: @(partnerAccent2 ?? $"color-mix(in srgb, {partnerAccent} 58%, #ffffff)") !important;
-            }
-        </style>
-    }
-    @if (embedded)
-    {
-        <style>
-            .app-shell { display: block !important; }
-            .app-sidebar, .mobile-nav-bar, .sidebar-backdrop, .workspace-summary-strip, .breadcrumb-bar { display: none !important; }
-            .app-main, .app-content { width: 100%; }
-        </style>
-    }
+    <script src="~/js/matmon.boot.js" asp-append-version="true"></script>
+    <script src="/matui/matui.boot.js?v=@Toolkit.Hash"></script>
+    <link rel="stylesheet" href="/matui/matui.css?v=@Toolkit.Hash" />
+    <partial name="_AppStyles" />
+    @await RenderSectionAsync("Styles", required: false)
 </head>
-<body class="matmon-shell">
-    @{
-        var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
-        string NavClass(string page) => string.Equals(currentPage, page, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
-
-        // Section-aware sidebar highlight (mirrors the cloud shell): a nav item stays active on ALL of its
-        // section's sub-pages (editors, tabs), matched by URL-path prefix rather than exact page name.
-        var currentPath = Context.Request.Path.Value ?? string.Empty;
-        bool PathStarts(string prefix) => currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-        // /monitoring is a shared prefix (Sensors + the Templates editor + the Probe-usage page live under it),
-        // so Templates/Probes are resolved first and excluded from Sensors (most-specific-prefix wins). Root "/"
-        // must be exact - it is a prefix of every path.
-        var dashboardActive = string.Equals(currentPath, "/", StringComparison.OrdinalIgnoreCase);
-        var probesActive = PathStarts("/probes") || PathStarts("/system/probes") || PathStarts("/monitoring/probe");
-        var agentsActive = PathStarts("/agents");
-        var templatesActive = PathStarts("/templates") || PathStarts("/monitoring/template");
-        var mapsActive = PathStarts("/maps");
-        var notificationsActive = PathStarts("/notifications");
-        var eventsActive = PathStarts("/events");
-        var discoveryActive = PathStarts("/discovery");
-        var systemActive = PathStarts("/config") || PathStarts("/system/users") || PathStarts("/system/mibs") || PathStarts("/system/syslog") || PathStarts("/backup");
-        var logsActive = PathStarts("/logs");
-        var sensorsActive = PathStarts("/monitoring") && !templatesActive && !probesActive;
-        string Active(bool on) => on ? "is-active" : string.Empty;
-        var isSecondaryMode = RuntimeOptions.Mode == Matmon.Core.AppMode.Secondary;
-        var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
-        var suppressWorkspaceSummary = string.Equals(ViewData["WorkspaceSummarySuppress"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
-        Matmon.Host.Services.WorkspaceSummary? workspaceSummary = null;
-
-        if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
-        {
-            try
-            {
-                workspaceSummary = DashboardSnapshotProvider.GetWorkspaceSummary();
-            }
-            catch
-            {
-                workspaceSummary = null;
-            }
-        }
-
-        ViewData["WorkspaceSummary"] = workspaceSummary;
-
-        // Server-render the sidebar alert badge from the cheap summary so it shows real
-        // numbers on first paint (the client refresh then keeps it live). Mirrors the
-        // tone/state/hint logic in site.js so the JS update is visually a no-op.
-        // All alert-based so the badge agrees with the Alerts page. Big number = open
-        // (unacknowledged) alerts; Err/Warn tiles = active alerts by severity (these persist
-        // after the sensor recovers, Alerta-style - counting sensor states diverged from the page).
-        var openAlerts = workspaceSummary?.OpenAlertCount ?? 0;
-        var ackAlerts = workspaceSummary?.AcknowledgedAlertCount ?? 0;
-        var errorAlerts = workspaceSummary?.ErrorAlertCount ?? 0;
-        var warningAlerts = workspaceSummary?.WarningAlertCount ?? 0;
-        var pausedSensors = workspaceSummary?.PausedSensorCount ?? 0;
-        var hasErrors = errorAlerts > 0;
-        var hasWarnings = warningAlerts > 0 || ackAlerts > 0 || pausedSensors > 0;
-        var alertTone = hasErrors ? "error" : (hasWarnings ? "warning" : "ok");
-        var alertState = errorAlerts > 0 ? "Error" : (warningAlerts > 0 ? "Warning" : (ackAlerts > 0 ? "Ack" : (pausedSensors > 0 ? "Paused" : "OK")));
-        var hintParts = new List<string>();
-        if (errorAlerts > 0) { hintParts.Add($"{errorAlerts} error"); }
-        if (warningAlerts > 0) { hintParts.Add($"{warningAlerts} warning"); }
-        if (ackAlerts > 0) { hintParts.Add($"{ackAlerts} ack"); }
-        if (pausedSensors > 0) { hintParts.Add($"{pausedSensors} paused"); }
-        var alertHint = hintParts.Count > 0 ? string.Join(" / ", hintParts) : "All clear";
-    }
-    @if (embedded)
+<body>
+    <a class="mat-skip" href="#main">Skip to the content</a>
+    @Html.Raw(Toolkit.Sprite)
+    @if (shell.Embedded)
     {
-        // For the Matmon.Cloud console: publish this instance's own effective nav (role- and mode-aware) so the
-        // cloud sidebar mirrors exactly what the instance shows - not a hardcoded guess. cloud.js reads this from
-        // the (same-origin) iframe on load and rebuilds the console menu; older instances that don't emit it fall
-        // back to the cloud's static menu.
-        var embedNav = new List<object>();
-        if (isSecondaryMode)
-        {
-            embedNav.Add(new { label = "Probe", path = "" });
-        }
-        else
-        {
-            embedNav.Add(new { label = "Dashboard", path = "" });
-            embedNav.Add(new { label = "Alerts", path = "Alerts" });
-            embedNav.Add(new { label = "Sensors", path = "Monitoring" });
-            embedNav.Add(new { label = "Probes", path = "Probes" });
-            embedNav.Add(new { label = "Discovery", path = "Discovery" });
-            embedNav.Add(new { label = "Maps", path = "Maps" });
-            embedNav.Add(new { label = "Templates", path = "Templates" });
-            embedNav.Add(new { label = "Notifications", path = "Notifications" });
-            embedNav.Add(new { label = "Events", path = "Events" });
-            if (isAdmin) { embedNav.Add(new { label = "System", path = "Config" }); }
-            if (isAdmin) { embedNav.Add(new { label = "Logs", path = "Logs" }); }
-        }
-        <script type="application/json" id="matmon-embed-nav">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(embedNav))</script>
+        @* For the Matmon.Cloud console: this instance's own menu (role- and mode-aware), which the cloud reads from the
+           same-origin frame and mirrors - a data block, not a script. *@
+        <script type="application/json" id="matmon-embed-nav">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(shell.EmbedNav))</script>
     }
-    <div class="app-shell">
-        <div class="mobile-nav-bar">
-            <button type="button"
-                    class="mobile-nav-toggle"
-                    data-sidebar-toggle
-                    aria-controls="app-sidebar"
-                    aria-expanded="false"
-                    aria-label="Open navigation menu">
-                @MatmonIcons.Render("menu")
-            </button>
-            @* The mobile slot is a fixed 1.35rem square: only ever put a square asset in it (the partner favicon
-               or the Matmon glyph) - the wide main logo would be stretched/distorted, and an OEM wide-lockup here
-               would also duplicate the product name printed below. So the name text stays with a square icon. *@
-            <img class="mobile-nav-logo" src="@(partnerHasSmallLogo ? "/api/branding/favicon" : "/favicon.svg")" alt="" aria-hidden="true" />
-            <div class="mobile-nav-copy">
-                <span class="mobile-nav-brand">@(partnerProductName ?? "MATMON")</span>
-                <strong>@(ViewData["Title"]?.ToString() ?? brandName)</strong>
-            </div>
-        </div>
 
-        <aside class="topbar app-sidebar" id="app-sidebar">
-            <div class="container-fluid px-2 py-2 sidebar-inner">
-                <div class="sidebar-brand-block">
-                    @if (partnerProductName is not null)
-                    {
-                        var isRow = partnerSidebarStyle == 1;
-                        <a class="brand" asp-area="" asp-page="/Index" style="@(isRow ? "flex-direction:row;align-items:center;gap:10px;" : "flex-direction:column;align-items:flex-start;gap:6px;")text-transform:none;letter-spacing:normal;font-size:1rem;">
-                            @if (partnerHasLogo)
-                            {
-                                <img src="/api/branding/logo" alt="@partnerProductName" style="@(isRow ? "max-height:40px;width:auto;" : "max-height:44px;max-width:100%;width:auto;")height:auto;object-fit:contain;" />
-                            }
-                            @if (!(partnerHasLogo && partnerIsOem))
-                            {
-                                <span style="display:flex;flex-direction:column;gap:2px;line-height:1.15;">
-                                    <span>@partnerProductName</span>
-                                    @if (!string.IsNullOrWhiteSpace(partnerSlogan))
-                                    {
-                                        <span style="font-size:.7rem;font-weight:400;opacity:.7;">@partnerSlogan</span>
-                                    }
-                                </span>
-                            }
-                        </a>
-                    }
-                    else
-                    {
-                        <a class="brand" asp-area="" asp-page="/Index">
-                            <img class="brand-mark" src="~/brand/matmon-mark-flat.svg" alt="" aria-hidden="true" />
-                            <span>MATMON</span>
-                        </a>
-                    }
-                    <div class="brand-note">@(partnerProductName is not null && !string.IsNullOrWhiteSpace(partnerName) ? $"Managed by {partnerName}" : (isSecondaryMode ? "Secondary probe node" : "Lightweight monitoring"))</div>
-                </div>
-
-                @if (User.Identity?.IsAuthenticated == true && !isSecondaryMode)
-                {
-                    <div class="sidebar-alert-status @NavClass("/Alerts")" data-nav-alert-status data-tone="@alertTone">
-                        <a class="sidebar-alert-status-main" asp-area="" asp-page="/Alerts" asp-route-alertFilter="open">
-                            <span class="sidebar-alert-status-label">Alerts</span>
-                            <span class="sidebar-alert-status-value">
-                                <span class="sidebar-alert-status-count" data-nav-alert-count>@openAlerts</span>
-                                <span class="sidebar-alert-status-state" data-nav-alert-state>@alertState</span>
-                            </span>
-                            <span class="sidebar-alert-status-hint" data-nav-alert-hint>@alertHint</span>
-                        </a>
-                        <span class="sidebar-alert-status-meta" aria-label="Alert summary">
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><strong data-nav-error-count>@errorAlerts</strong><small>Err</small></a>
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><strong data-nav-warning-count>@warningAlerts</strong><small>Warn</small></a>
-                            <a asp-area="" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><strong data-nav-ack-count>@ackAlerts</strong><small>Ack</small></a>
-                            <a asp-area="" asp-page="/Monitoring" asp-route-MonitoringKind="sensor" asp-route-MonitoringState="paused" data-tone="paused"><strong data-nav-paused-inline-count>@pausedSensors</strong><small>Pause</small></a>
+    <div class="mat-app@(shell.Embedded ? " mm-embedded" : string.Empty)">
+        @if (!shell.Embedded)
+        {
+            <aside class="mat-nav" id="mat-nav">
+                <div class="mat-nav__brand">
+                    <a asp-page="/Index" aria-label="@shell.BrandName, start page" class="@brandClass">
+                        @if (shell.PartnerLogo)
+                        {
+                            <img class="mat-brandmark" src="/api/branding/logo" alt="@shell.BrandName" />
+                        }
+                        else
+                        {
+                            <img class="mat-brandmark" src="~/brand/matmon-mark-flat.svg" alt="" width="38" height="38" />
+                        }
+                        <span>
+                            <span class="mat-nav__name">@shell.BrandName</span>
+                            <span class="mat-nav__tagline">@shell.Tagline</span>
                         </span>
-                    </div>
-                }
-
-                <nav class="topnav sidebar-nav">
-                    @if (User.Identity?.IsAuthenticated == true)
-                    {
-                        @if (isSecondaryMode)
-                        {
-                            <a asp-area="" asp-page="/Index" class="topnav-link @NavClass("/Index")">Probe</a>
-                        }
-                        else
-                        {
-                            <a asp-area="" asp-page="/Index" class="topnav-link @Active(dashboardActive)">Dashboard</a>
-                            <a asp-area="" asp-page="/Monitoring" class="topnav-link @Active(sensorsActive)">Sensors</a>
-                            <a asp-area="" asp-page="/Probes" class="topnav-link @Active(probesActive)">Probes</a>
-                            <a asp-area="" asp-page="/Agents" class="topnav-link @Active(agentsActive)">Agents</a>
-                            <a asp-area="" asp-page="/Discovery" class="topnav-link @Active(discoveryActive)">Discovery</a>
-                            <a asp-area="" asp-page="/Maps" class="topnav-link @Active(mapsActive)">Maps</a>
-                            <a asp-area="" asp-page="/Templates" class="topnav-link @Active(templatesActive)">Templates</a>
-                            <a asp-area="" asp-page="/Notifications" class="topnav-link @Active(notificationsActive)">Notifications</a>
-                            <a asp-area="" asp-page="/Events" class="topnav-link @Active(eventsActive)">Events</a>
-                            @if (isAdmin)
-                            {
-                                <a asp-area="" asp-page="/Config" class="topnav-link @Active(systemActive)">System</a>
-                                <a asp-area="" asp-page="/Logs" class="topnav-link @Active(logsActive)">Logs</a>
-                            }
-                        }
-                    }
-                </nav>
-
-                <div class="sidebar-footer">
-                    <div class="sidebar-footer-tools">
-                        <button type="button" class="sidebar-icon-button topnav-theme-toggle" data-theme-toggle title="Theme">
-                            <span class="theme-toggle-icon" data-theme-icon="light">@MatmonIcons.Render("sun")</span>
-                            <span class="theme-toggle-icon" data-theme-icon="dark">@MatmonIcons.Render("moon")</span>
-                            <span class="theme-toggle-icon" data-theme-icon="system">@MatmonIcons.Render("theme-system")</span>
-                            <span class="workspace-sr-only" data-theme-label>System</span>
-                        </button>
-
-                        @if (User.Identity?.IsAuthenticated == true)
-                        {
-                            var accountName = User.Identity?.Name ?? "Account";
-                            var accountRole = User.Claims.FirstOrDefault(claim => claim.Type == System.Security.Claims.ClaimTypes.Role)?.Value ?? "Viewer";
-                            var accountInitial = string.IsNullOrWhiteSpace(accountName)
-                                ? "A"
-                                : accountName.Trim().Substring(0, 1).ToUpperInvariant();
-
-                            <details class="account-menu">
-                                <summary class="account-menu-trigger">
-                                    <span class="account-avatar">@accountInitial</span>
-                                    <span class="account-trigger-copy">
-                                        <span class="account-trigger-label">Account</span>
-                                        <span class="account-trigger-name">@accountName</span>
-                                    </span>
-                                    <span class="account-trigger-chevron">@MatmonIcons.Render("arrow-right")</span>
-                                </summary>
-                                <div class="account-menu-panel">
-                                    <div class="account-menu-meta">
-                                        <span>Signed in</span>
-                                        <strong>@accountName</strong>
-                                        <small>@accountRole</small>
-                                    </div>
-                                    <a asp-area="" asp-page="/Account" class="account-menu-action">
-                                        <span>Account</span>
-                                    </a>
-                                    <form asp-page="/Logout" method="post" class="account-menu-form">
-                                        <button type="submit" class="account-menu-action">
-                                            <span>Log out</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </details>
-                        }
-                        else
-                        {
-                            <a asp-area="" asp-page="/Login" class="account-login-button @NavClass("/Login")">
-                                @MatmonIcons.Render("lock")
-                                <span>Login</span>
-                            </a>
-                        }
-                    </div>
-
-                    @if (!string.IsNullOrWhiteSpace(partnerName) && partnerProductName is null)
-                    {
-                        <div class="sidebar-version" style="opacity:.85;font-size:.72rem;">Managed by @partnerName</div>
-                    }
-
-                    <a class="sidebar-version" asp-area="" asp-page="/About" title="@(CloudUpdate.UpdateAvailable ? $"A newer build is available{(CloudUpdate.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : $"About {brandName}")">
-                        <span class="sidebar-version-brand">@brandName</span>
-                        <span class="sidebar-version-tag">@Matmon.Probe.MatmonVersion.Current</span>
-                        @if (CloudUpdate.UpdateAvailable)
-                        {
-                            <span class="sidebar-version-tag" style="background:rgba(95,141,255,.18);color:var(--matmon-accent,#5f8dff);font-weight:700;">Update</span>
-                        }
                     </a>
-                    @if (partnerProductName is not null)
-                    {
-                        <div class="sidebar-version" style="opacity:.55;font-size:.66rem;">powered by Matmon</div>
-                    }
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-nav__close" data-nav-close aria-label="Close the menu">@MatUi.Icon("x")</button>
                 </div>
-            </div>
-        </aside>
 
-        <div class="sidebar-backdrop" data-sidebar-backdrop hidden></div>
-
-        <div class="app-main">
-
-            <main class="container-fluid px-2 app-content">
-                @{
-                    var breadcrumbTrail = ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>;
-                    var breadcrumbs = BreadcrumbBuilder.Build(
-                        Context.Request.Path.Value ?? string.Empty,
-                        ViewData["Title"]?.ToString(),
-                        breadcrumbTrail);
+                @if (shell.Authed)
+                {
+                    <nav class="mat-nav__scroll" aria-label="Main">
+                        <ul class="mat-nav__list">
+                            @foreach (var group in shell.Menu)
+                            {
+                                if (group.Title is not null)
+                                {
+                                    <li class="mat-nav__group" role="presentation">@group.Title</li>
+                                }
+                                foreach (var item in group.Items)
+                                {
+                                    <li>
+                                        <a class="mat-nav__item@(item.Active ? " is-active" : string.Empty)" asp-page="@item.Page" aria-current="@(item.Active ? "page" : null)">
+                                            @MatUi.Icon(item.Icon)<span>@item.Title</span>
+                                            @if (item.BadgeKey is not null)
+                                            {
+                                                var tone = item.BadgeTone is null ? " mat-nav__badge--plain" : $" mat-nav__badge--{item.BadgeTone}";
+                                                <span class="mat-nav__badge@(tone)" data-nav-badge="@item.BadgeKey" hidden="@(item.BadgeCount == 0)">@item.BadgeCount<span class="mat-sr-only"> @(item.BadgeKey == "paused" ? "paused" : "open")</span></span>
+                                            }
+                                        </a>
+                                    </li>
+                                }
+                            }
+                        </ul>
+                    </nav>
                 }
 
-                @if (breadcrumbs.Count > 0)
-                {
-                    <nav class="breadcrumb-bar" aria-label="Breadcrumb">
-                        <ol class="breadcrumb-list">
-                            @for (var index = 0; index < breadcrumbs.Count; index++)
-                            {
-                                var crumb = breadcrumbs[index];
-                                var isLast = index == breadcrumbs.Count - 1;
+                <div class="mat-nav__foot">
+                    <div class="mat-nav__account">
+                        @if (shell.Authed)
+                        {
+                            <button type="button" class="mat-user" data-menu-toggle="user-menu" aria-haspopup="menu" aria-expanded="false">
+                                <span class="mat-avatar" aria-hidden="true">@MatUi.Initials(shell.UserName)</span>
+                                <span class="mat-user__text">
+                                    <span class="mat-user__name">@shell.UserName</span>
+                                    <span class="mat-user__role">@shell.UserRole</span>
+                                </span>
+                                @MatUi.Icon("chevron-up", "mat-user__chev")
+                            </button>
+                        }
+                        else
+                        {
+                            <a class="mat-btn mat-btn--secondary" asp-page="/Login">@MatUi.Icon("login")<span>Sign in</span></a>
+                        }
+                        <button type="button" class="mat-theme" data-theme-toggle data-theme-state="system" aria-label="Theme: System. Click for Light." title="Theme: System. Click for Light.">
+                            <svg class="mat-icon" data-theme-icon="system" aria-hidden="true" focusable="false"><use href="#mat-i-monitor"></use></svg>
+                            <svg class="mat-icon" data-theme-icon="light" aria-hidden="true" focusable="false"><use href="#mat-i-sun"></use></svg>
+                            <svg class="mat-icon" data-theme-icon="dark" aria-hidden="true" focusable="false"><use href="#mat-i-moon"></use></svg>
+                        </button>
+                    </div>
+                    <div class="mat-nav__version">
+                        <a asp-page="/About" title="@(shell.UpdateAvailable ? $"A newer build is available{(shell.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : $"About {shell.BrandName}")">@shell.BrandName @shell.Version</a>
+                        @if (shell.UpdateAvailable)
+                        {
+                            <a class="mat-pill mat-pill--accent" asp-page="/About">Update</a>
+                        }
+                        @if (shell.ManagedBy is not null)
+                        {
+                            <span class="mat-text-muted">Managed by @shell.ManagedBy</span>
+                        }
+                        @if (shell.PoweredBy)
+                        {
+                            <span class="mat-text-muted">powered by Matmon</span>
+                        }
+                    </div>
+                </div>
+            </aside>
+        }
 
-                                <li class="breadcrumb-item">
-                                    @if (!isLast && !string.IsNullOrWhiteSpace(crumb.Page))
+        <div class="mat-main">
+            @if (!shell.Embedded)
+            {
+                <header class="mat-topbar">
+                    <button type="button" class="mat-burger" data-nav-toggle aria-label="Open the menu" aria-controls="mat-nav" aria-expanded="false">@MatUi.Icon("menu")</button>
+                    <nav class="mat-crumbs" aria-label="Breadcrumb">
+                        <ol>
+                            @if (crumbs.Count == 0)
+                            {
+                                <li aria-current="page">@(ViewData["Title"]?.ToString() ?? shell.BrandName)</li>
+                            }
+                            else
+                            {
+                                @for (var i = 0; i < crumbs.Count; i++)
+                                {
+                                    var crumb = crumbs[i];
+                                    if (i == crumbs.Count - 1 || string.IsNullOrWhiteSpace(crumb.Page))
                                     {
-                                        <a class="breadcrumb-link" asp-page="@crumb.Page">@crumb.Label</a>
+                                        <li aria-current="@(i == crumbs.Count - 1 ? "page" : null)">@crumb.Label</li>
                                     }
                                     else
                                     {
-                                        <span class="breadcrumb-current" aria-current="page">@crumb.Label</span>
+                                        <li><a href="@CrumbHref(crumb.Page)">@crumb.Label</a></li>
                                     }
-                                </li>
-
-                                @if (!isLast)
-                                {
-                                    <li class="breadcrumb-separator" aria-hidden="true">
-                                        @MatmonIcons.Render("arrow-right")
-                                    </li>
                                 }
                             }
                         </ol>
                     </nav>
-                }
+                    @await RenderSectionAsync("TopbarActions", required: false)
+                </header>
+            }
+            else if (IsSectionDefined("TopbarActions"))
+            {
+                // Embedded in the cloud console there is no header bar; a page that defines its actions must not throw
+                // "section defined but not rendered".
+                IgnoreSection("TopbarActions");
+            }
 
-                @if (workspaceSummary is not null && !suppressWorkspaceSummary)
+            <main class="@pageClass" id="main">
+                @if (!ownHead)
                 {
-                    <section class="workspace-summary-strip" aria-label="Workspace summary">
-                                <div class="workspace-summary-card">
-                            <div class="workspace-summary-main">
-                                <span class="workspace-summary-kicker">Primary</span>
-                                <strong>@workspaceSummary.WorkspaceName</strong>
-                            </div>
-                            <div class="workspace-summary-metrics">
-                                <a class="workspace-summary-chip" asp-page="/Probes" aria-label="Configured probes">
-                                    @MatmonIcons.Render("probe")
-                                    <strong>@workspaceSummary.ConfiguredProbeCount</strong>
-                                    <span>Probes</span>
-                                </a>
-                                <a class="workspace-summary-chip" asp-page="/Monitoring" asp-route-monitoringKind="sensor" aria-label="Total sensors">
-                                    @MatmonIcons.Render("sensor")
-                                    <strong>@workspaceSummary.SensorCount</strong>
-                                    <span>Sensors</span>
-                                </a>
-                            </div>
+                    <div class="mat-page__head">
+                        <div class="mat-page__title">
+                            <h1>@title</h1>
+                            @if (!string.IsNullOrEmpty(sub))
+                            {
+                                <p class="mat-page__sub">@sub</p>
+                            }
                         </div>
-                    </section>
+                    </div>
                 }
-
                 @RenderBody()
             </main>
         </div>
     </div>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
+    @if (shell.Authed && !shell.Embedded)
+    {
+        <div class="mat-menu" id="user-menu" role="menu" aria-label="@shell.UserName" hidden>
+            <div class="mat-menu__head">
+                <span class="mat-avatar" aria-hidden="true">@MatUi.Initials(shell.UserName)</span>
+                <div><strong>@shell.UserName</strong><small>@shell.UserRole</small></div>
+            </div>
+            <a class="mat-menu__item" role="menuitem" asp-page="/Account">@MatUi.Icon("user")<span>Account</span></a>
+            <a class="mat-menu__item" role="menuitem" asp-page="/About">@MatUi.Icon("info")<span>About @shell.BrandName</span></a>
+            <div class="mat-menu__sep" role="separator"></div>
+            <form method="post" asp-page="/Logout">
+                <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("logout")<span>Sign out</span></button>
+            </form>
+        </div>
+    }
 
+    <script src="/matui/matui.js?v=@Toolkit.Hash"></script>
+    <partial name="_AppScripts" />
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

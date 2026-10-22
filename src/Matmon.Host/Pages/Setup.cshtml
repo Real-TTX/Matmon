@@ -1,52 +1,61 @@
 @page "/setup"
 @model SetupModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Setup";
-    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
+
+    // The brand at the top of the card: a managing partner's logo, or nothing under a white label without one, else the
+    // Matmon mark; a white label's product name replaces "Matmon" in the text.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var brandName = partnerProductName ?? "Matmon";
 }
 
-<section class="dashboard-shell auth-shell auth-shell-login">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("spark")
-            <h1>Welcome to Matmon</h1>
-        </div>
-    </div>
-
-    <div class="panel auth-card">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("lock")<span>Create your admin account</span></h2>
-            <span class="panel-hint">First run</span>
-        </div>
-
-        <p class="auth-intro">This is the first time Matmon starts. Create the administrator account to continue - you'll be able to add networks, probes and run discovery afterwards.</p>
-
-        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+<div class="mat-auth__card">
+    <div class="mat-auth__brand">
+        @if (partnerHasLogo)
         {
-            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
+            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
         }
-
-        <form method="post" class="workspace-form auth-form">
-            <label class="workspace-field">
-                <span>E-mail</span>
-                <input asp-for="Email" class="workspace-input" type="email" autocomplete="username" autofocus />
-            </label>
-
-            <label class="workspace-field">
-                <span>Password</span>
-                <input asp-for="Password" class="workspace-input" type="password" autocomplete="new-password" />
-            </label>
-
-            <label class="workspace-field">
-                <span>Repeat password</span>
-                <input asp-for="ConfirmPassword" class="workspace-input" type="password" autocomplete="new-password" />
-            </label>
-
-            <div class="auth-actions">
-                <span class="auth-note">At least 8 characters</span>
-                <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Create account</span></button>
-            </div>
-        </form>
+        else if (partnerProductName is null)
+        {
+            <img src="/brand/matmon-mark.svg" alt="" width="56" height="56" />
+        }
+        <h1>Welcome to @brandName</h1>
+        <p class="mat-muted">This is the first time @brandName starts. Create the administrator account to continue - you'll be able to add networks, probes and run discovery afterwards.</p>
     </div>
-</section>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+    }
+
+    <form method="post" class="mat-form" novalidate>
+        <div class="mat-field">
+            <label class="mat-label" for="Email">E-mail</label>
+            <input asp-for="Email" type="email" class="mat-input" autocomplete="username" autofocus required
+                   data-msg-required="Please enter the administrator's e-mail address." data-msg-type="Please enter an address like name@example.com." />
+            <span class="mat-hint">You sign in with it.</span>
+            <span class="mat-error" aria-live="polite"></span>
+        </div>
+        <div class="mat-field">
+            <label class="mat-label" for="Password">Password</label>
+            <div class="mat-input-icon mat-input-icon--end">
+                <input asp-for="Password" type="password" class="mat-input" autocomplete="new-password" required minlength="8"
+                       data-msg-required="Please choose a password." data-msg-range="The password needs at least 8 characters." />
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="Password" aria-pressed="false" aria-label="Show the password" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
+            </div>
+            <span class="mat-hint">At least 8 characters.</span>
+            <span class="mat-error" aria-live="polite"></span>
+        </div>
+        <div class="mat-field">
+            <label class="mat-label" for="ConfirmPassword">Repeat password</label>
+            <input asp-for="ConfirmPassword" type="password" class="mat-input" autocomplete="new-password" required data-msg-required="Please repeat the password." />
+            <span class="mat-error" aria-live="polite"></span>
+        </div>
+        <div class="mat-btn-row mat-btn-row--plain">
+            <button type="submit" class="mat-btn mat-btn--primary mat-btn--block">@MatUi.Icon("shield")<span>Create account</span></button>
+        </div>
+    </form>
+</div>

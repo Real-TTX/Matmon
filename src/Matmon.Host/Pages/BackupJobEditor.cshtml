@@ -2,197 +2,128 @@
 @model BackupJobEditorModel
 @{
     ViewData["Title"] = Model.PageMode;
+    ViewData["Width"] = "narrow";
+    var mode = Model.Input.ScheduleMode;
+    var isCloud = Model.Input.Destination == BackupDestination.Cloud;
 }
 
-<section class="dashboard-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("clock")
-            <h1>@Model.PageMode</h1>
-        </div>
-    </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
+@* The destination decides what the form asks: a Cloud job stores configuration only, so the sections and the retention
+   are hidden (not disabled - they keep their values for when the job goes back to Local disk) and the passphrase shows.
+   initializeBackupJobEditor (system.js) switches them; the server draws the first state. *@
+<form method="post" class="mat-form" novalidate data-backup-job-editor>
+    <input type="hidden" asp-for="ReturnUrl" />
 
-    <form method="post" class="workspace-form">
-        <input type="hidden" asp-for="ReturnUrl" />
-
-        <div class="config-grid">
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("pencil")<span>Backup job</span></h2>
-                    <span class="panel-hint">name, retention and state</span>
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">Backup job</h2><span class="mat-text-muted mm-push-end">name, retention and state</span></div>
+        <div class="mat-card__body">
+            <div class="mat-form__grid">
+                <div class="mat-field mat-field--full">
+                    <label class="mat-label" for="Input_Name">Name</label>
+                    <input asp-for="Input.Name" class="mat-input" />
                 </div>
-
-                <div class="workspace-form-grid workspace-core-grid">
-                    <label class="workspace-field">
-                        <span>Name</span>
-                        <input asp-for="Input.Name" class="form-control workspace-input" />
-                    </label>
-                    <label class="workspace-field">
-                        <span>Description</span>
-                        <textarea asp-for="Input.Description" class="form-control workspace-textarea" rows="3"></textarea>
-                    </label>
-                    <label class="workspace-field">
-                        <span>Destination</span>
-                        <select asp-for="Input.Destination" class="form-select workspace-select" data-backup-destination>
-                            <option value="Local">Local disk</option>
-                            <option value="Cloud" disabled="@(!Model.CloudConnected)">Matmon.Cloud (off-site)@(Model.CloudConnected ? "" : " – connect first")</option>
-                        </select>
-                    </label>
-                    <label class="workspace-field" data-local-only>
-                        <span>Retention count</span>
-                        <input asp-for="Input.RetentionCount" type="number" min="1" max="100" class="form-control workspace-input" />
-                    </label>
-                    <label class="workspace-field" data-cloud-only hidden>
-                        <span>Passphrase <span style="color:var(--matmon-muted);font-weight:400;">(optional, makes it portable)</span></span>
-                        <input asp-for="Input.Passphrase" type="password" class="form-control workspace-input" autocomplete="new-password" minlength="12" placeholder="@(Model.JobId is null ? "min. 12 chars" : "leave blank to keep the current one")" />
-                    </label>
-                    <label class="workspace-check">
+                <div class="mat-field mat-field--full">
+                    <label class="mat-label" for="Input_Description">Description</label>
+                    <textarea asp-for="Input.Description" class="mat-textarea" rows="3"></textarea>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="Input_Destination">Destination</label>
+                    <select asp-for="Input.Destination" class="mat-select" data-backup-destination>
+                        <option value="Local">Local disk</option>
+                        <option value="Cloud" disabled="@(!Model.CloudConnected)">Matmon.Cloud (off-site)@(Model.CloudConnected ? "" : " – connect first")</option>
+                    </select>
+                </div>
+                <div class="mat-field" data-local-only hidden="@isCloud">
+                    <label class="mat-label" for="Input_RetentionCount">Retention count</label>
+                    <input asp-for="Input.RetentionCount" type="number" min="1" max="100" class="mat-input mat-mono" data-msg-range="Keep 1 to 100 backups." />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field" data-cloud-only hidden="@(!isCloud)">
+                    <label class="mat-label" for="Input_Passphrase">Passphrase <span class="mat-text-muted">(optional, makes it portable)</span></label>
+                    <input asp-for="Input.Passphrase" type="password" class="mat-input" autocomplete="new-password" minlength="12" data-msg-range="Use at least 12 characters." placeholder="@(Model.JobId is null ? "min. 12 chars" : "leave blank to keep the current one")" />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field mat-field--full">
+                    <label class="mat-switch">
                         <input asp-for="Input.Enabled" type="checkbox" />
+                        <span class="mat-switch__track"></span>
                         <span>Enabled</span>
                     </label>
                 </div>
-            </section>
-
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("spark")<span>Schedule</span></h2>
-                    <span class="panel-hint">when backups run</span>
-                </div>
-
-                <div class="workspace-form-grid workspace-core-grid">
-                    <label class="workspace-field" data-schedule-field="mode">
-                        <span>Mode</span>
-                        <select asp-for="Input.ScheduleMode" asp-items="Model.ScheduleModeOptions" class="form-select workspace-select" data-schedule-mode></select>
-                    </label>
-                    <label class="workspace-field" data-schedule-field="hourly">
-                        <span>Every hours</span>
-                        <input asp-for="Input.EveryHours" type="number" min="1" max="8760" class="form-control workspace-input" data-schedule-hourly />
-                    </label>
-                    <label class="workspace-field" data-schedule-field="weekly">
-                        <span>Day of week</span>
-                        <select asp-for="Input.WeekDay" asp-items="Model.WeekDayOptions" class="form-select workspace-select" data-schedule-weekday></select>
-                    </label>
-                    <label class="workspace-field" data-schedule-field="monthly">
-                        <span>Day of month</span>
-                        <input asp-for="Input.DayOfMonth" type="number" min="1" max="31" class="form-control workspace-input" data-schedule-monthday />
-                    </label>
-                    <label class="workspace-field" data-schedule-field="daily">
-                        <span>Time of day</span>
-                        <input asp-for="Input.TimeOfDay" type="time" class="form-control workspace-input" data-schedule-time />
-                    </label>
-                </div>
-            </section>
-        </div>
-
-        <p class="panel-hint" data-cloud-note hidden style="margin:4px 2px 0;">
-            Cloud backups store <strong>configuration only</strong> (no telemetry, no local user accounts, no uploaded files such as map images or MIBs) and Matmon.Cloud keeps the newest 10 automatically - so the sections and retention above don't apply. Restore one on any of your instances during setup.
-        </p>
-
-        <section class="panel config-block" data-local-only>
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("folder")<span>Sections</span></h2>
-                <span class="panel-hint">what gets stored in the backup</span>
             </div>
-
-            <div class="backup-section-grid">
-                <label class="backup-section-item"><input asp-for="Input.Sections.Topology" /> <span>Topology</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Templates" /> <span>Templates</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.SensorDefinitions" /> <span>Sensor defs</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Notifications" /> <span>Notifications</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Maps" /> <span>Maps</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Users" /> <span>Users</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Alerts" /> <span>Alerts</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.SensorHistory" /> <span>History</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Events" /> <span>Events</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Statistics" /> <span>Statistics</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.BackupJobs" /> <span>Backup jobs</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.MapAssets" /> <span>Map images</span></label>
-                <label class="backup-section-item"><input asp-for="Input.Sections.Mibs" /> <span>MIBs</span></label>
-            </div>
-        </section>
-
-        <div class="page-actions workspace-toolbar">
-            <a class="workspace-secondary-submit" asp-page="/Config" asp-route-tab="backup">
-                @MatmonIcons.Render("arrow-left")
-                <span>Back</span>
-            </a>
-            <button type="submit" class="workspace-submit">
-                @MatmonIcons.Render("check")
-                <span>Save</span>
-            </button>
         </div>
-    </form>
-</section>
+    </section>
 
-@section Scripts {
-    <script>
-        (() => {
-            const modeSelect = document.querySelector('[data-schedule-mode]');
-            const fields = {
-                hourly: document.querySelector('[data-schedule-field="hourly"]'),
-                daily: document.querySelector('[data-schedule-field="daily"]'),
-                weekly: document.querySelector('[data-schedule-field="weekly"]'),
-                monthly: document.querySelector('[data-schedule-field="monthly"]')
-            };
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("calendar")<h2 class="mat-card__title">Schedule</h2><span class="mat-text-muted mm-push-end">when backups run</span></div>
+        <div class="mat-card__body">
+            <div class="mat-form__grid">
+                <div class="mat-field">
+                    <label class="mat-label" for="Input_ScheduleMode">Mode</label>
+                    <select asp-for="Input.ScheduleMode" asp-items="Model.ScheduleModeOptions" class="mat-select"></select>
+                </div>
+                <div class="mat-field" data-show-if="#Input_ScheduleMode" data-show-value="Hourly" hidden="@(mode != BackupScheduleMode.Hourly)">
+                    <label class="mat-label" for="Input_EveryHours">Every hours</label>
+                    <input asp-for="Input.EveryHours" type="number" min="1" max="8760" class="mat-input mat-mono" />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field" data-show-if="#Input_ScheduleMode" data-show-value="Weekly" hidden="@(mode != BackupScheduleMode.Weekly)">
+                    <label class="mat-label" for="Input_WeekDay">Day of week</label>
+                    <select asp-for="Input.WeekDay" asp-items="Model.WeekDayOptions" class="mat-select"></select>
+                </div>
+                <div class="mat-field" data-show-if="#Input_ScheduleMode" data-show-value="Monthly" hidden="@(mode != BackupScheduleMode.Monthly)">
+                    <label class="mat-label" for="Input_DayOfMonth">Day of month</label>
+                    <input asp-for="Input.DayOfMonth" type="number" min="1" max="31" class="mat-input mat-mono" />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field" data-show-if="#Input_ScheduleMode" data-show-value="Daily,Weekly,Monthly" hidden="@(mode == BackupScheduleMode.Hourly)">
+                    <label class="mat-label" for="Input_TimeOfDay">Time of day</label>
+                    <input asp-for="Input.TimeOfDay" type="time" class="mat-input mat-mono" />
+                </div>
+            </div>
+        </div>
+    </section>
 
-            if (!modeSelect) {
-                return;
-            }
+    <div class="mat-alert mat-alert--info" role="status" data-cloud-note hidden="@(!isCloud)">
+        @MatUi.Icon("info")
+        <div class="mat-alert__body">Cloud backups store <strong>configuration only</strong> (no telemetry, no local user accounts, no uploaded files such as map images or MIBs) and Matmon.Cloud keeps the newest 10 automatically - so the sections and retention don't apply. Restore one on any of your instances during setup.</div>
+    </div>
 
-            const updateVisibility = () => {
-                const mode = modeSelect.value;
-                const show = new Set();
+    <section class="mat-card" data-local-only hidden="@isCloud">
+        <div class="mat-card__head">@MatUi.Icon("layers")<h2 class="mat-card__title">Sections</h2><span class="mat-text-muted mm-push-end">what gets stored in the backup</span></div>
+        <div class="mat-card__body">
+            <fieldset class="mat-field mat-fieldset">
+                <legend class="mat-sr-only">Sections stored in the backup</legend>
+                <div class="mat-checks mat-checks--inline">
+                    <label class="mat-check"><input asp-for="Input.Sections.Topology" /><span class="mat-check__text">Topology</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Templates" /><span class="mat-check__text">Templates</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.SensorDefinitions" /><span class="mat-check__text">Sensor defs</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Notifications" /><span class="mat-check__text">Notifications</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Maps" /><span class="mat-check__text">Maps</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Users" /><span class="mat-check__text">Users</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Alerts" /><span class="mat-check__text">Alerts</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.SensorHistory" /><span class="mat-check__text">History</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Events" /><span class="mat-check__text">Events</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Statistics" /><span class="mat-check__text">Statistics</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.BackupJobs" /><span class="mat-check__text">Backup jobs</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.MapAssets" /><span class="mat-check__text">Map images</span></label>
+                    <label class="mat-check"><input asp-for="Input.Sections.Mibs" /><span class="mat-check__text">MIBs</span></label>
+                </div>
+            </fieldset>
+        </div>
+    </section>
 
-                if (mode === 'Hourly') {
-                    show.add('hourly');
-                } else if (mode === 'Daily') {
-                    show.add('daily');
-                } else if (mode === 'Weekly') {
-                    show.add('weekly');
-                    show.add('daily');
-                } else if (mode === 'Monthly') {
-                    show.add('monthly');
-                    show.add('daily');
-                }
-
-                Object.entries(fields).forEach(([key, field]) => {
-                    if (!field) {
-                        return;
-                    }
-
-                    field.hidden = !show.has(key);
-                });
-            };
-
-            modeSelect.addEventListener('change', updateVisibility);
-            updateVisibility();
-
-            // Destination toggle: a Cloud job stores config only (no section picker / retention) - hide the
-            // local-only controls and show the cloud note.
-            const destSelect = document.querySelector('[data-backup-destination]');
-            if (destSelect) {
-                const localOnly = document.querySelectorAll('[data-local-only]');
-                const cloudOnly = document.querySelectorAll('[data-cloud-only]');
-                const cloudNote = document.querySelector('[data-cloud-note]');
-                const syncDest = () => {
-                    const isCloud = destSelect.value === 'Cloud';
-                    localOnly.forEach(el => { el.hidden = isCloud; });
-                    cloudOnly.forEach(el => { el.hidden = !isCloud; });
-                    if (cloudNote) { cloudNote.hidden = !isCloud; }
-                };
-                destSelect.addEventListener('change', syncDest);
-                syncDest();
-            }
-        })();
-    </script>
-}
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
+        <a class="mat-btn mat-btn--secondary" asp-page="/Config" asp-route-tab="backup">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+</form>

@@ -2,337 +2,369 @@
 @model Matmon.Host.Pages.AgentsModel
 @{
     ViewData["Title"] = "Agents";
+    ViewData["PageSub"] = "Probes installed on the machine they monitor - as a Windows service or a systemd unit.";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("Sensors", "/Monitoring"), new BreadcrumbItem("Agents") };
     var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var issuedExpires = Model.IssuedExpiresUtc is { } expiresUtc
         ? new DateTimeOffset(DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc))
         : (DateTimeOffset?)null;
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("probe")
-            <div>
-                <div class="eyebrow">Sensors</div>
-                <h1>Agents</h1>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.IssuedCode))
+{
+    @* The code just issued: shown on exactly this render, then gone for good (only its hash is kept). It gets read out over
+       the phone, so it is big and monospaced. *@
+    <div class="mat-alert mat-alert--success" role="status">
+        @MatUi.Icon("key")
+        <div class="mat-alert__body">
+            <span class="mat-alert__title">Enrolment code@(string.IsNullOrWhiteSpace(Model.IssuedName) ? string.Empty : $" for {Model.IssuedName}")</span>
+            <span>Single use@(issuedExpires is { } expires ? $", valid until {expires.ToDisplay():g}" : string.Empty). Shown only now - Matmon keeps just a fingerprint of it. If you lose it, create a new one.</span>
+            <div class="mat-input-group">
+                <input class="mat-input mat-mono agent-code-input" id="agent-issued-code" value="@Model.IssuedCode" readonly aria-label="Enrolment code" />
+                <button type="button" class="mat-btn mat-btn--secondary" data-copy="#agent-issued-code">@MatUi.Icon("copy")<span>Copy</span></button>
             </div>
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    @if (Model.IssuedReplaces)
     {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.IssuedCode))
-    {
-        <section class="panel panel-stack workspace-panel agent-issued">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("lock")<span>Enrolment code@(string.IsNullOrWhiteSpace(Model.IssuedName) ? string.Empty : $" for {Model.IssuedName}")</span></h2>
-                @if (issuedExpires is { } expires)
-                {
-                    <span class="panel-hint">single use · valid until @expires.ToDisplay().ToString("g")</span>
-                }
-            </div>
-            <p class="panel-hint">Shown only now - Matmon keeps just a fingerprint of it. If you lose it, create a new one.</p>
-            @if (Model.IssuedReplaces)
-            {
-                <div class="workspace-banner workspace-banner-warning">
-                    This code takes over the existing probe <strong>@Model.IssuedName</strong> - its sensors, history and alerts stay. Whatever runs as that probe today (the old install, or the Docker container it replaces) is locked out the moment the new agent enrols, so remove it afterwards.
-                </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(Model.IssuedHostName))
-            {
-                <div class="workspace-banner workspace-banner-warning">
-                    <div>
-                        This agent will measure the host <strong>@Model.IssuedHostName</strong>. When it enrols, that host moves under the agent's probe: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply.
-                    </div>
-                </div>
-            }
-            <div class="agent-issued-code">
-                <code id="agent-issued-code">@Model.IssuedCode</code>
-                <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-issued-code">
-                    @MatmonIcons.Render("copy")
-                    <span data-copy-label>Copy</span>
-                </button>
-            </div>
-
-            <div class="probe-install-grid agent-install-grid">
-                <section class="probe-install-method">
-                    <div class="probe-install-method-header">
-                        <div class="probe-install-method-title">
-                            <h2 class="section-title">@MatmonIcons.Render("host")<span>Windows</span></h2>
-                            <span class="panel-hint">service</span>
-                        </div>
-                        <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-install-windows">
-                            @MatmonIcons.Render("copy")
-                            <span data-copy-label>Copy</span>
-                        </button>
-                    </div>
-                    <pre class="config-code probe-install-code" id="agent-install-windows">@Model.BuildWindowsCommands(Model.IssuedCode)</pre>
-                </section>
-
-                <section class="probe-install-method">
-                    <div class="probe-install-method-header">
-                        <div class="probe-install-method-title">
-                            <h2 class="section-title">@MatmonIcons.Render("host")<span>Linux</span></h2>
-                            <span class="panel-hint">systemd</span>
-                        </div>
-                        <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="agent-install-linux">
-                            @MatmonIcons.Render("copy")
-                            <span data-copy-label>Copy</span>
-                        </button>
-                    </div>
-                    <pre class="config-code probe-install-code" id="agent-install-linux">@Model.BuildLinuxCommands(Model.IssuedCode)</pre>
-                </section>
-            </div>
-        </section>
-    }
-
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("probe")<span>Installed agents</span></h2>
-            <span class="panel-hint">@Model.Agents.Count enrolled</span>
+        <div class="mat-alert mat-alert--warning" role="status">
+            @MatUi.Icon("alert")
+            <div class="mat-alert__body">This code takes over the existing probe <strong>@Model.IssuedName</strong> - its sensors, history and alerts stay. Whatever runs as that probe today (the old install, or the Docker container it replaces) is locked out the moment the new agent enrols, so remove it afterwards.</div>
         </div>
+    }
 
+    @if (!string.IsNullOrWhiteSpace(Model.IssuedHostName))
+    {
+        <div class="mat-alert mat-alert--warning" role="status">
+            @MatUi.Icon("alert")
+            <div class="mat-alert__body">This agent will measure the host <strong>@Model.IssuedHostName</strong>. When it enrols, that host moves under the agent's probe: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply.</div>
+        </div>
+    }
+
+    <section class="mat-card">
+        <div class="mat-card__head">
+            @MatUi.Icon("terminal")
+            <h2 class="mat-card__title">Install the agent</h2>
+            <span class="mat-text-muted mm-push-end">downloads it from this instance and enrols it with the code</span>
+        </div>
+        <div class="mat-card__body" data-tabs>
+            <div class="mat-tabs" role="tablist" aria-label="Platform">
+                <button type="button" class="mat-tab" role="tab" id="tab-agent-windows" aria-controls="panel-agent-windows" aria-selected="true">Windows</button>
+                <button type="button" class="mat-tab" role="tab" id="tab-agent-linux" aria-controls="panel-agent-linux" aria-selected="false" tabindex="-1">Linux</button>
+            </div>
+            <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-windows" aria-labelledby="tab-agent-windows">
+                <p class="mat-muted">A Windows service with a status icon in the tray. Run it in PowerShell as Administrator.</p>
+                <div class="mm-snippet">
+                    <pre class="mat-code"><code id="agent-install-windows">@Model.BuildWindowsCommands(Model.IssuedCode)</code></pre>
+                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-windows">@MatUi.Icon("copy")<span>Copy</span></button>
+                </div>
+            </div>
+            <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-linux" aria-labelledby="tab-agent-linux" hidden>
+                <p class="mat-muted">A systemd unit. Run it as root.</p>
+                <div class="mm-snippet">
+                    <pre class="mat-code"><code id="agent-install-linux">@Model.BuildLinuxCommands(Model.IssuedCode)</code></pre>
+                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-linux">@MatUi.Icon("copy")<span>Copy</span></button>
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+<section class="mat-section">
+    <div class="mat-section__head">
+        <h2>Installed agents</h2>
+        <p class="mat-section__lead">@Model.Agents.Count enrolled</p>
+    </div>
+    <div class="mat-list">
         @if (Model.Agents.Count == 0)
         {
-            <div class="empty-state">No agents yet. An agent is a probe that runs on the machine it monitors, as a Windows service or a systemd unit - create an enrolment code below to add one.</div>
-        }
-        else
-        {
-            <div class="system-table system-probe-table probe-overview-table" role="table" aria-label="Agents">
-                <div class="system-table-row system-table-head probe-overview-row" role="row">
-                    <span role="columnheader">Agent</span>
-                    <span role="columnheader">System</span>
-                    <span role="columnheader">Status</span>
-                    <span role="columnheader">Last seen</span>
-                    <span role="columnheader">Sensors</span>
-                    <span role="columnheader">Actions</span>
-                </div>
-
-                @foreach (var agent in Model.Agents)
+            <div class="mat-empty">
+                <span class="mat-empty__icon">@MatUi.Icon("server")</span>
+                <div class="mat-empty__title">No agents yet</div>
+                <p>An agent is a probe that runs on the machine it monitors, as a Windows service or a systemd unit - create an enrolment code below to add one.</p>
+                @if (isAdmin)
                 {
-                    var state = agent.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
-                        ? "error"
-                        : agent.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
-
-                    <div class="system-table-row probe-overview-row" role="row">
-                        <span role="cell">
-                            <strong>@agent.Name</strong>
-                            <small>@agent.ProbeId</small>
-                            @if (!string.IsNullOrWhiteSpace(agent.BoundHostName))
-                            {
-                                <small class="agent-bound-host" title="The machine this agent runs on - its sensors live under this host">
-                                    @MatmonIcons.Render("host") Host:
-                                    @if (isAdmin)
-                                    {
-                                        <a asp-page="/ElementEditor" asp-route-selectedId="@agent.BoundHostId" asp-route-returnUrl="/agents">@agent.BoundHostName</a>
-                                    }
-                                    else
-                                    {
-                                        @agent.BoundHostName
-                                    }
-                                </small>
-                            }
-                            else
-                            {
-                                <small class="system-probe-duplicate" title="Its host was deleted or moved out of the agent. A new install code gives it a host again.">@MatmonIcons.Render("warning") Not bound to a host</small>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(agent.DuplicateWarning))
-                            {
-                                <small class="system-probe-duplicate">@MatmonIcons.Render("warning") Duplicate agent: @agent.DuplicateWarning</small>
-                            }
-                        </span>
-                        <span role="cell">
-                            @(string.IsNullOrWhiteSpace(agent.Host) || agent.Host == "-" ? "-" : agent.Host)
-                            @if (!string.IsNullOrWhiteSpace(agent.OperatingSystem) && agent.OperatingSystem != "-")
-                            {
-                                <small>@agent.OperatingSystem</small>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(agent.Version))
-                            {
-                                <small class="system-probe-os">@agent.Version</small>
-                                @if (Model.IsUpdatePending(agent))
-                                {
-                                    <span class="sensor-chip" title="The agent updates itself to this instance's build within about an hour">Update pending → @Model.InstanceVersion</span>
-                                }
-                            }
-                            @if (!string.IsNullOrWhiteSpace(agent.UpdateStatus))
-                            {
-                                <small class="agent-update-status@(agent.UpdateStatus.Contains("rolled back") || agent.UpdateStatus.Contains("failed") ? " is-problem" : string.Empty)">@agent.UpdateStatus</small>
-                            }
-                        </span>
-                        <span role="cell">
-                            <span class="state-pill" data-state="@state">@agent.State</span>
-                            <small>@agent.Message</small>
-                        </span>
-                        <span role="cell">@(agent.LastSeenUtc.HasValue ? agent.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</span>
-                        <span role="cell">@agent.SensorCount</span>
-                        <span role="cell" class="probe-overview-actions">
-                            <details class="workspace-action-menu">
-                                <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Agent actions" title="Agent actions">
-                                    @MatmonIcons.Render("more")
-                                    <span>Actions</span>
-                                </summary>
-                                <div class="workspace-action-menu-panel">
-                                    <a class="workspace-action-menu-link" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">
-                                        @MatmonIcons.Render("sensor")
-                                        <span>Sensors</span>
-                                    </a>
-                                    <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@agent.ElementId">
-                                        @MatmonIcons.Render("chart")
-                                        <span>Usage</span>
-                                    </a>
-                                    @if (isAdmin)
-                                    {
-                                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@agent.ElementId" asp-route-returnUrl="/agents">
-                                            @MatmonIcons.Render("pencil")
-                                            <span>Edit</span>
-                                        </a>
-                                        <form method="post" asp-page="/Agents" asp-page-handler="CreateForProbe">
-                                            <input type="hidden" name="probeElementId" value="@agent.ElementId" />
-                                            <button type="submit" class="workspace-action-menu-link" title="Reinstalling this machine? A code that gives the new install this probe back.">
-                                                @MatmonIcons.Render("lock")
-                                                <span>New install code</span>
-                                            </button>
-                                        </form>
-                                    }
-                                </div>
-                            </details>
-                        </span>
-                    </div>
+                    <a class="mat-btn mat-btn--primary" href="#agent-add">@MatUi.Icon("plus")<span>Add an agent</span></a>
                 }
-            </div>
-        }
-    </section>
-
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("download")<span>Download</span></h2>
-            <span class="panel-hint">the agent build that matches this instance · @Matmon.Probe.MatmonVersion.Current</span>
-        </div>
-
-        @if (Model.Packages.Count == 0)
-        {
-            <div class="empty-state">
-                This instance carries no agent packages - a plain local build does not include them, the Docker image does.
-                To add them here, run <code>./scripts/publish-agent.ps1</code>, which publishes the agent into <code>@Model.PackagesPath</code>.
             </div>
         }
         else
         {
-            <div class="system-table agent-package-table" role="table" aria-label="Agent downloads">
-                <div class="system-table-row system-table-head agent-package-row" role="row">
-                    <span role="columnheader">Platform</span>
-                    <span role="columnheader">Size</span>
-                    <span role="columnheader">SHA-256</span>
-                    <span role="columnheader"></span>
-                </div>
-                @foreach (var package in Model.Packages)
-                {
-                    <div class="system-table-row agent-package-row" role="row">
-                        <span role="cell"><strong>@package.Platform.DisplayName</strong><small>@package.Platform.FileName</small></span>
-                        <span role="cell">@package.Megabytes.ToString("0.0") MB</span>
-                        <span role="cell"><code class="agent-package-hash" title="@package.Sha256">@package.Sha256[..16]…</code></span>
-                        <span role="cell">
-                            <a class="workspace-secondary-submit" href="/api/agent/packages/@package.Platform.RuntimeId" download="@package.Platform.FileName">
-                                @MatmonIcons.Render("download")
-                                <span>Download</span>
-                            </a>
-                        </span>
-                    </div>
-                }
-            </div>
-            <p class="panel-hint">On Windows, downloading the agent and double-clicking it is enough: it opens a setup window that asks for the instance URL and an enrolment code, installs itself as a service and puts a status icon in the tray. The install commands shown with a new code do the same from a terminal.</p>
-        }
-    </section>
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Installed agents with their state</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Agent</th>
+                            <th scope="col">System</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="mat-hide-sm">Last seen</th>
+                            <th scope="col" class="mat-num">Sensors</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var agent in Model.Agents)
+                        {
+                            var state = agent.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+                                ? "error"
+                                : agent.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
+                            var updateProblem = !string.IsNullOrWhiteSpace(agent.UpdateStatus)
+                                && (agent.UpdateStatus.Contains("rolled back") || agent.UpdateStatus.Contains("failed"));
 
-    @if (isAdmin)
+                            <tr>
+                                <td data-label="Agent">
+                                    <div class="probe-cell">
+                                        <strong>@agent.Name</strong>
+                                        <span class="probe-cell__meta mat-mono">@agent.ProbeId</span>
+                                        @if (!string.IsNullOrWhiteSpace(agent.BoundHostName))
+                                        {
+                                            <span class="probe-cell__meta" title="The machine this agent runs on - its sensors live under this host">
+                                                Host:
+                                                @if (isAdmin)
+                                                {
+                                                    <a asp-page="/ElementEditor" asp-route-selectedId="@agent.BoundHostId" asp-route-returnUrl="/agents">@agent.BoundHostName</a>
+                                                }
+                                                else
+                                                {
+                                                    @agent.BoundHostName
+                                                }
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="probe-cell__warn" title="Its host was deleted or moved out of the agent. A new install code gives it a host again.">@MatUi.Icon("alert")<span>Not bound to a host</span></span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(agent.DuplicateWarning))
+                                        {
+                                            <span class="probe-cell__warn">@MatUi.Icon("alert")<span>Duplicate agent: @agent.DuplicateWarning</span></span>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="System">
+                                    <div class="probe-cell">
+                                        <span>@(string.IsNullOrWhiteSpace(agent.Host) || agent.Host == "-" ? "-" : agent.Host)</span>
+                                        @if (!string.IsNullOrWhiteSpace(agent.OperatingSystem) && agent.OperatingSystem != "-")
+                                        {
+                                            <span class="probe-cell__meta">@agent.OperatingSystem</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(agent.Version))
+                                        {
+                                            <span class="probe-cell__meta mat-mono">@agent.Version</span>
+                                            @if (Model.IsUpdatePending(agent))
+                                            {
+                                                <span class="mat-pill mat-pill--info" title="The agent updates itself to this instance's build within about an hour">Update pending → @Model.InstanceVersion</span>
+                                            }
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(agent.UpdateStatus))
+                                        {
+                                            <span class="probe-cell__meta@(updateProblem ? " probe-cell__meta--problem" : string.Empty)">@agent.UpdateStatus</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="Status">
+                                    <div class="probe-cell">
+                                        <span class="@MatUi.PillClass(state)">@agent.State</span>
+                                        <span class="probe-cell__meta">@agent.Message</span>
+                                    </div>
+                                </td>
+                                <td data-label="Last seen" class="mat-hide-sm mat-mono">@(agent.LastSeenUtc.HasValue ? agent.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</td>
+                                <td data-label="Sensors" class="mat-num mat-mono">@agent.SensorCount</td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="agent-menu-@agent.ElementId" data-menu-place="bottom"
+                                                aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @agent.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</section>
+
+@* The row menus. "New install code" posts the one hidden form (it carries the anti-forgery token): reinstalling this machine?
+   A code that gives the new install this probe back. *@
+<form method="post" id="agent-row-actions" hidden></form>
+@foreach (var agent in Model.Agents)
+{
+    <div class="mat-menu" id="agent-menu-@agent.ElementId" role="menu" aria-label="Actions for @agent.Name" hidden>
+        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">@MatUi.Icon("activity")<span>Sensors</span></a>
+        <a class="mat-menu__item" role="menuitem" asp-page="/ProbeUsage" asp-route-probeElementId="@agent.ElementId">@MatUi.Icon("bar-chart")<span>Usage</span></a>
+        @if (isAdmin)
+        {
+            <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@agent.ElementId" asp-route-returnUrl="/agents">@MatUi.Icon("edit")<span>Edit</span></a>
+            <div class="mat-menu__sep" role="separator"></div>
+            <button type="submit" form="agent-row-actions" class="mat-menu__item" role="menuitem"
+                    asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@agent.ElementId"
+                    title="Reinstalling this machine? A code that gives the new install this probe back.">@MatUi.Icon("key")<span>New install code</span></button>
+        }
+    </div>
+}
+
+<section class="mat-section">
+    <div class="mat-section__head">
+        <h2>Download</h2>
+        <p class="mat-section__lead">The agent build that matches this instance: <span class="mat-mono">@Matmon.Probe.MatmonVersion.Current</span></p>
+    </div>
+
+    @if (Model.Packages.Count == 0)
     {
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("plus")<span>Add an agent</span></h2>
-                <span class="panel-hint">creates a single-use enrolment code</span>
-            </div>
-
-            @if (Model.ProbeLimitReason is { } limitReason)
-            {
-                <div class="workspace-banner workspace-banner-error">@limitReason An agent enrolling now would be refused.</div>
-            }
-
-            <form method="post" asp-page-handler="Create" class="workspace-form agent-create-form">
-                <label class="workspace-field workspace-field-primary">
-                    <span class="workspace-label">Name <em>optional - defaults to the machine's host name</em></span>
-                    <input asp-for="NewName" class="form-control workspace-input" placeholder="e.g. FILESRV-01" maxlength="120" />
-                </label>
-                <label class="workspace-field">
-                    <span class="workspace-label">Valid for</span>
-                    <select asp-for="NewValidityHours" class="form-select workspace-select">
-                        @foreach (var hours in Model.ValidityChoices)
-                        {
-                            <option value="@hours">@(hours switch { 1 => "1 hour", 24 => "24 hours", 168 => "7 days", _ => $"{hours} hours" })</option>
-                        }
-                    </select>
-                </label>
-                <div class="workspace-field">
-                    <span class="workspace-label">Host <em>optional - an existing host this agent belongs to</em></span>
-                    <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewHostId", DomId = "picker-agent-host", SelectedId = Model.NewHostId, Placeholder = "A new host, named after the machine", Options = Model.HostOptions })" />
-                    <small class="panel-hint">An agent always belongs to a host - the machine it runs on. Pick one that is already in your tree and Matmon moves it under the agent: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply. Leave it empty and the agent brings a host of its own, named after the machine.</small>
-                </div>
-                <div class="workspace-form-actions">
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create enrolment code</span></button>
-                </div>
-            </form>
-        </section>
-
-        @if (Model.PendingEnrollments.Count > 0)
-        {
-            <section class="panel panel-stack workspace-panel">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Unused codes</span></h2>
-                    <span class="panel-hint">@Model.PendingEnrollments.Count waiting for an agent</span>
-                </div>
-                <form method="post" asp-page-handler="Revoke">
-                    <div class="system-table agent-pending-table" role="table" aria-label="Unused enrolment codes">
-                        <div class="system-table-row system-table-head agent-pending-row" role="row">
-                            <span role="columnheader">For</span>
-                            <span role="columnheader">Created</span>
-                            <span role="columnheader">Expires</span>
-                            <span role="columnheader"></span>
-                        </div>
-                        @foreach (var pending in Model.PendingEnrollments)
-                        {
-                            <div class="system-table-row agent-pending-row" role="row">
-                                <span role="cell">
-                                    <strong>@(pending.Name ?? "host name of the machine")</strong>
-                                    @if (pending.ProbeElementId is not null)
-                                    {
-                                        <span class="sensor-chip" title="Takes over this existing probe instead of creating a new one">re-install</span>
-                                    }
-                                    @if (pending.HostElementId is not null)
-                                    {
-                                        <span class="sensor-chip" title="Binds the agent to this existing host - it moves under the agent's probe">existing host</span>
-                                    }
-                                </span>
-                                <span role="cell">@pending.CreatedUtc.ToDisplay().ToString("g")@(string.IsNullOrWhiteSpace(pending.CreatedBy) ? string.Empty : $" · {pending.CreatedBy}")</span>
-                                <span role="cell">@pending.ExpiresUtc.ToDisplay().ToString("g")</span>
-                                <span role="cell">
-                                    <button type="submit" class="workspace-secondary-submit" name="enrollmentId" value="@pending.Id">
-                                        @MatmonIcons.Render("x")
-                                        <span>Revoke</span>
-                                    </button>
-                                </span>
-                            </div>
-                        }
-                    </div>
-                </form>
-            </section>
-        }
+        <div class="mat-empty mat-empty--framed">
+            <span class="mat-empty__icon">@MatUi.Icon("download")</span>
+            <div class="mat-empty__title">No agent packages on this instance</div>
+            <p>A plain local build does not include them, the Docker image does. To add them here, run <code>./scripts/publish-agent.ps1</code>, which publishes the agent into <code>@Model.PackagesPath</code>.</p>
+        </div>
+    }
+    else
+    {
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Agent downloads</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Platform</th>
+                        <th scope="col" class="mat-num">Size</th>
+                        <th scope="col" class="mat-hide-sm">SHA-256</th>
+                        <th scope="col"><span class="mat-sr-only">Download</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var package in Model.Packages)
+                    {
+                        <tr>
+                            <td data-label="Platform">
+                                <div class="probe-cell">
+                                    <strong>@package.Platform.DisplayName</strong>
+                                    <span class="probe-cell__meta mat-mono">@package.Platform.FileName</span>
+                                </div>
+                            </td>
+                            <td data-label="Size" class="mat-num mat-mono">@package.Megabytes.ToString("0.0") MB</td>
+                            <td data-label="SHA-256" class="mat-hide-sm mat-mono" title="@package.Sha256">@package.Sha256[..16]…</td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    <a class="mat-btn mat-btn--secondary mat-btn--sm" href="/api/agent/packages/@package.Platform.RuntimeId" download="@package.Platform.FileName">@MatUi.Icon("download")<span>Download</span></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="mat-muted">On Windows, downloading the agent and double-clicking it is enough: it opens a setup window that asks for the instance URL and an enrolment code, installs itself as a service and puts a status icon in the tray. The install commands shown with a new code do the same from a terminal.</p>
     }
 </section>
+
+@if (isAdmin)
+{
+    <section class="mat-card" id="agent-add">
+        <div class="mat-card__head">
+            @MatUi.Icon("plus")
+            <h2 class="mat-card__title">Add an agent</h2>
+            <span class="mat-text-muted mm-push-end">creates a single-use enrolment code</span>
+        </div>
+        <div class="mat-card__body mat-stack">
+            @if (Model.ProbeLimitReason is { } limitReason)
+            {
+                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@limitReason An agent enrolling now would be refused.</div></div>
+            }
+
+            <form method="post" asp-page-handler="Create" class="mat-form" novalidate>
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" for="NewName">Name</label>
+                        <input asp-for="NewName" class="mat-input" placeholder="e.g. FILESRV-01" maxlength="120" />
+                        <span class="mat-hint">Optional - defaults to the machine's host name.</span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="NewValidityHours">Valid for</label>
+                        <select asp-for="NewValidityHours" class="mat-select">
+                            @foreach (var hours in Model.ValidityChoices)
+                            {
+                                <option value="@hours">@(hours switch { 1 => "1 hour", 24 => "24 hours", 168 => "7 days", _ => $"{hours} hours" })</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <span class="mat-label">Host</span>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewHostId", DomId = "picker-agent-host", SelectedId = Model.NewHostId, Placeholder = "A new host, named after the machine", Options = Model.HostOptions })" />
+                        <span class="mat-hint">Optional - an existing host this agent belongs to. An agent always belongs to a host - the machine it runs on. Pick one that is already in your tree and Matmon moves it under the agent: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply. Leave it empty and the agent brings a host of its own, named after the machine.</span>
+                    </div>
+                </div>
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create enrolment code</span></button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    @if (Model.PendingEnrollments.Count > 0)
+    {
+        <section class="mat-section">
+            <div class="mat-section__head">
+                <h2>Unused codes</h2>
+                <p class="mat-section__lead">@Model.PendingEnrollments.Count waiting for an agent</p>
+            </div>
+            @* One hidden form carries the handler and the anti-forgery token; each Revoke button posts it with its own code. *@
+            <form method="post" asp-page-handler="Revoke" id="agent-revoke" hidden></form>
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Unused enrolment codes</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">For</th>
+                            <th scope="col">Created</th>
+                            <th scope="col">Expires</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pending in Model.PendingEnrollments)
+                        {
+                            <tr>
+                                <td data-label="For">
+                                    <div class="probe-cell">
+                                        <strong>@(pending.Name ?? "host name of the machine")</strong>
+                                        @if (pending.ProbeElementId is not null || pending.HostElementId is not null)
+                                        {
+                                            <span class="mat-chips">
+                                                @if (pending.ProbeElementId is not null)
+                                                {
+                                                    <span class="mat-tag" title="Takes over this existing probe instead of creating a new one">re-install</span>
+                                                }
+                                                @if (pending.HostElementId is not null)
+                                                {
+                                                    <span class="mat-tag" title="Binds the agent to this existing host - it moves under the agent's probe">existing host</span>
+                                                }
+                                            </span>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="Created" class="mat-mono">@pending.CreatedUtc.ToDisplay().ToString("g")@(string.IsNullOrWhiteSpace(pending.CreatedBy) ? string.Empty : $" · {pending.CreatedBy}")</td>
+                                <td data-label="Expires" class="mat-mono">@pending.ExpiresUtc.ToDisplay().ToString("g")</td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <button type="submit" form="agent-revoke" name="enrollmentId" value="@pending.Id" class="mat-btn mat-btn--secondary mat-btn--sm">@MatUi.Icon("x")<span>Revoke</span></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+}

@@ -3,6 +3,7 @@
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore Store
 @{
     ViewData["Title"] = "Alerts";
+    ViewData["PageSub"] = "An alert stays open until it is acknowledged - also after its sensor recovered.";
     var returnUrl = Request.Path + Request.QueryString;
     var allAlerts = Model.View.Alerts;
     var activeMutes = Store.GetActiveAlertMutes();
@@ -29,7 +30,7 @@
     };
 
     var alertFilter = NormalizeAlertFilter(Request.Query["alertFilter"].ToString());
-    string TabClass(string filter) => string.Equals(alertFilter, filter, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
+    bool IsTab(string filter) => string.Equals(alertFilter, filter, StringComparison.OrdinalIgnoreCase);
 
     var openAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged);
     var errorAlertCount = allAlerts.Count(a => a.IsActive && !a.IsAcknowledged && string.Equals(a.StateKey, "error", StringComparison.OrdinalIgnoreCase));
@@ -39,6 +40,18 @@
     var pausedAlertCount = allAlerts.Count(a => a.IsActive && string.Equals(a.StateKey, "paused", StringComparison.OrdinalIgnoreCase));
     var activeAlertCount = allAlerts.Count(a => a.IsActive);
     var resolvedAlertCount = allAlerts.Count(a => !a.IsActive);
+
+    // The count on a tab: toned while it has something in it (the word on the tab says what), soft otherwise.
+    string BadgeClass(string filter, int count) => count == 0
+        ? "mat-badge mat-badge--soft"
+        : filter switch
+        {
+            "error" => "mat-badge mat-badge--error",
+            "warning" => "mat-badge mat-badge--warn",
+            "ack" => "mat-badge mat-badge--info",
+            "recovered" => "mat-badge mat-badge--ok",
+            _ => "mat-badge mat-badge--soft"
+        };
 
     bool MatchesInitialFilter(WorkspaceAlertRow a) => alertFilter switch
     {
@@ -58,227 +71,331 @@
     var initialVisibleIds = renderedAlerts.Where(MatchesInitialFilter).Take(InitialPageSize).Select(a => a.Id).ToHashSet();
     var initialMatchCount = renderedAlerts.Count(MatchesInitialFilter);
     var hiddenResolvedCount = resolvedAlertCount - renderedAlerts.Count(alert => !alert.IsActive);
+
+    // The time filter and the sort order are client-side (alerts.js): radios in the Filter and Sort dialogs (LIST-03).
+    var timeChoices = new (string Value, string Label)[]
+    {
+        ("all", "Any time"),
+        ("24h", "Last 24 hours"),
+        ("7d", "Last 7 days"),
+        ("30d", "Last 30 days"),
+        ("older-24h", "Older than 24 hours"),
+        ("older-7d", "Older than 7 days")
+    };
+    var sortChoices = new (string Value, string Label)[]
+    {
+        ("default", "Default (active first)"),
+        ("last-desc", "Last seen - newest"),
+        ("last-asc", "Last seen - oldest"),
+        ("first-desc", "First seen - newest"),
+        ("first-asc", "First seen - oldest"),
+        ("severity", "Severity"),
+        ("element", "Element name")
+    };
+    var muteAction = Url.Page("/Alerts", "MuteAlert");
+    var ackAction = Url.Page("/Alerts", "AcknowledgeAlert");
 }
 
-<section class="dashboard-shell alerts-page" data-alerts data-initial-filter="@alertFilter">
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("warning")
-            <h1>Alerts</h1>
-        </div>
-    </div>
-
-    <section class="panel panel-stack">
-        <nav class="alert-filter-bar" aria-label="Alert filters">
-            <a class="workspace-tab alert-filter-tab @TabClass("all")" data-alert-filter="all" asp-page="/Alerts"><span>All</span><strong>@activeAlertCount</strong></a>
-            <a class="workspace-tab alert-filter-tab @TabClass("open")" data-alert-filter="open" asp-page="/Alerts" asp-route-alertFilter="open"><span>Open</span><strong>@openAlertCount</strong></a>
-            <a class="workspace-tab alert-filter-tab @TabClass("error")" data-alert-filter="error" asp-page="/Alerts" asp-route-alertFilter="error" data-tone="error"><span>Error</span><strong>@errorAlertCount</strong></a>
-            <a class="workspace-tab alert-filter-tab @TabClass("warning")" data-alert-filter="warning" asp-page="/Alerts" asp-route-alertFilter="warning" data-tone="warning"><span>Warning</span><strong>@warningAlertCount</strong></a>
-            <a class="workspace-tab alert-filter-tab @TabClass("ack")" data-alert-filter="ack" asp-page="/Alerts" asp-route-alertFilter="ack" data-tone="ack"><span>Ack</span><strong>@acknowledgedAlertCount</strong></a>
-            <a class="workspace-tab alert-filter-tab @TabClass("recovered")" data-alert-filter="recovered" asp-page="/Alerts" asp-route-alertFilter="recovered" data-tone="ok"><span>Recovered</span><strong>@recoveredAlertCount</strong></a>
-            <a class="workspace-tab alert-filter-tab @TabClass("history")" data-alert-filter="history" asp-page="/Alerts" asp-route-alertFilter="history"><span>History</span><strong>@resolvedAlertCount</strong></a>
-            @if (pausedAlertCount > 0 || alertFilter == "paused")
-            {
-                <a class="workspace-tab alert-filter-tab @TabClass("paused")" data-alert-filter="paused" asp-page="/Alerts" asp-route-alertFilter="paused" data-tone="paused"><span>Paused</span><strong>@pausedAlertCount</strong></a>
-            }
-        </nav>
-
-        <div class="monitoring-filter-bar alerts-toolbar">
-            <label class="monitoring-filter-field alerts-search-field">
-                <span>@MatmonIcons.Render("search")<small>Search</small></span>
-                <input type="search" class="form-control workspace-input" placeholder="Element, path or message" data-alerts-search autocomplete="off" aria-label="Search alerts" />
-            </label>
-            <label class="monitoring-filter-field alerts-time-field">
-                <span>@MatmonIcons.Render("clock")<small>Time</small></span>
-                <select class="form-select workspace-select" data-alerts-time aria-label="Filter by time">
-                    <option value="all">Any time</option>
-                    <option value="24h">Last 24 hours</option>
-                    <option value="7d">Last 7 days</option>
-                    <option value="30d">Last 30 days</option>
-                    <option value="older-24h">Older than 24 hours</option>
-                    <option value="older-7d">Older than 7 days</option>
-                </select>
-            </label>
-            <label class="monitoring-filter-field alerts-sort-field">
-                <span>@MatmonIcons.Render("clock")<small>Sort</small></span>
-                <select class="form-select workspace-select" data-alerts-sort aria-label="Sort alerts">
-                    <option value="default">Default (active first)</option>
-                    <option value="last-desc">Last seen - newest</option>
-                    <option value="last-asc">Last seen - oldest</option>
-                    <option value="first-desc">First seen - newest</option>
-                    <option value="first-asc">First seen - oldest</option>
-                    <option value="severity">Severity</option>
-                    <option value="element">Element name</option>
-                </select>
-            </label>
-            <div class="alerts-bulkbar" data-alerts-bulkbar hidden>
-                <span class="alerts-bulkbar-count"><strong data-alerts-selected>0</strong> selected</span>
-                <button type="submit" form="alerts-form" class="workspace-primary-submit" data-alerts-bulk-ack
-                        onclick="return confirm('Acknowledge the selected alerts?');">
-                    @MatmonIcons.Render("check")<span>Acknowledge selected</span>
-                </button>
-            </div>
-        </div>
-    </section>
+<div class="mat-stack" data-alerts data-initial-filter="@alertFilter">
+    @* The views of the list. They are links (the menu, the dashboard and the cloud open ?alertFilter=open|error|warning|ack);
+       alerts.js switches them in place and keeps the address. *@
+    <nav class="mat-tabs" aria-label="Alert filters">
+        <a class="mat-tab@(IsTab("all") ? " is-active" : string.Empty)" aria-current="@(IsTab("all") ? "page" : null)" data-alert-filter="all" asp-page="/Alerts"><span>All</span><span class="@BadgeClass("all", activeAlertCount)">@activeAlertCount</span></a>
+        <a class="mat-tab@(IsTab("open") ? " is-active" : string.Empty)" aria-current="@(IsTab("open") ? "page" : null)" data-alert-filter="open" asp-page="/Alerts" asp-route-alertFilter="open"><span>Open</span><span class="@BadgeClass("open", openAlertCount)">@openAlertCount</span></a>
+        <a class="mat-tab@(IsTab("error") ? " is-active" : string.Empty)" aria-current="@(IsTab("error") ? "page" : null)" data-alert-filter="error" asp-page="/Alerts" asp-route-alertFilter="error"><span>Error</span><span class="@BadgeClass("error", errorAlertCount)">@errorAlertCount</span></a>
+        <a class="mat-tab@(IsTab("warning") ? " is-active" : string.Empty)" aria-current="@(IsTab("warning") ? "page" : null)" data-alert-filter="warning" asp-page="/Alerts" asp-route-alertFilter="warning"><span>Warning</span><span class="@BadgeClass("warning", warningAlertCount)">@warningAlertCount</span></a>
+        <a class="mat-tab@(IsTab("ack") ? " is-active" : string.Empty)" aria-current="@(IsTab("ack") ? "page" : null)" data-alert-filter="ack" asp-page="/Alerts" asp-route-alertFilter="ack"><span>Ack</span><span class="@BadgeClass("ack", acknowledgedAlertCount)">@acknowledgedAlertCount</span></a>
+        <a class="mat-tab@(IsTab("recovered") ? " is-active" : string.Empty)" aria-current="@(IsTab("recovered") ? "page" : null)" data-alert-filter="recovered" asp-page="/Alerts" asp-route-alertFilter="recovered"><span>Recovered</span><span class="@BadgeClass("recovered", recoveredAlertCount)">@recoveredAlertCount</span></a>
+        <a class="mat-tab@(IsTab("history") ? " is-active" : string.Empty)" aria-current="@(IsTab("history") ? "page" : null)" data-alert-filter="history" asp-page="/Alerts" asp-route-alertFilter="history"><span>History</span><span class="@BadgeClass("history", resolvedAlertCount)">@resolvedAlertCount</span></a>
+        @if (pausedAlertCount > 0 || alertFilter == "paused")
+        {
+            <a class="mat-tab@(IsTab("paused") ? " is-active" : string.Empty)" aria-current="@(IsTab("paused") ? "page" : null)" data-alert-filter="paused" asp-page="/Alerts" asp-route-alertFilter="paused"><span>Paused</span><span class="@BadgeClass("paused", pausedAlertCount)">@pausedAlertCount</span></a>
+        }
+    </nav>
 
     @if (activeMutes.Count > 0)
     {
-        <section class="panel panel-stack workspace-panel alerts-muted-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("bell")<span>Muted</span></h2>
-                <span class="panel-hint">@activeMutes.Count element@(activeMutes.Count == 1 ? string.Empty : "s") won't alarm</span>
+        <section class="mat-card">
+            <div class="mat-card__head">
+                @MatUi.Icon("bell")
+                <h2 class="mat-card__title">Muted</h2>
+                <span class="mat-card__sub mm-push-end">@activeMutes.Count element@(activeMutes.Count == 1 ? string.Empty : "s") won't alarm</span>
             </div>
-            <div class="alerts-muted-list">
-                @foreach (var muted in activeMutes)
-                {
-                    <div class="alerts-muted-row">
-                        <span class="alerts-muted-el">
-                            <span class="alerts-muted-name">@muted.ElementName</span>
-                            <span class="alerts-muted-path">@muted.ElementPath</span>
-                        </span>
-                        <span class="alerts-muted-scope">@(muted.IsPermanent ? "until un-muted" : $"until {muted.MutedUntilUtc!.Value.ToDisplay().ToString("g")}")</span>
-                        <form method="post" asp-page-handler="UnmuteAlert" asp-route-returnUrl="@returnUrl">
-                            <input type="hidden" name="elementId" value="@muted.ElementId" />
-                            <button type="submit" class="workspace-action-link alerts-unmute">@MatmonIcons.Render("bell")<span>Un-mute</span></button>
-                        </form>
-                    </div>
-                }
+            <div class="mat-table-wrap">
+                <table class="mat-table mat-table--compact">
+                    <caption class="mat-sr-only">Muted elements: no alert re-opens for them until the mute ends</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Element</th>
+                            <th scope="col">Muted</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var muted in activeMutes)
+                        {
+                            <tr>
+                                <td data-label="Element">
+                                    <div class="mat-table__name"><span class="mat-min-w-0">@muted.ElementName<small class="mm-break">@muted.ElementPath</small></span></div>
+                                </td>
+                                <td data-label="Muted">@(muted.IsPermanent ? "until un-muted" : $"until {muted.MutedUntilUtc!.Value.ToDisplay().ToString("g")}")</td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <form method="post" asp-page-handler="UnmuteAlert" asp-route-returnUrl="@returnUrl">
+                                            <input type="hidden" name="elementId" value="@muted.ElementId" />
+                                            <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm">@MatUi.Icon("bell")<span>Un-mute</span></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         </section>
     }
 
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("warning")<span>Alerts</span></h2>
-            <span class="panel-hint"><strong data-alerts-count>@initialMatchCount</strong> shown</span>
-        </div>
+    @if (hiddenResolvedCount > 0)
+    {
+        <p class="mat-muted">Showing the most recent @ResolvedRenderCap of @resolvedAlertCount resolved alerts. Older history is trimmed automatically.</p>
+    }
 
-        @if (hiddenResolvedCount > 0)
-        {
-            <div class="workspace-filter-note">Showing the most recent @ResolvedRenderCap of @resolvedAlertCount resolved alerts. Older history is trimmed automatically.</div>
-        }
-
-    <form method="post" id="alerts-form" asp-page-handler="AcknowledgeAlerts">
-        <input type="hidden" name="returnUrl" value="@returnUrl" />
-        <div class="alerts-table-wrap">
-            <table class="alerts-table">
-                <thead>
-                    <tr>
-                        <th class="alerts-col-check"><input type="checkbox" data-alerts-select-all aria-label="Select all on this page" /></th>
-                        <th class="alerts-col-state">Severity</th>
-                        <th class="alerts-col-element">Element</th>
-                        <th class="alerts-col-message">Message</th>
-                        <th class="alerts-col-time">First seen</th>
-                        <th class="alerts-col-time">Last seen</th>
-                        <th class="alerts-col-status">Status</th>
-                        <th class="alerts-col-actions">Actions</th>
-                    </tr>
-                </thead>
-                <tbody data-alerts-body>
-                    @foreach (var alert in renderedAlerts)
-                    {
-                        var canAck = alert.IsActive && !alert.IsAcknowledged;
-                        <tr class="alerts-row" data-alert-row
-                            hidden="@(initialVisibleIds.Contains(alert.Id) ? null : "hidden")"
-                            data-active="@alert.IsActive.ToString().ToLowerInvariant()"
-                            data-ack="@alert.IsAcknowledged.ToString().ToLowerInvariant()"
-                            data-recovered="@alert.IsRecovered.ToString().ToLowerInvariant()"
-                            data-state="@alert.StateKey"
-                            data-search="@($"{alert.ElementName} {alert.ElementPath} {alert.Message}".ToLowerInvariant())"
-                            data-first="@alert.FirstSeenSortKey"
-                            data-last="@alert.LastSeenSortKey"
-                            data-name="@alert.ElementName.ToLowerInvariant()">
-                            <td class="alerts-col-check">
-                                @if (canAck)
-                                {
-                                    <input type="checkbox" name="alertIds" value="@alert.Id" data-alerts-check aria-label="Select this alert" />
-                                }
-                            </td>
-                            <td class="alerts-col-state"><span class="state-pill" data-state="@alert.StateKey">@alert.StateLabel</span></td>
-                            <td class="alerts-col-element">
-                                <span class="tree-kind" data-kind="@alert.ElementKind.ToString().ToLowerInvariant()">@alert.ElementKind</span>
-                                <span class="alerts-element-text">
-                                    <span class="alerts-element-name">@alert.ElementName</span>
-                                    <span class="alerts-element-path">@alert.ElementPath</span>
-                                </span>
-                            </td>
-                            <td class="alerts-col-message" data-label="Message"><span title="@alert.Message">@alert.Message</span></td>
-                            <td class="alerts-col-time" data-label="First seen">@alert.FirstSeen</td>
-                            <td class="alerts-col-time" data-label="Last seen">@(alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt))</td>
-                            <td class="alerts-col-status" data-label="Status">
-                                @if (!alert.IsActive)
-                                {
-                                    <span class="state-pill" data-state="ok">Resolved</span>
-                                }
-                                else if (alert.IsRecovered)
-                                {
-                                    <span class="state-pill" data-state="ok">Recovered</span>
-                                }
-                                @if (alert.IsAcknowledged)
-                                {
-                                    <span class="state-pill" data-state="paused">Ack</span>
-                                }
-                            </td>
-                            <td class="alerts-col-actions">
-                                @if (alert.ElementKind == MonitoringElementKind.Sensor)
-                                {
-                                    <a class="alerts-action" title="Details" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId">@MatmonIcons.Render("chart")</a>
-                                }
-                                <a class="alerts-action" title="Edit" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")</a>
-                                @if (canAck)
-                                {
-                                    <button type="submit" class="alerts-action alerts-action-ack" title="Acknowledge"
-                                            name="alertId" value="@alert.Id"
-                                            formaction="@Url.Page("/Alerts", "AcknowledgeAlert")"
-                                            onclick="return confirm('Acknowledge this alert?');">@MatmonIcons.Render("check")</button>
-                                }
-                                @if (alert.IsActive)
-                                {
-                                    <details class="alerts-mute">
-                                        <summary class="alerts-action" title="Mute - acknowledge and stop it re-opening">@MatmonIcons.Render("bell")</summary>
-                                        <div class="alerts-mute-menu">
-                                            <span class="alerts-mute-title">Mute &amp; stop re-opening</span>
-                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):perm" formaction="@Url.Page("/Alerts", "MuteAlert")">Until I un-mute</button>
-                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):1h" formaction="@Url.Page("/Alerts", "MuteAlert")">For 1 hour</button>
-                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):24h" formaction="@Url.Page("/Alerts", "MuteAlert")">For 24 hours</button>
-                                            <button type="submit" class="alerts-mute-option" name="mute" value="@(alert.ElementId):7d" formaction="@Url.Page("/Alerts", "MuteAlert")">For 7 days</button>
-                                        </div>
-                                    </details>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+    <div class="mat-list" data-selectable>
         @if (allAlerts.Count == 0)
         {
-            <div class="empty-state">No alerts yet. Everything is healthy.</div>
+            <div class="mat-empty mat-empty--first">
+                <span class="mat-empty__icon">@MatUi.Icon("check-circle")</span>
+                <div class="mat-empty__title">No alerts yet</div>
+                <p>Everything is healthy.</p>
+            </div>
         }
-        <div class="empty-state" data-alerts-empty hidden>No alerts match this filter.</div>
+        else
+        {
+            <div class="mat-toolbar" role="toolbar" aria-label="Alert tools">
+                <div class="mat-input-icon mat-toolbar__search">
+                    @MatUi.Icon("search")
+                    <input class="mat-input" type="search" id="alerts-search" placeholder="Element, path or message" aria-label="Search alerts"
+                           autocomplete="off" enterkeyhint="search" data-shortcut="/" data-alerts-search />
+                </div>
+                <span class="mat-toolbar__spacer"></span>
+                <span class="mat-toolbar__info" aria-live="polite"><span data-alerts-count>@initialMatchCount</span> shown</span>
+                <div class="mat-toolbar__end">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" data-dialog-open="alerts-filter" aria-haspopup="dialog" data-alerts-filter-button>
+                        @MatUi.Icon("sliders")<span>Filter</span><span class="mat-badge" data-alerts-filter-badge hidden>1</span>
+                    </button>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" data-dialog-open="alerts-sort" aria-haspopup="dialog" data-alerts-sort-button>
+                        @MatUi.Icon("sort")<span>Sort</span><small data-alerts-sort-label>Default</small>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mat-chips" role="group" aria-label="Filters in effect" data-alerts-chips hidden>
+                <span class="mat-chip">First seen: <span data-alerts-time-label></span><button type="button" class="mat-chip__x" data-alerts-time-clear aria-label="Remove the time filter">@MatUi.Icon("x")</button></span>
+            </div>
+
+            <div class="mat-bulk" data-bulk-bar hidden role="status">
+                <span class="mat-bulk__count"><strong data-bulk-count>0</strong> selected</span>
+                <button type="submit" form="alerts-form" class="mat-btn mat-btn--primary mat-btn--sm" data-alerts-bulk-ack
+                        data-confirm="Acknowledge the selected alerts?" data-confirm-ok="Acknowledge">
+                    @MatUi.Icon("check")<span>Acknowledge selected</span>
+                </button>
+            </div>
+
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Alerts, the active ones first</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col" class="mat-table__select"><input type="checkbox" data-alerts-select-all aria-label="Select all on this page" /></th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Element</th>
+                            <th scope="col">Message</th>
+                            <th scope="col" class="mat-hide-sm">First seen</th>
+                            <th scope="col">Last seen</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody data-alerts-body>
+                        @foreach (var alert in renderedAlerts)
+                        {
+                            var canAck = alert.IsActive && !alert.IsAcknowledged;
+                            var muteMenuId = $"alerts-mute-{alert.Id:N}";
+                            <tr data-alert-row
+                                hidden="@(initialVisibleIds.Contains(alert.Id) ? null : "hidden")"
+                                data-active="@alert.IsActive.ToString().ToLowerInvariant()"
+                                data-ack="@alert.IsAcknowledged.ToString().ToLowerInvariant()"
+                                data-recovered="@alert.IsRecovered.ToString().ToLowerInvariant()"
+                                data-state="@alert.StateKey"
+                                data-search="@($"{alert.ElementName} {alert.ElementPath} {alert.Message}".ToLowerInvariant())"
+                                data-first="@alert.FirstSeenSortKey"
+                                data-last="@alert.LastSeenSortKey"
+                                data-name="@alert.ElementName.ToLowerInvariant()">
+                                <td data-label="Select" class="mat-table__select">
+                                    @if (canAck)
+                                    {
+                                        <input type="checkbox" name="alertIds" value="@alert.Id" form="alerts-form" data-select-row data-alerts-check aria-label="Select the alert of @alert.ElementName" />
+                                    }
+                                </td>
+                                <td data-label="Severity"><span class="@MatUi.PillClass(alert.StateKey)">@alert.StateLabel</span></td>
+                                <td data-label="Element">
+                                    <div class="mat-table__name">
+                                        <span class="mat-tag">@alert.ElementKind</span>
+                                        <span class="mat-min-w-0">@alert.ElementName<small class="mm-break">@alert.ElementPath</small></span>
+                                    </div>
+                                </td>
+                                <td data-label="Message" class="mm-break">@alert.Message</td>
+                                <td data-label="First seen" class="mat-hide-sm mat-mono mat-nowrap">@alert.FirstSeen</td>
+                                <td data-label="Last seen" class="mat-mono mat-nowrap">@(alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt))</td>
+                                <td data-label="Status">
+                                    <span class="mat-row mat-row--nowrap mat-gap-2">
+                                        @if (!alert.IsActive)
+                                        {
+                                            <span class="mat-pill mat-pill--ok">Resolved</span>
+                                        }
+                                        else if (alert.IsRecovered)
+                                        {
+                                            <span class="mat-pill mat-pill--ok">Recovered</span>
+                                        }
+                                        @if (alert.IsAcknowledged)
+                                        {
+                                            <span class="@MatUi.PillClass("ack")">Ack</span>
+                                        }
+                                        else if (alert.IsActive && !alert.IsRecovered)
+                                        {
+                                            <span class="mat-text-muted">Open</span>
+                                        }
+                                    </span>
+                                </td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        @if (alert.ElementKind == MonitoringElementKind.Sensor)
+                                        {
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId" aria-label="Details of @alert.ElementName" data-tip="Details">@MatUi.Icon("bar-chart")</a>
+                                        }
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl" aria-label="Edit @alert.ElementName" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        @if (canAck)
+                                        {
+                                            <button type="submit" form="alerts-form" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm"
+                                                    name="alertId" value="@alert.Id" formaction="@ackAction"
+                                                    aria-label="Acknowledge the alert of @alert.ElementName" data-tip="Acknowledge"
+                                                    data-confirm="Acknowledge this alert?" data-confirm-ok="Acknowledge">@MatUi.Icon("check")</button>
+                                        }
+                                        @if (alert.IsActive)
+                                        {
+                                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="@muteMenuId" data-menu-place="bottom"
+                                                    aria-haspopup="menu" aria-expanded="false" aria-label="Mute the alert of @alert.ElementName" data-tip="Mute">@MatUi.Icon("bell")</button>
+                                            <div class="mat-menu" id="@muteMenuId" role="menu" aria-label="Mute and stop re-opening" hidden>
+                                                <div class="mat-menu__head">
+                                                    <div>
+                                                        <strong>Mute &amp; stop re-opening</strong>
+                                                        <small>Acknowledges it; no new alert until the mute ends</small>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" form="alerts-form" class="mat-menu__item" role="menuitem" name="mute" value="@(alert.ElementId):perm" formaction="@muteAction">@MatUi.Icon("bell")<span>Until I un-mute</span></button>
+                                                <button type="submit" form="alerts-form" class="mat-menu__item" role="menuitem" name="mute" value="@(alert.ElementId):1h" formaction="@muteAction">@MatUi.Icon("clock")<span>For 1 hour</span></button>
+                                                <button type="submit" form="alerts-form" class="mat-menu__item" role="menuitem" name="mute" value="@(alert.ElementId):24h" formaction="@muteAction">@MatUi.Icon("clock")<span>For 24 hours</span></button>
+                                                <button type="submit" form="alerts-form" class="mat-menu__item" role="menuitem" name="mute" value="@(alert.ElementId):7d" formaction="@muteAction">@MatUi.Icon("calendar")<span>For 7 days</span></button>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mat-empty" data-alerts-empty hidden>
+                <span class="mat-empty__icon">@MatUi.Icon("search")</span>
+                <div class="mat-empty__title">No alerts match this filter</div>
+                <p>Choose another tab, or change the search or the time filter.</p>
+            </div>
+
+            <nav class="mat-pager" aria-label="Pagination" data-alerts-pager hidden>
+                <span class="mat-pager__info" data-alerts-pager-info></span>
+                <div class="mat-pager__pages">
+                    <button type="button" class="mat-pager__btn" data-alerts-prev aria-label="Previous page">@MatUi.Icon("chevron-left")</button>
+                    <button type="button" class="mat-pager__btn" data-alerts-next aria-label="Next page">@MatUi.Icon("chevron-right")</button>
+                </div>
+                <label class="alerts-page-size" for="alerts-page-size">
+                    <span>Per page</span>
+                    <select class="mat-select mat-select--sm mat-w-auto" id="alerts-page-size" data-alerts-page-size>
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                    </select>
+                </label>
+            </nav>
+        }
+    </div>
+
+    @* The one form every acknowledge and mute posts through: the checks and the row buttons point at it with form="alerts-form",
+       so the toolbar's search is in no form and Enter in it posts nothing. *@
+    <form method="post" id="alerts-form" asp-page-handler="AcknowledgeAlerts" hidden>
+        <input type="hidden" name="returnUrl" value="@returnUrl" />
     </form>
 
-    <div class="alerts-pager" data-alerts-pager hidden>
-        <button type="button" class="alerts-pager-btn" data-alerts-prev>@MatmonIcons.Render("arrow-left")<span>Prev</span></button>
-        <span class="alerts-pager-info" data-alerts-pager-info></span>
-        <button type="button" class="alerts-pager-btn" data-alerts-next><span>Next</span>@MatmonIcons.Render("arrow-right")</button>
-        <label class="alerts-pager-size">
-            <span>Per page</span>
-            <select class="workspace-select" data-alerts-page-size>
-                <option value="25">25</option>
-                <option value="50" selected>50</option>
-                <option value="100">100</option>
-            </select>
-        </label>
-    </div>
-    </section>
-</section>
+    <dialog class="mat-dialog mat-dialog--sm" id="alerts-filter" aria-labelledby="alerts-filter-title">
+        <div class="mat-dialog__form">
+            <div class="mat-dialog__head">
+                @MatUi.Icon("sliders")
+                <h2 class="mat-dialog__title" id="alerts-filter-title">Filter</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+            </div>
+            <div class="mat-dialog__body mat-form">
+                <fieldset class="mat-field mat-fieldset">
+                    <legend class="mat-label">First seen</legend>
+                    <div class="mat-options">
+                        @foreach (var choice in timeChoices)
+                        {
+                            <label class="mat-option"><input type="radio" id="alerts-time-@choice.Value" name="alerts-time" value="@choice.Value" checked="@(choice.Value == "all")" data-alerts-time /><span>@choice.Label</span></label>
+                        }
+                    </div>
+                </fieldset>
+                <p class="mat-hint">By the age of the alert: "Older than 7 days" finds the long-standing problems. The list follows the choice at once.</p>
+            </div>
+            <div class="mat-dialog__foot">
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="button" class="mat-btn mat-btn--primary" data-dialog-close>@MatUi.Icon("check")<span>Done</span></button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="mat-dialog mat-dialog--sm" id="alerts-sort" aria-labelledby="alerts-sort-title">
+        <div class="mat-dialog__form">
+            <div class="mat-dialog__head">
+                @MatUi.Icon("sort")
+                <h2 class="mat-dialog__title" id="alerts-sort-title">Sort</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+            </div>
+            <div class="mat-dialog__body mat-form">
+                <fieldset class="mat-field mat-fieldset">
+                    <legend class="mat-label">Sort by</legend>
+                    <div class="mat-options">
+                        @foreach (var choice in sortChoices)
+                        {
+                            <label class="mat-option"><input type="radio" id="alerts-sort-@choice.Value" name="alerts-sort" value="@choice.Value" checked="@(choice.Value == "default")" data-alerts-sort /><span>@choice.Label</span></label>
+                        }
+                    </div>
+                </fieldset>
+                <p class="mat-hint">The list follows the choice at once.</p>
+            </div>
+            <div class="mat-dialog__foot">
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="button" class="mat-btn mat-btn--primary" data-dialog-close>@MatUi.Icon("check")<span>Done</span></button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</div>

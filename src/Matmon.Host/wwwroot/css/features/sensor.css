@@ -1,0 +1,486 @@
+/* Matmon - sensor. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ======================================================================== Sensor detail (SensorDetails.cshtml) */
+
+/* ---- Stat cards: the number and its unit on one baseline ---- */
+.sensor-current-value,
+.sensor-window-value {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--mat-space-1);
+}
+.sensor-current-value small,
+.sensor-window-value small {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm);
+  font-weight: 500;
+}
+.sensor-type-value { overflow-wrap: anywhere; }
+
+/* An inherited tag: a dashed outline tells it from the sensor's own (the word "(inherited)" is there for a screen reader). */
+.sensor-tag--inherited {
+  outline: 1px dashed var(--mat-border-strong);
+  outline-offset: -1px;
+}
+
+/* A section title outside a card (Channels). */
+.sensor-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  font-size: var(--mat-fs-lg);
+}
+.sensor-section-title .mat-icon { color: var(--mat-accent-text); }
+
+/* ---- Channels: the current value of every channel, a grid of small cards with a meter or a gauge ---- */
+.sensor-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
+  gap: var(--mat-space-3);
+}
+.sensor-channel { --mat-card-pad: var(--mat-space-4); }
+.sensor-channel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--mat-space-3);
+}
+.sensor-channel-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-1);
+  min-width: 0;
+}
+.sensor-channel-key,
+.sensor-channel-message {
+  font-size: var(--mat-fs-sm);
+  overflow-wrap: anywhere;
+}
+.sensor-channel-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--mat-space-2);
+  text-align: end;
+}
+.sensor-channel-value {
+  font-size: var(--mat-fs-lg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.sensor-channel-meter { width: clamp(5rem, 9vw, 8rem); }
+
+/* The gauge: a half circle whose paths carry pathLength="100", so --gauge-fill (the percentage, set on the svg) is the dash. */
+.sensor-channel-gauge {
+  width: 4.25rem;
+  height: 2.4rem;
+}
+.sensor-channel-gauge path {
+  fill: none;
+  stroke-width: 9;
+}
+.sensor-channel-gauge-track { stroke: var(--mat-surface-3); }
+.sensor-channel-gauge-fill {
+  stroke: var(--mat-accent);
+  stroke-linecap: round;
+  stroke-dasharray: var(--gauge-fill, 0) 100;
+  transition: stroke-dasharray var(--mat-dur-slow) var(--mat-ease);
+}
+.sensor-channel-gauge[data-state="ok"] .sensor-channel-gauge-fill,
+.sensor-channel-gauge[data-state="healthy"] .sensor-channel-gauge-fill { stroke: var(--mat-success); }
+.sensor-channel-gauge[data-state="warning"] .sensor-channel-gauge-fill { stroke: var(--mat-warning); }
+.sensor-channel-gauge[data-state="error"] .sensor-channel-gauge-fill,
+.sensor-channel-gauge[data-state="critical"] .sensor-channel-gauge-fill { stroke: var(--mat-danger); }
+
+/* ---- Statistics table: a row with a finer grain opens it (its period is a link, the row is data-href); a stripe in
+   the state colour marks a period that had problems (OK % says it in numbers) ---- */
+.sensor-statistics-table tr[data-href] { cursor: pointer; }
+@media (min-width: 721px) {
+  .sensor-statistics-table tr[data-state="warning"] > td:first-child { box-shadow: inset 3px 0 0 var(--mat-warning); }
+  .sensor-statistics-table tr[data-state="error"] > td:first-child { box-shadow: inset 3px 0 0 var(--mat-danger); }
+}
+
+/* ===================================================== Sensor editors (SensorCreate, SensorAssistant, the partials) */
+
+/* ---- The assistant's step line ---- */
+.assistant-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mat-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- Parameters: the fields of one group under a quiet title, groups apart by a line ---- */
+.sensor-parameter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-3);
+}
+.sensor-parameter-group + .sensor-parameter-group {
+  padding-top: var(--mat-space-4);
+  border-top: 1px solid var(--mat-border);
+}
+.sensor-parameter-group-title {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm);
+  font-weight: 650;
+}
+
+/* ---- "Available variables" of the script sensors (_ScriptVariables) ---- */
+.script-variables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-2);
+  padding: var(--mat-space-4);
+  background: var(--mat-surface-2);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+}
+.script-variables-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.script-variables-head .mat-icon { color: var(--mat-accent-text); }
+.script-variables-title { font-size: var(--mat-fs-md); }
+.script-variables-hint {
+  margin-inline-start: auto;
+  font-size: var(--mat-fs-xs);
+}
+.script-variables-group {
+  margin-top: var(--mat-space-2);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-weight: 650;
+}
+.script-variables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+  gap: var(--mat-space-2) var(--mat-space-5);
+  margin: 0;
+}
+.script-variable {
+  display: flex;
+  align-items: baseline;
+  gap: var(--mat-space-2);
+  min-width: 0;
+}
+.script-variable dt { flex: none; }
+.script-variable dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--mat-fs-sm);
+}
+.script-variable code {
+  color: var(--mat-accent-text);
+  font-size: var(--mat-fs-xs);
+}
+
+/* ---- Script editor: a transparent textarea over a highlighted <pre> (initializeScriptEditors). Both share the same
+   metrics, so the coloured text lies exactly under the caret. The script swaps mat-textarea for code-editor-input, so
+   nothing here fights a toolkit class; the colours of the parts are MatUi's mat-code__* (+ code-editor-var). ---- */
+.code-editor {
+  position: relative;
+  overflow: hidden;
+  background: var(--mat-surface-3);
+  border: 1px solid var(--mat-border-strong);
+  border-radius: var(--mat-radius);
+}
+.code-editor:focus-within {
+  border-color: var(--mat-accent);
+  box-shadow: var(--mat-focus-ring);
+}
+.code-editor-highlight,
+.code-editor-input {
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--mat-space-3) var(--mat-space-4);
+  font-family: var(--mat-mono);
+  font-size: var(--mat-fs-sm);
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: normal;
+  tab-size: 2;
+  white-space: pre;
+}
+.code-editor-highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--mat-text);
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+.code-editor-highlight code {
+  padding: 0;
+  font: inherit;
+  white-space: pre;
+  color: inherit;
+  background: none;
+  border-radius: 0;
+}
+.code-editor-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 16rem;
+  overflow: auto;
+  color: transparent;
+  caret-color: var(--mat-text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  resize: vertical;
+}
+.code-editor-input::selection { background: var(--mat-selection); }
+.code-editor-var { color: var(--mat-accent-text); }
+
+/* ---- Channels & thresholds (_SensorThresholds and the assistant's list): one box per channel ---- */
+.sensor-threshold-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-3);
+}
+.sensor-threshold-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-3);
+  padding: var(--mat-space-4);
+  background: var(--mat-surface-2);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+}
+.sensor-threshold-card[data-threshold-virtual="true"] { border-style: dashed; }
+/* Configured, but no longer reported by the sensor: dimmed, never pruned on its own. */
+.sensor-threshold-card[data-threshold-orphaned="true"] { opacity: 0.75; }
+.sensor-threshold-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--mat-space-3);
+}
+.sensor-threshold-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-1);
+  min-width: 0;
+}
+.sensor-threshold-key {
+  font-size: var(--mat-fs-sm);
+  overflow-wrap: anywhere;
+}
+.sensor-threshold-head-actions {
+  flex: none;
+}
+.sensor-threshold-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  align-items: end;
+  gap: var(--mat-space-3) var(--mat-space-4);
+}
+.sensor-threshold-rule-name {
+  font-size: var(--mat-fs-sm);
+  font-weight: 650;
+}
+/* A condition that is switched off: its (disabled) inputs are dimmed so "off" reads at a glance. */
+.sensor-threshold-rule.is-disabled .mat-input-group { opacity: 0.45; }
+.sensor-threshold-note {
+  padding: var(--mat-space-2) var(--mat-space-3);
+  border: 1px dashed var(--mat-border);
+  border-radius: var(--mat-radius-sm);
+  font-size: var(--mat-fs-sm);
+}
+.sensor-threshold-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--mat-space-3) var(--mat-space-5);
+}
+.sensor-threshold-visual { width: min(14rem, 100%); }
+
+/* ---- Schedule: the "next runs" preview ---- */
+.schedule-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mat-space-2) var(--mat-space-3);
+  padding: var(--mat-space-2) var(--mat-space-3);
+  background: var(--mat-surface-2);
+  border: 1px dashed var(--mat-border);
+  border-radius: var(--mat-radius);
+}
+.schedule-preview-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm);
+  font-weight: 600;
+}
+
+/* ---- SNMP walk (_SnmpWalkList): the MIB bar and the rows of the walk ---- */
+.sensor-snmp-root { max-width: 32rem; }
+.snmp-mib-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  font-size: var(--mat-fs-sm);
+}
+.snmp-mib-status {
+  flex-basis: 100%;
+  font-size: var(--mat-fs-sm);
+}
+.snmp-mib-status:empty { display: none; }
+.snmp-walk-filter { max-width: 28rem; }
+/* The name and the OID are the label of the row's checkbox: a click on them ticks it. */
+.snmp-walk-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  cursor: pointer;
+}
+.snmp-walk-name,
+.snmp-walk-oid,
+.snmp-walk-value { overflow-wrap: anywhere; }
+.snmp-walk-oid.is-secondary {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+}
+
+/* ---- Remote run preview (_RemoteRunPreview): the status line above the result ---- */
+.remote-run-preview-status {
+  color: var(--mat-text-muted);
+}
+
+/* ---- Element picker (_ElementPicker): a select-like trigger and the dialog with the tree / the flat list ---- */
+.element-picker {
+  min-width: 0;
+  max-width: 100%;
+}
+.element-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  cursor: pointer;
+}
+.element-picker-trigger-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.element-picker-trigger.is-empty .element-picker-trigger-label {
+  color: var(--mat-text-faint);
+  font-weight: 400;
+}
+/* The path is cut at its FRONT, so its end - the element and its nearest parents - stays visible. */
+.element-picker-trigger-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+/* The tools stay at the top of the dialog while the list scrolls under them. */
+.element-picker-tools {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-block: var(--mat-space-2);
+  margin-top: calc(var(--mat-space-2) * -1);
+  background: var(--mat-surface);
+}
+.element-picker-search {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.element-picker-tag {
+  flex: 0 1 11rem;
+  min-width: 7rem;
+}
+.element-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Element <-> tag mode: only the list of the active mode is shown (and no tag filter in tag mode). */
+.element-picker-tag-list { display: none; }
+.element-picker.is-tag-mode [data-picker-list]:not(.element-picker-tag-list) { display: none; }
+.element-picker.is-tag-mode .element-picker-tag-list { display: flex; }
+.element-picker.is-tag-mode .element-picker-tag { display: none; }
+/* A tree by depth while browsing (--picker-depth, set per option), flat with the path while searching. */
+.element-picker-option {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-3);
+  padding: var(--mat-space-2) var(--mat-space-3);
+  padding-inline-start: calc(var(--mat-space-3) + var(--picker-depth, 0) * var(--mat-space-4));
+  border-radius: var(--mat-radius-sm);
+  cursor: pointer;
+}
+.element-picker-list.is-flat .element-picker-option { padding-inline-start: var(--mat-space-3); }
+.element-picker-list:not(.is-flat) .element-picker-option-path { display: none; }
+.element-picker-option:hover { background: var(--mat-surface-3); }
+.element-picker-option:focus-visible {
+  outline: none;
+  background: var(--mat-surface-3);
+  box-shadow: var(--mat-focus-ring);
+}
+.element-picker-option.is-selected {
+  background: var(--mat-accent-soft-strong);
+  color: var(--mat-accent-text);
+}
+.element-picker-option-kind {
+  flex: none;
+  display: inline-flex;
+  color: var(--mat-text-muted);
+}
+.element-picker-option.is-selected .element-picker-option-kind,
+.element-picker-option.is-selected .element-picker-option-path { color: inherit; }
+.element-picker-option-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.element-picker-option-name,
+.element-picker-option-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.element-picker-option-name { font-weight: 500; }
+.element-picker-option-path {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+}
+.element-picker-option-tags {
+  flex: none;
+  justify-content: flex-end;
+  max-width: 12rem;
+}
+.element-picker-clear { color: var(--mat-text-muted); }
+.element-picker-option-empty { padding: var(--mat-space-2) var(--mat-space-3); }
+.element-picker-empty {
+  padding: var(--mat-space-4);
+  text-align: center;
+}

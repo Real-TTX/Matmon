@@ -2,150 +2,108 @@
 @model BackupRestoreModel
 @{
     ViewData["Title"] = "Restore backup";
+    var errors = ViewData.ModelState.Values.SelectMany(entry => entry.Errors).Select(error => error.ErrorMessage).Where(message => !string.IsNullOrWhiteSpace(message)).ToList();
 }
 
-<section class="dashboard-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("arrow-right")
-            <h1>Restore backup</h1>
-        </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.Snapshot is null)
+{
+    <div class="mat-empty mat-empty--framed">
+        <span class="mat-empty__icon">@MatUi.Icon("archive")</span>
+        <div class="mat-empty__title">Backup snapshot not found</div>
+        <p>The file is not in the backup archive.</p>
+        <a class="mat-btn mat-btn--secondary" asp-page="/Config" asp-route-tab="backup">@MatUi.Icon("back")<span>Back to the backups</span></a>
     </div>
+}
+else
+{
+    <form method="post" class="mat-form" novalidate>
+        <input type="hidden" asp-for="FileName" />
+        <input type="hidden" asp-for="ReturnUrl" />
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    @if (Model.Snapshot is null)
-    {
-        <section class="panel config-block">
-            <div class="empty-state">Backup snapshot not found.</div>
-        </section>
-    }
-    else
-    {
-        <form method="post" class="workspace-form">
-            <input type="hidden" asp-for="FileName" />
-            <input type="hidden" asp-for="ReturnUrl" />
-
-            <div class="config-grid backup-restore-grid backup-restore-layout">
-                <section class="panel config-block">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("folder")<span>Snapshot</span></h2>
-                        <span class="panel-hint">@Model.Snapshot.DisplayName</span>
-                    </div>
-
-                    <div class="workspace-summary-card backup-restore-snapshot-summary">
-                        <div class="workspace-summary-main">
-                            <span class="workspace-summary-kicker">Archive</span>
-                            <strong>@Model.Snapshot.FileName</strong>
-                        </div>
-                        <div class="workspace-summary-metrics">
-                            <span class="workspace-summary-chip">
-                                @MatmonIcons.Render("clock")
-                                <strong>@Model.FormatDateTime(Model.Snapshot.CreatedUtc)</strong>
-                                <span>Created</span>
-                            </span>
-                            <span class="workspace-summary-chip">
-                                @MatmonIcons.Render("chart")
-                                <strong>@Model.Snapshot.Bytes.ToString("N0")</strong>
-                                <span>Bytes</span>
-                            </span>
-                            <span class="workspace-summary-chip">
-                                @MatmonIcons.Render("folder")
-                                <strong>@BackupRestoreModel.FormatCount(BackupRestoreModel.CountSections(Model.Snapshot.Sections))</strong>
-                                <span>Sections</span>
-                            </span>
-                        </div>
-                    </div>
-
-                    <dl class="config-list compact-config-list backup-restore-meta">
-                        <div class="config-row">
-                            <dt>File</dt>
-                            <dd>@Model.Snapshot.FileName</dd>
-                        </div>
-                        <div class="config-row">
-                            <dt>Job</dt>
-                            <dd>@(Model.Snapshot.JobName ?? "-")</dd>
-                        </div>
-                        <div class="config-row">
-                            <dt>Description</dt>
-                            <dd>@(Model.Snapshot.Description ?? "-")</dd>
-                        </div>
-                        <div class="config-row">
-                            <dt>Created</dt>
-                            <dd>@Model.FormatDateTime(Model.Snapshot.CreatedUtc)</dd>
-                        </div>
-                        <div class="config-row">
-                            <dt>Size</dt>
-                            <dd>@Model.Snapshot.Bytes.ToString("N0") bytes</dd>
-                        </div>
-                        <div class="config-row">
-                            <dt>Contains</dt>
-                            <dd>@Model.FormatSections(Model.Snapshot.Sections)</dd>
-                        </div>
-                    </dl>
-                </section>
-
-                <section class="panel config-block">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("spark")<span>Restore scope</span></h2>
-                        <span class="panel-hint">review the content before restoring</span>
-                    </div>
-
-                    <div class="backup-restore-section-grid">
-                        @foreach (var restoreSection in Model.SectionItems)
+        @if (errors.Count > 0)
+        {
+            <div class="mat-alert mat-alert--danger" role="alert">
+                @MatUi.Icon("x-circle")
+                <div class="mat-alert__body">
+                    <ul class="mat-alert__list">
+                        @foreach (var message in errors)
                         {
-                            <label class="backup-restore-section-card @(restoreSection.Included ? string.Empty : "is-disabled")">
-                                <input type="checkbox"
-                                       name="@restoreSection.FieldName"
-                                       value="true"
-                                       checked="@(restoreSection.Selected ? "checked" : null)"
-                                       disabled="@(restoreSection.Included ? null : "disabled")" />
-                                <div class="backup-restore-section-card-body">
-                                    <div class="backup-restore-section-card-head">
-                                        <strong>@restoreSection.Label</strong>
-                                        <span class="backup-restore-section-count">@BackupRestoreModel.FormatCount(restoreSection.ItemCount)</span>
-                                    </div>
-                                    <span class="backup-restore-section-description">@restoreSection.Description</span>
-                                    <div class="backup-restore-section-summary">
-                                        <span>@restoreSection.Summary</span>
-                                        <small>@(restoreSection.Included ? "included in backup" : "not present")</small>
-                                    </div>
-                                </div>
-                            </label>
+                            <li>@message</li>
                         }
-                    </div>
-                </section>
+                    </ul>
+                </div>
             </div>
+        }
 
-            <label class="workspace-field" style="max-width:420px;margin-top:12px;">
-                <span>Passphrase <span style="color:var(--matmon-muted);font-weight:400;">(only for an encrypted/portable backup)</span></span>
-                <input asp-for="Passphrase" type="password" class="workspace-input" autocomplete="off" placeholder="leave blank for a normal backup" />
-            </label>
+        <div class="mat-grid mat-grid--2">
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("archive")<h2 class="mat-card__title">Snapshot</h2><span class="mat-text-muted mm-push-end">@Model.Snapshot.DisplayName</span></div>
+                <div class="mat-card__body">
+                    <dl class="mat-kv">
+                        <dt>File</dt><dd class="mat-mono">@Model.Snapshot.FileName</dd>
+                        <dt>Job</dt><dd>@(Model.Snapshot.JobName ?? "-")</dd>
+                        <dt>Description</dt><dd>@(Model.Snapshot.Description ?? "-")</dd>
+                        <dt>Created</dt><dd class="mat-mono">@Model.FormatDateTime(Model.Snapshot.CreatedUtc)</dd>
+                        <dt>Size</dt><dd class="mat-mono">@Model.Snapshot.Bytes.ToString("N0") bytes</dd>
+                        <dt>Sections</dt><dd class="mat-mono">@BackupRestoreModel.FormatCount(BackupRestoreModel.CountSections(Model.Snapshot.Sections))</dd>
+                        <dt>Contains</dt><dd>@Model.FormatSections(Model.Snapshot.Sections)</dd>
+                    </dl>
+                </div>
+            </section>
 
-            <div asp-validation-summary="All" class="workspace-inline-note"></div>
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("layers")<h2 class="mat-card__title">Restore scope</h2><span class="mat-text-muted mm-push-end">review the content before restoring</span></div>
+                <div class="mat-card__body">
+                    @* Raw checkboxes named after the section (Input.Sections.<Section>): an unticked one posts nothing, and the model
+                       starts from "nothing selected", so only what is ticked here is restored. *@
+                    <fieldset class="mat-field mat-fieldset">
+                        <legend class="mat-sr-only">Sections to restore</legend>
+                        <div class="mat-checks">
+                            @foreach (var restoreSection in Model.SectionItems)
+                            {
+                                <label class="mat-check">
+                                    <input type="checkbox"
+                                           name="@restoreSection.FieldName"
+                                           value="true"
+                                           checked="@restoreSection.Selected"
+                                           disabled="@(!restoreSection.Included)" />
+                                    <span class="mat-check__text">
+                                        <strong>@restoreSection.Label <span class="mat-badge mat-badge--soft">@BackupRestoreModel.FormatCount(restoreSection.ItemCount)</span></strong>
+                                        <small class="mat-muted">@restoreSection.Description</small>
+                                        <small class="mat-muted">@restoreSection.Summary · @(restoreSection.Included ? "included in backup" : "not present")</small>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    </fieldset>
+                </div>
+            </section>
+        </div>
 
-            <div class="page-actions workspace-toolbar">
-                <a class="workspace-secondary-submit" asp-page="/Config" asp-route-tab="backup">
-                    @MatmonIcons.Render("arrow-left")
-                    <span>Back</span>
-                </a>
-                <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-page-handler="Download" asp-route-fileName="@Model.FileName">
-                    @MatmonIcons.Render("download")
-                    <span>Download</span>
-                </a>
-                <button type="submit" class="workspace-danger-submit" onclick="return confirm('Restore selected sections from this backup?');">
-                    @MatmonIcons.Render("arrow-right")
-                    <span>Restore now</span>
-                </button>
+        <section class="mat-card">
+            <div class="mat-card__body">
+                <div class="mat-field">
+                    <label class="mat-label" for="Passphrase">Passphrase <span class="mat-text-muted">(only for an encrypted/portable backup)</span></label>
+                    <input asp-for="Passphrase" type="password" class="mat-input" autocomplete="off" placeholder="leave blank for a normal backup" />
+                </div>
             </div>
-        </form>
-    }
-</section>
+        </section>
+
+        <div class="mat-btn-row">
+            <a class="mat-btn mat-btn--secondary" asp-page="/Config" asp-route-tab="backup">@MatUi.Icon("back")<span>Back</span></a>
+            <a class="mat-btn mat-btn--secondary" asp-page="/BackupRestore" asp-page-handler="Download" asp-route-fileName="@Model.FileName">@MatUi.Icon("download")<span>Download</span></a>
+            <span class="mat-btn-row__spacer"></span>
+            <button type="submit" class="mat-btn mat-btn--danger" data-confirm="Restore selected sections from this backup?" data-confirm-ok="Restore">@MatUi.Icon("restore")<span>Restore now</span></button>
+        </div>
+    </form>
+}

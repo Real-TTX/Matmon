@@ -2,53 +2,48 @@
 @model WorkspaceModel
 @{
     ViewData["Title"] = "New host";
+    ViewData["Width"] = "narrow";
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("host")
-            <h1>New host</h1>
-        </div>
-    </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section class="panel panel-stack workspace-panel">
-        <form method="post" asp-page-handler="CreateHost" class="workspace-form">
-            <input type="hidden" asp-for="ReturnUrl" />
-            <label class="workspace-field workspace-field-primary">
-                <span class="workspace-label">Host name</span>
-                <input asp-for="NewHost.Name" class="form-control workspace-input" placeholder="e.g. Office NAS" autofocus />
-            </label>
-            <div class="workspace-form-grid">
-                <label class="workspace-field">
-                    <span class="workspace-label">Address</span>
-                    <input asp-for="NewHost.Address" class="form-control workspace-input" placeholder="192.168.1.10" />
-                    <small class="workspace-hint">Reused as the default target for sensors on this host.</small>
-                </label>
-                <label class="workspace-field">
-                    <span class="workspace-label">Parent</span>
+<form method="post" asp-page-handler="CreateHost" class="mat-form" novalidate>
+    <input type="hidden" asp-for="ReturnUrl" />
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("monitor")<h2 class="mat-card__title">Host</h2></div>
+        <div class="mat-card__body">
+            <div class="mat-form__grid">
+                <div class="mat-field mat-field--full">
+                    <label class="mat-label" asp-for="NewHost.Name">Host name</label>
+                    <input asp-for="NewHost.Name" class="mat-input" placeholder="e.g. Office NAS" autofocus />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NewHost.Address">Address</label>
+                    <input asp-for="NewHost.Address" class="mat-input mat-mono" placeholder="192.168.1.10" aria-describedby="host-address-hint" />
+                    <span class="mat-hint" id="host-address-hint">Reused as the default target for sensors on this host.</span>
+                </div>
+                <div class="mat-field" role="group" aria-labelledby="host-parent-label">
+                    <span class="mat-label" id="host-parent-label">Parent</span>
                     <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "NewHost.ParentId", DomId = "picker-host-parent", SelectedId = Model.NewHost.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.View.HostParentOptions) })" />
-                </label>
+                </div>
+                <div class="mat-field mat-field--full">
+                    <label class="mat-label" asp-for="NewHost.Description">Description <span class="mat-text-muted">(optional)</span></label>
+                    <input asp-for="NewHost.Description" class="mat-input" placeholder="Notes about this host" />
+                </div>
             </div>
-            <label class="workspace-field">
-                <span class="workspace-label">Description <em>optional</em></span>
-                <input asp-for="NewHost.Description" class="form-control workspace-input" placeholder="Notes about this host" />
-            </label>
-            <div class="workspace-form-actions">
-                <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create host</span></button>
-            </div>
-        </form>
+        </div>
     </section>
-</section>
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create host</span></button>
+        <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+</form>

@@ -2,422 +2,416 @@
 @model WorkspaceModel
 @{
     ViewData["Title"] = "Sensors";
-    var isListView = string.Equals(Model.View.MonitoringViewMode, "list", StringComparison.OrdinalIgnoreCase);
-    var nodes = Model.View.MonitoringVisibleNodes;
-    var treeRoots = Model.View.MonitoringTreeRoots;
+    var view = Model.View;
+    var isListView = string.Equals(view.MonitoringViewMode, "list", StringComparison.OrdinalIgnoreCase);
+    var nodes = view.MonitoringVisibleNodes;
+    var treeRoots = view.MonitoringTreeRoots;
     var returnUrl = Request.Path + Request.QueryString;
     var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
+
+    // The toolbar (LIST-02..04, LIST-12): the search as a field, the filters (type, state, tag) behind one Filter button
+    // that opens a dialog, a chip per filter in effect. Every field points at ONE hidden GET form, so the field and the
+    // dialog always send the whole state; the query names are the page's own (monitoringView/Kind/State/Tag/Search).
+    var kindLabel = view.MonitoringKindFilter == "all"
+        ? null
+        : Enum.GetValues<MonitoringElementKind>().Select(kind => kind.ToString()).FirstOrDefault(kind => string.Equals(kind, view.MonitoringKindFilter, StringComparison.OrdinalIgnoreCase));
+    var stateOptions = new (string Value, string Label)[]
+    {
+        ("ok", "OK"), ("warning", "Warning"), ("error", "Error"), ("paused", "Paused"), ("unknown", "Unknown"), ("disabled", "Disabled")
+    };
+    var stateLabel = view.MonitoringStateFilter == "all"
+        ? null
+        : stateOptions.FirstOrDefault(option => option.Value == view.MonitoringStateFilter).Label;
+    var tagFilter = string.IsNullOrWhiteSpace(view.MonitoringTagFilter) ? null : view.MonitoringTagFilter;
+    var activeFilters = (kindLabel is null ? 0 : 1) + (stateLabel is null ? 0 : 1) + (tagFilter is null ? 0 : 1);
+
+    // The address of the page without one filter: the link of a chip's X (everything else stays).
+    string UrlWithout(string key)
+    {
+        var parts = Request.Query
+            .Where(kv => !string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(kv => kv.Value.Select(v => Uri.EscapeDataString(kv.Key) + "=" + Uri.EscapeDataString(v ?? string.Empty)))
+            .ToList();
+        return Request.Path + (parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty);
+    }
 }
 
-@* Tile size is a client-only preference written to <html> BEFORE the first paint, so
-   navigating to the page never renders a default size and then jumps to the stored
-   one. There is no URL round-trip and no redirect (the old redirect was the main
-   cause of the M→S flash). site.js only toggles this attribute + localStorage live. *@
-<script>
-    try {
-        var s = String(localStorage.getItem("matmon-monitoring-size") || "m").trim().toLowerCase();
-        document.documentElement.dataset.monitoringSize = (s === "s" || s === "l") ? s : "m";
-    } catch (e) { document.documentElement.dataset.monitoringSize = "m"; }
+@section Styles {
+    @* The tile size and the collapsed branches are client-only preferences: applied before the first paint, so the page
+       never draws the defaults and then jumps. *@
+    <script src="~/js/app/monitoring-prepaint.js" asp-append-version="true"></script>
+}
 
-    // Hide the saved-collapsed subtrees with an injected stylesheet BEFORE the tree is
-    // parsed, so the tree never renders expanded and then visibly collapses ("builds
-    // up"). site.js converts these into is-collapsed classes on load and removes this
-    // style, so expand/collapse keeps working afterwards.
-    try {
-        var collapsed = JSON.parse(localStorage.getItem("matmon-monitoring-tree-collapsed") || "[]");
-        if (Array.isArray(collapsed) && collapsed.length) {
-            var selector = collapsed
-                .filter(function (id) { return typeof id === "string"; })
-                .map(function (id) { return '.monitoring-tree-node[data-tree-node-id="' + id.replace(/[^a-zA-Z0-9-]/g, "") + '"] > .monitoring-tree-children'; })
-                .join(",");
-            if (selector) {
-                var preCollapse = document.createElement("style");
-                preCollapse.id = "matmon-precollapse";
-                preCollapse.textContent = selector + "{display:none!important}";
-                document.head.appendChild(preCollapse);
-            }
-        }
-    } catch (e) { /* collapse pre-paint is best-effort */ }
-</script>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-<section class="dashboard-shell">
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <div class="workspace-banner workspace-banner-info monitoring-tree-move-banner" data-tree-move-banner hidden>
-        <div class="monitoring-tree-move-banner-main">
-            @MatmonIcons.Render("move")
-            <span data-tree-move-label></span>
+@* Shown by monitoring.js while an element is being moved (its menu's Move, then "Move here" on the target). *@
+<div class="mat-alert mat-alert--info" role="status" data-tree-move-banner hidden>
+    @MatUi.Icon("route")
+    <div class="mat-alert__body">
+        <strong data-tree-move-label></strong>
+        <div class="mat-alert__actions">
+            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-tree-move-cancel>@MatUi.Icon("x")<span>Cancel move</span></button>
         </div>
-        <button type="button" class="workspace-secondary-submit" data-tree-move-cancel aria-label="Cancel move">
-            @MatmonIcons.Render("x")
-            <span>Cancel</span>
-        </button>
     </div>
+</div>
 
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("sensor")
-            <div>
-                <div class="eyebrow">Monitoring</div>
-                <h1>Sensors</h1>
+<form method="post" asp-page-handler="MoveElement" hidden data-tree-move-form>
+    <input type="hidden" name="elementId" data-tree-move-element />
+    <input type="hidden" name="parentId" data-tree-move-parent />
+    <input type="hidden" name="returnUrl" value="@(Request.Path + Request.QueryString)" />
+</form>
+
+<div class="mat-list" data-monitoring-shell data-monitoring-view="@view.MonitoringViewMode">
+    <div class="mat-toolbar" role="toolbar" aria-label="Sensors tools">
+        <div class="mat-input-icon mat-toolbar__search">
+            @MatUi.Icon("search")
+            <input class="mat-input" type="search" id="monitoring-search" name="monitoringSearch" form="monitoring-filter-form" value="@view.MonitoringSearch"
+                   placeholder="Name, path, text" aria-label="Search sensors" autocomplete="off" enterkeyhint="search" data-shortcut="/" />
+        </div>
+        <span class="mat-toolbar__spacer"></span>
+        <span class="mat-toolbar__info" aria-live="polite">@view.MonitoringVisibleCount shown</span>
+        <div class="monitoring-view-tools">
+            <nav class="mat-seg" aria-label="View">
+                <a class="mat-seg__btn@(isListView ? string.Empty : " is-active")"
+                   aria-current="@(isListView ? null : "page")"
+                   asp-page="/Monitoring"
+                   asp-route-monitoringView="tree"
+                   asp-route-monitoringKind="@view.MonitoringKindFilter"
+                   asp-route-monitoringState="@view.MonitoringStateFilter"
+                   asp-route-monitoringTag="@view.MonitoringTagFilter"
+                   asp-route-monitoringSearch="@view.MonitoringSearch">@MatUi.Icon("network")<span>Tree</span></a>
+                <a class="mat-seg__btn@(isListView ? " is-active" : string.Empty)"
+                   aria-current="@(isListView ? "page" : null)"
+                   asp-page="/Monitoring"
+                   asp-route-monitoringView="list"
+                   asp-route-monitoringKind="@view.MonitoringKindFilter"
+                   asp-route-monitoringState="@view.MonitoringStateFilter"
+                   asp-route-monitoringTag="@view.MonitoringTagFilter"
+                   asp-route-monitoringSearch="@view.MonitoringSearch">@MatUi.Icon("list")<span>List</span></a>
+            </nav>
+            @* Size is a live, client-only preference (no reload): monitoring-prepaint.js applies it before the first paint,
+               monitoring.js switches it and marks the pressed button. *@
+            <div class="mat-seg" role="group" aria-label="Tile size" data-monitoring-size-switch>
+                <button type="button" class="mat-seg__btn" aria-pressed="false" aria-label="Small tiles" data-tip="Small" data-monitoring-size-set="s">S</button>
+                <button type="button" class="mat-seg__btn" aria-pressed="false" aria-label="Medium tiles" data-tip="Medium" data-monitoring-size-set="m">M</button>
+                <button type="button" class="mat-seg__btn" aria-pressed="false" aria-label="Large tiles" data-tip="Large" data-monitoring-size-set="l">L</button>
             </div>
         </div>
+        <div class="mat-toolbar__end">
+            <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn@(activeFilters > 0 ? " is-active" : string.Empty)" data-dialog-open="monitoring-filter" aria-haspopup="dialog">
+                @MatUi.Icon("sliders")<span>Filter</span>@if (activeFilters > 0) { <span class="mat-badge">@activeFilters</span> }
+            </button>
+        </div>
     </div>
 
-    <form method="post" asp-page-handler="MoveElement" hidden data-tree-move-form>
-        <input type="hidden" name="elementId" data-tree-move-element />
-        <input type="hidden" name="parentId" data-tree-move-parent />
-        <input type="hidden" name="returnUrl" value="@(Request.Path + Request.QueryString)" />
+    @if (activeFilters > 0)
+    {
+        <div class="mat-chips" role="group" aria-label="Filters in effect">
+            @if (kindLabel is not null)
+            {
+                <span class="mat-chip">Type: @kindLabel<a class="mat-chip__x" href="@UrlWithout("monitoringKind")" aria-label="Remove the filter Type">@MatUi.Icon("x")</a></span>
+            }
+            @if (stateLabel is not null)
+            {
+                <span class="mat-chip">State: @stateLabel<a class="mat-chip__x" href="@UrlWithout("monitoringState")" aria-label="Remove the filter State">@MatUi.Icon("x")</a></span>
+            }
+            @if (tagFilter is not null)
+            {
+                <span class="mat-chip">Tag: @tagFilter<a class="mat-chip__x" href="@UrlWithout("monitoringTag")" aria-label="Remove the filter Tag">@MatUi.Icon("x")</a></span>
+            }
+        </div>
+    }
+
+    <form id="monitoring-filter-form" method="get" hidden>
+        <input type="hidden" name="monitoringView" value="@view.MonitoringViewMode" />
     </form>
 
-    <section class="panel panel-stack monitoring-controls" data-monitoring-shell data-monitoring-view="@Model.View.MonitoringViewMode">
-        <form method="get" class="monitoring-filter-bar">
-            <input type="hidden" name="monitoringView" value="@Model.View.MonitoringViewMode" />
-
-            <details class="workspace-action-menu monitoring-display-menu">
-                <summary class="workspace-secondary-submit monitoring-display-trigger" aria-label="Display options" title="Display options">
-                    @MatmonIcons.Render("dashboard")<span>Display</span>
-                </summary>
-                <div class="workspace-action-menu-panel monitoring-display-panel">
-                    <span class="monitoring-display-label">View</span>
-                    <div class="monitoring-view-switch">
-                        <a class="workspace-action-link @(isListView ? string.Empty : "is-active")"
-                           asp-page="/Monitoring"
-                           asp-route-monitoringView="tree"
-                           asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                           asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                           asp-route-monitoringTag="@Model.View.MonitoringTagFilter"
-                           asp-route-monitoringSearch="@Model.View.MonitoringSearch">
-                            @MatmonIcons.Render("monitoring")
-                            <span>Tree</span>
-                        </a>
-                        <a class="workspace-action-link @(isListView ? "is-active" : string.Empty)"
-                           asp-page="/Monitoring"
-                           asp-route-monitoringView="list"
-                           asp-route-monitoringKind="@Model.View.MonitoringKindFilter"
-                           asp-route-monitoringState="@Model.View.MonitoringStateFilter"
-                           asp-route-monitoringTag="@Model.View.MonitoringTagFilter"
-                           asp-route-monitoringSearch="@Model.View.MonitoringSearch">
-                            @MatmonIcons.Render("list")
-                            <span>List</span>
-                        </a>
-                    </div>
-
-                    @* Size is a live, client-only preference (no reload) - see the pre-paint
-                       script at the top of the page. site.js marks the active button. *@
-                    <span class="monitoring-display-label">Size</span>
-                    <div class="monitoring-size-switch" aria-label="Tile size" data-monitoring-size-switch>
-                        <button type="button" class="workspace-action-link" data-monitoring-size-set="s"><span>S</span></button>
-                        <button type="button" class="workspace-action-link" data-monitoring-size-set="m"><span>M</span></button>
-                        <button type="button" class="workspace-action-link" data-monitoring-size-set="l"><span>L</span></button>
-                    </div>
-
-                    @if (!isListView)
-                    {
-                        <span class="monitoring-display-label">Expand</span>
-                        <div class="monitoring-tree-bulk">
-                            <button type="button" class="workspace-action-link" data-tree-expand-all>@MatmonIcons.Render("plus")<span>Expand all</span></button>
-                            <button type="button" class="workspace-action-link" data-tree-collapse-all>@MatmonIcons.Render("x")<span>Collapse all</span></button>
-                            <button type="button" class="workspace-action-link" data-tree-collapse-level title="Show probes + their first level, collapse the rest">@MatmonIcons.Render("probe")<span>Probes + 1 level</span></button>
-                        </div>
-                    }
-                </div>
-            </details>
-
-            <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("search")<small>Search</small></span>
-                <input type="search" name="monitoringSearch" value="@Model.View.MonitoringSearch" class="form-control workspace-input" placeholder="Name, path, text" />
-            </label>
-
-                <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("sensor")<small>Type</small></span>
-                <select name="monitoringKind" class="form-select workspace-select">
-                    <option value="all" selected="@(Model.View.MonitoringKindFilter == "all" ? "selected" : null)">All</option>
-                    @foreach (var kind in Enum.GetValues<MonitoringElementKind>())
-                    {
-                        <option value="@kind.ToString().ToLowerInvariant()" selected="@(string.Equals(Model.View.MonitoringKindFilter, kind.ToString().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@kind</option>
-                    }
-                </select>
-            </label>
-
-            <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("warning")<small>State</small></span>
-                <select name="monitoringState" class="form-select workspace-select">
-                    <option value="all" selected="@(Model.View.MonitoringStateFilter == "all" ? "selected" : null)">All</option>
-                    <option value="ok" selected="@(Model.View.MonitoringStateFilter == "ok" ? "selected" : null)">OK</option>
-                    <option value="warning" selected="@(Model.View.MonitoringStateFilter == "warning" ? "selected" : null)">Warning</option>
-                    <option value="error" selected="@(Model.View.MonitoringStateFilter == "error" ? "selected" : null)">Error</option>
-                    <option value="paused" selected="@(Model.View.MonitoringStateFilter == "paused" ? "selected" : null)">Paused</option>
-                    <option value="unknown" selected="@(Model.View.MonitoringStateFilter == "unknown" ? "selected" : null)">Unknown</option>
-                    <option value="disabled" selected="@(Model.View.MonitoringStateFilter == "disabled" ? "selected" : null)">Disabled</option>
-                </select>
-            </label>
-
-            @if (Model.View.AllTags.Count > 0)
-            {
-                <label class="monitoring-filter-field">
-                    <span>@MatmonIcons.Render("tag")<small>Tag</small></span>
-                    <select name="monitoringTag" class="form-select workspace-select">
-                        <option value="" selected="@(string.IsNullOrEmpty(Model.View.MonitoringTagFilter) ? "selected" : null)">All tags</option>
-                        @foreach (var tag in Model.View.AllTags)
+    <dialog class="mat-dialog mat-dialog--sm" id="monitoring-filter" aria-labelledby="monitoring-filter-title">
+        <div class="mat-dialog__form">
+            <div class="mat-dialog__head">
+                @MatUi.Icon("sliders")
+                <h2 class="mat-dialog__title" id="monitoring-filter-title">Filter</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+            </div>
+            <div class="mat-dialog__body mat-form">
+                <div class="mat-field">
+                    <label class="mat-label" for="monitoring-filter-kind">Type</label>
+                    <select class="mat-select" id="monitoring-filter-kind" name="monitoringKind" form="monitoring-filter-form">
+                        <option value="all" selected="@(view.MonitoringKindFilter == "all")">All</option>
+                        @foreach (var kind in Enum.GetValues<MonitoringElementKind>())
                         {
-                            <option value="@tag" selected="@(string.Equals(Model.View.MonitoringTagFilter, tag, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@tag</option>
+                            var kindValue = kind.ToString().ToLowerInvariant();
+                            <option value="@kindValue" selected="@(string.Equals(view.MonitoringKindFilter, kindValue, StringComparison.OrdinalIgnoreCase))">@kind</option>
                         }
                     </select>
-                </label>
-            }
-
-            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
-            <a class="workspace-secondary-submit" asp-page="/Monitoring">@MatmonIcons.Render("arrow-left")<span>Reset</span></a>
-        </form>
-    </section>
-
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("sensor")<span>@(isListView ? "List" : "Tree")</span></h2>
-            <span class="panel-hint">@Model.View.MonitoringVisibleCount shown</span>
-        </div>
-
-        @if (nodes.Count == 0)
-        {
-            <div class="empty-state">No matching nodes.</div>
-        }
-        else if (isListView)
-        {
-            <div class="monitoring-list-shell">
-                <div class="monitoring-list-head" role="row">
-                    <span>Status</span>
-                    <span>Object</span>
-                    <span>Endpoint</span>
-                    <span>Information</span>
-                    <span>Actions</span>
                 </div>
-                @foreach (var node in nodes)
+                <div class="mat-field">
+                    <label class="mat-label" for="monitoring-filter-state">State</label>
+                    <select class="mat-select" id="monitoring-filter-state" name="monitoringState" form="monitoring-filter-form">
+                        <option value="all" selected="@(view.MonitoringStateFilter == "all")">All</option>
+                        @foreach (var option in stateOptions)
+                        {
+                            <option value="@option.Value" selected="@(view.MonitoringStateFilter == option.Value)">@option.Label</option>
+                        }
+                    </select>
+                </div>
+                @if (view.AllTags.Count > 0)
                 {
-                    var canAddFolder = isAdmin && (node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder);
-                    var canAddHost = isAdmin && (node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder);
-                    var canAddSensor = isAdmin && node.Kind != MonitoringElementKind.Sensor;
-                    var canDiscover = isAdmin && node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
-                    var hasChildActions = canAddFolder || canAddHost || canAddSensor;
-                    var canDelete = isAdmin && !(node.Kind == MonitoringElementKind.Probe && node.Depth == 0);
-                    var kindKey = node.Kind.ToString().ToLowerInvariant();
-                    var rowState = string.IsNullOrWhiteSpace(node.StateKey) ? "neutral" : node.StateKey;
-                    var hasState = !string.IsNullOrWhiteSpace(node.StateKey) && !string.IsNullOrWhiteSpace(node.StateLabel);
-                    var endpointLabel = node.Kind switch
-                    {
-                        MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.Target) => node.Target,
-                        MonitoringElementKind.Sensor => "(no target)",
-                        MonitoringElementKind.Host when !string.IsNullOrWhiteSpace(node.Address) => node.Address,
-                        MonitoringElementKind.Probe when !string.IsNullOrWhiteSpace(node.ProbeId) => node.ProbeId,
-                        _ => "-"
-                    };
-                    var endpointHint = node.Kind switch
-                    {
-                        MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.SensorTypeKey) => node.SensorTypeKey,
-                        MonitoringElementKind.Host => "host address",
-                        MonitoringElementKind.Probe => "probe id",
-                        MonitoringElementKind.Folder => "folder",
-                        _ => node.Kind.ToString()
-                    };
-                    var primaryInfo = !string.IsNullOrWhiteSpace(node.Details)
-                        ? node.Details
-                        : !string.IsNullOrWhiteSpace(node.SettingsSummary)
-                            ? node.SettingsSummary
-                            : "No extra information";
+                    <div class="mat-field">
+                        <label class="mat-label" for="monitoring-filter-tag">Tag</label>
+                        <select class="mat-select" id="monitoring-filter-tag" name="monitoringTag" form="monitoring-filter-form">
+                            <option value="" selected="@(tagFilter is null)">All tags</option>
+                            @foreach (var tag in view.AllTags)
+                            {
+                                <option value="@tag" selected="@(string.Equals(view.MonitoringTagFilter, tag, StringComparison.OrdinalIgnoreCase))">@tag</option>
+                            }
+                        </select>
+                        <span class="mat-hint">A sensor under a tagged folder or host has the tag too.</span>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(view.MonitoringSearch))
+                {
+                    <p class="mat-hint">The search in effect is kept.</p>
+                }
+            </div>
+            <div class="mat-dialog__foot">
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="submit" form="monitoring-filter-form" class="mat-btn mat-btn--primary">@MatUi.Icon("sliders")<span>Apply</span></button>
+                    <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                    <span class="mat-btn-row__spacer"></span>
+                    <a class="mat-btn mat-btn--ghost mat-btn--end" asp-page="/Monitoring">Reset everything</a>
+                </div>
+            </div>
+        </div>
+    </dialog>
 
-                    <article class="monitoring-list-row" data-state="@rowState" data-kind="@kindKey" data-depth="@node.Depth" data-acknowledged="@(node.IsAcknowledged ? "true" : null)">
-                        <div class="monitoring-list-status">
-                            <span class="monitoring-list-state-dot" aria-hidden="true"></span>
-                            @if (hasState)
-                            {
-                                <span class="state-pill" data-state="@node.StateKey">@node.StateLabel</span>
-                            }
-                            else
-                            {
-                                <span class="monitoring-list-muted-pill">@node.Kind</span>
-                            }
-                            @if (node.IsAcknowledged)
-                            {
-                                <span class="state-pill" data-state="ack">Ack</span>
-                            }
-                            @if (node.IsHighlighted)
-                            {
-                                <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
-                            }
-                        </div>
+    @if (nodes.Count == 0)
+    {
+        <div class="mat-empty">
+            <span class="mat-empty__icon">@MatUi.Icon("search")</span>
+            <div class="mat-empty__title">Nothing matches</div>
+            <p>Change the search or the filters, or reset them.</p>
+            <a class="mat-btn mat-btn--secondary" asp-page="/Monitoring">@MatUi.Icon("refresh")<span>Reset</span></a>
+        </div>
+    }
+    else if (isListView)
+    {
+        <div class="mat-table-wrap monitoring-list">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Probes, folders, hosts and sensors</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Status</th>
+                        <th scope="col">Object</th>
+                        <th scope="col">Endpoint</th>
+                        <th scope="col" class="mat-hide-sm">Information</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var node in nodes)
+                    {
+                        var canAddFolder = isAdmin && (node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder);
+                        var canAddHost = isAdmin && (node.Kind == MonitoringElementKind.Probe || node.Kind == MonitoringElementKind.Folder);
+                        var canAddSensor = isAdmin && node.Kind != MonitoringElementKind.Sensor;
+                        var canDiscover = isAdmin && node.Kind is MonitoringElementKind.Probe or MonitoringElementKind.Folder or MonitoringElementKind.Host;
+                        var hasChildActions = canAddFolder || canAddHost || canAddSensor;
+                        var canDelete = isAdmin && !(node.Kind == MonitoringElementKind.Probe && node.Depth == 0);
+                        var kindKey = node.Kind.ToString().ToLowerInvariant();
+                        var rowState = string.IsNullOrWhiteSpace(node.StateKey) ? "neutral" : node.StateKey;
+                        var hasState = !string.IsNullOrWhiteSpace(node.StateKey) && !string.IsNullOrWhiteSpace(node.StateLabel);
+                        var endpointLabel = node.Kind switch
+                        {
+                            MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.Target) => node.Target,
+                            MonitoringElementKind.Sensor => "(no target)",
+                            MonitoringElementKind.Host when !string.IsNullOrWhiteSpace(node.Address) => node.Address,
+                            MonitoringElementKind.Probe when !string.IsNullOrWhiteSpace(node.ProbeId) => node.ProbeId,
+                            _ => "-"
+                        };
+                        var endpointHint = node.Kind switch
+                        {
+                            MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.SensorTypeKey) => node.SensorTypeKey,
+                            MonitoringElementKind.Host => "host address",
+                            MonitoringElementKind.Probe => "probe id",
+                            MonitoringElementKind.Folder => "folder",
+                            _ => node.Kind.ToString()
+                        };
+                        var primaryInfo = !string.IsNullOrWhiteSpace(node.Details)
+                            ? node.Details
+                            : !string.IsNullOrWhiteSpace(node.SettingsSummary)
+                                ? node.SettingsSummary
+                                : "No extra information";
+                        var menuId = $"list-menu-{node.Id}";
 
-                        <div class="monitoring-list-main">
-                            <div class="monitoring-list-title-row">
-                                <span class="tree-kind" data-kind="@kindKey" title="@node.Kind">
-                                    @MatmonIcons.Render(node.KindIconKey)
-                                </span>
-                                @if (node.Kind == MonitoringElementKind.Sensor)
-                                {
-                                    <a class="monitoring-list-title" asp-page="/SensorDetails" asp-route-sensorId="@node.Id">@node.Name</a>
-                                }
-                                else if (isAdmin)
-                                {
-                                    <a class="monitoring-list-title" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@node.Name</a>
-                                }
-                                else
-                                {
-                                    <span class="monitoring-list-title">@node.Name</span>
-                                }
-                            </div>
-                            <div class="monitoring-list-path">@node.Path</div>
-                            @if (node.OwnTags.Count > 0)
-                            {
-                                <div class="tree-tags">
-                                    @foreach (var tag in node.OwnTags)
+                        <tr class="monitoring-list-row" data-state="@rowState" data-kind="@kindKey" data-depth="@node.Depth" data-acknowledged="@(node.IsAcknowledged ? "true" : null)">
+                            <td data-label="Status">
+                                <span class="monitoring-list-status">
+                                    @if (hasState)
                                     {
-                                        <span class="tree-tag">@MatmonIcons.Render("tag")<span>@tag</span></span>
+                                        <span class="@MatUi.PillClass(node.StateKey)">@node.StateLabel</span>
                                     }
-                                </div>
-                            }
-                        </div>
-
-                        <div class="monitoring-list-endpoint">
-                            <strong>@endpointLabel</strong>
-                            <small>@endpointHint</small>
-                        </div>
-
-                        <div class="monitoring-list-info">
-                            <span>@primaryInfo</span>
-                            @if (!string.IsNullOrWhiteSpace(node.TemplateSummary))
-                            {
-                                <small>@node.TemplateSummary</small>
-                            }
-                        </div>
-
-                        <div class="monitoring-list-side">
-                            <div class="workspace-row-actions">
-                                @if (node.Kind == MonitoringElementKind.Sensor)
-                                {
-                                    <a class="workspace-action-link monitoring-list-icon-action" asp-page="/SensorDetails" asp-route-sensorId="@node.Id" aria-label="Open sensor details" title="Open sensor details">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                }
-
-                                @if (isAdmin)
-                                {
-                                <details class="workspace-action-menu">
-                                    <summary class="workspace-secondary-submit monitoring-list-icon-action" aria-label="Element actions" title="Element actions">
-                                        @MatmonIcons.Render("more")
-                                        <span>Actions</span>
-                                    </summary>
-                                    <div class="workspace-action-menu-panel">
-                                        @if (canDiscover)
-                                        {
-                                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
-                                                <input type="hidden" name="scopeElementId" value="@node.Id" />
-                                                <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                                <button type="submit" class="workspace-action-menu-link">
-                                                    @MatmonIcons.Render("search")
-                                                    <span>Discover sensors</span>
-                                                </button>
-                                            </form>
-                                        }
-                                        @if (isAdmin)
-                                        {
-                                            <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
-                                                @MatmonIcons.Render("pencil")
-                                                <span>Edit</span>
-                                            </a>
-                                        }
-                                        @if (hasChildActions)
-                                        {
-                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                                            @if (canAddFolder)
-                                            {
-                                                <a class="workspace-action-menu-link" asp-page="/FolderCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
-                                                    @MatmonIcons.Render("folder")
-                                                    <span>Folder</span>
-                                                </a>
-                                            }
-                                            @if (canAddHost)
-                                            {
-                                                <a class="workspace-action-menu-link" asp-page="/HostCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
-                                                    @MatmonIcons.Render("host")
-                                                    <span>Host</span>
-                                                </a>
-                                            }
-                                            @if (canAddSensor)
-                                            {
-                                                <a class="workspace-action-menu-link" asp-page="/SensorCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">
-                                                    @MatmonIcons.Render("sensor")
-                                                    <span>Sensor</span>
-                                                </a>
-                                            }
-                                        }
-                                        @if (node.Kind != MonitoringElementKind.Sensor)
-                                        {
-                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                                            <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
-                                                <input type="hidden" name="elementId" value="@node.Id" />
-                                                <input type="hidden" name="paused" value="true" />
-                                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("pause")<span>Pause all</span></button>
-                                            </form>
-                                            <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
-                                                <input type="hidden" name="elementId" value="@node.Id" />
-                                                <input type="hidden" name="paused" value="false" />
-                                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Resume all</span></button>
-                                            </form>
-                                        }
+                                    else
+                                    {
+                                        <span class="mat-pill mat-pill--plain">@node.Kind</span>
+                                    }
+                                    @if (node.IsAcknowledged)
+                                    {
+                                        <span class="@MatUi.PillClass("ack")">Ack</span>
+                                    }
+                                    @if (node.IsHighlighted)
+                                    {
+                                        <span class="mat-pill mat-pill--accent">@MatUi.Icon("star")<span>Highlight</span></span>
+                                    }
+                                </span>
+                            </td>
+                            <td data-label="Object" class="mat-table__primary">
+                                <div class="mat-table__name">
+                                    <span class="tree-kind" data-kind="@kindKey" title="@node.Kind">@MatmonIcons.Render(node.KindIconKey)</span>
+                                    <span class="monitoring-list-object">
                                         @if (node.Kind == MonitoringElementKind.Sensor)
                                         {
-                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                                            <form method="post"
-                                                  asp-page-handler="ToggleSensorPause"
-                                                  asp-route-sensorId="@node.Id"
-                                                  asp-route-returnUrl="@(Request.Path + Request.QueryString)">
-                                                <button type="submit" class="workspace-action-menu-link">
-                                                    @MatmonIcons.Render(node.IsPaused ? "play" : "pause")
-                                                    <span>@(node.IsPaused ? "Resume" : "Pause")</span>
-                                                </button>
-                                            </form>
+                                            <a asp-page="/SensorDetails" asp-route-sensorId="@node.Id">@node.Name</a>
                                         }
-                                        @if (canDelete)
+                                        else if (isAdmin)
                                         {
-                                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                                            <form method="post"
-                                                  asp-page-handler="DeleteElement"
-                                                  onsubmit="return confirm('Delete this element and all children?');">
-                                                <input type="hidden" name="ElementEditor.Id" value="@node.Id" />
-                                                <input type="hidden" name="ReturnUrl" value="@returnUrl" />
-                                                <button type="submit" class="workspace-action-menu-link">
-                                                    @MatmonIcons.Render("trash")
-                                                    <span>Delete</span>
-                                                </button>
-                                            </form>
+                                            <a asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@node.Name</a>
                                         }
-                                    </div>
-                                </details>
+                                        else
+                                        {
+                                            <span>@node.Name</span>
+                                        }
+                                        <small>@node.Path</small>
+                                    </span>
+                                </div>
+                                @if (node.OwnTags.Count > 0)
+                                {
+                                    <span class="mat-chips monitoring-list-tags">
+                                        @foreach (var tag in node.OwnTags)
+                                        {
+                                            <span class="mat-tag">@tag</span>
+                                        }
+                                    </span>
                                 }
-                            </div>
-                        </div>
-                    </article>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="monitoring-tree" data-monitoring-tree>
-                @for (var i = 0; i < treeRoots.Count; i++)
-                {
-                    var rootViewData = new ViewDataDictionary(ViewData)
+                            </td>
+                            <td data-label="Endpoint">
+                                <span class="monitoring-list-endpoint">
+                                    <span class="mat-mono">@endpointLabel</span>
+                                    <small>@endpointHint</small>
+                                </span>
+                            </td>
+                            <td data-label="Information" class="mat-hide-sm">
+                                <span class="monitoring-list-info">
+                                    <span>@primaryInfo</span>
+                                    @if (!string.IsNullOrWhiteSpace(node.TemplateSummary))
+                                    {
+                                        <small>@node.TemplateSummary</small>
+                                    }
+                                </span>
+                            </td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    @if (node.Kind == MonitoringElementKind.Sensor)
+                                    {
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@node.Id" aria-label="Details of @node.Name" data-tip="Details">@MatUi.Icon("bar-chart")</a>
+                                    }
+                                    @if (isAdmin)
+                                    {
+                                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="@menuId" data-menu-place="bottom" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @node.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                                        <div class="mat-menu" id="@menuId" role="menu" aria-label="Actions for @node.Name" hidden>
+                                            @if (canDiscover)
+                                            {
+                                                <form method="post" class="mat-menu__form" asp-page="/Discovery" asp-page-handler="Scope">
+                                                    <input type="hidden" name="scopeElementId" value="@node.Id" />
+                                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("search")<span>Discover sensors</span></button>
+                                                </form>
+                                            }
+                                            <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("edit")<span>Edit</span></a>
+                                            @if (hasChildActions)
+                                            {
+                                                <div class="mat-menu__sep" role="separator"></div>
+                                                @if (canAddFolder)
+                                                {
+                                                    <a class="mat-menu__item" role="menuitem" asp-page="/FolderCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("folder")<span>Create folder</span></a>
+                                                }
+                                                @if (canAddHost)
+                                                {
+                                                    <a class="mat-menu__item" role="menuitem" asp-page="/HostCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("monitor")<span>Create host</span></a>
+                                                }
+                                                @if (canAddSensor)
+                                                {
+                                                    <a class="mat-menu__item" role="menuitem" asp-page="/SensorCreate" asp-route-selectedId="@node.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("activity")<span>Create sensor</span></a>
+                                                }
+                                            }
+                                            <div class="mat-menu__sep" role="separator"></div>
+                                            @if (node.Kind != MonitoringElementKind.Sensor)
+                                            {
+                                                <form method="post" class="mat-menu__form" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
+                                                    <input type="hidden" name="elementId" value="@node.Id" />
+                                                    <input type="hidden" name="paused" value="true" />
+                                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("pause")<span>Pause all</span></button>
+                                                </form>
+                                                <form method="post" class="mat-menu__form" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
+                                                    <input type="hidden" name="elementId" value="@node.Id" />
+                                                    <input type="hidden" name="paused" value="false" />
+                                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("play")<span>Resume all</span></button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <form method="post" class="mat-menu__form" asp-page-handler="ToggleSensorPause" asp-route-sensorId="@node.Id" asp-route-returnUrl="@returnUrl">
+                                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon(node.IsPaused ? "play" : "pause")<span>@(node.IsPaused ? "Resume" : "Pause")</span></button>
+                                                </form>
+                                            }
+                                            @if (canDelete)
+                                            {
+                                                <div class="mat-menu__sep" role="separator"></div>
+                                                <form method="post" class="mat-menu__form" asp-page-handler="DeleteElement">
+                                                    <input type="hidden" name="ElementEditor.Id" value="@node.Id" />
+                                                    <input type="hidden" name="ReturnUrl" value="@returnUrl" />
+                                                    <button type="submit" class="mat-menu__item mat-menu__item--danger" role="menuitem"
+                                                            data-confirm="Delete this element and all children?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
+                                                </form>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <section class="mat-card monitoring-tree-panel" aria-label="Tree">
+            <div class="mat-card__body">
+                <div class="monitoring-tree-tools" role="group" aria-label="Expand and collapse">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-tree-expand-all>@MatUi.Icon("plus")<span>Expand all</span></button>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-tree-collapse-all>@MatUi.Icon("minus")<span>Collapse all</span></button>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-tree-collapse-level data-tip="Show probes and their first level, collapse the rest">@MatUi.Icon("server")<span>Probes + 1 level</span></button>
+                </div>
+                <div class="monitoring-tree" data-monitoring-tree>
+                    @for (var i = 0; i < treeRoots.Count; i++)
                     {
-                        ["PrevSiblingId"] = i > 0 ? treeRoots[i - 1].Id : (Guid?)null,
-                        ["NextSiblingId"] = i < treeRoots.Count - 1 ? treeRoots[i + 1].Id : (Guid?)null
-                    };
-                    <partial name="_MonitoringTreeNode" model="treeRoots[i]" view-data="rootViewData" />
-                }
+                        var rootViewData = new ViewDataDictionary(ViewData)
+                        {
+                            ["PrevSiblingId"] = i > 0 ? treeRoots[i - 1].Id : (Guid?)null,
+                            ["NextSiblingId"] = i < treeRoots.Count - 1 ? treeRoots[i + 1].Id : (Guid?)null
+                        };
+                        <partial name="_MonitoringTreeNode" model="treeRoots[i]" view-data="rootViewData" />
+                    }
+                </div>
             </div>
-        }
-    </section>
-</section>
+        </section>
+    }
+</div>

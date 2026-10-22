@@ -1,4 +1,10 @@
 @model Matmon.Host.Ui.ElementPickerModel
+@*
+    The reusable element / tag picker: a field that looks like a select and opens a MatUi dialog with the topology as an
+    indented tree while browsing and a flat, tag-filterable list while searching. initializeElementPickers (pickers.js)
+    writes the chosen id (or "tag:<name>") into the hidden [data-picker-value] input and fires "change" on it.
+    A page labels it with <label class="mat-label" for="@(DomId)-trigger">.
+*@
 @{
     var selected = Model.Selected;
     var allTags = Model.Options
@@ -6,108 +12,119 @@
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
         .ToArray();
+    var tagMode = Model.SelectedTagName is not null;
+    var dialogId = Model.DomId + "-dialog";
 }
-<div class="element-picker @(Model.SelectedTagName is not null ? "is-tag-mode" : null)" data-element-picker id="@Model.DomId">
+<div class="element-picker @(tagMode ? "is-tag-mode" : null)" data-element-picker id="@Model.DomId">
     <input type="hidden" name="@Model.FieldName" value="@Model.EffectiveValue" data-picker-value data-selected-name="@(Model.SelectedTagName ?? selected?.Name)" @Html.Raw(Model.ValueAttribute) />
-    <button type="button" class="form-control workspace-input element-picker-trigger @(string.IsNullOrEmpty(Model.EffectiveValue) ? "is-empty" : null)" data-picker-open aria-haspopup="dialog">
+    <button type="button" class="mat-select element-picker-trigger @(string.IsNullOrEmpty(Model.EffectiveValue) ? "is-empty" : null)" id="@(Model.DomId)-trigger" data-picker-open aria-haspopup="dialog" aria-controls="@dialogId">
         <span class="element-picker-trigger-label" data-picker-label>@(Model.SelectedTagName is { } tagName ? $"# {tagName}" : (selected?.Name ?? Model.Placeholder))</span>
-        <span class="element-picker-trigger-path" data-picker-trigger-path>@(Model.SelectedTagName is not null ? "Tag · all matching sensors" : selected?.Path)</span>
-        @MatmonIcons.Render("search", "element-picker-trigger-icon")
+        <span class="element-picker-trigger-path" data-picker-trigger-path>@(tagMode ? "Tag · all matching sensors" : selected?.Path)</span>
     </button>
 
-    <div class="element-picker-backdrop" data-picker-dialog hidden>
-        <div class="element-picker-panel" role="dialog" aria-modal="true" aria-label="Select element">
-            <div class="element-picker-head">
-                @if (Model.AllowTags)
-                {
-                    <div class="element-picker-mode" data-picker-mode-switch role="tablist">
-                        <button type="button" class="element-picker-mode-btn @(Model.SelectedTagName is null ? "is-active" : null)" data-picker-mode="element">@MatmonIcons.Render("monitoring")<span>Element</span></button>
-                        <button type="button" class="element-picker-mode-btn @(Model.SelectedTagName is not null ? "is-active" : null)" data-picker-mode="tag">@MatmonIcons.Render("tag")<span>Tag</span></button>
-                    </div>
-                }
-                <div class="element-picker-search">
-                    @MatmonIcons.Render("search")
-                    <input type="text" class="form-control workspace-input" placeholder="Search name, path or tag…" data-picker-search autocomplete="off" />
-                </div>
-                @if (allTags.Length > 0)
-                {
-                    <select class="form-select workspace-select element-picker-tag" data-picker-tag>
-                        <option value="">All tags</option>
-                        @foreach (var tag in allTags)
-                        {
-                            <option value="@tag.ToLowerInvariant()">@tag</option>
-                        }
-                    </select>
-                }
-                <button type="button" class="workspace-secondary-submit element-picker-close" data-picker-close aria-label="Close">@MatmonIcons.Render("x")</button>
+    <dialog class="mat-dialog mat-dialog--lg element-picker-dialog" id="@dialogId" aria-labelledby="@(dialogId)-title" data-picker-dialog>
+        <div class="mat-dialog__form">
+            <div class="mat-dialog__head">
+                @MatUi.Icon("search")
+                <h2 class="mat-dialog__title" id="@(dialogId)-title">@(Model.AllowTags ? "Choose an element or a tag" : "Choose an element")</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-picker-close aria-label="Close">@MatUi.Icon("x")</button>
             </div>
-
-            <ul class="element-picker-list" data-picker-list role="listbox">
-                @if (Model.AllowClear)
-                {
-                    <li class="element-picker-option element-picker-clear" data-picker-option data-id="" data-search="" data-tags="" role="option" tabindex="0">
-                        <span class="element-picker-option-name">- none -</span>
-                    </li>
-                }
-                @foreach (var option in Model.Options)
-                {
-                    var tagsLower = string.Join(" ", option.Tags.Select(tag => tag.ToLowerInvariant()));
-                    var search = $"{option.Name} {option.Path} {tagsLower}".ToLowerInvariant();
-                    <li class="element-picker-option @(option.Id == Model.SelectedId ? "is-selected" : null)"
-                        data-picker-option
-                        data-id="@option.Id"
-                        data-name="@option.Name"
-                        data-path="@option.Path"
-                        data-search="@search"
-                        data-tags="@tagsLower"
-                        style="--picker-depth:@option.Depth"
-                        role="option"
-                        tabindex="0">
-                        <span class="element-picker-option-kind" data-kind="@option.Kind.ToString().ToLowerInvariant()">@MatmonIcons.Render(option.KindIconKey)</span>
-                        <span class="element-picker-option-body">
-                            <span class="element-picker-option-name">@option.Name</span>
-                            <span class="element-picker-option-path">@option.Path</span>
-                        </span>
-                        @if (option.Tags.Count > 0)
-                        {
-                            <span class="element-picker-option-tags">
-                                @foreach (var tag in option.Tags)
-                                {
-                                    <span class="tree-tag is-mini">@tag</span>
-                                }
-                            </span>
-                        }
-                    </li>
-                }
-            </ul>
-            @if (Model.AllowTags)
-            {
-                <ul class="element-picker-list element-picker-tag-list" data-picker-tag-list role="listbox">
-                    @foreach (var tag in allTags)
+            <div class="mat-dialog__body mat-stack mat-stack--sm element-picker-body">
+                <div class="mat-row element-picker-tools">
+                    @if (Model.AllowTags)
                     {
-                        <li class="element-picker-option @(string.Equals(Model.EffectiveValue, $"tag:{tag}", StringComparison.OrdinalIgnoreCase) ? "is-selected" : null)"
-                            data-picker-option
-                            data-id="tag:@tag"
-                            data-name="@tag"
-                            data-path="Tag · all matching sensors"
-                            data-search="@tag.ToLowerInvariant()"
-                            data-tags=""
-                            role="option"
-                            tabindex="0">
-                            <span class="element-picker-option-kind" data-kind="tag">@MatmonIcons.Render("tag")</span>
-                            <span class="element-picker-option-body">
-                                <span class="element-picker-option-name"># @tag</span>
-                                <span class="element-picker-option-path">All sensors with this tag</span>
-                            </span>
+                        <div class="mat-seg" role="group" aria-label="Choose by">
+                            <button type="button" class="mat-seg__btn @(tagMode ? null : "is-active")" data-picker-mode="element" aria-pressed="@(tagMode ? "false" : "true")">@MatUi.Icon("network")<span>Element</span></button>
+                            <button type="button" class="mat-seg__btn @(tagMode ? "is-active" : null)" data-picker-mode="tag" aria-pressed="@(tagMode ? "true" : "false")">@MatUi.Icon("tag")<span>Tag</span></button>
+                        </div>
+                    }
+                    <div class="mat-input-icon element-picker-search">
+                        @MatUi.Icon("search")
+                        <input type="search" class="mat-input" placeholder="Search name, path or tag…" aria-label="Search name, path or tag" autocomplete="off" data-picker-search />
+                    </div>
+                    @if (allTags.Length > 0)
+                    {
+                        <select class="mat-select element-picker-tag" aria-label="Filter by tag" data-picker-tag>
+                            <option value="">All tags</option>
+                            @foreach (var tag in allTags)
+                            {
+                                <option value="@tag.ToLowerInvariant()">@tag</option>
+                            }
+                        </select>
+                    }
+                </div>
+
+                <ul class="element-picker-list" data-picker-list role="listbox" aria-label="Elements">
+                    @if (Model.AllowClear)
+                    {
+                        <li class="element-picker-option element-picker-clear" data-picker-option data-id="" data-search="" data-tags="" role="option" tabindex="0">
+                            <span class="element-picker-option-name">- none -</span>
                         </li>
                     }
-                    @if (allTags.Length == 0)
+                    @foreach (var option in Model.Options)
                     {
-                        <li class="element-picker-option-empty">No tags defined yet.</li>
+                        var tagsLower = string.Join(" ", option.Tags.Select(tag => tag.ToLowerInvariant()));
+                        var search = $"{option.Name} {option.Path} {tagsLower}".ToLowerInvariant();
+                        var isSelected = option.Id == Model.SelectedId;
+                        <li class="element-picker-option @(isSelected ? "is-selected" : null)"
+                            data-picker-option
+                            data-id="@option.Id"
+                            data-name="@option.Name"
+                            data-path="@option.Path"
+                            data-search="@search"
+                            data-tags="@tagsLower"
+                            style="--picker-depth: @option.Depth"
+                            role="option"
+                            aria-selected="@(isSelected ? "true" : "false")"
+                            tabindex="0">
+                            <span class="element-picker-option-kind" data-kind="@option.Kind.ToString().ToLowerInvariant()">@MatmonIcons.Render(option.KindIconKey)</span>
+                            <span class="element-picker-option-body">
+                                <span class="element-picker-option-name">@option.Name</span>
+                                <span class="element-picker-option-path">@option.Path</span>
+                            </span>
+                            @if (option.Tags.Count > 0)
+                            {
+                                <span class="mat-chips element-picker-option-tags">
+                                    @foreach (var tag in option.Tags)
+                                    {
+                                        <span class="mat-tag">@tag</span>
+                                    }
+                                </span>
+                            }
+                        </li>
                     }
                 </ul>
-            }
-            <div class="element-picker-empty" data-picker-empty hidden>No matches.</div>
+                @if (Model.AllowTags)
+                {
+                    <ul class="element-picker-list element-picker-tag-list" data-picker-tag-list role="listbox" aria-label="Tags">
+                        @foreach (var tag in allTags)
+                        {
+                            var isSelectedTag = string.Equals(Model.EffectiveValue, $"tag:{tag}", StringComparison.OrdinalIgnoreCase);
+                            <li class="element-picker-option @(isSelectedTag ? "is-selected" : null)"
+                                data-picker-option
+                                data-id="tag:@tag"
+                                data-name="@tag"
+                                data-path="Tag · all matching sensors"
+                                data-search="@tag.ToLowerInvariant()"
+                                data-tags=""
+                                role="option"
+                                aria-selected="@(isSelectedTag ? "true" : "false")"
+                                tabindex="0">
+                                <span class="element-picker-option-kind" data-kind="tag">@MatUi.Icon("tag")</span>
+                                <span class="element-picker-option-body">
+                                    <span class="element-picker-option-name"># @tag</span>
+                                    <span class="element-picker-option-path">All sensors with this tag</span>
+                                </span>
+                            </li>
+                        }
+                        @if (allTags.Length == 0)
+                        {
+                            <li class="mat-text-muted element-picker-option-empty">No tags defined yet.</li>
+                        }
+                    </ul>
+                }
+                <p class="mat-text-muted element-picker-empty" data-picker-empty hidden>No matches.</p>
+            </div>
         </div>
-    </div>
+    </dialog>
 </div>

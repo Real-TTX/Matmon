@@ -1,5 +1,4 @@
 @page "/notifications/rule"
-@using Matmon.Host.Ui
 @model WorkspaceModel
 @{
     ViewData["Title"] = "Notification rule";
@@ -8,269 +7,240 @@
     var targetPickerOptions = Model.View.Nodes
         .Select(node => new ElementPickerOption(node.Id, node.Name, node.Path, node.Kind, node.Kind.ToString(), node.KindIconKey, node.Tags, node.Depth))
         .ToList();
+    // The trigger states are checkboxes now (they were a multi-select): ticked = in the bound list, exactly what the
+    // select tag helper used to mark as selected.
+    var newRuleStates = Model.NewNotificationRule.TriggerStates.Select(state => state.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var editRuleStates = Model.NotificationRuleEditor.TriggerStates.Select(state => state.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    // The placeholders and the preview, the same for the create and the edit form (beside each other, under the templates).
+    void RenderTemplateHelp()
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("code")<h2 class="mat-card__title">Placeholders</h2></div>
+            <div class="mat-card__body notification-placeholders">
+                <p class="mat-muted">The preview uses the latest matching alert or sensor data available in the workspace.</p>
+                @foreach (var group in Model.View.NotificationTemplateGroups)
+                {
+                    <div class="notification-placeholders__group">
+                        <h3 class="notification-placeholders__title">@group.Title</h3>
+                        <dl class="notification-placeholders__list">
+                            @foreach (var placeholder in group.Placeholders)
+                            {
+                                <dt><code>@((placeholder.IsHtmlSnippet ? "{{{" : "{{") + placeholder.Key + (placeholder.IsHtmlSnippet ? "}}}" : "}}"))</code></dt>
+                                <dd>@placeholder.Description</dd>
+                            }
+                        </dl>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("eye")<h2 class="mat-card__title">Preview</h2></div>
+            <div class="mat-card__body mat-stack">
+                <p class="mat-muted">@Model.View.NotificationRulePreviewSummary</p>
+                <dl class="mat-kv">
+                    <dt>Subject</dt>
+                    <dd><strong>@Model.View.NotificationRulePreviewSubject</strong></dd>
+                </dl>
+                <pre class="mat-code mm-prewrap mm-break"><code>@Model.View.NotificationRulePreviewText</code></pre>
+                <div class="notification-preview-html">
+                    @Html.Raw(Model.View.NotificationRulePreviewHtml)
+                </div>
+            </div>
+        </section>
+    }
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("bell")
-            <h1>Notification rule</h1>
-        </div>
-    </div>
+<nav class="mat-tabs" aria-label="Notifications">
+    <a class="mat-tab is-active" aria-current="true" asp-page="/Notifications">Rules</a>
+    <a class="mat-tab" asp-page="/Notifications" asp-fragment="senders">Senders</a>
+    <a class="mat-tab" asp-page="/Notifications" asp-fragment="receivers">Receivers</a>
+</nav>
 
-    <div class="sensor-tabs">
-        <a class="sensor-tab is-active" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
-        <a class="sensor-tab" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
-        <a class="sensor-tab" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
-    </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (isCreateMode)
+{
+    <form method="post" asp-page-handler="CreateNotificationRule" class="mat-form" novalidate>
+        <input type="hidden" asp-for="ReturnUrl" />
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section class="panel panel-stack workspace-editor-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("bell")<span>@(isCreateMode ? "Create rule" : "Edit rule")</span></h2>
-            <span class="panel-hint">@Model.View.SelectedNotificationRuleKind</span>
-        </div>
-
-        @if (isCreateMode)
-        {
-            <form method="post" asp-page-handler="CreateNotificationRule" class="workspace-form">
-                <input type="hidden" asp-for="ReturnUrl" />
-                <div class="workspace-form-grid">
-                    <label>
-                        <span>Name</span>
-                        <input asp-for="NewNotificationRule.Name" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Sender</span>
-                        <select asp-for="NewNotificationRule.SenderId" class="form-select workspace-select" asp-items="Model.NewNotificationRule.SenderOptions"></select>
-                    </label>
-                    <label>
-                        <span>Receiver</span>
-                        <select asp-for="NewNotificationRule.ReceiverId" class="form-select workspace-select" asp-items="Model.NewNotificationRule.ReceiverOptions"></select>
-                    </label>
-                    <label>
-                        <span>Target</span>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("bell")<h2 class="mat-card__title">Create rule</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationRule.Name">Name</label>
+                        <input asp-for="NewNotificationRule.Name" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationRule.SenderId">Sender</label>
+                        <select asp-for="NewNotificationRule.SenderId" class="mat-select" asp-items="Model.NewNotificationRule.SenderOptions"></select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationRule.ReceiverId">Receiver</label>
+                        <select asp-for="NewNotificationRule.ReceiverId" class="mat-select" asp-items="Model.NewNotificationRule.ReceiverOptions"></select>
+                    </div>
+                    <div class="mat-field">
+                        <span class="mat-label">Target</span>
                         <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewNotificationRule.TargetToken", DomId = "picker-new-rule-target", SelectedValue = Model.NewNotificationRule.TargetToken, AllowTags = true, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
-                    </label>
-                    <label>
-                        <span>Enabled</span>
-                        <select asp-for="NewNotificationRule.Enabled" class="form-select workspace-select">
-                            <option value="true">true</option>
-                            <option value="false">false</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Include descendants</span>
-                        <select asp-for="NewNotificationRule.IncludeDescendants" class="form-select workspace-select">
-                            <option value="true">true</option>
-                            <option value="false">false</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Cooldown window (min)</span>
-                        <input asp-for="NewNotificationRule.CooldownMinutes" type="number" min="1" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Threshold (max per window)</span>
-                        <input asp-for="NewNotificationRule.Threshold" type="number" min="1" placeholder="1" class="form-control workspace-input" />
-                        <span class="workspace-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
-                    </label>
-                    <label class="workspace-span-2">
-                        <span>Trigger states</span>
-                        <select asp-for="NewNotificationRule.TriggerStates" class="form-select workspace-select" asp-items="Model.NewNotificationRule.TriggerStateOptions" multiple size="5"></select>
-                    </label>
-                </div>
-
-                <section class="workspace-notification-template-block">
-                    <div class="panel-header workspace-subsection-header">
-                        <h3 class="section-title">Message templates</h3>
-                        <span class="panel-hint">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets</span>
                     </div>
-
-                    <div class="workspace-form-grid">
-                        <label class="workspace-span-2">
-                            <span>Subject template</span>
-                            <input asp-for="NewNotificationRule.SubjectTemplate" class="form-control workspace-input" placeholder="{{state.label}}: {{element.path}}" />
-                        </label>
-                        <label class="workspace-span-2">
-                            <span>Text template</span>
-                            <textarea asp-for="NewNotificationRule.TextTemplate" rows="6" class="form-control workspace-textarea"></textarea>
-                        </label>
-                        <label class="workspace-span-2">
-                            <span>HTML template</span>
-                            <textarea asp-for="NewNotificationRule.HtmlTemplate" rows="10" class="form-control workspace-textarea"></textarea>
-                        </label>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationRule.CooldownMinutes">Cooldown window (min)</label>
+                        <input asp-for="NewNotificationRule.CooldownMinutes" type="number" min="1" class="mat-input mat-mono" data-msg-range="The window is 1 minute or more." />
+                        <span class="mat-error" aria-live="polite"></span>
                     </div>
-
-                    <div class="notification-template-layout">
-                        <div class="notification-template-help panel">
-                            <div class="notification-template-panel-title">Placeholders</div>
-                            <div class="notification-template-help-note">The preview uses the latest matching alert or sensor data available in the workspace.</div>
-
-                            @foreach (var group in Model.View.NotificationTemplateGroups)
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationRule.Threshold">Threshold (max per window)</label>
+                        <input asp-for="NewNotificationRule.Threshold" type="number" min="1" placeholder="1" class="mat-input mat-mono" data-msg-range="The threshold is 1 or more." />
+                        <span class="mat-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-switch"><input asp-for="NewNotificationRule.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-switch"><input asp-for="NewNotificationRule.IncludeDescendants" /><span class="mat-switch__track"></span><span>Include descendants</span></label>
+                    </div>
+                    <fieldset class="mat-field mat-fieldset mat-field--full">
+                        <legend class="mat-legend">Trigger states</legend>
+                        <div class="mat-checks mat-checks--inline">
+                            @foreach (var option in Model.NewNotificationRule.TriggerStateOptions)
                             {
-                                <div class="notification-template-group">
-                                    <div class="notification-template-group-title">@group.Title</div>
-                                    <div class="notification-template-group-items">
-                                        @foreach (var placeholder in group.Placeholders)
-                                        {
-                                            <div class="notification-template-placeholder">
-                                                <code>@((placeholder.IsHtmlSnippet ? "{{{" : "{{") + placeholder.Key + (placeholder.IsHtmlSnippet ? "}}}" : "}}"))</code>
-                                                <span>@placeholder.Description</span>
-                                            </div>
-                                        }
-                                    </div>
-                                </div>
+                                <label class="mat-check"><input type="checkbox" id="new-rule-state-@option.Value" name="NewNotificationRule.TriggerStates" value="@option.Value" checked="@(newRuleStates.Contains(option.Value ?? string.Empty))" /><span class="mat-check__text">@option.Text</span></label>
                             }
                         </div>
-
-                        <div class="notification-template-preview panel">
-                            <div class="notification-template-panel-title">Preview</div>
-                            <div class="notification-template-preview-summary">@Model.View.NotificationRulePreviewSummary</div>
-                            <div class="notification-template-preview-subject">
-                                <span>Subject</span>
-                                <strong>@Model.View.NotificationRulePreviewSubject</strong>
-                            </div>
-                            <pre class="notification-template-preview-text">@Model.View.NotificationRulePreviewText</pre>
-                            <div class="notification-template-preview-html">
-                                @Html.Raw(Model.View.NotificationRulePreviewHtml)
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <div class="workspace-form-actions">
-                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create rule</span></button>
+                    </fieldset>
                 </div>
-            </form>
-        }
-        else
-        {
-            <form method="post" asp-page-handler="SaveNotificationRule" class="workspace-form">
-                <input type="hidden" asp-for="NotificationRuleEditor.Id" />
-                <input type="hidden" asp-for="ReturnUrl" />
+            </div>
+        </section>
 
-                <div class="workspace-form-grid">
-                    <label>
-                        <span>Name</span>
-                        <input asp-for="NotificationRuleEditor.Name" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Sender</span>
-                        <select asp-for="NotificationRuleEditor.SenderId" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.SenderOptions"></select>
-                    </label>
-                    <label>
-                        <span>Receiver</span>
-                        <select asp-for="NotificationRuleEditor.ReceiverId" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.ReceiverOptions"></select>
-                    </label>
-                    <label>
-                        <span>Target</span>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("file-text")<h2 class="mat-card__title">Message templates</h2></div>
+            <div class="mat-card__body mat-form">
+                <p class="mat-muted">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets.</p>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NewNotificationRule.SubjectTemplate">Subject template</label>
+                    <input asp-for="NewNotificationRule.SubjectTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}}" />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NewNotificationRule.TextTemplate">Text template</label>
+                    <textarea asp-for="NewNotificationRule.TextTemplate" rows="6" class="mat-textarea mat-mono"></textarea>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NewNotificationRule.HtmlTemplate">HTML template</label>
+                    <textarea asp-for="NewNotificationRule.HtmlTemplate" rows="10" class="mat-textarea mat-mono"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <div class="notification-template-layout">
+            @{ RenderTemplateHelp(); }
+        </div>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create rule</span></button>
+            <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+        </div>
+    </form>
+}
+else
+{
+    <form method="post" asp-page-handler="SaveNotificationRule" class="mat-form" novalidate>
+        <input type="hidden" asp-for="NotificationRuleEditor.Id" />
+        <input type="hidden" asp-for="ReturnUrl" />
+
+        <section class="mat-card">
+            <div class="mat-card__head">
+                @MatUi.Icon("bell")<h2 class="mat-card__title">Edit rule</h2>
+                @if (!string.IsNullOrWhiteSpace(Model.View.SelectedNotificationRuleKind))
+                {
+                    <span class="mat-text-muted mm-push-end">@Model.View.SelectedNotificationRuleKind</span>
+                }
+            </div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationRuleEditor.Name">Name</label>
+                        <input asp-for="NotificationRuleEditor.Name" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationRuleEditor.SenderId">Sender</label>
+                        <select asp-for="NotificationRuleEditor.SenderId" class="mat-select" asp-items="Model.NotificationRuleEditor.SenderOptions"></select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationRuleEditor.ReceiverId">Receiver</label>
+                        <select asp-for="NotificationRuleEditor.ReceiverId" class="mat-select" asp-items="Model.NotificationRuleEditor.ReceiverOptions"></select>
+                    </div>
+                    <div class="mat-field">
+                        <span class="mat-label">Target</span>
                         <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NotificationRuleEditor.TargetToken", DomId = "picker-edit-rule-target", SelectedValue = Model.NotificationRuleEditor.TargetToken, AllowTags = true, Placeholder = "All sensors (no target)", Options = targetPickerOptions })" />
-                    </label>
-                    <label>
-                        <span>Enabled</span>
-                        <select asp-for="NotificationRuleEditor.Enabled" class="form-select workspace-select">
-                            <option value="true">true</option>
-                            <option value="false">false</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Include descendants</span>
-                        <select asp-for="NotificationRuleEditor.IncludeDescendants" class="form-select workspace-select">
-                            <option value="true">true</option>
-                            <option value="false">false</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Cooldown window (min)</span>
-                        <input asp-for="NotificationRuleEditor.CooldownMinutes" type="number" min="1" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Threshold (max per window)</span>
-                        <input asp-for="NotificationRuleEditor.Threshold" type="number" min="1" placeholder="1" class="form-control workspace-input" />
-                        <span class="workspace-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
-                    </label>
-                    <label class="workspace-span-2">
-                        <span>Trigger states</span>
-                        <select asp-for="NotificationRuleEditor.TriggerStates" class="form-select workspace-select" asp-items="Model.NotificationRuleEditor.TriggerStateOptions" multiple size="5"></select>
-                    </label>
-                </div>
-
-                <section class="workspace-notification-template-block">
-                    <div class="panel-header workspace-subsection-header">
-                        <h3 class="section-title">Message templates</h3>
-                        <span class="panel-hint">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets</span>
                     </div>
-
-                    <div class="workspace-form-grid">
-                        <label class="workspace-span-2">
-                            <span>Subject template</span>
-                            <input asp-for="NotificationRuleEditor.SubjectTemplate" class="form-control workspace-input" placeholder="{{state.label}}: {{element.path}}" />
-                        </label>
-                        <label class="workspace-span-2">
-                            <span>Text template</span>
-                            <textarea asp-for="NotificationRuleEditor.TextTemplate" rows="6" class="form-control workspace-textarea"></textarea>
-                        </label>
-                        <label class="workspace-span-2">
-                            <span>HTML template</span>
-                            <textarea asp-for="NotificationRuleEditor.HtmlTemplate" rows="10" class="form-control workspace-textarea"></textarea>
-                        </label>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationRuleEditor.CooldownMinutes">Cooldown window (min)</label>
+                        <input asp-for="NotificationRuleEditor.CooldownMinutes" type="number" min="1" class="mat-input mat-mono" data-msg-range="The window is 1 minute or more." />
+                        <span class="mat-error" aria-live="polite"></span>
                     </div>
-
-                    <div class="notification-template-layout">
-                        <div class="notification-template-help panel">
-                            <div class="notification-template-panel-title">Placeholders</div>
-                            <div class="notification-template-help-note">The preview uses the latest matching alert or sensor data available in the workspace.</div>
-
-                            @foreach (var group in Model.View.NotificationTemplateGroups)
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationRuleEditor.Threshold">Threshold (max per window)</label>
+                        <input asp-for="NotificationRuleEditor.Threshold" type="number" min="1" placeholder="1" class="mat-input mat-mono" data-msg-range="The threshold is 1 or more." />
+                        <span class="mat-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-switch"><input asp-for="NotificationRuleEditor.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-switch"><input asp-for="NotificationRuleEditor.IncludeDescendants" /><span class="mat-switch__track"></span><span>Include descendants</span></label>
+                    </div>
+                    <fieldset class="mat-field mat-fieldset mat-field--full">
+                        <legend class="mat-legend">Trigger states</legend>
+                        <div class="mat-checks mat-checks--inline">
+                            @foreach (var option in Model.NotificationRuleEditor.TriggerStateOptions)
                             {
-                                <div class="notification-template-group">
-                                    <div class="notification-template-group-title">@group.Title</div>
-                                    <div class="notification-template-group-items">
-                                        @foreach (var placeholder in group.Placeholders)
-                                        {
-                                            <div class="notification-template-placeholder">
-                                                <code>@((placeholder.IsHtmlSnippet ? "{{{" : "{{") + placeholder.Key + (placeholder.IsHtmlSnippet ? "}}}" : "}}"))</code>
-                                                <span>@placeholder.Description</span>
-                                            </div>
-                                        }
-                                    </div>
-                                </div>
+                                <label class="mat-check"><input type="checkbox" id="edit-rule-state-@option.Value" name="NotificationRuleEditor.TriggerStates" value="@option.Value" checked="@(editRuleStates.Contains(option.Value ?? string.Empty))" /><span class="mat-check__text">@option.Text</span></label>
                             }
                         </div>
-
-                        <div class="notification-template-preview panel">
-                            <div class="notification-template-panel-title">Preview</div>
-                            <div class="notification-template-preview-summary">@Model.View.NotificationRulePreviewSummary</div>
-                            <div class="notification-template-preview-subject">
-                                <span>Subject</span>
-                                <strong>@Model.View.NotificationRulePreviewSubject</strong>
-                            </div>
-                            <pre class="notification-template-preview-text">@Model.View.NotificationRulePreviewText</pre>
-                            <div class="notification-template-preview-html">
-                                @Html.Raw(Model.View.NotificationRulePreviewHtml)
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <div class="workspace-form-actions">
-                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save rule</span></button>
-                    <span class="workspace-form-actions-spacer"></span>
-                    <button type="submit" asp-page-handler="DeleteNotificationRule" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this notification rule?');">@MatmonIcons.Render("trash")<span>Delete rule</span></button>
+                    </fieldset>
                 </div>
-            </form>
-        }
-    </section>
-</section>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("file-text")<h2 class="mat-card__title">Message templates</h2></div>
+            <div class="mat-card__body mat-form">
+                <p class="mat-muted">Use <code>{{...}}</code> in text and <code>{{{...}}}</code> for raw HTML snippets.</p>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NotificationRuleEditor.SubjectTemplate">Subject template</label>
+                    <input asp-for="NotificationRuleEditor.SubjectTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}}" />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NotificationRuleEditor.TextTemplate">Text template</label>
+                    <textarea asp-for="NotificationRuleEditor.TextTemplate" rows="6" class="mat-textarea mat-mono"></textarea>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="NotificationRuleEditor.HtmlTemplate">HTML template</label>
+                    <textarea asp-for="NotificationRuleEditor.HtmlTemplate" rows="10" class="mat-textarea mat-mono"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <div class="notification-template-layout">
+            @{ RenderTemplateHelp(); }
+        </div>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save rule</span></button>
+            <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+            <span class="mat-btn-row__spacer"></span>
+            <button type="submit" asp-page-handler="DeleteNotificationRule" formnovalidate class="mat-btn mat-btn--danger" data-confirm="Delete this notification rule?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete rule</span></button>
+        </div>
+    </form>
+}

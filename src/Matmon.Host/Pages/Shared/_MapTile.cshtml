@@ -23,6 +23,23 @@
     var clockNow = tile.Kind == MonitoringMapTileKind.Clock
         ? TimeZoneInfo.ConvertTime(DateTimeOffset.Now, MapTileRender.ResolveTimeZone(Model.TimeZoneId))
         : default;
+
+    // Placement and size, both in grid cells. A tile with no column/row yet (added this second, not saved)
+    // falls back to "auto" so the browser puts it somewhere sensible until the save normalises it.
+    var tileColumn = tile.Column > 0 ? tile.Column.ToString() : "auto";
+    var tileRow = tile.Row > 0 ? tile.Row.ToString() : "auto";
+    // The per-tile colours are DATA, so they travel as custom properties on the tile (the documented exception
+    // to "no inline style"). Every one is written with its name, and one that is not set is "initial" - the
+    // guaranteed-invalid value, so the stylesheet's var() fallback applies exactly as if it were absent (an
+    // EMPTY value would not: var() would substitute nothing and the background would go transparent).
+    // The rule colour goes through MonitoringMapColorRules (BrandingSafety inside) and the three tile colours
+    // through BrandingSafety here, so nothing unvalidated reaches CSS. --map-tile-tone wins over the state's
+    // own tone (--map-tile-state-tone, set per data-state in maps.css).
+    var toneRule = MonitoringMapColorRules.ResolveByKey(tile.ColorRules, Model.StateKey) ?? "initial";
+    var customBackground = BrandingSafety.SafeHexColor(tile.BackgroundColor) ?? "initial";
+    var customAccent = BrandingSafety.SafeHexColor(tile.AccentColor) ?? "initial";
+    var customText = BrandingSafety.SafeHexColor(tile.TextColor) ?? "initial";
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
 }
 <article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")"
          data-tile-id="@tile.Id"
@@ -35,9 +52,7 @@
             the tile is the container. *@
          data-density="@(tile.RowSpan <= 1 ? "s" : tile.RowSpan == 2 ? "m" : "l")"
          @Html.Raw(editorAttributes)
-         @* Placement and size, both in grid cells. A tile with no column/row yet (added this second, not
-            saved) falls back to "auto" so the browser puts it somewhere sensible until the save normalises it. *@
-         style="--tile-col: @(tile.Column > 0 ? tile.Column.ToString() : "auto"); --tile-row: @(tile.Row > 0 ? tile.Row.ToString() : "auto"); --tile-span: @tile.ColumnSpan; --tile-rows: @tile.RowSpan; @MapTileRender.TileStyle(tile, Model.StateKey)"
+         style="--tile-col: @tileColumn; --tile-row: @tileRow; --tile-span: @tile.ColumnSpan; --tile-rows: @tile.RowSpan; --map-tile-tone: @toneRule; --map-tile-custom-bg: @customBackground; --map-tile-custom-accent: @customAccent; --map-tile-custom-text: @customText"
          hidden="@(Model.IsDeleted ? "hidden" : null)">
     @if (Model.Editable)
     {
@@ -52,7 +67,9 @@
     @* The head is an EYEBROW, not a heading: on a board read from across a room the reading is the hero and
        the name is its caption, so the name sits above it small and quiet rather than competing with it in
        bold. The state badge only appears when the state is worth a word - an "OK" pill on a green card is a
-       label for something the colour already said - so a healthy tile gets a dot instead. *@
+       label for something the colour already said - so a healthy tile gets a dot instead. The pill is MatUi's,
+       sized to the board through its own --mat-pill-* hooks (see .map-tile-pill); the live patch swaps its tone
+       class when the state changes (setMapTilePillTone in maps.js). *@
     @if (showHead)
     {
         <div class="map-tile-head@(Model.Editable ? " map-tile-drag-handle" : "")" data-map-drag-handle="@(Model.Editable ? "" : null)">
@@ -66,16 +83,16 @@
                 @if (Model.StateKey == "ok")
                 {
                     <span class="map-tile-state-dot" data-state="@Model.StateKey" title="@Model.StateLabel" aria-label="@Model.StateLabel"></span>
-                    <span class="state-pill is-collapsed" data-state="@Model.StateKey" data-tile-state-label hidden>@Model.StateLabel</span>
+                    <span class="@MatUi.PillClass(Model.StateKey) map-tile-pill is-collapsed" data-state="@Model.StateKey" data-tile-state-label hidden>@Model.StateLabel</span>
                 }
                 else
                 {
-                    <span class="state-pill" data-state="@Model.StateKey" data-tile-state-label>@Model.StateLabel</span>
+                    <span class="@MatUi.PillClass(Model.StateKey) map-tile-pill" data-state="@Model.StateKey" data-tile-state-label>@Model.StateLabel</span>
                 }
             }
             @if (Model.Editable)
             {
-                <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatUi.Icon("trash")</button>
             }
         </div>
     }
@@ -157,8 +174,9 @@
             }
             else if (tile.ImageAssetId is { } assetId)
             {
+                @* How the picture fits is a data-fit value the stylesheet maps to object-fit (no inline style). *@
                 <img class="map-tile-image" src="/api/map-assets/@assetId" alt="@(tile.Title ?? "Map image")"
-                     style="object-fit: @MapTileRender.ImageFitCss(tile.ImageFit);" />
+                     data-fit="@MapTileRender.ImageFitCss(tile.ImageFit)" />
             }
             else
             {
@@ -167,8 +185,11 @@
 
             @foreach (var pin in Model.Pins ?? [])
             {
+                @* The pin's point, as a percentage of the frame - geometry that is data, so a custom property. *@
+                var pinX = pin.X.ToString(invariant);
+                var pinY = pin.Y.ToString(invariant);
                 <span class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style"
-                      style="left: @pin.X.ToString(System.Globalization.CultureInfo.InvariantCulture)%; top: @pin.Y.ToString(System.Globalization.CultureInfo.InvariantCulture)%;"
+                      style="--pin-x: @(pinX)%; --pin-y: @(pinY)%"
                       title="@pin.Label">
                     <span class="map-pin-dot" aria-hidden="true"></span>
                     @if (pin.ShowLabel || pin.Style == "tile")
@@ -220,7 +241,9 @@
            says how busy. preserveAspectRatio="none" is fine: the labels are HTML beside the plot, not text
            inside the stretched SVG. The grid lines sit where the scale's bounds and middle land (y 2 / 20 / 38
            of the 40-unit viewBox - SparklineGeometry pads 2 units top and bottom). Every path is emitted, even
-           an empty one, so the live patch and the tooltip can match lines by position. *@
+           an empty one, so the live patch and the tooltip can match lines by position.
+           A line's colour is its series' identity from a fixed palette - data, so --series-color, which the
+           stylesheet turns into the stroke and the legend swatch. *@
         var axis = Model.Axis;
         <div class="map-tile-multigraph">
             <div class="map-multigraph-chart" data-map-multigraph data-window-start="@axis?.StartMs" data-window-end="@axis?.EndMs" data-unit="@axis?.Unit">
@@ -242,7 +265,7 @@
                         <line class="map-multigraph-grid" x1="0" x2="100" y1="38" y2="38"></line>
                         @foreach (var line in series)
                         {
-                            <path class="map-graph-line" d="@(line.LinePath ?? string.Empty)" style="stroke: @line.Color" data-series-points="@line.Points" data-series-label="@line.Label"></path>
+                            <path class="map-graph-line" d="@(line.LinePath ?? string.Empty)" style="--series-color: @line.Color" data-series-points="@line.Points" data-series-label="@line.Label"></path>
                         }
                     </svg>
                     <span class="map-multigraph-cursor" aria-hidden="true" hidden></span>
@@ -260,7 +283,7 @@
                 @foreach (var line in series)
                 {
                     <li>
-                        <span class="map-graph-swatch" style="background: @line.Color" aria-hidden="true"></span>
+                        <span class="map-graph-swatch" style="--series-color: @line.Color" aria-hidden="true"></span>
                         <span class="map-graph-legend-name">@line.Label</span>
                         <span class="map-graph-legend-value">@line.Value</span>
                     </li>

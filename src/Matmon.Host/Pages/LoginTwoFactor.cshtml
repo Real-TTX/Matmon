@@ -1,52 +1,61 @@
 @page "/login/2fa"
 @model LoginTwoFactorModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Two-factor";
-    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
+
+    // The brand at the top of the card: a managing partner's logo, or nothing under a white label without one (its product
+    // name is in the window title), else the Matmon mark.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
 }
 
-<section class="dashboard-shell auth-shell auth-shell-login">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("lock")
-            <h1>Two-factor</h1>
-        </div>
+<div class="mat-auth__card">
+    <div class="mat-auth__brand">
+        @if (partnerHasLogo)
+        {
+            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
+        }
+        else if (partnerProductName is null)
+        {
+            <img src="/brand/matmon-mark.svg" alt="" width="56" height="56" />
+        }
+        <h1>Two-factor</h1>
+        <p class="mat-muted">Enter the 6-digit code from your authenticator app, or request a one-time code by e-mail.</p>
     </div>
 
-    <div class="panel auth-card">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("spark")<span>Verify</span></h2>
-        </div>
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.InfoMessage))
+    {
+        <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.InfoMessage</div></div>
+    }
 
-        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-        {
-            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-        }
-        @if (!string.IsNullOrWhiteSpace(Model.InfoMessage))
-        {
-            <div class="workspace-banner workspace-banner-success">@Model.InfoMessage</div>
-        }
-
-        <p class="panel-hint" style="margin:0 0 14px;">Enter the 6-digit code from your authenticator app, or request a one-time code by e-mail.</p>
-
-        <form method="post" asp-page-handler="Verify" class="workspace-form auth-form">
-            <label class="workspace-field">
-                <span>Authentication code</span>
-                <input asp-for="Code" class="workspace-input" inputmode="numeric" autocomplete="one-time-code" autofocus placeholder="123456" />
-            </label>
-            <div class="auth-actions">
-                <span class="auth-note">From your authenticator</span>
-                <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Verify</span></button>
+    @* The authenticator code and the e-mailed fallback code are both six digits and post as the one field "Code". The
+       boxes start empty after a failed attempt (no asp-for), so a new code is typed in rather than over the old one. *@
+    <form method="post" asp-page-handler="Verify" class="mat-form" novalidate>
+        <div class="mat-field">
+            <label class="mat-label" for="Code">Authentication code</label>
+            <div class="mat-otp mat-otp--lg mat-otp--center" data-otp data-length="6" data-chars="digits" data-submit="#verify-go">
+                <input class="mat-otp__input" id="Code" name="Code" inputmode="numeric" autocomplete="one-time-code" autofocus required pattern="[0-9]{6}"
+                       data-msg-required="Please enter the six digits of the code." data-msg-pattern="The code has six digits." />
             </div>
-        </form>
+            <span class="mat-hint">From your authenticator app, or the code we e-mailed you.</span>
+            <span class="mat-error" aria-live="polite"></span>
+        </div>
+        <div class="mat-btn-row mat-btn-row--plain">
+            <button type="submit" class="mat-btn mat-btn--primary mat-btn--block" id="verify-go">@MatUi.Icon("check")<span>Verify</span></button>
+        </div>
+    </form>
 
-        <form method="post" asp-page-handler="SendEmail" style="margin-top:12px;">
-            <button type="submit" class="workspace-secondary-submit" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;">
-                <span>Send a code to my e-mail instead</span>
-            </button>
-        </form>
+    <form method="post" asp-page-handler="SendEmail">
+        <div class="mat-btn-row mat-btn-row--plain">
+            <button type="submit" class="mat-btn mat-btn--secondary mat-btn--block">@MatUi.Icon("mail")<span>Send a code to my e-mail instead</span></button>
+        </div>
+    </form>
 
-        <p class="panel-hint" style="margin-top:14px;text-align:center;"><a href="/login">Back to sign in</a></p>
-    </div>
-</section>
+    <p class="mat-text-center"><a href="/login">Back to sign in</a></p>
+</div>

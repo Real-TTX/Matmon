@@ -1,554 +1,578 @@
 @page "/monitoring/element"
 @model WorkspaceModel
 @{
-    ViewData["Title"] = "Element";
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");
+    var hasElement = Model.ElementEditor.Id != Guid.Empty;
     var isSensor = Model.ElementEditor.Kind == "Sensor";
     var sensorCredentialFields = Model.ElementEditor.SensorParameterFields.Where(field => field.IsCredential).ToList();
+    var sensorTypeName = isSensor
+        ? Model.ElementEditor.SensorTypeOptions.FirstOrDefault(option => string.Equals(option.Value, Model.ElementEditor.SensorTypeKey, StringComparison.OrdinalIgnoreCase))?.Text
+        : null;
+    var pageTitle = hasElement && !string.IsNullOrWhiteSpace(Model.ElementEditor.Name) ? Model.ElementEditor.Name : "Element";
+    var kindLabel = string.IsNullOrWhiteSpace(sensorTypeName) ? Model.ElementEditor.Kind : $"{Model.ElementEditor.Kind} · {sensorTypeName}";
+    ViewData["Title"] = pageTitle;
+    ViewData["OwnHead"] = true;
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("pencil")
-            <h1>Element</h1>
-        </div>
-        @if (isSensor)
+<div class="mat-page__head">
+    <div class="mat-page__title">
+        <h1>@pageTitle</h1>
+        @if (hasElement && !string.IsNullOrWhiteSpace(kindLabel))
         {
-            <div class="workspace-inline-actions">
-                <a class="workspace-action-link"
-                   href="@($"{Request.PathBase}/monitoring/sensor/assistant?selectedId={(Model.ElementEditor.ParentId ?? Model.ElementEditor.Id)}&returnUrl={Uri.EscapeDataString(backUrl)}")">
-                    @MatmonIcons.Render("spark")
-                    <span>Assistant</span>
-                </a>
-            </div>
+            <p class="mat-page__sub">
+                @kindLabel
+                @if (isSensor && Model.ElementEditor.IsPaused)
+                {
+                    <span class="@MatUi.PillClass("paused")">Paused</span>
+                }
+            </p>
         }
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    @if (isSensor)
     {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+        <a class="mat-btn mat-btn--secondary mm-push-end"
+           href="@($"{Request.PathBase}/monitoring/sensor/assistant?selectedId={(Model.ElementEditor.ParentId ?? Model.ElementEditor.Id)}&returnUrl={Uri.EscapeDataString(backUrl)}")">
+            @MatUi.Icon("sparkles")<span>Assistant</span>
+        </a>
     }
+</div>
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("pencil")<span>Edit</span></h2>
-            <span class="panel-hint">@Model.View.SelectedElementKind</span>
-            @if (isSensor && Model.ElementEditor.IsPaused)
-            {
-                <span class="state-pill" data-state="paused">Paused</span>
-            }
-        </div>
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-        @if (Model.ElementEditor.Id == Guid.Empty)
-        {
-            <div class="empty-state">Select an element.</div>
-        }
-        else
-        {
-            <form method="post" asp-page-handler="SaveElement" class="workspace-form">
-                <input type="hidden" asp-for="ElementEditor.Id" />
-                <input type="hidden" asp-for="ElementEditor.Kind" />
+@if (!hasElement)
+{
+    <div class="mat-empty mat-empty--framed">
+        <span class="mat-empty__icon">@MatUi.Icon("search")</span>
+        <div class="mat-empty__title">Select an element</div>
+        <p>Open a probe, folder, host or sensor from the tree to edit it here.</p>
+        <a class="mat-btn mat-btn--primary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+}
+else
+{
+    <form method="post" asp-page-handler="SaveElement" class="mat-form" novalidate>
+        <input type="hidden" asp-for="ElementEditor.Id" />
+        <input type="hidden" asp-for="ElementEditor.Kind" />
 
-                <div class="sensor-tabs" data-sensor-tabs role="tablist">
-                    <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("pencil")<span>General</span></button>
-                    @if (isSensor)
+        <div class="mat-alert mat-alert--danger" role="alert" data-validation-summary hidden>@MatUi.Icon("x-circle")<div class="mat-alert__body"><strong>Please check the form.</strong><ul class="mat-alert__list"></ul></div></div>
+
+        <section data-tabs data-tab-hash>
+            <div class="mat-tabs" role="tablist" aria-label="Element sections">
+                <button type="button" class="mat-tab" role="tab" id="tab-general" aria-controls="panel-general" aria-selected="true">General</button>
+                @if (isSensor)
+                {
+                    <button type="button" class="mat-tab" role="tab" id="tab-parameters" aria-controls="panel-parameters" aria-selected="false" tabindex="-1">Parameters</button>
+                    @if (sensorCredentialFields.Count > 0)
                     {
-                        <button type="button" class="sensor-tab" data-sensor-tab-target="parameters" role="tab">@MatmonIcons.Render("settings")<span>Parameters</span></button>
-                        @if (sensorCredentialFields.Count > 0)
-                        {
-                            <button type="button" class="sensor-tab" data-sensor-tab-target="credentials" role="tab">@MatmonIcons.Render("key")<span>Credentials</span></button>
-                        }
-                        <button type="button" class="sensor-tab" data-sensor-tab-target="thresholds" role="tab">@MatmonIcons.Render("signal")<span>Channels</span></button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-credentials" aria-controls="panel-credentials" aria-selected="false" tabindex="-1">Credentials</button>
                     }
-                    else
-                    {
-                        <button type="button" class="sensor-tab" data-sensor-tab-target="credentials" role="tab">@MatmonIcons.Render("key")<span>Credentials</span></button>
-                    }
-                    <button type="button" class="sensor-tab" data-sensor-tab-target="schedule" role="tab">@MatmonIcons.Render("clock")<span>Schedule</span></button>
-                    <button type="button" class="sensor-tab" data-sensor-tab-target="telemetry" role="tab">@MatmonIcons.Render("chart")<span>Telemetry</span></button>
-                </div>
+                    <button type="button" class="mat-tab" role="tab" id="tab-thresholds" aria-controls="panel-thresholds" aria-selected="false" tabindex="-1">Channels</button>
+                }
+                else
+                {
+                    <button type="button" class="mat-tab" role="tab" id="tab-credentials" aria-controls="panel-credentials" aria-selected="false" tabindex="-1">Credentials</button>
+                }
+                <button type="button" class="mat-tab" role="tab" id="tab-schedule" aria-controls="panel-schedule" aria-selected="false" tabindex="-1">Schedule</button>
+                <button type="button" class="mat-tab" role="tab" id="tab-telemetry" aria-controls="panel-telemetry" aria-selected="false" tabindex="-1">Telemetry</button>
+            </div>
 
-                @* ---------- GENERAL ---------- *@
-                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="general">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("pencil")<span>@Model.View.SelectedElementKind</span></h2>
-                        <span class="panel-hint">name, parent &amp; target</span>
-                    </div>
-                    <div class="workspace-form-grid">
-                        <label>
-                            <span>Name</span>
-                            <input asp-for="ElementEditor.Name" class="form-control workspace-input" />
-                        </label>
-
-                        @if (Model.ElementEditor.ParentOptions.Count > 0)
-                        {
-                            <label class="workspace-span-2">
-                                <span>Parent</span>
-                                <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "ElementEditor.ParentId", DomId = "picker-element-parent", SelectedId = Model.ElementEditor.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.ElementEditor.ParentOptions), ValueAttribute = isSensor ? "data-sensor-parent-select" : null })" />
-                            </label>
-                        }
-                        else
-                        {
-                            <div class="workspace-span-2 empty-state">Root probe fixed.</div>
-                        }
-
-                        @if (Model.ElementEditor.Kind == "Probe")
-                        {
-                            <label>
-                                <span>Probe ID</span>
-                                <input asp-for="ElementEditor.ProbeId" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>Token</span>
-                                <input asp-for="ElementEditor.EnrollmentToken" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>Scan networks (subnets)</span>
-                                <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="form-control workspace-textarea" placeholder="10.10.0.0/16&#10;192.168.1.0/24"></textarea>
-                                <small class="workspace-field-hint">One CIDR per line. Networks this probe should scan - useful for routed networks it can reach but doesn't auto-detect. Shown on the Probes page and offered as Discovery suggestions.</small>
-                            </label>
-                            <div class="workspace-span-2">
-                                <span class="workspace-label">Snippet</span>
-                                <pre class="workspace-code">@Model.ElementEditor.BootstrapSnippet</pre>
+            @* ---------- GENERAL (the element's own fields, then where its values came from) ---------- *@
+            <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general">
+                <section class="mat-card">
+                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@Model.View.SelectedElementKind</h2><span class="mat-text-muted mm-push-end">name, parent &amp; target</span></div>
+                    <div class="mat-card__body">
+                        <div class="mat-form__grid">
+                            <div class="mat-field mat-field--full">
+                                <label class="mat-label" asp-for="ElementEditor.Name">Name</label>
+                                <input asp-for="ElementEditor.Name" class="mat-input" />
                             </div>
-                        }
 
-                        @if (Model.ElementEditor.Kind == "Host")
-                        {
-                            <label class="workspace-span-2">
-                                <span>Address</span>
-                                <input asp-for="ElementEditor.Address" class="form-control workspace-input" />
-                            </label>
-                        }
-
-                        @if (isSensor)
-                        {
-                            <label>
-                                <span>Type</span>
-                                <select class="form-select workspace-select" asp-items="Model.ElementEditor.SensorTypeOptions" disabled aria-disabled="true" title="The sensor type is fixed after creation"></select>
-                                <input type="hidden" asp-for="ElementEditor.SensorTypeKey" />
-                                <small class="workspace-field-hint">Fixed after creation - history, channels &amp; statistics all depend on it. Create a new sensor to use a different type.</small>
-                            </label>
-                            @if (string.Equals(Model.ElementEditor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
+                            @if (Model.ElementEditor.ParentOptions.Count > 0)
                             {
-                                <div class="workspace-span-2 workspace-inline-note">Target is auto-filled from the parent probe for heartbeat sensors.</div>
+                                <div class="mat-field mat-field--full" role="group" aria-labelledby="element-parent-label">
+                                    <span class="mat-label" id="element-parent-label">Parent</span>
+                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "ElementEditor.ParentId", DomId = "picker-element-parent", SelectedId = Model.ElementEditor.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.ElementEditor.ParentOptions), ValueAttribute = isSensor ? "data-sensor-parent-select" : null })" />
+                                </div>
                             }
                             else
                             {
-                                <label>
-                                    <span>Target</span>
-                                    <input asp-for="ElementEditor.Target" class="form-control workspace-input" placeholder="@Model.ElementEditor.TargetPlaceholder" />
-                                </label>
+                                <div class="mat-field mat-field--full">
+                                    <span class="mat-label">Parent</span>
+                                    <span class="mat-text-muted">Root probe fixed.</span>
+                                </div>
                             }
-                        }
 
-                        <label class="workspace-span-2">
-                            <span>Description</span>
-                            <input asp-for="ElementEditor.Description" class="form-control workspace-input" />
-                        </label>
+                            @if (Model.ElementEditor.Kind == "Probe")
+                            {
+                                <div class="mat-field">
+                                    <label class="mat-label" asp-for="ElementEditor.ProbeId">Probe ID</label>
+                                    <input asp-for="ElementEditor.ProbeId" class="mat-input mat-mono" />
+                                </div>
+                                <div class="mat-field">
+                                    <label class="mat-label" asp-for="ElementEditor.EnrollmentToken">Token</label>
+                                    <input asp-for="ElementEditor.EnrollmentToken" class="mat-input mat-mono" />
+                                </div>
+                                <div class="mat-field mat-field--full">
+                                    <label class="mat-label" asp-for="ElementEditor.ProbeSubnetsText">Scan networks (subnets)</label>
+                                    <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="mat-textarea mat-mono" placeholder="10.10.0.0/16&#10;192.168.1.0/24" aria-describedby="element-subnets-hint"></textarea>
+                                    <span class="mat-hint" id="element-subnets-hint">One CIDR per line. Networks this probe should scan - useful for routed networks it can reach but doesn't auto-detect. Shown on the Probes page and offered as Discovery suggestions.</span>
+                                </div>
+                                <div class="mat-field mat-field--full">
+                                    <span class="mat-label">Snippet</span>
+                                    <div class="mm-snippet">
+                                        <pre class="mat-code" id="element-bootstrap-snippet"><code>@Model.ElementEditor.BootstrapSnippet</code></pre>
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--icon" data-copy="#element-bootstrap-snippet" aria-label="Copy the snippet" data-tip="Copy">@MatUi.Icon("copy")</button>
+                                    </div>
+                                </div>
+                            }
 
-                        <label class="workspace-span-2">
-                            <span>Tags</span>
-                            <input asp-for="ElementEditor.TagsText" class="form-control workspace-input" placeholder="prod, network, berlin" data-tag-input />
-                            <partial name="_TagSuggestions" model="Model.View.AllTags" />
-                            <small class="workspace-field-hint">Comma-separated. Tags cascade to children and power tree filtering, maps &amp; the sensor picker.</small>
-                        </label>
+                            @if (Model.ElementEditor.Kind == "Host")
+                            {
+                                <div class="mat-field mat-field--full">
+                                    <label class="mat-label" asp-for="ElementEditor.Address">Address</label>
+                                    <input asp-for="ElementEditor.Address" class="mat-input mat-mono" />
+                                </div>
+                            }
 
-                        @if (isSensor)
-                        {
-                            <label>
-                                <span>Highlight</span>
-                                <select asp-for="ElementEditor.Highlight" class="form-select workspace-select">
-                                    <option value="">@(string.IsNullOrWhiteSpace(Model.ElementEditor.HighlightInheritedLabel) || string.Equals(Model.ElementEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.ElementEditor.HighlightInheritedLabel})")</option>
-                                    <option value="true">on</option>
-                                    <option value="false">off</option>
-                                </select>
-                            </label>
-                        }
-
-                        <label>
-                            <span>Enabled</span>
-                            <select asp-for="ElementEditor.EnabledMode" class="form-select workspace-select">
-                                <option value="inherit">@(string.IsNullOrWhiteSpace(Model.ElementEditor.EnabledInheritedLabel) || string.Equals(Model.ElementEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.ElementEditor.EnabledInheritedLabel})")</option>
-                                <option value="enabled">enabled</option>
-                                <option value="disabled">disabled</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span>Timeout</span>
-                            <input asp-for="ElementEditor.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.TimeoutSecondsPlaceholder" />
-                        </label>
-                        <label>
-                            <span>Retries</span>
-                            <input asp-for="ElementEditor.RetryCount" type="number" min="0" class="form-control workspace-input" placeholder="@Model.ElementEditor.RetryCountPlaceholder" />
-                        </label>
-                    </div>
-                </div>
-
-                @if (isSensor)
-                {
-                    @* ---------- PARAMETERS ---------- *@
-                    @await Html.PartialAsync("_SensorCredentials", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
-
-                    @await Html.PartialAsync("_SensorParameters", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
-
-                    @* ---------- THRESHOLDS ---------- *@
-                    @await Html.PartialAsync("_SensorThresholds", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
-                }
-
-                @* ---------- SCHEDULE ---------- *@
-                @await Html.PartialAsync("_SensorSchedule", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
-
-                @* ---------- TELEMETRY ---------- *@
-                <div class="sensor-telemetry-section workspace-span-2" data-sensor-tab="telemetry">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("chart")<span>Telemetry &amp; retention</span></h2>
-                        @if (!string.IsNullOrWhiteSpace(Model.ElementEditor.TelemetryProfileSummary))
-                        {
-                            <span class="telemetry-profile-pill">@MatmonIcons.Render("spark")<span>@Model.ElementEditor.TelemetryProfileSummary</span></span>
-                        }
-                    </div>
-                    <div class="workspace-form-grid">
-                        <label>
-                            <span>Raw history (days)</span>
-                            <input asp-for="ElementEditor.ObservationRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.ObservationRetentionDaysPlaceholder" />
-                        </label>
-                        <label>
-                            <span>Summary granularity (min)</span>
-                            <input asp-for="ElementEditor.StatisticsBucketMinutes" type="number" min="1" list="telemetry-bucket-presets" class="form-control workspace-input" placeholder="@Model.ElementEditor.StatisticsBucketMinutesPlaceholder" />
-                        </label>
-                        <label>
-                            <span>Summaries kept (days)</span>
-                            <input asp-for="ElementEditor.StatisticsRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.StatisticsRetentionDaysPlaceholder" />
-                        </label>
-                        <label>
-                            <span>Event log (days)</span>
-                            <input asp-for="ElementEditor.EventRetentionDays" type="number" min="1" class="form-control workspace-input" placeholder="@Model.ElementEditor.EventRetentionDaysPlaceholder" />
-                        </label>
-                    </div>
-                    <datalist id="telemetry-bucket-presets">
-                        <option value="60">Hourly</option>
-                        <option value="360">Every 6 hours</option>
-                        <option value="720">Every 12 hours</option>
-                        <option value="1440">Daily</option>
-                    </datalist>
-
-                    @if (isSensor)
-                    {
-                        <div class="workspace-form-grid">
-                            <label>
-                                <span>Y-axis min</span>
-                                <input asp-for="ElementEditor.GraphMinValue" type="number" step="any" class="form-control workspace-input" placeholder="auto" />
-                            </label>
-                            <label>
-                                <span>Y-axis max</span>
-                                <input asp-for="ElementEditor.GraphMaxValue" type="number" step="any" class="form-control workspace-input" placeholder="auto" />
-                            </label>
-                        </div>
-                    }
-                    <div class="workspace-inline-note">Empty = inherit; the placeholder shows the active value.</div>
-                </div>
-
-                @* ---------- CREDENTIALS (containers define bundles) ---------- *@
-                    @if (!isSensor)
-                    {
-                    <div class="workspace-span-2 workspace-credential-section" data-sensor-tab="credentials">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("key")<span>Credentials</span></h2>
-                            <span class="panel-hint">inherited access</span>
-                        </div>
-                        <div class="workspace-inline-note">Define reusable credentials here. Child sensors automatically pick the first inherited bundle with the matching credential type, or can explicitly select one.</div>
-
-                        <div class="credential-bundles" data-credential-section>
-                            <div class="empty-state" data-credential-empty hidden="@(Model.ElementEditor.CredentialBundleVisibleCount > 0 ? "hidden" : null)">No credentials yet.</div>
-                            <div class="credential-list" data-credential-list>
-                                @for (var i = 0; i < Model.ElementEditor.CredentialBundles.Count; i++)
+                            @if (isSensor)
+                            {
+                                <div class="mat-field">
+                                    <label class="mat-label" for="element-sensor-type">Type</label>
+                                    <select class="mat-select" id="element-sensor-type" asp-items="Model.ElementEditor.SensorTypeOptions" disabled aria-disabled="true" aria-describedby="element-sensor-type-hint"></select>
+                                    <input type="hidden" asp-for="ElementEditor.SensorTypeKey" />
+                                    <span class="mat-hint" id="element-sensor-type-hint">Fixed after creation - history, channels &amp; statistics all depend on it. Create a new sensor to use a different type.</span>
+                                </div>
+                                @if (string.Equals(Model.ElementEditor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    var credential = Model.ElementEditor.CredentialBundles[i];
-                                    var isHidden = i >= Model.ElementEditor.CredentialBundleVisibleCount || credential.IsDeleted;
-                                    <div class="credential-row" data-credential-row data-credential-deleted="@(credential.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
-                                        <input type="hidden" asp-for="ElementEditor.CredentialBundles[i].Id" />
-                                        <input type="hidden" asp-for="ElementEditor.CredentialBundles[i].IsDeleted" />
-                                        <div class="credential-row-summary">
-                                            <span class="credential-row-icon">@MatmonIcons.Render("key")</span>
-                                            <span class="credential-row-name" data-credential-name-label>@(string.IsNullOrWhiteSpace(credential.Name) ? "New credential" : credential.Name)</span>
-                                            <span class="tree-tag is-mini credential-row-kind" data-credential-kind-label>@credential.Kind</span>
-                                            <div class="credential-row-actions">
-                                                <button type="button" class="workspace-secondary-submit" data-credential-edit>@MatmonIcons.Render("pencil")<span>Edit</span></button>
-                                                <button type="button" class="workspace-danger-submit credential-row-delete" data-credential-delete aria-label="Delete credential" title="Delete credential">@MatmonIcons.Render("trash")<span class="workspace-sr-only">Delete</span></button>
-                                            </div>
-                                        </div>
-
-                                        <div class="credential-modal-backdrop" data-credential-modal hidden>
-                                          <div class="credential-modal" role="dialog" aria-modal="true" aria-label="Edit credential">
-                                            <div class="credential-modal-head">
-                                                <h3 class="section-title">@MatmonIcons.Render("key")<span>Credential</span></h3>
-                                                <button type="button" class="workspace-secondary-submit credential-modal-x" data-credential-modal-close aria-label="Close">@MatmonIcons.Render("x")</button>
-                                            </div>
-                                            <div class="credential-modal-body">
-                                        <div class="sensor-threshold-grid">
-                                            <label>
-                                                <span>Name</span>
-                                                <input asp-for="ElementEditor.CredentialBundles[i].Name" class="form-control workspace-input" placeholder="Windows admin" />
-                                            </label>
-                                            <label>
-                                                <span>Kind</span>
-                                                <select asp-for="ElementEditor.CredentialBundles[i].Kind" class="form-select workspace-select" data-credential-kind-select>
-                                                    @* 'Ssh' is hidden (redundant with 'Linux' - both use ssh.*); kept only when a legacy bundle already has it. *@
-                                                    @* 'Ssh' is hidden (redundant with 'Linux'); PostgreSql/MySql have no dedicated typed bundle yet (use inline creds or a Generic bundle) - keep any kind the current bundle already is. *@
-                                                    @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>().Where(kind => (kind != MonitoringCredentialKind.Ssh && kind != MonitoringCredentialKind.PostgreSql && kind != MonitoringCredentialKind.MySql) || credential.Kind == kind))
-                                                    {
-                                                        <option value="@kind">@kind</option>
-                                                    }
-                                                </select>
-                                            </label>
-                                            <label class="workspace-span-2">
-                                                <span>Description</span>
-                                                <input asp-for="ElementEditor.CredentialBundles[i].Description" class="form-control workspace-input" placeholder="Optional note" />
-                                            </label>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="windows" hidden="@(credential.Kind == MonitoringCredentialKind.Windows ? null : "hidden")">
-                                                <div class="workspace-inline-note">Windows / WinRM credentials</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>Username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].WinrmUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                    </label>
-                                                    <label>
-                                                        <span>Password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].WinrmPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="ssh" hidden="@((credential.Kind == MonitoringCredentialKind.Linux || credential.Kind == MonitoringCredentialKind.Ssh) ? null : "hidden")">
-                                                <div class="workspace-inline-note">SSH / Linux credentials</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>Username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SshUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                    </label>
-                                                    <label>
-                                                        <span>Password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SshPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                    <label class="workspace-span-2">
-                                                        <span>Private key path</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SshPrivateKeyPath" class="form-control workspace-input" placeholder="C:\\Users\\monitor\\.ssh\\id_ed25519" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
-                                                <div class="workspace-inline-note">Proxmox API token - exactly as shown in the Proxmox UI (Token ID + secret).</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label class="workspace-span-2">
-                                                        <span>Token ID</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveTokenId" class="form-control workspace-input" placeholder="root@pam!monitoring" />
-                                                    </label>
-                                                    <label class="workspace-span-2">
-                                                        <span>Token secret</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveTokenSecret" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="sqlserver" hidden="@(credential.Kind == MonitoringCredentialKind.SqlServer ? null : "hidden")">
-                                                <div class="workspace-inline-note">SQL Server credentials</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>Username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].MssqlUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                    </label>
-                                                    <label>
-                                                        <span>Password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].MssqlPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="snmp" hidden="@(credential.Kind == MonitoringCredentialKind.Snmp ? null : "hidden")">
-                                                <div class="workspace-inline-note">SNMP credentials</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>Community</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpCommunity" class="form-control workspace-input" placeholder="public" />
-                                                    </label>
-                                                    <label>
-                                                        <span>v3 username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3Username" class="form-control workspace-input" placeholder="snmp-user" />
-                                                    </label>
-                                                    <label>
-                                                        <span>v3 auth protocol</span>
-                                                        <select asp-for="ElementEditor.CredentialBundles[i].SnmpV3AuthProtocol" class="form-select workspace-select">
-                                                        <option value="">Not set</option>
-                                                        @foreach (var option in Matmon.Core.Domain.SnmpV3Crypto.AuthOptions) { <option value="@option.Value">@option.Label</option> }
-                                                        @if (Model.ElementEditor.CredentialBundles[i].SnmpV3AuthProtocol is { Length: > 0 } stored && !Matmon.Core.Domain.SnmpV3Crypto.AuthOptions.Any(o => string.Equals(o.Value, stored, StringComparison.OrdinalIgnoreCase))) { <option value="@stored">@stored</option> }
-                                                    </select>
-                                                    </label>
-                                                    <label>
-                                                        <span>v3 auth password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3AuthPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                    <label>
-                                                        <span>v3 privacy protocol</span>
-                                                        <select asp-for="ElementEditor.CredentialBundles[i].SnmpV3PrivacyProtocol" class="form-select workspace-select">
-                                                        <option value="">Not set</option>
-                                                        @foreach (var option in Matmon.Core.Domain.SnmpV3Crypto.PrivOptions) { <option value="@option.Value">@option.Label</option> }
-                                                        @if (Model.ElementEditor.CredentialBundles[i].SnmpV3PrivacyProtocol is { Length: > 0 } stored && !Matmon.Core.Domain.SnmpV3Crypto.PrivOptions.Any(o => string.Equals(o.Value, stored, StringComparison.OrdinalIgnoreCase))) { <option value="@stored">@stored</option> }
-                                                    </select>
-                                                    </label>
-                                                    <label>
-                                                        <span>v3 privacy password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3PrivacyPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                    <label class="workspace-span-2">
-                                                        <span>v3 context</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3ContextName" class="form-control workspace-input" placeholder="optional" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="unifi" hidden="@(credential.Kind == MonitoringCredentialKind.Unifi ? null : "hidden")">
-                                                <div class="workspace-inline-note">UniFi API key (sent as X-API-KEY)</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label class="workspace-span-2">
-                                                        <span>API key</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].UnifiApiKey" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="generic" hidden="@(credential.Kind == MonitoringCredentialKind.Generic ? null : "hidden")">
-                                                <div class="workspace-inline-note">Generic credentials - exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>Username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].GenericUsername" class="form-control workspace-input" placeholder="monitor" />
-                                                    </label>
-                                                    <label>
-                                                        <span>Password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].GenericPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                    <label class="workspace-span-2">
-                                                        <span>Token / API key</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].GenericToken" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="workspace-span-2 credential-kind-panel" data-credential-kind-group="mail" hidden="@(credential.Kind == MonitoringCredentialKind.Mail ? null : "hidden")">
-                                                <div class="workspace-inline-note">Mail Health - the SMTP (send) and IMAP (receive) accounts. Both are stored encrypted at rest.</div>
-                                                <div class="sensor-threshold-grid">
-                                                    <label>
-                                                        <span>SMTP username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailSmtpUsername" class="form-control workspace-input" placeholder="monitor@account-a" />
-                                                    </label>
-                                                    <label>
-                                                        <span>SMTP password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailSmtpPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                    <label>
-                                                        <span>IMAP username</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailImapUsername" class="form-control workspace-input" placeholder="mailbox@account-b" />
-                                                    </label>
-                                                    <label>
-                                                        <span>IMAP password</span>
-                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailImapPassword" type="password" autocomplete="off" class="form-control workspace-input" placeholder="••••••••" />
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        </div>
-                                            </div>
-                                            <div class="credential-modal-foot">
-                                                <button type="button" class="workspace-submit" data-credential-modal-save>@MatmonIcons.Render("check")<span>Done</span></button>
-                                            </div>
-                                          </div>
-                                        </div>
+                                    <div class="mat-field">
+                                        <span class="mat-label">Target</span>
+                                        <span class="mat-text-muted">Target is auto-filled from the parent probe for heartbeat sensors.</span>
                                     </div>
                                 }
+                                else
+                                {
+                                    <div class="mat-field">
+                                        <label class="mat-label" asp-for="ElementEditor.Target">Target</label>
+                                        <input asp-for="ElementEditor.Target" class="mat-input mat-mono" placeholder="@Model.ElementEditor.TargetPlaceholder" />
+                                    </div>
+                                }
+                            }
+
+                            <div class="mat-field mat-field--full">
+                                <label class="mat-label" asp-for="ElementEditor.Description">Description</label>
+                                <input asp-for="ElementEditor.Description" class="mat-input" />
                             </div>
 
-                            <div class="sensor-threshold-actions">
-                                <button type="button" class="workspace-secondary-submit" data-credential-add>@MatmonIcons.Render("plus")<span>Add credential</span></button>
+                            <div class="mat-field mat-field--full">
+                                <label class="mat-label" asp-for="ElementEditor.TagsText">Tags</label>
+                                <input asp-for="ElementEditor.TagsText" class="mat-input" placeholder="prod, network, berlin" data-tag-input aria-describedby="element-tags-hint" />
+                                <partial name="_TagSuggestions" model="Model.View.AllTags" />
+                                <span class="mat-hint" id="element-tags-hint">Comma-separated. Tags cascade to children and power tree filtering, maps &amp; the sensor picker.</span>
+                            </div>
+
+                            @if (isSensor)
+                            {
+                                <div class="mat-field">
+                                    <label class="mat-label" asp-for="ElementEditor.Highlight">Highlight</label>
+                                    <select asp-for="ElementEditor.Highlight" class="mat-select">
+                                        <option value="">@(string.IsNullOrWhiteSpace(Model.ElementEditor.HighlightInheritedLabel) || string.Equals(Model.ElementEditor.HighlightInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.ElementEditor.HighlightInheritedLabel})")</option>
+                                        <option value="true">on</option>
+                                        <option value="false">off</option>
+                                    </select>
+                                </div>
+                            }
+
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.EnabledMode">Enabled</label>
+                                <select asp-for="ElementEditor.EnabledMode" class="mat-select">
+                                    <option value="inherit">@(string.IsNullOrWhiteSpace(Model.ElementEditor.EnabledInheritedLabel) || string.Equals(Model.ElementEditor.EnabledInheritedLabel, "inherit", StringComparison.OrdinalIgnoreCase) ? "inherit" : $"inherit ({Model.ElementEditor.EnabledInheritedLabel})")</option>
+                                    <option value="enabled">enabled</option>
+                                    <option value="disabled">disabled</option>
+                                </select>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.TimeoutSeconds">Timeout</label>
+                                <input asp-for="ElementEditor.TimeoutSeconds" type="number" min="1" class="mat-input" placeholder="@Model.ElementEditor.TimeoutSecondsPlaceholder" />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.RetryCount">Retries</label>
+                                <input asp-for="ElementEditor.RetryCount" type="number" min="0" class="mat-input" placeholder="@Model.ElementEditor.RetryCountPlaceholder" />
+                                <span class="mat-error" aria-live="polite"></span>
                             </div>
                         </div>
                     </div>
-                    }
+                </section>
 
-                @* ---------- TEMPLATE (shown under General) ---------- *@
-                <div class="sensor-overview-section workspace-span-2" data-sensor-tab="general">
-                    <div class="workspace-span-2 workspace-template-origin">
-                        <div class="panel-header">
-                            <h2 class="section-title">@MatmonIcons.Render("template")<span>Template</span></h2>
-                            @if (Model.ElementEditor.TemplateOriginId is not null)
-                            {
-                                <span class="panel-hint">@(Model.ElementEditor.TemplateOriginName ?? "origin")</span>
-                            }
-                        </div>
-
+                <section class="mat-card">
+                    <div class="mat-card__head">
+                        @MatUi.Icon("template")
+                        <h2 class="mat-card__title">Template</h2>
                         @if (Model.ElementEditor.TemplateOriginId is not null)
                         {
-                            <div class="workspace-inline-note">
-                                Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "-")</strong>. Its values were copied in - later template edits don't change this element until you restore.
-                            </div>
-                            <div class="workspace-form-actions">
-                                <button type="submit" asp-page-handler="ReapplyElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Restore from template</span></button>
-                                <button type="submit" asp-page-handler="DetachElementTemplate" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("close")<span>Detach origin</span></button>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="workspace-inline-note">Not created from a template. Templates are chosen when you create a sensor - start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</div>
+                            <span class="mat-text-muted mm-push-end">@(Model.ElementEditor.TemplateOriginName ?? "origin")</span>
                         }
                     </div>
-
-                </div>
-
-                <div class="workspace-form-actions">
-                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save</span></button>
-                    @if (isSensor)
+                    @if (Model.ElementEditor.TemplateOriginId is not null)
                     {
-                        <button type="submit" asp-page-handler="RunSensorNow" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Test</span></button>
+                        <div class="mat-card__body">
+                            <p>Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "-")</strong>. Its values were copied in - later template edits don't change this element until you restore.</p>
+                        </div>
+                        <div class="mat-card__foot">
+                            <div class="mat-actions">
+                                <button type="submit" asp-page-handler="ReapplyElementTemplate" formnovalidate class="mat-btn mat-btn--secondary">@MatUi.Icon("restore")<span>Restore from template</span></button>
+                                <button type="submit" asp-page-handler="DetachElementTemplate" formnovalidate class="mat-btn mat-btn--secondary">@MatUi.Icon("x")<span>Detach origin</span></button>
+                            </div>
+                        </div>
                     }
-
-                    <span class="workspace-form-actions-spacer"></span>
-
-                    @if (isSensor)
+                    else
                     {
-                        <button type="submit" asp-page-handler="ToggleSensorPause" asp-route-sensorId="@Model.ElementEditor.Id" asp-route-returnUrl="@(Request.Path + Request.QueryString)" formnovalidate class="workspace-secondary-submit">
-                            @MatmonIcons.Render(Model.ElementEditor.IsPaused ? "play" : "pause")<span>@(Model.ElementEditor.IsPaused ? "Resume" : "Pause")</span>
-                        </button>
+                        <div class="mat-card__body">
+                            <p class="mat-muted">Not created from a template. Templates are chosen when you create a sensor - start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</p>
+                        </div>
                     }
-                    @if (Model.ElementEditor.Kind == "Probe")
-                    {
-                        <button type="submit" asp-page-handler="RotateToken" formnovalidate class="workspace-secondary-submit">@MatmonIcons.Render("arrow-right")<span>Rotate</span></button>
-                    }
-                    @if (!(isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        <button type="submit" asp-page-handler="DeleteElement" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this element and all children?');">@MatmonIcons.Render("trash")<span>Delete</span></button>
-                    }
+                </section>
+            </div>
 
-                    <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate class="d-none" data-sensor-preview-submit>Preview</button>
-                </div>
-
-                @if (isSensor)
-                {
-                    <partial name="_RemoteRunPreview" model="Model" />
-                }
-            </form>
-
-            @if (isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase))
+            @if (isSensor)
             {
-                <div class="workspace-inline-note">System sensor. Managed by the probe.</div>
+                @* ---------- PARAMETERS, CREDENTIALS, CHANNELS (shared partials, each one tab panel) ---------- *@
+                @await Html.PartialAsync("_SensorCredentials", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
+
+                @await Html.PartialAsync("_SensorParameters", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
+
+                @await Html.PartialAsync("_SensorThresholds", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
             }
+
+            @* ---------- SCHEDULE (shared partial, its own tab panel) ---------- *@
+            @await Html.PartialAsync("_SensorSchedule", Model.ElementEditor, new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "ElementEditor" } })
+
+            @* ---------- TELEMETRY & RETENTION (the type's profile is the fallback the placeholders show) ---------- *@
+            <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-telemetry" aria-labelledby="tab-telemetry" hidden>
+                <section class="mat-card">
+                    <div class="mat-card__head">@MatUi.Icon("bar-chart")<h2 class="mat-card__title">Telemetry &amp; retention</h2></div>
+                    <div class="mat-card__body mat-stack">
+                        @if (!string.IsNullOrWhiteSpace(Model.ElementEditor.TelemetryProfileSummary))
+                        {
+                            <div class="mat-alert mat-alert--info">@MatUi.Icon("info")<div class="mat-alert__body">@Model.ElementEditor.TelemetryProfileSummary</div></div>
+                        }
+                        <p class="mat-muted">Empty = inherit; the placeholder shows the active value.</p>
+                        <div class="mat-form__grid">
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.ObservationRetentionDays">Raw history (days)</label>
+                                <input asp-for="ElementEditor.ObservationRetentionDays" type="number" min="1" class="mat-input" placeholder="@Model.ElementEditor.ObservationRetentionDaysPlaceholder" />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.StatisticsBucketMinutes">Summary granularity (min)</label>
+                                <input asp-for="ElementEditor.StatisticsBucketMinutes" type="number" min="1" list="telemetry-bucket-presets" class="mat-input" placeholder="@Model.ElementEditor.StatisticsBucketMinutesPlaceholder" />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.StatisticsRetentionDays">Summaries kept (days)</label>
+                                <input asp-for="ElementEditor.StatisticsRetentionDays" type="number" min="1" class="mat-input" placeholder="@Model.ElementEditor.StatisticsRetentionDaysPlaceholder" />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.EventRetentionDays">Event log (days)</label>
+                                <input asp-for="ElementEditor.EventRetentionDays" type="number" min="1" class="mat-input" placeholder="@Model.ElementEditor.EventRetentionDaysPlaceholder" />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            @if (isSensor)
+                            {
+                                <div class="mat-field">
+                                    <label class="mat-label" asp-for="ElementEditor.GraphMinValue">Y-axis min</label>
+                                    <input asp-for="ElementEditor.GraphMinValue" type="number" step="any" class="mat-input" placeholder="auto" />
+                                    <span class="mat-error" aria-live="polite"></span>
+                                </div>
+                                <div class="mat-field">
+                                    <label class="mat-label" asp-for="ElementEditor.GraphMaxValue">Y-axis max</label>
+                                    <input asp-for="ElementEditor.GraphMaxValue" type="number" step="any" class="mat-input" placeholder="auto" />
+                                    <span class="mat-error" aria-live="polite"></span>
+                                </div>
+                            }
+                        </div>
+                        <datalist id="telemetry-bucket-presets">
+                            <option value="60">Hourly</option>
+                            <option value="360">Every 6 hours</option>
+                            <option value="720">Every 12 hours</option>
+                            <option value="1440">Daily</option>
+                        </datalist>
+                    </div>
+                </section>
+            </div>
+
+            @* ---------- CREDENTIALS (containers define the bundles their children inherit) ---------- *@
+            @if (!isSensor)
+            {
+                <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-credentials" aria-labelledby="tab-credentials" hidden>
+                    <section class="mat-card">
+                        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">Credentials</h2><span class="mat-text-muted mm-push-end">inherited access</span></div>
+                        <div class="mat-card__body mat-stack">
+                            <p class="mat-muted">Define reusable credentials here. Child sensors automatically pick the first inherited bundle with the matching credential type, or can explicitly select one.</p>
+
+                            <div class="mat-stack" data-credential-section>
+                                <p class="mat-text-muted" data-credential-empty hidden="@(Model.ElementEditor.CredentialBundleVisibleCount > 0 ? "hidden" : null)">No credentials yet.</p>
+                                <ul class="mat-listgroup credential-list" data-credential-list>
+                                    @for (var i = 0; i < Model.ElementEditor.CredentialBundles.Count; i++)
+                                    {
+                                        var credential = Model.ElementEditor.CredentialBundles[i];
+                                        var isHidden = i >= Model.ElementEditor.CredentialBundleVisibleCount || credential.IsDeleted;
+                                        var dialogId = $"element-credential-{i}";
+                                        <li class="mat-listgroup__item credential-row" data-credential-row data-credential-deleted="@(credential.IsDeleted ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
+                                            <input type="hidden" asp-for="ElementEditor.CredentialBundles[i].Id" />
+                                            <input type="hidden" asp-for="ElementEditor.CredentialBundles[i].IsDeleted" />
+                                            @MatUi.Icon("key")
+                                            <span class="mat-listgroup__text"><strong data-credential-name-label>@(string.IsNullOrWhiteSpace(credential.Name) ? "New credential" : credential.Name)</strong></span>
+                                            <span class="mat-tag" data-credential-kind-label>@credential.Kind</span>
+                                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-credential-edit data-dialog-open="@dialogId">@MatUi.Icon("edit")<span>Edit</span></button>
+                                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-credential-delete aria-label="Delete credential" data-tip="Delete credential">@MatUi.Icon("trash")</button>
+
+                                            <dialog class="mat-dialog" id="@dialogId" aria-labelledby="@(dialogId + "-title")" data-credential-modal>
+                                                <div class="mat-dialog__form">
+                                                    <div class="mat-dialog__head">
+                                                        @MatUi.Icon("key")
+                                                        <h2 class="mat-dialog__title" id="@(dialogId + "-title")">Credential</h2>
+                                                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-credential-modal-close data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                                                    </div>
+                                                    <div class="mat-dialog__body">
+                                                        <div class="mat-form__grid">
+                                                            <div class="mat-field">
+                                                                <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].Name">Name</label>
+                                                                <input asp-for="ElementEditor.CredentialBundles[i].Name" class="mat-input" placeholder="Windows admin" />
+                                                            </div>
+                                                            <div class="mat-field">
+                                                                <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].Kind">Kind</label>
+                                                                <select asp-for="ElementEditor.CredentialBundles[i].Kind" class="mat-select" data-credential-kind-select>
+                                                                    @* 'Ssh' is hidden (redundant with 'Linux'); PostgreSql/MySql have no dedicated typed bundle yet (use inline creds or a Generic bundle) - keep any kind the current bundle already is. *@
+                                                                    @foreach (var kind in Enum.GetValues<MonitoringCredentialKind>().Where(kind => (kind != MonitoringCredentialKind.Ssh && kind != MonitoringCredentialKind.PostgreSql && kind != MonitoringCredentialKind.MySql) || credential.Kind == kind))
+                                                                    {
+                                                                        <option value="@kind">@kind</option>
+                                                                    }
+                                                                </select>
+                                                            </div>
+                                                            <div class="mat-field mat-field--full">
+                                                                <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].Description">Description</label>
+                                                                <input asp-for="ElementEditor.CredentialBundles[i].Description" class="mat-input" placeholder="Optional note" />
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="windows" hidden="@(credential.Kind == MonitoringCredentialKind.Windows ? null : "hidden")">
+                                                                <p class="mat-text-muted">Windows / WinRM credentials</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].WinrmUsername">Username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].WinrmUsername" class="mat-input" placeholder="monitor" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].WinrmPassword">Password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].WinrmPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="ssh" hidden="@((credential.Kind == MonitoringCredentialKind.Linux || credential.Kind == MonitoringCredentialKind.Ssh) ? null : "hidden")">
+                                                                <p class="mat-text-muted">SSH / Linux credentials</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SshUsername">Username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SshUsername" class="mat-input" placeholder="monitor" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SshPassword">Password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SshPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                    <div class="mat-field mat-field--full">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SshPrivateKeyPath">Private key path</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SshPrivateKeyPath" class="mat-input mat-mono" placeholder="C:\\Users\\monitor\\.ssh\\id_ed25519" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
+                                                                <p class="mat-text-muted">Proxmox API token - exactly as shown in the Proxmox UI (Token ID + secret).</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field mat-field--full">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].PveTokenId">Token ID</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveTokenId" class="mat-input mat-mono" placeholder="root@pam!monitoring" />
+                                                                    </div>
+                                                                    <div class="mat-field mat-field--full">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].PveTokenSecret">Token secret</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].PveTokenSecret" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="sqlserver" hidden="@(credential.Kind == MonitoringCredentialKind.SqlServer ? null : "hidden")">
+                                                                <p class="mat-text-muted">SQL Server credentials</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MssqlUsername">Username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].MssqlUsername" class="mat-input" placeholder="monitor" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MssqlPassword">Password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].MssqlPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="snmp" hidden="@(credential.Kind == MonitoringCredentialKind.Snmp ? null : "hidden")">
+                                                                <p class="mat-text-muted">SNMP credentials</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpCommunity">Community</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpCommunity" class="mat-input" placeholder="public" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpV3Username">v3 username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3Username" class="mat-input" placeholder="snmp-user" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpV3AuthProtocol">v3 auth protocol</label>
+                                                                        <select asp-for="ElementEditor.CredentialBundles[i].SnmpV3AuthProtocol" class="mat-select">
+                                                                            <option value="">Not set</option>
+                                                                            @foreach (var option in Matmon.Core.Domain.SnmpV3Crypto.AuthOptions) { <option value="@option.Value">@option.Label</option> }
+                                                                            @if (Model.ElementEditor.CredentialBundles[i].SnmpV3AuthProtocol is { Length: > 0 } stored && !Matmon.Core.Domain.SnmpV3Crypto.AuthOptions.Any(o => string.Equals(o.Value, stored, StringComparison.OrdinalIgnoreCase))) { <option value="@stored">@stored</option> }
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpV3AuthPassword">v3 auth password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3AuthPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpV3PrivacyProtocol">v3 privacy protocol</label>
+                                                                        <select asp-for="ElementEditor.CredentialBundles[i].SnmpV3PrivacyProtocol" class="mat-select">
+                                                                            <option value="">Not set</option>
+                                                                            @foreach (var option in Matmon.Core.Domain.SnmpV3Crypto.PrivOptions) { <option value="@option.Value">@option.Label</option> }
+                                                                            @if (Model.ElementEditor.CredentialBundles[i].SnmpV3PrivacyProtocol is { Length: > 0 } stored && !Matmon.Core.Domain.SnmpV3Crypto.PrivOptions.Any(o => string.Equals(o.Value, stored, StringComparison.OrdinalIgnoreCase))) { <option value="@stored">@stored</option> }
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpV3PrivacyPassword">v3 privacy password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3PrivacyPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                    <div class="mat-field mat-field--full">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpV3ContextName">v3 context</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].SnmpV3ContextName" class="mat-input" placeholder="optional" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="unifi" hidden="@(credential.Kind == MonitoringCredentialKind.Unifi ? null : "hidden")">
+                                                                <p class="mat-text-muted">UniFi API key (sent as X-API-KEY)</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field mat-field--full">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].UnifiApiKey">API key</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].UnifiApiKey" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="generic" hidden="@(credential.Kind == MonitoringCredentialKind.Generic ? null : "hidden")">
+                                                                <p class="mat-text-muted">Generic credentials - exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].GenericUsername">Username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].GenericUsername" class="mat-input" placeholder="monitor" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].GenericPassword">Password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].GenericPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                    <div class="mat-field mat-field--full">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].GenericToken">Token / API key</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].GenericToken" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="mail" hidden="@(credential.Kind == MonitoringCredentialKind.Mail ? null : "hidden")">
+                                                                <p class="mat-text-muted">Mail Health - the SMTP (send) and IMAP (receive) accounts. Both are stored encrypted at rest.</p>
+                                                                <div class="mat-form__grid">
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MailSmtpUsername">SMTP username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailSmtpUsername" class="mat-input" placeholder="monitor@account-a" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MailSmtpPassword">SMTP password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailSmtpPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MailImapUsername">IMAP username</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailImapUsername" class="mat-input" placeholder="mailbox@account-b" />
+                                                                    </div>
+                                                                    <div class="mat-field">
+                                                                        <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MailImapPassword">IMAP password</label>
+                                                                        <input asp-for="ElementEditor.CredentialBundles[i].MailImapPassword" type="password" autocomplete="off" class="mat-input" placeholder="••••••••" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mat-dialog__foot">
+                                                        <div class="mat-btn-row mat-btn-row--plain">
+                                                            <button type="button" class="mat-btn mat-btn--primary" data-credential-modal-save data-dialog-close>@MatUi.Icon("check")<span>Done</span></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </dialog>
+                                        </li>
+                                    }
+                                </ul>
+                                <div class="mat-actions">
+                                    <button type="button" class="mat-btn mat-btn--secondary" data-credential-add>@MatUi.Icon("plus")<span>Add credential</span></button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            }
+        </section>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
+            <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+            @if (isSensor)
+            {
+                <button type="submit" asp-page-handler="RunSensorNow" formnovalidate class="mat-btn mat-btn--secondary">@MatUi.Icon("progress-play")<span>Test</span></button>
+            }
+
+            <span class="mat-btn-row__spacer"></span>
+
+            @if (isSensor)
+            {
+                <button type="submit" asp-page-handler="ToggleSensorPause" asp-route-sensorId="@Model.ElementEditor.Id" asp-route-returnUrl="@(Request.Path + Request.QueryString)" formnovalidate class="mat-btn mat-btn--secondary mat-btn--end">
+                    @MatUi.Icon(Model.ElementEditor.IsPaused ? "play" : "pause")<span>@(Model.ElementEditor.IsPaused ? "Resume" : "Pause")</span>
+                </button>
+            }
+            @if (Model.ElementEditor.Kind == "Probe")
+            {
+                <button type="submit" asp-page-handler="RotateToken" formnovalidate class="mat-btn mat-btn--secondary mat-btn--end">@MatUi.Icon("refresh")<span>Rotate</span></button>
+            }
+            @if (!(isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase)))
+            {
+                <button type="submit" asp-page-handler="DeleteElement" formnovalidate class="mat-btn mat-btn--danger" data-confirm="Delete this element and all children?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
+            }
+
+            <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate hidden data-sensor-preview-submit>Preview</button>
+        </div>
+
+        @if (isSensor)
+        {
+            <partial name="_RemoteRunPreview" model="Model" />
         }
-    </section>
-</section>
+    </form>
+
+    @if (isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase))
+    {
+        <p class="mat-muted">System sensor. Managed by the probe.</p>
+    }
+}

@@ -1,9 +1,9 @@
 @page "/notifications"
 @model WorkspaceModel
-@using Matmon.Core.Domain
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     ViewData["Title"] = "Notifications";
+    ViewData["PageSub"] = "Trigger rules and the scheduled report, and the senders and receivers they use.";
     var returnUrl = Request.Path + Request.QueryString;
 
     // The single scheduled "summary report" is shown as one row in the same list as the trigger rules.
@@ -18,189 +18,236 @@
     var reportSchedule = report.Cadence == SummaryReportCadence.Weekly
         ? $"Weekly · {report.DayOfWeek} {report.HourOfDay:00}:00"
         : $"Daily · {report.HourOfDay:00}:00";
+    var notificationCount = Model.View.NotificationRules.Count + 1;
 }
 
-<section class="dashboard-shell">
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("bell")
-            <h1>Notifications</h1>
+@* Rules / Senders / Receivers are client-side tabs on this single page, so the URL stays /notifications (keeping the
+   menu item lit) and deep-links via #senders / #receivers - the editors' returnUrl lands on the right tab. *@
+<section data-tabs data-tab-hash>
+    <div class="mat-tabs" role="tablist" aria-label="Notifications">
+        <button type="button" class="mat-tab" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="true">Rules <span class="mat-badge mat-badge--soft">@notificationCount</span></button>
+        <button type="button" class="mat-tab" role="tab" id="tab-senders" aria-controls="panel-senders" aria-selected="false" tabindex="-1">Senders <span class="mat-badge mat-badge--soft">@Model.View.NotificationSenderCount</span></button>
+        <button type="button" class="mat-tab" role="tab" id="tab-receivers" aria-controls="panel-receivers" aria-selected="false" tabindex="-1">Receivers <span class="mat-badge mat-badge--soft">@Model.View.NotificationReceivers.Count</span></button>
+    </div>
+
+    <div class="mat-tabpanel" role="tabpanel" id="panel-rules" aria-labelledby="tab-rules">
+        <div class="mat-list" data-notif-filter>
+            <div class="mat-toolbar" role="toolbar" aria-label="Notification tools">
+                <div class="mat-input-icon mat-toolbar__search">
+                    @MatUi.Icon("search")
+                    <input class="mat-input" type="search" id="notif-q" data-notif-search placeholder="Search by name" aria-label="Search notifications" autocomplete="off" enterkeyhint="search" data-shortcut="/" />
+                </div>
+                <span class="mat-toolbar__spacer"></span>
+                <span class="mat-toolbar__info" aria-live="polite" data-notif-count>@notificationCount @(notificationCount == 1 ? "notification" : "notifications")</span>
+                <div class="mat-toolbar__end">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" data-dialog-open="notif-filter" aria-haspopup="dialog" data-notif-filter-button>
+                        @MatUi.Icon("sliders")<span>Filter</span><span class="mat-badge" data-notif-filter-badge hidden>1</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mat-chips" role="group" aria-label="Filters in effect" data-notif-chips hidden>
+                <span class="mat-chip">Type: <span data-notif-chip-label></span><button type="button" class="mat-chip__x" data-notif-type-clear aria-label="Remove the filter Type">@MatUi.Icon("x")</button></span>
+            </div>
+
+            <div class="mat-table-wrap" data-notif-table>
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Trigger rules and the scheduled report</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Delivery</th>
+                            <th scope="col">When</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @* Scheduled: the summary report (single) *@
+                        <tr data-notif-row data-notif-type="scheduled" data-notif-name="summary report @report.Subject">
+                            <td data-label="Name" class="mat-table__primary"><a asp-page="/NotificationReportEditor">Summary report</a></td>
+                            <td data-label="Type"><span class="mat-tag">Scheduled</span></td>
+                            <td data-label="Delivery">@reportSender → @reportReceiver</td>
+                            <td data-label="When">@(reportSchedule + (report.AttachPdf ? " · +PDF" : ""))</td>
+                            <td data-label="Status"><span class="@MatUi.PillClass(report.Enabled ? "ok" : "plain")">@(report.Enabled ? "Enabled" : "Disabled")</span></td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/NotificationReportEditor" aria-label="Edit the summary report" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                </div>
+                            </td>
+                        </tr>
+
+                        @* Trigger: the alert-based rules *@
+                        @foreach (var rule in Model.View.NotificationRules)
+                        {
+                            <tr class="@(Model.NotificationRuleEditor.Id == rule.Id ? "is-selected" : null)" data-notif-row data-notif-type="trigger" data-notif-name="@rule.Name">
+                                <td data-label="Name" class="mat-table__primary"><a asp-page="/NotificationRuleEditor" asp-route-selectedNotificationRuleId="@rule.Id">@rule.Name</a></td>
+                                <td data-label="Type"><span class="mat-chips"><span class="mat-tag">Trigger</span><span class="mat-tag">@rule.Channel</span></span></td>
+                                <td data-label="Delivery">@rule.Sender → @rule.Receiver</td>
+                                <td data-label="When">@rule.Target · @rule.Triggers · @rule.Cooldown</td>
+                                <td data-label="Status"><span class="@MatUi.PillClass(rule.Enabled ? "ok" : "plain")">@(rule.Enabled ? "Enabled" : "Disabled")</span></td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/NotificationRuleEditor" asp-route-selectedNotificationRuleId="@rule.Id" aria-label="Edit @rule.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mat-empty" data-notif-empty hidden>
+                <span class="mat-empty__icon">@MatUi.Icon("search")</span>
+                <div class="mat-empty__title">Nothing matches</div>
+                <p>Change the search or the filter, or reset them.</p>
+                <button type="button" class="mat-btn mat-btn--secondary" data-notif-reset>@MatUi.Icon("refresh")<span>Reset</span></button>
+            </div>
+
+            <div class="mat-actions">
+                <a class="mat-btn mat-btn--primary" asp-page="/NotificationRuleEditor" asp-route-returnUrl="@returnUrl">@MatUi.Icon("plus")<span>Trigger notification</span></a>
+                <a class="mat-btn mat-btn--secondary" asp-page="/NotificationReportEditor">@MatUi.Icon("clock")<span>Scheduled report</span></a>
+            </div>
+        </div>
+
+        <dialog class="mat-dialog mat-dialog--sm" id="notif-filter" aria-labelledby="notif-filter-title" data-notif-filter-dialog>
+            <div class="mat-dialog__form">
+                <div class="mat-dialog__head">
+                    @MatUi.Icon("sliders")
+                    <h2 class="mat-dialog__title" id="notif-filter-title">Filter</h2>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                </div>
+                <div class="mat-dialog__body mat-form">
+                    <div class="mat-field">
+                        <label class="mat-label" for="notif-type">Type</label>
+                        <select class="mat-select" id="notif-type" data-notif-type-filter>
+                            <option value="all">All</option>
+                            <option value="trigger">Trigger</option>
+                            <option value="scheduled">Scheduled</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mat-dialog__foot">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="button" class="mat-btn mat-btn--primary" data-notif-apply>@MatUi.Icon("sliders")<span>Apply</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                        <span class="mat-btn-row__spacer"></span>
+                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--end" data-notif-reset data-dialog-close>Reset everything</button>
+                    </div>
+                </div>
+            </div>
+        </dialog>
+    </div>
+
+    <div class="mat-tabpanel" role="tabpanel" id="panel-senders" aria-labelledby="tab-senders" hidden>
+        <div class="mat-list">
+            @if (Model.View.NotificationSenders.Count == 0)
+            {
+                <div class="mat-empty mat-empty--first">
+                    <span class="mat-empty__icon">@MatUi.Icon("mail")</span>
+                    <div class="mat-empty__title">No senders yet</div>
+                    <p>A sender is the mail server (or webhook) a rule delivers through. Without one, rules fall back to the default SMTP settings.</p>
+                    <a class="mat-btn mat-btn--primary" asp-page="/NotificationSenderEditor" asp-route-returnUrl="/notifications#senders">@MatUi.Icon("plus")<span>Add sender</span></a>
+                </div>
+            }
+            else
+            {
+                <div class="mat-table-wrap">
+                    <table class="mat-table">
+                        <caption class="mat-sr-only">Notification senders</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Name</th>
+                                <th scope="col">Type</th>
+                                <th scope="col" class="mat-hide-sm">Details</th>
+                                <th scope="col">Status</th>
+                                <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sender in Model.View.NotificationSenders)
+                            {
+                                <tr class="@(Model.NotificationSenderEditor.Id == sender.Id ? "is-selected" : null)">
+                                    <td data-label="Name" class="mat-table__primary"><a asp-page="/NotificationSenderEditor" asp-route-selectedNotificationSenderId="@sender.Id" asp-route-returnUrl="/notifications#senders">@sender.Name</a></td>
+                                    <td data-label="Type"><span class="mat-tag">@sender.Kind</span></td>
+                                    <td data-label="Details" class="mat-hide-sm">@sender.Summary</td>
+                                    <td data-label="Status"><span class="@MatUi.PillClass(sender.Enabled ? "ok" : "plain")">@(sender.Enabled ? "Enabled" : "Disabled")</span></td>
+                                    <td class="mat-table__cell-actions">
+                                        <div class="mat-table__actions">
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/NotificationSenderEditor" asp-route-selectedNotificationSenderId="@sender.Id" asp-route-returnUrl="/notifications#senders" aria-label="Edit @sender.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="mat-actions">
+                <a class="mat-btn mat-btn--primary" asp-page="/NotificationSenderEditor" asp-route-returnUrl="/notifications#senders">@MatUi.Icon("plus")<span>Add sender</span></a>
+            </div>
         </div>
     </div>
 
-    @* Rules / Senders / Receivers are client-side tabs on this single page, so the URL stays
-       /notifications (keeping the sidebar nav highlighted) and deep-links via #senders / #receivers. *@
-    <div class="sensor-tabs" data-sensor-tabs data-tab-hash="true">
-        <button type="button" class="sensor-tab is-active" data-sensor-tab-target="rules">@MatmonIcons.Render("bell")<span>Rules</span></button>
-        <button type="button" class="sensor-tab" data-sensor-tab-target="senders">@MatmonIcons.Render("mail")<span>Senders</span></button>
-        <button type="button" class="sensor-tab" data-sensor-tab-target="receivers">@MatmonIcons.Render("inbox")<span>Receivers</span></button>
-    </div>
-
-    <div data-sensor-tab="rules">
-        <section class="panel panel-stack monitoring-controls">
-            <form class="monitoring-filter-bar" data-notif-filter onsubmit="return false;">
-                <label class="monitoring-filter-field">
-                    <span>@MatmonIcons.Render("search")<small>Search</small></span>
-                    <input type="search" class="form-control workspace-input" data-notif-search placeholder="Name, sender, target" aria-label="Search notifications" />
-                </label>
-                <label class="monitoring-filter-field">
-                    <span>@MatmonIcons.Render("bell")<small>Type</small></span>
-                    <select class="form-select workspace-select" data-notif-type-filter aria-label="Filter by type">
-                        <option value="all">All</option>
-                        <option value="trigger">Trigger</option>
-                        <option value="scheduled">Scheduled</option>
-                    </select>
-                </label>
-            </form>
-        </section>
-
-        <section class="panel panel-stack workspace-panel">
-            <style>
-                .notif-type-chip { display:inline-block; padding:0.05rem 0.5rem; border:1px solid var(--matmon-border); border-radius:999px; font-size:0.72rem; color:var(--matmon-muted); margin-left:6px; }
-            </style>
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("bell")<span>Notification rules</span></h2>
-                <span class="panel-hint">@(Model.View.NotificationRuleCount) trigger · 1 scheduled</span>
-            </div>
-
-            <div class="notification-rule-list">
-                @* Scheduled: the summary report (single) *@
-                <article class="notification-rule-row" data-notif-row data-notif-type="scheduled" data-notif-name="summary report @report.Subject">
-                    <div class="notification-rule-main">
-                        <div class="notification-rule-name">Summary report <span class="notif-type-chip">Scheduled</span></div>
-                        <div class="notification-rule-meta">@reportSender -> @reportReceiver</div>
-                        <div class="notification-rule-meta">@reportSchedule@(report.AttachPdf ? " | +PDF" : "")</div>
-                    </div>
-                    <div class="notification-rule-side">
-                        <span class="notification-rule-state @(report.Enabled ? "is-enabled" : "is-disabled")">@(report.Enabled ? "Enabled" : "Disabled")</span>
-                        <div class="workspace-row-actions">
-                            <a class="workspace-action-link" asp-page="/NotificationReportEditor">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                        </div>
-                    </div>
-                </article>
-
-                @* Trigger: the alert-based rules *@
-                @foreach (var rule in Model.View.NotificationRules)
-                {
-                    <article class="notification-rule-row @(Model.NotificationRuleEditor.Id == rule.Id ? "is-selected" : string.Empty)"
-                             data-notif-row data-notif-type="trigger" data-notif-name="@rule.Name">
-                        <div class="notification-rule-main">
-                            <div class="notification-rule-name">@rule.Name <span class="notif-type-chip">Trigger</span> <span class="notif-type-chip" style="background:var(--matmon-surface-soft);color:var(--matmon-muted);">@rule.Channel</span></div>
-                            <div class="notification-rule-meta">@rule.Sender -> @rule.Receiver</div>
-                            <div class="notification-rule-meta">@rule.Target | @rule.Triggers | @rule.Cooldown</div>
-                        </div>
-                        <div class="notification-rule-side">
-                            <span class="notification-rule-state @(rule.Enabled ? "is-enabled" : "is-disabled")">@(rule.Enabled ? "Enabled" : "Disabled")</span>
-                            <div class="workspace-row-actions">
-                                <a class="workspace-action-link" asp-page="/NotificationRuleEditor" asp-route-selectedNotificationRuleId="@rule.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                            </div>
-                        </div>
-                    </article>
-                }
-            </div>
-
-            <div class="page-actions">
-                <a class="workspace-action-link" asp-page="/NotificationRuleEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>Trigger notification</span></a>
-                <a class="workspace-action-link" asp-page="/NotificationReportEditor">@MatmonIcons.Render("clock")<span>Scheduled report</span></a>
-            </div>
-        </section>
-    </div>
-
-    <div data-sensor-tab="senders" hidden>
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("mail")<span>Senders</span></h2>
-                <span class="panel-hint">@Model.View.NotificationSenderCount senders</span>
-            </div>
-
-            <div class="notification-rule-list">
-                @foreach (var sender in Model.View.NotificationSenders)
-                {
-                    <article class="notification-rule-row @(Model.NotificationSenderEditor.Id == sender.Id ? "is-selected" : string.Empty)">
-                        <div class="notification-rule-main">
-                            <div class="notification-rule-name">@sender.Name</div>
-                            <div class="notification-rule-meta">@sender.Kind | @sender.Summary</div>
-                        </div>
-                        <div class="notification-rule-side">
-                            <span class="notification-rule-state @(sender.Enabled ? "is-enabled" : "is-disabled")">@(sender.Enabled ? "Enabled" : "Disabled")</span>
-                            <div class="workspace-row-actions">
-                                <a class="workspace-action-link" asp-page="/NotificationSenderEditor" asp-route-selectedNotificationSenderId="@sender.Id" asp-route-returnUrl="/notifications#senders">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                            </div>
-                        </div>
-                    </article>
-                }
-            </div>
-
-            <div class="page-actions">
-                <a class="workspace-action-link" asp-page="/NotificationSenderEditor" asp-route-returnUrl="/notifications#senders">@MatmonIcons.Render("plus")<span>Sender</span></a>
-            </div>
-        </section>
-    </div>
-
-    <div data-sensor-tab="receivers" hidden>
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("inbox")<span>Receivers</span></h2>
-                <span class="panel-hint">@Model.View.NotificationReceivers.Count receivers</span>
-            </div>
-
-            <div class="notification-rule-list">
-                @foreach (var receiver in Model.View.NotificationReceivers)
-                {
-                    <article class="notification-rule-row @(!receiver.IsBuiltIn && Model.NotificationReceiverEditor.Id == receiver.Id ? "is-selected" : string.Empty)">
-                        <div class="notification-rule-main">
-                            <div class="notification-rule-name">@receiver.Name @if (receiver.IsBuiltIn) { <span class="notif-type-chip">Built-in group</span> }</div>
-                            <div class="notification-rule-meta">@receiver.Kind | @receiver.Target</div>
-                            <div class="notification-rule-meta">@receiver.Summary</div>
-                        </div>
-                        <div class="notification-rule-side">
-                            <span class="notification-rule-state @(receiver.Enabled ? "is-enabled" : "is-disabled")">@(receiver.Enabled ? "Enabled" : "Disabled")</span>
-                            <div class="workspace-row-actions">
-                                @if (!receiver.IsBuiltIn)
+    <div class="mat-tabpanel" role="tabpanel" id="panel-receivers" aria-labelledby="tab-receivers" hidden>
+        <div class="mat-list">
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Notification receivers, the built-in groups first</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Kind</th>
+                            <th scope="col">Target</th>
+                            <th scope="col" class="mat-hide-sm">Details</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var receiver in Model.View.NotificationReceivers)
+                        {
+                            <tr class="@(!receiver.IsBuiltIn && Model.NotificationReceiverEditor.Id == receiver.Id ? "is-selected" : null)">
+                                @if (receiver.IsBuiltIn)
                                 {
-                                    <a class="workspace-action-link" asp-page="/NotificationReceiverEditor" asp-route-selectedNotificationReceiverId="@receiver.Id" asp-route-returnUrl="/notifications#receivers">@MatmonIcons.Render("pencil")<span>Edit</span></a>
+                                    <td data-label="Name" class="mat-table__primary">@receiver.Name <span class="mat-tag">Built-in group</span></td>
                                 }
-                            </div>
-                        </div>
-                    </article>
-                }
+                                else
+                                {
+                                    <td data-label="Name" class="mat-table__primary"><a asp-page="/NotificationReceiverEditor" asp-route-selectedNotificationReceiverId="@receiver.Id" asp-route-returnUrl="/notifications#receivers">@receiver.Name</a></td>
+                                }
+                                <td data-label="Kind"><span class="mat-tag">@receiver.Kind</span></td>
+                                <td data-label="Target" class="@(receiver.IsBuiltIn ? "mat-text-muted" : "mat-mono mm-break")">@receiver.Target</td>
+                                <td data-label="Details" class="mat-hide-sm">@receiver.Summary</td>
+                                <td data-label="Status"><span class="@MatUi.PillClass(receiver.Enabled ? "ok" : "plain")">@(receiver.Enabled ? "Enabled" : "Disabled")</span></td>
+                                <td class="mat-table__cell-actions">
+                                    @if (!receiver.IsBuiltIn)
+                                    {
+                                        <div class="mat-table__actions">
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/NotificationReceiverEditor" asp-route-selectedNotificationReceiverId="@receiver.Id" asp-route-returnUrl="/notifications#receivers" aria-label="Edit @receiver.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
 
-            <div class="page-actions">
-                <a class="workspace-action-link" asp-page="/NotificationReceiverEditor" asp-route-returnUrl="/notifications#receivers">@MatmonIcons.Render("plus")<span>Receiver</span></a>
+            <div class="mat-actions">
+                <a class="mat-btn mat-btn--primary" asp-page="/NotificationReceiverEditor" asp-route-returnUrl="/notifications#receivers">@MatUi.Icon("plus")<span>Add receiver</span></a>
             </div>
-        </section>
+        </div>
     </div>
 </section>
-
-<script>
-    (function () {
-        var root = document.querySelector("[data-notif-filter]");
-        if (!root) { return; }
-        var rows = Array.prototype.slice.call(document.querySelectorAll("[data-notif-row]"));
-        var search = root.querySelector("[data-notif-search]");
-        var typeSelect = root.querySelector("[data-notif-type-filter]");
-        function apply() {
-            var q = ((search && search.value) || "").trim().toLowerCase();
-            var activeType = (typeSelect && typeSelect.value) || "all";
-            rows.forEach(function (row) {
-                var t = row.getAttribute("data-notif-type");
-                var n = (row.getAttribute("data-notif-name") || "").toLowerCase();
-                var show = (activeType === "all" || activeType === t) && (q === "" || n.indexOf(q) >= 0);
-                row.hidden = !show;
-            });
-        }
-        if (typeSelect) { typeSelect.addEventListener("change", apply); }
-        if (search) { search.addEventListener("input", apply); }
-        apply();
-    })();
-</script>

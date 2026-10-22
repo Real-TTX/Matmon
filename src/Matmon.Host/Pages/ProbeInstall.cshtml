@@ -2,118 +2,103 @@
 @model ProbeInstallModel
 @{
     ViewData["Title"] = "Install probe";
-    ViewData["WorkspaceSummarySuppress"] = true;
+    ViewData["PageSub"] = "Copy one of the commands below and start the probe on the target host.";
     var backUrl = Model.GetSafeReturnUrl("/Config?tab=probes");
+    var probe = Model.Probe;
+    var stateTone = probe is null
+        ? null
+        : probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+            ? "error"
+            : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
 }
 
-<section class="dashboard-shell probe-install-shell">
-    <div class="page-header probe-install-header">
-        <div class="dashboard-header-main">
-            <h1>Install probe</h1>
-            <div class="panel-hint">Copy one of the commands below and start the probe on the target host.</div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (probe is null)
+{
+    <div class="mat-empty mat-empty--framed">
+        <span class="mat-empty__icon">@MatUi.Icon("server")</span>
+        <div class="mat-empty__title">No probe selected</div>
+        <p>Open this page from a probe in the probe list to see its install commands.</p>
+        <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+}
+else
+{
+    <section class="mat-card">
+        <div class="mat-card__head">
+            @MatUi.Icon("server")
+            <h2 class="mat-card__title">@probe.Name</h2>
+            <span class="@MatUi.PillClass(stateTone) mm-push-end">@probe.State</span>
         </div>
+        <div class="mat-card__body">
+            <dl class="mat-kv">
+                <dt>Role</dt><dd>@probe.Role</dd>
+                <dt>Probe ID</dt><dd class="mat-mono">@probe.ProbeId</dd>
+                <dt>Status</dt><dd>@probe.State - @probe.Message</dd>
+                <dt>Token</dt><dd>@(Model.CanInstall ? "Ready" : "Missing")</dd>
+            </dl>
+        </div>
+    </section>
 
-        @if (Model.Probe is not null)
-        {
-            <div class="workspace-summary-card probe-install-summary" aria-label="Probe summary">
-                <div class="workspace-summary-main">
-                    <span class="workspace-summary-kicker">Probe</span>
-                    <strong>@Model.Probe.Name</strong>
-                    <span class="panel-hint">@Model.Probe.State - @Model.Probe.Message</span>
-                </div>
-                <div class="workspace-summary-metrics">
-                    <span class="workspace-summary-chip">
-                        <strong>@Model.Probe.Role</strong>
-                        <span>Role</span>
-                    </span>
-                    <span class="workspace-summary-chip">
-                        <strong>@Model.Probe.ProbeId</strong>
-                        <span>ID</span>
-                    </span>
-                    <span class="workspace-summary-chip">
-                        <strong>@(Model.CanInstall ? "Ready" : "Missing")</strong>
-                        <span>Token</span>
-                    </span>
-                </div>
-            </div>
-        }
-    </div>
-
-    <div class="workspace-form-actions probe-install-actions">
-        <a class="workspace-secondary-submit" href="@backUrl">
-            @MatmonIcons.Render("arrow-left")
-            <span>Back</span>
-        </a>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    @if (!Model.CanInstall)
     {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    @if (Model.Probe is null)
-    {
-        <div class="empty-state">No probe selected.</div>
-    }
-    else if (!Model.CanInstall)
-    {
-        <div class="workspace-banner workspace-banner-warning">
-            This probe cannot be installed yet. Only secondary probes with an enrollment token can be deployed.
+        <div class="mat-alert mat-alert--warning" role="status">
+            @MatUi.Icon("alert")
+            <div class="mat-alert__body">This probe cannot be installed yet. Only secondary probes with an enrollment token can be deployed.</div>
         </div>
     }
     else
     {
-        <div class="probe-install-grid">
-            <section class="probe-install-method">
-                <div class="probe-install-method-header">
-                    <div class="probe-install-method-title">
-                        <h2 class="section-title">@MatmonIcons.Render("probe")<span>Docker run</span></h2>
-                        <span class="panel-hint">fastest</span>
+        <section class="mat-card">
+            <div class="mat-card__head">
+                @MatUi.Icon("whale")
+                <h2 class="mat-card__title">Install commands</h2>
+                <span class="mat-text-muted mm-push-end">run them on the target host</span>
+            </div>
+            <div class="mat-card__body mat-stack">
+                <div data-tabs>
+                    <div class="mat-tabs" role="tablist" aria-label="How to start the probe">
+                        <button type="button" class="mat-tab" role="tab" id="tab-install-docker" aria-controls="panel-install-docker" aria-selected="true">Docker run</button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-install-compose" aria-controls="panel-install-compose" aria-selected="false" tabindex="-1">Compose</button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-install-curl" aria-controls="panel-install-curl" aria-selected="false" tabindex="-1">Curl installer</button>
                     </div>
-                    <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="probe-install-docker">
-                        @MatmonIcons.Render("copy")
-                        <span data-copy-label>Copy</span>
-                    </button>
-                </div>
-                <pre class="config-code probe-install-code" id="probe-install-docker">@Model.BuildDockerRun()</pre>
-            </section>
-
-            <section class="probe-install-method">
-                <div class="probe-install-method-header">
-                    <div class="probe-install-method-title">
-                        <h2 class="section-title">@MatmonIcons.Render("list")<span>Compose</span></h2>
-                        <span class="panel-hint">recommended for servers</span>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-docker" aria-labelledby="tab-install-docker">
+                        <p class="mat-muted">The fastest way: one command.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code"><code id="probe-install-docker">@Model.BuildDockerRun()</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-docker">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
                     </div>
-                    <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="probe-install-compose">
-                        @MatmonIcons.Render("copy")
-                        <span data-copy-label>Copy</span>
-                    </button>
-                </div>
-                <pre class="config-code probe-install-code" id="probe-install-compose">@Model.BuildCompose()</pre>
-            </section>
-
-            <section class="probe-install-method">
-                <div class="probe-install-method-header">
-                    <div class="probe-install-method-title">
-                        <h2 class="section-title">@MatmonIcons.Render("search")<span>Curl installer</span></h2>
-                        <span class="panel-hint">one-liner</span>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-compose" aria-labelledby="tab-install-compose" hidden>
+                        <p class="mat-muted">Recommended for servers: save it as <code>docker-compose.yml</code> and run <code>docker compose up -d</code>.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code"><code id="probe-install-compose">@Model.BuildCompose()</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-compose">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
                     </div>
-                    <button type="button" class="workspace-secondary-submit probe-copy-button" data-copy-button data-copy-target="probe-install-curl">
-                        @MatmonIcons.Render("copy")
-                        <span data-copy-label>Copy</span>
-                    </button>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-curl" aria-labelledby="tab-install-curl" hidden>
+                        <p class="mat-muted">A one-liner for a shell on the target host.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code"><code id="probe-install-curl">@Model.BuildCurlInstaller()</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-curl">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                    </div>
                 </div>
-                <pre class="config-code probe-install-code" id="probe-install-curl">@Model.BuildCurlInstaller()</pre>
-            </section>
-        </div>
-
-        <div class="workspace-inline-note probe-install-note">
-            If primary and secondary run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.
-        </div>
+                <p class="mat-hint">If primary and secondary run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.</p>
+            </div>
+        </section>
     }
-</section>
+
+    <div class="mat-btn-row">
+        <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+}

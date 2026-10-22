@@ -4,86 +4,71 @@
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Login";
-    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
 
-    // Reseller co-branding / white-label on the sign-in card: the managing partner's logo (served via the
-    // cached /api/branding/logo endpoint) + product name + "Managed by". Absent when unmanaged or opted out.
-    var partner = WorkspaceStore.GetServicePartnerInfo();
+    // Reseller co-branding / white label on the sign-in card (cheap accessors - all null/false when the instance is not
+    // managed or the customer opted out of the partner's branding): the partner's logo (served by the cached, anonymous
+    // /api/branding/logo endpoint) in place of the Matmon mark, its product name in place of "Matmon", its slogan, and
+    // "Managed by". An OEM logo is a lockup that already carries the product name: the name is then for screen readers only.
+    var productName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerName = WorkspaceStore.GetServicePartnerName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var slogan = WorkspaceStore.GetServicePartnerSlogan();
+    var nameInLogo = productName is not null && partnerHasLogo && WorkspaceStore.GetServicePartnerLogoIsOem();
+    var brandName = productName ?? "Matmon";
 }
 
-<section class="dashboard-shell auth-shell auth-shell-login">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("lock")
-            <h1>Login</h1>
-        </div>
+<div class="mat-auth__card">
+    <div class="mat-auth__brand">
+        @if (partnerHasLogo)
+        {
+            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
+        }
+        else if (productName is null)
+        {
+            <img src="/brand/matmon-mark.svg" alt="" width="56" height="56" />
+        }
+        <h1 class="@(nameInLogo ? "mat-sr-only" : null)">@brandName</h1>
+        <p class="mat-muted">
+            @(slogan ?? "Sign in with your e-mail.")
+            @if (!string.IsNullOrWhiteSpace(partnerName))
+            {
+                <br />
+                <span>Managed by @partnerName</span>
+            }
+        </p>
     </div>
 
-    <div class="panel auth-card">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("spark")<span>Access</span></h2>
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+    }
+
+    <form method="post" class="mat-form" novalidate>
+        <input type="hidden" asp-for="ReturnUrl" />
+        <div class="mat-field">
+            <label class="mat-label" for="Email">E-mail</label>
+            <input asp-for="Email" type="email" class="mat-input" autocomplete="email" autofocus required
+                   data-msg-required="Please enter your e-mail address." data-msg-type="Please enter an address like name@example.com." />
+            <span class="mat-error" aria-live="polite"></span>
         </div>
-
-        @if (partner is { HasPartner: true, BrandingSuppressed: false } && (partner.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(partner.Name) || !string.IsNullOrWhiteSpace(partner.ProductName)))
-        {
-            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0 18px;">
-                @if (partner.LogoPng is { Length: > 0 })
-                {
-                    <img src="/api/branding/logo" alt="@(partner.ProductName ?? partner.Name)" style="max-height:72px;max-width:100%;width:auto;height:auto;object-fit:contain;" />
-                }
-                @if (!string.IsNullOrWhiteSpace(partner.ProductName) && !(partner.LogoPng is { Length: > 0 } && partner.LogoIsOem))
-                {
-                    <span style="font-weight:700;font-size:1.05rem;">@partner.ProductName</span>
-                }
-                @if (!string.IsNullOrWhiteSpace(partner.Slogan))
-                {
-                    <span style="color:var(--matmon-muted);font-size:0.85rem;text-align:center;">@partner.Slogan</span>
-                }
-                @if (!string.IsNullOrWhiteSpace(partner.Name))
-                {
-                    <span style="color:var(--matmon-muted);font-size:0.85rem;">Managed by @partner.Name</span>
-                }
+        <div class="mat-field">
+            <label class="mat-label" for="Password">Password</label>
+            <div class="mat-input-icon mat-input-icon--end">
+                <input asp-for="Password" type="password" class="mat-input" autocomplete="current-password" required data-msg-required="Please enter your password." />
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="Password" aria-pressed="false" aria-label="Show the password" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
             </div>
-        }
-        else
-        {
-            @* Unmanaged install: the sign-in card carries the Matmon lockup where a partner's logo would go,
-               so the two states have the same shape instead of an empty gap. *@
-            <div class="auth-brand-lockup"><img src="~/brand/matmon-logo.svg" alt="Matmon" /></div>
-        }
+            <span class="mat-error" aria-live="polite"></span>
+        </div>
+        <div class="mat-btn-row mat-btn-row--plain">
+            <button type="submit" class="mat-btn mat-btn--primary mat-btn--block">@MatUi.Icon("login")<span>Sign in</span></button>
+        </div>
+    </form>
 
-        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-        {
-            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-        }
-
-        <form method="post" class="workspace-form auth-form">
-            <input type="hidden" asp-for="ReturnUrl" />
-
-            <label class="workspace-field">
-                <span>E-mail</span>
-                <input asp-for="Email" class="workspace-input" type="email" autocomplete="email" />
-            </label>
-
-            <label class="workspace-field">
-                <span>Password</span>
-                <input asp-for="Password" class="workspace-input" type="password" autocomplete="current-password" />
-            </label>
-
-            <div class="auth-actions">
-                <span class="auth-note">Sign in with your e-mail</span>
-                <button type="submit" class="workspace-submit auth-submit">@MatmonIcons.Render("arrow-right")<span>Login</span></button>
-            </div>
-        </form>
-
-        @if (Model.CloudSsoAvailable && !Model.Embedded)
-        {
-            <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--matmon-muted);font-size:0.85rem;">
-                <span style="flex:1;height:1px;background:var(--matmon-border);"></span>or<span style="flex:1;height:1px;background:var(--matmon-border);"></span>
-            </div>
-            <a href="/signin-cloud?handler=Start" class="workspace-secondary-submit" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;">
-                @MatmonIcons.Render("network")<span>Sign in with Matmon Cloud</span>
-            </a>
-        }
-    </div>
-</section>
+    @if (Model.CloudSsoAvailable && !Model.Embedded)
+    {
+        <p class="mm-auth-or">or</p>
+        <div class="mat-btn-row mat-btn-row--plain">
+            <a class="mat-btn mat-btn--secondary mat-btn--block" href="/signin-cloud?handler=Start">@MatUi.Icon("cloud")<span>Sign in with Matmon Cloud</span></a>
+        </div>
+    }
+</div>

@@ -2,128 +2,155 @@
 @model AccountModel
 @{
     ViewData["Title"] = "Account";
-    ViewData["WorkspaceSummarySuppress"] = "true";
+    ViewData["PageSub"] = Model.AccountName;
+    // An error, an enrollment in progress or the answer of a two-factor action opens the Security tab (decided here, not in script).
+    var security = Model.ShowSecurityTab;
 }
 
-<section class="dashboard-shell">
-    <div class="page-header" style="padding-inline:0.5rem;">
-        <div class="page-title">@MatmonIcons.Render("lock")<h1>Account</h1></div>
-        <span class="panel-hint">@Model.AccountName</span>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+<section data-tabs data-tab-hash>
+    <div class="mat-tabs" role="tablist" aria-label="Account">
+        <button type="button" class="mat-tab" role="tab" id="tab-general" aria-controls="panel-general" aria-selected="@(security ? "false" : "true")" tabindex="@(security ? "-1" : null)">General</button>
+        <button type="button" class="mat-tab" role="tab" id="tab-security" aria-controls="panel-security" aria-selected="@(security ? "true" : "false")" tabindex="@(security ? null : "-1")">Security</button>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section data-tabs>
-        <div class="sensor-tabs" data-sensor-tabs data-tab-hash="true" data-active-tab="@(Model.ShowSecurityTab ? "security" : null)">
-            <button type="button" class="sensor-tab" data-sensor-tab-target="general">General</button>
-            <button type="button" class="sensor-tab" data-sensor-tab-target="security">Security</button>
-        </div>
-
-        <div data-sensor-tab="general" style="margin-top:16px;">
-            <div class="panel">
-                <div class="panel-header"><h2 class="section-title">@MatmonIcons.Render("spark")<span>Profile</span></h2></div>
-                <div style="padding:14px 18px;">
-                    <dl class="account-facts">
-                        <div><dt>E-mail</dt><dd>@Model.AccountName</dd></div>
-                        <div><dt>Role</dt><dd><span class="account-role-chip">@Model.Role</span></dd></div>
-                        <div><dt>Sign-in</dt><dd>@(Model.HasPassword ? "E-mail + password (local)" : "Matmon.Cloud SSO only - no local password set")</dd></div>
-                    </dl>
-                </div>
+    @* ---------------- General ---------------- *@
+    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general" hidden="@security">
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("user")<h2 class="mat-card__title">Profile</h2></div>
+            <div class="mat-card__body">
+                <dl class="mat-kv">
+                    <dt>E-mail</dt><dd>@Model.AccountName</dd>
+                    <dt>Role</dt><dd><span class="mat-tag">@Model.Role</span></dd>
+                    <dt>Sign-in</dt><dd>@(Model.HasPassword ? "E-mail + password (local)" : "Matmon.Cloud SSO only - no local password set")</dd>
+                </dl>
             </div>
+        </section>
 
-            <div class="panel" style="margin-top:16px;">
-                <div class="panel-header"><h2 class="section-title">@MatmonIcons.Render("clock")<span>Preferences</span></h2></div>
-                <div style="padding:16px 18px;">
-                    <form method="post" asp-page-handler="TimeZone" class="workspace-form">
-                        <label class="workspace-field">
-                            <span>Display timezone</span>
-                            <select asp-for="TimeZoneId" asp-items="Model.TimeZoneItems" class="form-select workspace-select"></select>
-                            <span class="panel-hint" style="margin-top:4px;">Timestamps across the UI are shown in this zone. <strong>System default</strong> uses the server/admin setting. Data is always stored in UTC.</span>
-                        </label>
-                        <button type="submit" class="workspace-submit">Save timezone</button>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("clock")<h2 class="mat-card__title">Preferences</h2></div>
+            <div class="mat-card__body">
+                <form method="post" asp-page-handler="TimeZone" class="mat-form" novalidate>
+                    <div class="mat-field">
+                        <label class="mat-label" for="TimeZoneId">Display timezone</label>
+                        <select asp-for="TimeZoneId" asp-items="Model.TimeZoneItems" class="mat-select"></select>
+                        <span class="mat-hint">Timestamps across the UI are shown in this zone. <strong>System default</strong> uses the server/admin setting. Data is always stored in UTC.</span>
+                    </div>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save timezone</span></button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    @* ---------------- Security ---------------- *@
+    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-security" aria-labelledby="tab-security" hidden="@(!security)">
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("lock")<h2 class="mat-card__title">@(Model.HasPassword ? "Change password" : "Set a local password")</h2></div>
+            <div class="mat-card__body mat-stack">
+                @if (!Model.HasPassword)
+                {
+                    <p class="mat-muted">This account signs in via Matmon.Cloud. Set a local password so you can also sign in with e-mail + password when the cloud is unreachable.</p>
+                }
+                <form method="post" class="mat-form" novalidate>
+                    @if (Model.HasPassword)
+                    {
+                        <div class="mat-field">
+                            <label class="mat-label" for="CurrentPassword">Current password <span class="mat-req" aria-hidden="true">*</span></label>
+                            <input asp-for="CurrentPassword" type="password" class="mat-input" autocomplete="current-password" required data-msg-required="Please enter your current password." />
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                    }
+                    <div class="mat-field">
+                        <label class="mat-label" for="NewPassword">New password <span class="mat-req" aria-hidden="true">*</span></label>
+                        <input asp-for="NewPassword" type="password" class="mat-input" autocomplete="new-password" required minlength="8" data-msg-required="Please enter a new password." data-msg-range="Use at least 8 characters." />
+                        <span class="mat-hint">At least 8 characters.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="ConfirmPassword">Confirm new password <span class="mat-req" aria-hidden="true">*</span></label>
+                        <input asp-for="ConfirmPassword" type="password" class="mat-input" autocomplete="new-password" required data-msg-required="Please repeat the new password." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("key")<span>@(Model.HasPassword ? "Change password" : "Set password")</span></button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">
+                @MatUi.Icon("shield")<h2 class="mat-card__title">Two-factor authentication</h2>
+                <span class="@MatUi.PillClass(Model.TwoFactorEnabled ? "ok" : null) mm-push-end">@(Model.TwoFactorEnabled ? "On" : "Off")</span>
+            </div>
+            <div class="mat-card__body mat-stack">
+                @if (Model.Enrollment is not null)
+                {
+                    <p>Scan this QR with your authenticator app (or enter the key manually), then enter the 6-digit code to confirm.</p>
+                    @* A QR is a picture to scan: black on white in both themes (COLOR-07). *@
+                    <div class="mm-qr">@Html.Raw(Model.QrSvg)</div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="totp-manual-key">Manual key</label>
+                        <div class="mat-input-group">
+                            <input class="mat-input mat-mono" id="totp-manual-key" value="@Model.Enrollment.SecretBase32" readonly data-select-on-focus />
+                            <button type="button" class="mat-btn mat-btn--secondary" data-copy="#totp-manual-key">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                    </div>
+                    <form method="post" asp-page-handler="ConfirmTotp" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="TotpCode">Code from your app <span class="mat-req" aria-hidden="true">*</span></label>
+                            <div class="mat-otp" data-otp data-length="6" data-chars="digits">
+                                <input asp-for="TotpCode" class="mat-otp__input" inputmode="numeric" autocomplete="one-time-code" required pattern="[0-9]{6}" data-msg-required="Please enter the six digits of the code." data-msg-pattern="The code has six digits." />
+                            </div>
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-btn-row">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Enable two-factor</span></button>
+                        </div>
                     </form>
-                </div>
-            </div>
-        </div>
-
-        <div data-sensor-tab="security" hidden style="margin-top:16px;">
-            <div class="panel">
-                <div class="panel-header"><h2 class="section-title"><span>@(Model.HasPassword ? "Change password" : "Set a local password")</span></h2></div>
-                <div style="padding:16px 18px;">
-                    @if (!Model.HasPassword)
-                    {
-                        <p class="panel-hint" style="margin-top:0;">This account signs in via Matmon.Cloud. Set a local password so you can also sign in with e-mail + password when the cloud is unreachable.</p>
-                    }
-                    <form method="post" class="workspace-form">
-                        @if (Model.HasPassword)
-                        {
-                            <label class="workspace-field">
-                                <span>Current password</span>
-                                <input asp-for="CurrentPassword" type="password" class="workspace-input" autocomplete="current-password" />
-                            </label>
-                        }
-                        <label class="workspace-field">
-                            <span>New password (min. 8 characters)</span>
-                            <input asp-for="NewPassword" type="password" class="workspace-input" autocomplete="new-password" />
-                        </label>
-                        <label class="workspace-field">
-                            <span>Confirm new password</span>
-                            <input asp-for="ConfirmPassword" type="password" class="workspace-input" autocomplete="new-password" />
-                        </label>
-                        <button type="submit" class="workspace-submit">@(Model.HasPassword ? "Change password" : "Set password")</button>
+                }
+                else if (Model.TwoFactorEnabled)
+                {
+                    <p>Two-factor is <strong>enabled</strong>@(Model.TwoFactorSince is { } since ? $" since {since.ToDisplay():yyyy-MM-dd}" : ""). At sign-in you enter a code from your authenticator (or request a one-time code by e-mail).</p>
+                    @* "E-mail me a code" posts its own handler: a hidden form of its own, so it sits in the same button row without
+                       sending (or validating) the code field of the disable form. *@
+                    <form method="post" asp-page-handler="SendDisableCode" id="send-disable-code" hidden></form>
+                    <form method="post" asp-page-handler="DisableTotp" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="TotpCode">Authenticator code - or an e-mailed code <span class="mat-req" aria-hidden="true">*</span></label>
+                            <div class="mat-otp" data-otp data-length="6" data-chars="digits">
+                                <input asp-for="TotpCode" class="mat-otp__input" inputmode="numeric" autocomplete="one-time-code" required pattern="[0-9]{6}" data-msg-required="Please enter the six digits of the code." data-msg-pattern="The code has six digits." />
+                            </div>
+                            <span class="mat-hint">To confirm that it is you.</span>
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-btn-row">
+                            <button type="submit" form="send-disable-code" class="mat-btn mat-btn--secondary">@MatUi.Icon("mail")<span>Lost your authenticator? E-mail me a code</span></button>
+                            <span class="mat-btn-row__spacer"></span>
+                            <button type="submit" class="mat-btn mat-btn--danger" data-confirm="Disable two-factor authentication?" data-confirm-ok="Disable">@MatUi.Icon("x-circle")<span>Disable two-factor</span></button>
+                        </div>
                     </form>
-                </div>
+                }
+                else
+                {
+                    <p class="mat-muted">Add a second step at sign-in with an authenticator app (TOTP). If you lose your device, you can get a one-time code by e-mail.</p>
+                    <form method="post" asp-page-handler="StartTotp">
+                        <div class="mat-btn-row">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("shield")<span>Set up two-factor</span></button>
+                        </div>
+                    </form>
+                }
             </div>
-
-            <div class="panel" style="margin-top:16px;">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Two-factor authentication</span></h2>
-                    <span class="panel-hint">@(Model.TwoFactorEnabled ? "On" : "Off")</span>
-                </div>
-                <div style="padding:16px 18px;">
-                    @if (Model.Enrollment is not null)
-                    {
-                        <p class="panel-hint" style="margin-top:0;">Scan this QR with your authenticator app (or enter the key manually), then enter the 6-digit code to confirm.</p>
-                        <div style="background:#fff;padding:10px;border-radius:10px;width:max-content;max-width:100%;margin:0 0 12px;">@Html.Raw(Model.QrSvg)</div>
-                        <p style="margin:0 0 12px;">Manual key: <code style="user-select:all;">@Model.Enrollment.SecretBase32</code></p>
-                        <form method="post" asp-page-handler="ConfirmTotp" class="workspace-form">
-                            <label class="workspace-field">
-                                <span>Code from your app</span>
-                                <input asp-for="TotpCode" class="workspace-input" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
-                            </label>
-                            <button type="submit" class="workspace-submit">Enable two-factor</button>
-                        </form>
-                    }
-                    else if (Model.TwoFactorEnabled)
-                    {
-                        <p style="margin-top:0;">Two-factor is <strong>enabled</strong>@(Model.TwoFactorSince is { } since ? $" since {since.ToDisplay():yyyy-MM-dd}" : ""). At sign-in you enter a code from your authenticator (or request a one-time code by e-mail).</p>
-                        <form method="post" asp-page-handler="DisableTotp" class="workspace-form" onsubmit="return confirm('Disable two-factor authentication?');">
-                            <label class="workspace-field">
-                                <span>Authenticator code — or an e-mailed code (to confirm)</span>
-                                <input asp-for="TotpCode" class="workspace-input" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
-                            </label>
-                            <button type="submit" class="workspace-danger-submit">Disable two-factor</button>
-                        </form>
-                        <form method="post" asp-page-handler="SendDisableCode" style="margin-top:8px;">
-                            <button type="submit" class="workspace-secondary-submit">Lost your authenticator? E-mail me a code</button>
-                        </form>
-                    }
-                    else
-                    {
-                        <p class="panel-hint" style="margin-top:0;">Add a second step at sign-in with an authenticator app (TOTP). If you lose your device, you can get a one-time code by e-mail.</p>
-                        <form method="post" asp-page-handler="StartTotp">
-                            <button type="submit" class="workspace-submit">Set up two-factor</button>
-                        </form>
-                    }
-                </div>
-            </div>
-        </div>
-    </section>
+        </section>
+    </div>
 </section>

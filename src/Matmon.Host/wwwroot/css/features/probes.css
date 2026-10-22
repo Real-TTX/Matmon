@@ -1,0 +1,60 @@
+/* Matmon - probes. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- A table cell with several lines (Probes, Agents, agent downloads): the name, then its facts in small muted lines ---- */
+.probe-cell { display: grid; gap: var(--mat-space-1); justify-items: start; min-width: 0; }
+.probe-cell__meta { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); font-weight: 400; overflow-wrap: anywhere; }
+.probe-cell__meta--problem { color: var(--mat-warning-text); }
+/* A warning inside a row (duplicate probe, agent without a host): the icon AND the words, never the colour alone. */
+.probe-cell__warn { display: inline-flex; align-items: center; gap: var(--mat-space-1); color: var(--mat-warning-text); font-size: var(--mat-fs-xs); font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  /* On a phone a row is a card with the label at the left: the lines of a cell go to the right, under the label's line. */
+  .mat-table td:not(:first-child) > .probe-cell { justify-items: end; text-align: right; }
+}
+
+/* ---- The enrolment code just issued: it gets read out over the phone, so it is big and spaced ---- */
+.agent-code-input { font-size: var(--mat-fs-lg); font-weight: 600; letter-spacing: 0.08em; }
+
+/* ---- Probe usage: the sensor rows ---- */
+.probe-usage-sensor { display: grid; gap: var(--mat-space-1); min-width: 0; }
+.probe-usage-sensor__name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--mat-space-2); font-weight: 600; }
+.probe-usage-cell { display: grid; gap: var(--mat-space-1); min-width: 0; }
+.probe-usage-cell__line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--mat-space-2); }
+/* A second line: the path, the last run, checks per hour. Long ones are cut, their full text is in the title. */
+.probe-usage-cell__note { max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+/* The meter of a row needs a width of its own: a table cell (or, on a phone, a flex item) would shrink it to nothing. */
+.probe-usage-meter { width: 100%; min-width: 6rem; max-width: 14rem; }
+.probe-usage-meter-cell { width: 25%; }
+/* The facts at the right end of a group's heading (usage, checks and bytes, share); they wrap on a narrow screen. */
+.probe-usage-group-facts { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--mat-space-2) var(--mat-space-3); min-width: 0; color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }
+@media (max-width: 720px) {
+  /* In a group a row is a card with the label at the left, so the lines go right; the flat table's record card flows them. */
+  .mat-group__item .probe-usage-cell { justify-items: end; text-align: right; }
+  .probe-usage-cell__note { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+}
+
+/* ---- Discovery: the scan form ---- */
+.discovery-subnets { align-items: center; }
+
+/* ---- Discovery: the result table, one group per host ---- */
+/* The host's check stands before the group's toggle, at the toggle's indent. */
+.discovery-node-pick { display: inline-flex; align-items: center; flex: none; padding-left: var(--mat-space-4); }
+.discovery-node-sub { margin-left: var(--mat-space-2); color: var(--mat-text-muted); font-weight: 400; }
+.discovery-node-facts { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--mat-space-1) var(--mat-space-2); min-width: 0; }
+.discovery-node-count { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); font-weight: 600; white-space: nowrap; }
+.discovery-node-note > td { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+.discovery-sensor-name { display: inline-flex; align-items: center; gap: var(--mat-space-2); min-width: 0; font-weight: 600; }
+.discovery-sensor-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--mat-space-2); }
+/* A host that won't be imported is greyed out and its sensors cannot be ticked - its own check stays usable. */
+.discovery-node.is-disabled > tr:not(.mat-group__head) { opacity: 0.5; pointer-events: none; }
+.discovery-node.is-disabled .discovery-node-toggle,
+.discovery-node.is-disabled .discovery-node-facts { opacity: 0.5; }
+/* A sensor that is already monitored reads as done, not as something to do. */
+.discovery-sensor.is-present { opacity: 0.7; }
+/* Sensors that are neither recommended nor ticked wait behind "N more sensors" (the All preset and a tick show them too). */
+.discovery-node:not(.is-showing-extras) > .discovery-sensor.is-extra:not(:has(input:checked)) { display: none; }
+.discovery-more-hide { display: none; }
+.discovery-node.is-showing-extras .discovery-more-show { display: none; }
+.discovery-node.is-showing-extras .discovery-more-hide { display: inline; }
+
+/* ---- Discovery: the job lists ---- */
+.discovery-job-message { display: block; max-width: 32rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }

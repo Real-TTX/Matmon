@@ -1,0 +1,49 @@
+/* Matmon - notifications. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- Rule editor: the placeholders card beside the preview card, under the message templates ---- */
+.notification-template-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: var(--mat-gap);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .notification-template-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The placeholder reference: one group per topic, each a list of token -> what it stands for. */
+.notification-placeholders { display: flex; flex-direction: column; gap: var(--mat-space-4); }
+.notification-placeholders__group + .notification-placeholders__group {
+  padding-top: var(--mat-space-4);
+  border-top: 1px solid var(--mat-border);
+}
+.notification-placeholders__title { margin-bottom: var(--mat-space-2); font-size: var(--mat-fs-sm); }
+.notification-placeholders__list {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: var(--mat-space-2) var(--mat-space-3);
+  align-items: baseline;
+  margin: 0;
+}
+.notification-placeholders__list dt { min-width: 0; overflow-wrap: anywhere; }
+.notification-placeholders__list dd { margin: 0; min-width: 0; color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }
+
+/* The rendered HTML body of the preview: the template's own markup, framed so it reads as the e-mail and not as the page. */
+.notification-preview-html {
+  min-width: 0;
+  overflow: auto;
+  padding: var(--mat-space-3) var(--mat-space-4);
+  background: var(--mat-surface-2);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+}
+
+/* ---- Scheduled report: the rendered e-mail in a sandboxed frame. The frame keeps the page's colour scheme, so in dark
+   mode the browser paints the (light) e-mail document on its own light canvas. ---- */
+.notification-report-frame {
+  display: block;
+  width: 100%;
+  height: 620px;
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+}

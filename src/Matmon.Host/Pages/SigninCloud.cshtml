@@ -1,10 +1,15 @@
 @page "/signin-cloud"
 @model SigninCloudModel
 @{
+    // Every handler of this page redirects (out to the cloud's sign-in, back to the sign-in page with an error, or into
+    // the app). The card is only what shows should a browser ever stop here.
+    Layout = "_AnonymousLayout";
     ViewData["Title"] = "Signing in…";
-    Layout = null;
 }
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8" /><title>Signing in…</title></head>
-<body><p style="font-family:system-ui;padding:24px;">Signing in with Matmon.Cloud…</p></body>
-</html>
+
+<div class="mat-auth__card">
+    <div class="mat-auth__brand">
+        <h1>Signing in…</h1>
+        <p class="mat-muted">Signing in with Matmon.Cloud…</p>
+    </div>
+</div>

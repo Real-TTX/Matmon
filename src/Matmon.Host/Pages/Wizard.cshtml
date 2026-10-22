@@ -1,374 +1,473 @@
 @page "/setup/wizard"
 @model WizardModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     Layout = "_AnonymousLayout";
-    ViewData["Title"] = "Set up Matmon";
-    ViewData["AnonymousMainExtraClass"] = "anonymous-main-top";
+    ViewData["Title"] = "Setup assistant";
 
-    var steps = new (string Key, string Icon, string Label)[]
+    // The steps in the order of WizardModel.StepOrder. The bar at the top (mat-steps) shows how far along the assistant
+    // is; the label of the current step is the line under the title.
+    var steps = new (string Key, string Label)[]
     {
-        ("welcome", "spark", "Welcome"),
-        ("cloud", "cloud", "Cloud & license"),
-        ("restore", "download", "Restore"),
-        ("notifications", "bell", "Notifications"),
-        ("structure", "folder", "Structure & networks"),
-        ("discovery", "search", "Devices & probes"),
-        ("twofactor", "lock", "Security"),
-        ("done", "check", "Done"),
+        ("welcome", "Welcome"),
+        ("cloud", "Cloud & license"),
+        ("restore", "Restore"),
+        ("notifications", "Notifications"),
+        ("structure", "Structure & networks"),
+        ("discovery", "Devices & probes"),
+        ("twofactor", "Security"),
+        ("done", "Done"),
     };
 
     string StepUrl(string? key) => key is null ? "/" : $"/setup/wizard?step={key}";
     var primaryUrl = Model.PrimaryUrl;
+    var currentIndex = Math.Clamp(Model.StepIndex, 0, steps.Length - 1);
+    var current = steps[currentIndex];
+
+    // The brand at the top of the card: a managing partner's logo, or nothing under a white label without one, else the
+    // Matmon mark; a white label's product name replaces "Matmon" in the text.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var brandName = partnerProductName ?? "Matmon";
 }
 
-<section class="dashboard-shell setup-wizard">
-    <div class="page-header setup-wizard-header">
-        <div class="page-title">
-            @MatmonIcons.Render("spark")
-            <h1>Set up Matmon</h1>
-        </div>
-        <a class="workspace-secondary-submit setup-wizard-skip" href="/">@MatmonIcons.Render("x")<span>Skip setup</span></a>
+<div class="mat-auth__card mm-auth-card--wide">
+    <div class="mat-auth__brand">
+        @if (partnerHasLogo)
+        {
+            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
+        }
+        else if (partnerProductName is null)
+        {
+            <img src="/brand/matmon-mark.svg" alt="" width="56" height="56" />
+        }
+        <h1>Set up @brandName</h1>
+        <p class="mat-muted">Step @Model.StepNumber of @Model.StepCount: @current.Label</p>
     </div>
 
-    @{
-        var current = steps[Math.Clamp(Model.StepIndex, 0, steps.Length - 1)];
-    }
-    <div class="setup-wizard-progress" aria-label="Setup progress">
-        <div class="setup-wizard-progress-head">
-            <span class="setup-wizard-progress-step">@MatmonIcons.Render(current.Icon)<span>@current.Label</span></span>
-            <span class="setup-wizard-progress-count">Step @Model.StepNumber / @Model.StepCount</span>
-        </div>
-        <div class="setup-wizard-progress-track" role="progressbar" aria-valuenow="@Model.StepNumber" aria-valuemin="1" aria-valuemax="@Model.StepCount">
-            <span class="setup-wizard-progress-bar" style="width:@Model.ProgressPercent%"></span>
-        </div>
-    </div>
-
-    <div class="panel setup-wizard-panel">
-        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    <ol class="mat-steps" aria-label="Setup progress">
+        @for (var i = 0; i < steps.Length; i++)
         {
-            <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-        }
-        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-        {
-            <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-        }
-        <div class="setup-wizard-body">
-            @switch (Model.Step)
+            if (i < currentIndex)
             {
-                case "welcome":
-                    <h2 class="section-title">@MatmonIcons.Render("spark")<span>Your account is ready</span></h2>
-                    <p>A few quick, optional steps to get monitoring going. We'll start with the cloud connection - it decides whether you even need to set up e-mail or a license by hand. Skip anything you don't need; you can change it all later.</p>
-                    break;
+                <li class="is-done"><span class="mat-sr-only">Step @(i + 1), @steps[i].Label, done</span></li>
+            }
+            else if (i == currentIndex)
+            {
+                <li class="is-active" aria-current="step"><span class="mat-sr-only">Step @(i + 1), @steps[i].Label, current</span></li>
+            }
+            else
+            {
+                <li><span class="mat-sr-only">Step @(i + 1), @steps[i].Label</span></li>
+            }
+        }
+    </ol>
 
-                case "cloud":
-                    <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Connect to Matmon Cloud</span></h2>
-                    @if (Model.CloudEnvLinkActive)
-                    {
-                        <div class="workspace-banner workspace-banner-warning">
-                            <div>
-                                This installation is <strong>already linked</strong> to the cloud instance <code>@Model.CloudEnvLinkInstanceId</code> at <strong>@Model.CloudLinkUrl</strong> -
-                                by the <em>environment</em> it was started with (<code>Matmon__CloudInstanceId</code> / <code>Matmon__CloudInstanceToken</code>), not by this setup.
-                                That is why it was connected without you doing anything, and why the license of that instance (currently <strong>@Model.License.DisplayName</strong>) is already here:
-                                a new installation started with this environment always becomes that same instance again.
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+    }
+
+    <section class="mm-wizard__step" aria-labelledby="wizard-step-title">
+        @switch (Model.Step)
+        {
+            case "welcome":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("sparkles")<span>Your account is ready</span></h2>
+                <p>A few quick, optional steps to get monitoring going. We'll start with the cloud connection - it decides whether you even need to set up e-mail or a license by hand. Skip anything you don't need; you can change it all later.</p>
+                break;
+
+            case "cloud":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("cloud")<span>Connect to Matmon Cloud</span></h2>
+                @if (Model.CloudEnvLinkActive)
+                {
+                    <div class="mat-alert mat-alert--warning" role="status">
+                        @MatUi.Icon("alert")
+                        <div class="mat-alert__body">
+                            This installation is <strong>already linked</strong> to the cloud instance <code>@Model.CloudEnvLinkInstanceId</code> at <strong>@Model.CloudLinkUrl</strong> -
+                            by the <em>environment</em> it was started with (<code>Matmon__CloudInstanceId</code> / <code>Matmon__CloudInstanceToken</code>), not by this setup.
+                            That is why it was connected without you doing anything, and why the license of that instance (currently <strong>@Model.License.DisplayName</strong>) is already here:
+                            a new installation started with this environment always becomes that same instance again.
+                        </div>
+                    </div>
+                    <p>Keep that link, or unlink and register this installation under your account yourself - as a <strong>new</strong> instance, or by taking an old one over.</p>
+                    @* Both actions are handlers of System > Cloud and come back here (returnUrl): one form, the second button
+                       posts to its own handler (formaction). *@
+                    <form method="post" asp-page="/Config" asp-page-handler="CloudKeepEnvLink" class="mat-form" novalidate>
+                        <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Keep this link</span></button>
+                            <button type="submit" class="mat-btn mat-btn--secondary" asp-page="/Config" asp-page-handler="CloudUnlinkEnvLink"
+                                    data-confirm="Unlink this installation from that cloud instance?" data-confirm-ok="Unlink">@MatUi.Icon("x")<span>Unlink and connect as new</span></button>
+                        </div>
+                    </form>
+                }
+                else if (Model.CloudConnected)
+                {
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Connected to <strong>@Model.CloudLinkUrl</strong>. Your license is managed automatically (currently <strong>@Model.License.DisplayName</strong>), and you can relay alert e-mail through the cloud in the next step - no SMTP needed.</span></p>
+                    <form method="post" asp-page-handler="CloudMonitoring" class="mat-form" novalidate>
+                        <label class="mat-check"><input type="checkbox" id="wizard-notify-problems" name="notifyOnProblems" value="true" checked /><span class="mat-check__text">E-mail me if this instance goes offline (and when it recovers)</span></label>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("bell")<span>Save</span></button>
+                        </div>
+                    </form>
+                    <p class="mat-muted">Manage the link anytime in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud @MatUi.Icon("external")</a>.</p>
+                }
+                else
+                {
+                    <p>Optional but recommended: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay (send alerts without your own mail server), Full Access, and automatic license management. You stay in control - disconnect anytime.</p>
+                    <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="mat-form" novalidate>
+                        <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
+                        <div class="mat-form__grid">
+                            <div class="mat-field">
+                                <label class="mat-label" for="wizard-cloud-url">Cloud URL</label>
+                                <input class="mat-input mat-mono" id="wizard-cloud-url" name="CloudProvision.Url" value="@Model.DefaultCloudUrl" inputmode="url" autocomplete="off" />
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" for="wizard-cloud-name">Instance name</label>
+                                <input class="mat-input" id="wizard-cloud-name" name="CloudProvision.Name" value="@Model.SuggestedInstanceName" autocomplete="off" />
                             </div>
                         </div>
-                        <p>Keep that link, or unlink and register this installation under your account yourself - as a <strong>new</strong> instance, or by taking an old one over.</p>
-                        <div class="setup-wizard-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
-                            <form method="post" asp-page="/Config" asp-page-handler="CloudKeepEnvLink" class="setup-wizard-form">
-                                <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
-                                <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Keep this link</span></button>
-                            </form>
-                            <form method="post" asp-page="/Config" asp-page-handler="CloudUnlinkEnvLink" class="setup-wizard-form" onsubmit="return confirm('Unlink this installation from that cloud instance?');">
-                                <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
-                                <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("x")<span>Unlink and connect as new</span></button>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Connect</span></button>
+                        </div>
+                    </form>
+                    <p class="mat-muted">You'll confirm the link in your Matmon Cloud account, then land back here.</p>
+
+                    <details class="mat-collapse">
+                        <summary><span>No cloud? Apply a license token manually (offline / air-gapped)</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+                        <div class="mat-accordion__body">
+                            <form method="post" asp-page-handler="SetLicenseToken" class="mat-form" novalidate>
+                                <p class="mat-muted">Without the cloud you're on the <strong>@Model.License.DisplayName</strong> tier. For an air-gapped install, paste a signed license token issued by Matmon.Cloud:</p>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="wizard-license-token">License token</label>
+                                    <textarea class="mat-textarea mat-mono" id="wizard-license-token" name="LicenseTokenInput" rows="3" placeholder="Paste the signed token…"></textarea>
+                                </div>
+                                <div class="mat-btn-row mat-btn-row--plain">
+                                    <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("check")<span>Apply license</span></button>
+                                </div>
                             </form>
                         </div>
-                    }
-                    else if (Model.CloudConnected)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") Connected to <strong>@Model.CloudLinkUrl</strong>. Your license is managed automatically (currently <strong>@Model.License.DisplayName</strong>), and you can relay alert e-mail through the cloud in the next step - no SMTP needed.</p>
-                        <form method="post" asp-page-handler="CloudMonitoring" class="setup-wizard-form">
-                            <label class="setup-wizard-check"><input type="checkbox" name="notifyOnProblems" value="true" checked /> <span>E-mail me if this instance goes offline (and when it recovers)</span></label>
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("bell")<span>Save</span></button>
-                        </form>
-                        <p class="setup-wizard-muted" style="margin-top:10px;">Manage the link anytime in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud ↗</a>.</p>
-                    }
-                    else
-                    {
-                        <p>Optional but recommended: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay (send alerts without your own mail server), Full Access, and automatic license management. You stay in control - disconnect anytime.</p>
-                        <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="setup-wizard-form">
-                            <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
-                            <div class="setup-wizard-grid">
-                                <label class="workspace-field"><span>Cloud URL</span><input name="CloudProvision.Url" class="workspace-input" value="@Model.DefaultCloudUrl" /></label>
-                                <label class="workspace-field"><span>Instance name</span><input name="CloudProvision.Name" class="workspace-input" value="@Model.SuggestedInstanceName" autocomplete="off" /></label>
-                            </div>
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Connect</span></button>
-                        </form>
-                        <p class="setup-wizard-muted" style="margin-top:8px;">You'll confirm the link in your Matmon Cloud account, then land back here.</p>
+                    </details>
+                }
+                break;
 
-                        <details class="setup-wizard-details" style="margin-top:14px;">
-                            <summary>No cloud? Apply a license token manually (offline / air-gapped)</summary>
-                            <p class="setup-wizard-muted" style="margin:8px 0;">Without the cloud you're on the <strong>@Model.License.DisplayName</strong> tier. For an air-gapped install, paste a signed license token issued by Matmon.Cloud:</p>
-                            <form method="post" asp-page-handler="SetLicenseToken" class="setup-wizard-form">
-                                <label class="workspace-field"><span>License token</span><textarea name="LicenseTokenInput" class="workspace-input" rows="3" placeholder="Paste the signed token…"></textarea></label>
-                                <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("check")<span>Apply license</span></button>
-                            </form>
-                        </details>
-                    }
-                    break;
-
-                case "restore":
-                    <h2 class="section-title">@MatmonIcons.Render("download")<span>Restore from a cloud backup</span></h2>
-                    @if (!Model.CloudConnected)
-                    {
-                        <p>Restoring a previous configuration needs the cloud link. <a href="@StepUrl("cloud")">Connect to Matmon.Cloud</a> first, or skip this step if you're setting up fresh.</p>
-                    }
-                    else if (!Model.AccountBackupsAvailable)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("cloud") Couldn't reach Matmon.Cloud to list your backups right now. Skip this step - you can always restore later from <a href="/Config?tab=backup" target="_blank" rel="noopener">System → Cloud → Backup ↗</a>.</p>
-                    }
-                    else if (Model.AccountBackups.Count == 0)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") No backups on your cloud account yet. Nothing to restore - carry on setting up. (Once any of your instances stores a cloud backup, it'll appear here for disaster recovery.)</p>
-                    }
-                    else
-                    {
-                        <p>Bring this fresh instance back from a backup on your cloud account - handy when you're re-installing a dead instance. Only the <strong>configuration</strong> is restored (no telemetry, and your new admin account is kept).</p>
-                        <ul class="setup-wizard-tree">
-                            @foreach (var backup in Model.AccountBackups)
-                            {
-                                var encrypted = backup.Label.Contains("(encrypted)", StringComparison.OrdinalIgnoreCase);
-                                <li class="setup-wizard-restore-item">
-                                    <form method="post" asp-page-handler="RestoreFromCloud" class="setup-wizard-form" onsubmit="return confirm('Restore this backup? It overwrites the current configuration (your admin account is kept).');">
+            case "restore":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("restore")<span>Restore from a cloud backup</span></h2>
+                @if (!Model.CloudConnected)
+                {
+                    <p>Restoring a previous configuration needs the cloud link. <a href="@StepUrl("cloud")">Connect to Matmon.Cloud</a> first, or skip this step if you're setting up fresh.</p>
+                }
+                else if (!Model.AccountBackupsAvailable)
+                {
+                    <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Couldn't reach Matmon.Cloud to list your backups right now. Skip this step - you can always restore later from <a href="/Config?tab=backup" target="_blank" rel="noopener">System → Cloud → Backup @MatUi.Icon("external")</a>.</div></div>
+                }
+                else if (Model.AccountBackups.Count == 0)
+                {
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>No backups on your cloud account yet. Nothing to restore - carry on setting up. (Once any of your instances stores a cloud backup, it'll appear here for disaster recovery.)</span></p>
+                }
+                else
+                {
+                    <p>Bring this fresh instance back from a backup on your cloud account - handy when you're re-installing a dead instance. Only the <strong>configuration</strong> is restored (no telemetry, and your new admin account is kept).</p>
+                    <div class="mat-stack">
+                        @foreach (var backup in Model.AccountBackups)
+                        {
+                            var encrypted = backup.Label.Contains("(encrypted)", StringComparison.OrdinalIgnoreCase);
+                            var passphraseId = $"wizard-passphrase-{backup.Id}";
+                            <div class="mat-card">
+                                <div class="mat-card__head">@MatUi.Icon("cloud")<h3 class="mat-card__title">@backup.InstanceName</h3></div>
+                                <div class="mat-card__body">
+                                    <form method="post" asp-page-handler="RestoreFromCloud" class="mat-form" novalidate>
                                         <input type="hidden" name="backupId" value="@backup.Id" />
-                                        <div class="setup-wizard-restore-head">
-                                            @MatmonIcons.Render("cloud")
-                                            <span><strong>@backup.InstanceName</strong> · @backup.CreatedUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC · @backup.Label</span>
-                                        </div>
+                                        <p class="mat-muted"><span class="mat-mono">@backup.CreatedUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC</span> · @backup.Label</p>
                                         @if (encrypted)
                                         {
-                                            <label class="workspace-field"><span>Passphrase</span><input type="password" name="passphrase" class="workspace-input" placeholder="Required - this backup is encrypted" autocomplete="off" /></label>
+                                            <div class="mat-field mm-wizard__inline">
+                                                <label class="mat-label" for="@passphraseId">Passphrase</label>
+                                                <div class="mat-input-icon mat-input-icon--end">
+                                                    <input class="mat-input" id="@passphraseId" type="password" name="passphrase" placeholder="Required - this backup is encrypted" autocomplete="off"
+                                                           required data-msg-required="This backup is encrypted - please enter its passphrase." />
+                                                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="@passphraseId" aria-pressed="false" aria-label="Show the passphrase" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
+                                                </div>
+                                                <span class="mat-error" aria-live="polite"></span>
+                                            </div>
                                         }
-                                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("download")<span>Restore this backup</span></button>
+                                        <div class="mat-btn-row mat-btn-row--plain">
+                                            <button type="submit" class="mat-btn mat-btn--secondary"
+                                                    data-confirm="Restore this backup? It overwrites the current configuration (your admin account is kept)." data-confirm-ok="Restore">@MatUi.Icon("restore")<span>Restore this backup</span></button>
+                                        </div>
                                     </form>
-                                </li>
-                            }
-                        </ul>
-                    }
-                    break;
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                break;
 
-                case "notifications":
-                    <h2 class="section-title">@MatmonIcons.Render("bell")<span>Get notified</span></h2>
-                    @if (Model.CloudConnected)
+            case "notifications":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("bell")<span>Get notified</span></h2>
+                @if (Model.CloudConnected)
+                {
+                    @if (Model.CloudRelayEnabled)
                     {
-                        @if (Model.CloudRelayEnabled)
-                        {
-                            <p class="setup-wizard-muted">@MatmonIcons.Render("check") Alerts are delivered through <strong>Matmon.Cloud</strong> - no mail server of your own required. Pick recipients per rule under <a href="/notifications" target="_blank" rel="noopener">Notifications ↗</a>.</p>
-                            <form method="post" asp-page-handler="EnableCloudRelay" class="setup-wizard-form">
-                                <input type="hidden" name="enable" value="false" />
-                                <button type="submit" class="workspace-secondary-submit">Turn cloud delivery off</button>
-                            </form>
-                        }
-                        else
-                        {
-                            <p>You're connected to Matmon.Cloud, so alert e-mail can go out through the cloud gateway - the simplest option, no SMTP server needed.</p>
-                            <form method="post" asp-page-handler="EnableCloudRelay" class="setup-wizard-form">
-                                <input type="hidden" name="enable" value="true" />
-                                <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Deliver alerts via Matmon.Cloud</span></button>
-                            </form>
-                        }
-                        <details class="setup-wizard-details" style="margin-top:14px;">
-                            <summary>Use your own SMTP server instead</summary>
-                            @await Html.PartialAsync("_WizardSmtpForm", Model)
-                        </details>
-                    }
-                    else
-                    {
-                        <p>Set up e-mail alerts on Warning/Critical. (Connect Matmon.Cloud in the previous step to skip this and relay alerts through the cloud instead.)</p>
-                        @if (Model.EmailConfigured)
-                        {
-                            <p class="setup-wizard-muted">@MatmonIcons.Render("check") E-mail is configured. Manage it in <a href="/notifications" target="_blank" rel="noopener">Notifications ↗</a>.</p>
-                        }
-                        else
-                        {
-                            @await Html.PartialAsync("_WizardSmtpForm", Model)
-                        }
-                    }
-                    break;
-
-                case "structure":
-                    <h2 class="section-title">@MatmonIcons.Render("folder")<span>Organize &amp; scope your monitoring</span></h2>
-                    <p>Create a starter folder structure, and tell this node which networks it may scan.</p>
-
-                    <h3 class="setup-wizard-subhead">Folders</h3>
-                    <p class="setup-wizard-muted" style="margin-top:0;">This starter structure - only the missing folders are created, existing ones are left as they are.</p>
-                    <ul class="setup-wizard-tree">
-                        @foreach (var folder in Model.StarterFolders)
-                        {
-                            <li class="setup-wizard-folder@(folder.Depth > 0 ? " is-child" : string.Empty)@(folder.Exists ? " is-done" : string.Empty)">
-                                <span class="setup-wizard-tree-item">@(folder.Exists ? MatmonIcons.Render("check") : MatmonIcons.Render("folder"))<span>@folder.Label</span></span>
-                                @if (folder.Exists)
-                                {
-                                    <span class="setup-wizard-folder-tag">exists</span>
-                                }
-                            </li>
-                        }
-                    </ul>
-                    @if (Model.AllFoldersExist)
-                    {
-                        <button type="button" class="workspace-submit setup-wizard-open" disabled>@MatmonIcons.Render("check")<span>All folders exist</span></button>
-                    }
-                    else
-                    {
-                        <form method="post" asp-page-handler="CreateStructure">
-                            <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("plus")<span>Create @Model.MissingFolderCount missing folder@(Model.MissingFolderCount == 1 ? string.Empty : "s")</span></button>
+                        <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Alerts are delivered through <strong>Matmon.Cloud</strong> - no mail server of your own required. Pick recipients per rule under <a href="/notifications" target="_blank" rel="noopener">Notifications @MatUi.Icon("external")</a>.</span></p>
+                        <form method="post" asp-page-handler="EnableCloudRelay" class="mat-form" novalidate>
+                            <input type="hidden" name="enable" value="false" />
+                            <div class="mat-btn-row mat-btn-row--plain">
+                                <button type="submit" class="mat-btn mat-btn--secondary">Turn cloud delivery off</button>
+                            </div>
                         </form>
                     }
-
-                    <h3 class="setup-wizard-subhead" style="margin-top:18px;">Networks</h3>
-                    @if (Model.ConfiguredSubnets.Count > 0)
+                    else
                     {
-                        <ul class="setup-wizard-chips">
-                            @foreach (var net in Model.ConfiguredSubnets)
-                            {
-                                <li class="tree-tag setup-wizard-net">
-                                    @MatmonIcons.Render("network")<span>@net</span>
-                                    <form method="post" asp-page-handler="RemoveNetwork">
-                                        <input type="hidden" name="cidr" value="@net" />
-                                        <button type="submit" class="setup-wizard-net-remove" aria-label="Remove @net" title="Remove">@MatmonIcons.Render("x")</button>
-                                    </form>
-                                </li>
-                            }
-                        </ul>
+                        <p>You're connected to Matmon.Cloud, so alert e-mail can go out through the cloud gateway - the simplest option, no SMTP server needed.</p>
+                        <form method="post" asp-page-handler="EnableCloudRelay" class="mat-form" novalidate>
+                            <input type="hidden" name="enable" value="true" />
+                            <div class="mat-btn-row mat-btn-row--plain">
+                                <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Deliver alerts via Matmon.Cloud</span></button>
+                            </div>
+                        </form>
+                    }
+                    <details class="mat-collapse">
+                        <summary><span>Use your own SMTP server instead</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+                        <div class="mat-accordion__body">
+                            @await Html.PartialAsync("_WizardSmtpForm", Model)
+                        </div>
+                    </details>
+                }
+                else
+                {
+                    <p>Set up e-mail alerts on Warning/Critical. (Connect Matmon.Cloud in the previous step to skip this and relay alerts through the cloud instead.)</p>
+                    @if (Model.EmailConfigured)
+                    {
+                        <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>E-mail is configured. Manage it in <a href="/notifications" target="_blank" rel="noopener">Notifications @MatUi.Icon("external")</a>.</span></p>
                     }
                     else
                     {
-                        <p class="setup-wizard-muted">No subnets configured yet.</p>
+                        @await Html.PartialAsync("_WizardSmtpForm", Model)
                     }
-                    <form method="post" asp-page-handler="AddNetwork" class="setup-wizard-add">
-                        <input type="text" name="cidr" class="workspace-input" placeholder="e.g. 192.168.1.0/24" autocomplete="off" />
-                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Add</span></button>
-                    </form>
-                    @if (Model.SuggestedNetworks.Count > 0)
+                }
+                break;
+
+            case "structure":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("folder")<span>Organize &amp; scope your monitoring</span></h2>
+                <p>Create a starter folder structure, and tell this node which networks it may scan.</p>
+
+                <h3 class="mm-wizard__sub">Folders</h3>
+                <p class="mat-muted">This starter structure - only the missing folders are created, existing ones are left as they are.</p>
+                <ul class="mm-wizard__folders">
+                    @foreach (var folder in Model.StarterFolders)
                     {
-                        <p class="setup-wizard-muted">Detected - click to add:</p>
-                        <div class="setup-wizard-suggestions">
+                        var folderClass = "mm-wizard__folder" + (folder.Depth > 0 ? " is-child" : string.Empty) + (folder.Exists ? " is-done" : string.Empty);
+                        <li class="@folderClass">
+                            @(folder.Exists ? MatUi.Icon("check-circle") : MatUi.Icon("folder"))<span>@folder.Label</span>
+                            @if (folder.Exists)
+                            {
+                                <span class="mat-pill mat-pill--ok mm-push-end">exists</span>
+                            }
+                        </li>
+                    }
+                </ul>
+                @if (Model.AllFoldersExist)
+                {
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="button" class="mat-btn mat-btn--primary" disabled>@MatUi.Icon("check")<span>All folders exist</span></button>
+                    </div>
+                }
+                else
+                {
+                    <form method="post" asp-page-handler="CreateStructure" class="mat-form" novalidate>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create @Model.MissingFolderCount missing folder@(Model.MissingFolderCount == 1 ? string.Empty : "s")</span></button>
+                        </div>
+                    </form>
+                }
+
+                <h3 class="mm-wizard__sub">Networks</h3>
+                @if (Model.ConfiguredSubnets.Count > 0)
+                {
+                    @* One form for every remove button: the button that was pressed posts its network as "cidr". *@
+                    <form method="post" asp-page-handler="RemoveNetwork" id="wizard-remove-network" hidden></form>
+                    <div class="mat-chips" role="group" aria-label="Networks of this node">
+                        @foreach (var net in Model.ConfiguredSubnets)
+                        {
+                            <span class="mat-chip">@MatUi.Icon("network")<span class="mat-mono">@net</span><button type="submit" class="mat-chip__x" form="wizard-remove-network" name="cidr" value="@net" aria-label="Remove @net" data-tip="Remove">@MatUi.Icon("x")</button></span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="mat-muted">No subnets configured yet.</p>
+                }
+                <form method="post" asp-page-handler="AddNetwork" class="mat-form" novalidate>
+                    <div class="mat-field mm-wizard__inline">
+                        <label class="mat-label" for="wizard-cidr">Add a network</label>
+                        <div class="mat-input-group">
+                            <input class="mat-input mat-mono" id="wizard-cidr" type="text" name="cidr" placeholder="e.g. 192.168.1.0/24" autocomplete="off" />
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Add</span></button>
+                        </div>
+                    </div>
+                </form>
+                @if (Model.SuggestedNetworks.Count > 0)
+                {
+                    <form method="post" asp-page-handler="AddNetwork" id="wizard-add-detected" hidden></form>
+                    <div class="mat-stack mat-stack--sm">
+                        <p class="mat-muted">Detected - click to add:</p>
+                        <div class="mat-row">
                             @foreach (var net in Model.SuggestedNetworks)
                             {
-                                <form method="post" asp-page-handler="AddNetwork">
-                                    <input type="hidden" name="cidr" value="@net" />
-                                    <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("plus")<span>@net</span></button>
-                                </form>
+                                <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" form="wizard-add-detected" name="cidr" value="@net">@MatUi.Icon("plus")<span class="mat-mono">@net</span></button>
                             }
                         </div>
-                    }
-                    break;
+                    </div>
+                }
+                break;
 
-                case "discovery":
-                    <h2 class="section-title">@MatmonIcons.Render("search")<span>Find your devices</span></h2>
-                    <p>Scan the networks from the previous step, and (optionally) add remote probes for other sites.</p>
+            case "discovery":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("search")<span>Find your devices</span></h2>
+                <p>Scan the networks from the previous step, and (optionally) add remote probes for other sites.</p>
 
-                    <h3 class="setup-wizard-subhead">Discovery scan</h3>
-                    @if (Model.ConfiguredSubnets.Count > 0)
-                    {
-                        <ul class="setup-wizard-chips">
-                            @foreach (var net in Model.ConfiguredSubnets)
-                            {
-                                <li class="tree-tag">@MatmonIcons.Render("network")<span>@net</span></li>
-                            }
-                        </ul>
-                        <form method="post" asp-page-handler="StartDiscovery">
-                            <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("search")<span>Start a scan</span></button>
-                        </form>
-                        <p class="setup-wizard-muted"><a href="/Discovery" target="_blank" rel="noopener">Open Discovery ↗</a> to import what's found.</p>
-                    }
-                    else
-                    {
-                        <p class="setup-wizard-muted">No networks yet - add a subnet in the previous step (Structure &amp; networks) first.</p>
-                        <a class="workspace-secondary-submit setup-wizard-open" href="/setup/wizard?step=structure">@MatmonIcons.Render("arrow-left")<span>Back to networks</span></a>
-                    }
-
-                    <h3 class="setup-wizard-subhead" style="margin-top:18px;">Remote probes</h3>
-                    <p class="setup-wizard-muted" style="margin-top:0;">Optional - monitor another site or devices behind NAT. The probe connects outbound to this server.</p>
-                    @if (Model.RemoteProbes.Count > 0)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") @Model.RemoteProbes.Count remote probe@(Model.RemoteProbes.Count == 1 ? string.Empty : "s") already added. Deploy each with its command (replace <code>@primaryUrl</code> with an address the probe can reach):</p>
-                        @foreach (var probe in Model.RemoteProbes)
+                <h3 class="mm-wizard__sub">Discovery scan</h3>
+                @if (Model.ConfiguredSubnets.Count > 0)
+                {
+                    <div class="mat-chips" role="group" aria-label="Networks to scan">
+                        @foreach (var net in Model.ConfiguredSubnets)
                         {
-                            <div class="setup-wizard-probe">
-                                <strong class="setup-wizard-tree-item">@MatmonIcons.Render("probe")<span>@probe.Name</span></strong>
-                                <pre class="setup-wizard-code">docker run -d \
+                            <span class="mat-chip">@MatUi.Icon("network")<span class="mat-mono">@net</span></span>
+                        }
+                    </div>
+                    <form method="post" asp-page-handler="StartDiscovery" class="mat-form" novalidate>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("search")<span>Start a scan</span></button>
+                        </div>
+                    </form>
+                    <p class="mat-muted"><a href="/Discovery" target="_blank" rel="noopener">Open Discovery @MatUi.Icon("external")</a> to import what's found.</p>
+                }
+                else
+                {
+                    <p class="mat-muted">No networks yet - add a subnet in the previous step (Structure &amp; networks) first.</p>
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <a class="mat-btn mat-btn--secondary" href="/setup/wizard?step=structure">@MatUi.Icon("back")<span>Back to networks</span></a>
+                    </div>
+                }
+
+                <h3 class="mm-wizard__sub">Remote probes</h3>
+                <p class="mat-muted">Optional - monitor another site or devices behind NAT. The probe connects outbound to this server.</p>
+                @if (Model.RemoteProbes.Count > 0)
+                {
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>@Model.RemoteProbes.Count remote probe@(Model.RemoteProbes.Count == 1 ? string.Empty : "s") already added. Deploy each with its command (replace <code>@primaryUrl</code> with an address the probe can reach):</span></p>
+                    @for (var i = 0; i < Model.RemoteProbes.Count; i++)
+                    {
+                        var probe = Model.RemoteProbes[i];
+                        var commandId = $"wizard-probe-command-{i}";
+                        <div class="mat-card">
+                            <div class="mat-card__head">@MatUi.Icon("server")<h4 class="mat-card__title">@probe.Name</h4></div>
+                            <div class="mat-card__body">
+                                <div class="mm-snippet">
+                                    <pre class="mat-code" id="@commandId"><code>docker run -d \
   -e Matmon__Mode=Secondary \
   -e Matmon__ProbeId=@probe.ProbeId \
   -e Matmon__ProbeToken=@probe.Token \
   -e Matmon__PrimaryUrl=@primaryUrl \
-  ghcr.io/real-ttx/matmon:latest</pre>
+  ghcr.io/real-ttx/matmon:latest</code></pre>
+                                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--icon mat-btn--sm" data-copy="#@commandId" aria-label="Copy the command for @probe.Name" data-tip="Copy">@MatUi.Icon("copy")</button>
+                                </div>
                             </div>
-                        }
-                    }
-                    else
-                    {
-                        <p class="setup-wizard-muted">No remote probes yet - add one below to get its deploy command.</p>
-                    }
-                    <form method="post" asp-page-handler="CreateProbe" class="setup-wizard-add">
-                        <input type="text" name="name" class="workspace-input" placeholder="Probe name, e.g. Branch office" autocomplete="off" />
-                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create probe</span></button>
-                    </form>
-                    break;
-
-                case "twofactor":
-                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Secure your account</span></h2>
-                    @if (Model.TwoFactorEnabled)
-                    {
-                        <p class="setup-wizard-muted">@MatmonIcons.Render("check") Two-factor authentication is enabled. Manage it on your <a href="/Account" target="_blank" rel="noopener">Account ↗</a>.</p>
-                    }
-                    else if (Model.Enrollment is not null)
-                    {
-                        <p>Scan this QR code with your authenticator app (or enter the key), then type the 6-digit code to turn on two-factor.</p>
-                        <div class="setup-wizard-2fa" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
-                            <div class="setup-wizard-qr" style="width:168px;height:168px;">@Html.Raw(Model.QrSvg)</div>
-                            <p class="setup-wizard-muted">Manual key:<br /><code>@Model.Enrollment.SecretBase32</code></p>
                         </div>
-                        <form method="post" asp-page-handler="ConfirmTotp" class="setup-wizard-add">
-                            <input type="text" name="TotpCode" class="workspace-input" placeholder="123456" inputmode="numeric" autocomplete="one-time-code" />
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Enable</span></button>
-                        </form>
                     }
-                    else
-                    {
-                        <p>Add a second factor (an authenticator app) so a stolen password alone can't sign in. Optional, but recommended for the admin account.</p>
-                        <form method="post" asp-page-handler="StartTotp">
-                            <button type="submit" class="workspace-submit setup-wizard-open">@MatmonIcons.Render("lock")<span>Set up two-factor</span></button>
-                        </form>
-                    }
-                    break;
+                }
+                else
+                {
+                    <p class="mat-muted">No remote probes yet - add one below to get its deploy command.</p>
+                }
+                <form method="post" asp-page-handler="CreateProbe" class="mat-form" novalidate>
+                    <div class="mat-field mm-wizard__inline">
+                        <label class="mat-label" for="wizard-probe-name">New remote probe</label>
+                        <div class="mat-input-group">
+                            <input class="mat-input" id="wizard-probe-name" type="text" name="name" placeholder="Probe name, e.g. Branch office" autocomplete="off" />
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create probe</span></button>
+                        </div>
+                    </div>
+                </form>
+                break;
 
-                case "done":
-                    <h2 class="section-title">@MatmonIcons.Render("check")<span>You're all set</span></h2>
-                    <p>Matmon is ready. Revisit any of these from the menu anytime.</p>
-                    break;
-            }
-        </div>
+            case "twofactor":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("lock")<span>Secure your account</span></h2>
+                @if (Model.TwoFactorEnabled)
+                {
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Two-factor authentication is enabled. Manage it on your <a href="/Account" target="_blank" rel="noopener">Account @MatUi.Icon("external")</a>.</span></p>
+                }
+                else if (Model.Enrollment is not null)
+                {
+                    <p>Scan this QR code with your authenticator app (or enter the key), then type the 6-digit code to turn on two-factor.</p>
+                    <div class="mm-wizard__totp">
+                        <div class="mm-wizard__qr" role="img" aria-label="QR code for your authenticator app">@Html.Raw(Model.QrSvg)</div>
+                        <div class="mat-field mm-wizard__key">
+                            <label class="mat-label" for="wizard-totp-key">Manual key</label>
+                            <div class="mat-input-group">
+                                <input class="mat-input mat-mono" id="wizard-totp-key" value="@Model.Enrollment.SecretBase32" readonly />
+                                <button type="button" class="mat-btn mat-btn--secondary" data-copy="#wizard-totp-key">@MatUi.Icon("copy")<span>Copy</span></button>
+                            </div>
+                        </div>
+                    </div>
+                    <form method="post" asp-page-handler="ConfirmTotp" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="wizard-totp-code">Code from the app</label>
+                            <div class="mat-otp" data-otp data-length="6" data-chars="digits" data-submit="#wizard-totp-go">
+                                <input class="mat-otp__input" id="wizard-totp-code" name="TotpCode" inputmode="numeric" autocomplete="one-time-code" required pattern="[0-9]{6}"
+                                       data-msg-required="Please enter the six digits of the code." data-msg-pattern="The code has six digits." />
+                            </div>
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary" id="wizard-totp-go">@MatUi.Icon("check")<span>Enable</span></button>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <p>Add a second factor (an authenticator app) so a stolen password alone can't sign in. Optional, but recommended for the admin account.</p>
+                    <form method="post" asp-page-handler="StartTotp" class="mat-form" novalidate>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("lock")<span>Set up two-factor</span></button>
+                        </div>
+                    </form>
+                }
+                break;
 
-        <div class="setup-wizard-actions">
-            @if (Model.PrevStep is not null)
-            {
-                <a class="workspace-secondary-submit" href="@StepUrl(Model.PrevStep)">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-            }
-            <span class="setup-wizard-actions-spacer"></span>
-            @if (Model.Step == "welcome")
-            {
-                <a class="workspace-submit" href="@StepUrl(Model.NextStep)"><span>Get started</span>@MatmonIcons.Render("arrow-right")</a>
-            }
-            else if (Model.Step == "done")
-            {
-                <a class="workspace-submit" href="/"><span>Go to dashboard</span>@MatmonIcons.Render("arrow-right")</a>
-            }
-            else
-            {
-                <a class="workspace-secondary-submit" href="@StepUrl(Model.NextStep)"><span>Skip</span></a>
-                <a class="workspace-submit" href="@StepUrl(Model.NextStep)"><span>Continue</span>@MatmonIcons.Render("arrow-right")</a>
-            }
-        </div>
+            case "done":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("check")<span>You're all set</span></h2>
+                <p>@brandName is ready. Revisit any of these from the menu anytime.</p>
+                break;
+        }
+    </section>
+
+    @* Moving through the assistant: forward (Get started / Continue / Go to dashboard), Skip, Back, and leaving it. *@
+    <div class="mat-btn-row">
+        @if (Model.Step == "welcome")
+        {
+            <a class="mat-btn mat-btn--primary" href="@StepUrl(Model.NextStep)"><span>Get started</span>@MatUi.Icon("arrow-right")</a>
+        }
+        else if (Model.Step == "done")
+        {
+            <a class="mat-btn mat-btn--primary" href="/"><span>Go to dashboard</span>@MatUi.Icon("arrow-right")</a>
+        }
+        else
+        {
+            <a class="mat-btn mat-btn--primary" href="@StepUrl(Model.NextStep)"><span>Continue</span>@MatUi.Icon("arrow-right")</a>
+            <a class="mat-btn mat-btn--secondary" href="@StepUrl(Model.NextStep)"><span>Skip</span></a>
+        }
+        @if (Model.PrevStep is not null)
+        {
+            <a class="mat-btn mat-btn--secondary" href="@StepUrl(Model.PrevStep)">@MatUi.Icon("back")<span>Back</span></a>
+        }
+        @if (Model.Step != "done")
+        {
+            <span class="mat-btn-row__spacer"></span>
+            <a class="mat-btn mat-btn--ghost mat-btn--end" href="/">@MatUi.Icon("x")<span>Skip setup</span></a>
+        }
     </div>
-</section>
+</div>

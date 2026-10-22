@@ -2,149 +2,236 @@
 @model EventsModel
 @{
     ViewData["Title"] = "Events";
+    var hasSyslog = Model.SyslogView is not null;
+    ViewData["PageSub"] = hasSyslog
+        ? "What Matmon saw happen, and what the network's devices said."
+        : "What Matmon saw happen: state changes, alerts and changes to the setup.";
     var returnUrl = Request.Path + Request.QueryString;
+
+    // The Matmon list is filtered on the server: the search is a field in the toolbar, Kind / State / Limit sit in the
+    // Filter dialog (LIST-03), every field points at the one hidden GET form, and each filter in effect is a chip whose X
+    // drops it (LIST-04).
+    const int DefaultTake = 250;
+    var stateChoices = new (string Value, string Label)[]
+    {
+        ("ok", "OK"),
+        ("warning", "Warning"),
+        ("error", "Error"),
+        ("paused", "Paused"),
+        ("unknown", "Unknown"),
+        ("disabled", "Disabled")
+    };
+    var kindActive = !string.Equals(Model.View.KindFilter, "all", StringComparison.OrdinalIgnoreCase);
+    var stateActive = !string.Equals(Model.View.StateFilter, "all", StringComparison.OrdinalIgnoreCase);
+    var takeActive = Model.View.Take != DefaultTake;
+    var activeFilters = (kindActive ? 1 : 0) + (stateActive ? 1 : 0) + (takeActive ? 1 : 0);
+    var stateFilterLabel = stateChoices.FirstOrDefault(choice => string.Equals(choice.Value, Model.View.StateFilter, StringComparison.OrdinalIgnoreCase)).Label ?? Model.View.StateFilter;
+    var eventsPath = Url.Page("/Events") ?? "/Events";
+
+    // The address of the list without one filter: the link of a chip's X. Only the Matmon list's own fields are kept.
+    string UrlWithout(string key)
+    {
+        var parts = new List<string>();
+        foreach (var name in new[] { "search", "kind", "state", "take" })
+        {
+            if (string.Equals(name, key, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var value in Request.Query[name])
+            {
+                if (!string.IsNullOrEmpty(value))
+                {
+                    parts.Add(Uri.EscapeDataString(name) + "=" + Uri.EscapeDataString(value));
+                }
+            }
+        }
+
+        return eventsPath + (parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty);
+    }
 }
 
-<section class="dashboard-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("list")
-            <h1>Events</h1>
-        </div>
-    </div>
-
-    @if (Model.SyslogView is not null)
+@* Two sources of events: what Matmon saw happen, and what the network's devices said. The second only appears once syslog
+   is switched on (System > Syslog) or the log holds something; until then the page is the Matmon list alone. *@
+<div class="mat-stack" data-tabs="@(hasSyslog ? string.Empty : null)" data-tab-hash="@(hasSyslog ? string.Empty : null)">
+    @if (hasSyslog)
     {
-        @* Two sources of events: what Matmon saw happen, and what the network's devices said. The second only appears
-           once syslog is switched on (System > Syslog) or the log holds something. *@
-        <div class="sensor-tabs" data-sensor-tabs data-tab-hash="true">
-            <button type="button" class="sensor-tab is-active" data-sensor-tab-target="matmon">@MatmonIcons.Render("monitoring")<span>Matmon</span></button>
-            <button type="button" class="sensor-tab" data-sensor-tab-target="syslog">@MatmonIcons.Render("list")<span>Syslog</span></button>
+        <div class="mat-tabs" role="tablist" aria-label="Event sources">
+            <button type="button" class="mat-tab" role="tab" id="tab-matmon" aria-controls="panel-matmon" aria-selected="true">@MatUi.Icon("activity")<span>Matmon</span></button>
+            <button type="button" class="mat-tab" role="tab" id="tab-syslog" aria-controls="panel-syslog" aria-selected="false" tabindex="-1">@MatUi.Icon("list")<span>Syslog</span></button>
         </div>
     }
 
-    <div data-sensor-tab="matmon">
-    <section class="panel panel-stack monitoring-controls">
-        <form method="get" class="monitoring-filter-bar">
-            <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("search")<small>Search</small></span>
-                <input type="search" name="search" value="@Model.View.Search" class="form-control workspace-input" placeholder="Name, path, message" />
-            </label>
+    <div class="@(hasSyslog ? "mat-tabpanel" : null)" role="@(hasSyslog ? "tabpanel" : null)" id="panel-matmon" aria-labelledby="@(hasSyslog ? "tab-matmon" : null)">
+        <div class="mat-list">
+            <div class="mat-toolbar" role="toolbar" aria-label="Event tools">
+                <div class="mat-input-icon mat-toolbar__search">
+                    @MatUi.Icon("search")
+                    <input class="mat-input" type="search" id="events-search" name="search" form="events-form" value="@Model.View.Search" placeholder="Name, path, message"
+                           aria-label="Search the events" autocomplete="off" enterkeyhint="search" data-shortcut="/" />
+                </div>
+                <span class="mat-toolbar__spacer"></span>
+                <span class="mat-toolbar__info" aria-live="polite">@Model.View.Events.Count @(Model.View.Events.Count == 1 ? "entry" : "entries")</span>
+                <div class="mat-toolbar__end">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn@(activeFilters > 0 ? " is-active" : string.Empty)" data-dialog-open="events-filter" aria-haspopup="dialog">
+                        @MatUi.Icon("sliders")<span>Filter</span>
+                        @if (activeFilters > 0)
+                        {
+                            <span class="mat-badge">@activeFilters</span>
+                        }
+                    </button>
+                </div>
+            </div>
 
-            <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("warning")<small>Kind</small></span>
-                <select name="kind" class="form-select workspace-select">
-                    <option value="all" selected="@(Model.View.KindFilter == "all" ? "selected" : null)">All</option>
-                    @foreach (var kind in Enum.GetValues<MonitoringEventKind>())
+            @if (activeFilters > 0)
+            {
+                <div class="mat-chips" role="group" aria-label="Filters in effect">
+                    @if (kindActive)
                     {
-                        <option value="@kind.ToString()" selected="@(string.Equals(Model.View.KindFilter, kind.ToString(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@kind</option>
+                        <span class="mat-chip">Kind: @Model.View.KindFilter<a class="mat-chip__x" href="@UrlWithout("kind")" aria-label="Remove the filter Kind">@MatUi.Icon("x")</a></span>
                     }
-                </select>
-            </label>
+                    @if (stateActive)
+                    {
+                        <span class="mat-chip">State: @stateFilterLabel<a class="mat-chip__x" href="@UrlWithout("state")" aria-label="Remove the filter State">@MatUi.Icon("x")</a></span>
+                    }
+                    @if (takeActive)
+                    {
+                        <span class="mat-chip">Limit: @Model.View.Take<a class="mat-chip__x" href="@UrlWithout("take")" aria-label="Remove the filter Limit">@MatUi.Icon("x")</a></span>
+                    }
+                </div>
+            }
 
-            <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("sensor")<small>State</small></span>
-                <select name="state" class="form-select workspace-select">
-                    <option value="all" selected="@(Model.View.StateFilter == "all" ? "selected" : null)">All</option>
-                    <option value="ok" selected="@(Model.View.StateFilter == "ok" ? "selected" : null)">OK</option>
-                    <option value="warning" selected="@(Model.View.StateFilter == "warning" ? "selected" : null)">Warning</option>
-                    <option value="error" selected="@(Model.View.StateFilter == "error" ? "selected" : null)">Error</option>
-                    <option value="paused" selected="@(Model.View.StateFilter == "paused" ? "selected" : null)">Paused</option>
-                    <option value="unknown" selected="@(Model.View.StateFilter == "unknown" ? "selected" : null)">Unknown</option>
-                    <option value="disabled" selected="@(Model.View.StateFilter == "disabled" ? "selected" : null)">Disabled</option>
-                </select>
-            </label>
+            <form id="events-form" method="get" action="@eventsPath" novalidate hidden></form>
 
-            <label class="monitoring-filter-field">
-                <span>@MatmonIcons.Render("clock")<small>Limit</small></span>
-                <input type="number" name="take" min="50" max="1000" value="@Model.View.Take" class="form-control workspace-input" />
-            </label>
-
-            <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Apply</span></button>
-            <a class="workspace-secondary-submit" asp-page="/Events">@MatmonIcons.Render("arrow-left")<span>Reset</span></a>
-        </form>
-    </section>
-
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("list")<span>Log</span></h2>
-            <span class="panel-hint">@Model.View.Events.Count entries</span>
+            @if (Model.View.Events.Count == 0)
+            {
+                <div class="mat-empty">
+                    <span class="mat-empty__icon">@MatUi.Icon("search")</span>
+                    <div class="mat-empty__title">No events found</div>
+                    <p>Change the search or the filters, or reset them.</p>
+                    <a class="mat-btn mat-btn--secondary" href="@eventsPath">@MatUi.Icon("refresh")<span>Reset</span></a>
+                </div>
+            }
+            else
+            {
+                <div class="mat-table-wrap">
+                    <table class="mat-table">
+                        <caption class="mat-sr-only">Events, the newest first</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Time</th>
+                                <th scope="col">Event</th>
+                                <th scope="col">Element</th>
+                                <th scope="col">Message</th>
+                                <th scope="col">State</th>
+                                <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in Model.View.Events)
+                            {
+                                <tr>
+                                    <td data-label="Time" class="mat-mono mat-nowrap">@entry.Timestamp</td>
+                                    <td data-label="Event" class="mat-nowrap">@entry.KindLabel</td>
+                                    <td data-label="Element" class="mat-table__primary">
+                                        <div class="mat-table__name">
+                                            @if (!string.IsNullOrWhiteSpace(entry.ElementKind))
+                                            {
+                                                <span class="mat-tag">@entry.ElementKind</span>
+                                            }
+                                            <span class="mat-min-w-0">@entry.ElementName<small class="mm-break">@entry.ElementPath</small></span>
+                                        </div>
+                                    </td>
+                                    <td data-label="Message" class="mm-break">
+                                        @entry.Message
+                                        @if (!string.IsNullOrWhiteSpace(entry.Details))
+                                        {
+                                            <small class="mat-d-block mat-text-muted">@entry.Details</small>
+                                        }
+                                    </td>
+                                    <td data-label="State">
+                                        @if (!string.IsNullOrWhiteSpace(entry.StateLabel))
+                                        {
+                                            <span class="@MatUi.PillClass(entry.StateKey)">@entry.StateLabel</span>
+                                        }
+                                    </td>
+                                    <td class="mat-table__cell-actions">
+                                        @if (entry.ElementId is Guid elementId)
+                                        {
+                                            <div class="mat-table__actions">
+                                                @if (string.Equals(entry.ElementKind, MonitoringElementKind.Sensor.ToString(), StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@elementId" aria-label="Details of @entry.ElementName" data-tip="Details">@MatUi.Icon("bar-chart")</a>
+                                                }
+                                                <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ElementEditor" asp-route-selectedId="@elementId" asp-route-returnUrl="@returnUrl" aria-label="Edit @entry.ElementName" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
 
-        @if (Model.View.Events.Count == 0)
-        {
-            <div class="empty-state">No events found.</div>
-        }
-        else
-        {
-            <div class="events-list">
-                @foreach (var entry in Model.View.Events)
-                {
-                    <details class="event-row" data-state="@entry.StateKey">
-                        <summary class="event-row-summary">
-                            <span class="tree-kind event-row-kind" data-kind="@entry.ElementKind.ToLowerInvariant()">@entry.KindLabel</span>
-                            <div class="event-row-main">
-                                <span class="event-row-name">@entry.ElementName</span>
-                                <span class="event-row-separator">&middot;</span>
-                                <span class="event-row-path">@entry.ElementPath</span>
-                                <span class="event-row-separator">&middot;</span>
-                                <span class="event-row-message">@(string.IsNullOrWhiteSpace(entry.Details) ? entry.Message : entry.Details)</span>
-                            </div>
-                            <div class="event-row-side">
-                                @if (!string.IsNullOrWhiteSpace(entry.StateLabel))
-                                {
-                                    <span class="state-pill" data-state="@entry.StateKey">@entry.StateLabel</span>
-                                }
-                                <span class="event-row-time">@entry.Timestamp</span>
-                                <span class="event-row-chevron">@MatmonIcons.Render("arrow-right")</span>
-                            </div>
-                        </summary>
-
-                        <div class="event-row-body">
-                            <div class="event-row-body-grid">
-                                <div class="event-row-field">
-                                    <span class="workspace-label">Message</span>
-                                    <div>@entry.Message</div>
-                                </div>
-                                @if (!string.IsNullOrWhiteSpace(entry.Details))
-                                {
-                                    <div class="event-row-field">
-                                        <span class="workspace-label">Details</span>
-                                        <div>@entry.Details</div>
-                                    </div>
-                                }
-                                <div class="event-row-field">
-                                    <span class="workspace-label">Path</span>
-                                    <div>@entry.ElementPath</div>
-                                </div>
-                                <div class="event-row-field">
-                                    <span class="workspace-label">Time</span>
-                                    <div>@entry.Timestamp</div>
-                                </div>
-                            </div>
-
-                            @if (entry.ElementId is Guid elementId)
+        <dialog class="mat-dialog mat-dialog--sm" id="events-filter" aria-labelledby="events-filter-title">
+            <div class="mat-dialog__form">
+                <div class="mat-dialog__head">
+                    @MatUi.Icon("sliders")
+                    <h2 class="mat-dialog__title" id="events-filter-title">Filter</h2>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                </div>
+                <div class="mat-dialog__body mat-form">
+                    <div class="mat-field">
+                        <label class="mat-label" for="events-kind">Kind</label>
+                        <select class="mat-select" id="events-kind" name="kind" form="events-form">
+                            <option value="all" selected="@(Model.View.KindFilter == "all")">All</option>
+                            @foreach (var kind in Enum.GetValues<MonitoringEventKind>())
                             {
-                                <div class="workspace-row-actions event-row-actions">
-                                    @if (string.Equals(entry.ElementKind, MonitoringElementKind.Sensor.ToString(), StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        <a class="workspace-action-link" asp-page="/SensorDetails" asp-route-sensorId="@elementId">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                    }
-                                    <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@elementId" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                </div>
+                                <option value="@kind.ToString()" selected="@(string.Equals(Model.View.KindFilter, kind.ToString(), StringComparison.OrdinalIgnoreCase))">@kind</option>
                             }
-                        </div>
-                    </details>
-                }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="events-state">State</label>
+                        <select class="mat-select" id="events-state" name="state" form="events-form">
+                            <option value="all" selected="@(Model.View.StateFilter == "all")">All</option>
+                            @foreach (var choice in stateChoices)
+                            {
+                                <option value="@choice.Value" selected="@(Model.View.StateFilter == choice.Value)">@choice.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="events-take">Limit</label>
+                        <input class="mat-input mat-mono" type="number" id="events-take" name="take" form="events-form" min="50" max="1000" value="@Model.View.Take"
+                               data-msg-range="Between 50 and 1000 entries." />
+                        <span class="mat-hint">How many of the newest events are read, 50 to 1000.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(Model.View.Search))
+                    {
+                        <p class="mat-hint">The search in effect is kept.</p>
+                    }
+                </div>
+                <div class="mat-dialog__foot">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="submit" form="events-form" class="mat-btn mat-btn--primary">@MatUi.Icon("sliders")<span>Apply</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                        <span class="mat-btn-row__spacer"></span>
+                        <a class="mat-btn mat-btn--ghost mat-btn--end" href="@eventsPath">Reset everything</a>
+                    </div>
+                </div>
             </div>
-        }
-    </section>
+        </dialog>
     </div>
 
     @if (Model.SyslogView is { } syslogView)
     {
-        <div data-sensor-tab="syslog" hidden>
+        <div class="mat-tabpanel" role="tabpanel" id="panel-syslog" aria-labelledby="tab-syslog" hidden>
             <partial name="_SyslogMessages" model="syslogView" />
         </div>
     }
-</section>
+</div>

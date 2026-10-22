@@ -1,107 +1,122 @@
 @using Matmon.Core.Domain
 @model ISensorParameterEditor
+@*
+    The structured parameters of a sensor (the general ones; the credential fields are _SensorCredentials). It is the
+    sensor editors' tab panel "parameters" (id panel-parameters, its tab is tab-parameters). A page that draws the panel
+    itself (SensorCreate, which adds the SNMP walk to it) or has no tabs (the assistant) sets
+    ViewData["SensorEditorPanels"] = false; ViewData["SensorEditorTab"] = "parameters" opens the panel.
+*@
 @{
     var generalFields = Model.SensorParameterFields.Where(field => !field.IsCredential).ToList();
+    var asPanel = ViewData["SensorEditorPanels"] is not false;
+    var open = string.Equals(ViewData["SensorEditorTab"] as string, "parameters", StringComparison.OrdinalIgnoreCase);
+    var isPost = string.Equals(Context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase);
 }
-<div class="sensor-parameter-section" data-sensor-tab="parameters">
-    <div class="panel-header">
-        <h2 class="section-title">@MatmonIcons.Render("sensor")<span>Parameters</span></h2>
-        <span class="panel-hint">@Model.SensorTypeKey</span>
-    </div>
-    <div class="workspace-inline-note">Blank means inherit. Placeholders show the inherited or default value.</div>
+<div class="@(asPanel ? "mat-tabpanel mat-stack" : "mat-stack")" role="@(asPanel ? "tabpanel" : null)" id="@(asPanel ? "panel-parameters" : null)" aria-labelledby="@(asPanel ? "tab-parameters" : null)" hidden="@(asPanel && !open)">
+    <section class="mat-card sensor-parameter-section">
+        <div class="mat-card__head">
+            @MatUi.Icon("sliders")
+            <h2 class="mat-card__title">Parameters</h2>
+            <span class="mat-tag mat-mono mm-push-end">@Model.SensorTypeKey</span>
+        </div>
+        <div class="mat-card__body mat-stack">
+            <p class="mat-muted">Blank means inherit. Placeholders show the inherited or default value.</p>
 
-    <partial name="_ScriptVariables" model="@Model.SensorTypeKey" />
+            <partial name="_ScriptVariables" model="@Model.SensorTypeKey" />
 
-    @if (generalFields.Count == 0)
-    {
-        <div class="empty-state">No fields defined.</div>
-    }
-    else
-    {
-        var generalGroups = generalFields
-            .Select(f => string.IsNullOrWhiteSpace(f.Group) ? string.Empty : f.Group!.Trim())
-            .Distinct()
-            .ToList();
-        var showGroupTitles = generalGroups.Count > 1 || generalGroups.Any(g => g.Length > 0);
-
-        foreach (var group in generalGroups)
-        {
-            if (showGroupTitles)
+            @if (generalFields.Count == 0)
             {
-                <div class="sensor-parameter-group-title">@(group.Length == 0 ? "General" : group)</div>
+                <p class="mat-muted">No fields defined.</p>
             }
-            <div class="sensor-parameter-list">
-                @for (var i = 0; i < Model.SensorParameterFields.Count; i++)
-                {
-                    var field = Model.SensorParameterFields[i];
-                    if (field.IsCredential)
-                    {
-                        continue;
-                    }
-                    var fieldGroup = string.IsNullOrWhiteSpace(field.Group) ? string.Empty : field.Group!.Trim();
-                    if (!string.Equals(fieldGroup, group, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
+            else
+            {
+                var generalGroups = generalFields
+                    .Select(f => string.IsNullOrWhiteSpace(f.Group) ? string.Empty : f.Group!.Trim())
+                    .Distinct()
+                    .ToList();
+                var showGroupTitles = generalGroups.Count > 1 || generalGroups.Any(g => g.Length > 0);
 
-                    <div class="sensor-parameter-card"
-                         data-sensor-parameter-field
-                         data-parameter-key="@field.Key"
-                         data-visible-when-key="@field.VisibleWhenParameterKey"
-                         data-visible-when-values="@field.VisibleWhenValuesText"
-                         data-inherited-value="@field.InheritedValue"
-                         data-effective-value="@field.EffectiveValue"
-                         hidden="@(!field.IsVisible ? "hidden" : null)">
-                        <input type="hidden" asp-for="SensorParameterFields[i].Key" />
-                        <div class="sensor-parameter-head">
-                            <div>
-                                <div class="sensor-parameter-name">@field.Label</div>
-                                @if (!string.IsNullOrWhiteSpace(field.Description))
-                                {
-                                    <div class="sensor-parameter-help">@field.Description</div>
-                                }
-                            </div>
-                            @if (field.Required)
+                foreach (var group in generalGroups)
+                {
+                    <div class="sensor-parameter-group">
+                        @if (showGroupTitles)
+                        {
+                            <h3 class="sensor-parameter-group-title">@(group.Length == 0 ? "General" : group)</h3>
+                        }
+                        <div class="mat-form__grid">
+                            @for (var i = 0; i < Model.SensorParameterFields.Count; i++)
                             {
-                                <span class="sensor-required">required</span>
+                                var field = Model.SensorParameterFields[i];
+                                if (field.IsCredential)
+                                {
+                                    continue;
+                                }
+                                var fieldGroup = string.IsNullOrWhiteSpace(field.Group) ? string.Empty : field.Group!.Trim();
+                                if (!string.Equals(fieldGroup, group, StringComparison.Ordinal))
+                                {
+                                    continue;
+                                }
+                                var wide = field.Kind is SensorParameterKind.ScriptEditor or SensorParameterKind.Multiline;
+                                var placeholder = field.DisplayPlaceholder ?? field.Placeholder;
+
+                                <div class="mat-field @(wide ? "mat-field--full" : null)"
+                                     data-sensor-parameter-field
+                                     data-parameter-key="@field.Key"
+                                     data-visible-when-key="@field.VisibleWhenParameterKey"
+                                     data-visible-when-values="@field.VisibleWhenValuesText"
+                                     data-inherited-value="@field.InheritedValue"
+                                     data-effective-value="@field.EffectiveValue"
+                                     hidden="@(!field.IsVisible)">
+                                    <input type="hidden" asp-for="SensorParameterFields[i].Key" />
+                                    <label class="mat-label" asp-for="SensorParameterFields[i].Value">
+                                        <span>@field.Label</span>
+                                        @if (field.Required)
+                                        {
+                                            <span class="mat-req" aria-hidden="true">*</span>
+                                            <span class="mat-sr-only">(required)</span>
+                                        }
+                                    </label>
+
+                                    @switch (field.Kind)
+                                    {
+                                        case SensorParameterKind.ValueList:
+                                        case SensorParameterKind.Boolean:
+                                            <select asp-for="SensorParameterFields[i].Value" class="mat-select" asp-items="field.Options"></select>
+                                            break;
+                                        case SensorParameterKind.Integer:
+                                            <input asp-for="SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "1")" min="@field.Min" max="@field.Max" class="mat-input mat-mono" placeholder="@placeholder" />
+                                            break;
+                                        case SensorParameterKind.Decimal:
+                                            <input asp-for="SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "any")" min="@field.Min" max="@field.Max" class="mat-input mat-mono" placeholder="@placeholder" />
+                                            break;
+                                        case SensorParameterKind.ScriptEditor:
+                                            <textarea asp-for="SensorParameterFields[i].Value" rows="14" class="mat-textarea" data-script-editor spellcheck="false" placeholder="@placeholder"></textarea>
+                                            break;
+                                        case SensorParameterKind.Multiline:
+                                            <textarea asp-for="SensorParameterFields[i].Value" rows="4" class="mat-textarea" placeholder="@placeholder"></textarea>
+                                            break;
+                                        case SensorParameterKind.Secret:
+                                            @* Keep a just-typed secret across a Test/Preview/validation re-post (password inputs are never
+                                               echoed by asp-for) - but only on POST, so a stored secret is never rendered on the initial GET. *@
+                                            <input asp-for="SensorParameterFields[i].Value" type="password" autocomplete="off" class="mat-input" value="@(isPost ? field.Value : null)" placeholder="@placeholder" />
+                                            break;
+                                        default:
+                                            <input asp-for="SensorParameterFields[i].Value" type="text" class="mat-input" placeholder="@placeholder" />
+                                            break;
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(field.Description))
+                                    {
+                                        <span class="mat-hint">@field.Description</span>
+                                    }
+                                </div>
                             }
                         </div>
-
-                        @switch (field.Kind)
-                        {
-                            case SensorParameterKind.ValueList:
-                                <select asp-for="SensorParameterFields[i].Value" class="form-select workspace-select" asp-items="field.Options"></select>
-                                break;
-                            case SensorParameterKind.Boolean:
-                                <select asp-for="SensorParameterFields[i].Value" class="form-select workspace-select" asp-items="field.Options"></select>
-                                break;
-                            case SensorParameterKind.Integer:
-                                <input asp-for="SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "1")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                break;
-                            case SensorParameterKind.Decimal:
-                                <input asp-for="SensorParameterFields[i].Value" type="number" step="@(field.Step ?? "any")" min="@field.Min" max="@field.Max" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                break;
-                            case SensorParameterKind.ScriptEditor:
-                                <textarea asp-for="SensorParameterFields[i].Value" rows="14" class="form-control workspace-textarea" data-script-editor spellcheck="false" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
-                                break;
-                            case SensorParameterKind.Multiline:
-                                <textarea asp-for="SensorParameterFields[i].Value" rows="4" class="form-control workspace-textarea" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)"></textarea>
-                                break;
-                            case SensorParameterKind.Secret:
-                                @* Keep a just-typed secret across a Test/Preview/validation re-post (password
-                                   inputs are never echoed by asp-for) - but only on POST, so a stored secret
-                                   is never rendered on the initial GET. *@
-                                <input asp-for="SensorParameterFields[i].Value" type="password" autocomplete="off" class="form-control workspace-input" value="@(string.Equals(Context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase) ? field.Value : null)" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                break;
-                            default:
-                                <input asp-for="SensorParameterFields[i].Value" type="text" class="form-control workspace-input" placeholder="@(field.DisplayPlaceholder ?? field.Placeholder)" />
-                                break;
-                        }
                     </div>
                 }
-            </div>
-        }
-    }
+            }
+        </div>
+    </section>
 
     <input type="hidden" asp-for="SensorAdvancedParametersText" />
 </div>

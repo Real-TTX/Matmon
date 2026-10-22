@@ -54,8 +54,8 @@ public static class BreadcrumbBuilder
                 items.Add(new(GetLeafTitle(title, "Map")));
                 break;
             case "/notifications":
-                items.Add(new("Notifications", "/Notifications"));
-                items.Add(new("Rules"));
+                // One page with three tabs (rules, senders, receivers): the trail ends at the page, not at one tab.
+                items.Add(new("Notifications"));
                 break;
             case "/notifications/settings":
                 items.Add(new("Notifications", "/Notifications"));

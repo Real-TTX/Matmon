@@ -1,4 +1,12 @@
 @model WorkspaceMonitoringTreeNode
+@*
+    One node of the monitoring tree (Sensors page, tree view), recursively: a container (probe, folder, host) is a row with
+    its toggle, kind, name, details, tags, counts and its action menu, then its children - the sensors as a strip of chips,
+    then the child containers. A sensor at the top level is a single chip. monitoring.js reads the data-tree-* attributes
+    (expand/collapse, move) and opens a row's menu at the pointer on right-click; dashboard.js updates the chips live by
+    data-series-key (value, unit, data-state, the sparkline, data-role="state").
+    The menus are MatUi menus (data-menu-toggle + .mat-menu) inside their node, so closest("[data-tree-node]") finds it.
+*@
 @{
     var returnUrl = Context.Request.Path + Context.Request.QueryString;
     // Viewers are read-only: gate every mutating affordance behind admin (the write-guard enforces
@@ -14,33 +22,36 @@
     var sensorChildren = Model.Children.Where(child => child.Kind == MonitoringElementKind.Sensor).ToArray();
     var branchChildren = Model.Children.Where(child => child.Kind != MonitoringElementKind.Sensor).ToArray();
     var isSensorNode = Model.Kind == MonitoringElementKind.Sensor;
+    var kindKey = Model.Kind.ToString().ToLowerInvariant();
     // Delete is available on every element (with confirmation) except the local root
     // probe, which the store refuses to delete anyway. Viewers can't delete.
     var canDelete = isAdmin && !isRootMasterProbe;
+    // A viewer gets a container's menu only where it holds something for them (a probe's usage page).
+    var hasMenu = isAdmin || Model.Kind == MonitoringElementKind.Probe;
     // Sibling ids passed down by the parent so a node can reorder among its siblings
     // (Move up/down). Null = no sibling on that side.
     var prevSiblingId = ViewData["PrevSiblingId"] as Guid?;
     var nextSiblingId = ViewData["NextSiblingId"] as Guid?;
-    var statusIcon = Model.StateKey switch
+
+    // The glyph of a chip's state (its shape says the state too, not only its colour; the word is there for screen readers).
+    string StatusIcon(WorkspaceMonitoringTreeNode node) => node.StateKey switch
     {
         "ok" => "check",
-        "warning" => "warning",
+        "warning" => "alert",
         "error" => "x",
-        "paused" => "pause",
-        "disabled" => "pause",
-        _ => Model.KindIconKey
+        "paused" or "disabled" => "pause",
+        _ => MatmonIcons.SpriteName(node.KindIconKey)
     };
 }
 
 <article class="monitoring-tree-node @(Model.Children.Count > 0 ? "is-branch" : "is-leaf") @(isRootMasterProbe ? "is-master-probe" : string.Empty) @(isProbeRoot ? "is-probe-root" : string.Empty)"
          data-tree-node
          data-tree-node-id="@Model.Id"
-         data-tree-kind="@Model.Kind.ToString().ToLowerInvariant()"
+         data-tree-kind="@kindKey"
          data-tree-depth="@Model.Depth"
          data-tree-path="@Model.Path"
          data-state="@Model.StateKey"
-         data-acknowledged="@(Model.IsAcknowledged ? "true" : null)"
-         style="--tree-state-color:@Model.StateColor">
+         data-acknowledged="@(Model.IsAcknowledged ? "true" : null)">
     @if (isSensorNode)
     {
         <div class="monitoring-sensor-strip is-single-sensor">
@@ -52,13 +63,12 @@
                      data-tree-depth="@Model.Depth"
                      data-tree-path="@Model.Path"
                      data-state="@Model.StateKey"
-                     data-acknowledged="@(Model.IsAcknowledged ? "true" : null)"
-                     style="--tree-state-color:@Model.StateColor;--series-color:@(Model.SeriesLineColor ?? Model.StateColor)">
+                     data-acknowledged="@(Model.IsAcknowledged ? "true" : null)">
                 <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" title="@Model.Path">
-                    <span class="monitoring-sensor-status">@MatmonIcons.Render(statusIcon)</span>
+                    <span class="monitoring-sensor-status">@MatUi.Icon(StatusIcon(Model))<span class="mat-sr-only" data-role="state">@Model.StateLabel</span></span>
                     <span class="tree-name monitoring-sensor-name">@Model.Name</span>
                     <span class="monitoring-sensor-value">
-                        <span data-role="current-value">@((Model.CurrentValue.HasValue ? Model.CurrentValue.Value.ToString("0.###") : "-"))</span>
+                        <span data-role="current-value">@(Model.CurrentValue.HasValue ? Model.CurrentValue.Value.ToString("0.###") : "-")</span>
                         <span data-role="current-unit">@Model.Unit</span>
                     </span>
                     <span class="monitoring-sensor-meta">
@@ -72,7 +82,7 @@
                             <span class="monitoring-sensor-tags" data-tag-overflow>
                                 @foreach (var tag in Model.Tags)
                                 {
-                                    <span class="tree-tag is-mini" data-tag-chip>@tag</span>
+                                    <span class="mat-tag" data-tag-chip>@tag</span>
                                 }
                             </span>
                         }
@@ -83,255 +93,173 @@
                     </svg>
                 </a>
                 <div class="monitoring-sensor-overlay-actions">
-                    <a class="monitoring-sensor-open" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" aria-label="Open sensor" title="Open sensor">@MatmonIcons.Render("eye")</a>
+                    <a class="mat-btn mat-btn--secondary mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id" aria-label="Open @Model.Name" data-tip="Open sensor">@MatUi.Icon("eye")</a>
                     @if (isAdmin)
                     {
-                    <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
-                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
-                        @MatmonIcons.Render("more")
-                        <span>Actions</span>
-                    </summary>
-                    <div class="workspace-action-menu-panel">
-                        <form method="post" asp-page-handler="RunSensor" asp-route-sensorId="@Model.Id" asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
-                            <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Run now</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--icon mat-btn--sm" data-menu-toggle="sensor-menu-@Model.Id" data-menu-place="bottom" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @Model.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                    }
+                </div>
+                @if (isAdmin)
+                {
+                    <div class="mat-menu" id="sensor-menu-@Model.Id" role="menu" aria-label="Actions for @Model.Name" hidden>
+                        <form method="post" class="mat-menu__form" asp-page-handler="RunSensor" asp-route-sensorId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                            <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("play")<span>Run now</span></button>
                         </form>
-                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                        <a class="workspace-action-menu-link" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
-                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
-                            @MatmonIcons.Render("move")
-                            <span>Move</span>
-                        </button>
-                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                        <form method="post"
-                              asp-page-handler="ToggleSensorPause"
-                              asp-route-sensorId="@Model.Id"
-                              asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
-                            <button type="submit" class="workspace-action-menu-link">
-                                @MatmonIcons.Render(Model.IsPaused ? "play" : "pause")
-                                <span>@(Model.IsPaused ? "Resume" : "Pause")</span>
-                            </button>
+                        <div class="mat-menu__sep" role="separator"></div>
+                        <a class="mat-menu__item" role="menuitem" asp-page="/SensorDetails" asp-route-sensorId="@Model.Id">@MatUi.Icon("bar-chart")<span>Details</span></a>
+                        <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">@MatUi.Icon("edit")<span>Edit</span></a>
+                        <button type="button" class="mat-menu__item" role="menuitem" data-tree-move-start>@MatUi.Icon("route")<span data-tree-move-start-text>Move</span></button>
+                        <div class="mat-menu__sep" role="separator"></div>
+                        <form method="post" class="mat-menu__form" asp-page-handler="ToggleSensorPause" asp-route-sensorId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                            <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon(Model.IsPaused ? "play" : "pause")<span>@(Model.IsPaused ? "Resume" : "Pause")</span></button>
                         </form>
                         @if (canDelete)
                         {
-                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                            <form method="post"
-                                  asp-page-handler="DeleteElement"
-                                  onsubmit="return confirm('Delete this sensor?');">
+                            <div class="mat-menu__sep" role="separator"></div>
+                            <form method="post" class="mat-menu__form" asp-page-handler="DeleteElement">
                                 <input type="hidden" name="ElementEditor.Id" value="@Model.Id" />
                                 <input type="hidden" name="ReturnUrl" value="@returnUrl" />
-                                <button type="submit" class="workspace-action-menu-link">
-                                    @MatmonIcons.Render("trash")
-                                    <span>Delete</span>
-                                </button>
+                                <button type="submit" class="mat-menu__item mat-menu__item--danger" role="menuitem"
+                                        data-confirm="Delete this sensor?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
                             </form>
                         }
                     </div>
-                    </details>
-                    }
-                </div>
+                }
             </article>
         </div>
     }
     else
     {
         <div class="monitoring-tree-row">
-        @if (branchChildren.Length > 0 || sensorChildren.Length > 0)
-        {
-            <button type="button"
-                    class="monitoring-tree-toggle"
-                    data-tree-toggle
-                    aria-expanded="true"
-                    aria-label="Collapse @Model.Name">
-                @MatmonIcons.Render("arrow-right")
-            </button>
-        }
-        else
-        {
-            <span class="monitoring-tree-toggle monitoring-tree-toggle-spacer"></span>
-        }
-
-        <span class="tree-kind" data-kind="@Model.Kind.ToString().ToLowerInvariant()">
-            @MatmonIcons.Render(Model.KindIconKey)
-            <span>@Model.Kind</span>
-        </span>
-
-        <div class="monitoring-tree-main">
-            <div class="tree-name">@Model.Name</div>
-            @if (!string.IsNullOrWhiteSpace(Model.Details))
+            @if (branchChildren.Length > 0 || sensorChildren.Length > 0)
             {
-                <div class="monitoring-tree-details">@Model.Details</div>
-            }
-            @if (Model.Tags.Count > 0)
-            {
-                <div class="tree-tags">
-                    @foreach (var tag in Model.Tags)
-                    {
-                        <span class="tree-tag">@MatmonIcons.Render("tag")<span>@tag</span></span>
-                    }
-                </div>
-            }
-
-            @if (Model.Kind == MonitoringElementKind.Sensor)
-            {
-                <div class="monitoring-tree-meta">
-                    <span class="monitoring-tree-value">
-                        <span class="monitoring-tree-value-label">Value</span>
-                        <span class="monitoring-tree-value-number">
-                            @((Model.CurrentValue.HasValue ? Model.CurrentValue.Value.ToString("0.###") : "-"))
-                            @if (!string.IsNullOrWhiteSpace(Model.Unit))
-                            {
-                                <text>@Model.Unit</text>
-                            }
-                        </span>
-                    </span>
-                    @if (!string.IsNullOrWhiteSpace(Model.LastCheck))
-                    {
-                        <span class="monitoring-tree-lastcheck">Last @Model.LastCheck</span>
-                    }
-                </div>
-            }
-        </div>
-
-        <div class="monitoring-tree-side">
-            @if (Model.Kind == MonitoringElementKind.Sensor)
-            {
-                @if (!string.IsNullOrWhiteSpace(Model.StateLabel))
-                {
-                    <span class="state-pill" data-state="@Model.StateKey">@Model.StateLabel</span>
-                    @if (Model.IsAcknowledged)
-                    {
-                        <span class="state-pill" data-state="ack">Ack</span>
-                    }
-                }
+                <button type="button"
+                        class="monitoring-tree-toggle"
+                        data-tree-toggle
+                        data-tree-label="@Model.Name"
+                        aria-expanded="true"
+                        aria-label="Collapse @Model.Name">
+                    @MatUi.Icon("chevron-right")
+                </button>
             }
             else
             {
-                @* Container summary as pills (replaces the redundant state pill - the
-                   left-edge accent already shows the rolled-up state). *@
-                <span class="monitoring-count-pill" data-count="total">@Model.SensorCount @(Model.SensorCount == 1 ? "Sensor" : "Sensors")</span>
+                <span class="monitoring-tree-toggle is-spacer" aria-hidden="true"></span>
+            }
+
+            <span class="tree-kind" data-kind="@kindKey" title="@Model.Kind">@MatmonIcons.Render(Model.KindIconKey)<span class="mat-sr-only">@Model.Kind</span></span>
+
+            <div class="monitoring-tree-main">
+                <span class="tree-name">@Model.Name</span>
+                @if (!string.IsNullOrWhiteSpace(Model.Details))
+                {
+                    <span class="monitoring-tree-details">@Model.Details</span>
+                }
+                @if (Model.Tags.Count > 0)
+                {
+                    <span class="monitoring-tree-tags">
+                        @foreach (var tag in Model.Tags)
+                        {
+                            <span class="mat-tag">@tag</span>
+                        }
+                    </span>
+                }
+            </div>
+
+            <div class="monitoring-tree-side">
+                @* Container summary as pills (no state pill: the row's left edge already shows the rolled-up state). *@
+                <span class="mat-pill mat-pill--plain">@Model.SensorCount @(Model.SensorCount == 1 ? "Sensor" : "Sensors")</span>
                 @if (Model.WarningCount > 0)
                 {
-                    <span class="monitoring-count-pill" data-count="warning">@Model.WarningCount Warning</span>
+                    <span class="mat-pill mat-pill--warn">@Model.WarningCount Warning</span>
                 }
                 @if (Model.ErrorCount > 0)
                 {
-                    <span class="monitoring-count-pill" data-count="error">@Model.ErrorCount Error</span>
+                    <span class="mat-pill mat-pill--error">@Model.ErrorCount Error</span>
                 }
-            }
-            @if (Model.IsHighlighted)
-            {
-                <span class="highlight-pill">@MatmonIcons.Render("star")<span>Highlight</span></span>
-            }
-            <div class="workspace-row-actions">
-                <details class="workspace-action-menu">
-                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Element actions" title="Element actions">
-                        @MatmonIcons.Render("more")
-                        <span>Actions</span>
-                    </summary>
-                    <div class="workspace-action-menu-panel">
-                        @if (canDiscover)
-                        {
-                            <form method="post" asp-page="/Discovery" asp-page-handler="Scope">
-                                <input type="hidden" name="scopeElementId" value="@Model.Id" />
-                                <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                <button type="submit" class="workspace-action-menu-link">
-                                    @MatmonIcons.Render("search")
-                                    <span>Discover sensors</span>
-                                </button>
-                            </form>
-                        }
-                        @if (Model.Kind == MonitoringElementKind.Probe)
-                        {
-                            <a class="workspace-action-menu-link" asp-page="/ProbeUsage" asp-route-probeElementId="@Model.Id" asp-route-returnUrl="@returnUrl">
-                                @MatmonIcons.Render("chart")
-                                <span>Usage</span>
-                            </a>
-                        }
-                        @if (isAdmin)
-                        {
-                            <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">
-                                @MatmonIcons.Render("pencil")
-                                <span>Edit</span>
-                            </a>
-                            <button type="button" class="workspace-action-menu-link" data-tree-move-start>
-                                @MatmonIcons.Render("move")
-                                <span>Move</span>
-                            </button>
-                            @if (prevSiblingId.HasValue)
+                @if (Model.IsHighlighted)
+                {
+                    <span class="mat-pill mat-pill--accent">@MatUi.Icon("star")<span>Highlight</span></span>
+                }
+                <div class="monitoring-tree-actions">
+                    @if (hasMenu)
+                    {
+                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="tree-menu-@Model.Id" data-menu-place="bottom" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @Model.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                        <div class="mat-menu" id="tree-menu-@Model.Id" role="menu" aria-label="Actions for @Model.Name" hidden>
+                            @if (canDiscover)
                             {
-                                <form method="post" asp-page-handler="MoveElementBefore" asp-route-elementId="@Model.Id" asp-route-siblingId="@prevSiblingId.Value" asp-route-returnUrl="@returnUrl">
-                                    <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-up")<span>Move up</span></button>
+                                <form method="post" class="mat-menu__form" asp-page="/Discovery" asp-page-handler="Scope">
+                                    <input type="hidden" name="scopeElementId" value="@Model.Id" />
+                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("search")<span>Discover sensors</span></button>
                                 </form>
                             }
-                            @if (nextSiblingId.HasValue)
+                            @if (Model.Kind == MonitoringElementKind.Probe)
                             {
-                                <form method="post" asp-page-handler="MoveElementAfter" asp-route-elementId="@Model.Id" asp-route-siblingId="@nextSiblingId.Value" asp-route-returnUrl="@returnUrl">
-                                    <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("arrow-down")<span>Move down</span></button>
+                                <a class="mat-menu__item" role="menuitem" asp-page="/ProbeUsage" asp-route-probeElementId="@Model.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("bar-chart")<span>Usage</span></a>
+                            }
+                            @if (isAdmin)
+                            {
+                                <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@Model.Id">@MatUi.Icon("edit")<span>Edit</span></a>
+                                <button type="button" class="mat-menu__item" role="menuitem" data-tree-move-start>@MatUi.Icon("route")<span data-tree-move-start-text>Move</span></button>
+                                @if (prevSiblingId.HasValue)
+                                {
+                                    <form method="post" class="mat-menu__form" asp-page-handler="MoveElementBefore" asp-route-elementId="@Model.Id" asp-route-siblingId="@prevSiblingId.Value" asp-route-returnUrl="@returnUrl">
+                                        <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("arrow-up")<span>Move up</span></button>
+                                    </form>
+                                }
+                                @if (nextSiblingId.HasValue)
+                                {
+                                    <form method="post" class="mat-menu__form" asp-page-handler="MoveElementAfter" asp-route-elementId="@Model.Id" asp-route-siblingId="@nextSiblingId.Value" asp-route-returnUrl="@returnUrl">
+                                        <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("arrow-down")<span>Move down</span></button>
+                                    </form>
+                                }
+                                <div class="mat-menu__sep" role="separator"></div>
+                                <form method="post" class="mat-menu__form" asp-page-handler="RunElementSensors" asp-route-elementId="@Model.Id" asp-route-returnUrl="@returnUrl">
+                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("play")<span>Run all</span></button>
+                                </form>
+                                <form method="post" class="mat-menu__form" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
+                                    <input type="hidden" name="elementId" value="@Model.Id" />
+                                    <input type="hidden" name="paused" value="true" />
+                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("pause")<span>Pause all</span></button>
+                                </form>
+                                <form method="post" class="mat-menu__form" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
+                                    <input type="hidden" name="elementId" value="@Model.Id" />
+                                    <input type="hidden" name="paused" value="false" />
+                                    <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("play")<span>Resume all</span></button>
                                 </form>
                             }
-                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                            <form method="post" asp-page-handler="RunElementSensors" asp-route-elementId="@Model.Id" asp-route-returnUrl="@returnUrl">
-                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Run all</span></button>
-                            </form>
-                            <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
-                                <input type="hidden" name="elementId" value="@Model.Id" />
-                                <input type="hidden" name="paused" value="true" />
-                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("pause")<span>Pause all</span></button>
-                            </form>
-                            <form method="post" asp-page-handler="PauseElement" asp-route-returnUrl="@returnUrl">
-                                <input type="hidden" name="elementId" value="@Model.Id" />
-                                <input type="hidden" name="paused" value="false" />
-                                <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Resume all</span></button>
-                            </form>
-                        }
-                        @if (hasChildActions)
-                        {
-                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                            @if (canAddFolder)
+                            @if (hasChildActions)
                             {
-                                <a class="workspace-action-menu-link" asp-page="/FolderCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
-                                    @MatmonIcons.Render("folder")
-                                    <span>Create folder</span>
-                                </a>
+                                <div class="mat-menu__sep" role="separator"></div>
+                                @if (canAddFolder)
+                                {
+                                    <a class="mat-menu__item" role="menuitem" asp-page="/FolderCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("folder")<span>Create folder</span></a>
+                                }
+                                @if (canAddHost)
+                                {
+                                    <a class="mat-menu__item" role="menuitem" asp-page="/HostCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("monitor")<span>Create host</span></a>
+                                }
+                                @if (canAddSensor)
+                                {
+                                    <a class="mat-menu__item" role="menuitem" asp-page="/SensorCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">@MatUi.Icon("activity")<span>Create sensor</span></a>
+                                }
                             }
-                            @if (canAddHost)
+                            @if (canDelete)
                             {
-                                <a class="workspace-action-menu-link" asp-page="/HostCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
-                                    @MatmonIcons.Render("host")
-                                    <span>Create host</span>
-                                </a>
+                                <div class="mat-menu__sep" role="separator"></div>
+                                <form method="post" class="mat-menu__form" asp-page-handler="DeleteElement">
+                                    <input type="hidden" name="ElementEditor.Id" value="@Model.Id" />
+                                    <input type="hidden" name="ReturnUrl" value="@returnUrl" />
+                                    <button type="submit" class="mat-menu__item mat-menu__item--danger" role="menuitem"
+                                            data-confirm="Delete this element and all children?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
+                                </form>
                             }
-                            @if (canAddSensor)
-                            {
-                                <a class="workspace-action-menu-link" asp-page="/SensorCreate" asp-route-selectedId="@Model.Id" asp-route-returnUrl="@returnUrl">
-                                    @MatmonIcons.Render("sensor")
-                                    <span>Create sensor</span>
-                                </a>
-                            }
-                        }
-                        @if (canDelete)
-                        {
-                            <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                            <form method="post"
-                                  asp-page-handler="DeleteElement"
-                                  onsubmit="return confirm('Delete this element and all children?');">
-                                <input type="hidden" name="ElementEditor.Id" value="@Model.Id" />
-                                <input type="hidden" name="ReturnUrl" value="@returnUrl" />
-                                <button type="submit" class="workspace-action-menu-link">
-                                    @MatmonIcons.Render("trash")
-                                    <span>Delete</span>
-                                </button>
-                            </form>
-                        }
-                    </div>
-                </details>
-                <button type="button" class="workspace-secondary-submit monitoring-action-trigger monitoring-move-target" data-tree-move-target hidden aria-label="Move element here" title="Move element here">
-                    @MatmonIcons.Render("arrow-right")
-                    <span>Move here</span>
-                </button>
+                        </div>
+                    }
+                    <button type="button" class="mat-btn mat-btn--primary mat-btn--sm" data-tree-move-target hidden aria-label="Move element here" title="Move element here">@MatUi.Icon("arrow-right")<span>Move here</span></button>
+                </div>
             </div>
-        </div>
         </div>
 
         @if (branchChildren.Length > 0 || sensorChildren.Length > 0)
@@ -343,15 +271,6 @@
                         @for (var sensorIndex = 0; sensorIndex < sensorChildren.Length; sensorIndex++)
                         {
                             var sensor = sensorChildren[sensorIndex];
-                            var sensorStatusIcon = sensor.StateKey switch
-                            {
-                                "ok" => "check",
-                                "warning" => "warning",
-                                "error" => "x",
-                                "paused" => "pause",
-                                "disabled" => "pause",
-                                _ => sensor.KindIconKey
-                            };
 
                             <article class="monitoring-sensor-chip"
                                      data-series-key="@sensor.SeriesKey"
@@ -361,12 +280,12 @@
                                      data-tree-depth="@sensor.Depth"
                                      data-tree-path="@sensor.Path"
                                      data-state="@sensor.StateKey"
-                                     style="--tree-state-color:@sensor.StateColor;--series-color:@(sensor.SeriesLineColor ?? sensor.StateColor)">
+                                     data-acknowledged="@(sensor.IsAcknowledged ? "true" : null)">
                                 <a class="monitoring-sensor-chip-main" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" title="@sensor.Path">
-                                    <span class="monitoring-sensor-status">@MatmonIcons.Render(sensorStatusIcon)</span>
+                                    <span class="monitoring-sensor-status">@MatUi.Icon(StatusIcon(sensor))<span class="mat-sr-only" data-role="state">@sensor.StateLabel</span></span>
                                     <span class="tree-name monitoring-sensor-name">@sensor.Name</span>
                                     <span class="monitoring-sensor-value">
-                                        <span data-role="current-value">@((sensor.CurrentValue.HasValue ? sensor.CurrentValue.Value.ToString("0.###") : "-"))</span>
+                                        <span data-role="current-value">@(sensor.CurrentValue.HasValue ? sensor.CurrentValue.Value.ToString("0.###") : "-")</span>
                                         <span data-role="current-unit">@sensor.Unit</span>
                                     </span>
                                     <span class="monitoring-sensor-meta">
@@ -380,7 +299,7 @@
                                             <span class="monitoring-sensor-tags" data-tag-overflow>
                                                 @foreach (var tag in sensor.Tags)
                                                 {
-                                                    <span class="tree-tag is-mini" data-tag-chip>@tag</span>
+                                                    <span class="mat-tag" data-tag-chip>@tag</span>
                                                 }
                                             </span>
                                         }
@@ -391,75 +310,46 @@
                                     </svg>
                                 </a>
                                 <div class="monitoring-sensor-overlay-actions">
-                                    <a class="monitoring-sensor-open" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" aria-label="Open sensor" title="Open sensor">@MatmonIcons.Render("eye")</a>
+                                    <a class="mat-btn mat-btn--secondary mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" aria-label="Open @sensor.Name" data-tip="Open sensor">@MatUi.Icon("eye")</a>
                                     @if (isAdmin)
                                     {
-                                    <details class="workspace-action-menu monitoring-sensor-actions monitoring-sensor-action-menu">
-                                    <summary class="workspace-secondary-submit monitoring-action-trigger" aria-label="Sensor actions" title="Sensor actions">
-                                        @MatmonIcons.Render("more")
-                                        <span>Actions</span>
-                                    </summary>
-                                    <div class="workspace-action-menu-panel">
-                                        <form method="post" asp-page-handler="RunSensor" asp-route-sensorId="@sensor.Id" asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
-                                            <button type="submit" class="workspace-action-menu-link">@MatmonIcons.Render("play")<span>Run now</span></button>
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--icon mat-btn--sm" data-menu-toggle="sensor-menu-@sensor.Id" data-menu-place="bottom" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @sensor.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                                    }
+                                </div>
+                                @if (isAdmin)
+                                {
+                                    <div class="mat-menu" id="sensor-menu-@sensor.Id" role="menu" aria-label="Actions for @sensor.Name" hidden>
+                                        <form method="post" class="mat-menu__form" asp-page-handler="RunSensor" asp-route-sensorId="@sensor.Id" asp-route-returnUrl="@returnUrl">
+                                            <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("play")<span>Run now</span></button>
                                         </form>
-                                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                                        <a class="workspace-action-menu-link" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id">@MatmonIcons.Render("chart")<span>Details</span></a>
-                                        <a class="workspace-action-menu-link" asp-page="/ElementEditor" asp-route-selectedId="@sensor.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                        <button type="button" class="workspace-action-menu-link" data-tree-move-start>
-                                            @MatmonIcons.Render("move")
-                                            <span>Move</span>
-                                        </button>
+                                        <div class="mat-menu__sep" role="separator"></div>
+                                        <a class="mat-menu__item" role="menuitem" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id">@MatUi.Icon("bar-chart")<span>Details</span></a>
+                                        <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@sensor.Id">@MatUi.Icon("edit")<span>Edit</span></a>
+                                        <button type="button" class="mat-menu__item" role="menuitem" data-tree-move-start>@MatUi.Icon("route")<span data-tree-move-start-text>Move</span></button>
                                         @if (sensorIndex > 0)
                                         {
-                                            <form method="post"
-                                                  asp-page-handler="MoveElementBefore"
-                                                  asp-route-elementId="@sensor.Id"
-                                                  asp-route-siblingId="@sensorChildren[sensorIndex - 1].Id"
-                                                  asp-route-returnUrl="@returnUrl">
-                                                <button type="submit" class="workspace-action-menu-link">
-                                                    @MatmonIcons.Render("arrow-left")
-                                                    <span>Move left</span>
-                                                </button>
+                                            <form method="post" class="mat-menu__form" asp-page-handler="MoveElementBefore" asp-route-elementId="@sensor.Id" asp-route-siblingId="@sensorChildren[sensorIndex - 1].Id" asp-route-returnUrl="@returnUrl">
+                                                <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("back")<span>Move left</span></button>
                                             </form>
                                         }
                                         @if (sensorIndex < sensorChildren.Length - 1)
                                         {
-                                            <form method="post"
-                                                  asp-page-handler="MoveElementAfter"
-                                                  asp-route-elementId="@sensor.Id"
-                                                  asp-route-siblingId="@sensorChildren[sensorIndex + 1].Id"
-                                                  asp-route-returnUrl="@returnUrl">
-                                                <button type="submit" class="workspace-action-menu-link">
-                                                    @MatmonIcons.Render("arrow-right")
-                                                    <span>Move right</span>
-                                                </button>
+                                            <form method="post" class="mat-menu__form" asp-page-handler="MoveElementAfter" asp-route-elementId="@sensor.Id" asp-route-siblingId="@sensorChildren[sensorIndex + 1].Id" asp-route-returnUrl="@returnUrl">
+                                                <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon("arrow-right")<span>Move right</span></button>
                                             </form>
                                         }
-                                        <form method="post"
-                                              asp-page-handler="ToggleSensorPause"
-                                              asp-route-sensorId="@sensor.Id"
-                                              asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)">
-                                            <button type="submit" class="workspace-action-menu-link">
-                                                @MatmonIcons.Render(sensor.IsPaused ? "play" : "pause")
-                                                <span>@(sensor.IsPaused ? "Resume" : "Pause")</span>
-                                            </button>
+                                        <form method="post" class="mat-menu__form" asp-page-handler="ToggleSensorPause" asp-route-sensorId="@sensor.Id" asp-route-returnUrl="@returnUrl">
+                                            <button type="submit" class="mat-menu__item" role="menuitem">@MatUi.Icon(sensor.IsPaused ? "play" : "pause")<span>@(sensor.IsPaused ? "Resume" : "Pause")</span></button>
                                         </form>
-                                        <div class="workspace-action-menu-separator" aria-hidden="true"></div>
-                                        <form method="post"
-                                              asp-page-handler="DeleteElement"
-                                              onsubmit="return confirm('Delete this sensor?');">
+                                        <div class="mat-menu__sep" role="separator"></div>
+                                        <form method="post" class="mat-menu__form" asp-page-handler="DeleteElement">
                                             <input type="hidden" name="ElementEditor.Id" value="@sensor.Id" />
                                             <input type="hidden" name="ReturnUrl" value="@returnUrl" />
-                                            <button type="submit" class="workspace-action-menu-link">
-                                                @MatmonIcons.Render("trash")
-                                                <span>Delete</span>
-                                            </button>
+                                            <button type="submit" class="mat-menu__item mat-menu__item--danger" role="menuitem"
+                                                    data-confirm="Delete this sensor?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
                                         </form>
                                     </div>
-                                    </details>
-                                    }
-                                </div>
+                                }
                             </article>
                         }
                     </div>

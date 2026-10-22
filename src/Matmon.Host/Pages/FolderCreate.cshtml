@@ -2,46 +2,41 @@
 @model WorkspaceModel
 @{
     ViewData["Title"] = "New folder";
+    ViewData["Width"] = "narrow";
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("folder")
-            <h1>New folder</h1>
-        </div>
-    </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section class="panel panel-stack workspace-panel">
-        <form method="post" asp-page-handler="CreateFolder" class="workspace-form">
-            <input type="hidden" asp-for="ReturnUrl" />
-            <label class="workspace-field workspace-field-primary">
-                <span class="workspace-label">Folder name</span>
-                <input asp-for="NewFolder.Name" class="form-control workspace-input" placeholder="e.g. Network devices" autofocus />
-            </label>
-            <label class="workspace-field">
-                <span class="workspace-label">Parent</span>
-                <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "NewFolder.ParentId", DomId = "picker-folder-parent", SelectedId = Model.NewFolder.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.View.FolderParentOptions) })" />
-            </label>
-            <label class="workspace-field">
-                <span class="workspace-label">Description <em>optional</em></span>
-                <input asp-for="NewFolder.Description" class="form-control workspace-input" placeholder="Notes about this folder" />
-            </label>
-            <div class="workspace-form-actions">
-                <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create folder</span></button>
+<form method="post" asp-page-handler="CreateFolder" class="mat-form" novalidate>
+    <input type="hidden" asp-for="ReturnUrl" />
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("folder")<h2 class="mat-card__title">Folder</h2></div>
+        <div class="mat-card__body mat-stack">
+            <div class="mat-field">
+                <label class="mat-label" asp-for="NewFolder.Name">Folder name</label>
+                <input asp-for="NewFolder.Name" class="mat-input" placeholder="e.g. Network devices" autofocus />
             </div>
-        </form>
+            <div class="mat-field" role="group" aria-labelledby="folder-parent-label">
+                <span class="mat-label" id="folder-parent-label">Parent</span>
+                <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "NewFolder.ParentId", DomId = "picker-folder-parent", SelectedId = Model.NewFolder.ParentId, AllowClear = false, Placeholder = "Select parent…", Options = Model.PickerOptionsFor(Model.View.FolderParentOptions) })" />
+            </div>
+            <div class="mat-field">
+                <label class="mat-label" asp-for="NewFolder.Description">Description <span class="mat-text-muted">(optional)</span></label>
+                <input asp-for="NewFolder.Description" class="mat-input" placeholder="Notes about this folder" />
+            </div>
+        </div>
     </section>
-</section>
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create folder</span></button>
+        <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+</form>

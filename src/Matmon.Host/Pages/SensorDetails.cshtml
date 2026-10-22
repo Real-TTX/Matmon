@@ -1,185 +1,225 @@
 @page "/monitoring/sensor/{sensorId:guid}"
 @model SensorDetailsModel
 @{
-    ViewData["Title"] = Model.View.Name;
-    ViewData["WorkspaceSummarySuppress"] = true;
+    var view = Model.View;
+    ViewData["Title"] = view.Name;
+    ViewData["PageSub"] = view.Path;
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    // The Statistics tab opens when the address carries one of its filters (the server decides; "#name" in the
+    // address opens a tab too - core.js).
+    var statsTabActive = !string.IsNullOrWhiteSpace(Model.StatsGroup)
+        || !string.IsNullOrWhiteSpace(Model.StatsRange)
+        || !string.IsNullOrWhiteSpace(Model.StatsFrom)
+        || !string.IsNullOrWhiteSpace(Model.StatsTo)
+        || !string.IsNullOrWhiteSpace(Model.StatsChannel);
+
+    string StateTextClass(string key) => key switch
+    {
+        "ok" => "mat-text-success",
+        "warning" => "mat-text-warning",
+        "error" => "mat-text-danger",
+        _ => "mat-text-muted"
+    };
+    string? MeterTone(string key) => key switch
+    {
+        "ok" or "healthy" => "ok",
+        "warning" => "warn",
+        "error" or "critical" => "error",
+        _ => null
+    };
+    string UsageTone(string key) => key switch
+    {
+        "low" => "ok",
+        "high" => "error",
+        _ => "warn"
+    };
 }
 
-<section class="dashboard-shell">
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+@* The actions of the sensor. One hidden form carries the anti-forgery token; every button posts it to its own handler
+   (formaction), so the actions stay one row of buttons (MatUi keeps their order). *@
+<form method="post" id="sensor-actions" hidden></form>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+<div class="mat-actions">
+    <button type="submit" form="sensor-actions" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@view.SensorId" class="mat-btn mat-btn--primary">@MatUi.Icon("refresh")<span>Run now</span></button>
+    <button type="submit" form="sensor-actions" asp-page-handler="ToggleSensorPause" asp-route-window="@Model.Window" asp-route-sensorId="@view.SensorId" class="mat-btn mat-btn--secondary">@MatUi.Icon(view.IsPaused ? "play" : "pause")<span>@(view.IsPaused ? "Resume" : "Pause")</span></button>
+    <a class="mat-btn mat-btn--secondary" asp-page="/ElementEditor" asp-route-selectedId="@view.SensorId" asp-route-returnUrl="@Model.CurrentUrl">@MatUi.Icon("edit")<span>Edit</span></a>
+    @if (Model.SyslogLogRoute is { } syslogRoute)
     {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
+        <a class="mat-btn mat-btn--ghost" asp-page="/Events" asp-all-route-data="@syslogRoute" asp-fragment="syslog" data-tip="The messages this sensor counts">@MatUi.Icon("list")<span>Log</span></a>
     }
+</div>
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <div class="page-header sensor-header" style="--sensor-state-color:@Model.View.StateColor">
-        <div class="sensor-header-main">
-            <div class="page-title">
-                @MatmonIcons.Render("sensor")
-                <h1>@Model.View.Name</h1>
-            </div>
-            <div class="sensor-path">@Model.View.Path</div>
-            <div class="sensor-meta">
-                <span class="sensor-chip">@Model.View.SensorTypeLabel</span>
-                <span class="usage-level-pill" data-level="@Model.View.UsageLevelKey">@Model.View.UsageLevelLabel</span>
-                <span class="sensor-chip">@Model.View.Target</span>
-                <span class="sensor-chip">primary: @Model.View.DefaultChannelLabel</span>
-                @if (!string.IsNullOrWhiteSpace(Model.View.ExecutionProbe))
+<div class="mat-grid mat-grid--4">
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Current value</span>
+            <span class="mat-stat__value sensor-current-value">
+                <span>@view.CurrentValueText</span>
+                @if (!string.IsNullOrWhiteSpace(view.Unit))
                 {
-                    <span class="sensor-chip">probe: @Model.View.ExecutionProbe</span>
+                    <small>@view.Unit</small>
                 }
-                <span class="sensor-chip">@Model.View.SettingsSummary</span>
-            </div>
-            @if (Model.View.Tags.Count > 0)
-            {
-                <div class="sensor-tag-row">
-                    @foreach (var tag in Model.View.Tags)
-                    {
-                        <span class="sensor-tag @(tag.Inherited ? "is-inherited" : null)" title="@(tag.Inherited ? "inherited from a parent" : "tag")">@MatmonIcons.Render("tag")<span>@tag.Text</span></span>
-                    }
-                </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(Model.View.StateMessage))
-            {
-                <div class="sensor-state-message">@Model.View.StateMessage</div>
-            }
-        </div>
-
-        <div class="sensor-header-side">
-            <span class="state-pill" data-state="@Model.View.StateKey">@Model.View.StateLabel</span>
-            @if (Model.View.IsAcknowledged)
-            {
-                <span class="state-pill" data-state="ack">Acknowledged</span>
-            }
-            <div class="sensor-current-value">
-                <strong>@Model.View.CurrentValueText</strong>
-                @if (!string.IsNullOrWhiteSpace(Model.View.Unit))
-                {
-                    <span>@Model.View.Unit</span>
-                }
-            </div>
-            @if (Model.View.UnitConversion is { } conversion)
-            {
-                <div class="sensor-unit-conversion" title="How the stored measurement is converted for display">
-                    <span class="sensor-unit-conversion-tag">unit</span>
-                    <span class="sensor-unit-conversion-body">
-                        stored <strong>@conversion.RawUnit</strong> → shown <strong>@conversion.DisplayUnit</strong>
-                        @if (!string.IsNullOrWhiteSpace(conversion.Example))
-                        {
-                            <span class="sensor-unit-conversion-example">@conversion.Example</span>
-                        }
-                    </span>
-                </div>
-            }
-            <div class="sensor-header-meta">
-                @if (!string.IsNullOrWhiteSpace(Model.View.LastSeenText))
-                {
-                    <span class="panel-hint">last @Model.View.LastSeenText</span>
-                }
-                @if (!string.IsNullOrWhiteSpace(Model.View.LastDurationText))
-                {
-                    <span class="panel-hint">duration @Model.View.LastDurationText</span>
-                }
-            </div>
-            <div class="workspace-row-actions sensor-header-actions">
-                <a class="workspace-action-link" asp-page="/ElementEditor" asp-route-selectedId="@Model.View.SensorId" asp-route-returnUrl="@Model.CurrentUrl" title="Edit" aria-label="Edit">
-                    @MatmonIcons.Render("pencil")
-                    <span>Edit</span>
-                </a>
-                @if (Model.SyslogLogRoute is { } syslogRoute)
-                {
-                    <a class="workspace-action-link" asp-page="/Events" asp-all-route-data="@syslogRoute" asp-fragment="syslog" title="The messages this sensor counts" aria-label="Open the log">
-                        @MatmonIcons.Render("list")
-                        <span>Log</span>
-                    </a>
-                }
-                <form method="post" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
-                    <button type="submit" class="workspace-secondary-submit" title="Run now" aria-label="Run now">
-                        @MatmonIcons.Render("spark")
-                        <span>Run now</span>
-                    </button>
-                </form>
-                <form method="post" asp-page-handler="ToggleSensorPause" asp-route-window="@Model.Window" asp-route-sensorId="@Model.View.SensorId">
-                    <button type="submit" class="workspace-secondary-submit" title="@(Model.View.IsPaused ? "Resume" : "Pause")" aria-label="@(Model.View.IsPaused ? "Resume" : "Pause")">
-                        @MatmonIcons.Render(Model.View.IsPaused ? "play" : "pause")
-                        <span>@(Model.View.IsPaused ? "Resume" : "Pause")</span>
-                    </button>
-                </form>
-                <a class="workspace-action-link" asp-page="/Monitoring" title="Back to monitoring" aria-label="Back to monitoring">
-                    @MatmonIcons.Render("arrow-left")
-                    <span>Back</span>
-                </a>
-            </div>
+            </span>
+            <span class="mat-stat__delta">primary: @view.DefaultChannelLabel</span>
         </div>
     </div>
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">State</span>
+            <span class="mat-stat__value @StateTextClass(view.StateKey)">@view.StateLabel</span>
+            @if (view.IsAcknowledged)
+            {
+                <span class="mat-stat__delta"><span class="mat-pill mat-pill--info">Acknowledged</span></span>
+            }
+        </div>
+    </div>
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Last check</span>
+            <span class="mat-stat__value">@(view.LastSeenText ?? "–")</span>
+            @if (!string.IsNullOrWhiteSpace(view.LastDurationText))
+            {
+                <span class="mat-stat__delta">duration @view.LastDurationText</span>
+            }
+        </div>
+    </div>
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Type</span>
+            <span class="mat-stat__value sensor-type-value">@view.SensorTypeLabel</span>
+            <span class="mat-stat__delta"><span class="@MatUi.PillClass(UsageTone(view.UsageLevelKey))" data-tip="How much load a check puts on the target">@view.UsageLevelLabel usage</span></span>
+        </div>
+    </div>
+</div>
 
-    @{
-        var statsTabActive = !string.IsNullOrWhiteSpace(Model.StatsGroup)
-            || !string.IsNullOrWhiteSpace(Model.StatsRange)
-            || !string.IsNullOrWhiteSpace(Model.StatsFrom)
-            || !string.IsNullOrWhiteSpace(Model.StatsTo)
-            || !string.IsNullOrWhiteSpace(Model.StatsChannel);
-    }
-    <nav class="sensor-tabs sensor-detail-tabs" data-sensor-tabs data-tab-hash="true" data-active-tab="@(statsTabActive ? "statistics" : null)" role="tablist" aria-label="Sensor sections">
-        <button type="button" class="sensor-tab" data-sensor-tab-target="general" role="tab">@MatmonIcons.Render("dashboard")<span>General</span></button>
-        <button type="button" class="sensor-tab" data-sensor-tab-target="statistics" role="tab">@MatmonIcons.Render("chart")<span>Statistics</span></button>
-        <button type="button" class="sensor-tab" data-sensor-tab-target="history" role="tab">@MatmonIcons.Render("clock")<span>History</span></button>
-    </nav>
+<section data-tabs data-tab-hash>
+    <div class="mat-tabs" role="tablist" aria-label="Sensor sections">
+        <button type="button" class="mat-tab" role="tab" id="tab-general" aria-controls="panel-general" aria-selected="@(statsTabActive ? "false" : "true")" tabindex="@(statsTabActive ? "-1" : null)">General</button>
+        <button type="button" class="mat-tab" role="tab" id="tab-statistics" aria-controls="panel-statistics" aria-selected="@(statsTabActive ? "true" : "false")" tabindex="@(statsTabActive ? null : "-1")">Statistics</button>
+        <button type="button" class="mat-tab" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1">History</button>
+    </div>
 
-    <div class="sensor-detail-tabpanel" data-sensor-tab="general">
-        <section class="panel panel-stack sensor-channels-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels</span></h2>
-                <span class="panel-hint">@Model.View.Channels.Count</span>
+    @* ---------- GENERAL ---------- *@
+    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general" hidden="@statsTabActive">
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("info")<h2 class="mat-card__title">Details</h2></div>
+            <div class="mat-card__body">
+                <dl class="mat-kv">
+                    @if (!string.IsNullOrWhiteSpace(view.StateMessage))
+                    {
+                        <dt>Message</dt>
+                        <dd>@view.StateMessage</dd>
+                    }
+                    <dt>Target</dt>
+                    <dd class="mat-mono">@view.Target</dd>
+                    @if (!string.IsNullOrWhiteSpace(view.ExecutionProbe))
+                    {
+                        <dt>Probe</dt>
+                        <dd>@view.ExecutionProbe</dd>
+                    }
+                    <dt>Settings</dt>
+                    <dd>@view.SettingsSummary</dd>
+                    @if (view.UnitConversion is { } conversion)
+                    {
+                        <dt>Unit</dt>
+                        <dd data-tip="How the stored measurement is converted for display" data-tip-align="start">
+                            stored <strong>@conversion.RawUnit</strong> → shown <strong>@conversion.DisplayUnit</strong>
+                            @if (!string.IsNullOrWhiteSpace(conversion.Example))
+                            {
+                                <span class="mat-text-muted">@conversion.Example</span>
+                            }
+                        </dd>
+                    }
+                    @if (view.Tags.Count > 0)
+                    {
+                        <dt>Tags</dt>
+                        <dd>
+                            <span class="mat-chips">
+                                @foreach (var tag in view.Tags)
+                                {
+                                    <span class="mat-tag @(tag.Inherited ? "sensor-tag--inherited" : null)" data-tip="@(tag.Inherited ? "inherited from a parent" : "tag")">
+                                        @MatUi.Icon("tag")
+                                        <span>@tag.Text</span>
+                                        @if (tag.Inherited)
+                                        {
+                                            <span class="mat-sr-only">(inherited)</span>
+                                        }
+                                    </span>
+                                }
+                            </span>
+                        </dd>
+                    }
+                </dl>
+            </div>
+        </section>
+
+        <section class="mat-section">
+            <div class="mat-row mat-row--between">
+                <h2 class="sensor-section-title">@MatUi.Icon("activity")<span>Channels</span></h2>
+                <span class="mat-badge mat-badge--soft">@view.Channels.Count<span class="mat-sr-only"> channels</span></span>
             </div>
 
-            @if (Model.View.Channels.Count == 0)
+            @if (view.Channels.Count == 0)
             {
-                <div class="empty-state">No channels yet.</div>
+                <div class="mat-empty mat-empty--framed">
+                    <span class="mat-empty__icon">@MatUi.Icon("activity")</span>
+                    <div class="mat-empty__title">No channels yet</div>
+                    <p>The channels appear after the sensor's first run - or press Run now.</p>
+                </div>
             }
             else
             {
-                <div class="sensor-channel-list sensor-channel-grid">
-                    @foreach (var channel in Model.View.Channels)
+                <div class="sensor-channel-grid">
+                    @foreach (var channel in view.Channels)
                     {
-                        <article class="sensor-channel-row" data-state="@channel.StateKey" data-default="@(channel.IsDefault ? "true" : "false")">
-                            <div class="sensor-channel-main">
-                                <div class="sensor-channel-name">
-                                    <span>@channel.Label</span>
-                                    @if (channel.IsDefault)
-                                    {
-                                        <span class="state-pill" data-state="ok">Primary</span>
-                                    }
-                                </div>
-                                <div class="sensor-channel-meta">
-                                    @channel.Key
+                        var fillText = channel.FillPercent?.ToString("0.#", inv);
+                        <article class="mat-card sensor-channel" data-state="@channel.StateKey" data-default="@(channel.IsDefault ? "true" : "false")">
+                            <div class="mat-card__body sensor-channel-body">
+                                <div class="sensor-channel-main">
+                                    <div class="mat-row sensor-channel-name">
+                                        <strong>@channel.Label</strong>
+                                        @if (channel.IsDefault)
+                                        {
+                                            <span class="mat-pill mat-pill--accent">Primary</span>
+                                        }
+                                    </div>
+                                    <span class="mat-text-muted mat-mono sensor-channel-key">@channel.Key</span>
                                     @if (!string.IsNullOrWhiteSpace(channel.Message))
                                     {
-                                        <text>| @channel.Message</text>
+                                        <span class="mat-text-muted sensor-channel-message">@channel.Message</span>
                                     }
                                 </div>
-                            </div>
-                            <div class="sensor-channel-side">
-                                <div class="sensor-channel-value">@channel.ValueText @channel.Unit</div>
-                                @if (channel.VisualKey == "progress" && channel.FillPercent.HasValue)
-                                {
-                                    <div class="sensor-channel-meter" data-state="@channel.StateKey" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
-                                        <span style="width:@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></span>
-                                    </div>
-                                }
-                                else if (channel.VisualKey == "gauge" && channel.FillPercent.HasValue)
-                                {
-                                    var gaugeDash = (channel.FillPercent.Value / 100d * 125.6d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
-                                    <svg class="sensor-channel-gauge" viewBox="0 0 100 56" data-state="@channel.StateKey" aria-hidden="true" title="@channel.FillPercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%">
-                                        <path class="sensor-channel-gauge-track" d="M10 50 A40 40 0 0 1 90 50" />
-                                        <path class="sensor-channel-gauge-fill" d="M10 50 A40 40 0 0 1 90 50" style="stroke-dasharray:@gaugeDash 200" />
-                                    </svg>
-                                }
-                                <span class="state-pill" data-state="@channel.StateKey">@channel.StateLabel</span>
+                                <div class="sensor-channel-side">
+                                    <span class="sensor-channel-value">@channel.ValueText @channel.Unit</span>
+                                    @if (channel.VisualKey == "progress" && channel.FillPercent.HasValue)
+                                    {
+                                        <div class="sensor-channel-meter">
+                                            <div class="mat-meter mat-meter--sm" role="progressbar" aria-valuenow="@fillText" aria-valuemin="0" aria-valuemax="100" aria-label="@channel.Label: @fillText %">
+                                                <div class="mat-meter__fill" data-value="@fillText" data-tone="@MeterTone(channel.StateKey)"></div>
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (channel.VisualKey == "gauge" && channel.FillPercent.HasValue)
+                                    {
+                                        @* pathLength="100": the dash is the percentage itself, no arc length to compute. *@
+                                        <svg class="sensor-channel-gauge" viewBox="0 0 100 56" data-state="@channel.StateKey" aria-hidden="true" style="--gauge-fill: @fillText">
+                                            <path class="sensor-channel-gauge-track" d="M10 50 A40 40 0 0 1 90 50" pathLength="100" />
+                                            <path class="sensor-channel-gauge-fill" d="M10 50 A40 40 0 0 1 90 50" pathLength="100" />
+                                        </svg>
+                                    }
+                                    <span class="@MatUi.PillClass(channel.StateKey)">@channel.StateLabel</span>
+                                </div>
                             </div>
                         </article>
                     }
@@ -187,216 +227,301 @@
             }
         </section>
 
-        <div class="sensor-stats-grid">
-        @foreach (var window in Model.View.Windows)
-        {
-            <article class="panel sensor-window-card @(window.Key == Model.View.SelectedWindow.Key ? "is-selected" : string.Empty)" data-state="@window.StateKey">
-                <div class="sensor-window-head">
-                    <span class="metric-label">@window.Label</span>
-                    <span class="state-pill" data-state="@window.StateKey">@window.StateLabel</span>
-                </div>
-                <div class="sensor-window-figure">
-                    <span>AVG</span>
-                    <strong>@(window.Average?.ToString("0.###") ?? "-")</strong>
-                    @if (!string.IsNullOrWhiteSpace(Model.View.Unit))
-                    {
-                        <small>@Model.View.Unit</small>
-                    }
-                </div>
-                <div class="sensor-window-mini">
-                    <span>MIN @(window.Minimum?.ToString("0.###") ?? "-")</span>
-                    <span>MAX @(window.Maximum?.ToString("0.###") ?? "-")</span>
-                </div>
-                <div class="sensor-window-mini">
-                    <span>Checks @window.SampleCount</span>
-                    <span>Latest @(window.LatestValue?.ToString("0.###") ?? "-")</span>
-                </div>
-            </article>
-        }
+        <div class="mat-grid mat-grid--3">
+            @foreach (var window in view.Windows)
+            {
+                var isSelected = window.Key == view.SelectedWindow.Key;
+                <article class="mat-card @(isSelected ? "mat-card--accent" : null)">
+                    <div class="mat-card__body mat-stat">
+                        <div class="mat-row mat-row--between">
+                            <span class="mat-stat__label">@window.Label</span>
+                            <span class="@MatUi.PillClass(window.StateKey)">@window.StateLabel</span>
+                        </div>
+                        <span class="mat-stat__value sensor-window-value">
+                            <small>avg</small>
+                            <span>@(window.Average?.ToString("0.###") ?? "-")</span>
+                            @if (!string.IsNullOrWhiteSpace(view.Unit))
+                            {
+                                <small>@view.Unit</small>
+                            }
+                        </span>
+                        <span class="mat-stat__delta">min @(window.Minimum?.ToString("0.###") ?? "-") · max @(window.Maximum?.ToString("0.###") ?? "-")</span>
+                        <span class="mat-stat__delta">@window.SampleCount checks · latest @(window.LatestValue?.ToString("0.###") ?? "-")</span>
+                    </div>
+                </article>
+            }
         </div>
 
-        <section class="panel panel-stack sensor-chart-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("chart")<span>@Model.View.SelectedWindow.Label</span></h2>
-                <div class="sensor-window-tabs">
-                    @foreach (var window in Model.View.Windows)
+        @{
+            var win = view.SelectedWindow;
+        }
+        <section class="mat-card sensor-chart-card" data-chart-state="@view.StateKey">
+            <div class="mat-card__head">
+                @MatUi.Icon("bar-chart")
+                <h2 class="mat-card__title">@win.Label</h2>
+                <nav class="mat-seg mm-push-end" aria-label="Time window">
+                    @foreach (var window in view.Windows)
                     {
-                        <a class="sensor-window-tab @(window.Key == Model.View.SelectedWindow.Key ? "is-active" : string.Empty)"
+                        var isSelected = window.Key == win.Key;
+                        <a class="mat-seg__btn @(isSelected ? "is-active" : null)" aria-current="@(isSelected ? "true" : null)"
                            asp-page="/SensorDetails"
-                           asp-route-sensorId="@Model.View.SensorId"
-                           asp-route-window="@window.Key">
-                            @window.Label
-                        </a>
+                           asp-route-sensorId="@view.SensorId"
+                           asp-route-window="@window.Key">@window.Label</a>
                     }
+                </nav>
+            </div>
+            <div class="mat-card__body mat-stack">
+                @if (win.SampleCount == 0)
+                {
+                    <p class="mat-muted">No history in this window.</p>
+                }
+                else
+                {
+                    var chartPointsJson = "[" + string.Join(",", win.Points.Select(p =>
+                        $"[{p.TimestampUtc.ToUnixTimeMilliseconds()},{p.Value.ToString("0.######", inv)}]")) + "]";
+                    <div class="sensor-window-summary">
+                        <span>avg @(win.Average?.ToString("0.###") ?? "-")@(string.IsNullOrWhiteSpace(view.Unit) ? string.Empty : $" {view.Unit}")</span>
+                        <span>min @(win.Minimum?.ToString("0.###") ?? "-")</span>
+                        <span>max @(win.Maximum?.ToString("0.###") ?? "-")</span>
+                        <span>@win.SampleCount checks</span>
+                    </div>
+                    <div class="sensor-chart-legend">
+                        <span class="sensor-chart-legend-line" aria-hidden="true"></span>
+                        <span>Primary: @view.DefaultChannelLabel</span>
+                        <span class="mat-text-muted">used for overview, chart &amp; statistics</span>
+                    </div>
+                    <div class="sensor-chart-wrap" data-chart="line"
+                         data-chart-points="@chartPointsJson"
+                         data-chart-min="@win.GraphMin.ToString("0.######", inv)"
+                         data-chart-max="@win.GraphMax.ToString("0.######", inv)"
+                         data-chart-from="@win.FromUtc.ToUnixTimeMilliseconds()"
+                         data-chart-to="@win.ToUtc.ToUnixTimeMilliseconds()"
+                         data-chart-unit="@view.Unit">
+                        <div class="sensor-chart-axis-y" aria-hidden="true">
+                            <span>@win.GraphMax.ToString("0.##", inv)</span>
+                            <span>@win.GraphMin.ToString("0.##", inv)</span>
+                        </div>
+                        <svg class="sparkline sensor-chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="@view.DefaultChannelLabel over @win.Label">
+                            <path data-role="area" d="@win.AreaPath"></path>
+                            <path data-role="line" d="@win.LinePath"></path>
+                        </svg>
+                    </div>
+                    <div class="graph-footer">
+                        <span>@win.FromUtc.ToDisplay().ToString("dd.MM HH:mm")</span>
+                        <span>@win.ToUtc.ToDisplay().ToString("dd.MM HH:mm")</span>
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+
+    @* ---------- STATISTICS ---------- *@
+    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-statistics" aria-labelledby="tab-statistics" hidden="@(!statsTabActive)">
+        @if (view.Statistics is { } stats)
+        {
+            var statsBase = $"{Request.PathBase}/monitoring/sensor/{view.SensorId}";
+            var channelQuery = Uri.EscapeDataString(stats.SelectedChannelKey);
+            var granularity = stats.GranularityLabel.ToLowerInvariant();
+            var hasChannelChoice = stats.Channels.Count > 1;
+            var selectedChannelLabel = stats.Channels.FirstOrDefault(c => c.IsSelected)?.Label ?? stats.SelectedChannelKey;
+            var groupLabels = new Dictionary<string, string> { ["native"] = "Native", ["day"] = "Day", ["month"] = "Month", ["year"] = "Year" };
+
+            // The address of the statistics without some of the filters in effect: the link of a chip's X. Every link
+            // ends in #statistics so the tab stays open whatever is left.
+            string StatsUrlWithout(params string[] keys)
+            {
+                var current = new (string Key, string? Value)[]
+                {
+                    ("window", Model.Window), ("StatsRange", Model.StatsRange), ("StatsFrom", Model.StatsFrom),
+                    ("StatsTo", Model.StatsTo), ("StatsGroup", Model.StatsGroup), ("StatsChannel", Model.StatsChannel)
+                };
+                var parts = current
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Value) && !keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase))
+                    .Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value!)}");
+                var query = string.Join("&", parts);
+                return statsBase + (query.Length > 0 ? "?" + query : string.Empty) + "#statistics";
+            }
+
+            var showGroupChip = !string.IsNullOrWhiteSpace(Model.StatsGroup);
+            var showPeriodChip = !string.IsNullOrWhiteSpace(Model.StatsFrom) || !string.IsNullOrWhiteSpace(Model.StatsTo);
+            var showChannelChip = hasChannelChoice && !string.IsNullOrWhiteSpace(Model.StatsChannel);
+            var activeFilters = (showGroupChip ? 1 : 0) + (showPeriodChip ? 1 : 0) + (showChannelChip ? 1 : 0);
+
+            <div class="mat-toolbar" role="toolbar" aria-label="Statistics tools">
+                <nav class="mat-seg" aria-label="Range">
+                    @foreach (var rangeOption in new[] { ("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("90d", "90d"), ("all", "All") })
+                    {
+                        var isActive = stats.SelectedRange == rangeOption.Item1;
+                        <a class="mat-seg__btn @(isActive ? "is-active" : null)" aria-current="@(isActive ? "true" : null)"
+                           href="@($"{statsBase}?window={Model.Window}&StatsRange={rangeOption.Item1}&StatsChannel={channelQuery}#statistics")">@rangeOption.Item2</a>
+                    }
+                </nav>
+                <span class="mat-toolbar__spacer"></span>
+                <span class="mat-toolbar__info" aria-live="polite">@stats.Rows.Count @granularity period@(stats.Rows.Count == 1 ? string.Empty : "s") · @stats.BucketCount buckets</span>
+                <div class="mat-toolbar__end">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn @(activeFilters > 0 ? "is-active" : null)" data-dialog-open="stats-filter" aria-haspopup="dialog">
+                        @MatUi.Icon("sliders")<span>Filter</span>
+                        @if (activeFilters > 0)
+                        {
+                            <span class="mat-badge">@activeFilters</span>
+                        }
+                    </button>
                 </div>
             </div>
 
-            @if (Model.View.SelectedWindow.SampleCount == 0)
+            @if (activeFilters > 0)
             {
-                <div class="empty-state">No history in this window.</div>
+                <div class="mat-chips" role="group" aria-label="Filters in effect">
+                    @if (showChannelChip)
+                    {
+                        <span class="mat-chip">Channel: @selectedChannelLabel<a class="mat-chip__x" href="@StatsUrlWithout("StatsChannel")" aria-label="Remove the filter Channel">@MatUi.Icon("x")</a></span>
+                    }
+                    @if (showPeriodChip)
+                    {
+                        <span class="mat-chip">Period: @(stats.FromText ?? "…") – @(stats.ToText ?? "…")<a class="mat-chip__x" href="@StatsUrlWithout("StatsFrom", "StatsTo")" aria-label="Remove the filter Period">@MatUi.Icon("x")</a></span>
+                    }
+                    @if (showGroupChip)
+                    {
+                        <span class="mat-chip">Group by: @(groupLabels.TryGetValue(stats.SelectedGroup, out var groupLabel) ? groupLabel : stats.SelectedGroup)<a class="mat-chip__x" href="@StatsUrlWithout("StatsGroup")" aria-label="Remove the filter Group by">@MatUi.Icon("x")</a></span>
+                    }
+                </div>
+            }
+
+            <form id="stats-form" method="get" action="@($"{statsBase}#statistics")" hidden>
+                <input type="hidden" name="window" value="@Model.Window" />
+                <input type="hidden" name="StatsRange" value="@(stats.SelectedRange == "custom" ? string.Empty : stats.SelectedRange)" />
+                @if (!hasChannelChoice)
+                {
+                    <input type="hidden" name="StatsChannel" value="@stats.SelectedChannelKey" />
+                }
+            </form>
+
+            <dialog class="mat-dialog mat-dialog--sm" id="stats-filter" aria-labelledby="stats-filter-title">
+                <div class="mat-dialog__form">
+                    <div class="mat-dialog__head">
+                        @MatUi.Icon("sliders")
+                        <h2 class="mat-dialog__title" id="stats-filter-title">Filter</h2>
+                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                    </div>
+                    <div class="mat-dialog__body mat-form">
+                        @if (hasChannelChoice)
+                        {
+                            <div class="mat-field">
+                                <label class="mat-label" for="stats-channel">Channel</label>
+                                <select class="mat-select" id="stats-channel" name="StatsChannel" form="stats-form">
+                                    @foreach (var channelOption in stats.Channels)
+                                    {
+                                        <option value="@channelOption.Key" selected="@channelOption.IsSelected">@channelOption.Label</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        <div class="mat-form__grid">
+                            <div class="mat-field">
+                                <label class="mat-label" for="stats-from">From</label>
+                                <input class="mat-input mat-mono" type="date" id="stats-from" name="StatsFrom" value="@stats.FromText" form="stats-form" />
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" for="stats-to">To</label>
+                                <input class="mat-input mat-mono" type="date" id="stats-to" name="StatsTo" value="@stats.ToText" form="stats-form" />
+                            </div>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="stats-group">Group by</label>
+                            <select class="mat-select" id="stats-group" name="StatsGroup" form="stats-form">
+                                <option value="native" selected="@(stats.SelectedGroup == "native")">Native</option>
+                                <option value="day" selected="@(stats.SelectedGroup == "day")">Day</option>
+                                <option value="month" selected="@(stats.SelectedGroup == "month")">Month</option>
+                                <option value="year" selected="@(stats.SelectedGroup == "year")">Year</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mat-dialog__foot">
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" form="stats-form" class="mat-btn mat-btn--primary">@MatUi.Icon("sliders")<span>Apply</span></button>
+                            <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                            @if (stats.SelectedRange != "7d" || stats.SelectedGroup != "day")
+                            {
+                                <span class="mat-btn-row__spacer"></span>
+                                <a class="mat-btn mat-btn--ghost mat-btn--end" href="@($"{statsBase}?window={Model.Window}&StatsChannel={channelQuery}#statistics")">Reset everything</a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </dialog>
+
+            var chartRows = stats.Rows.Reverse().ToList();
+            var chartValues = chartRows.Where(r => r.AverageValue.HasValue).Select(r => r.AverageValue!.Value).ToList();
+            @if (chartValues.Count > 0)
+            {
+                var chartMax = chartValues.Max();
+                var chartMin = Math.Min(0d, chartValues.Min());
+                var chartRange = chartMax - chartMin;
+                if (chartRange <= 0d) { chartRange = 1d; }
+                var slot = 100d / chartRows.Count;
+                var barWidth = Math.Min(Math.Max(slot * 0.68d, 0.6d), 12d);
+                var unitSuffix = string.IsNullOrWhiteSpace(stats.Unit) ? string.Empty : $" {stats.Unit}";
+                <section class="mat-card">
+                    <div class="mat-card__head">
+                        @MatUi.Icon("bar-chart")
+                        <h2 class="mat-card__title">Long-term statistics</h2>
+                        <span class="mat-text-muted mm-push-end">average per @granularity period</span>
+                    </div>
+                    <div class="mat-card__body">
+                        <div class="sensor-statistics-chart sensor-chart-wrap" data-chart="bars">
+                            <div class="sensor-chart-plot">
+                                <div class="sensor-chart-axis-y" aria-hidden="true">
+                                    <span>@chartMax.ToString("0.##", inv)</span>
+                                    <span>@chartMin.ToString("0.##", inv)</span>
+                                </div>
+                                <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="img" aria-label="Average per @granularity period">
+                                    @for (var i = 0; i < chartRows.Count; i++)
+                                    {
+                                        var cr = chartRows[i];
+                                        if (!cr.AverageValue.HasValue)
+                                        {
+                                            continue;
+                                        }
+                                        var barHeight = Math.Max((cr.AverageValue.Value - chartMin) / chartRange * 40d, 0.6d);
+                                        var barX = (i * slot) + ((slot - barWidth) / 2d);
+                                        var barY = 42d - barHeight;
+                                        var barTip = $"{cr.PeriodText} · avg {cr.AverageText}{unitSuffix} · min {cr.MinimumText} · max {cr.MaximumText}" + (cr.UptimeText is null ? string.Empty : $" · {cr.UptimeText} OK") + $" · {cr.SampleCount} checks";
+                                        <rect class="sensor-statistics-bar" data-state="@cr.StateKey" data-bar-tip="@barTip" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"></rect>
+                                    }
+                                </svg>
+                            </div>
+                            <div class="sensor-statistics-chart-axis">
+                                <span>@chartRows.First().PeriodText</span>
+                                <span>@chartRows.Last().PeriodText</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            }
+
+            @if (stats.Rows.Count == 0)
+            {
+                <div class="mat-empty mat-empty--framed">
+                    <span class="mat-empty__icon">@MatUi.Icon("bar-chart")</span>
+                    <div class="mat-empty__title">No statistics in this range</div>
+                    <p>Choose a longer range, or reset the filters.</p>
+                </div>
             }
             else
             {
-                <div class="sensor-window-summary">
-                    <span>AVG @(Model.View.SelectedWindow.Average?.ToString("0.###") ?? "-")@(string.IsNullOrWhiteSpace(Model.View.Unit) ? string.Empty : $" {Model.View.Unit}")</span>
-                    <span>MIN @(Model.View.SelectedWindow.Minimum?.ToString("0.###") ?? "-")</span>
-                    <span>MAX @(Model.View.SelectedWindow.Maximum?.ToString("0.###") ?? "-")</span>
-                    <span>@Model.View.SelectedWindow.SampleCount checks</span>
-                </div>
-                <div class="sensor-chart-legend">
-                    <span class="sensor-chart-legend-line" style="--series-color:@Model.View.SelectedWindow.LineColor"></span>
-                    <span>Primary: @Model.View.DefaultChannelLabel</span>
-                    <span class="panel-hint">used for overview, chart &amp; statistics</span>
-                </div>
-                var win = Model.View.SelectedWindow;
-                var chartInv = System.Globalization.CultureInfo.InvariantCulture;
-                var chartPointsJson = "[" + string.Join(",", win.Points.Select(p =>
-                    $"[{p.TimestampUtc.ToUnixTimeMilliseconds()},{p.Value.ToString("0.######", chartInv)}]")) + "]";
-                <div class="sensor-chart-wrap" data-chart="line"
-                     style="--series-color:@win.LineColor"
-                     data-chart-points="@chartPointsJson"
-                     data-chart-min="@win.GraphMin.ToString("0.######", chartInv)"
-                     data-chart-max="@win.GraphMax.ToString("0.######", chartInv)"
-                     data-chart-from="@win.FromUtc.ToUnixTimeMilliseconds()"
-                     data-chart-to="@win.ToUtc.ToUnixTimeMilliseconds()"
-                     data-chart-unit="@Model.View.Unit">
-                    <div class="sensor-chart-axis-y" aria-hidden="true">
-                        <span>@win.GraphMax.ToString("0.##", chartInv)</span>
-                        <span>@win.GraphMin.ToString("0.##", chartInv)</span>
-                    </div>
-                    <svg class="sparkline sensor-chart" viewBox="0 0 100 40" preserveAspectRatio="none" style="--series-color:@win.LineColor">
-                        <path data-role="area" d="@win.AreaPath"></path>
-                        <path data-role="line" d="@win.LinePath"></path>
-                    </svg>
-                </div>
-                <div class="graph-footer">
-                    <span>@win.FromUtc.ToDisplay().ToString("dd.MM HH:mm")</span>
-                    <span>@win.ToUtc.ToDisplay().ToString("dd.MM HH:mm")</span>
-                </div>
-            }
-        </section>
-
-    </div>
-
-    <div class="sensor-detail-tabpanel" data-sensor-tab="statistics">
-        @if (Model.View.Statistics is { } stats)
-        {
-            <section class="panel panel-stack sensor-statistics-panel">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Long-term statistics</span></h2>
-                    <span class="panel-hint">@stats.Rows.Count @stats.GranularityLabel.ToLowerInvariant() period@(stats.Rows.Count == 1 ? string.Empty : "s") · @stats.BucketCount buckets</span>
-                </div>
-
-                <form method="get" asp-page="/SensorDetails" asp-route-sensorId="@Model.View.SensorId" class="sensor-statistics-controls">
-                    <input type="hidden" name="window" value="@Model.Window" />
-                    <input type="hidden" name="StatsRange" value="@(stats.SelectedRange == "custom" ? string.Empty : stats.SelectedRange)" />
-                    @if (stats.Channels.Count > 1)
-                    {
-                        <label class="sensor-statistics-field">
-                            <span>Channel</span>
-                            <select name="StatsChannel" class="form-select workspace-select" onchange="this.form.submit()">
-                                @foreach (var channelOption in stats.Channels)
-                                {
-                                    <option value="@channelOption.Key" selected="@channelOption.IsSelected">@channelOption.Label</option>
-                                }
-                            </select>
-                        </label>
-                    }
-                    else
-                    {
-                        <input type="hidden" name="StatsChannel" value="@stats.SelectedChannelKey" />
-                    }
-                    <div class="sensor-statistics-field">
-                        <span>Range</span>
-                        <div class="sensor-range-chips">
-                            @foreach (var rangeOption in new[] { ("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("90d", "90d"), ("all", "All") })
-                            {
-                                <a class="sensor-range-chip @(stats.SelectedRange == rangeOption.Item1 ? "is-active" : string.Empty)"
-                                   href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsRange={rangeOption.Item1}&StatsChannel={stats.SelectedChannelKey}")">@rangeOption.Item2</a>
-                            }
-                        </div>
-                    </div>
-                    <label class="sensor-statistics-field">
-                        <span>From</span>
-                        <input type="date" name="StatsFrom" value="@stats.FromText" class="form-control workspace-input" />
-                    </label>
-                    <label class="sensor-statistics-field">
-                        <span>To</span>
-                        <input type="date" name="StatsTo" value="@stats.ToText" class="form-control workspace-input" />
-                    </label>
-                    <label class="sensor-statistics-field">
-                        <span>Group by</span>
-                        <select name="StatsGroup" class="form-select workspace-select">
-                            <option value="native" selected="@(stats.SelectedGroup == "native")">Native</option>
-                            <option value="day" selected="@(stats.SelectedGroup == "day")">Day</option>
-                            <option value="month" selected="@(stats.SelectedGroup == "month")">Month</option>
-                            <option value="year" selected="@(stats.SelectedGroup == "year")">Year</option>
-                        </select>
-                    </label>
-                    <div class="sensor-statistics-actions">
-                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("search")<span>Apply</span></button>
-                        @if (stats.SelectedRange != "7d" || stats.SelectedGroup != "day")
-                        {
-                            <a class="workspace-secondary-submit" href="@($"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsChannel={stats.SelectedChannelKey}")">@MatmonIcons.Render("close")<span>Reset</span></a>
-                        }
-                    </div>
-                </form>
-
-                @{
-                    var chartRows = stats.Rows.Reverse().ToList();
-                    var chartValues = chartRows.Where(r => r.AverageValue.HasValue).Select(r => r.AverageValue!.Value).ToList();
-                }
-                @if (chartValues.Count > 0)
-                {
-                    var inv = System.Globalization.CultureInfo.InvariantCulture;
-                    var chartMax = chartValues.Max();
-                    var chartMin = Math.Min(0d, chartValues.Min());
-                    var chartRange = chartMax - chartMin;
-                    if (chartRange <= 0d) { chartRange = 1d; }
-                    var slot = 100d / chartRows.Count;
-                    var barWidth = Math.Min(Math.Max(slot * 0.68d, 0.6d), 12d);
-                    var unitSuffix = string.IsNullOrWhiteSpace(stats.Unit) ? string.Empty : $" {stats.Unit}";
-                    <div class="sensor-statistics-chart sensor-chart-wrap" data-chart="bars">
-                        <div class="sensor-chart-plot">
-                        <div class="sensor-chart-axis-y" aria-hidden="true">
-                            <span>@chartMax.ToString("0.##", inv)</span>
-                            <span>@chartMin.ToString("0.##", inv)</span>
-                        </div>
-                        <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="img" aria-label="Average per @stats.GranularityLabel.ToLowerInvariant() period">
-                            @for (var i = 0; i < chartRows.Count; i++)
-                            {
-                                var cr = chartRows[i];
-                                if (!cr.AverageValue.HasValue)
-                                {
-                                    continue;
-                                }
-                                var barHeight = Math.Max((cr.AverageValue.Value - chartMin) / chartRange * 40d, 0.6d);
-                                var barX = (i * slot) + ((slot - barWidth) / 2d);
-                                var barY = 42d - barHeight;
-                                var barTip = $"{cr.PeriodText} · avg {cr.AverageText}{unitSuffix} · min {cr.MinimumText} · max {cr.MaximumText}" + (cr.UptimeText is null ? string.Empty : $" · {cr.UptimeText} OK") + $" · {cr.SampleCount} checks";
-                                <rect class="sensor-statistics-bar" data-state="@cr.StateKey" data-bar-tip="@barTip" x="@(barX.ToString("0.###", inv))" y="@(barY.ToString("0.###", inv))" width="@(barWidth.ToString("0.###", inv))" height="@(barHeight.ToString("0.###", inv))" rx="0.4"></rect>
-                            }
-                        </svg>
-                        </div>
-                        <div class="sensor-statistics-chart-axis">
-                            <span>@chartRows.First().PeriodText</span>
-                            <span>@chartRows.Last().PeriodText</span>
-                        </div>
-                    </div>
-                }
-
-                <div class="sensor-statistics-scroll">
-                    <table class="sensor-statistics-table">
+                <div class="mat-table-wrap">
+                    <table class="mat-table mat-table--compact sensor-statistics-table">
+                        <caption class="mat-sr-only">Statistics per @granularity period of @selectedChannelLabel</caption>
                         <thead>
                             <tr>
-                                <th>Period</th>
-                                <th>Avg@(stats.Unit is null ? string.Empty : $" ({stats.Unit})")</th>
-                                <th>Min</th>
-                                <th>Max</th>
-                                <th title="bottom 1 %">1 %</th>
-                                <th title="top 1 %">99 %</th>
-                                <th title="share of checks in the OK state">OK %</th>
-                                <th>Checks</th>
+                                <th scope="col">Period</th>
+                                <th scope="col" class="mat-num">Avg@(stats.Unit is null ? string.Empty : $" ({stats.Unit})")</th>
+                                <th scope="col" class="mat-num">Min</th>
+                                <th scope="col" class="mat-num">Max</th>
+                                <th scope="col" class="mat-num mat-hide-sm" title="bottom 1 %">1 %</th>
+                                <th scope="col" class="mat-num mat-hide-sm" title="top 1 %">99 %</th>
+                                <th scope="col" class="mat-num" title="share of checks in the OK state">OK %</th>
+                                <th scope="col" class="mat-num">Checks</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -404,73 +529,95 @@
                             {
                                 var drillHref = row.DrillGroup is null
                                     ? null
-                                    : $"{Request.PathBase}/monitoring/sensor/{Model.View.SensorId}?window={Model.Window}&StatsFrom={row.DrillFrom}&StatsTo={row.DrillTo}&StatsGroup={row.DrillGroup}&StatsChannel={stats.SelectedChannelKey}";
-                                <tr data-state="@row.StateKey" class="@(drillHref is null ? null : "is-clickable")" data-href="@drillHref" title="@(drillHref is null ? null : $"Drill into {row.PeriodText}")">
-                                    <td>@row.PeriodText@if (drillHref is not null) {<span class="sensor-statistics-drill">›</span>}</td>
-                                    <td class="is-strong" data-label="Avg">@row.AverageText</td>
-                                    <td data-label="Min">@row.MinimumText</td>
-                                    <td data-label="Max">@row.MaximumText</td>
-                                    <td data-label="1 %">@row.LowPercentileText</td>
-                                    <td data-label="99 %">@row.HighPercentileText</td>
-                                    <td data-label="OK %">@(row.UptimeText ?? "-")</td>
-                                    <td data-label="Checks">@row.SampleCount</td>
+                                    : $"{statsBase}?window={Model.Window}&StatsFrom={row.DrillFrom}&StatsTo={row.DrillTo}&StatsGroup={row.DrillGroup}&StatsChannel={channelQuery}#statistics";
+                                <tr data-state="@row.StateKey" data-href="@drillHref">
+                                    <td data-label="Period" class="mat-table__primary mat-mono">
+                                        @if (drillHref is not null)
+                                        {
+                                            <a href="@drillHref" data-tip="Drill into @row.PeriodText" data-tip-align="start">@row.PeriodText</a>
+                                        }
+                                        else
+                                        {
+                                            @row.PeriodText
+                                        }
+                                    </td>
+                                    <td data-label="Avg" class="mat-num mat-mono mat-table__keep-label"><strong>@row.AverageText</strong></td>
+                                    <td data-label="Min" class="mat-num mat-mono mat-table__keep-label">@row.MinimumText</td>
+                                    <td data-label="Max" class="mat-num mat-mono mat-table__keep-label">@row.MaximumText</td>
+                                    <td data-label="1 %" class="mat-num mat-mono mat-hide-sm mat-table__keep-label">@row.LowPercentileText</td>
+                                    <td data-label="99 %" class="mat-num mat-mono mat-hide-sm mat-table__keep-label">@row.HighPercentileText</td>
+                                    <td data-label="OK %" class="mat-num mat-mono mat-table__keep-label">@(row.UptimeText ?? "-")</td>
+                                    <td data-label="Checks" class="mat-num mat-mono mat-table__keep-label">@row.SampleCount</td>
                                 </tr>
                             }
                         </tbody>
                     </table>
-                    @if (stats.Rows.Count == 0)
-                    {
-                        <div class="empty-state">No statistics in this range.</div>
-                    }
                 </div>
-            </section>
+            }
         }
         else
         {
-            <div class="panel empty-state">No long-term statistics collected yet.</div>
+            <div class="mat-empty mat-empty--framed">
+                <span class="mat-empty__icon">@MatUi.Icon("bar-chart")</span>
+                <div class="mat-empty__title">No long-term statistics yet</div>
+                <p>Statistics are rolled up from the sensor's history every few minutes.</p>
+            </div>
         }
     </div>
 
-    <div class="sensor-detail-tabpanel" data-sensor-tab="history">
-        <section class="panel panel-stack">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("clock")<span>Last results</span></h2>
-                <span class="panel-hint">@Model.View.RecentObservations.Count</span>
+    @* ---------- HISTORY ---------- *@
+    <div class="mat-tabpanel" role="tabpanel" id="panel-history" aria-labelledby="tab-history" hidden>
+        @if (view.RecentObservations.Count == 0)
+        {
+            <div class="mat-empty mat-empty--framed">
+                <span class="mat-empty__icon">@MatUi.Icon("clock")</span>
+                <div class="mat-empty__title">No measurements yet</div>
+                <p>The first result appears after the sensor has run - or press Run now.</p>
             </div>
-
-            @if (Model.View.RecentObservations.Count == 0)
-            {
-                <div class="empty-state">No measurements yet.</div>
-            }
-            else
-            {
-                <div class="sensor-observation-list">
-                    @foreach (var observation in Model.View.RecentObservations)
-                    {
-                        <article class="sensor-observation-row" data-state="@observation.StateKey">
-                            <div class="sensor-observation-main">
-                                <div class="sensor-observation-name">
-                                    <span>@observation.TimestampText</span>
-                                    @if (observation.ChannelCount > 1)
-                                    {
-                                        <span class="state-pill" data-state="paused">@observation.ChannelCount channels</span>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(observation.ExecutionProbe))
-                                    {
-                                        <span class="state-pill" data-state="ok">@observation.ExecutionProbe</span>
-                                    }
-                                </div>
-                                <div class="sensor-observation-meta">@observation.Message</div>
-                            </div>
-                            <div class="sensor-observation-side">
-                                <div class="sensor-channel-value">@observation.ValueText @observation.Unit</div>
-                                <span class="state-pill" data-state="@observation.StateKey">@observation.StateLabel</span>
-                                <span class="sensor-observation-meta">duration @observation.DurationText</span>
-                            </div>
-                        </article>
-                    }
+        }
+        else
+        {
+            <section class="mat-card">
+                <div class="mat-card__head">
+                    @MatUi.Icon("clock")
+                    <h2 class="mat-card__title">Last results</h2>
+                    <span class="mat-text-muted mm-push-end">@view.RecentObservations.Count shown</span>
                 </div>
-            }
-        </section>
+                <div class="mat-table-wrap sensor-history-table">
+                    <table class="mat-table mat-table--compact">
+                        <caption class="mat-sr-only">Last results of @view.Name</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Time</th>
+                                <th scope="col">State</th>
+                                <th scope="col" class="mat-num">Value</th>
+                                <th scope="col" class="mat-num mat-hide-sm">Duration</th>
+                                <th scope="col" class="mat-hide-sm">Probe</th>
+                                <th scope="col">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var observation in view.RecentObservations)
+                            {
+                                <tr data-state="@observation.StateKey">
+                                    <td data-label="Time" class="mat-mono">@observation.TimestampText</td>
+                                    <td data-label="State"><span class="@MatUi.PillClass(observation.StateKey)">@observation.StateLabel</span></td>
+                                    <td data-label="Value" class="mat-num mat-mono">
+                                        @observation.ValueText @observation.Unit
+                                        @if (observation.ChannelCount > 1)
+                                        {
+                                            <span class="mat-tag">@observation.ChannelCount channels</span>
+                                        }
+                                    </td>
+                                    <td data-label="Duration" class="mat-num mat-mono mat-hide-sm">@observation.DurationText</td>
+                                    <td data-label="Probe" class="mat-hide-sm">@observation.ExecutionProbe</td>
+                                    <td data-label="Message" class="mm-break">@observation.Message</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
     </div>
 </section>

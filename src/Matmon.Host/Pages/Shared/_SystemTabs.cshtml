@@ -2,28 +2,31 @@
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore Workspace
 @* The tab strip of the System section. System is one page (Config) with a tab per area and a few areas that are
    pages of their own (Syslog): both render this strip, so the section looks like one place whichever it is on.
-   Model = the active tab's name. *@
+   The tabs are LINKS (each area is its own request: ?tab=backup asks the cloud for its backup list, for one), so they
+   are MatUi's link tabs, not a [data-tabs] group. Model = the active tab's name. *@
 @{
     var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var active = Model ?? "general";
-    string Active(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
+    bool IsActive(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase);
+    string Css(string tab) => IsActive(tab) ? "mat-tab is-active" : "mat-tab";
+    string? Current(string tab) => IsActive(tab) ? "page" : null;
 }
 
-<div class="sensor-tabs system-tabs" role="tablist" aria-label="System sections">
-    <a class="sensor-tab @Active("general")" asp-page="/Config" asp-route-tab="general">Overview</a>
-    <a class="sensor-tab @Active("probes")" asp-page="/Config" asp-route-tab="probes">Probes</a>
-    <a class="sensor-tab @Active("storage")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+<nav class="mat-tabs" aria-label="System sections">
+    <a class="@Css("general")" aria-current="@Current("general")" asp-page="/Config" asp-route-tab="general">Overview</a>
+    <a class="@Css("probes")" aria-current="@Current("probes")" asp-page="/Config" asp-route-tab="probes">Probes</a>
+    <a class="@Css("storage")" aria-current="@Current("storage")" asp-page="/Config" asp-route-tab="storage">Storage</a>
     @if (canManage)
     {
-        <a class="sensor-tab @Active("syslog")" asp-page="/SystemSyslog">Syslog</a>
-        <a class="sensor-tab @Active("backup")" asp-page="/Config" asp-route-tab="backup">Backup</a>
-        <a class="sensor-tab @Active("cloud")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
-        <a class="sensor-tab @Active("license")" asp-page="/Config" asp-route-tab="license">License</a>
+        <a class="@Css("syslog")" aria-current="@Current("syslog")" asp-page="/SystemSyslog">Syslog</a>
+        <a class="@Css("backup")" aria-current="@Current("backup")" asp-page="/Config" asp-route-tab="backup">Backup</a>
+        <a class="@Css("cloud")" aria-current="@Current("cloud")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
+        <a class="@Css("license")" aria-current="@Current("license")" asp-page="/Config" asp-route-tab="license">License</a>
         @if (Workspace.GetServicePartnerInfo()?.HasPartner == true)
         {
-            <a class="sensor-tab @Active("partner")" asp-page="/Config" asp-route-tab="partner">Service partner</a>
+            <a class="@Css("partner")" aria-current="@Current("partner")" asp-page="/Config" asp-route-tab="partner">Service partner</a>
         }
 
-        <a class="sensor-tab @Active("users")" asp-page="/Config" asp-route-tab="users">Users</a>
+        <a class="@Css("users")" aria-current="@Current("users")" asp-page="/Config" asp-route-tab="users">Users</a>
     }
-</div>
+</nav>

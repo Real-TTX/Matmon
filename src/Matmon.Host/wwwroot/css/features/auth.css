@@ -1,0 +1,71 @@
+/* Matmon - auth: sign-in, the second factor, first-run setup, the setup assistant and the small pages without the menu. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- The brand at the top of a card: a managing partner's logo in place of the Matmon mark. A logo can have any
+   shape, so it keeps its proportions and is held to the height of a lockup. ---- */
+.mm-auth-logo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(260px, 100%);
+  max-height: 72px;
+  object-fit: contain;
+}
+
+/* ---- "or" between the sign-in form and "Sign in with Matmon Cloud": a line on each side of the word ---- */
+.mm-auth-or {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-3);
+  margin: 0;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm);
+}
+.mm-auth-or::before,
+.mm-auth-or::after {
+  content: "";
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--mat-border);
+}
+
+/* ---- The setup assistant: a wider card than a sign-in ---- */
+.mm-auth-card--wide { width: min(760px, 100%); }
+
+/* One step: its title, its text and its forms one below another. */
+.mm-wizard__step { display: flex; flex-direction: column; gap: var(--mat-space-4); min-width: 0; }
+.mm-wizard__step p { margin: 0; }
+.mm-wizard__title { display: flex; align-items: center; gap: var(--mat-space-2); font-size: var(--mat-fs-lg); }
+.mm-wizard__title > .mat-icon { color: var(--mat-accent-text); }
+
+/* A part of a step (Folders, Networks, Discovery scan, Remote probes): a line above it and a smaller heading. */
+.mm-wizard__sub { padding-top: var(--mat-space-4); border-top: 1px solid var(--mat-border); font-size: var(--mat-fs-md); }
+
+/* What is already done (connected, configured, enabled): a check beside the sentence. */
+.mm-wizard__state { display: flex; align-items: flex-start; gap: var(--mat-space-2); color: var(--mat-text-muted); }
+.mm-wizard__state > .mat-icon { margin-top: calc((1lh - 1.15em) / 2); color: var(--mat-success-text); }
+
+/* A field with its button beside it (add a network, name a probe) does not need the whole width of the card. */
+.mm-wizard__inline { max-width: 28rem; }
+
+/* The starter folders: what exists is checked and muted, a sub-folder is indented under its parent. */
+.mm-wizard__folders { display: flex; flex-direction: column; gap: var(--mat-space-2); list-style: none; }
+.mm-wizard__folder { display: flex; align-items: center; gap: var(--mat-space-2); min-height: var(--mat-control-h-sm); }
+.mm-wizard__folder > .mat-icon { color: var(--mat-accent-text); }
+.mm-wizard__folder.is-child { padding-inline-start: var(--mat-space-6); }
+.mm-wizard__folder.is-done { color: var(--mat-text-muted); }
+.mm-wizard__folder.is-done > .mat-icon { color: var(--mat-success-text); }
+
+/* Two-factor enrolment: the QR code beside the manual key. The code is drawn dark on light and has to stay that way in
+   the dark theme too, or no phone reads it - hence the plate, in the one white the toolkit keeps the same in both themes. */
+.mm-wizard__totp { display: flex; flex-wrap: wrap; align-items: center; gap: var(--mat-space-5); }
+.mm-wizard__qr {
+  flex: none;
+  width: max-content;
+  max-width: 100%;
+  padding: var(--mat-space-3);
+  border-radius: var(--mat-radius);
+  background: var(--mat-picker-light);
+  line-height: 0;
+}
+.mm-wizard__qr svg { display: block; }
+.mm-wizard__key { flex: 1 1 16rem; min-width: 0; }

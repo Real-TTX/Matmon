@@ -2,27 +2,32 @@
 @model AboutModel
 @{
     ViewData["Title"] = "About";
-    var channelKey = Model.Channel.ToLowerInvariant();
+    ViewData["Width"] = "narrow";
+    // The delivery channel as a pill: a release is the good news, a nightly build the accent, a local build neither.
+    var channelTone = Model.Channel.ToLowerInvariant() switch
+    {
+        "release" => "ok",
+        "nightly" => "accent",
+        _ => "plain"
+    };
 }
 
-<section class="dashboard-shell about-page">
-    <div class="about-hero">
-        <span class="about-hero-mark"><img src="~/brand/matmon-mark-flat.svg" alt="" aria-hidden="true" /></span>
-        <div class="about-hero-copy">
-            <span class="about-hero-kicker">About</span>
-            <h1>Matmon</h1>
-            <p>Lightweight, self-hosted network monitoring.</p>
-            <div class="about-version-row">
-                <span class="about-version-tag">@Model.Version</span>
-                <span class="about-channel-badge" data-channel="@channelKey">@Model.Channel</span>
+<section class="mat-card">
+    <div class="mat-card__body">
+        <div class="mat-row mat-gap-4">
+            <img src="~/brand/matmon-mark.svg" alt="" width="72" height="72" />
+            <div class="mat-stack mat-stack--sm">
+                <h2 class="mat-card__title">Matmon</h2>
+                <p class="mat-muted">Lightweight, self-hosted network monitoring.</p>
+                <div class="mat-row">
+                    <span class="mat-tag mat-mono">@Model.Version</span>
+                    <span class="@MatUi.PillClass(channelTone)">@Model.Channel</span>
+                </div>
             </div>
         </div>
     </div>
-
-    <div class="about-meta">
-        <a class="about-link" href="https://matmon.eu" target="_blank" rel="noopener">
-            @MatmonIcons.Render("signal")<span>matmon.eu</span>
-        </a>
-        <span class="about-copyright">© @Model.Year Matmon · All rights reserved</span>
+    <div class="mat-card__foot mat-row mat-row--between">
+        <a class="mat-btn mat-btn--ghost mat-btn--sm" href="https://matmon.eu" target="_blank" rel="noopener">@MatUi.Icon("globe")<span>matmon.eu</span></a>
+        <span class="mat-text-muted">© @Model.Year Matmon · All rights reserved</span>
     </div>
 </section>

@@ -1,2 +1,6 @@
 @page "/logout"
 @model LogoutModel
+@{
+    // Signing out is a POST that redirects to the sign-in page (a GET answers 405); nothing is rendered.
+    Layout = null;
+}

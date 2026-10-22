@@ -1,0 +1,282 @@
+/* Matmon - monitoring. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- The Sensors page: view and size switches in the toolbar, the tree panel in the list block ---- */
+/* The Tree/List and S/M/L switches sit before the Filter button; on a phone they take a row of their own under the search
+   (the count stays last, MatUi puts it at order 9), so the search field keeps its width. */
+.monitoring-view-tools { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--mat-space-2); }
+@media (max-width: 480px) {
+  .monitoring-view-tools { order: 8; flex: 1 1 100%; justify-content: space-between; }
+}
+
+/* The tree takes the place a table has in a MatUi list (after the toolbar and the chips). */
+.mat-list > .monitoring-tree-panel { order: 2; }
+.monitoring-tree-panel { --mat-card-pad: var(--mat-space-4); }
+.monitoring-tree-tools { display: flex; flex-wrap: wrap; gap: var(--mat-space-1); margin-bottom: var(--mat-space-3); }
+
+/* ---- The state colour of a node or a chip: one custom property, always from the state tokens (as mm-state-dot) ---- */
+.monitoring-tree-node,
+.monitoring-sensor-chip { --tree-state: var(--mat-text-faint); }
+.monitoring-tree-node[data-state="ok"],
+.monitoring-sensor-chip[data-state="ok"] { --tree-state: var(--mat-success); }
+.monitoring-tree-node[data-state="warning"],
+.monitoring-sensor-chip[data-state="warning"] { --tree-state: var(--mat-warning); }
+.monitoring-tree-node[data-state="error"],
+.monitoring-sensor-chip[data-state="error"] { --tree-state: var(--mat-danger); }
+.monitoring-tree-node[data-state="paused"],
+.monitoring-tree-node[data-state="disabled"],
+.monitoring-sensor-chip[data-state="paused"],
+.monitoring-sensor-chip[data-state="disabled"] { --tree-state: var(--mat-border-strong); }
+
+/* ---- The kind of an element (probe, folder, host, sensor) as its glyph; the word is beside it for screen readers ---- */
+.tree-kind { display: inline-flex; flex: none; align-items: center; justify-content: center; font-size: 1.15rem; color: var(--mat-text-muted); }
+
+/* ---- The tree: a row per container, its children indented on a guide line (the look of mat-tree, Matmon's own script) ---- */
+.monitoring-tree { --tree-gap: var(--mat-space-1); display: grid; gap: var(--tree-gap); min-width: 0; }
+.monitoring-tree-node { display: grid; gap: var(--tree-gap); min-width: 0; }
+.monitoring-tree-node.is-probe-root { margin-top: var(--mat-space-1); }
+
+.monitoring-tree-row {
+  display: grid;
+  grid-template-columns: var(--mat-space-6) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+  min-width: 0;
+  min-height: 36px;
+  padding: var(--mat-space-1) var(--mat-space-2) var(--mat-space-1) var(--mat-space-1);
+  border-left: 3px solid var(--tree-state);
+  border-radius: 0 var(--mat-radius-sm) var(--mat-radius-sm) 0;
+  transition: background-color var(--mat-dur) var(--mat-ease);
+}
+.monitoring-tree-row:hover,
+.monitoring-tree-row:focus-within { background: color-mix(in srgb, var(--mat-text) 5%, transparent); }
+.monitoring-tree-node.is-move-source > .monitoring-tree-row { background: var(--mat-accent-soft); box-shadow: inset 0 0 0 1px var(--mat-accent); }
+
+/* The chevron: the whole button turns, so the open state needs nothing but aria-expanded (monitoring-prepaint.js turns a
+   remembered collapsed one back before the first paint). */
+.monitoring-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--mat-space-6);
+  height: var(--mat-space-6);
+  padding: 0;
+  border: 0;
+  border-radius: var(--mat-radius-sm);
+  background: transparent;
+  color: var(--mat-text-muted);
+  cursor: pointer;
+  transition: rotate var(--mat-dur) var(--mat-ease), background-color var(--mat-dur) var(--mat-ease);
+}
+.monitoring-tree-toggle[aria-expanded="true"] { rotate: 90deg; }
+.monitoring-tree-toggle:hover { background: var(--mat-surface-3); color: var(--mat-text); }
+.monitoring-tree-toggle:focus-visible { outline: none; box-shadow: var(--mat-focus-ring); }
+.monitoring-tree-toggle.is-spacer { cursor: default; }
+
+/* The state shows on the left edge, on the kind glyph and - for a problem - on the name. */
+.monitoring-tree-node[data-state="ok"] > .monitoring-tree-row .tree-kind { color: var(--mat-success-text); }
+.monitoring-tree-node[data-state="warning"] > .monitoring-tree-row .tree-kind,
+.monitoring-tree-node[data-state="warning"] > .monitoring-tree-row .tree-name { color: var(--mat-warning-text); }
+.monitoring-tree-node[data-state="error"] > .monitoring-tree-row .tree-kind,
+.monitoring-tree-node[data-state="error"] > .monitoring-tree-row .tree-name { color: var(--mat-danger-text); }
+
+.monitoring-tree-main { display: flex; align-items: center; gap: var(--mat-space-2); min-width: 0; overflow: hidden; white-space: nowrap; }
+.monitoring-tree-row .tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.monitoring-tree-node.is-master-probe > .monitoring-tree-row .tree-name { font-weight: 700; }
+.monitoring-tree-details { min-width: 0; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+.monitoring-tree-tags { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--mat-space-1); min-width: 0; overflow: hidden; }
+
+.monitoring-tree-side { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--mat-space-2); min-width: 0; }
+.monitoring-tree-actions { display: flex; align-items: center; gap: var(--mat-space-1); }
+
+.monitoring-tree-children {
+  display: grid;
+  gap: var(--tree-gap);
+  min-width: 0;
+  margin-left: calc(var(--mat-space-4) + 3px); /* the guide line runs under the middle of the chevron */
+  padding-left: var(--mat-space-3);
+  border-left: 1px solid var(--mat-border);
+}
+.monitoring-tree-node.is-collapsed > .monitoring-tree-children { display: none; }
+
+/* ---- The sensors of a container: a strip of chips (state edge, glyph, name, value; meta and sparkline by tile size) ---- */
+.monitoring-sensor-strip { display: flex; flex-wrap: wrap; align-items: stretch; gap: var(--mat-space-2); min-width: 0; padding-block: var(--mat-space-1); }
+
+.monitoring-sensor-chip {
+  position: relative; /* the veil and the action buttons are placed on it; never a z-index here, or its menu would be trapped */
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 9.8rem;
+  max-width: 13.4rem;
+  border: 1px solid var(--mat-border);
+  border-left: 4px solid var(--tree-state);
+  border-radius: var(--mat-radius-sm);
+  background: var(--mat-surface-2);
+}
+.monitoring-sensor-chip.is-move-source { outline: 2px solid var(--mat-accent); outline-offset: 1px; }
+/* Acknowledged: the lower half of the state edge in the ack colour, so a warning-ack and an error-ack stay apart. */
+.monitoring-sensor-chip[data-acknowledged="true"]::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  bottom: -1px;
+  width: 4px;
+  height: calc(50% + 1px);
+  background: var(--mat-info);
+  border-bottom-left-radius: var(--mat-radius-sm);
+}
+
+.monitoring-sensor-chip-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon name"
+    "icon value"
+    "meta meta";
+  column-gap: var(--mat-space-2);
+  min-width: 0;
+  padding: var(--mat-space-1) var(--mat-space-2);
+  border-radius: inherit;
+  color: inherit;
+  text-decoration: none;
+}
+.monitoring-sensor-chip-main:hover { text-decoration: none; }
+.monitoring-sensor-chip-main:focus-visible { outline: none; box-shadow: var(--mat-focus-ring); }
+
+.monitoring-sensor-status { grid-area: icon; align-self: start; display: inline-flex; padding-top: 2px; font-size: 1rem; color: var(--tree-state); }
+.monitoring-sensor-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mat-fs-sm); font-weight: 600; }
+.monitoring-sensor-value {
+  grid-area: value;
+  justify-self: end;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--mat-fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitoring-sensor-meta {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-1) var(--mat-space-2);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  white-space: nowrap;
+}
+/* Type and time stay whole; the tags take the rest and fold what does not fit into a "+N" tag (tags.js). */
+.monitoring-sensor-meta > span:not(.monitoring-sensor-tags) { flex: none; }
+.monitoring-sensor-tags { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: var(--mat-space-1); min-width: 0; overflow: hidden; --mat-tag-pad-x: var(--mat-space-1); }
+.monitoring-sensor-tags [data-tag-chip],
+.monitoring-sensor-tags [data-tag-more] { flex: none; }
+.tag-overflow-more { cursor: default; }
+
+/* The sparkline (drawn by dashboard.js): its colour is the chip's state, from the tokens - the CSS wins over the colour the
+   script writes into the stroke/fill attributes. */
+.monitoring-sensor-graph { grid-area: graph; display: none; width: 100%; height: 2.25rem; min-width: 0; overflow: visible; }
+.monitoring-sensor-chip .monitoring-sensor-graph path { vector-effect: non-scaling-stroke; }
+.monitoring-sensor-chip .monitoring-sensor-graph [data-role="line"] { fill: none; stroke: var(--tree-state); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.monitoring-sensor-chip .monitoring-sensor-graph [data-role="area"] { fill: color-mix(in srgb, var(--tree-state) 14%, transparent); stroke: none; }
+
+/* Tile size S: name and value only. */
+html[data-monitoring-size="s"] .monitoring-sensor-chip { min-width: 7rem; max-width: 9.6rem; }
+html[data-monitoring-size="s"] .monitoring-sensor-chip-main { grid-template-areas: "icon name" "icon value"; padding-block: 2px; }
+html[data-monitoring-size="s"] .monitoring-sensor-name,
+html[data-monitoring-size="s"] .monitoring-sensor-value { font-size: var(--mat-fs-xs); }
+html[data-monitoring-size="s"] .monitoring-sensor-status { font-size: 0.85rem; }
+html[data-monitoring-size="s"] .monitoring-sensor-meta { display: none; }
+
+/* Tile size L: the meta line and the sparkline. */
+html[data-monitoring-size="l"] .monitoring-sensor-chip { min-width: 14rem; max-width: 18.5rem; }
+html[data-monitoring-size="l"] .monitoring-sensor-chip-main {
+  grid-template-areas:
+    "icon name"
+    "icon value"
+    "meta meta"
+    "graph graph";
+  row-gap: 2px;
+  padding: var(--mat-space-2);
+}
+html[data-monitoring-size="l"] .monitoring-sensor-name,
+html[data-monitoring-size="l"] .monitoring-sensor-value { font-size: var(--mat-fs-md); }
+html[data-monitoring-size="l"] .monitoring-sensor-status { font-size: 1.15rem; }
+html[data-monitoring-size="l"] .monitoring-sensor-graph { display: block; }
+
+/* The chip's actions (open, menu): with a mouse they float on a veil over the chip while it is hovered or focused and while
+   its menu is open; on a touch screen they stand beside the chip all the time. */
+.monitoring-sensor-chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--mat-surface) 78%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mat-dur) var(--mat-ease);
+}
+.monitoring-sensor-overlay-actions {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: var(--mat-space-2);
+  z-index: 2;
+  align-items: center;
+  gap: var(--mat-space-1);
+}
+@media (hover: hover) {
+  .monitoring-sensor-chip:hover::after,
+  .monitoring-sensor-chip:focus-within::after,
+  .monitoring-sensor-chip:has([data-menu-toggle][aria-expanded="true"])::after { opacity: 1; }
+  .monitoring-sensor-chip:hover .monitoring-sensor-overlay-actions,
+  .monitoring-sensor-chip:focus-within .monitoring-sensor-overlay-actions,
+  .monitoring-sensor-chip:has([data-menu-toggle][aria-expanded="true"]) .monitoring-sensor-overlay-actions,
+  .monitoring-tree.is-move-active .monitoring-sensor-chip.is-move-source .monitoring-sensor-overlay-actions { display: inline-flex; }
+}
+@media (hover: none) {
+  .monitoring-sensor-chip { grid-template-columns: minmax(0, 1fr) auto; }
+  .monitoring-sensor-chip::after { display: none; }
+  .monitoring-sensor-overlay-actions { display: inline-flex; position: static; padding-inline: var(--mat-space-1); }
+}
+
+/* ---- The list view: a MatUi table; the tile size sets its density ---- */
+html[data-monitoring-size="s"] .monitoring-list { --mat-table-pad-y: var(--mat-space-1); }
+html[data-monitoring-size="l"] .monitoring-list { --mat-table-pad-y: var(--mat-space-4); }
+.monitoring-list-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--mat-space-1); }
+.monitoring-list-object,
+.monitoring-list-endpoint,
+.monitoring-list-info { display: flex; flex-direction: column; min-width: 0; }
+.monitoring-list-object small { overflow-wrap: anywhere; }
+.monitoring-list-endpoint small,
+.monitoring-list-info small { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+.monitoring-list-endpoint > .mat-mono { overflow-wrap: anywhere; }
+.monitoring-list-info > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.monitoring-list-tags { margin-top: var(--mat-space-1); }
+html[data-monitoring-size="s"] .monitoring-list-object small,
+html[data-monitoring-size="s"] .monitoring-list-endpoint small,
+html[data-monitoring-size="s"] .monitoring-list-info small { display: none; }
+
+/* ---- Phones: a row wraps (counts and actions under the name), the guide line moves in, the chips stack ---- */
+@media (max-width: 720px) {
+  .monitoring-tree-panel { --mat-card-pad: var(--mat-space-3); }
+  .monitoring-tree-row { grid-template-columns: var(--mat-space-6) auto minmax(0, 1fr); align-items: start; }
+  .monitoring-tree-main { flex-wrap: wrap; row-gap: var(--mat-space-1); white-space: normal; }
+  .monitoring-tree-row .tree-name { overflow-wrap: anywhere; }
+  .monitoring-tree-details { flex-basis: 100%; max-width: none; white-space: normal; overflow-wrap: anywhere; }
+  .monitoring-tree-tags { flex-basis: 100%; flex-wrap: wrap; }
+  .monitoring-tree-side { grid-column: 2 / -1; justify-content: flex-start; }
+  .monitoring-tree-children { margin-left: var(--mat-space-2); padding-left: var(--mat-space-2); }
+  .monitoring-sensor-strip { flex-direction: column; }
+  .monitoring-sensor-chip,
+  html[data-monitoring-size] .monitoring-sensor-chip { width: 100%; min-width: 0; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monitoring-tree-row,
+  .monitoring-tree-toggle,
+  .monitoring-sensor-chip::after { transition: none; }
+}

@@ -3,61 +3,85 @@
 @{
     // The walk result, shared by SensorCreate and SensorAssistant. Names, enum labels, units and descriptions come
     // from the instance's MIBs at render time; the MIB bar uploads more MIBs and relabels these rows in place
-    // (initializeSnmpWalkMibs), so nobody has to walk again after adding a vendor MIB.
+    // (initializeSnmpWalkMibs in sensor-run.js, scoped to [data-snmp-walk]), so nobody has to walk again after adding a vendor MIB.
     var items = Model.NewSensor.SnmpWalkItems;
     var named = items.Count(item => Mibs.Translate(item.Oid) is { IsObject: true });
     var isAdmin = User.IsInRole(MatmonUserRole.Admin.ToString());
 }
-<div class="snmp-mib-bar" data-snmp-mib-bar>
-    <span class="snmp-mib-summary" data-snmp-mib-summary>
-        @MatmonIcons.Render("list")
-        <span>@Mibs.Registry.Modules.Count MIBs loaded@(items.Count > 0 ? $" · names for {named} of {items.Count} OIDs" : "")</span>
-    </span>
-    @if (isAdmin)
-    {
-        <label class="workspace-secondary-submit snmp-mib-upload">
-            @MatmonIcons.Render("upload")
-            <span>Upload MIB</span>
-            <input type="file" multiple accept=".mib,.my,.txt,.zip" hidden data-snmp-mib-upload data-upload-url="/system/mibs?handler=Upload" />
-        </label>
-        <a class="workspace-secondary-submit" href="/system/mibs" target="_blank" rel="noopener">Manage MIBs</a>
-    }
-    <span class="snmp-mib-status" data-snmp-mib-status role="status" aria-live="polite"></span>
-</div>
-
-@if (items.Count > 0)
-{
-    @if (items.Count > 12)
-    {
-        <input type="search" class="form-control workspace-input snmp-walk-filter" placeholder="Filter by name, OID or value…" data-snmp-walk-filter />
-    }
-    <div class="snmp-walk-list" data-snmp-walk-list>
-        @for (var i = 0; i < items.Count; i++)
+<div class="mat-stack snmp-walk" data-snmp-walk>
+    <div class="mat-row snmp-mib-bar" data-snmp-mib-bar>
+        <span class="mat-text-muted snmp-mib-summary" data-snmp-mib-summary>
+            @MatUi.Icon("book")
+            <span>@Mibs.Registry.Modules.Count MIBs loaded@(items.Count > 0 ? $" · names for {named} of {items.Count} OIDs" : "")</span>
+        </span>
+        @if (isAdmin)
         {
-            var item = items[i];
-            var translation = Mibs.Translate(item.Oid) is { IsObject: true } known ? known : null;
-            var units = translation?.Node.Units;
-            <label class="snmp-walk-row @(item.IsNumeric ? "is-numeric" : "is-text")" data-snmp-walk-row data-oid="@item.Oid" data-raw-value="@item.Value" title="@translation?.Node.Description">
-                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Oid" />
-                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Syntax" />
-                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Value" />
-                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].IsNumeric" />
-                <input type="hidden" name="NewSensor.SnmpWalkItems[@i].Name" value="@translation?.Name" data-snmp-walk-name-input />
-                <input asp-for="NewSensor.SnmpWalkItems[i].Selected" type="checkbox" class="form-check-input" />
-                <div class="snmp-walk-main">
-                    <div class="snmp-walk-name" data-snmp-walk-name @(translation is null ? "hidden" : null)>@translation?.Name</div>
-                    <div class="snmp-walk-oid @(translation is null ? null : "is-secondary")" data-snmp-walk-oid>@item.Oid</div>
-                    <div class="snmp-walk-value" data-snmp-walk-value>@(translation?.FormatValue(item.Value) ?? item.Value)@(units is null ? null : $" {units}")</div>
-                </div>
-                <div class="snmp-walk-meta">
-                    <span class="snmp-walk-module" data-snmp-walk-module @(translation is null ? "hidden" : null)>@translation?.Node.Module</span>
-                    <span class="snmp-walk-type">@item.Syntax</span>
-                    @if (item.IsNumeric)
-                    {
-                        <span class="sensor-required">numeric</span>
-                    }
-                </div>
+            <label class="mat-btn mat-btn--secondary mat-btn--sm snmp-mib-upload">
+                @MatUi.Icon("upload")
+                <span>Upload MIB</span>
+                <input type="file" multiple accept=".mib,.my,.txt,.zip" hidden data-snmp-mib-upload data-upload-url="/system/mibs?handler=Upload" />
             </label>
+            <a class="mat-btn mat-btn--ghost mat-btn--sm" href="/system/mibs" target="_blank" rel="noopener">@MatUi.Icon("external")<span>Manage MIBs</span></a>
         }
+        <span class="mat-text-muted snmp-mib-status" data-snmp-mib-status role="status" aria-live="polite"></span>
     </div>
-}
+
+    @if (items.Count > 0)
+    {
+        @if (items.Count > 12)
+        {
+            <div class="mat-input-icon snmp-walk-filter">
+                @MatUi.Icon("filter")
+                <input type="search" class="mat-input" placeholder="Filter by name, OID or value…" aria-label="Filter the walk by name, OID or value" autocomplete="off" data-snmp-walk-filter />
+            </div>
+        }
+        <div class="mat-table-wrap">
+            <table class="mat-table mat-table--compact" data-snmp-walk-list>
+                <caption class="mat-sr-only">The OIDs the walk found - tick the ones to monitor</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" class="mat-table__select"><span class="mat-sr-only">Monitor</span></th>
+                        <th scope="col">Name and OID</th>
+                        <th scope="col">Value</th>
+                        <th scope="col" class="mat-hide-sm">Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < items.Count; i++)
+                    {
+                        var item = items[i];
+                        var translation = Mibs.Translate(item.Oid) is { IsObject: true } known ? known : null;
+                        var units = translation?.Node.Units;
+                        <tr class="@(item.IsNumeric ? "is-numeric" : "is-text")" data-snmp-walk-row data-oid="@item.Oid" data-raw-value="@item.Value" title="@translation?.Node.Description">
+                            <td data-label="Monitor" class="mat-table__select">
+                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Oid" />
+                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Syntax" />
+                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Value" />
+                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].IsNumeric" />
+                                <input type="hidden" name="NewSensor.SnmpWalkItems[@i].Name" value="@translation?.Name" data-snmp-walk-name-input />
+                                <input asp-for="NewSensor.SnmpWalkItems[i].Selected" type="checkbox" aria-label="Monitor @(translation?.Name ?? item.Oid)" />
+                            </td>
+                            <td data-label="Name">
+                                <label class="snmp-walk-main" asp-for="NewSensor.SnmpWalkItems[i].Selected">
+                                    <strong class="snmp-walk-name" data-snmp-walk-name hidden="@(translation is null)">@translation?.Name</strong>
+                                    <span class="mat-mono snmp-walk-oid @(translation is null ? null : "is-secondary")" data-snmp-walk-oid>@item.Oid</span>
+                                </label>
+                            </td>
+                            <td data-label="Value" class="snmp-walk-value" data-snmp-walk-value>@(translation?.FormatValue(item.Value) ?? item.Value)@(units is null ? null : $" {units}")</td>
+                            <td data-label="Type" class="mat-hide-sm">
+                                <span class="mat-chips">
+                                    <span class="mat-tag" data-snmp-walk-module hidden="@(translation is null)">@translation?.Node.Module</span>
+                                    <span class="mat-tag mat-mono">@item.Syntax</span>
+                                    @if (item.IsNumeric)
+                                    {
+                                        <span class="mat-pill mat-pill--accent">numeric</span>
+                                    }
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

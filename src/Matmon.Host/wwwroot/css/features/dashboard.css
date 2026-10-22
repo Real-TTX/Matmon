@@ -1,0 +1,35 @@
+/* Matmon - dashboard, alerts, events and the log views. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- Sensor status: the pills under the stacked meter are links to the list behind each number ---- */
+.dashboard-status-link { display: inline-flex; border-radius: var(--mat-radius-pill); text-decoration: none; }
+.dashboard-status-link:hover { text-decoration: none; }
+.dashboard-status-link:focus-visible { outline: none; box-shadow: var(--mat-focus-ring); }
+
+/* ---- Highlights: one card per pinned sensor - name and state, the latest value, its trend, type and target ---- */
+.dashboard-graph__body { display: flex; flex-direction: column; gap: var(--mat-space-3); height: 100%; }
+.dashboard-graph__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--mat-space-3); min-width: 0; }
+.dashboard-graph__name { display: flex; flex-direction: column; gap: var(--mat-space-1); min-width: 0; }
+.dashboard-graph__name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-graph__path { overflow: hidden; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-graph__value { display: flex; align-items: baseline; gap: var(--mat-space-1); min-width: 0; }
+.dashboard-graph__value strong { font-size: var(--mat-fs-2xl); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.dashboard-graph__value span { color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }
+.dashboard-graph__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--mat-space-2); margin-top: auto; font-size: var(--mat-fs-xs); }
+
+/* ---- Sparklines (drawn by drawSparkline in core.js): the colour follows the state of the card or row around them ----
+   drawSparkline writes stroke/fill attributes; these rules win over them, so the line is always a token colour and
+   follows the theme. */
+.dashboard-spark { display: block; width: 100%; height: var(--mat-space-12); overflow: visible; --dashboard-spark: var(--mat-accent); }
+.dashboard-spark--mini { width: 7rem; height: var(--mat-space-8); }
+[data-series-key][data-state="ok"] .dashboard-spark { --dashboard-spark: var(--mat-success); }
+[data-series-key][data-state="warning"] .dashboard-spark { --dashboard-spark: var(--mat-warning); }
+[data-series-key][data-state="error"] .dashboard-spark { --dashboard-spark: var(--mat-danger); }
+[data-series-key][data-state="paused"] .dashboard-spark,
+[data-series-key][data-state="disabled"] .dashboard-spark,
+[data-series-key][data-state="unknown"] .dashboard-spark { --dashboard-spark: var(--mat-text-faint); }
+.dashboard-spark path { vector-effect: non-scaling-stroke; }
+.dashboard-spark [data-role="line"] { fill: none; stroke: var(--dashboard-spark); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dashboard-spark [data-role="area"] { fill: var(--dashboard-spark); fill-opacity: .14; stroke: none; }
+
+/* ---- Alerts: the page size beside the pager ---- */
+.alerts-page-size { display: inline-flex; align-items: center; gap: var(--mat-space-2); color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }

@@ -1,5 +1,6 @@
 @model IReadOnlyList<string>
-@* Autocomplete source for the tag chip inputs (initializeTagInputs links the field to this). *@
+@* The tags that already exist, as the suggestions of the tag inputs: initializeTagInputs (tags.js) turns every
+   input[data-tag-input] into MatUi's tag input and offers these options under it. A datalist draws nothing by itself. *@
 <datalist id="matmon-tag-suggestions">
     @foreach (var tag in Model)
     {

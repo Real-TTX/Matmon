@@ -1,354 +1,136 @@
 @model Matmon.Host.Pages.SyslogMessagesViewModel
 @* The Syslog tab of the Events page: what the network's devices report, kept here after they reboot and forget it.
-   Rendered inside Events.cshtml; its data comes from the Events page's SyslogData / SyslogCounts / SyslogSenders handlers. *@
+   Rendered inside Events.cshtml; its data comes from the Events page's SyslogData / SyslogCounts / SyslogSenders handlers.
+   A live view (logs.js, initializeSyslogMessages): the search is a field in the toolbar, the time window, the sender, the
+   severity and the regex switch sit in the Filter dialog and apply at once (LIST-03), each filter in effect is a chip
+   (LIST-04), Live and Refresh are at the toolbar's end. Every message goes onto the page with textContent - anything on
+   the network can send a line. The view loads when its tab is first shown. *@
+@{
+    // The window a link without one opens with (EventsModel.SyslogWindow): a filter only counts as "in effect" when it
+    // differs from it.
+    const int DefaultWindow = 60;
+}
 
-<div id="syslog-messages" data-page-size="@Model.PageSize" data-has-messages="@(Model.HasMessages ? "true" : "false")" data-enabled="@(Model.ReceiverEnabled ? "true" : "false")">
-    <section class="panel syslog-status">
-        <span class="state-pill" data-state="@Model.Head.State">@Model.Head.Label</span>
-        <span class="syslog-status-text">@Model.Head.Text</span>
-        @if (!string.IsNullOrWhiteSpace(Model.LastReceivedText))
-        {
-            <span class="syslog-status-meta">@Model.LastReceivedText</span>
-        }
-        @if (Model.CanConfigure)
-        {
-            <a class="workspace-secondary-submit" asp-page="/SystemSyslog">@MatmonIcons.Render("gear")<span>@(Model.ReceiverEnabled ? "Settings" : "Turn it on")</span></a>
-        }
+<div class="mat-stack" id="syslog-messages" data-page-size="@Model.PageSize" data-has-messages="@(Model.HasMessages ? "true" : "false")"
+     data-enabled="@(Model.ReceiverEnabled ? "true" : "false")" data-default-window="@DefaultWindow">
+    <section class="mat-card">
+        <div class="mat-card__body mat-row">
+            <span class="@MatUi.PillClass(Model.Head.State)">@Model.Head.Label</span>
+            <span>@Model.Head.Text</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LastReceivedText))
+            {
+                <span class="mat-text-muted">@Model.LastReceivedText</span>
+            }
+            @if (Model.CanConfigure)
+            {
+                <a class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" asp-page="/SystemSyslog">@MatUi.Icon("settings")<span>@(Model.ReceiverEnabled ? "Settings" : "Turn it on")</span></a>
+            }
+        </div>
     </section>
 
-    <section class="panel panel-stack monitoring-controls">
-        <div class="monitoring-filter-bar syslog-filter-bar">
-            <label class="monitoring-filter-field syslog-filter-select">
-                <span>Time</span>
-                <select id="slWindow" class="form-select workspace-select">
-                    @foreach (var choice in Matmon.Host.Services.SyslogPageSupport.Windows)
-                    {
-                        <option value="@choice.Minutes" selected="@(Model.Window == choice.Minutes)">@choice.Label</option>
-                    }
-                    @if (Matmon.Host.Services.SyslogPageSupport.Windows.All(choice => choice.Minutes != Model.Window))
-                    {
-                        <option value="@Model.Window" selected>Last @Model.Window minutes</option>
-                    }
-                </select>
-            </label>
-            <label class="monitoring-filter-field syslog-filter-sender">
-                <span>Sender</span>
-                <input id="slSource" class="workspace-input" list="slSenders" value="@Model.Source" placeholder="IP or host name" autocomplete="off" />
-                <datalist id="slSenders"></datalist>
-            </label>
-            <label class="monitoring-filter-field syslog-filter-select">
-                <span>Severity</span>
-                <select id="slSeverity" class="form-select workspace-select">
-                    @foreach (var choice in Matmon.Host.Services.SyslogPageSupport.SeverityChoices)
-                    {
-                        <option value="@choice.Value" selected="@((Model.Severity ?? string.Empty) == choice.Value)">@choice.Label</option>
-                    }
-                </select>
-            </label>
-            <label class="monitoring-filter-field syslog-filter-search">
-                <span>Search</span>
-                <input id="slSearch" class="workspace-input" value="@Model.Q" placeholder="text in the message…" autocomplete="off" />
-            </label>
-            <label class="monitoring-filter-field monitoring-filter-inline" title="Treat the search as a regular expression">
-                <span>Regex</span>
-                <input type="checkbox" id="slRegex" checked="@Model.Regex" />
-            </label>
-            <label class="monitoring-filter-field monitoring-filter-inline">
-                <span>Live</span>
-                <input type="checkbox" id="slLive" checked />
-            </label>
-            <div class="monitoring-filter-actions">
-                <button type="button" id="slRefresh" class="workspace-secondary-submit">Refresh</button>
+    <div class="mat-list">
+        <div class="mat-toolbar" role="toolbar" aria-label="Syslog tools">
+            <div class="mat-input-icon mat-toolbar__search">
+                @MatUi.Icon("search")
+                <input class="mat-input" type="search" id="slSearch" value="@Model.Q" placeholder="Text in the message…" aria-label="Search the messages"
+                       autocomplete="off" enterkeyhint="search" />
+            </div>
+            <span class="mat-toolbar__spacer"></span>
+            <span class="mat-toolbar__info" id="slSummary" aria-live="polite"></span>
+            <div class="mat-toolbar__end">
+                <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" id="slFilterButton" data-dialog-open="sl-filter" aria-haspopup="dialog">
+                    @MatUi.Icon("sliders")<span>Filter</span><span class="mat-badge" id="slFilterBadge" hidden>0</span>
+                </button>
+                <label class="mat-switch"><input type="checkbox" id="slLive" checked /><span class="mat-switch__track"></span><span>Live</span></label>
+                <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" id="slRefresh">@MatUi.Icon("refresh")<span>Refresh</span></button>
             </div>
         </div>
-        <p id="slError" class="syslog-filter-error" role="alert" hidden></p>
-    </section>
 
-    <div class="panel workspace-panel syslog-messages-panel">
-        <div class="panel-header">
-            <h2 class="section-title"><span>Messages</span></h2>
-            <span class="syslog-summary" id="slSummary" aria-live="polite"></span>
+        <div class="mat-chips" role="group" aria-label="Filters in effect" id="slChips" hidden></div>
+
+        <div class="mat-alert mat-alert--danger" role="alert" id="slErrorBox" hidden>
+            @MatUi.Icon("x-circle")
+            <div class="mat-alert__body" id="slError"></div>
         </div>
-        <div class="log-viewport">
-            <table class="log-table syslog-table">
+
+        <div class="mat-table-wrap" id="slTable">
+            <table class="mat-table mat-table--compact">
+                <caption class="mat-sr-only">Syslog messages, the newest first</caption>
                 <thead>
                     <tr>
-                        <th class="log-col-time syslog-col-time">Received</th>
-                        <th class="log-col-lvl">Severity</th>
-                        <th class="log-col-src">Sender</th>
-                        <th class="syslog-col-app">Program</th>
-                        <th>Message</th>
+                        <th scope="col">Received</th>
+                        <th scope="col">Severity</th>
+                        <th scope="col">Sender</th>
+                        <th scope="col" class="mat-hide-sm">Program</th>
+                        <th scope="col">Message</th>
                     </tr>
                 </thead>
                 <tbody id="slRows"></tbody>
             </table>
-            <p id="slEmpty" class="panel-hint syslog-empty" hidden></p>
         </div>
-        <div class="syslog-more">
-            <button type="button" id="slMore" class="workspace-secondary-submit" hidden>Load older messages</button>
+
+        <div class="mat-empty" id="slEmptyBox" hidden>
+            <span class="mat-empty__icon">@MatUi.Icon("list")</span>
+            <div class="mat-empty__title" id="slEmptyTitle"></div>
+            <p id="slEmpty"></p>
+        </div>
+
+        <div class="mat-actions" id="slMoreRow" hidden>
+            <button type="button" class="mat-btn mat-btn--secondary" id="slMore">@MatUi.Icon("chevron-down")<span>Load older messages</span></button>
         </div>
     </div>
-</div>
 
-<script>
-    (function () {
-        var root = document.getElementById("syslog-messages");
-        var els = {
-            window: document.getElementById("slWindow"),
-            source: document.getElementById("slSource"),
-            senders: document.getElementById("slSenders"),
-            severity: document.getElementById("slSeverity"),
-            search: document.getElementById("slSearch"),
-            regex: document.getElementById("slRegex"),
-            live: document.getElementById("slLive"),
-            refresh: document.getElementById("slRefresh"),
-            rows: document.getElementById("slRows"),
-            empty: document.getElementById("slEmpty"),
-            more: document.getElementById("slMore"),
-            summary: document.getElementById("slSummary"),
-            error: document.getElementById("slError")
-        };
-        var PAGE = Number(root.dataset.pageSize) || 200;
-        var MAX_ROWS = 5000;
-        var hasMessages = root.dataset.hasMessages === "true";
-        var enabled = root.dataset.enabled === "true";
-
-        var rows = [];      // what is on screen, newest first
-        var hasMore = false;
-        var busy = false;
-        var timer = null;
-        var started = false;
-        var sendersLoaded = false;
-        var generation = 0; // bumps when the filter changes, so a slow answer for an old filter is dropped
-
-        function params(extra) {
-            var p = new URLSearchParams({
-                window: els.window.value,
-                source: els.source.value,
-                severity: els.severity.value,
-                q: els.search.value,
-                regex: els.regex.checked ? "true" : "false"
-            });
-            Object.keys(extra || {}).forEach(function (key) { p.set(key, extra[key]); });
-            return p;
-        }
-
-        function get(handler, extra) {
-            var p = params(extra);
-            p.set("handler", handler);
-            return fetch("?" + p.toString(), { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
-                .then(function (response) {
-                    if (!response.ok) { throw new Error("HTTP " + response.status); }
-                    return response.json();
-                });
-        }
-
-        function cell(tag, className, text, title) {
-            var el = document.createElement(tag);
-            if (className) { el.className = className; }
-            if (text !== null && text !== undefined) { el.textContent = text; }
-            if (title) { el.title = title; }
-            return el;
-        }
-
-        // Everything below puts message content on the page with textContent: any device on the network can send a
-        // syslog line, so what it says is never treated as markup.
-        function buildRow(m) {
-            var tr = document.createElement("tr");
-            tr.className = "log-row syslog-row";
-
-            var received = m.ts + (m.deviceTime ? "  (the device's own clock said: " + m.deviceTime + ")" : "");
-            tr.appendChild(cell("td", "log-time", m.time, received));
-
-            var tdSev = document.createElement("td");
-            tdSev.appendChild(cell("span", "log-lvl log-lvl-" + m.sevClass, m.sevName, "severity " + m.sev + ", facility " + m.facility));
-            tr.appendChild(tdSev);
-
-            var tdSrc = cell("td", "log-source syslog-sender", m.source, m.source);
-            if (m.host && m.host !== m.source) {
-                tdSrc.appendChild(cell("small", null, m.host));
-            }
-            tr.appendChild(tdSrc);
-
-            var tdApp = cell("td", "log-source syslog-app", m.app || "", m.app || "");
-            if (m.procId && m.app) { tdApp.title = m.app + "[" + m.procId + "]"; }
-            if (m.msgId && m.msgId !== m.app) { tdApp.appendChild(cell("small", null, m.msgId)); }
-            tr.appendChild(tdApp);
-
-            var tdMsg = cell("td", "log-msg");
-            tdMsg.appendChild(cell("div", null, m.text));
-            tr.appendChild(tdMsg);
-            return tr;
-        }
-
-        function syncEmpty() {
-            if (rows.length > 0) { els.empty.hidden = true; return; }
-            els.empty.hidden = false;
-            els.empty.textContent = !hasMessages
-                ? (enabled
-                    ? "Nothing has arrived yet. Point a device's syslog setting at this machine and its messages appear here within seconds."
-                    : "The receiver is off, so nothing has been collected. An admin turns it on under System > Syslog.")
-                : "No message matches this filter.";
-        }
-
-        function renderAll() {
-            els.rows.textContent = "";
-            var fragment = document.createDocumentFragment();
-            rows.forEach(function (m) { fragment.appendChild(buildRow(m)); });
-            els.rows.appendChild(fragment);
-            els.more.hidden = !hasMore;
-            syncEmpty();
-        }
-
-        function showError(message) {
-            els.error.hidden = !message;
-            els.error.textContent = message || "";
-        }
-
-        function chip(className, text) {
-            return cell("span", "syslog-count " + className, text);
-        }
-
-        function showCounts(counts) {
-            if (!counts) { return; }
-            els.summary.textContent = "";
-            els.summary.appendChild(chip(counts.errors > 0 ? "syslog-count-error" : "", counts.errors.toLocaleString() + (counts.errors === 1 ? " error" : " errors")));
-            els.summary.appendChild(chip(counts.warnings > 0 ? "syslog-count-warning" : "", counts.warnings.toLocaleString() + (counts.warnings === 1 ? " warning" : " warnings")));
-            els.summary.appendChild(chip("", counts.total.toLocaleString() + (counts.total === 1 ? " message" : " messages")));
-        }
-
-        function reload() {
-            var mine = ++generation;
-            busy = true;
-            get("SyslogData", { counts: "true" })
-                .then(function (d) {
-                    if (mine !== generation) { return; }
-                    showError(d.error);
-                    rows = d.items || [];
-                    hasMore = !!d.hasMore;
-                    renderAll();
-                    if (d.error) { els.summary.textContent = ""; } else { showCounts(d.counts); }
-                })
-                .catch(function () { /* keep the last view on a transient error */ })
-                .then(function () { busy = false; });
-        }
-
-        function refreshCounts(mine) {
-            get("SyslogCounts").then(function (d) {
-                if (mine === generation) { showCounts(d.counts); }
-            }).catch(function () { });
-        }
-
-        function tick() {
-            // Only while the tab is the one on screen: a hidden panel must not keep polling the log.
-            if (busy || document.hidden || root.closest("[hidden]")) { return; }
-            var mine = generation;
-            var topId = rows.length ? rows[0].id : 0;
-            busy = true;
-            get("SyslogData", { counts: "false" })
-                .then(function (d) {
-                    if (mine !== generation) { return; }
-                    showError(d.error);
-                    var items = d.items || [];
-                    var fresh = items.filter(function (m) { return m.id > topId; });
-                    if (fresh.length === 0) { return; }
-
-                    if (fresh.length === items.length && items.length >= PAGE) {
-                        // A whole page of news: there may be more between it and what is shown. Start over.
-                        rows = items;
-                        hasMore = !!d.hasMore;
-                        renderAll();
-                    } else {
-                        var fragment = document.createDocumentFragment();
-                        fresh.forEach(function (m) { fragment.appendChild(buildRow(m)); });
-                        els.rows.insertBefore(fragment, els.rows.firstChild);
-                        rows = fresh.concat(rows);
-                        if (rows.length > MAX_ROWS) {
-                            rows.length = MAX_ROWS;
-                            while (els.rows.children.length > MAX_ROWS) { els.rows.removeChild(els.rows.lastChild); }
-                            hasMore = true;
-                            els.more.hidden = false;
+    <dialog class="mat-dialog mat-dialog--sm" id="sl-filter" aria-labelledby="sl-filter-title">
+        <div class="mat-dialog__form">
+            <div class="mat-dialog__head">
+                @MatUi.Icon("sliders")
+                <h2 class="mat-dialog__title" id="sl-filter-title">Filter</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+            </div>
+            <div class="mat-dialog__body mat-form">
+                <div class="mat-field">
+                    <label class="mat-label" for="slWindow">Time</label>
+                    <select class="mat-select" id="slWindow">
+                        @foreach (var choice in Matmon.Host.Services.SyslogPageSupport.Windows)
+                        {
+                            <option value="@choice.Minutes" selected="@(Model.Window == choice.Minutes)">@choice.Label</option>
                         }
-                        syncEmpty();
-                    }
-                    refreshCounts(mine);
-                })
-                .catch(function () { })
-                .then(function () { busy = false; });
-        }
-
-        function schedule() {
-            if (timer) { clearInterval(timer); timer = null; }
-            if (els.live.checked) { timer = setInterval(tick, 4000); }
-        }
-
-        // The sender suggestions are an aggregate over the log - asked for once, when someone starts to type, not on
-        // every visit to the Events page.
-        function loadSenders() {
-            if (sendersLoaded) { return; }
-            sendersLoaded = true;
-            get("SyslogSenders").then(function (d) {
-                (d.names || []).forEach(function (name) {
-                    var option = document.createElement("option");
-                    option.value = name;
-                    els.senders.appendChild(option);
-                });
-            }).catch(function () { sendersLoaded = false; });
-        }
-
-        els.more.addEventListener("click", function () {
-            if (busy || rows.length === 0) { return; }
-            var mine = generation;
-            busy = true;
-            els.more.disabled = true;
-            get("SyslogData", { before: rows[rows.length - 1].id, counts: "false" })
-                .then(function (d) {
-                    if (mine !== generation) { return; }
-                    var items = d.items || [];
-                    var fragment = document.createDocumentFragment();
-                    items.forEach(function (m) { fragment.appendChild(buildRow(m)); });
-                    els.rows.appendChild(fragment);
-                    rows = rows.concat(items);
-                    hasMore = !!d.hasMore && rows.length < MAX_ROWS;
-                    els.more.hidden = !hasMore;
-                })
-                .catch(function () { })
-                .then(function () { busy = false; els.more.disabled = false; });
-        });
-
-        [els.window, els.severity, els.regex, els.source].forEach(function (input) {
-            input.addEventListener("change", reload);
-        });
-        var debounce;
-        [els.search, els.source].forEach(function (input) {
-            input.addEventListener("input", function () {
-                clearTimeout(debounce);
-                debounce = setTimeout(reload, 300);
-            });
-        });
-        els.source.addEventListener("focus", loadSenders);
-        els.refresh.addEventListener("click", reload);
-        els.live.addEventListener("change", schedule);
-
-        // The log is loaded when its tab is first shown (or at once when the page opens on it), not on every visit to
-        // the Events page - most visits are about the Matmon events next to it.
-        function start() {
-            if (started) { return; }
-            started = true;
-            reload();
-            schedule();
-        }
-
-        function shown() { return !root.closest("[hidden]"); }
-
-        // The tab scripts show and hide the panel after this script has run - by a click, by the #syslog in a link, by
-        // a hash change - so watch the panel itself instead of guessing which of those happened.
-        var panel = root.closest("[data-sensor-tab]");
-        if (!panel || shown()) {
-            start();
-        } else {
-            new MutationObserver(function () { if (shown()) { start(); } })
-                .observe(panel, { attributes: true, attributeFilter: ["hidden"] });
-        }
-    })();
-</script>
+                        @if (Matmon.Host.Services.SyslogPageSupport.Windows.All(choice => choice.Minutes != Model.Window))
+                        {
+                            <option value="@Model.Window" selected>Last @Model.Window minutes</option>
+                        }
+                    </select>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="slSource">Sender</label>
+                    <input class="mat-input mat-mono" id="slSource" list="slSenders" value="@Model.Source" placeholder="IP or host name" autocomplete="off" />
+                    <datalist id="slSenders"></datalist>
+                    <span class="mat-hint">An address or a host name; the senders of the last 30 days are suggested.</span>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="slSeverity">Severity</label>
+                    <select class="mat-select" id="slSeverity">
+                        @foreach (var choice in Matmon.Host.Services.SyslogPageSupport.SeverityChoices)
+                        {
+                            <option value="@choice.Value" selected="@((Model.Severity ?? string.Empty) == choice.Value)">@choice.Label</option>
+                        }
+                    </select>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-check">
+                        <input type="checkbox" id="slRegex" checked="@Model.Regex" />
+                        <span class="mat-check__text"><strong>Regular expression</strong><small class="mat-muted">Treat the search as a regular expression.</small></span>
+                    </label>
+                </div>
+                <p class="mat-hint">The list follows every choice at once.</p>
+            </div>
+            <div class="mat-dialog__foot">
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="button" class="mat-btn mat-btn--primary" data-dialog-close>@MatUi.Icon("check")<span>Done</span></button>
+                    <span class="mat-btn-row__spacer"></span>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--end" id="slReset">Reset everything</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</div>

@@ -22,129 +22,137 @@
         })
         .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
         .ToArray();
+
+    static string Plural(int count, string singular) => $"{count} {singular}{(count == 1 ? string.Empty : "s")}";
 }
 
-<section class="dashboard-shell">
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("template")
-            <h1>Templates</h1>
+<div class="mat-grid mat-grid--4">
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Total</span>
+            <span class="mat-stat__value">@templates.Count</span>
+            <span class="mat-stat__delta">@configuredTemplateCount configured</span>
         </div>
     </div>
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Sensor templates</span>
+            <span class="mat-stat__value">@sensorTemplateCount</span>
+            <span class="mat-stat__delta">For one sensor type</span>
+        </div>
+    </div>
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Inherited</span>
+            <span class="mat-stat__value">@linkedTemplateCount</span>
+            <span class="mat-stat__delta">Based on another template</span>
+        </div>
+    </div>
+    <div class="mat-card">
+        <div class="mat-card__body mat-stat">
+            <span class="mat-stat__label">Affected sensors</span>
+            <span class="mat-stat__value">@impactedSensorLinks</span>
+            <span class="mat-stat__delta">Created from a template</span>
+        </div>
+    </div>
+</div>
 
-    <section class="template-metric-grid">
-        <article class="panel template-metric-card">
-            <span>@MatmonIcons.Render("template")<span>Total</span></span>
-            <strong>@templates.Count</strong>
-        </article>
-        <article class="panel template-metric-card">
-            <span>@MatmonIcons.Render("sensor")<span>Sensor templates</span></span>
-            <strong>@sensorTemplateCount</strong>
-        </article>
-        <article class="panel template-metric-card">
-            <span>@MatmonIcons.Render("arrow-right")<span>Inherited</span></span>
-            <strong>@linkedTemplateCount</strong>
-        </article>
-        <article class="panel template-metric-card">
-            <span>@MatmonIcons.Render("signal")<span>Affected sensors</span></span>
-            <strong>@impactedSensorLinks</strong>
-        </article>
-    </section>
-
-    <section class="panel panel-stack workspace-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("template")<span>Template Library</span></h2>
-            <span class="panel-hint">@configuredTemplateCount configured / @templates.Count total</span>
+<div class="mat-list">
+    @if (templates.Count == 0)
+    {
+        <div class="mat-empty mat-empty--first">
+            <span class="mat-empty__icon">@MatUi.Icon("template")</span>
+            <div class="mat-empty__title">No templates yet</div>
+            <p>Create one and Matmon opens the detail assistant directly.</p>
+            <a class="mat-btn mat-btn--primary" asp-page="/TemplateEditor" asp-route-returnUrl="@returnUrl">@MatUi.Icon("plus")<span>New template</span></a>
+        </div>
+    }
+    else
+    {
+        <div class="mat-toolbar" role="toolbar" aria-label="Templates tools">
+            <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" data-groups-set="toggle" data-groups-target="#templates-table">@MatUi.Icon("chevron-down")<span>Open or close all scopes</span></button>
+            <span class="mat-toolbar__spacer"></span>
+            <span class="mat-toolbar__info" aria-live="polite">@configuredTemplateCount configured / @templates.Count total</span>
         </div>
 
-        @if (templates.Count == 0)
-        {
-            <div class="empty-state">No templates yet. Create one below and Matmon will open the detail assistant directly.</div>
-        }
-        else
-        {
-            <div class="template-library">
+        <div class="mat-table-wrap">
+            <table class="mat-table" id="templates-table" data-groups="templates">
+                <caption class="mat-sr-only">Templates by scope</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Template</th>
+                        <th scope="col" class="mat-hide-sm">Based on</th>
+                        <th scope="col" class="mat-hide-sm">Configuration</th>
+                        <th scope="col" class="mat-num">Affected</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
                 @foreach (var group in groupedTemplates)
                 {
-                    <section class="template-scope-group">
-                        <div class="template-scope-heading">
-                            <span class="template-scope-badge" data-scope="@group.First().ScopeKey">@group.Key</span>
-                            <span>@group.Count() template@(group.Count() == 1 ? string.Empty : "s")</span>
-                        </div>
-
-                        <div class="template-row-list">
-                            @foreach (var template in group.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
-                            {
-                                <article class="template-row" data-scope="@template.ScopeKey">
-                                    <div class="template-row-icon">
-                                        @MatmonIcons.Render(template.IsSensorTemplate ? "sensor" : "template")
-                                    </div>
-
-                                    <div class="template-row-main">
-                                        <div class="template-row-title">
-                                            <strong>@template.Name</strong>
-                                            <span class="template-scope-badge" data-scope="@template.ScopeKey">@template.Scope</span>
+                    <tbody class="mat-group" data-group="@group.Key">
+                        <tr class="mat-group__head">
+                            <td class="mat-group__cell" colspan="5">
+                                <div class="mat-group__bar">
+                                    <button type="button" class="mat-group__toggle" data-group-toggle aria-expanded="true">
+                                        @MatUi.Icon("chevron-down", "mat-group__chev")<span class="mat-group__title">@group.Key</span><span class="mat-badge mat-badge--soft">@group.Count()<span class="mat-sr-only"> @(group.Count() == 1 ? "template" : "templates")</span></span>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        @foreach (var template in group.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
+                        {
+                            <tr class="mat-group__item">
+                                <td data-label="Template" class="mat-table__primary">
+                                    <div class="mat-table__name">
+                                        @MatUi.Icon(template.IsSensorTemplate ? "activity" : "template")
+                                        <span>
+                                            <a asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@template.Name</a>
                                             @if (!string.IsNullOrWhiteSpace(template.SensorTypeLabel))
                                             {
-                                                <span class="sensor-chip">@template.SensorTypeLabel</span>
+                                                <small>@template.SensorTypeLabel</small>
                                             }
-                                        </div>
-
-                                        <div class="template-flow-line">
-                                            <span>@(string.IsNullOrWhiteSpace(template.ParentName) ? "Base defaults" : template.ParentName)</span>
-                                            @MatmonIcons.Render("arrow-right")
-                                            <span>@template.Name</span>
-                                            @MatmonIcons.Render("arrow-right")
-                                            <span>@template.ImpactCount sensor@(template.ImpactCount == 1 ? string.Empty : "s")</span>
-                                        </div>
-
-                                        <div class="template-chip-list">
-                                            <span>@template.Summary</span>
-                                            <span>@template.ParameterCount param@(template.ParameterCount == 1 ? string.Empty : "s")</span>
-                                            <span>@template.ThresholdCount threshold@(template.ThresholdCount == 1 ? string.Empty : "s")</span>
-                                            <span>@template.CredentialCount credential@(template.CredentialCount == 1 ? string.Empty : "s")</span>
-                                        </div>
+                                        </span>
                                     </div>
-
-                                    <div class="template-row-side">
-                                        <div class="template-impact-mini">
-                                            <strong>@template.ImpactCount</strong>
-                                            <span>affected</span>
-                                            @if (template.InheritedImpactCount > 0)
-                                            {
-                                                <small>@template.InheritedImpactCount inherited</small>
-                                            }
-                                        </div>
-
-                                        <div class="template-card-actions">
-                                            @if (template.IsSensorTemplate && !string.IsNullOrWhiteSpace(template.SensorTypeKey))
-                                            {
-                                                <a class="workspace-secondary-submit" asp-page="/SensorCreate" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>New sensor</span></a>
-                                            }
-                                            <a class="workspace-action-link" asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                        </div>
+                                </td>
+                                <td data-label="Based on" class="mat-hide-sm">@(string.IsNullOrWhiteSpace(template.ParentName) ? "Base defaults" : template.ParentName)</td>
+                                <td data-label="Configuration" class="mat-hide-sm">
+                                    <span class="mat-text-muted">@template.Summary · @(Plural(template.ParameterCount, "param")) · @(Plural(template.ThresholdCount, "threshold")) · @(Plural(template.CredentialCount, "credential"))</span>
+                                </td>
+                                <td data-label="Affected" class="mat-num">
+                                    @template.ImpactCount
+                                    @if (template.InheritedImpactCount > 0)
+                                    {
+                                        <small class="mat-text-muted">(@template.InheritedImpactCount inherited)</small>
+                                    }
+                                </td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        @if (template.IsSensorTemplate && !string.IsNullOrWhiteSpace(template.SensorTypeKey))
+                                        {
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorCreate" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl" aria-label="New sensor from @template.Name" data-tip="New sensor">@MatUi.Icon("plus")</a>
+                                        }
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl" aria-label="Edit @template.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
                                     </div>
-                                </article>
-                            }
-                        </div>
-                    </section>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
                 }
-            </div>
-        }
-    </section>
+            </table>
+        </div>
+    }
 
-    <div class="page-actions">
-        <a class="workspace-action-link" asp-page="/TemplateEditor" asp-route-returnUrl="@returnUrl">@MatmonIcons.Render("plus")<span>New Template</span></a>
+    <div class="mat-actions">
+        <a class="mat-btn mat-btn--primary" asp-page="/TemplateEditor" asp-route-returnUrl="@returnUrl">@MatUi.Icon("plus")<span>New template</span></a>
     </div>
-</section>
+</div>

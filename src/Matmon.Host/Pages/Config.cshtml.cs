@@ -91,11 +91,6 @@ public class ConfigModel : PageModel
                 ? "Not connected (retrying…)"
                 : $"Not connected — {TunnelStatus.LastError} (retrying…)";
 
-    /// <summary>Colour token for <see cref="TunnelStatusText"/>.</summary>
-    public string TunnelStatusColor => !TunnelStatus.Enabled || TunnelStatus.NotIncludedInPlan
-        ? "var(--matmon-muted)"
-        : TunnelStatus.Connected ? "var(--matmon-success)" : "var(--matmon-warning)";
-
     /// <summary>Heartbeat staleness: true when the last successful beat is older than ~3x the configured cadence,
     /// so the Cloud tab can warn "link degraded" even while the loop is technically running.</summary>
     public bool HeartbeatStale { get; private set; }

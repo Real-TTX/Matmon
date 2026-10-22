@@ -1,0 +1,160 @@
+/* Matmon - charts. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- The series colour: a sensor state on the chart or on any ancestor (data-chart-state="ok|warning|error|paused|
+   unknown|disabled") sets --series-color, and every mark below reads it. Data colours as variables, never inline. ---- */
+[data-chart-state="ok"] { --series-color: var(--mat-success); }
+[data-chart-state="warning"] { --series-color: var(--mat-warning); }
+[data-chart-state="error"] { --series-color: var(--mat-danger); }
+[data-chart-state="paused"] { --series-color: var(--mat-text-muted); }
+[data-chart-state="unknown"],
+[data-chart-state="disabled"] { --series-color: var(--mat-text-faint); }
+
+/* ---- Sparkline (dashboard, tree, sensor detail): a line and the area under it in a 100 x 40 viewBox, drawn by the
+   server or by drawSparkline (core.js). The CSS colours win over the stroke/fill attributes the script sets. ---- */
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 80px;
+  overflow: visible;
+}
+.sparkline path { vector-effect: non-scaling-stroke; }
+.sparkline [data-role="area"] {
+  fill: color-mix(in srgb, var(--series-color, var(--mat-accent)) 12%, transparent);
+  stroke: none;
+}
+.sparkline [data-role="line"] {
+  fill: none;
+  stroke: var(--series-color, var(--mat-accent));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The line under a chart: its first and its last time. */
+.graph-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mat-space-3);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Interactive chart (sensor detail): the plot, its y-axis labels laid over it, and the hover marks that
+   charts.js places (crosshair, dot, tooltip). ---- */
+.sensor-chart { height: 180px; }
+.sensor-chart-wrap { position: relative; }
+/* Holds the plot (svg + the y-axis over it) so the labels never spill onto the x-axis labels below it. */
+.sensor-chart-plot { position: relative; }
+.sensor-chart-axis-y {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--mat-space-1);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.sensor-chart-axis-y span {
+  padding: 0 var(--mat-space-1);
+  border-radius: var(--mat-radius-xs);
+  background: color-mix(in srgb, var(--mat-surface) 80%, transparent);
+}
+.sensor-chart-crosshair {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 1px;
+  background: var(--mat-border-strong);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+.sensor-chart-dot {
+  position: absolute;
+  z-index: 3;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--series-color, var(--mat-accent));
+  border: 2px solid var(--mat-surface);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* A popover (SPACE-03: the one place for --mat-shadow-2). */
+.sensor-chart-tooltip {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--mat-space-1) var(--mat-space-2);
+  color: var(--mat-text);
+  background: var(--mat-surface);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius-sm);
+  box-shadow: var(--mat-shadow-2);
+  font-size: var(--mat-fs-xs);
+  line-height: var(--mat-lh-tight);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sensor-chart-tooltip span { color: var(--mat-text-muted); }
+
+/* The summary line above the chart, and the legend of the primary channel. */
+.sensor-window-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--mat-space-3);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.sensor-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mat-space-2);
+  font-size: var(--mat-fs-sm);
+}
+.sensor-chart-legend-line {
+  flex: none;
+  width: 1.5rem;
+  border-top: 2px solid var(--series-color, var(--mat-accent));
+}
+
+/* ---- Bar chart (sensor statistics): one bar per period, in the colour of its worst state ---- */
+.sensor-statistics-chart svg {
+  display: block;
+  width: 100%;
+  height: 7.5rem;
+}
+.sensor-statistics-bar {
+  fill: var(--mat-accent);
+  transition: fill-opacity var(--mat-dur-fast) var(--mat-ease);
+}
+.sensor-statistics-bar[data-state="ok"],
+.sensor-statistics-bar[data-state="healthy"] { fill: var(--mat-success); }
+.sensor-statistics-bar[data-state="warning"] { fill: var(--mat-warning); }
+.sensor-statistics-bar[data-state="error"],
+.sensor-statistics-bar[data-state="critical"] { fill: var(--mat-danger); }
+.sensor-statistics-bar[data-state="paused"],
+.sensor-statistics-bar[data-state="unknown"],
+.sensor-statistics-bar[data-state="disabled"] { fill: var(--mat-text-faint); }
+.sensor-statistics-bar.is-hover { fill-opacity: 0.7; }
+.sensor-statistics-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--mat-space-3);
+  margin-top: var(--mat-space-1);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+}

@@ -2,55 +2,74 @@
 @model MapEditorModel
 @{
     ViewData["Title"] = Model.IsCreateMode ? "New Map" : $"Edit {Model.Input.Name}";
-    var logicalSize = MonitoringMap.LogicalSizeFor(Model.Input.AspectRatioWidth, Model.Input.AspectRatioHeight);
+    ViewData["PageSub"] = "Design your wallboard. Use the grid, add widgets and configure the slide rotation.";
+    ViewData["Width"] = "wide";
+
+    string WindowLabel(int hours) => hours switch
+    {
+        1 => "Last hour",
+        72 => "Last 3 days",
+        168 => "Last 7 days (averages)",
+        336 => "Last 14 days (averages)",
+        _ => $"Last {hours} hours"
+    };
+
+    // Ids in ASP.NET's own shape - Input_Tiles_<n>__<Field>, exactly what asp-for generates - so the designer's
+    // slide duplication, which rewrites "Input_Tiles_<n>__", gives every cloned field and label its own id. In
+    // the <template> the index is "__index__", which the designer replaces like every other occurrence:
+    // "Input_Tiles___index____Title" becomes "Input_Tiles_7__Title".
+    string TileId(int index) => $"Input_Tiles_{index}__";
+    const string TemplateTileId = "Input_Tiles___index____";
+
+    // The stored value is folded into the option list: a select can only post one of its own options, so a board
+    // saved at 25 s would have been silently rewritten to the first entry the moment anything else on this page
+    // was saved.
+    var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
+        .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
 }
 
-<section class="dashboard-shell maps-shell">
-    @* Header per mockup: what this screen is, then the three board-level actions on the right with Save as
-       the filled primary. Preview/Fullscreen open the read-only viewer rather than duplicating the board. *@
-    <div class="page-header map-editor-header">
-        <div class="page-title">
-            <div>
-                <h1>Layout &amp; Slides</h1>
-                <p class="map-editor-subtitle">Design your wallboard. Use the grid, add widgets and configure the slide rotation.</p>
-            </div>
+@* Only VIEW actions up here. Back / Save / Delete belong to the form and sit in its one action row at the foot. *@
+@section TopbarActions {
+    @if (!Model.IsCreateMode)
+    {
+        <div class="mat-topbar__actions">
+            <a class="mat-btn mat-btn--ghost mat-btn--icon" asp-page="/Maps" asp-route-mapId="@Model.Input.Id" target="_blank" rel="noopener" aria-label="Preview the saved board in a new tab" data-tip="Preview">@MatUi.Icon("eye")</a>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon" data-map-fullscreen aria-label="Show the canvas full screen" data-tip="Full screen">@MatUi.Icon("tv")</button>
         </div>
-        @* Only VIEW actions up here. Back/Save/Delete belong to the form, and this app puts a form's actions
-           in one row at its foot - Back and Save on the left, Delete pushed right. Splitting them (Save in the
-           header, Delete at the bottom) meant the two ends of one decision sat at opposite ends of the page. *@
-        <div class="page-actions">
-            @if (!Model.IsCreateMode)
+    }
+}
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="mat-alert mat-alert--danger" role="alert">
+        @MatUi.Icon("x-circle")
+        <div class="mat-alert__body">
+            @foreach (var error in ViewData.ModelState.Values.SelectMany(value => value.Errors))
             {
-                <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id" target="_blank" rel="noopener">@MatmonIcons.Render("eye")<span>Preview</span></a>
-                <button type="button" class="workspace-secondary-submit" data-map-fullscreen>@MatmonIcons.Render("move")<span>Fullscreen</span></button>
+                <p>@error.ErrorMessage</p>
             }
         </div>
     </div>
+}
 
-    @if (!ViewData.ModelState.IsValid)
-    {
-        <div class="workspace-banner workspace-banner-error">
-            @foreach (var error in ViewData.ModelState.Values.SelectMany(value => value.Errors))
-            {
-                <span>@error.ErrorMessage</span>
-            }
-        </div>
-    }
+<form method="post" id="map-editor-form" class="mat-form map-editor-form" data-map-designer-form novalidate>
+    <input type="hidden" asp-for="Input.Id" />
+    <script type="application/json" data-map-designer-config>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DesignerConfigJson))</script>
 
-    <form method="post" id="map-editor-form" class="map-editor-form" data-map-designer-form>
-        <input type="hidden" asp-for="Input.Id" />
-        @* Grid geometry, ShowSlideHeaders and the public-link toggle are all real inputs in the Grid /
-           Wallboard property tabs now. *@
-        <script type="application/json" data-map-designer-config>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DesignerConfigJson))</script>
-        <div class="icon-picker-modal" data-icon-picker-modal hidden>
-            <div class="icon-picker-backdrop" data-icon-picker-close></div>
-            <div class="icon-picker-dialog" role="dialog" aria-modal="true" aria-label="Choose icon">
-                <div class="icon-picker-head">
-                    <div class="icon-picker-search">
-                        @MatmonIcons.Render("search")
-                        <input type="text" class="form-control workspace-input" placeholder="Search icons…" data-icon-picker-search autocomplete="off" />
-                    </div>
-                    <button type="button" class="workspace-secondary-submit" data-icon-picker-close aria-label="Close">@MatmonIcons.Render("x")</button>
+    @* The icon picker: one shared dialog for every tile panel, driven by initializeIconPicker (pickers.js), which
+       shows and hides it through its hidden attribute; the designer bridges that to MatUi's dialog (open, focus,
+       Escape, the scroll lock). *@
+    <dialog class="mat-dialog mat-dialog--lg" id="map-icon-picker" aria-labelledby="map-icon-picker-title" data-icon-picker-modal>
+        <div class="mat-dialog__form">
+            <div class="mat-dialog__head">
+                @MatUi.Icon("image")
+                <h2 class="mat-dialog__title" id="map-icon-picker-title">Choose an icon</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close data-icon-picker-close aria-label="Close">@MatUi.Icon("x")</button>
+            </div>
+            <div class="mat-dialog__body mat-stack">
+                <div class="mat-input-icon">
+                    @MatUi.Icon("search")
+                    <input type="search" class="mat-input" placeholder="Search icons…" data-icon-picker-search autocomplete="off" aria-label="Search icons" autofocus />
                 </div>
                 <div class="icon-picker-grid" data-icon-picker-grid>
                     <button type="button" class="icon-picker-cell is-clear" data-icon-key="" data-icon-search="auto default none clear">
@@ -65,56 +84,43 @@
                         </button>
                     }
                 </div>
-                <div class="icon-picker-empty" data-icon-picker-empty hidden>No matching icons.</div>
+                <p class="mat-muted icon-picker-empty" data-icon-picker-empty hidden>No matching icons.</p>
             </div>
         </div>
+    </dialog>
 
-        <section class="panel map-editor-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("move")<span>Designer</span></h2>
-                <span class="panel-hint">Drag a widget onto the canvas, click it to edit its properties</span>
-            </div>
-            @* Top-level tabs, as in the mockup. The map's own settings moved OUT of the right-hand column
-               into Display/Settings, so that column is now purely the SELECTED WIDGET's properties - which is
-               what "Properties" means on the mockup. Uses the app-wide .sensor-tabs language; the per-widget
-               and per-slide tab bars deliberately use their own data- attributes so initializeSensorTabs
-               (which resolves panels per FORM) cannot fight with them. *@
-            <div class="sensor-tabs map-editor-tabs" data-sensor-tabs>
-                <button type="button" class="sensor-tab" data-sensor-tab-target="editor">@MatmonIcons.Render("move")<span>Editor</span></button>
-                <button type="button" class="sensor-tab" data-sensor-tab-target="slides">@MatmonIcons.Render("copy")<span>Slides</span></button>
-                @* Three tabs, one per object you can edit: the working surface, the slides, the board.
-                   Display and Settings were both board-level and split arbitrarily - Display had ended up
-                   holding three dead hidden inputs, a timezone and a note pointing at Settings. *@
-                <button type="button" class="sensor-tab" data-sensor-tab-target="settings">@MatmonIcons.Render("gear")<span>Board</span></button>
-            </div>
+    @* Three tabs, one per object you can edit: the working surface, the slides, the board. data-tabs sits on the
+       tab list itself rather than around the panels, so a tab-like control INSIDE a panel (the element picker's
+       mode switch, ...) can never be taken for one of these. *@
+    <div class="mat-tabs" role="tablist" aria-label="Map designer" data-tabs data-tab-hash>
+        <button type="button" class="mat-tab" role="tab" id="tab-editor" aria-controls="panel-editor" aria-selected="true">@MatUi.Icon("grid")<span>Editor</span></button>
+        <button type="button" class="mat-tab" role="tab" id="tab-slides" aria-controls="panel-slides" aria-selected="false" tabindex="-1">@MatUi.Icon("layers")<span>Slides</span></button>
+        <button type="button" class="mat-tab" role="tab" id="tab-board" aria-controls="panel-board" aria-selected="false" tabindex="-1">@MatUi.Icon("settings")<span>Board</span></button>
+    </div>
 
-            <div class="map-tab-panel" data-sensor-tab="editor">
-            <div class="map-designer-shell">
-                @* The palette is rendered from MapWidgetCatalog, not hand-written buttons: several entries are
-                   the same tile Kind with a different VisualType (Gauge and Progress are both a Value tile),
-                   which is the distinction a user picks by and the enum cannot express. Adding a widget is one
-                   entry in that catalog. *@
-                <aside class="map-toolbox" aria-label="Widget library">
-                    <div class="map-designer-side-title">
-                        @MatmonIcons.Render("spark")
-                        <strong>Widgets</strong>
-                    </div>
-                    <div class="map-toolbox-search">
-                        @MatmonIcons.Render("search")
-                        <input type="text" class="form-control workspace-input" placeholder="Search widgets…" data-map-tool-search autocomplete="off" aria-label="Search widgets" />
-                    </div>
-                    <div class="map-toolbox-list">
-                        @foreach (var group in MapWidgetCatalog.ByCategory())
-                        {
-                            <div class="map-toolbox-group" data-map-tool-group>
-                                <span class="map-toolbox-group-label">@MapWidgetCatalog.CategoryLabel(group.Key)</span>
-                                <div class="map-toolbox-group-items">
+    @* --- Editor: toolbox | canvas | properties ------------------------------------------------------------ *@
+    <div class="mat-tabpanel map-designer" role="tabpanel" id="panel-editor" aria-labelledby="tab-editor">
+        <div class="map-designer-shell">
+            @* The palette is rendered from MapWidgetCatalog, not hand-written buttons: several entries are the same
+               tile Kind with a different VisualType (Gauge and Progress are both a Value tile), which is the
+               distinction a user picks by and the enum cannot express. Adding a widget is one catalog entry. *@
+            <aside class="map-toolbox" aria-label="Widget library">
+                <h2 class="map-designer-side-title">@MatUi.Icon("sparkles")<span>Widgets</span></h2>
+                <div class="mat-input-icon">
+                    @MatUi.Icon("search")
+                    <input type="search" class="mat-input" placeholder="Search widgets…" data-map-tool-search autocomplete="off" aria-label="Search widgets" />
+                </div>
+                <div class="map-toolbox-list">
+                    @foreach (var group in MapWidgetCatalog.ByCategory())
+                    {
+                        <div class="map-toolbox-group" data-map-tool-group>
+                            <span class="map-toolbox-group-label">@MapWidgetCatalog.CategoryLabel(group.Key)</span>
+                            <div class="map-toolbox-group-items">
                                 @foreach (var widget in group)
                                 {
-                                    @* A drawn preview, not a word: the description is what the entry MEANS,
-                                       the schematic is what it LOOKS like, and on a wallboard the second is
-                                       what you are actually choosing between. The description moves to the
-                                       tooltip because two cards per row leaves no honest room for it. *@
+                                    @* A drawn preview, not a word: the description is what the entry MEANS, the
+                                       schematic is what it LOOKS like, and on a wallboard the second is what you
+                                       are actually choosing between. The description is the tooltip. *@
                                     <button type="button" class="map-tool-button" draggable="true"
                                             title="@widget.Description"
                                             data-map-tool-widget="@widget.Key"
@@ -123,78 +129,75 @@
                                             data-map-tool-visual="@widget.VisualType"
                                             data-map-tool-search="@($"{widget.Label} {widget.Description} {widget.SearchTerms}".ToLowerInvariant())">
                                         <partial name="_MapWidgetPreview" model="@MapWidgetCatalog.PreviewKey(widget)" />
-                                        <span class="map-tool-label"><strong>@widget.Label</strong></span>
+                                        <span class="map-tool-label">@widget.Label</span>
                                     </button>
                                 }
-                                </div>
                             </div>
-                        }
-                        <div class="map-toolbox-empty" data-map-tool-empty hidden>No matching widget.</div>
-                    </div>
+                        </div>
+                    }
+                    <p class="mat-muted map-toolbox-empty" data-map-tool-empty hidden>No matching widget.</p>
+                </div>
+            </aside>
 
-                </aside>
+            <div class="map-designer-workbench">
+                @* Canvas head. The board is shown at its real size, so the only geometry facts worth stating are
+                   how many columns it has and how many rows fill a screen. Clicking the title selects the board
+                   itself, which is how you get back from a widget to the board. *@
+                <div class="map-canvas-head">
+                    <button type="button" class="map-canvas-title" data-map-select-map>
+                        <strong data-map-title-preview>@Model.Input.Name</strong>
+                        <small>
+                            <b data-map-grid-preview>@Model.Input.Columns</b> columns
+                            <span class="map-canvas-sep">|</span> <b>@Model.Input.Rows</b> rows fill a wallboard screen
+                            <span class="map-canvas-sep">|</span> drag a widget to move it
+                        </small>
+                    </button>
+                    @* A switcher, not a list: managing slides lives on the Slides tab, but changing slide must not
+                       mean leaving the board you are drawing on. *@
+                    <label class="map-canvas-slide-switch">
+                        @MatUi.Icon("layers")
+                        <span class="mat-sr-only">Slide</span>
+                        <select class="mat-select mat-select--sm" data-map-slide-switch></select>
+                    </label>
+                </div>
 
-                <div class="map-designer-workbench">
-                    @* Canvas header. v3 has no scaled canvas, so there is no zoom and no ruler to read a
-                       coordinate off - the board is shown at its real size and the only geometry facts worth
-                       stating are how many columns it flows across and how tall a row unit is. Clicking the
-                       title still selects the board itself, which is how you get back from a widget to the
-                       board-level settings. *@
-                    <div class="map-canvas-head">
-                        <button type="button" class="map-canvas-title" data-map-select-map>
-                            <strong data-map-title-preview>@Model.Input.Name</strong>
-                            <small>
-                                <b data-map-grid-preview>@Model.Input.Columns</b> columns
-                                <span class="map-canvas-sep">|</span> <b>@Model.Input.Rows</b> rows fill a wallboard screen
-                                <span class="map-canvas-sep">|</span> drag a widget to reorder it
-                            </small>
-                        </button>
-                        @* A switcher, not a list: managing slides lives on the Slides tab, but changing
-                           slide must not mean leaving the board you are drawing on. *@
-                        <label class="map-canvas-slide-switch" title="Switch slide">
-                            @MatmonIcons.Render("copy")
-                            <select class="form-select workspace-select" data-map-slide-switch aria-label="Slide"></select>
-                        </label>
-                    </div>
-
-                    <div class="map-stage" data-map-stage>
-                        <div class="map-slide map-slide-editable"
-                             data-map-slide
-                             data-map-designer
-                             data-next-tile-index="@Model.Input.Tiles.Count"
-                             style="--map-columns: @Model.Input.Columns; --map-rows: @Model.Input.Rows; --tile-gap: @(Model.Input.TilePadding)px; --map-margin: @(Model.Input.OuterMargin)px;">
-                            @* A CELL grid, laid out by the SAME grid definition as the tiles (see _MapSlide) so a
-                               guide cannot drift from where a tile will actually land. One screen's worth is
-                               rendered here; the designer re-renders it to cover however tall the flow grows. *@
-                            <div class="map-grid-guides" aria-hidden="true">
-                                @for (var cell = 0; cell < Math.Max(1, Model.Input.Columns) * Math.Max(1, Model.Input.Rows); cell++)
-                                {
-                                    <span class="map-grid-cell-guide"></span>
-                                }
-                            </div>
-                            @* An empty slide is where a layout MEANS something, so that is where it is
-                               offered - rather than as a row of cards in the slide's properties that quietly
-                               replaces whatever you had. Shown by the designer only while the active slide
-                               has no widgets. *@
-                            <div class="map-canvas-empty" data-map-canvas-empty hidden>
-                                <strong>This slide is empty</strong>
-                                <div class="map-toolbox-templates" data-map-layout-templates>
-                                    <span class="map-canvas-empty-title">Start from a layout</span>
-                                    <p class="map-toolbox-note">Or drag a widget in from the library on the left.</p>
-                                    @* Thumbnails, not word chips: the whole point of a layout is its shape, and the
-                                       shape is already declared as slots - so the preview is generated from the SAME
-                                       slots the template applies. A hand-drawn thumbnail could disagree with it. *@
-                                    <div class="map-layout-cards">
+                <div class="map-stage" data-map-stage>
+                    <div class="map-slide map-slide-editable"
+                         data-map-slide
+                         data-map-designer
+                         data-next-tile-index="@Model.Input.Tiles.Count"
+                         style="--map-columns: @Model.Input.Columns; --map-rows: @Model.Input.Rows; --tile-gap: @(Model.Input.TilePadding)px; --map-margin: @(Model.Input.OuterMargin)px">
+                        @* A CELL grid, laid out by the SAME grid definition as the tiles so a guide cannot drift
+                           from where a tile will actually land. One screen's worth is rendered here; the designer
+                           re-renders it to cover however tall the board grows. *@
+                        <div class="map-grid-guides" aria-hidden="true">
+                            @for (var cell = 0; cell < Math.Max(1, Model.Input.Columns) * Math.Max(1, Model.Input.Rows); cell++)
+                            {
+                                <span class="map-grid-cell-guide"></span>
+                            }
+                        </div>
+                        @* An empty slide is where a layout MEANS something, so that is where it is offered -
+                           rather than as cards that quietly replace whatever you had. Shown by the designer only
+                           while the active slide has no widgets. *@
+                        <div class="map-canvas-empty" data-map-canvas-empty hidden>
+                            <strong>This slide is empty</strong>
+                            <div class="map-toolbox-templates" data-map-layout-templates>
+                                <span class="map-canvas-empty-title">Start from a layout</span>
+                                <p class="mat-muted">Or drag a widget in from the library on the left.</p>
+                                @* Thumbnails generated from the SAME slots the template applies - a hand-drawn
+                                   thumbnail could disagree with it. The slots are geometry that is data, so they
+                                   travel as custom properties. *@
+                                <div class="map-layout-cards">
                                     @foreach (var template in MapWidgetCatalog.LayoutTemplates)
                                     {
                                         <button type="button" class="map-layout-card" data-map-layout="@template.Key"
                                                 data-layout-min-columns="@template.MinColumns" data-layout-min-rows="@template.MinRows"
                                                 title="@template.Description">
                                             <span class="map-layout-thumb" aria-hidden="true"
-                                                  style="grid-template-columns: repeat(@template.MinColumns, 1fr); grid-template-rows: repeat(@template.MinRows, 1fr);">
+                                                  style="--thumb-cols: @template.MinColumns; --thumb-rows: @template.MinRows">
                                                 @foreach (var slot in template.Slots)
                                                 {
-                                                    <span style="grid-column: @slot.Column / span @slot.ColumnSpan; grid-row: @slot.Row / span @slot.RowSpan;"></span>
+                                                    <span style="--slot-col: @slot.Column; --slot-span: @slot.ColumnSpan; --slot-row: @slot.Row; --slot-rows: @slot.RowSpan"></span>
                                                 }
                                             </span>
                                             <span class="map-layout-card-meta">
@@ -203,782 +206,793 @@
                                             </span>
                                         </button>
                                     }
-                                    </div>
-                                    <div class="map-toolbox-note map-toolbox-note-warn" data-map-layout-too-small hidden>
-                                        Some layouts need more columns than this board has.
-                                    </div>
                                 </div>
+                                <p class="map-layout-warning" data-map-layout-too-small hidden>
+                                    Some layouts need more columns than this board has.
+                                </p>
                             </div>
-                            @for (var index = 0; index < Model.TileRenderModels.Count; index++)
-                            {
-                                <partial name="_MapTile" model="Model.TileRenderModels[index]" />
-                            }
                         </div>
-                    </div>
-                </div>
-
-                <aside class="map-property-editor" aria-label="Properties">
-                    <div class="map-designer-side-title">
-                        @MatmonIcons.Render("gear")
-                        <strong data-map-property-scope-label>Properties</strong>
-                    </div>
-
-                    @* Tab bar for the TILE panels. It sits outside them because only one tile panel is visible
-                       at a time - keeping the bar here means the chosen tab survives clicking from tile to
-                       tile, which a per-panel bar would not. Hidden unless a tile is selected. *@
-                    <div class="map-property-tabs" data-map-property-tabs hidden role="tablist">
-                        <button type="button" class="map-property-tab is-active" data-map-property-tab="general" role="tab" aria-selected="true">General</button>
-                        <button type="button" class="map-property-tab" data-map-property-tab="data" role="tab" aria-selected="false">Data</button>
-                        <button type="button" class="map-property-tab" data-map-property-tab="display" role="tab" aria-selected="false">Display</button>
-                        <button type="button" class="map-property-tab" data-map-property-tab="advanced" role="tab" aria-selected="false">Advanced</button>
-                    </div>
-
-                    @* Nothing selected: the aside shows the CANVAS view settings instead of an empty box.
-                       These are deliberately view-only (remembered per browser, never saved on the map) - the
-                       board's own geometry stays in the Settings tab, so there is exactly one input per
-                       stored property and the two can never drift apart. *@
-                    <div class="map-property-empty" data-map-property-empty>
-                        <p>Select a widget on the canvas to edit it. The running order, the board's grid and its wallboard
-                           options live on <strong>Slides</strong> and <strong>Board</strong>.</p>
-                        <div class="map-view-settings">
-                            <span class="workspace-label">Canvas view</span>
-                            <label class="map-switch">
-                                <input type="checkbox" checked data-map-view-grid />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Show grid</span>
-                            </label>
-                            <label class="map-switch">
-                                <input type="checkbox" checked data-map-view-rulers />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Show rulers</span>
-                            </label>
-                            <span class="workspace-inline-note">Affects this browser only - it does not change the board.
-                                Widgets always snap: the layout is stored as grid cells, so there is no position between two of them.</span>
-                        </div>
-                    </div>
-                    <div data-map-property-host>
-                        @for (var index = 0; index < Model.Input.Tiles.Count; index++)
+                        @for (var index = 0; index < Model.TileRenderModels.Count; index++)
                         {
-                            var tile = Model.Input.Tiles[index];
-                            @* Grouped into the General/Data/Display tabs the aside's [data-map-property-tabs]
-                               bar drives. The bar lives OUTSIDE the panels on purpose: only one panel is ever
-                               visible, and a per-panel bar would reset the chosen tab every time you click a
-                               different tile. Mirror any field change in the <template> below. *@
-                            <section class="map-property-panel" data-map-property-panel data-tile-index="@index" hidden>
-                                @* Header card per mockup: what you have selected, at a glance, with its one
-                                   destructive action. It mirrors the tile - the designer keeps icon/title/kind
-                                   in step, so the aside never claims to be editing a different widget. *@
-                                <header class="map-property-head">
-                                    <span class="map-property-head-icon" data-map-property-head-icon>@MatmonIcons.Render(string.IsNullOrWhiteSpace(tile.IconKey) ? "square" : tile.IconKey)</span>
-                                    <span class="map-property-head-text">
-                                        <strong data-map-property-head-title>@(string.IsNullOrWhiteSpace(tile.Title) ? MapTileRender.KindLabel(tile.Kind) : tile.Title)</strong>
-                                        <small data-map-property-head-kind>@MapTileRender.KindLabel(tile.Kind)</small>
-                                    </span>
-                                    <button type="button" class="map-property-head-remove" data-map-property-remove title="Delete widget" aria-label="Delete widget">@MatmonIcons.Render("trash")</button>
-                                </header>
-                                <div data-map-prop-group="general">
-                                    <label class="workspace-field">
-                                        <span class="workspace-label">Title</span>
-                                        <input asp-for="Input.Tiles[index].Title" class="form-control workspace-input" data-map-property-title />
-                                    </label>
-                                    <div class="workspace-field">
-                                        <span class="workspace-label">Widget</span>
-                                        <input type="hidden" asp-for="Input.Tiles[index].Kind" data-map-property-kind />
-                                        <input type="hidden" asp-for="Input.Tiles[index].VisualType" data-map-property-visual-type />
-                                        <span class="map-property-readonly" data-map-property-kind-label>@MapTileRender.KindLabel(tile.Kind)</span>
-                                    </div>
-                                    @* Size is editable here, not only by dragging the handle: a number field is
-                                       keyboard reachable and lets you type an exact span, and it is the SAME
-                                       input the drag writes into, so the two can never disagree. *@
-                                    <div class="map-property-size">
-                                        <label class="workspace-field">
-                                            <span class="workspace-label">Width (columns)</span>
-                                            <input asp-for="Input.Tiles[index].ColumnSpan" type="number" min="1" max="@Model.Input.Columns" class="form-control workspace-input" data-map-tile-column-span />
-                                        </label>
-                                        <label class="workspace-field">
-                                            <span class="workspace-label">Height (rows)</span>
-                                            <input asp-for="Input.Tiles[index].RowSpan" type="number" min="1" max="@MonitoringMapTileConstraints.MaxRowSpan" class="form-control workspace-input" data-map-tile-row-span />
-                                        </label>
-                                    </div>
-                                    <div class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</div>
-                                    <div class="map-property-hint" data-map-property-hint></div>
-                                </div>
-                                <div data-map-prop-group="data" hidden>
-                                    <label class="workspace-field" data-map-property-target>
-                                        <span class="workspace-label">Target</span>
-                                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].TargetToken", DomId = $"picker-map-tile-{index}", SelectedValue = Model.Input.Tiles[index].TargetToken, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
-                                    </label>
-                                    <label class="workspace-field" data-map-property-text-only>
-                                        <span class="workspace-label">Text</span>
-                                        <textarea asp-for="Input.Tiles[index].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
-                                    </label>
-                                    <label class="workspace-field" data-map-property-graph-only>
-                                        <span class="workspace-label">Graph type</span>
-                                        <select asp-for="Input.Tiles[index].GraphType" asp-items="Model.GraphTypeOptions" class="form-select workspace-select" data-map-property-graph-type></select>
-                                    </label>
-                                    @* The same property as the multi-graph's window (its field is in _MapCompareFields); only the
-                                       field of the current kind is enabled, see syncDuplicateFields. *@
-                                    <label class="workspace-field" data-map-property-graph-only>
-                                        <span class="workspace-label">Time window</span>
-                                        <select name="Input.Tiles[@index].GraphWindowHours" class="form-select workspace-select">
-                                            @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
-                                            {
-                                                <option value="@hours" selected="@(hours == Model.Input.Tiles[index].GraphWindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", 168 => "Last 7 days (averages)", 336 => "Last 14 days (averages)", _ => $"Last {hours} hours" })</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label class="workspace-field" data-map-property-list-only>
-                                        <span class="workspace-label">Order</span>
-                                        <select asp-for="Input.Tiles[index].ListMode" class="form-select workspace-select">
-                                            <option value="@MonitoringMapListMode.Worst">Worst state first</option>
-                                            <option value="@MonitoringMapListMode.TopValue">Highest value first</option>
-                                            <option value="@MonitoringMapListMode.BottomValue">Lowest value first</option>
-                                            <option value="@MonitoringMapListMode.Alphabetical">By name</option>
-                                        </select>
-                                    </label>
-                                    @* A value / gauge / progress tile has to be told WHICH channel it shows -
-                                       a host sensor reports CPU, memory, disk and SMART, and "whichever is
-                                       default" is a coin toss. The scale is separate because a dial needs one:
-                                       a percentage channel brings its own 0..100, anything else (latency,
-                                       throughput, temperature) has to say where full is. *@
-                                    <label class="workspace-field" data-map-property-value-only>
-                                        <span class="workspace-label">Channel</span>
-                                        <input asp-for="Input.Tiles[index].ChannelKey" class="form-control workspace-input" placeholder="Default channel" />
-                                        <span class="workspace-inline-note">Channel keys differ per sensor type (e.g. <code>cpu</code>, <code>memory</code>, <code>latency</code>) - the Channels tab of the sensor lists them. Empty = the sensor's own default channel.</span>
-                                    </label>
-                                    <div class="workspace-field map-property-size" data-map-property-value-only>
-                                        <label class="workspace-field">
-                                            <span class="workspace-label">Scale from</span>
-                                            <input asp-for="Input.Tiles[index].GaugeMin" type="number" step="any" class="form-control workspace-input" placeholder="0" />
-                                        </label>
-                                        <label class="workspace-field">
-                                            <span class="workspace-label">Scale to</span>
-                                            <input asp-for="Input.Tiles[index].GaugeMax" type="number" step="any" class="form-control workspace-input" placeholder="100" />
-                                        </label>
-                                    </div>
-                                    <span class="workspace-inline-note" data-map-property-value-only>A gauge or bar needs a scale. Leave both empty for a percentage channel; for anything else set them in the channel's own unit, or the tile shows the plain number instead of inventing a dial position.</span>
-                                    <label class="workspace-field" data-map-property-list-only>
-                                        <span class="workspace-label">Rank by channel</span>
-                                        <input asp-for="Input.Tiles[index].ListChannelKey" class="form-control workspace-input" placeholder="Default channel" />
-                                        <span class="workspace-inline-note">Channel keys differ per sensor type - leave empty to use each sensor's default channel.</span>
-                                    </label>
-                                    <label class="workspace-field" data-map-property-rows-only>
-                                        <span class="workspace-label">Rows</span>
-                                        <input asp-for="Input.Tiles[index].ListLimit" type="number" min="1" max="50" class="form-control workspace-input" />
-                                    </label>
-                                    @* A multi-graph reuses ListChannelKey/ListLimit rather than growing two
-                                       more properties, but its labels have to say what they mean HERE: the
-                                       channel is what makes the lines comparable, not a ranking key. *@
-                                    <partial name="_MapCompareFields" model="@(new Matmon.Host.Pages.MapCompareFieldsModel($"Input.Tiles[{index}]", Model.Input.Tiles[index].ListChannelKey, Model.Input.Tiles[index].GraphWindowHours, Model.CompareChannelOptions))" />
-                                    @* More than one target. A chart comparing "these four switches" is a set
-                                       the tree has no single node for, and a tag would mean labelling the
-                                       estate first - so the extra targets are their own list. Each row is the
-                                       same element picker used everywhere else; the rows are rendered by the
-                                       designer from the one hidden field below, for the same reason the pins
-                                       are one field: the editor clones whole tiles by rewriting field names. *@
-                                    <div class="workspace-field" data-map-property-series-only>
-                                        <span class="workspace-label">More targets</span>
-                                        <input type="hidden" asp-for="Input.Tiles[index].TargetTokensText" data-map-targets-value />
-                                        <div class="map-target-rows" data-map-targets-editor></div>
-                                        <span class="workspace-inline-note">Each target contributes every sensor under it, all unioned with the one above and de-duplicated. A folder or a tag counts as many.</span>
-                                    </div>
-                                    <label class="workspace-field" data-map-property-series-only>
-                                        <span class="workspace-label">Lines</span>
-                                        <input asp-for="Input.Tiles[index].ListLimit" type="number" min="1" max="8" class="form-control workspace-input" />
-                                        <span class="workspace-inline-note">Capped at 8 - each line costs one history query, and past a handful the chart stops answering "which one moved?".</span>
-                                    </label>
-                                    <label class="workspace-field" data-map-property-sla-only>
-                                        <span class="workspace-label">Window (days)</span>
-                                        <input asp-for="Input.Tiles[index].SlaWindowDays" type="number" min="1" max="365" class="form-control workspace-input" />
-                                        <span class="workspace-inline-note">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
-                                    </label>
-                                    <div class="workspace-field" data-map-property-image-only>
-                                        <span class="workspace-label">Picture</span>
-                                        <input type="hidden" asp-for="Input.Tiles[index].ImageAssetId" data-map-property-image-id />
-                                        <div class="map-image-upload">
-                                            <input type="file" accept="image/png,image/jpeg" class="form-control workspace-input" data-map-image-file />
-                                            <button type="button" class="workspace-secondary-submit" data-map-image-clear>Remove</button>
-                                        </div>
-                                        <span class="workspace-inline-note" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
-                                    </div>
-                                    <label class="workspace-field" data-map-property-image-only>
-                                        <span class="workspace-label">Fit</span>
-                                        <select asp-for="Input.Tiles[index].ImageFit" class="form-select workspace-select" data-map-property-image-fit>
-                                            <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
-                                            <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
-                                            <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
-                                        </select>
-                                    </label>
-                                    <div class="workspace-field" data-map-property-pins-only>
-                                        <span class="workspace-label">Pins</span>
-                                        <input type="hidden" asp-for="Input.Tiles[index].PinsJson" data-map-property-pins />
-                                        <div class="map-pin-editor" data-map-pin-editor></div>
-                                        <div class="map-pin-actions">
-                                            <button type="button" class="workspace-secondary-submit" data-map-pin-place>Place on picture</button>
-                                            <button type="button" class="workspace-secondary-submit" data-map-pin-add>Add pin</button>
-                                        </div>
-                                        <span class="workspace-inline-note" data-map-pin-hint></span>
-                                    </div>
-                                </div>
-                                <div data-map-prop-group="display" hidden>
-                                    <div class="workspace-field icon-picker-field">
-                                        <span class="workspace-label">Icon</span>
-                                        <input type="hidden" asp-for="Input.Tiles[index].IconKey" data-map-property-icon data-icon-picker-value />
-                                        <button type="button" class="form-control workspace-input icon-picker-trigger" data-icon-picker-trigger>
-                                            <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render(string.IsNullOrWhiteSpace(tile.IconKey) ? "square" : tile.IconKey)</span>
-                                            <span class="icon-picker-trigger-label" data-icon-picker-trigger-label>@(string.IsNullOrWhiteSpace(tile.IconKey) ? "Auto (by type)" : tile.IconKey)</span>
-                                            <span class="icon-picker-trigger-caret" aria-hidden="true">&#9662;</span>
-                                        </button>
-                                    </div>
-                                    <label class="workspace-field">
-                                        <span class="workspace-label">Background</span>
-                                        <input asp-for="Input.Tiles[index].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
-                                    </label>
-                                    <label class="workspace-field">
-                                        <span class="workspace-label">Accent</span>
-                                        <input asp-for="Input.Tiles[index].AccentColor" class="form-control workspace-input" placeholder="auto or #78d5c8" data-map-property-accent />
-                                    </label>
-                                    <label class="workspace-field">
-                                        <span class="workspace-label">Text color</span>
-                                        <input asp-for="Input.Tiles[index].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
-                                    </label>
-                                    @* Pill toggles per mockup. Still real checkboxes underneath, so they post,
-                                       take focus and need no JS - only the track is drawn from :checked. *@
-                                    <div class="map-property-switches">
-                                        <label class="map-switch">
-                                            <input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card />
-                                            <span class="map-switch-track" aria-hidden="true"></span>
-                                            <span>Card background</span>
-                                        </label>
-                                        <label class="map-switch">
-                                            <input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title />
-                                            <span class="map-switch-track" aria-hidden="true"></span>
-                                            <span>Show title</span>
-                                        </label>
-                                        <label class="map-switch">
-                                            <input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge />
-                                            <span class="map-switch-track" aria-hidden="true"></span>
-                                            <span>Show state badge</span>
-                                        </label>
-                                        <label class="map-switch">
-                                            <input asp-for="Input.Tiles[index].ShowElementName" />
-                                            <span class="map-switch-track" aria-hidden="true"></span>
-                                            <span>Show target name</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div data-map-prop-group="advanced" hidden>
-                                    @* Four buckets, not six states: "up / warning / down / unknown" is how
-                                       someone configuring a wallboard thinks. MonitoringMapColorRules is where
-                                       the six SensorStates collapse into these four, in one place. *@
-                                    <span class="workspace-label">Colour rules</span>
-                                    <div class="map-color-rules">
-                                        @foreach (var bucket in MonitoringMapColorRules.Buckets)
-                                        {
-                                            var current = tile.ColorRules.TryGetValue(bucket.Key, out var hex) ? hex : string.Empty;
-                                            var swatch = BrandingSafety.SafeHexColor(current) ?? MonitoringMapColorRules.DefaultHex(bucket.Key);
-                                            <div class="map-color-rule">
-                                                <span class="map-color-rule-label">@bucket.Label</span>
-                                                @* The swatch is a view control only - the TEXT field is what posts. A colour
-                                                   input cannot express "leave it to the theme", which is the default and the
-                                                   answer most boards want, so it seeds the text rather than replacing it. *@
-                                                <input type="color" class="map-color-swatch" value="@swatch"
-                                                       data-map-color-swatch="@bucket.Key" aria-label="@bucket.Label colour"
-                                                       tabindex="-1" />
-                                                <input type="text" class="form-control workspace-input"
-                                                       name="Input.Tiles[@index].ColorRules[@bucket.Key]" value="@current"
-                                                       placeholder="theme" data-map-color-rule="@bucket.Key" />
-                                                <button type="button" class="map-color-rule-clear" data-map-color-clear="@bucket.Key"
-                                                        title="Back to the theme colour" aria-label="Reset @bucket.Label to the theme colour">@MatmonIcons.Render("x")</button>
-                                            </div>
-                                        }
-                                    </div>
-                                    <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
-                                    <label class="workspace-field">
-                                        <span class="workspace-label">Refresh (seconds)</span>
-                                        <input asp-for="Input.Tiles[index].RefreshSeconds" type="number" min="0" max="3600" class="form-control workspace-input" placeholder="0" />
-                                        <span class="workspace-inline-note">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence. Useful for a widget whose data is expensive or slow-changing.</span>
-                                    </label>
-                                </div>
-                            </section>
+                            <partial name="_MapTile" model="Model.TileRenderModels[index]" />
                         }
                     </div>
-                </aside>
+                </div>
             </div>
 
-            </div>
+            <aside class="map-property-editor" aria-label="Properties">
+                <h2 class="map-designer-side-title">@MatUi.Icon("sliders")<span data-map-property-scope-label>Properties</span></h2>
 
-            @* --- Slides ------------------------------------------------------------------------------- *@
-            @* Slide PROPERTIES only - the filmstrip and the running order live under the canvas in the
-               Editor tab (that is where the mockup puts them, and where you actually need them). Clicking a
-               slide's gear switches here. *@
-            <div class="map-tab-panel" data-sensor-tab="slides">
-                <div class="map-settings-grid">
+                @* Tab bar for the TILE panels. It sits outside them because only one tile panel is visible at a
+                   time - keeping the bar here means the chosen tab survives clicking from tile to tile. Toggle
+                   buttons in MatUi's tab look, not role="tab": they switch a group inside whichever panel is
+                   shown, which MatUi's tab behaviour (panels by id) cannot express. Hidden unless a tile is
+                   selected. *@
+                <div class="mat-tabs map-property-tabs" data-map-property-tabs role="group" aria-label="Widget properties" hidden>
+                    <button type="button" class="mat-tab is-active" data-map-property-tab="general" aria-pressed="true">General</button>
+                    <button type="button" class="mat-tab" data-map-property-tab="data" aria-pressed="false">Data</button>
+                    <button type="button" class="mat-tab" data-map-property-tab="display" aria-pressed="false">Display</button>
+                    <button type="button" class="mat-tab" data-map-property-tab="advanced" aria-pressed="false">Advanced</button>
+                </div>
 
-                    @* The list of slides, on the tab called Slides. It used to sit under the canvas while
-                       this tab held only the selected slide's fields - a tab named after a collection that
-                       did not show the collection. The canvas keeps a switcher instead. *@
-                    <section class="panel-subcard map-slides-list-card">
-                        <div class="map-subcard-head">
-                            <h3 class="map-settings-title">Slides <span class="map-count" data-map-slide-count>@Model.Input.Slides.Count</span></h3>
-                            <button type="button" class="workspace-secondary-submit" data-map-slide-add>@MatmonIcons.Render("plus")<span>Add slide</span></button>
-                        </div>
-                        <div class="map-slide-rows" data-map-slide-tabs>
-                            @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
-                            {
-                                var slide = Model.Input.Slides[slideIndex];
-                                <div class="map-slide-row @(slideIndex == 0 ? "is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id"
-                                     data-slide-title="@slide.Title" data-slide-subtitle="@slide.Subtitle"
-                                     data-slide-duration="@slide.DurationSeconds" data-slide-bg="@slide.BackgroundColor"
-                                     data-slide-show-header="@(slide.ShowHeader ? "true" : "false")"
-                                     draggable="true">
-                                    <span class="map-slide-row-grip" aria-hidden="true">@MatmonIcons.Render("move")</span>
-                                    <span class="map-slide-row-index">@(slideIndex + 1)</span>
-                                    <span class="map-slide-row-name">@slide.Name</span>
-                                    <span class="map-slide-row-duration">@(slide.DurationSeconds is { } seconds ? $"{seconds}s" : "—")</span>
-                                    <span class="map-slide-row-actions">
-                                        <button type="button" class="map-slide-row-action" data-map-slide-settings title="Slide properties">@MatmonIcons.Render("gear")</button>
-                                        <button type="button" class="map-slide-row-action" data-map-slide-duplicate title="Duplicate slide">@MatmonIcons.Render("copy")</button>
-                                        <button type="button" class="map-slide-row-action is-danger" data-map-slide-delete title="Delete slide">@MatmonIcons.Render("trash")</button>
+                @* Nothing selected: the CANVAS view settings instead of an empty box. View-only (remembered per
+                   browser, never saved on the map) - the board's own geometry stays on the Board tab, so there is
+                   exactly one input per stored property. *@
+                <div class="map-property-empty mat-stack" data-map-property-empty>
+                    <p class="mat-muted">Select a widget on the canvas to edit it. The running order, the board's grid and its wallboard
+                        options live on <strong>Slides</strong> and <strong>Board</strong>.</p>
+                    <div class="map-view-settings mat-stack mat-stack--sm">
+                        <span class="mat-label">Canvas view</span>
+                        <label class="mat-switch">
+                            <input type="checkbox" checked data-map-view-grid />
+                            <span class="mat-switch__track"></span>
+                            <span>Show grid</span>
+                        </label>
+                        <label class="mat-switch">
+                            <input type="checkbox" checked data-map-view-rulers />
+                            <span class="mat-switch__track"></span>
+                            <span>Show rulers</span>
+                        </label>
+                        <span class="mat-hint">Affects this browser only - it does not change the board.
+                            Widgets always snap: the layout is stored as grid cells, so there is no position between two of them.</span>
+                    </div>
+                </div>
+
+                <div data-map-property-host>
+                    @for (var index = 0; index < Model.Input.Tiles.Count; index++)
+                    {
+                        var tile = Model.Input.Tiles[index];
+                        var tileId = TileId(index);
+                        var iconKey = string.IsNullOrWhiteSpace(tile.IconKey) ? "square" : tile.IconKey;
+                        @* Grouped into the General / Data / Display / Advanced groups the aside's
+                           [data-map-property-tabs] bar drives. Every field is a direct child of its group (the
+                           designer hides a tab whose group has nothing visible). Mirror any field change in the
+                           <template> below. *@
+                        <section class="map-property-panel" data-map-property-panel data-tile-index="@index" hidden>
+                            @* What you have selected, at a glance, with its one destructive action. The designer
+                               keeps icon / title / kind in step with the tile. *@
+                            <header class="mat-card map-property-head">
+                                <div class="mat-card__body map-property-head-body">
+                                    <span class="map-property-head-icon" data-map-property-head-icon>@MatmonIcons.Render(iconKey)</span>
+                                    <span class="map-property-head-text">
+                                        <strong class="mat-card__title" data-map-property-head-title>@(string.IsNullOrWhiteSpace(tile.Title) ? MapTileRender.KindLabel(tile.Kind) : tile.Title)</strong>
+                                        <small data-map-property-head-kind>@MapTileRender.KindLabel(tile.Kind)</small>
                                     </span>
+                                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-property-remove aria-label="Delete widget" data-tip="Delete widget">@MatUi.Icon("trash")</button>
                                 </div>
-                            }
-                        </div>
-                        <div data-map-slide-inputs hidden></div>
-                    </section>
+                            </header>
 
-                    <section class="panel-subcard map-slide-panel" data-map-slide-panel>
-                        <h3 class="map-settings-title">Selected slide</h3>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Slide name</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="name" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Heading</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="title" placeholder="Shown on the board" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Sub-heading</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="subtitle" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Duration (seconds)</span>
-                            <input type="number" min="3" max="600" class="form-control workspace-input" data-map-slide-field="durationSeconds" placeholder="Map default" />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Background</span>
-                            <input type="text" class="form-control workspace-input" data-map-slide-field="backgroundColor" placeholder="auto or #0b1220" />
-                        </label>
-                        <div class="map-property-checks">
-                            <label><input type="checkbox" data-map-slide-field="showHeader" /> <span>Show this slide heading</span></label>
-                        </div>
-                        <div class="map-property-hint">Duration overrides the board's auto-rotate for this slide only. Drag a widget on the canvas to reorder it.</div>
-
-                        @* Emptying a slide is its own, named action - not a side effect of clicking a
-                           layout card. A layout is what you start an empty slide FROM (the canvas offers
-                           them there); replacing a board you have already built is a decision, so it says
-                           how many widgets it throws away and happens in two steps. *@
-                        <button type="button" class="workspace-secondary-submit map-slide-clear" data-map-slide-clear>
-                            @MatmonIcons.Render("trash")<span>Clear this slide</span>
-                        </button>
-                    </section>
-                </div>
-            </div>
-
-            @* --- Board -------------------------------------------------------------------------------- *@
-            <div class="map-tab-panel" data-sensor-tab="settings">
-                <div class="map-settings-grid">
-                    <section class="panel-subcard">
-                        <h3 class="map-settings-title">Board</h3>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Name</span>
-                            <input asp-for="Input.Name" class="form-control workspace-input" data-map-name />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Description</span>
-                            <input asp-for="Input.Description" class="form-control workspace-input" data-map-description />
-                        </label>
-                        @* Round-trip only. A flow has no fixed canvas and no letterbox, so these three no
-                           longer decide anything - they are posted back so an older board's stored values
-                           survive a save instead of being silently reset. *@
-                        <input type="hidden" asp-for="Input.AspectRatioWidth" />
-                        <input type="hidden" asp-for="Input.AspectRatioHeight" />
-                        <input type="hidden" asp-for="Input.WallboardFit" />
-                        <label class="workspace-field">
-                            <span class="workspace-label">Board timezone</span>
-                            <input asp-for="Input.DisplayTimeZoneId" class="form-control workspace-input" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
-                            <datalist id="map-timezone-list">
-                                @foreach (var zone in TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
-                                {
-                                    <option value="@zone"></option>
-                                }
-                            </datalist>
-                            <span class="workspace-inline-note">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
-                        </label>
-                        <div class="map-property-checks">
-                            <label><input asp-for="Input.PublicEnabled" data-map-public-enabled /> <span>Publish an anonymous link</span></label>
-                        </div>
-                        <div class="map-property-hint">
-                            The public link needs no sign-in - anyone holding it sees the board. Turning this off makes the link 404 immediately, including its live-data endpoint. Copy or rotate the link on the Maps page.
-                        </div>
-                    </section>
-
-                    @* Grid geometry is authoritative under v2 - this is exactly why cells were chosen over
-                       pixels: change the column count and every widget flows with it instead of standing still. *@
-                    <section class="panel-subcard">
-                        <h3 class="map-settings-title">Grid</h3>
-                        <div class="map-grid-fields">
-                            <label class="workspace-field">
-                                <span class="workspace-label">Columns</span>
-                                <input asp-for="Input.Columns" type="number" min="2" max="48" class="form-control workspace-input" data-map-columns />
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Rows per screen</span>
-                                <input asp-for="Input.Rows" type="number" min="2" max="32" class="form-control workspace-input" data-map-rows />
-                                <span class="workspace-inline-note">How many row units fill one wallboard screen. A board taller than this scrolls.</span>
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Gap (px)</span>
-                                <input asp-for="Input.TilePadding" type="number" min="0" max="80" class="form-control workspace-input" data-map-tile-padding />
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Margin (px)</span>
-                                <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="form-control workspace-input" data-map-outer-margin />
-                            </label>
-                        </div>
-                        <span class="workspace-inline-note">Gap and margin are CSS pixels. Changing the column count reflows every widget - a widget wider than the new grid is clamped into it, and growing the grid back cannot undo that, so the change is committed when you leave the field.</span>
-                    </section>
-
-                    <section class="panel-subcard">
-                        <div class="map-subcard-head">
-                            <h3 class="map-settings-title">Slide rotation</h3>
-                        </div>
-                        <p class="map-toolbox-note">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</p>
-                        <label class="map-switch">
-                            <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
-                            <span class="map-switch-track" aria-hidden="true"></span>
-                            <span>Autoplay</span>
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Default duration</span>
-                            @* The stored value is folded into the option list: a select can only post one of
-                               its own options, so a board saved at 25 s would have been silently rewritten to
-                               the first entry the moment anything else on this page was saved. *@
-                            @{
-                                var rotationChoices = new[] { 5, 10, 15, 20, 30, 45, 60, 120, 300 }
-                                    .Append(Model.Input.AutoRotateSeconds).Distinct().OrderBy(value => value).ToArray();
-                            }
-                            <select asp-for="Input.AutoRotateSeconds" class="form-select workspace-select">
-                                @foreach (var seconds in rotationChoices)
-                                {
-                                    <option value="@seconds">@seconds seconds</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Page indicator</span>
-                            <select asp-for="Input.PaginationMode" class="form-select workspace-select">
-                                <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
-                                <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
-                                <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
-                            </select>
-                        </label>
-                    </section>
-                </div>
-            </div>
-
-            @* One pin row, cloned per pin by the designer. The target uses the SAME element picker as
-               everything else (cloned, ids rewritten) rather than a long native select - pins are not special
-               enough to deserve their own target UI. Nothing here is model-bound: the designer serialises the
-               rows into the tile's single PinsJson field. *@
-            <template data-map-pin-template>
-                <div class="map-pin-row" data-map-pin-row data-pin-id="__pinId__">
-                    <div class="map-pin-row-main">
-                        <input type="text" class="form-control workspace-input" data-pin-field="label" placeholder="Label" />
-                        <select class="form-select workspace-select" data-pin-field="style">
-                            <option value="Dot">Dot</option>
-                            <option value="Tile">Mini tile</option>
-                        </select>
-                        <button type="button" class="map-pin-row-remove" data-map-pin-remove aria-label="Remove pin">@MatmonIcons.Render("trash")</button>
-                    </div>
-                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-pin-__pinId__", AllowTags = true, Placeholder = "No target", Options = Model.TilePickerOptions, ValueAttribute = "data-pin-field-target" })" />
-                    <div class="map-pin-row-geo" data-map-pin-geo hidden>
-                        <input type="number" step="0.0001" min="-90" max="90" class="form-control workspace-input" data-pin-field="latitude" placeholder="Latitude" aria-label="Latitude" />
-                        <input type="number" step="0.0001" min="-180" max="180" class="form-control workspace-input" data-pin-field="longitude" placeholder="Longitude" aria-label="Longitude" />
-                    </div>
-                </div>
-            </template>
-            @* One extra-target row, cloned per token by the designer. Same element picker as everywhere else,
-               with its DOM id rewritten per row - a duplicated id would make one row's picker drive another
-               row's value. *@
-            <template data-map-target-template>
-                <div class="map-target-row" data-map-target-row>
-                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-target-__rowId__", AllowTags = true, Placeholder = "Pick an element or tag", Options = Model.TilePickerOptions, ValueAttribute = "data-map-target-value" })" />
-                    <button type="button" class="map-target-remove" data-map-target-remove aria-label="Remove target">@MatmonIcons.Render("trash")</button>
-                </div>
-            </template>
-            <template data-map-tile-template>
-                <article class="map-tile map-tile-editor"
-                         data-map-tile
-                         data-tile-index="__index__"
-                         data-slide-id="__slideId__"
-                         data-tile-id="__id__"
-                         data-state="unknown"
-                         data-kind="__kindLower__"
-                         data-visual="__visual__"
-                         data-density="__density__"
-                         style="--tile-col: __column__; --tile-row: __row__; --tile-span: __colSpan__; --tile-rows: __rowSpan__;">
-                    <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
-                    <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
-                    <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
-                    <input type="hidden" name="Input.Tiles[__index__].Column" value="__column__" data-map-tile-column />
-                    <input type="hidden" name="Input.Tiles[__index__].Row" value="__row__" data-map-tile-row />
-                    <input type="hidden" name="Input.Tiles[__index__].Order" value="__order__" data-map-tile-order />
-
-                    @* First paint only - the designer immediately asks ?handler=TileMarkup for the real
-                       server render. It still mirrors _MapTile's anatomy (head / body / foot, and the density
-                       the row span implies), because a placeholder shaped differently from the thing it
-                       stands in for flashes a visibly different widget for one round trip. *@
-                    <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
-                        <span class="map-tile-icon">@MatmonIcons.Render("square")</span>
-                        <strong data-tile-title>__title__</strong>
-                        <button type="button" class="map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatmonIcons.Render("trash")</button>
-                    </div>
-                    <div class="map-tile-body">
-                        <p data-tile-subtitle>No target selected</p>
-                    </div>
-                    <div class="map-tile-foot">
-                        <small data-map-tile-kind-label>__kindLabel__</small>
-                    </div>
-                    <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__colSpan__ × __rowSpan__</span>
-                    <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
-                </article>
-                @* Property panel for a freshly dropped tile. Kept field-for-field identical to the
-                   server-rendered one above - only grouped into the same General/Data/Display tabs, which the
-                   designer toggles via [data-map-prop-group]. Any field added here must be added there too. *@
-                <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
-                    <header class="map-property-head">
-                        <span class="map-property-head-icon" data-map-property-head-icon>@MatmonIcons.Render("square")</span>
-                        <span class="map-property-head-text">
-                            <strong data-map-property-head-title>__title__</strong>
-                            <small data-map-property-head-kind>__kindLabel__</small>
-                        </span>
-                        <button type="button" class="map-property-head-remove" data-map-property-remove title="Delete widget" aria-label="Delete widget">@MatmonIcons.Render("trash")</button>
-                    </header>
-                    <div data-map-prop-group="general">
-                        <label class="workspace-field">
-                            <span class="workspace-label">Title</span>
-                            <input name="Input.Tiles[__index__].Title" value="__title__" class="form-control workspace-input" data-map-property-title />
-                        </label>
-                        <div class="workspace-field">
-                            <span class="workspace-label">Widget</span>
-                            <input type="hidden" name="Input.Tiles[__index__].Kind" value="__kind__" data-map-property-kind />
-                            <input type="hidden" name="Input.Tiles[__index__].VisualType" value="__visual__" data-map-property-visual-type />
-                            <span class="map-property-readonly" data-map-property-kind-label>__kindLabel__</span>
-                        </div>
-                        <div class="map-property-size">
-                            <label class="workspace-field">
-                                <span class="workspace-label">Width (columns)</span>
-                                <input name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="number" min="1" max="@Model.Input.Columns" class="form-control workspace-input" data-map-tile-column-span />
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Height (rows)</span>
-                                <input name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="number" min="1" max="@MonitoringMapTileConstraints.MaxRowSpan" class="form-control workspace-input" data-map-tile-row-span />
-                            </label>
-                        </div>
-                        <div class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</div>
-                        <div class="map-property-hint" data-map-property-hint></div>
-                    </div>
-                    <div data-map-prop-group="data" hidden>
-                        <label class="workspace-field" data-map-property-target>
-                            <span class="workspace-label">Target</span>
-                            <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].TargetToken", DomId = "picker-map-tile-__index__", SelectedValue = null, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
-                        </label>
-                        <label class="workspace-field" data-map-property-text-only>
-                            <span class="workspace-label">Text</span>
-                            <textarea name="Input.Tiles[__index__].Text" class="form-control workspace-input" rows="4" data-map-property-text></textarea>
-                        </label>
-                        <label class="workspace-field" data-map-property-graph-only>
-                            <span class="workspace-label">Graph type</span>
-                            <select name="Input.Tiles[__index__].GraphType" class="form-select workspace-select" data-map-property-graph-type>
-                                <option value="@MonitoringMapTileGraphType.Line">Line</option>
-                                <option value="@MonitoringMapTileGraphType.Area">Area</option>
-                                <option value="@MonitoringMapTileGraphType.Bars">Bars</option>
-                                <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
-                            </select>
-                        </label>
-                        <label class="workspace-field" data-map-property-graph-only>
-                            <span class="workspace-label">Time window</span>
-                            <select name="Input.Tiles[__index__].GraphWindowHours" class="form-select workspace-select">
-                                            @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
-                                            {
-                                                <option value="@hours" selected="@(hours == 24)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", 168 => "Last 7 days (averages)", 336 => "Last 14 days (averages)", _ => $"Last {hours} hours" })</option>
-                                            }
-                            </select>
-                        </label>
-                        <label class="workspace-field" data-map-property-value-only>
-                            <span class="workspace-label">Channel</span>
-                            <input name="Input.Tiles[__index__].ChannelKey" class="form-control workspace-input" placeholder="Default channel" />
-                        </label>
-                        <div class="workspace-field map-property-size" data-map-property-value-only>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Scale from</span>
-                                <input name="Input.Tiles[__index__].GaugeMin" type="number" step="any" class="form-control workspace-input" placeholder="0" />
-                            </label>
-                            <label class="workspace-field">
-                                <span class="workspace-label">Scale to</span>
-                                <input name="Input.Tiles[__index__].GaugeMax" type="number" step="any" class="form-control workspace-input" placeholder="100" />
-                            </label>
-                        </div>
-                        <span class="workspace-inline-note" data-map-property-value-only>Leave the scale empty for a percentage channel; set it in the channel's own unit for anything else.</span>
-                        <label class="workspace-field" data-map-property-list-only>
-                            <span class="workspace-label">Order</span>
-                            <select name="Input.Tiles[__index__].ListMode" class="form-select workspace-select">
-                                <option value="@MonitoringMapListMode.Worst">Worst state first</option>
-                                <option value="@MonitoringMapListMode.TopValue">Highest value first</option>
-                                <option value="@MonitoringMapListMode.BottomValue">Lowest value first</option>
-                                <option value="@MonitoringMapListMode.Alphabetical">By name</option>
-                            </select>
-                        </label>
-                        <label class="workspace-field" data-map-property-list-only>
-                            <span class="workspace-label">Rank by channel</span>
-                            <input name="Input.Tiles[__index__].ListChannelKey" class="form-control workspace-input" placeholder="Default channel" />
-                            <span class="workspace-inline-note">Channel keys differ per sensor type - leave empty to use each sensor's default channel.</span>
-                        </label>
-                        <label class="workspace-field" data-map-property-rows-only>
-                            <span class="workspace-label">Rows</span>
-                            <input name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="50" value="5" class="form-control workspace-input" />
-                        </label>
-                        <partial name="_MapCompareFields" model="@(new Matmon.Host.Pages.MapCompareFieldsModel("Input.Tiles[__index__]", null, 24, Model.CompareChannelOptions))" />
-                        <div class="workspace-field" data-map-property-series-only>
-                            <span class="workspace-label">More targets</span>
-                            <input type="hidden" name="Input.Tiles[__index__].TargetTokensText" data-map-targets-value />
-                            <div class="map-target-rows" data-map-targets-editor></div>
-                            <span class="workspace-inline-note">Each target contributes every sensor under it, unioned and de-duplicated.</span>
-                        </div>
-                        <label class="workspace-field" data-map-property-series-only>
-                            <span class="workspace-label">Lines</span>
-                            <input name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="8" value="4" class="form-control workspace-input" />
-                            <span class="workspace-inline-note">Capped at 8 - each line costs one history query.</span>
-                        </label>
-                        <label class="workspace-field" data-map-property-sla-only>
-                            <span class="workspace-label">Window (days)</span>
-                            <input name="Input.Tiles[__index__].SlaWindowDays" type="number" min="1" max="365" value="7" class="form-control workspace-input" />
-                            <span class="workspace-inline-note">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
-                        </label>
-                        <div class="workspace-field" data-map-property-image-only>
-                            <span class="workspace-label">Picture</span>
-                            <input type="hidden" name="Input.Tiles[__index__].ImageAssetId" data-map-property-image-id />
-                            <div class="map-image-upload">
-                                <input type="file" accept="image/png,image/jpeg" class="form-control workspace-input" data-map-image-file />
-                                <button type="button" class="workspace-secondary-submit" data-map-image-clear>Remove</button>
+                            <div class="map-prop-group" data-map-prop-group="general">
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@(tileId)Title">Title</label>
+                                    <input asp-for="Input.Tiles[index].Title" class="mat-input" data-map-property-title />
+                                </div>
+                                <div class="mat-field">
+                                    <span class="mat-label">Widget</span>
+                                    <input type="hidden" asp-for="Input.Tiles[index].Kind" data-map-property-kind />
+                                    <input type="hidden" asp-for="Input.Tiles[index].VisualType" data-map-property-visual-type />
+                                    <span class="map-property-readonly" data-map-property-kind-label>@MapTileRender.KindLabel(tile.Kind)</span>
+                                </div>
+                                @* Size is editable here, not only by dragging the handle: a number field is keyboard
+                                   reachable and lets you type an exact span, and it is the SAME input the drag writes
+                                   into, so the two can never disagree. *@
+                                <div class="mat-form__grid map-property-pair">
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="@(tileId)ColumnSpan">Width (columns)</label>
+                                        <input asp-for="Input.Tiles[index].ColumnSpan" type="number" min="1" max="@Model.Input.Columns" class="mat-input" data-map-tile-column-span />
+                                    </div>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="@(tileId)RowSpan">Height (rows)</label>
+                                        <input asp-for="Input.Tiles[index].RowSpan" type="number" min="1" max="@MonitoringMapTileConstraints.MaxRowSpan" class="mat-input" data-map-tile-row-span />
+                                    </div>
+                                </div>
+                                <p class="map-property-size-readout" data-map-property-size>Size @tile.ColumnSpan &times; @tile.RowSpan cells</p>
+                                <p class="map-property-hint" data-map-property-hint></p>
                             </div>
-                            <span class="workspace-inline-note" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
-                        </div>
-                        <label class="workspace-field" data-map-property-image-only>
-                            <span class="workspace-label">Fit</span>
-                            <select name="Input.Tiles[__index__].ImageFit" class="form-select workspace-select" data-map-property-image-fit>
-                                <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
-                                <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
-                                <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
-                            </select>
-                        </label>
-                        <div class="workspace-field" data-map-property-pins-only>
-                            <span class="workspace-label">Pins</span>
-                            <input type="hidden" name="Input.Tiles[__index__].PinsJson" data-map-property-pins />
-                            <div class="map-pin-editor" data-map-pin-editor></div>
-                            <div class="map-pin-actions">
-                                <button type="button" class="workspace-secondary-submit" data-map-pin-place>Place on picture</button>
-                                <button type="button" class="workspace-secondary-submit" data-map-pin-add>Add pin</button>
+
+                            <div class="map-prop-group" data-map-prop-group="data" hidden>
+                                <div class="mat-field" data-map-property-target>
+                                    <span class="mat-label">Target</span>
+                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].TargetToken", DomId = $"picker-map-tile-{index}", SelectedValue = Model.Input.Tiles[index].TargetToken, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                                </div>
+                                <div class="mat-field" data-map-property-text-only>
+                                    <label class="mat-label" for="@(tileId)Text">Text</label>
+                                    <textarea asp-for="Input.Tiles[index].Text" class="mat-textarea" rows="4" data-map-property-text></textarea>
+                                </div>
+                                <div class="mat-field" data-map-property-graph-only>
+                                    <label class="mat-label" for="@(tileId)GraphType">Graph type</label>
+                                    <select asp-for="Input.Tiles[index].GraphType" asp-items="Model.GraphTypeOptions" class="mat-select" data-map-property-graph-type></select>
+                                </div>
+                                @* The same property as the multi-graph's window (its field is in _MapCompareFields); only
+                                   the field of the current kind is enabled, see syncDuplicateFields. *@
+                                <div class="mat-field" data-map-property-graph-only>
+                                    <label class="mat-label" for="@(tileId)GraphWindowHours_graph">Time window</label>
+                                    <select id="@(tileId)GraphWindowHours_graph" name="Input.Tiles[@index].GraphWindowHours" class="mat-select">
+                                        @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
+                                        {
+                                            <option value="@hours" selected="@(hours == Model.Input.Tiles[index].GraphWindowHours)">@WindowLabel(hours)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="mat-field" data-map-property-list-only>
+                                    <label class="mat-label" for="@(tileId)ListMode">Order</label>
+                                    <select asp-for="Input.Tiles[index].ListMode" class="mat-select">
+                                        <option value="@MonitoringMapListMode.Worst">Worst state first</option>
+                                        <option value="@MonitoringMapListMode.TopValue">Highest value first</option>
+                                        <option value="@MonitoringMapListMode.BottomValue">Lowest value first</option>
+                                        <option value="@MonitoringMapListMode.Alphabetical">By name</option>
+                                    </select>
+                                </div>
+                                @* A value / gauge / progress tile has to be told WHICH channel it shows - a host
+                                   sensor reports CPU, memory, disk and SMART, and "whichever is default" is a coin
+                                   toss. The scale is separate because a dial needs one: a percentage channel brings
+                                   its own 0..100, anything else has to say where full is. *@
+                                <div class="mat-field" data-map-property-value-only>
+                                    <label class="mat-label" for="@(tileId)ChannelKey">Channel</label>
+                                    <input asp-for="Input.Tiles[index].ChannelKey" class="mat-input mat-mono" placeholder="Default channel" />
+                                    <span class="mat-hint">Channel keys differ per sensor type (e.g. <code>cpu</code>, <code>memory</code>, <code>latency</code>) - the Channels tab of the sensor lists them. Empty = the sensor's own default channel.</span>
+                                </div>
+                                <div class="mat-form__grid map-property-pair" data-map-property-value-only>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="@(tileId)GaugeMin">Scale from</label>
+                                        <input asp-for="Input.Tiles[index].GaugeMin" type="number" step="any" class="mat-input" placeholder="0" />
+                                    </div>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="@(tileId)GaugeMax">Scale to</label>
+                                        <input asp-for="Input.Tiles[index].GaugeMax" type="number" step="any" class="mat-input" placeholder="100" />
+                                    </div>
+                                </div>
+                                <p class="mat-hint" data-map-property-value-only>A gauge or bar needs a scale. Leave both empty for a percentage channel; for anything else set them in the channel's own unit, or the tile shows the plain number instead of inventing a dial position.</p>
+                                <div class="mat-field" data-map-property-list-only>
+                                    <label class="mat-label" for="@(tileId)ListChannelKey_rank">Rank by channel</label>
+                                    <input asp-for="Input.Tiles[index].ListChannelKey" id="@(tileId)ListChannelKey_rank" class="mat-input mat-mono" placeholder="Default channel" />
+                                    <span class="mat-hint">Channel keys differ per sensor type - leave empty to use each sensor's default channel.</span>
+                                </div>
+                                <div class="mat-field" data-map-property-rows-only>
+                                    <label class="mat-label" for="@(tileId)ListLimit_rows">Rows</label>
+                                    <input asp-for="Input.Tiles[index].ListLimit" id="@(tileId)ListLimit_rows" type="number" min="1" max="50" class="mat-input" />
+                                </div>
+                                @* A multi-graph reuses ListChannelKey / ListLimit rather than growing two more
+                                   properties, but its labels have to say what they mean HERE: the channel is what makes
+                                   the lines comparable, not a ranking key. *@
+                                <partial name="_MapCompareFields" model="@(new Matmon.Host.Pages.MapCompareFieldsModel($"Input.Tiles[{index}]", Model.Input.Tiles[index].ListChannelKey, Model.Input.Tiles[index].GraphWindowHours, Model.CompareChannelOptions))" />
+                                @* More than one target. A chart comparing "these four switches" is a set the tree has
+                                   no single node for. Each row is the same element picker used everywhere else, rendered
+                                   by the designer from the one hidden field below - the editor clones whole tiles by
+                                   rewriting field names. *@
+                                <div class="mat-field" data-map-property-series-only>
+                                    <span class="mat-label">More targets</span>
+                                    <input type="hidden" asp-for="Input.Tiles[index].TargetTokensText" data-map-targets-value />
+                                    <div class="map-target-rows" data-map-targets-editor></div>
+                                    <span class="mat-hint">Each target contributes every sensor under it, all unioned with the one above and de-duplicated. A folder or a tag counts as many.</span>
+                                </div>
+                                <div class="mat-field" data-map-property-series-only>
+                                    <label class="mat-label" for="@(tileId)ListLimit_lines">Lines</label>
+                                    <input asp-for="Input.Tiles[index].ListLimit" id="@(tileId)ListLimit_lines" type="number" min="1" max="8" class="mat-input" />
+                                    <span class="mat-hint">Capped at 8 - each line costs one history query, and past a handful the chart stops answering "which one moved?".</span>
+                                </div>
+                                <div class="mat-field" data-map-property-sla-only>
+                                    <label class="mat-label" for="@(tileId)SlaWindowDays">Window (days)</label>
+                                    <input asp-for="Input.Tiles[index].SlaWindowDays" type="number" min="1" max="365" class="mat-input" />
+                                    <span class="mat-hint">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
+                                </div>
+                                <div class="mat-field" data-map-property-image-only>
+                                    <label class="mat-label" for="@(tileId)ImageFile">Picture</label>
+                                    <input type="hidden" asp-for="Input.Tiles[index].ImageAssetId" data-map-property-image-id />
+                                    <div class="map-image-upload">
+                                        <input type="file" id="@(tileId)ImageFile" accept="image/png,image/jpeg" class="mat-input" data-map-image-file />
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-image-clear>Remove</button>
+                                    </div>
+                                    <span class="mat-hint" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
+                                </div>
+                                <div class="mat-field" data-map-property-image-only>
+                                    <label class="mat-label" for="@(tileId)ImageFit">Fit</label>
+                                    <select asp-for="Input.Tiles[index].ImageFit" class="mat-select" data-map-property-image-fit>
+                                        <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
+                                        <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
+                                        <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
+                                    </select>
+                                </div>
+                                <div class="mat-field" data-map-property-pins-only>
+                                    <span class="mat-label">Pins</span>
+                                    <input type="hidden" asp-for="Input.Tiles[index].PinsJson" data-map-property-pins />
+                                    <div class="map-pin-editor" data-map-pin-editor></div>
+                                    <div class="mat-row">
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-pin-place>@MatUi.Icon("compass")<span>Place on picture</span></button>
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-pin-add>@MatUi.Icon("plus")<span>Add pin</span></button>
+                                    </div>
+                                    <span class="mat-hint" data-map-pin-hint></span>
+                                </div>
                             </div>
-                            <span class="workspace-inline-note" data-map-pin-hint></span>
+
+                            <div class="map-prop-group" data-map-prop-group="display" hidden>
+                                <div class="mat-field icon-picker-field">
+                                    <span class="mat-label" id="@(tileId)IconKey_label">Icon</span>
+                                    <input type="hidden" asp-for="Input.Tiles[index].IconKey" data-map-property-icon data-icon-picker-value />
+                                    <button type="button" class="mat-select icon-picker-trigger" data-icon-picker-trigger aria-haspopup="dialog" aria-labelledby="@(tileId)IconKey_label @(tileId)IconKey_current">
+                                        <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render(iconKey)</span>
+                                        <span class="icon-picker-trigger-label" id="@(tileId)IconKey_current" data-icon-picker-trigger-label>@(string.IsNullOrWhiteSpace(tile.IconKey) ? "Auto (by type)" : tile.IconKey)</span>
+                                    </button>
+                                </div>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@(tileId)BackgroundColor">Background</label>
+                                    <input asp-for="Input.Tiles[index].BackgroundColor" class="mat-input mat-mono" placeholder="auto or #101827" data-map-property-background />
+                                </div>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@(tileId)AccentColor">Accent</label>
+                                    <input asp-for="Input.Tiles[index].AccentColor" class="mat-input mat-mono" placeholder="auto or #78d5c8" data-map-property-accent />
+                                </div>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@(tileId)TextColor">Text colour</label>
+                                    <input asp-for="Input.Tiles[index].TextColor" class="mat-input mat-mono" placeholder="auto or #ffffff" data-map-property-text-color />
+                                </div>
+                                @* Real checkboxes, so they post, take focus and need no JS. asp-for renders each
+                                   one's hidden "false" partner at the end of the form, after the checkbox. *@
+                                <div class="map-property-switches mat-stack mat-stack--sm">
+                                    <label class="mat-switch">
+                                        <input asp-for="Input.Tiles[index].ShowCard" data-map-property-show-card />
+                                        <span class="mat-switch__track"></span>
+                                        <span>Card background</span>
+                                    </label>
+                                    <label class="mat-switch">
+                                        <input asp-for="Input.Tiles[index].ShowTitle" data-map-property-show-title />
+                                        <span class="mat-switch__track"></span>
+                                        <span>Show title</span>
+                                    </label>
+                                    <label class="mat-switch">
+                                        <input asp-for="Input.Tiles[index].ShowStateBadge" data-map-property-show-badge />
+                                        <span class="mat-switch__track"></span>
+                                        <span>Show state badge</span>
+                                    </label>
+                                    <label class="mat-switch">
+                                        <input asp-for="Input.Tiles[index].ShowElementName" />
+                                        <span class="mat-switch__track"></span>
+                                        <span>Show target name</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="map-prop-group" data-map-prop-group="advanced" hidden>
+                                @* Four buckets, not six states: "up / warning / down / unknown" is how someone
+                                   configuring a wallboard thinks. MonitoringMapColorRules is where the six
+                                   SensorStates collapse into these four, in one place. *@
+                                <span class="mat-label">Colour rules</span>
+                                <div class="map-color-rules">
+                                    @foreach (var bucket in MonitoringMapColorRules.Buckets)
+                                    {
+                                        var current = tile.ColorRules.TryGetValue(bucket.Key, out var hex) ? hex : string.Empty;
+                                        var swatch = BrandingSafety.SafeHexColor(current) ?? MonitoringMapColorRules.DefaultHex(bucket.Key);
+                                        var ruleId = tileId + "ColorRules_" + bucket.Key;
+                                        <div class="map-color-rule">
+                                            <label class="map-color-rule-label" for="@ruleId">@bucket.Label</label>
+                                            @* The swatch is a view control only - the TEXT field is what posts. A colour
+                                               input cannot express "leave it to the theme", which is the default and the
+                                               answer most boards want, so it seeds the text rather than replacing it. *@
+                                            <input type="color" class="map-color-swatch" value="@swatch"
+                                                   data-map-color-swatch="@bucket.Key" aria-label="@bucket.Label colour"
+                                                   tabindex="-1" />
+                                            <input type="text" class="mat-input mat-input--sm mat-mono" id="@ruleId"
+                                                   name="Input.Tiles[@index].ColorRules[@bucket.Key]" value="@current"
+                                                   placeholder="theme" data-map-color-rule="@bucket.Key" />
+                                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-color-clear="@bucket.Key"
+                                                    aria-label="Reset @bucket.Label to the theme colour" data-tip="Theme colour">@MatUi.Icon("x")</button>
+                                        </div>
+                                    }
+                                </div>
+                                <p class="mat-hint">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</p>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@(tileId)RefreshSeconds">Refresh (seconds)</label>
+                                    <input asp-for="Input.Tiles[index].RefreshSeconds" type="number" min="0" max="3600" class="mat-input" placeholder="0" />
+                                    <span class="mat-hint">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence. Useful for a widget whose data is expensive or slow-changing.</span>
+                                </div>
+                            </div>
+                        </section>
+                    }
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    @* --- Slides: the list (add / rename / reorder / duplicate / delete) and the SELECTED slide's fields -------- *@
+    <div class="mat-tabpanel" role="tabpanel" id="panel-slides" aria-labelledby="tab-slides" hidden>
+        <div class="mat-grid">
+            @* The list of slides, on the tab called Slides. The canvas keeps a switcher instead. *@
+            <section class="mat-card">
+                <div class="mat-card__head">
+                    @MatUi.Icon("layers")
+                    <h2 class="mat-card__title">Slides</h2>
+                    <span class="mat-badge mat-badge--soft" data-map-slide-count>@Model.Input.Slides.Count</span>
+                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" data-map-slide-add>@MatUi.Icon("plus")<span>Add slide</span></button>
+                </div>
+                <div class="mat-card__body">
+                    @* JS-rendered rows are cloned from the first server-rendered row, so the two markups cannot
+                       drift. A row's own class is only map-slide-row (+ is-active). *@
+                    <div class="map-slide-rows" data-map-slide-tabs>
+                        @for (var slideIndex = 0; slideIndex < Model.Input.Slides.Count; slideIndex++)
+                        {
+                            var slide = Model.Input.Slides[slideIndex];
+                            <div class="map-slide-row@(slideIndex == 0 ? " is-active" : "")" data-map-slide-tab data-slide-id="@slide.Id"
+                                 data-slide-title="@slide.Title" data-slide-subtitle="@slide.Subtitle"
+                                 data-slide-duration="@slide.DurationSeconds" data-slide-bg="@slide.BackgroundColor"
+                                 data-slide-show-header="@(slide.ShowHeader ? "true" : "false")"
+                                 draggable="true">
+                                <span class="map-slide-row-grip" aria-hidden="true">@MatUi.Icon("menu")</span>
+                                <span class="map-slide-row-index">@(slideIndex + 1)</span>
+                                <span class="map-slide-row-name">@slide.Name</span>
+                                <span class="map-slide-row-duration">@(slide.DurationSeconds is { } seconds ? $"{seconds}s" : "—")</span>
+                                <span class="map-slide-row-actions">
+                                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-slide-settings aria-label="Slide properties" data-tip="Properties">@MatUi.Icon("settings")</button>
+                                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-slide-duplicate aria-label="Duplicate slide" data-tip="Duplicate">@MatUi.Icon("copy")</button>
+                                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-slide-delete aria-label="Delete slide" data-tip="Delete">@MatUi.Icon("trash")</button>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                    <div data-map-slide-inputs hidden></div>
+                </div>
+            </section>
+
+            @* Slide fields are not model-bound: the designer owns the slide list and re-renders the hidden
+               Input.Slides[..] inputs from it. *@
+            <section class="mat-card" data-map-slide-panel>
+                <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">Selected slide</h2></div>
+                <div class="mat-card__body mat-stack">
+                    <div class="mat-field">
+                        <label class="mat-label" for="map-slide-name">Slide name</label>
+                        <input type="text" class="mat-input" id="map-slide-name" data-map-slide-field="name" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="map-slide-title">Heading</label>
+                        <input type="text" class="mat-input" id="map-slide-title" data-map-slide-field="title" placeholder="Shown on the board" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="map-slide-subtitle">Sub-heading</label>
+                        <input type="text" class="mat-input" id="map-slide-subtitle" data-map-slide-field="subtitle" />
+                    </div>
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" for="map-slide-duration">Duration (seconds)</label>
+                            <input type="number" min="3" max="600" class="mat-input" id="map-slide-duration" data-map-slide-field="durationSeconds" placeholder="Map default" />
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="map-slide-background">Background</label>
+                            <input type="text" class="mat-input mat-mono" id="map-slide-background" data-map-slide-field="backgroundColor" placeholder="auto or #0b1220" />
                         </div>
                     </div>
-                    <div data-map-prop-group="display" hidden>
-                        <div class="workspace-field icon-picker-field">
-                            <span class="workspace-label">Icon</span>
-                            <input type="hidden" name="Input.Tiles[__index__].IconKey" value="" data-map-property-icon data-icon-picker-value />
-                            <button type="button" class="form-control workspace-input icon-picker-trigger" data-icon-picker-trigger>
-                                <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render("square")</span>
-                                <span class="icon-picker-trigger-label" data-icon-picker-trigger-label>Auto (by type)</span>
-                                <span class="icon-picker-trigger-caret" aria-hidden="true">&#9662;</span>
-                            </button>
-                        </div>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Background</span>
-                            <input name="Input.Tiles[__index__].BackgroundColor" class="form-control workspace-input" placeholder="auto or #101827" data-map-property-background />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Accent</span>
-                            <input name="Input.Tiles[__index__].AccentColor" class="form-control workspace-input" placeholder="auto or #78d5c8" data-map-property-accent />
-                        </label>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Text color</span>
-                            <input name="Input.Tiles[__index__].TextColor" class="form-control workspace-input" placeholder="auto or #ffffff" data-map-property-text-color />
-                        </label>
-                        <div class="map-property-switches">
-                            <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card /><input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Card background</span>
-                            </label>
-                            <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title /><input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Show title</span>
-                            </label>
-                            <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge /><input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Show state badge</span>
-                            </label>
-                            <label class="map-switch">
-                                <input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked /><input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" />
-                                <span class="map-switch-track" aria-hidden="true"></span>
-                                <span>Show target name</span>
-                            </label>
-                        </div>
+                    <label class="mat-switch">
+                        <input type="checkbox" data-map-slide-field="showHeader" />
+                        <span class="mat-switch__track"></span>
+                        <span>Show this slide heading</span>
+                    </label>
+                    <span class="mat-hint">Duration overrides the board's auto-rotate for this slide only. Drag a widget on the canvas to move it.</span>
+                    @* Emptying a slide is its own, named action - not a side effect of clicking a layout card. It
+                       says how many widgets it throws away before it does. *@
+                    <div class="mat-row">
+                        <button type="button" class="mat-btn mat-btn--danger" data-map-slide-clear>@MatUi.Icon("trash")<span>Clear this slide</span></button>
                     </div>
-                    @* The Advanced group has to exist in the template too - a freshly dropped tile otherwise
-                       showed an empty Advanced tab until the first save. *@
-                    <div data-map-prop-group="advanced" hidden>
-                        <span class="workspace-label">Colour rules</span>
-                        <div class="map-color-rules">
-                            @foreach (var bucket in MonitoringMapColorRules.Buckets)
+                </div>
+            </section>
+        </div>
+    </div>
+
+    @* --- Board ----------------------------------------------------------------------------------------- *@
+    <div class="mat-tabpanel" role="tabpanel" id="panel-board" aria-labelledby="tab-board" hidden>
+        <div class="mat-grid">
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Board</h2></div>
+                <div class="mat-card__body mat-stack">
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_Name">Name</label>
+                        <input asp-for="Input.Name" class="mat-input" data-map-name />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_Description">Description</label>
+                        <input asp-for="Input.Description" class="mat-input" data-map-description />
+                    </div>
+                    @* Round-trip only. A board has no fixed canvas and no letterbox, so these three no longer decide
+                       anything - they are posted back so an older board's stored values survive a save. *@
+                    <input type="hidden" asp-for="Input.AspectRatioWidth" />
+                    <input type="hidden" asp-for="Input.AspectRatioHeight" />
+                    <input type="hidden" asp-for="Input.WallboardFit" />
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_DisplayTimeZoneId">Board timezone</label>
+                        <input asp-for="Input.DisplayTimeZoneId" class="mat-input mat-mono" placeholder="Platform default, e.g. Europe/Berlin" list="map-timezone-list" />
+                        <datalist id="map-timezone-list">
+                            @foreach (var zone in TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
                             {
-                                <div class="map-color-rule">
-                                    <span class="map-color-rule-label">@bucket.Label</span>
-                                    <input type="color" class="map-color-swatch" value="@MonitoringMapColorRules.DefaultHex(bucket.Key)"
-                                           data-map-color-swatch="@bucket.Key" aria-label="@bucket.Label colour" tabindex="-1" />
-                                    <input type="text" class="form-control workspace-input"
-                                           name="Input.Tiles[__index__].ColorRules[@bucket.Key]" value=""
-                                           placeholder="theme" data-map-color-rule="@bucket.Key" />
-                                    <button type="button" class="map-color-rule-clear" data-map-color-clear="@bucket.Key"
-                                            title="Back to the theme colour" aria-label="Reset @bucket.Label to the theme colour">@MatmonIcons.Render("x")</button>
-                                </div>
+                                <option value="@zone"></option>
                             }
-                        </div>
-                        <span class="workspace-inline-note">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</span>
-                        <label class="workspace-field">
-                            <span class="workspace-label">Refresh (seconds)</span>
-                            <input name="Input.Tiles[__index__].RefreshSeconds" type="number" min="0" max="3600" class="form-control workspace-input" placeholder="0" />
-                            <span class="workspace-inline-note">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence.</span>
-                        </label>
+                        </datalist>
+                        <span class="mat-hint">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
                     </div>
-                </section>
-            </template>
+                    <label class="mat-switch">
+                        <input asp-for="Input.PublicEnabled" data-map-public-enabled />
+                        <span class="mat-switch__track"></span>
+                        <span>Publish an anonymous link</span>
+                    </label>
+                    <span class="mat-hint">The public link needs no sign-in - anyone holding it sees the board. Turning this off makes the link 404 immediately, including its live-data endpoint. Copy or rotate the link on the Maps page.</span>
+                </div>
+            </section>
 
-            @* Save lives in the page header (mockup), so only the destructive action stays down here. *@
-            <div class="page-actions workspace-toolbar">
-                <a class="workspace-secondary-submit" asp-page="/Maps" asp-route-mapId="@Model.Input.Id">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                <button type="submit" asp-page-handler="Save" class="workspace-submit">@MatmonIcons.Render("check")<span>Save layout</span></button>
-                @if (!Model.IsCreateMode)
-                {
-                    <span class="workspace-form-actions-spacer"></span>
-                    <button type="submit" asp-page-handler="Delete" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this map?');">@MatmonIcons.Render("trash")<span>Delete map</span></button>
-                }
+            @* Grid geometry is authoritative: change the column count and every widget flows with it. *@
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("grid")<h2 class="mat-card__title">Grid</h2></div>
+                <div class="mat-card__body mat-stack">
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" for="Input_Columns">Columns</label>
+                            <input asp-for="Input.Columns" type="number" min="2" max="48" class="mat-input" data-map-columns />
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="Input_Rows">Rows per screen</label>
+                            <input asp-for="Input.Rows" type="number" min="2" max="32" class="mat-input" data-map-rows />
+                            <span class="mat-hint">How many row units fill one wallboard screen. A board taller than this scrolls.</span>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="Input_TilePadding">Gap (px)</label>
+                            <input asp-for="Input.TilePadding" type="number" min="0" max="80" class="mat-input" data-map-tile-padding />
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="Input_OuterMargin">Margin (px)</label>
+                            <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="mat-input" data-map-outer-margin />
+                        </div>
+                    </div>
+                    <span class="mat-hint">Gap and margin are CSS pixels. Changing the column count reflows every widget - a widget wider than the new grid is clamped into it, and growing the grid back cannot undo that, so the change is committed when you leave the field.</span>
+                </div>
+            </section>
+
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("play")<h2 class="mat-card__title">Slide rotation</h2></div>
+                <div class="mat-card__body mat-stack">
+                    <span class="mat-muted">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</span>
+                    <label class="mat-switch">
+                        <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
+                        <span class="mat-switch__track"></span>
+                        <span>Autoplay</span>
+                    </label>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_AutoRotateSeconds">Default duration</label>
+                        <select asp-for="Input.AutoRotateSeconds" class="mat-select">
+                            @foreach (var seconds in rotationChoices)
+                            {
+                                <option value="@seconds">@seconds seconds</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_PaginationMode">Page indicator</label>
+                        <select asp-for="Input.PaginationMode" class="mat-select">
+                            <option value="@MonitoringMapPaginationMode.Below">Below the board</option>
+                            <option value="@MonitoringMapPaginationMode.OverlayAlways">Overlay - always visible</option>
+                            <option value="@MonitoringMapPaginationMode.OverlayOnActivity">Overlay - on activity</option>
+                            <option value="@MonitoringMapPaginationMode.Hidden">Hidden</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    @* One pin row, cloned per pin by the designer. The target uses the SAME element picker as everything else
+       (cloned, ids rewritten). Nothing here is model-bound: the designer serialises the rows into the tile's
+       single PinsJson field. *@
+    <template data-map-pin-template>
+        <div class="map-pin-row" data-map-pin-row data-pin-id="__pinId__">
+            <div class="map-pin-row-main">
+                <input type="text" class="mat-input mat-input--sm" data-pin-field="label" placeholder="Label" aria-label="Pin label" />
+                <select class="mat-select mat-select--sm" data-pin-field="style" aria-label="Pin style">
+                    <option value="Dot">Dot</option>
+                    <option value="Tile">Mini tile</option>
+                </select>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-pin-remove aria-label="Remove pin">@MatUi.Icon("trash")</button>
+            </div>
+            <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-pin-__pinId__", AllowTags = true, Placeholder = "No target", Options = Model.TilePickerOptions, ValueAttribute = "data-pin-field-target" })" />
+            <div class="map-pin-row-geo" data-map-pin-geo hidden>
+                <input type="number" step="0.0001" min="-90" max="90" class="mat-input mat-input--sm" data-pin-field="latitude" placeholder="Latitude" aria-label="Latitude" />
+                <input type="number" step="0.0001" min="-180" max="180" class="mat-input mat-input--sm" data-pin-field="longitude" placeholder="Longitude" aria-label="Longitude" />
+            </div>
+        </div>
+    </template>
+    @* One extra-target row, cloned per token by the designer. Same element picker as everywhere else, with its
+       DOM id rewritten per row - a duplicated id would make one row's picker drive another row's value. *@
+    <template data-map-target-template>
+        <div class="map-target-row" data-map-target-row>
+            <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-target-__rowId__", AllowTags = true, Placeholder = "Pick an element or tag", Options = Model.TilePickerOptions, ValueAttribute = "data-map-target-value" })" />
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-target-remove aria-label="Remove target">@MatUi.Icon("trash")</button>
+        </div>
+    </template>
+    <template data-map-tile-template>
+        <article class="map-tile map-tile-editor"
+                 data-map-tile
+                 data-tile-index="__index__"
+                 data-slide-id="__slideId__"
+                 data-tile-id="__id__"
+                 data-state="unknown"
+                 data-kind="__kindLower__"
+                 data-visual="__visual__"
+                 data-density="__density__"
+                 style="--tile-col: __column__; --tile-row: __row__; --tile-span: __colSpan__; --tile-rows: __rowSpan__">
+            <input type="hidden" name="Input.Tiles[__index__].Id" value="__id__" />
+            <input type="hidden" name="Input.Tiles[__index__].SlideId" value="__slideId__" data-map-tile-slide-id />
+            <input type="hidden" name="Input.Tiles[__index__].IsDeleted" value="false" data-map-tile-deleted />
+            <input type="hidden" name="Input.Tiles[__index__].Column" value="__column__" data-map-tile-column />
+            <input type="hidden" name="Input.Tiles[__index__].Row" value="__row__" data-map-tile-row />
+            <input type="hidden" name="Input.Tiles[__index__].Order" value="__order__" data-map-tile-order />
+
+            @* First paint only - the designer immediately asks ?handler=TileMarkup for the real server render. It
+               still mirrors _MapTile's anatomy (head / body / foot, and the density the row span implies), because
+               a placeholder shaped differently from the thing it stands in for flashes a visibly different widget
+               for one round trip. *@
+            <div class="map-tile-head map-tile-drag-handle" data-map-drag-handle>
+                <span class="map-tile-icon">@MatmonIcons.Render("square")</span>
+                <strong data-tile-title>__title__</strong>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm map-tile-remove" data-map-remove-tile aria-label="Remove tile">@MatUi.Icon("trash")</button>
+            </div>
+            <div class="map-tile-body">
+                <p data-tile-subtitle>No target selected</p>
+            </div>
+            <div class="map-tile-foot">
+                <small data-map-tile-kind-label>__kindLabel__</small>
+            </div>
+            <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">__colSpan__ × __rowSpan__</span>
+            <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
+        </article>
+        @* Property panel for a freshly dropped tile. Kept field-for-field identical to the server-rendered one
+           above. Any field added here must be added there too. *@
+        <section class="map-property-panel" data-map-property-panel data-tile-index="__index__" hidden>
+            <header class="mat-card map-property-head">
+                <div class="mat-card__body map-property-head-body">
+                    <span class="map-property-head-icon" data-map-property-head-icon>@MatmonIcons.Render("square")</span>
+                    <span class="map-property-head-text">
+                        <strong class="mat-card__title" data-map-property-head-title>__title__</strong>
+                        <small data-map-property-head-kind>__kindLabel__</small>
+                    </span>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-property-remove aria-label="Delete widget" data-tip="Delete widget">@MatUi.Icon("trash")</button>
+                </div>
+            </header>
+
+            <div class="map-prop-group" data-map-prop-group="general">
+                <div class="mat-field">
+                    <label class="mat-label" for="@(TemplateTileId)Title">Title</label>
+                    <input id="@(TemplateTileId)Title" name="Input.Tiles[__index__].Title" value="__title__" class="mat-input" data-map-property-title />
+                </div>
+                <div class="mat-field">
+                    <span class="mat-label">Widget</span>
+                    <input type="hidden" name="Input.Tiles[__index__].Kind" value="__kind__" data-map-property-kind />
+                    <input type="hidden" name="Input.Tiles[__index__].VisualType" value="__visual__" data-map-property-visual-type />
+                    <span class="map-property-readonly" data-map-property-kind-label>__kindLabel__</span>
+                </div>
+                <div class="mat-form__grid map-property-pair">
+                    <div class="mat-field">
+                        <label class="mat-label" for="@(TemplateTileId)ColumnSpan">Width (columns)</label>
+                        <input id="@(TemplateTileId)ColumnSpan" name="Input.Tiles[__index__].ColumnSpan" value="__colSpan__" type="number" min="1" max="@Model.Input.Columns" class="mat-input" data-map-tile-column-span />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="@(TemplateTileId)RowSpan">Height (rows)</label>
+                        <input id="@(TemplateTileId)RowSpan" name="Input.Tiles[__index__].RowSpan" value="__rowSpan__" type="number" min="1" max="@MonitoringMapTileConstraints.MaxRowSpan" class="mat-input" data-map-tile-row-span />
+                    </div>
+                </div>
+                <p class="map-property-size-readout" data-map-property-size>Size __colSpan__ x __rowSpan__ cells</p>
+                <p class="map-property-hint" data-map-property-hint></p>
+            </div>
+
+            <div class="map-prop-group" data-map-prop-group="data" hidden>
+                <div class="mat-field" data-map-property-target>
+                    <span class="mat-label">Target</span>
+                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].TargetToken", DomId = "picker-map-tile-__index__", SelectedValue = null, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                </div>
+                <div class="mat-field" data-map-property-text-only>
+                    <label class="mat-label" for="@(TemplateTileId)Text">Text</label>
+                    <textarea id="@(TemplateTileId)Text" name="Input.Tiles[__index__].Text" class="mat-textarea" rows="4" data-map-property-text></textarea>
+                </div>
+                <div class="mat-field" data-map-property-graph-only>
+                    <label class="mat-label" for="@(TemplateTileId)GraphType">Graph type</label>
+                    <select id="@(TemplateTileId)GraphType" name="Input.Tiles[__index__].GraphType" class="mat-select" data-map-property-graph-type>
+                        <option value="@MonitoringMapTileGraphType.Line">Line</option>
+                        <option value="@MonitoringMapTileGraphType.Area">Area</option>
+                        <option value="@MonitoringMapTileGraphType.Bars">Bars</option>
+                        <option value="@MonitoringMapTileGraphType.Smooth">Smooth</option>
+                    </select>
+                </div>
+                <div class="mat-field" data-map-property-graph-only>
+                    <label class="mat-label" for="@(TemplateTileId)GraphWindowHours_graph">Time window</label>
+                    <select id="@(TemplateTileId)GraphWindowHours_graph" name="Input.Tiles[__index__].GraphWindowHours" class="mat-select">
+                        @foreach (var hours in MonitoringMapTile.GraphWindowChoices)
+                        {
+                            <option value="@hours" selected="@(hours == 24)">@WindowLabel(hours)</option>
+                        }
+                    </select>
+                </div>
+                <div class="mat-field" data-map-property-value-only>
+                    <label class="mat-label" for="@(TemplateTileId)ChannelKey">Channel</label>
+                    <input id="@(TemplateTileId)ChannelKey" name="Input.Tiles[__index__].ChannelKey" class="mat-input mat-mono" placeholder="Default channel" />
+                </div>
+                <div class="mat-form__grid map-property-pair" data-map-property-value-only>
+                    <div class="mat-field">
+                        <label class="mat-label" for="@(TemplateTileId)GaugeMin">Scale from</label>
+                        <input id="@(TemplateTileId)GaugeMin" name="Input.Tiles[__index__].GaugeMin" type="number" step="any" class="mat-input" placeholder="0" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="@(TemplateTileId)GaugeMax">Scale to</label>
+                        <input id="@(TemplateTileId)GaugeMax" name="Input.Tiles[__index__].GaugeMax" type="number" step="any" class="mat-input" placeholder="100" />
+                    </div>
+                </div>
+                <p class="mat-hint" data-map-property-value-only>Leave the scale empty for a percentage channel; set it in the channel's own unit for anything else.</p>
+                <div class="mat-field" data-map-property-list-only>
+                    <label class="mat-label" for="@(TemplateTileId)ListMode">Order</label>
+                    <select id="@(TemplateTileId)ListMode" name="Input.Tiles[__index__].ListMode" class="mat-select">
+                        <option value="@MonitoringMapListMode.Worst">Worst state first</option>
+                        <option value="@MonitoringMapListMode.TopValue">Highest value first</option>
+                        <option value="@MonitoringMapListMode.BottomValue">Lowest value first</option>
+                        <option value="@MonitoringMapListMode.Alphabetical">By name</option>
+                    </select>
+                </div>
+                <div class="mat-field" data-map-property-list-only>
+                    <label class="mat-label" for="@(TemplateTileId)ListChannelKey_rank">Rank by channel</label>
+                    <input id="@(TemplateTileId)ListChannelKey_rank" name="Input.Tiles[__index__].ListChannelKey" class="mat-input mat-mono" placeholder="Default channel" />
+                    <span class="mat-hint">Channel keys differ per sensor type - leave empty to use each sensor's default channel.</span>
+                </div>
+                <div class="mat-field" data-map-property-rows-only>
+                    <label class="mat-label" for="@(TemplateTileId)ListLimit_rows">Rows</label>
+                    <input id="@(TemplateTileId)ListLimit_rows" name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="50" value="5" class="mat-input" />
+                </div>
+                <partial name="_MapCompareFields" model="@(new Matmon.Host.Pages.MapCompareFieldsModel("Input.Tiles[__index__]", null, 24, Model.CompareChannelOptions))" />
+                <div class="mat-field" data-map-property-series-only>
+                    <span class="mat-label">More targets</span>
+                    <input type="hidden" name="Input.Tiles[__index__].TargetTokensText" data-map-targets-value />
+                    <div class="map-target-rows" data-map-targets-editor></div>
+                    <span class="mat-hint">Each target contributes every sensor under it, unioned and de-duplicated.</span>
+                </div>
+                <div class="mat-field" data-map-property-series-only>
+                    <label class="mat-label" for="@(TemplateTileId)ListLimit_lines">Lines</label>
+                    <input id="@(TemplateTileId)ListLimit_lines" name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="8" value="4" class="mat-input" />
+                    <span class="mat-hint">Capped at 8 - each line costs one history query.</span>
+                </div>
+                <div class="mat-field" data-map-property-sla-only>
+                    <label class="mat-label" for="@(TemplateTileId)SlaWindowDays">Window (days)</label>
+                    <input id="@(TemplateTileId)SlaWindowDays" name="Input.Tiles[__index__].SlaWindowDays" type="number" min="1" max="365" value="7" class="mat-input" />
+                    <span class="mat-hint">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
+                </div>
+                <div class="mat-field" data-map-property-image-only>
+                    <label class="mat-label" for="@(TemplateTileId)ImageFile">Picture</label>
+                    <input type="hidden" name="Input.Tiles[__index__].ImageAssetId" data-map-property-image-id />
+                    <div class="map-image-upload">
+                        <input type="file" id="@(TemplateTileId)ImageFile" accept="image/png,image/jpeg" class="mat-input" data-map-image-file />
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-image-clear>Remove</button>
+                    </div>
+                    <span class="mat-hint" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
+                </div>
+                <div class="mat-field" data-map-property-image-only>
+                    <label class="mat-label" for="@(TemplateTileId)ImageFit">Fit</label>
+                    <select id="@(TemplateTileId)ImageFit" name="Input.Tiles[__index__].ImageFit" class="mat-select" data-map-property-image-fit>
+                        <option value="@MonitoringMapImageFit.Contain">Fit inside (no cropping)</option>
+                        <option value="@MonitoringMapImageFit.Cover">Fill and crop</option>
+                        <option value="@MonitoringMapImageFit.Stretch">Stretch</option>
+                    </select>
+                </div>
+                <div class="mat-field" data-map-property-pins-only>
+                    <span class="mat-label">Pins</span>
+                    <input type="hidden" name="Input.Tiles[__index__].PinsJson" data-map-property-pins />
+                    <div class="map-pin-editor" data-map-pin-editor></div>
+                    <div class="mat-row">
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-pin-place>@MatUi.Icon("compass")<span>Place on picture</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-pin-add>@MatUi.Icon("plus")<span>Add pin</span></button>
+                    </div>
+                    <span class="mat-hint" data-map-pin-hint></span>
+                </div>
+            </div>
+
+            <div class="map-prop-group" data-map-prop-group="display" hidden>
+                <div class="mat-field icon-picker-field">
+                    <span class="mat-label" id="@(TemplateTileId)IconKey_label">Icon</span>
+                    <input type="hidden" name="Input.Tiles[__index__].IconKey" value="" data-map-property-icon data-icon-picker-value />
+                    <button type="button" class="mat-select icon-picker-trigger" data-icon-picker-trigger aria-haspopup="dialog" aria-labelledby="@(TemplateTileId)IconKey_label @(TemplateTileId)IconKey_current">
+                        <span class="icon-picker-trigger-glyph" data-icon-picker-trigger-glyph>@MatmonIcons.Render("square")</span>
+                        <span class="icon-picker-trigger-label" id="@(TemplateTileId)IconKey_current" data-icon-picker-trigger-label>Auto (by type)</span>
+                    </button>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="@(TemplateTileId)BackgroundColor">Background</label>
+                    <input id="@(TemplateTileId)BackgroundColor" name="Input.Tiles[__index__].BackgroundColor" class="mat-input mat-mono" placeholder="auto or #101827" data-map-property-background />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="@(TemplateTileId)AccentColor">Accent</label>
+                    <input id="@(TemplateTileId)AccentColor" name="Input.Tiles[__index__].AccentColor" class="mat-input mat-mono" placeholder="auto or #78d5c8" data-map-property-accent />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="@(TemplateTileId)TextColor">Text colour</label>
+                    <input id="@(TemplateTileId)TextColor" name="Input.Tiles[__index__].TextColor" class="mat-input mat-mono" placeholder="auto or #ffffff" data-map-property-text-color />
+                </div>
+                @* ⚠️ Each checkbox comes BEFORE its hidden "false" partner (the order ASP.NET's own tag helper
+                   emits): with both posted the binder takes the FIRST value, so hidden-first read every switch back
+                   as false. The partner sits after the track, so the track stays the checkbox's next sibling - which
+                   is what draws the switch on. *@
+                <div class="map-property-switches mat-stack mat-stack--sm">
+                    <label class="mat-switch">
+                        <input name="Input.Tiles[__index__].ShowCard" type="checkbox" value="true" checked data-map-property-show-card />
+                        <span class="mat-switch__track"></span>
+                        <span>Card background</span>
+                        <input name="Input.Tiles[__index__].ShowCard" type="hidden" value="false" />
+                    </label>
+                    <label class="mat-switch">
+                        <input name="Input.Tiles[__index__].ShowTitle" type="checkbox" value="true" checked data-map-property-show-title />
+                        <span class="mat-switch__track"></span>
+                        <span>Show title</span>
+                        <input name="Input.Tiles[__index__].ShowTitle" type="hidden" value="false" />
+                    </label>
+                    <label class="mat-switch">
+                        <input name="Input.Tiles[__index__].ShowStateBadge" type="checkbox" value="true" checked data-map-property-show-badge />
+                        <span class="mat-switch__track"></span>
+                        <span>Show state badge</span>
+                        <input name="Input.Tiles[__index__].ShowStateBadge" type="hidden" value="false" />
+                    </label>
+                    <label class="mat-switch">
+                        <input name="Input.Tiles[__index__].ShowElementName" type="checkbox" value="true" checked />
+                        <span class="mat-switch__track"></span>
+                        <span>Show target name</span>
+                        <input name="Input.Tiles[__index__].ShowElementName" type="hidden" value="false" />
+                    </label>
+                </div>
+            </div>
+
+            @* The Advanced group has to exist in the template too - a freshly dropped tile otherwise showed an
+               empty Advanced tab until the first save. *@
+            <div class="map-prop-group" data-map-prop-group="advanced" hidden>
+                <span class="mat-label">Colour rules</span>
+                <div class="map-color-rules">
+                    @foreach (var bucket in MonitoringMapColorRules.Buckets)
+                    {
+                        var ruleId = TemplateTileId + "ColorRules_" + bucket.Key;
+                        <div class="map-color-rule">
+                            <label class="map-color-rule-label" for="@ruleId">@bucket.Label</label>
+                            <input type="color" class="map-color-swatch" value="@MonitoringMapColorRules.DefaultHex(bucket.Key)"
+                                   data-map-color-swatch="@bucket.Key" aria-label="@bucket.Label colour" tabindex="-1" />
+                            <input type="text" class="mat-input mat-input--sm mat-mono" id="@ruleId"
+                                   name="Input.Tiles[__index__].ColorRules[@bucket.Key]" value=""
+                                   placeholder="theme" data-map-color-rule="@bucket.Key" />
+                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-color-clear="@bucket.Key"
+                                    aria-label="Reset @bucket.Label to the theme colour" data-tip="Theme colour">@MatUi.Icon("x")</button>
+                        </div>
+                    }
+                </div>
+                <p class="mat-hint">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</p>
+                <div class="mat-field">
+                    <label class="mat-label" for="@(TemplateTileId)RefreshSeconds">Refresh (seconds)</label>
+                    <input id="@(TemplateTileId)RefreshSeconds" name="Input.Tiles[__index__].RefreshSeconds" type="number" min="0" max="3600" class="mat-input" placeholder="0" />
+                    <span class="mat-hint">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence.</span>
+                </div>
             </div>
         </section>
-    </form>
-</section>
+    </template>
+
+    <div class="mat-btn-row">
+        <button type="submit" asp-page-handler="Save" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save layout</span></button>
+        <a class="mat-btn mat-btn--secondary" asp-page="/Maps" asp-route-mapId="@Model.Input.Id">@MatUi.Icon("back")<span>Back</span></a>
+        @if (!Model.IsCreateMode)
+        {
+            <span class="mat-btn-row__spacer"></span>
+            <button type="submit" asp-page-handler="Delete" formnovalidate class="mat-btn mat-btn--danger"
+                    data-confirm="Delete this map? Its slides and widgets go with it." data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete map</span></button>
+        }
+    </div>
+</form>

@@ -1,6 +1,10 @@
 @page "/Maps/Public/{token}"
 @model MapPublicModel
+@inject Matmon.Host.Ui.MatUiToolkit Toolkit
 @{
+    // The TV wallboard: its own full-screen page, no menu and no header bar, but drawn with MatUi like every other
+    // page (the toolkit, the app styles and scripts, the sprite). It is always dark - a wall display in a dimmed
+    // operations room - which is why data-theme is written here rather than left to the browser.
     Layout = null;
     var display = Model.Display!;
     var map = display.Map;
@@ -8,19 +12,25 @@
     var showPagination = display.Slides.Count > 1 && map.PaginationMode != MonitoringMapPaginationMode.Hidden;
     var navModel = new Matmon.Host.Ui.MapCarouselNavModel(display.Slides.Select(s => s.Slide.Name).ToArray(), map.PaginationMode);
 }
-<!doctype html>
-<html lang="en" data-theme="dark">
+<!DOCTYPE html>
+<html lang="en" data-app="matmon" data-theme="dark">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="dark" />
     <title>@map.Name - Matmon</title>
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    <script src="~/js/matmon.boot.js" asp-append-version="true"></script>
+    <script src="/matui/matui.boot.js?v=@Toolkit.Hash"></script>
+    <link rel="stylesheet" href="/matui/matui.css?v=@Toolkit.Hash" />
+    <partial name="_AppStyles" />
 </head>
 <body class="public-map-body"
       data-map-live="/Maps/Public/@map.PublicToken?handler=Data"
       data-map-live-interval="@Math.Clamp(map.AutoRotateSeconds, 10, 120)"
       data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(display).Revision">
+    @Html.Raw(Toolkit.Sprite)
     <main class="public-map-shell">
         <div class="map-stage" data-map-stage>
             <div class="map-carousel" data-map-carousel data-map-carousel-autoplay="@(map.AutoRotateEnabled ? "" : null)" data-map-carousel-interval="@map.AutoRotateSeconds">
@@ -47,6 +57,7 @@
             <partial name="_MapCarouselNav" model="navModel" />
         }
     </main>
-    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="/matui/matui.js?v=@Toolkit.Hash"></script>
+    <partial name="_AppScripts" />
 </body>
 </html>

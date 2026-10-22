@@ -1,0 +1,7 @@
+/* Matmon - editors. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ---- Credential bundles (element + template editors): a list of rows, each opening its own mat-dialog ----
+   Unused slots and deleted rows stay in the DOM (hidden) so the form keeps their indexes; while every row is hidden the
+   list draws no empty frame - the "No credentials yet." line stands in for it. */
+.credential-list:not(:has(> .credential-row:not([hidden]))) { display: none; }
+.credential-row > .mat-tag { flex: none; }

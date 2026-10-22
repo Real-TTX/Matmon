@@ -1,7 +1,6 @@
 @page "/Maps"
 @model MapsModel
 @{
-    ViewData["Title"] = "Maps";
     var map = Model.SelectedMap;
 
     // Through the cloud tunnel the request host is the instance's INTERNAL host (localhost), so an absolute URL
@@ -14,136 +13,164 @@
                 : Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme))
             ?? $"/Maps/Public/{candidate.PublicToken}";
 
-    // v3 boards have no aspect ratio and no letterbox mode - they flow across their columns. Describing one
+    // Boards have no aspect ratio and no letterbox mode - they lay out across their columns. Describing one
     // as "1920:1080 · keep ratio" was left over from the canvas and told the reader nothing true.
-    string MapPresetText(MonitoringMap map) =>
-        $"{Math.Max(1, map.Columns)} columns · {Math.Max(1, map.Rows)} rows per screen";
+    string MapPresetText(MonitoringMap candidate) =>
+        $"{Math.Max(1, candidate.Columns)} columns · {Math.Max(1, candidate.Rows)} rows per screen";
 
-    string LibrarySummary(MonitoringMap candidate)
+    // The viewer is a page of its own: the map's name is the title and the breadcrumb leads back to the
+    // library (it used to be a "Map Library" button above the board).
+    var selectedPublicUrl = map is null ? null : PublicUrl(map);
+    if (map is not null && Model.Display is not null)
     {
-        var slideCount = candidate.EffectiveSlides().Count;
-        var publicState = candidate.PublicEnabled ? "on" : "off";
-        return $"{slideCount} slide{(slideCount == 1 ? "" : "s")} · {Math.Max(1, candidate.Columns)} columns · Public {publicState} · updated {candidate.UpdatedUtc.LocalDateTime:g}";
+        ViewData["Title"] = map.Name;
+        ViewData["PageSub"] = MapPresetText(map);
+        ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("Maps", "/Maps"), new BreadcrumbItem(map.Name) };
+    }
+    else
+    {
+        ViewData["Title"] = "Maps";
+        ViewData["PageSub"] = "Boards of tiles for a screen or a TV - open one here, or share it as a wallboard.";
     }
 }
 
-<section class="dashboard-shell maps-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("dashboard")
-            <h1>Maps</h1>
+@section TopbarActions {
+    @if (map is not null && Model.Display is not null && Model.CanEditMaps)
+    {
+        <div class="mat-topbar__actions">
+            @if (Model.Maps.Count > 1)
+            {
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon" data-menu-toggle="map-switch-menu" data-menu-place="bottom" aria-haspopup="menu" aria-expanded="false" aria-label="Switch to another map" data-tip="Switch map">@MatUi.Icon("layers")</button>
+            }
+            @if (map.PublicEnabled)
+            {
+                <a class="mat-btn mat-btn--ghost mat-btn--icon" href="@selectedPublicUrl" target="_blank" rel="noopener" aria-label="Open the public wallboard" data-tip="Public wallboard">@MatUi.Icon("external")</a>
+            }
+            <a class="mat-btn mat-btn--ghost mat-btn--icon" asp-page="/MapEditor" asp-route-mapId="@map.Id" aria-label="Edit @map.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
         </div>
+    }
+}
+
+@if (Model.Maps.Count == 0)
+{
+    <div class="mat-list">
+        <div class="mat-empty mat-empty--first">
+            <span class="mat-empty__icon">@MatUi.Icon("globe")</span>
+            <div class="mat-empty__title">No maps yet</div>
+            @if (Model.CanEditMaps)
+            {
+                <p>A map is a board of tiles - states, values, graphs, lists and alerts - for this page or a TV on the wall.</p>
+                <a class="mat-btn mat-btn--primary" asp-page="/MapEditor">@MatUi.Icon("plus")<span>New map</span></a>
+            }
+            else
+            {
+                <p>An administrator can create one.</p>
+            }
+        </div>
+        @if (Model.CanEditMaps)
+        {
+            <div class="mat-actions">
+                <a class="mat-btn mat-btn--primary" asp-page="/MapEditor">@MatUi.Icon("plus")<span>New map</span></a>
+            </div>
+        }
     </div>
+}
+else if (map is null)
+{
+    <div class="mat-list">
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Maps</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Map</th>
+                        <th scope="col" class="mat-num">Slides</th>
+                        <th scope="col" class="mat-num mat-hide-sm">Columns</th>
+                        <th scope="col">Public link</th>
+                        <th scope="col" class="mat-hide-sm">Updated</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var candidate in Model.Maps)
+                    {
+                        var publicUrl = PublicUrl(candidate);
+                        var slideCount = candidate.EffectiveSlides().Count;
+                        <tr>
+                            <td data-label="Map" class="mat-table__primary">
+                                <a asp-page="/Maps" asp-route-mapId="@candidate.Id">@candidate.Name</a>
+                            </td>
+                            <td data-label="Slides" class="mat-num">@slideCount</td>
+                            <td data-label="Columns" class="mat-num mat-hide-sm">@Math.Max(1, candidate.Columns)</td>
+                            <td data-label="Public link">
+                                <div class="map-library-public">
+                                    <span class="@MatUi.PillClass(candidate.PublicEnabled ? "ok" : "plain")">@(candidate.PublicEnabled ? "On" : "Off")</span>
+                                    @if (Model.CanEditMaps && candidate.PublicEnabled)
+                                    {
+                                        <span class="mat-mono map-library-url" title="@publicUrl">@publicUrl</span>
+                                    }
+                                </div>
+                            </td>
+                            <td data-label="Updated" class="mat-mono mat-hide-sm">@candidate.UpdatedUtc.LocalDateTime.ToString("g")</td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/Maps" asp-route-mapId="@candidate.Id" aria-label="Open @candidate.Name" data-tip="Open">@MatUi.Icon("eye")</a>
+                                    @if (Model.CanEditMaps)
+                                    {
+                                        if (candidate.PublicEnabled)
+                                        {
+                                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-copy="@publicUrl" aria-label="Copy the public link of @candidate.Name" data-tip="Copy public link">@MatUi.Icon("copy")</button>
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="@publicUrl" target="_blank" rel="noopener" aria-label="Open the public wallboard of @candidate.Name" data-tip="Public wallboard">@MatUi.Icon("external")</a>
+                                        }
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/MapEditor" asp-route-mapId="@candidate.Id" aria-label="Edit @candidate.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        if (candidate.PublicEnabled)
+                                        {
+                                            <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@candidate.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="New public link for @candidate.Name" data-tip="New public link"
+                                                        data-confirm="Generate a new link for @(candidate.Name)? The current one stops working immediately." data-confirm-ok="New link" data-confirm-danger>@MatUi.Icon("refresh")</button>
+                                            </form>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
 
-    @if (Model.Maps.Count == 0)
+        @if (Model.CanEditMaps)
+        {
+            <div class="mat-actions">
+                <a class="mat-btn mat-btn--primary" asp-page="/MapEditor">@MatUi.Icon("plus")<span>New map</span></a>
+            </div>
+        }
+    </div>
+}
+else if (Model.Display is not null)
+{
+    var mapNav = Model.Display.Slides.Count > 1
+        ? new Matmon.Host.Ui.MapCarouselNavModel(Model.Display.Slides.Select(s => s.Slide.Name).ToArray(), map.PaginationMode)
+        : null;
+
+    @if (Model.CanEditMaps && Model.Maps.Count > 1)
     {
-        <section class="panel map-library-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("list")<span>Map Library</span></h2>
-            </div>
-
-            <div class="empty-state">
-                No maps yet.
-            </div>
-
-            @if (Model.CanEditMaps)
+        <div class="mat-menu" id="map-switch-menu" role="menu" aria-label="Switch map" hidden>
+            @foreach (var candidate in Model.Maps)
             {
-                <div class="page-actions">
-                    <a class="workspace-submit" asp-page="/MapEditor">@MatmonIcons.Render("plus")<span>New map</span></a>
-                </div>
+                var isCurrent = candidate.Id == map.Id;
+                <a class="mat-menu__item" role="menuitem" asp-page="/Maps" asp-route-mapId="@candidate.Id" aria-current="@(isCurrent ? "page" : null)">@MatUi.Icon(isCurrent ? "check" : "globe")<span>@candidate.Name</span></a>
             }
-        </section>
+        </div>
     }
-    else if (map is null)
-    {
-        <section class="panel map-library-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("list")<span>Map Library</span></h2>
-            </div>
 
-            <div class="map-library-list">
-                @foreach (var candidate in Model.Maps)
-                {
-                    var publicUrl = PublicUrl(candidate);
-                    <article class="map-library-row">
-                        <a class="map-library-main" asp-page="/Maps" asp-route-mapId="@candidate.Id">
-                            <strong>@candidate.Name</strong>
-                            <span>@LibrarySummary(candidate)</span>
-                        </a>
-                        @if (Model.CanEditMaps && candidate.PublicEnabled)
-                        {
-                            <div class="map-public-link">
-                                @MatmonIcons.Render("lock")
-                                <input class="workspace-input" value="@publicUrl" readonly aria-label="Public map link for @candidate.Name" />
-                            </div>
-                        }
-                        <div class="map-library-actions">
-                            <a class="workspace-submit" asp-page="/Maps" asp-route-mapId="@candidate.Id">@MatmonIcons.Render("dashboard")<span>Open</span></a>
-                            @if (Model.CanEditMaps)
-                            {
-                                if (candidate.PublicEnabled)
-                                {
-                                    <a class="workspace-secondary-submit" href="@publicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
-                                }
-                                <a class="workspace-secondary-submit" asp-page="/MapEditor" asp-route-mapId="@candidate.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                                @if (candidate.PublicEnabled)
-                                {
-                                    <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@candidate.Id">
-                                        <button type="submit" class="workspace-secondary-submit">@MatmonIcons.Render("spark")<span>Rotate</span></button>
-                                    </form>
-                                }
-                            }
-                        </div>
-                    </article>
-                }
-            </div>
-
-            @if (Model.CanEditMaps)
-            {
-                <div class="page-actions">
-                    <a class="workspace-submit" asp-page="/MapEditor">@MatmonIcons.Render("plus")<span>New map</span></a>
-                </div>
-            }
-        </section>
-    }
-    else if (Model.Display is not null)
-    {
-        var selectedPublicUrl = PublicUrl(map);
-        var mapNav = Model.Display.Slides.Count > 1
-            ? new Matmon.Host.Ui.MapCarouselNavModel(Model.Display.Slides.Select(s => s.Slide.Name).ToArray(), map.PaginationMode)
-            : null;
+    <div class="mat-stack">
         @* The in-app viewer patches itself from the same JSON the public board polls, so a map on a second
            monitor stays current without a reload throwing the carousel back to slide 1. *@
-        <section class="panel map-view-panel"
-                 data-map-live="/Maps?mapId=@map.Id&amp;handler=Data"
-                 data-map-live-interval="30"
-                 data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(Model.Display).Revision">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("dashboard")<span>@map.Name</span></h2>
-                <span class="panel-hint">@MapPresetText(map)</span>
-            </div>
-
-            <div class="map-view-toolbar">
-                <a class="workspace-secondary-submit" asp-page="/Maps">@MatmonIcons.Render("arrow-left")<span>Map Library</span></a>
-                @if (Model.CanEditMaps)
-                {
-                    <form method="get" class="map-switcher-form">
-                        <label class="workspace-label" for="map-switcher">Map</label>
-                        <select id="map-switcher" name="mapId" class="form-select workspace-select" onchange="this.form.submit()">
-                            @foreach (var candidate in Model.Maps)
-                            {
-                                <option value="@candidate.Id" selected="@(candidate.Id == map.Id ? "selected" : null)">@candidate.Name</option>
-                            }
-                        </select>
-                    </form>
-                    @if (map.PublicEnabled)
-                    {
-                        <a class="workspace-secondary-submit" href="@selectedPublicUrl" target="_blank" rel="noopener">@MatmonIcons.Render("arrow-right")<span>Public</span></a>
-                    }
-                    <a class="workspace-submit" asp-page="/MapEditor" asp-route-mapId="@map.Id">@MatmonIcons.Render("pencil")<span>Edit</span></a>
-                }
-            </div>
-
+        <div class="map-view"
+             data-map-live="/Maps?mapId=@map.Id&amp;handler=Data"
+             data-map-live-interval="30"
+             data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(Model.Display).Revision">
             <div class="map-stage" data-map-stage>
                 <div class="map-carousel" data-map-carousel>
                     @for (var slideIndex = 0; slideIndex < Model.Display.Slides.Count; slideIndex++)
@@ -168,50 +195,48 @@
             {
                 <partial name="_MapCarouselNav" model="mapNav" />
             }
-        </section>
-            @* Share panel for the public link. The QR is the point of it: a wallboard is usually set up by
-               someone standing at the TV, and typing a 32-character token by hand is the worst part of the job. *@
-            @if (map.PublicEnabled && Model.CanEditMaps)
-            {
-                <section class="panel panel-stack map-share-panel">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("network")<span>Public link</span></h2>
-                        <span class="panel-hint">No sign-in required - anyone with the link sees this board</span>
-                    </div>
-                    <div class="map-share-grid">
-                        <div class="map-share-main">
-                            <label class="workspace-field">
-                                <span class="workspace-label">Link</span>
-                                <div class="map-share-row">
-                                    <input type="text" class="form-control workspace-input" id="map-public-url" value="@selectedPublicUrl" readonly />
-                                    <button type="button" class="workspace-secondary-submit" data-copy-button data-copy-target="map-public-url">
-                                        @MatmonIcons.Render("copy")<span data-copy-label>Copy</span>
-                                    </button>
-                                </div>
-                            </label>
-                            <div class="map-property-hint">
-                                <strong>Kiosk setup:</strong> open the link in the display browser and press <kbd>F11</kbd> for
-                                full screen. The board refreshes its values in place, so it can stay open indefinitely -
-                                it never reloads unless the layout itself changes.
-                                @if (Model.Display!.Slides.Count > 1)
-                                {
-                                    <text> Slides rotate every @map.AutoRotateSeconds s.</text>
-                                }
+        </div>
+
+        @* Share panel for the public link. The QR is the point of it: a wallboard is usually set up by
+           someone standing at the TV, and typing a 32-character token by hand is the worst part of the job. *@
+        @if (map.PublicEnabled && Model.CanEditMaps)
+        {
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Public link</h2><span class="mat-text-muted mm-push-end">No sign-in required - anyone with the link sees this board</span></div>
+                <div class="mat-card__body map-share">
+                    <div class="mat-stack">
+                        <div class="mat-field">
+                            <label class="mat-label" for="map-public-url">Link</label>
+                            <div class="mat-input-group">
+                                <input type="text" class="mat-input mat-mono" id="map-public-url" value="@selectedPublicUrl" readonly />
+                                <button type="button" class="mat-btn mat-btn--secondary" data-copy="#map-public-url">@MatUi.Icon("copy")<span>Copy</span></button>
                             </div>
-                            <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@map.Id" class="map-share-rotate">
-                                <button type="submit" class="workspace-secondary-submit"
-                                        onclick="return confirm('Generate a new link? The current one stops working immediately.');">
-                                    @MatmonIcons.Render("arrow-right")<span>New link</span>
-                                </button>
-                                <span class="workspace-inline-note">Rotating invalidates the old link at once - use it if it leaked.</span>
-                            </form>
                         </div>
-                        <div class="map-share-qr" aria-label="QR code for the public link">
-                            @Html.Raw(Matmon.Host.Services.TotpQr.Render(selectedPublicUrl, 3, QRCoder.QRCodeGenerator.ECCLevel.M))
-                            <small>Scan to open on a phone</small>
-                        </div>
+                        <span class="mat-muted">
+                            <strong>Kiosk setup:</strong> open the link in the display browser and press <kbd>F11</kbd> for
+                            full screen. The board refreshes its values in place, so it can stay open indefinitely -
+                            it never reloads unless the layout itself changes.
+                            @if (Model.Display.Slides.Count > 1)
+                            {
+                                <text> Slides rotate every @map.AutoRotateSeconds s.</text>
+                            }
+                        </span>
+                        <form method="post" asp-page-handler="RotatePublicLink" asp-route-mapId="@map.Id" class="mat-row">
+                            <button type="submit" class="mat-btn mat-btn--secondary"
+                                    data-confirm="Generate a new link? The current one stops working immediately." data-confirm-ok="New link" data-confirm-danger>
+                                @MatUi.Icon("refresh")<span>New link</span>
+                            </button>
+                            <span class="mat-hint">Rotating invalidates the old link at once - use it if it leaked.</span>
+                        </form>
                     </div>
-                </section>
-            }
-    }
-</section>
+                    @* Drawn black on transparent, so it sits on a white plate in both themes - on the dark theme it
+                       would otherwise be black on near-black and no phone would read it. Rendered offline. *@
+                    <figure class="map-share-qr">
+                        <div class="mm-qr" role="img" aria-label="QR code for the public link">@Html.Raw(Matmon.Host.Services.TotpQr.Render(selectedPublicUrl!, 3, QRCoder.QRCodeGenerator.ECCLevel.M))</div>
+                        <figcaption class="mat-hint">Scan to open on a phone</figcaption>
+                    </figure>
+                </div>
+            </section>
+        }
+    </div>
+}

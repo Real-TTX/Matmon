@@ -1,38 +1,39 @@
 @page
 @model ErrorModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Error";
+
+    // The brand at the top of the card: a managing partner's logo, or nothing under a white label without one, else the
+    // Matmon mark.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
 }
 
-<section class="dashboard-shell auth-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("warning")
-            <h1>Error</h1>
-        </div>
+<div class="mat-auth__card">
+    <div class="mat-auth__brand">
+        @if (partnerHasLogo)
+        {
+            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
+        }
+        else if (partnerProductName is null)
+        {
+            <img src="/brand/matmon-mark.svg" alt="" width="56" height="56" />
+        }
+        <h1>Something went wrong</h1>
+        <p class="mat-muted">An error occurred while processing your request.</p>
     </div>
 
-    <section class="panel auth-card">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("warning")<span>Something went wrong</span></h2>
-            <span class="panel-hint">request diagnostics</span>
-        </div>
+    @if (Model.ShowRequestId)
+    {
+        <dl class="mat-kv">
+            <dt>Request ID</dt>
+            <dd class="mat-mono">@Model.RequestId</dd>
+        </dl>
+    }
 
-        <p class="workspace-inline-note">An error occurred while processing your request.</p>
-
-        @if (Model.ShowRequestId)
-        {
-            <dl class="config-list compact-config-list">
-                <div class="config-row">
-                    <dt>Request ID</dt>
-                    <dd><code>@Model.RequestId</code></dd>
-                </div>
-            </dl>
-        }
-
-        <div class="page-actions workspace-toolbar">
-            <a class="workspace-secondary-submit" asp-page="/Index">@MatmonIcons.Render("arrow-left")<span>Back to monitoring</span></a>
-        </div>
-    </section>
-</section>
+    <div class="mat-btn-row mat-btn-row--plain">
+        <a class="mat-btn mat-btn--secondary mat-btn--block" asp-page="/Index">@MatUi.Icon("back")<span>Back to monitoring</span></a>
+    </div>
+</div>

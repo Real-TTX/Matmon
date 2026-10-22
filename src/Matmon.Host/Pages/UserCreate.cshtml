@@ -2,88 +2,72 @@
 @model UserCreateModel
 @{
     ViewData["Title"] = "New user";
+    ViewData["Width"] = "narrow";
     var backUrl = Model.GetSafeReturnUrl("/Config?tab=users");
+    var isCloud = Model.UserInput.AccountType == UserAccountType.Cloud;
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("plus")
-            <h1>New user</h1>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@* The account type decides the fields (data-show-if): a local account has a username and a password, a cloud account
+   only the e-mail of its Matmon Cloud account. The server reads only the fields of the chosen type. *@
+<form method="post" class="mat-form" novalidate>
+    <input type="hidden" asp-for="ReturnUrl" />
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("user")<h2 class="mat-card__title">New user</h2></div>
+        <div class="mat-card__body">
+            <div class="mat-form__grid">
+                <div class="mat-field mat-field--full">
+                    <label class="mat-label" for="UserInput_AccountType">Account type</label>
+                    <select asp-for="UserInput.AccountType" class="mat-select">
+                        <option value="Local">Local - username + password</option>
+                        <option value="Cloud">Matmon Cloud - e-mail, SSO (no local password)</option>
+                    </select>
+                </div>
+
+                <div class="mat-field mat-field--full" data-show-if="#UserInput_AccountType" data-show-value="Local" hidden="@isCloud">
+                    <label class="mat-label" for="UserInput_Username">Username</label>
+                    <input asp-for="UserInput.Username" class="mat-input" autocomplete="username" />
+                </div>
+
+                <div class="mat-field" data-show-if="#UserInput_AccountType" data-show-value="Local" hidden="@isCloud">
+                    <label class="mat-label" for="UserInput_Password">Password</label>
+                    <input asp-for="UserInput.Password" type="password" class="mat-input" autocomplete="new-password" />
+                </div>
+
+                <div class="mat-field" data-show-if="#UserInput_AccountType" data-show-value="Local" hidden="@isCloud">
+                    <label class="mat-label" for="UserInput_PasswordConfirm">Confirm password</label>
+                    <input asp-for="UserInput.PasswordConfirm" type="password" class="mat-input" autocomplete="new-password" />
+                </div>
+
+                <div class="mat-field mat-field--full" data-show-if="#UserInput_AccountType" data-show-value="Cloud" hidden="@(!isCloud)">
+                    <label class="mat-label" for="UserInput_Email">Cloud account e-mail</label>
+                    <input asp-for="UserInput.Email" type="email" class="mat-input" autocomplete="email" data-msg-type="Please enter a valid e-mail address." />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+
+                <div class="mat-field">
+                    <label class="mat-label" for="UserInput_Role">Role</label>
+                    <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="mat-select"></select>
+                </div>
+            </div>
         </div>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section class="panel panel-stack workspace-editor-panel">
-        <form method="post" class="workspace-form">
-            <input type="hidden" asp-for="ReturnUrl" />
-
-            <label class="workspace-field" style="margin-bottom:0.6rem;">
-                <span class="workspace-label">Account type</span>
-                <select asp-for="UserInput.AccountType" class="form-select workspace-select" data-usertype-select>
-                    <option value="Local">Local - username + password</option>
-                    <option value="Cloud">Matmon Cloud - e-mail, SSO (no local password)</option>
-                </select>
-            </label>
-
-            <div class="workspace-form-grid">
-                <label class="workspace-field" data-usertype="local">
-                    <span class="workspace-label">Username</span>
-                    <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
-                </label>
-
-                <label class="workspace-field" data-usertype="local">
-                    <span class="workspace-label">Password</span>
-                    <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" />
-                </label>
-
-                <label class="workspace-field" data-usertype="local">
-                    <span class="workspace-label">Confirm password</span>
-                    <input asp-for="UserInput.PasswordConfirm" type="password" class="form-control workspace-input" autocomplete="new-password" />
-                </label>
-
-                <label class="workspace-field" data-usertype="cloud" hidden>
-                    <span class="workspace-label">Cloud account e-mail</span>
-                    <input asp-for="UserInput.Email" type="email" class="form-control workspace-input" autocomplete="email" />
-                </label>
-
-                <label class="workspace-field">
-                    <span class="workspace-label">Role</span>
-                    <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="form-select workspace-select"></select>
-                </label>
-            </div>
-
-            <div class="workspace-inline-note" data-usertype="local">New users are created as enabled accounts.</div>
-            <div class="workspace-inline-note" data-usertype="cloud" hidden>Cloud users sign in with “Sign in with Matmon Cloud” (SSO) - no local password is set. An admin can add one later on the user's page.</div>
-
-            <script>
-                (function () {
-                    var sel = document.querySelector("[data-usertype-select]");
-                    if (!sel) { return; }
-                    function sync() {
-                        var t = (sel.value || "Local").toLowerCase();
-                        document.querySelectorAll("[data-usertype]").forEach(function (el) {
-                            el.hidden = el.getAttribute("data-usertype") !== t;
-                        });
-                    }
-                    sel.addEventListener("change", sync);
-                    sync();
-                })();
-            </script>
-
-            <div class="workspace-form-actions">
-                <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create user</span></button>
-            </div>
-        </form>
     </section>
-</section>
+
+    <p class="mat-muted" data-show-if="#UserInput_AccountType" data-show-value="Local" hidden="@isCloud">New users are created as enabled accounts.</p>
+    <p class="mat-muted" data-show-if="#UserInput_AccountType" data-show-value="Cloud" hidden="@(!isCloud)">Cloud users sign in with “Sign in with Matmon Cloud” (SSO) - no local password is set. An admin can add one later on the user's page.</p>
+
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create user</span></button>
+        <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+</form>

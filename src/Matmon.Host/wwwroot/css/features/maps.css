@@ -1,0 +1,1735 @@
+/* Matmon - maps. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
+
+/* ==========================================================================
+   The map library (/Maps without a map)
+   ========================================================================== */
+
+/* The public-link cell: the on/off pill and, for an editor, the link itself (copied from the row's actions). */
+.map-library-public {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  min-width: 0;
+}
+.map-library-url {
+  min-width: 0;
+  max-width: 22rem;
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   The in-app viewer and its share card
+   ========================================================================== */
+
+.map-view {
+  min-width: 0;
+}
+
+/* The public-link card: the link, the kiosk hint and "New link" on the left, the QR on the right. */
+.map-share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--mat-space-6);
+  align-items: start;
+}
+.map-share-qr {
+  display: grid;
+  justify-items: center;
+  gap: var(--mat-space-2);
+  margin: 0;
+}
+/* The QR is drawn black on transparent, so it sits on a light plate in BOTH themes - on the dark theme it would
+   otherwise be black on near-black and no phone would read it. */
+.mm-qr {
+  background: var(--mat-picker-light);
+  padding: var(--mat-space-3);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+  line-height: 0;
+}
+.mm-qr svg {
+  display: block;
+  width: 8.5rem;
+  height: 8.5rem;
+}
+@media (max-width: 760px) {
+  .map-share {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   The stage and the slide grid - shared by the viewer, the wallboard and the designer
+   --------------------------------------------------------------------------
+   A slide is a real CSS grid of --map-columns columns; a tile places itself into it by cell (--tile-col /
+   --tile-row) and spans --tile-span columns and --tile-rows row units. There is no canvas and no transform, so
+   the designer and the viewer show tiles at their true size: WYSIWYG by construction. Below a 640 CSS-px STAGE
+   (not viewport) fitMapStages sets data-layout="stack" and the slide becomes a one-column reading list.
+   ========================================================================== */
+
+.map-stage {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* The in-app viewer and the designer canvas: a framed box the board grows inside. No aspect ratio and no
+   max-height - the board is as tall as its content and the page scrolls if it has to. */
+.map-view .map-stage,
+.map-designer-workbench .map-stage {
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius-lg);
+  background: var(--mat-surface-2);
+  overflow: visible;
+}
+.map-view .map-slide,
+.map-designer-workbench .map-slide {
+  border-radius: calc(var(--mat-radius-lg) - 1px);
+}
+
+.map-slide {
+  --map-row-unit: 4.6rem;
+  /* ⚠️ The tile type scale hangs off the ROW UNIT, not off the tile, so every tile on a board shares one scale,
+     the editor matches the viewer by construction, and a wallboard - which enlarges the row unit to fill the
+     screen - enlarges the text with it. */
+  --map-type: calc(var(--map-row-unit) * 0.21);
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
+  grid-auto-rows: var(--map-row-unit);
+  gap: var(--tile-gap, 16px);
+  align-content: start;
+  width: 100%;
+  padding: var(--map-margin, 24px);
+  background-color: var(--slide-bg, var(--mat-bg));
+}
+
+/* Auto-Stack (a phone, or a narrow embedded console): the same grid with ONE column. DOM order already IS the
+   reading order (the server sorts by Order), so nothing is re-sorted here. */
+.map-slide[data-layout="stack"] {
+  --map-type: calc(var(--map-row-unit) * 0.24);
+  grid-template-columns: minmax(0, 1fr);
+}
+/* ⚠️ A stacked tile DROPS its placement: a tile pins itself to a column and a row, which in a one-column list
+   would leave holes where the board has empty space and put two tiles on the same line. Its height stays the
+   definite rowSpan x row unit of the base rule. */
+.map-slide[data-layout="stack"] .map-tile {
+  grid-column: span 1;
+  grid-row: auto / span var(--tile-rows, 2);
+}
+.map-slide[data-layout="stack"] .map-grid-guides {
+  display: none;
+}
+
+/* A slide heading is a full-width row of the grid, above the first row of tiles. */
+.map-slide-header {
+  grid-column: 1 / -1;
+  color: var(--mat-text);
+  pointer-events: none;
+}
+.map-slide-header h2 {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.2vw, 2.2rem);
+  line-height: var(--mat-lh-tight);
+}
+.map-slide-header p {
+  margin: 0;
+  color: var(--mat-text-muted);
+  font-size: clamp(0.78rem, 1.1vw, 1.1rem);
+}
+
+.map-carousel {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+   The public wallboard (/Maps/Public/{token}) - its own full-screen, always-dark page
+   ========================================================================== */
+
+.public-map-body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--mat-bg);
+  color: var(--mat-text);
+}
+
+/* A wallboard is unattended: nothing should be reachable only by scrolling, and nothing should move because
+   someone brushed a mouse. On a PHONE that inverts - one column of eight tiles cannot fit any screen - so a
+   stacked board scrolls. */
+.public-map-shell {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+}
+.public-map-shell:has(.map-slide[data-layout="stack"]) {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+/* The stage IS the screen, so a slide of exactly --map-rows row units fills it by pure CSS - no JS measuring,
+   nothing to re-run on resize. A taller board scrolls (shrinking an arbitrarily long board is how wallboards
+   become unreadable); fitWallboard only nudges the unit when a ragged band overshoots. */
+.public-map-shell .map-stage {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  background: var(--mat-bg);
+}
+.public-map-shell:has(.map-slide[data-layout="stack"]) .map-stage {
+  position: static;
+  inset: auto;
+}
+.public-map-shell .map-slide {
+  --map-row-unit: calc(
+    (100vh - 2 * var(--map-margin, 24px) - (var(--map-rows, 6) - 1) * var(--tile-gap, 16px)) / var(--map-rows, 6)
+  );
+  min-height: 100vh;
+}
+
+/* The stage is fixed, so a nav rendered after it ("below the board") would sit behind it at the top of the
+   page. On a full-screen board there is no "below": the indicator is pinned to the bottom, over the margin. */
+.public-map-shell .map-carousel-nav,
+.public-map-shell .map-carousel-nav[data-map-pagination="below"] {
+  position: fixed;
+  left: 50%;
+  bottom: var(--mat-space-4);
+  z-index: 5;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+/* ==========================================================================
+   The tile - one markup (_MapTile) for the viewer, the wallboard and the designer
+   ========================================================================== */
+
+.map-tile {
+  /* The tone of the tile: a per-tile colour rule (--map-tile-tone, set inline as data, "initial" when none)
+     wins over the state's own tone; a custom accent wins over both for the accent. */
+  --map-tile-state-tone: var(--mat-text-faint);
+  --map-tile-tint: var(--map-tile-tone, var(--map-tile-state-tone));
+  --map-tile-accent: var(--map-tile-custom-accent, var(--map-tile-tint));
+  /* ⚠️ An INLINE-SIZE container, not size: the type scale hangs off the row unit, so the only cq units left
+     measure width - and an inline-size container needs no definite height (a size container whose height came
+     from its content resolved every cq unit to zero: a board of empty boxes). */
+  container-type: inline-size;
+  /* ⚠️ RELATIVE, and it matters: the resize grip, the size badge and the pin layer are absolutely positioned
+     children. Without it every grip on the board escaped to the slide's bottom-right corner. */
+  position: relative;
+  grid-column: var(--tile-col, auto) / span var(--tile-span, 3);
+  grid-row: var(--tile-row, auto) / span var(--tile-rows, 2);
+  height: calc(var(--tile-rows, 2) * var(--map-row-unit, 4.6rem) + (var(--tile-rows, 2) - 1) * var(--tile-gap, 16px));
+  /* Three slots: eyebrow / body / detail. The body (the reading) gets the space left over. */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: calc(var(--map-type, 0.95rem) * 0.25);
+  min-width: 0;
+  min-height: 0;
+  padding: calc(var(--map-type, 0.95rem) * 0.62);
+  border: 1px solid color-mix(in srgb, var(--map-tile-accent) 45%, var(--mat-border));
+  border-radius: var(--mat-radius-lg);
+  /* The STATE colours the whole card: on a wall display a tinted card is legible from across the room. Flat,
+     no gradient, no glow. */
+  background: var(--map-tile-custom-bg, color-mix(in srgb, var(--mat-surface) 88%, var(--map-tile-tint)));
+  color: var(--map-tile-custom-text, var(--mat-text));
+  overflow: hidden;
+}
+
+/* A board is scanned, not read: a tile in trouble carries a doubled edge in its tone so it is what you see
+   first; healthy ones stay quiet. Only error and warning - if everything stands out, nothing does. */
+.map-tile[data-state="error"],
+.map-tile[data-state="warning"] {
+  border-color: var(--map-tile-accent);
+  box-shadow: inset 0 0 0 1px var(--map-tile-accent);
+}
+
+.map-tile[data-state="ok"] { --map-tile-state-tone: var(--mat-success); }
+.map-tile[data-state="warning"] { --map-tile-state-tone: var(--mat-warning); }
+.map-tile[data-state="error"] { --map-tile-state-tone: var(--mat-danger); }
+.map-tile[data-state="ack"] { --map-tile-state-tone: var(--mat-info); }
+
+/* A plain tile (ShowCard = false): a bare heading or label with no card chrome. */
+.map-tile.is-plain {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: var(--mat-space-1) var(--mat-space-2);
+}
+
+/* ---- Anatomy: eyebrow / body / detail ----
+   ⚠️ The three slots are placed EXPLICITLY, because the head and the foot are both conditional: with
+   auto-placement a tile without a head put the body in the head's auto row and it collapsed to nothing. */
+.map-tile-head {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.4);
+  min-width: 0;
+}
+.map-tile-body {
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.25);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.map-tile-foot {
+  grid-row: 3;
+  display: grid;
+  min-width: 0;
+}
+
+/* The eyebrow: the name as a quiet caption above the reading, not a bold heading competing with it. */
+.map-tile-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.8);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tile's glyph, in the tile's tone, scaled with the board. */
+.map-tile-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--map-tile-accent);
+  font-size: calc(var(--map-type, 0.95rem) * 0.95);
+}
+
+/* A healthy tile says so with a dot, not with a word: the card is already green. */
+.map-tile-state-dot {
+  flex: none;
+  width: calc(var(--map-type, 0.95rem) * 0.42);
+  height: calc(var(--map-type, 0.95rem) * 0.42);
+  margin-left: auto;
+  border-radius: var(--mat-radius-pill);
+  background: var(--map-tile-accent);
+}
+
+/* A non-ok state gets its word: MatUi's pill, sized to the board through the pill's own hooks. */
+.map-tile-pill {
+  --mat-pill-font-size: calc(var(--map-type, 0.95rem) * 0.75);
+  --mat-pill-height: calc(var(--map-type, 0.95rem) * 1.45);
+  --mat-pill-pad-x: calc(var(--map-type, 0.95rem) * 0.55);
+  margin-left: auto;
+}
+
+/* Caption lines, deliberately quiet and small: every pixel they take is a pixel the reading does not get. */
+.map-tile p,
+.map-tile small {
+  flex: none;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The reading: grows with the tile's height in rows (a taller tile shouts louder), capped by its width so it
+   stays one line; equal-width digits so a value ticking 9 -> 10 does not make the line jitter. */
+.map-tile-value {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  font-size: min(calc(var(--map-type, 0.95rem) * 1.7 * var(--tile-rows, 2)), 30cqw);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Density, decided server-side from the row span (a container cannot query its own size) ---- */
+/* One row: a single line - eyebrow left, reading right, no detail. */
+.map-tile[data-density="s"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.5);
+}
+.map-tile[data-density="s"] .map-tile-head,
+.map-tile[data-density="s"] .map-tile-body {
+  grid-row: auto;
+}
+.map-tile[data-density="s"] .map-tile-body {
+  justify-content: center;
+  align-items: flex-end;
+}
+.map-tile[data-density="s"] .map-tile-foot {
+  display: none;
+}
+.map-tile[data-density="s"] .map-tile-value {
+  flex: none;
+  font-size: calc(var(--map-type, 0.95rem) * 1.45);
+}
+/* A heading is prose, not a reading: it keeps the width and stays left-aligned. */
+.map-tile[data-kind="heading"][data-density="s"],
+.map-tile[data-kind="text"][data-density="s"] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.map-tile[data-kind="heading"][data-density="s"] .map-tile-body,
+.map-tile[data-kind="text"][data-density="s"] .map-tile-body {
+  align-items: flex-start;
+  text-align: left;
+}
+/* Stacked there is no room beside the label: eyebrow over reading again, and the tile may grow to its text. */
+.map-slide[data-layout="stack"] .map-tile[data-density="s"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  height: auto;
+  min-height: var(--map-row-unit, 4.6rem);
+}
+.map-slide[data-layout="stack"] .map-tile[data-density="s"] .map-tile-body {
+  align-items: flex-start;
+}
+/* Two rows: the reading and at most one caption. */
+.map-tile[data-density="m"] .map-tile-foot small {
+  display: none;
+}
+
+/* ---- Collection widgets: sensor list, alert feed, SLA, clock, heading ---- */
+/* A list is as tall as its tile, so the row that does not fit fades out instead of being cut in half (the
+   mask is an alpha ramp, not a colour - the feed prints its total underneath anyway). */
+.map-tile-rows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: calc(var(--map-type, 0.95rem) * 0.3);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  mask-image: linear-gradient(to bottom, var(--mat-text) calc(100% - 1.1em), transparent 100%);
+}
+.map-tile-row {
+  --map-row-tone: var(--mat-border-strong);
+  display: flex;
+  align-items: baseline;
+  gap: 2cqw;
+  min-width: 0;
+  padding-left: var(--mat-space-2);
+  border-left: 2px solid var(--map-row-tone);
+  font-size: calc(var(--map-type, 0.95rem) * 0.82);
+  line-height: var(--mat-lh-tight);
+}
+.map-tile-row[data-state="ok"] { --map-row-tone: var(--mat-success); }
+.map-tile-row[data-state="warning"] { --map-row-tone: var(--mat-warning); }
+.map-tile-row[data-state="error"] { --map-row-tone: var(--mat-danger); }
+.map-tile-row[data-state="unknown"],
+.map-tile-row[data-state="disabled"] { --map-row-tone: var(--mat-text-faint); }
+.map-tile-row-label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.map-tile-row-label strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* (A row's detail <small> takes the tile's caption style, .map-tile small.) */
+.map-tile-row-time {
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: 0.8em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-tile-row-value {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.map-tile-row-time {
+  flex: none;
+}
+.map-tile-sla,
+.map-tile-clock,
+.map-tile-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.16);
+  min-width: 0;
+}
+.map-tile-sla strong,
+.map-tile-clock strong {
+  font-size: calc(var(--map-type, 0.95rem) * 1.5 * var(--tile-rows, 2));
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+}
+.map-tile-heading strong {
+  font-size: calc(var(--map-type, 0.95rem) * 1.5 * var(--tile-rows, 2));
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+
+/* ---- Picture and world-map tiles, and their status pins ---- */
+/* ONE cell exactly the size of the frame, so the picture's height: 100% resolves against the frame and not
+   against a row the picture itself was sizing. */
+.map-tile-canvas {
+  position: relative;
+  display: grid;
+  flex: 1;
+  grid-template: 100% / 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--mat-radius);
+}
+/* An uploaded picture; how it fits is the tile's data-fit (MonitoringMapTile.ImageFit). Contain is the default
+   because cropping a floorplan would move every pin relative to what it was placed against. */
+.map-tile-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+}
+.map-tile-image[data-fit="cover"] { object-fit: cover; }
+.map-tile-image[data-fit="fill"] { object-fit: fill; }
+/* ⚠️ The continents are painted by a MASK, not an <img>: an SVG in an img tag is its own document, where
+   currentColor is black whatever the theme. Masked, the paint is this element's own background - the tile's
+   text colour - so it follows the theme and a per-tile text colour. mask-size: contain letterboxes exactly like
+   object-fit: contain, so the pin geometry is unchanged. */
+.map-tile-worldmap {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background-color: currentColor;
+  -webkit-mask: url("/brand/world-map.svg") center / contain no-repeat;
+  mask: url("/brand/world-map.svg") center / contain no-repeat;
+  opacity: 0.34;
+}
+.map-tile-canvas-empty {
+  place-self: center;
+  color: var(--mat-text-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 1.25);
+}
+
+/* A pin's point is --pin-x / --pin-y (percent of the frame); the marker is centred on it. */
+.map-pin {
+  --map-pin-tone: var(--mat-text-faint);
+  position: absolute;
+  left: var(--pin-x, 50%);
+  top: var(--pin-y, 50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: calc(var(--map-type, 0.95rem) * 0.78);
+  line-height: var(--mat-lh-tight);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.map-pin[data-state="ok"] { --map-pin-tone: var(--mat-success); }
+.map-pin[data-state="warning"] { --map-pin-tone: var(--mat-warning); }
+.map-pin[data-state="error"] { --map-pin-tone: var(--mat-danger); }
+.map-pin-dot {
+  flex: none;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: var(--mat-radius-pill);
+  background: var(--map-pin-tone);
+  /* An outline in the surface colour keeps the dot visible on a dark photo and a white floorplan alike. */
+  box-shadow: 0 0 0 0.16em var(--mat-surface);
+}
+.map-pin[data-pin-style="tile"] .map-pin-dot {
+  width: 0.5em;
+  height: 0.5em;
+}
+.map-pin-label {
+  display: flex;
+  flex-direction: column;
+  max-width: 14em;
+  padding: 0.15em 0.4em;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--map-pin-tone) 45%, transparent);
+  border-radius: var(--mat-radius-sm);
+  background: color-mix(in srgb, var(--mat-surface) 85%, transparent);
+  text-overflow: ellipsis;
+}
+.map-pin-label strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.map-pin-label small {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Graph ---- */
+.map-tile-graph-frame {
+  /* A shrink floor as well as a grow factor: the trend is the widget, it must not get the leftovers. */
+  display: grid;
+  flex: 1 1 60%;
+  place-items: center;
+  align-items: stretch;
+  min-height: 0;
+  padding: var(--mat-space-1);
+  border: 1px solid color-mix(in srgb, var(--map-tile-accent) 35%, transparent);
+  border-radius: var(--mat-radius);
+  background: color-mix(in srgb, var(--map-tile-accent) 10%, transparent);
+  color: var(--mat-text-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.8);
+}
+.map-tile-graph-frame > svg {
+  place-self: stretch;
+}
+.map-tile-graph {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.map-graph-area {
+  fill: color-mix(in srgb, var(--map-tile-accent) 22%, transparent);
+  stroke: none;
+}
+.map-graph-line,
+.map-graph-bars {
+  fill: none;
+  stroke: var(--map-tile-accent);
+  stroke-width: 2.1;
+  vector-effect: non-scaling-stroke;
+}
+.map-graph-bars {
+  stroke-width: 3.2;
+}
+
+/* ---- Multi-graph: several lines on one shared scale, a legend under the chart ---- */
+.map-tile-multigraph {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: calc(var(--map-type, 0.95rem) * 0.35);
+  min-height: 0;
+}
+.map-tile-multigraph .map-tile-graph {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+/* Y labels | plot, time labels under the plot - HTML beside the stretched SVG, never text inside it. */
+.map-multigraph-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  column-gap: calc(var(--map-type, 0.95rem) * 0.35);
+  min-height: 0;
+}
+.map-multigraph-yaxis {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--mat-text-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.62);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+}
+.map-multigraph-ysizer {
+  display: block;
+  visibility: hidden;
+  white-space: nowrap;
+}
+/* On the grid lines: 2 / 20 / 38 of the 40-unit viewBox = 5 % / 50 % / 95 % of the plot's height. */
+.map-multigraph-yaxis [data-axis-top],
+.map-multigraph-yaxis [data-axis-middle],
+.map-multigraph-yaxis [data-axis-bottom] {
+  position: absolute;
+  right: 0;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+.map-multigraph-yaxis [data-axis-top] { top: 5%; }
+.map-multigraph-yaxis [data-axis-middle] { top: 50%; }
+.map-multigraph-yaxis [data-axis-bottom] { top: 95%; }
+.map-multigraph-plot {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+}
+.map-multigraph-grid {
+  stroke: color-mix(in srgb, var(--mat-text-muted) 28%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.map-multigraph-xaxis {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: space-between;
+  color: var(--mat-text-muted);
+  font-size: calc(var(--map-type, 0.95rem) * 0.58);
+  line-height: 1.2;
+}
+/* Each line's colour is its series' identity (--series-color, data); the stroke follows it. */
+.map-tile-multigraph .map-graph-line {
+  fill: none;
+  stroke: var(--series-color, var(--map-tile-accent));
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+/* Hover read-out: a hairline at the pointer and a card with the time and every line's value there. Only where
+   there is a pointer - a wallboard nobody touches never shows it. */
+.map-multigraph-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--mat-text) 45%, transparent);
+  pointer-events: none;
+}
+.map-multigraph-tooltip {
+  position: absolute;
+  top: 4%;
+  z-index: 3;
+  display: grid;
+  gap: 2px;
+  min-width: 9rem;
+  max-width: 16rem;
+  padding: var(--mat-space-2) var(--mat-space-3);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+  background: var(--mat-surface);
+  box-shadow: var(--mat-shadow-2);
+  color: var(--mat-text);
+  font-size: var(--mat-fs-xs);
+  line-height: var(--mat-lh-tight);
+  pointer-events: none;
+}
+.map-multigraph-tooltip time {
+  color: var(--mat-text-muted);
+}
+.map-multigraph-tooltip-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.map-multigraph-tooltip-row span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-multigraph-tooltip-row strong {
+  font-variant-numeric: tabular-nums;
+}
+/* Two across where there is room: a legend is read by colour first. */
+.map-graph-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0 calc(var(--map-type, 0.95rem) * 0.6);
+  margin: 0;
+  padding: 0;
+  font-size: calc(var(--map-type, 0.95rem) * 0.78);
+  list-style: none;
+}
+.map-graph-legend li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--map-type, 0.95rem) * 0.3);
+  min-width: 0;
+}
+.map-graph-swatch {
+  flex: none;
+  width: calc(var(--map-type, 0.95rem) * 0.42);
+  height: calc(var(--map-type, 0.95rem) * 0.42);
+  border-radius: var(--mat-radius-xs);
+  background: var(--series-color, var(--map-tile-accent));
+}
+/* The tooltip builds its swatches at the tooltip's own (fixed) size. */
+.map-multigraph-tooltip .map-graph-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+}
+.map-graph-legend-name {
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-graph-legend-value {
+  margin-left: auto;
+  color: var(--mat-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ---- Progress bar ---- */
+.map-tile-progress-wrap {
+  display: grid;
+  gap: var(--mat-space-1);
+}
+/* The bar IS the widget, so it gets real weight - a hairline under a big number cannot be read as a level from
+   across a room. --map-progress is the reading in percent (data). */
+.map-tile-progress {
+  height: calc(var(--map-type, 0.95rem) * 0.55);
+  min-height: 10px;
+  max-height: 2.4rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--map-tile-accent) 42%, var(--mat-border));
+  border-radius: var(--mat-radius-pill);
+  background: color-mix(in srgb, var(--map-tile-accent) 12%, var(--mat-surface-2));
+}
+.map-tile-progress span {
+  display: block;
+  width: calc(var(--map-progress, 0) * 1%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--map-tile-accent);
+}
+/* A progress tile has already spent height on the bar and its caption, so the reading cannot also claim 40 %. */
+.map-tile:has(.map-tile-progress-wrap) .map-tile-value {
+  flex: 0 1 auto;
+  min-height: 0;
+  font-size: min(calc(var(--map-type, 0.95rem) * 1.2 * var(--tile-rows, 2)), 18cqw);
+}
+
+/* ---- Gauge: a real 180-degree dial ---- */
+.map-tile-gauge {
+  position: relative;
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+/* Shrink-wraps the arc (same aspect ratio as the viewBox), and is its own SIZE container, so the reading scales
+   with the DIAL rather than with the tile - on a wide, short tile the arc is a fraction of the tile's width. */
+.map-gauge-dial {
+  position: relative;
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 100 / 58;
+  container-type: size;
+}
+.map-gauge {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.map-gauge-track,
+.map-gauge-fill {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+.map-gauge-track {
+  stroke: color-mix(in srgb, var(--map-tile-accent) 18%, var(--mat-border));
+}
+/* pathLength="100" on the path makes the dash array a PERCENT of the arc: the fill is the reading itself. */
+.map-gauge-fill {
+  stroke: var(--map-tile-accent);
+  stroke-dasharray: var(--map-progress, 0) 100;
+  transition: stroke-dasharray 320ms var(--mat-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-gauge-fill {
+    transition: none;
+  }
+}
+/* The reading sits in the mouth of the arc. */
+.map-gauge-readout {
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  max-width: 74%;
+  text-align: center;
+  transform: translateX(-50%);
+}
+.map-gauge-readout strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: min(calc(var(--map-type, 0.95rem) * 1.5 * var(--tile-rows, 2)), 19cqw);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-tile .map-gauge-readout small {
+  max-width: 100%;
+  font-size: calc(var(--map-type, 0.95rem) * 0.72);
+}
+
+/* Past roughly 2.2:1 the dial moves to the left and the reading sits beside it, where it simply reads.
+   display: contents dissolves the dial wrapper so the arc and the readout become the two columns. */
+@container (max-width: 26rem) {
+  .map-gauge-dial {
+    display: contents;
+  }
+  .map-tile-gauge {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: var(--mat-space-2);
+  }
+  .map-gauge {
+    width: auto;
+    height: 100%;
+    aspect-ratio: 100 / 58;
+  }
+  .map-gauge-readout {
+    position: static;
+    max-width: none;
+    justify-items: start;
+    text-align: left;
+    transform: none;
+  }
+  .map-gauge-readout strong {
+    font-size: 1.45rem;
+  }
+  .map-tile .map-gauge-readout small {
+    font-size: 0.72rem;
+  }
+}
+/* Smaller still: the scale caption drops first - a reading you can read beats a reading and a caption you
+   cannot. */
+@container (max-width: 14rem) {
+  .map-gauge-readout small {
+    display: none;
+  }
+  .map-gauge-readout strong {
+    font-size: 1.15rem;
+  }
+}
+/* A dial too short to read as a dial: the readout lies flat inside it, with a slim level bar under the number
+   (the hard-stop ramp below is the reading itself, i.e. data). */
+@container (max-height: 104px) {
+  .map-tile-gauge {
+    display: grid;
+    grid-auto-flow: row;
+    align-content: center;
+    justify-items: stretch;
+    gap: var(--mat-space-1);
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+  .map-tile-gauge span {
+    width: 100%;
+    aspect-ratio: auto;
+    grid-auto-flow: column;
+    align-items: baseline;
+    justify-content: start;
+    gap: var(--mat-space-2);
+  }
+  .map-tile-gauge strong {
+    font-size: min(calc(var(--map-type, 0.95rem) * 1.4 * var(--tile-rows, 2)), 22cqw);
+  }
+  .map-tile-gauge::after {
+    content: "";
+    display: block;
+    width: 100%;
+    height: calc(var(--map-type, 0.95rem) * 0.22);
+    min-height: 3px;
+    border: 1px solid color-mix(in srgb, var(--map-tile-accent) 42%, var(--mat-border));
+    border-radius: var(--mat-radius-pill);
+    background: linear-gradient(90deg,
+      var(--map-tile-accent) 0 calc(var(--map-progress, 0) * 1%),
+      color-mix(in srgb, var(--map-tile-accent) 12%, var(--mat-surface-2)) calc(var(--map-progress, 0) * 1%) 100%);
+  }
+}
+
+/* ==========================================================================
+   Slide controls (_MapCarouselNav) - an overlay on the board, or a strip below it
+   ========================================================================== */
+
+.map-carousel-nav {
+  position: absolute;
+  left: 50%;
+  bottom: var(--mat-space-4);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mat-space-2);
+  max-width: calc(100% - 2 * var(--mat-space-4));
+  padding: var(--mat-space-1) var(--mat-space-2);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius-pill);
+  background: var(--mat-surface);
+  box-shadow: var(--mat-shadow-2);
+  transform: translateX(-50%);
+}
+/* "Below the board": under the board in normal flow - rendered after the stage for exactly this. */
+.map-carousel-nav[data-map-pagination="below"] {
+  position: static;
+  width: fit-content;
+  margin: var(--mat-space-3) auto 0;
+  box-shadow: none;
+  transform: none;
+}
+/* "Overlay - on activity": fades out while nothing happens, so a wall display is not permanently branded with a
+   nav bar (initializeMapCarousel's pingActivity). */
+.map-carousel-nav[data-map-pagination="overlayonactivity"] {
+  transition: opacity 240ms var(--mat-ease);
+}
+.map-carousel-nav[data-map-pagination="overlayonactivity"].is-idle {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-carousel-nav[data-map-pagination="overlayonactivity"] {
+    transition: none;
+  }
+}
+.map-carousel-dots {
+  min-width: 0;
+}
+
+/* ==========================================================================
+   The designer (/Maps/Edit): toolbox | canvas | properties
+   ========================================================================== */
+
+/* The Editor tab is the query container, so the three columns stack by the room the designer has (the menu
+   beside it, an embedded console) rather than by the window. */
+.map-designer {
+  container: map-designer / inline-size;
+}
+.map-designer-shell {
+  display: grid;
+  /* 17rem: the palette shows two schematic cards per row, which need the width to also read the name. */
+  grid-template-columns: 17rem minmax(0, 1fr) 20rem;
+  gap: var(--mat-space-4);
+  align-items: start;
+}
+
+.map-toolbox,
+.map-property-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-3);
+  min-width: 0;
+  min-height: min(36rem, 72vh);
+  max-height: min(72vh, 52rem);
+  overflow: auto;
+  padding: var(--mat-space-3);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius-lg);
+  background: var(--mat-surface);
+}
+.map-property-editor > * {
+  min-width: 0;
+}
+/* The widget LIST takes the toolbox's height and scrolls on its own. */
+.map-toolbox {
+  max-height: min(36rem, 72vh);
+}
+.map-designer-side-title {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  margin: 0;
+  color: var(--mat-text);
+  font-size: var(--mat-fs-md);
+  font-weight: 650;
+}
+.map-designer-side-title .mat-icon {
+  color: var(--mat-text-muted);
+}
+
+/* ---- Widget palette ---- */
+.map-toolbox-list {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: var(--mat-space-3);
+  min-height: 0;
+  overflow: auto;
+}
+.map-toolbox-group {
+  display: grid;
+  gap: var(--mat-space-1);
+}
+.map-toolbox-group-label {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-weight: 650;
+}
+/* Two per row: a schematic needs to be big enough to read as a shape. */
+.map-toolbox-group-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mat-space-1);
+}
+.map-toolbox-empty {
+  margin: 0;
+  font-size: var(--mat-fs-xs);
+}
+.map-tool-button {
+  display: grid;
+  gap: var(--mat-space-1);
+  width: 100%;
+  padding: var(--mat-space-1);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+  background: var(--mat-surface);
+  color: var(--mat-text);
+  text-align: left;
+  cursor: grab;
+  transition: border-color var(--mat-dur-fast) var(--mat-ease), background var(--mat-dur-fast) var(--mat-ease);
+}
+.map-tool-button:hover {
+  border-color: color-mix(in srgb, var(--mat-accent) 50%, var(--mat-border));
+  background: var(--mat-accent-soft);
+}
+.map-tool-button:focus-visible {
+  outline: none;
+  box-shadow: var(--mat-focus-ring);
+}
+/* The schematic: every shape is drawn in currentColor at one of three weights, so the hover tint below is the
+   only rule that needs to know a colour. */
+.map-tool-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--mat-radius-sm);
+  background: var(--mat-surface-3);
+  color: color-mix(in srgb, var(--mat-accent) 62%, var(--mat-text-muted));
+  transition: color var(--mat-dur-fast) var(--mat-ease);
+}
+.map-tool-button:hover .map-tool-preview {
+  color: var(--mat-accent);
+}
+.map-tool-preview .mtp-fill { fill: currentColor; }
+.map-tool-preview .mtp-soft { fill: currentColor; opacity: 0.4; }
+.map-tool-preview .mtp-track { stroke: currentColor; opacity: 0.3; }
+.map-tool-preview .mtp-stroke { stroke: currentColor; }
+.map-tool-preview .mtp-stroke-fill { fill: currentColor; }
+.map-tool-preview .mtp-area { fill: currentColor; opacity: 0.16; }
+/* The name wraps to two lines rather than truncating ("Floorpla…"). */
+.map-tool-label {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--mat-fs-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* ---- The canvas ---- */
+.map-designer-workbench {
+  display: grid;
+  gap: var(--mat-space-2);
+  min-width: 0;
+  max-height: min(72vh, 52rem);
+  overflow: auto;
+}
+/* "Full screen" (header bar): the canvas alone, the size it will be on the wall. */
+.map-designer-workbench:fullscreen {
+  max-height: none;
+  padding: var(--mat-space-6);
+  background: var(--mat-bg);
+}
+.map-canvas-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mat-space-3);
+}
+/* The board's title: clicking it selects the board itself (back from a widget). */
+.map-canvas-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--mat-space-1) var(--mat-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--mat-radius);
+  background: transparent;
+  color: var(--mat-text);
+  text-align: left;
+  cursor: pointer;
+}
+.map-canvas-title:hover,
+.map-canvas-title.is-selected {
+  border-color: color-mix(in srgb, var(--mat-accent) 45%, transparent);
+}
+.map-canvas-title:focus-visible {
+  outline: none;
+  box-shadow: var(--mat-focus-ring);
+}
+.map-canvas-title strong {
+  font-size: var(--mat-fs-md);
+  font-weight: 650;
+}
+.map-canvas-title small {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.map-canvas-title small b {
+  color: var(--mat-text);
+  font-weight: 600;
+}
+.map-canvas-sep {
+  margin: 0 var(--mat-space-1);
+  opacity: 0.4;
+}
+.map-canvas-slide-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  color: var(--mat-text-muted);
+}
+
+/* Grid guides: an overlay that repeats the tiles' OWN grid definition (it cannot drift from where a tile lands),
+   one outlined CELL per grid position - graph paper in both directions, not filled column bars. */
+.map-grid-guides {
+  position: absolute;
+  inset: var(--map-margin, 24px);
+  display: grid;
+  grid-template-columns: repeat(var(--map-columns, 12), minmax(0, 1fr));
+  grid-auto-rows: var(--map-row-unit, 4.6rem);
+  gap: var(--tile-gap, 16px);
+  pointer-events: none;
+}
+.map-grid-cell-guide {
+  border: 1px dashed var(--mat-border);
+  border-radius: var(--mat-radius);
+}
+/* Where the wallboard SCREEN ends: a board may be taller (it scrolls), but on a TV everything past this line
+   is below the fold. */
+.map-grid-cell-guide.is-fold {
+  border-bottom: 1px solid color-mix(in srgb, var(--mat-warning) 55%, transparent);
+}
+
+/* The empty slide, and the only place a layout is offered: it spans the whole board and claims three rows,
+   the height the cards need. */
+.map-canvas-empty {
+  grid-column: 1 / -1;
+  grid-row: span 3;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--mat-space-2);
+  min-height: calc(var(--map-row-unit, 4.6rem) * 3);
+  padding: var(--mat-space-4);
+  border: 1px dashed var(--mat-border-strong);
+  border-radius: var(--mat-radius-lg);
+  background: var(--mat-surface);
+  text-align: center;
+}
+.map-canvas-empty > strong {
+  color: var(--mat-text);
+  font-size: var(--mat-fs-md);
+}
+.map-toolbox-templates {
+  display: grid;
+  justify-items: center;
+  gap: var(--mat-space-2);
+  width: min(44rem, 100%);
+}
+.map-toolbox-templates > p {
+  margin: 0;
+  font-size: var(--mat-fs-xs);
+}
+.map-canvas-empty-title {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-weight: 650;
+}
+.map-layout-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--mat-space-2);
+  width: 100%;
+}
+.map-layout-card {
+  display: grid;
+  gap: var(--mat-space-1);
+  padding: var(--mat-space-1);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+  background: var(--mat-surface);
+  color: var(--mat-text);
+  text-align: left;
+  cursor: pointer;
+}
+.map-layout-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mat-accent) 55%, var(--mat-border));
+  background: var(--mat-accent-soft);
+}
+.map-layout-card:focus-visible {
+  outline: none;
+  box-shadow: var(--mat-focus-ring);
+}
+.map-layout-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* The thumbnail is a real CSS grid of the template's own slots (--thumb-* / --slot-*, data), so it cannot show
+   an arrangement the button does not produce. */
+.map-layout-thumb {
+  display: grid;
+  grid-template-columns: repeat(var(--thumb-cols, 12), 1fr);
+  grid-template-rows: repeat(var(--thumb-rows, 6), 1fr);
+  gap: 2px;
+  aspect-ratio: 16 / 9;
+  padding: 2px;
+  border-radius: var(--mat-radius-sm);
+  background: var(--mat-surface-3);
+}
+.map-layout-thumb span {
+  grid-column: var(--slot-col, auto) / span var(--slot-span, 1);
+  grid-row: var(--slot-row, auto) / span var(--slot-rows, 1);
+  border-radius: var(--mat-radius-xs);
+  background: color-mix(in srgb, var(--mat-accent) 55%, transparent);
+}
+.map-layout-card-meta {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.map-layout-card-meta strong {
+  font-size: var(--mat-fs-xs);
+  font-weight: 600;
+}
+.map-layout-card-meta small {
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  line-height: var(--mat-lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-layout-warning {
+  margin: 0;
+  color: var(--mat-warning-text);
+  font-size: var(--mat-fs-xs);
+}
+
+/* ---- A tile on the canvas: the whole tile is the drag surface ---- */
+.map-tile-editor {
+  cursor: grab;
+}
+.map-tile-editor.is-dragging {
+  z-index: 20;
+  opacity: 0.82;
+  cursor: grabbing;
+}
+.map-tile-editor.is-selected {
+  outline: 2px solid var(--mat-accent);
+  outline-offset: 2px;
+}
+.map-tile-editor.is-resizing {
+  z-index: 20;
+  outline: 2px dashed var(--mat-accent);
+  outline-offset: 2px;
+}
+.map-tile-drag-handle {
+  cursor: grab;
+}
+.map-tile-drag-handle:active {
+  cursor: grabbing;
+}
+.map-tile-remove {
+  flex: none;
+}
+.map-tile-resize-handle {
+  position: absolute;
+  right: var(--mat-space-1);
+  bottom: var(--mat-space-1);
+  width: 0.9rem;
+  height: 0.9rem;
+  border-right: 2px solid color-mix(in srgb, var(--map-tile-accent) 70%, var(--mat-text-muted));
+  border-bottom: 2px solid color-mix(in srgb, var(--map-tile-accent) 70%, var(--mat-text-muted));
+  opacity: 0.65;
+  cursor: nwse-resize;
+}
+.map-tile-resize-handle:hover {
+  opacity: 1;
+}
+/* While dragging or resizing: the real tile stays visible, with a live "W x H" badge on top. */
+.map-tile-size-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  padding: 2px var(--mat-space-2);
+  border-radius: var(--mat-radius-pill);
+  background: var(--mat-accent);
+  box-shadow: var(--mat-shadow-2);
+  color: var(--mat-on-accent);
+  font-size: var(--mat-fs-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--mat-dur-fast) var(--mat-ease);
+  pointer-events: none;
+}
+.map-tile-editor.is-resizing .map-tile-size-badge,
+.map-tile-editor.is-dragging .map-tile-size-badge {
+  opacity: 1;
+}
+/* "Place on picture": the canvas takes the pointer back from the tile's drag surface for one click. */
+.map-tile-editor .map-tile-canvas.is-placing {
+  outline: 2px dashed color-mix(in srgb, var(--mat-accent) 60%, transparent);
+  outline-offset: -2px;
+  cursor: crosshair;
+}
+
+/* ---- Properties ---- */
+/* The tile tab bar, compact enough for four tabs in the 20rem aside (MatUi's own --mat-tabs-* hooks). */
+.map-property-tabs {
+  --mat-tabs-gap: 0;
+  --mat-tabs-pad-x: var(--mat-space-2);
+  --mat-tabs-height: var(--mat-control-h-sm);
+  flex: none;
+}
+.map-property-empty > p {
+  margin: 0;
+}
+.map-view-settings {
+  padding-top: var(--mat-space-3);
+  border-top: 1px solid var(--mat-border);
+}
+.map-property-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-3);
+  min-width: 0;
+}
+/* The header card: what is selected and its one destructive action. */
+.map-property-head {
+  --mat-card-pad: var(--mat-space-3);
+}
+.map-property-head-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.map-property-head-icon {
+  display: inline-flex;
+  color: var(--mat-accent-text);
+  font-size: 1.1rem;
+}
+.map-property-head-text {
+  display: grid;
+  min-width: 0;
+}
+.map-property-head-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-property-head-text small {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+}
+.map-prop-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mat-space-3);
+  min-width: 0;
+}
+.map-prop-group > p {
+  margin: 0;
+}
+/* The tile kind: fixed once the widget is on the board (delete and re-drag to change it). */
+.map-property-readonly {
+  padding-block: var(--mat-space-1);
+  font-weight: 600;
+}
+.map-property-size-readout {
+  padding: var(--mat-space-2) var(--mat-space-3);
+  border-radius: var(--mat-radius);
+  background: var(--mat-surface-2);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+}
+.map-property-hint {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+}
+.map-property-hint:empty {
+  display: none;
+}
+
+/* Colour rules: label, the swatch (a view control), the hex text (what posts), back to the theme colour. */
+.map-color-rules {
+  display: grid;
+  gap: var(--mat-space-1);
+}
+.map-color-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.75rem 6.5rem auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.map-color-rule-label {
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A native colour input stripped of its chrome so it reads as a swatch. */
+.map-color-swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--mat-border-strong);
+  border-radius: var(--mat-radius-sm);
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.map-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.map-color-swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: var(--mat-radius-xs);
+}
+.map-color-swatch::-moz-color-swatch {
+  border: 0;
+  border-radius: var(--mat-radius-xs);
+}
+
+/* The icon field: a select-looking button that opens the icon dialog. */
+.icon-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.icon-picker-trigger-glyph {
+  display: inline-flex;
+  flex: none;
+  color: var(--mat-accent-text);
+}
+.icon-picker-trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The icon dialog's glyph grid. */
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: var(--mat-space-2);
+}
+.icon-picker-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mat-space-1);
+  padding: var(--mat-space-3) var(--mat-space-1);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+  background: var(--mat-surface);
+  color: var(--mat-text);
+  cursor: pointer;
+  transition: border-color var(--mat-dur-fast) var(--mat-ease), background var(--mat-dur-fast) var(--mat-ease);
+}
+.icon-picker-cell:hover,
+.icon-picker-cell:focus-visible {
+  border-color: var(--mat-accent);
+  background: var(--mat-accent-soft);
+  outline: none;
+}
+.icon-picker-cell.is-active {
+  border-color: var(--mat-accent);
+  box-shadow: inset 0 0 0 1px var(--mat-accent);
+}
+.icon-picker-glyph {
+  display: inline-flex;
+  font-size: 1.35rem;
+}
+.icon-picker-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.icon-picker-empty {
+  margin: 0;
+  text-align: center;
+}
+
+/* Pins: one row per pin (label, style, remove; the target; latitude / longitude on the world map). */
+.map-pin-editor {
+  display: grid;
+  gap: var(--mat-space-2);
+}
+.map-pin-editor:empty {
+  display: none;
+}
+.map-pin-row {
+  display: grid;
+  gap: var(--mat-space-2);
+  padding: var(--mat-space-2);
+  border: 1px solid var(--mat-border);
+  border-radius: var(--mat-radius);
+  background: var(--mat-surface-2);
+}
+.map-pin-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.map-pin-row-geo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mat-space-2);
+}
+
+/* Extra targets of a multi-graph: one picker per row, each with its own remove. */
+.map-target-rows {
+  display: grid;
+  gap: var(--mat-space-2);
+}
+.map-target-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+
+/* The picture upload: the file field and its Remove button on one line. */
+.map-image-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  min-width: 0;
+}
+
+/* ---- Slides tab: the running order ---- */
+.map-slide-rows {
+  display: grid;
+  gap: var(--mat-space-1);
+  max-height: 22rem;
+  overflow: auto;
+}
+.map-slide-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+  padding: var(--mat-space-1) var(--mat-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--mat-radius);
+  font-size: var(--mat-fs-sm);
+  cursor: pointer;
+}
+.map-slide-row:hover {
+  background: var(--mat-surface-2);
+}
+.map-slide-row.is-active {
+  border-color: color-mix(in srgb, var(--mat-accent) 55%, transparent);
+  background: var(--mat-accent-soft);
+}
+.map-slide-row.is-dragging {
+  opacity: 0.5;
+}
+.map-slide-row-grip {
+  display: inline-flex;
+  color: var(--mat-text-faint);
+  cursor: grab;
+}
+.map-slide-row-index {
+  min-width: 1.1rem;
+  color: var(--mat-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.map-slide-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-slide-row-duration {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+/* Row actions only on hover, focus or the active row - five slides x three buttons is noise. */
+.map-slide-row-actions {
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--mat-dur-fast) var(--mat-ease);
+}
+.map-slide-row:hover .map-slide-row-actions,
+.map-slide-row.is-active .map-slide-row-actions,
+.map-slide-row:focus-within .map-slide-row-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .map-slide-row-actions {
+    opacity: 1;
+  }
+}
+
+/* ---- Narrow designer: canvas first, then the properties you just opened, then the library ---- */
+@container map-designer (max-width: 62rem) {
+  .map-designer-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .map-designer-workbench {
+    order: 1;
+    max-height: none;
+  }
+  .map-property-editor {
+    order: 2;
+    min-height: 0;
+    max-height: none;
+  }
+  .map-toolbox {
+    order: 3;
+    min-height: 0;
+    max-height: 26rem;
+  }
+  /* Full width, the card only has to be recognisable, not the size of a widget. */
+  .map-toolbox-group-items {
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  }
+}

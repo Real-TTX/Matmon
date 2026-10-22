@@ -4,17 +4,17 @@
     ViewData["Title"] = "Infrastructure";
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("monitoring")
-            <h1>Infrastructure</h1>
-        </div>
-        <div class="workspace-inline-actions">
-            <a class="workspace-action-link" asp-page="/Index">@MatmonIcons.Render("monitoring")<span>Monitoring</span></a>
-            <a class="workspace-action-link" asp-page="/Monitoring">@MatmonIcons.Render("sensor")<span>Sensors</span></a>
-            <a class="workspace-action-link" asp-page="/Templates">@MatmonIcons.Render("template")<span>Templates</span></a>
-            <a class="workspace-action-link" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Notifications</span></a>
-        </div>
-    </div>
-</section>
+<nav class="mat-grid mat-grid--4" aria-label="Infrastructure">
+    <a class="mat-card" asp-page="/Index">
+        <div class="mat-card__body mat-row mat-row--nowrap mat-gap-2">@MatUi.Icon("network")<strong>Monitoring</strong></div>
+    </a>
+    <a class="mat-card" asp-page="/Monitoring">
+        <div class="mat-card__body mat-row mat-row--nowrap mat-gap-2">@MatUi.Icon("activity")<strong>Sensors</strong></div>
+    </a>
+    <a class="mat-card" asp-page="/Templates">
+        <div class="mat-card__body mat-row mat-row--nowrap mat-gap-2">@MatUi.Icon("template")<strong>Templates</strong></div>
+    </a>
+    <a class="mat-card" asp-page="/Notifications">
+        <div class="mat-card__body mat-row mat-row--nowrap mat-gap-2">@MatUi.Icon("bell")<strong>Notifications</strong></div>
+    </a>
+</nav>

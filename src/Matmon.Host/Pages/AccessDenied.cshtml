@@ -1,26 +1,32 @@
 @page "/access-denied"
 @model AccessDeniedModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     Layout = "_AnonymousLayout";
     ViewData["Title"] = "Access denied";
+
+    // The brand at the top of the card: a managing partner's logo, or nothing under a white label without one, else the
+    // Matmon mark; a white label's product name replaces "Matmon" in the text.
+    var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var brandName = partnerProductName ?? "Matmon";
 }
 
-<section class="dashboard-shell auth-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("lock")
-            <h1>Access denied</h1>
-        </div>
+<div class="mat-auth__card">
+    <div class="mat-auth__brand">
+        @if (partnerHasLogo)
+        {
+            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
+        }
+        else if (partnerProductName is null)
+        {
+            <img src="/brand/matmon-mark.svg" alt="" width="56" height="56" />
+        }
+        <h1>Access denied</h1>
+        <p class="mat-muted">Your account can view @brandName, but this action requires a higher role.</p>
     </div>
 
-    <section class="panel auth-card">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("warning")<span>Permission required</span></h2>
-            <span class="panel-hint">role based access</span>
-        </div>
-        <p class="workspace-inline-note">Your account can view Matmon, but this action requires a higher role.</p>
-        <div class="page-actions workspace-toolbar">
-            <a class="workspace-secondary-submit" asp-page="/Index">@MatmonIcons.Render("arrow-left")<span>Back to monitoring</span></a>
-        </div>
-    </section>
-</section>
+    <div class="mat-btn-row mat-btn-row--plain">
+        <a class="mat-btn mat-btn--secondary mat-btn--block" asp-page="/Index">@MatUi.Icon("back")<span>Back to monitoring</span></a>
+    </div>
+</div>

@@ -4,718 +4,716 @@
     ViewData["Title"] = "System";
     var storage = Model.Overview.Storage;
     var telemetry = Model.StorageTelemetry;
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
     var usedPercent = storage.DriveFreePercent.HasValue
         ? Math.Clamp(100 - storage.DriveFreePercent.Value, 0, 100)
         : 0;
     var canManageSystem = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var canManageUsers = canManageSystem;
+    // The delivery channel as a pill: a release is the good news, a nightly build the accent, a local build neither.
+    var channelTone = Matmon.Probe.MatmonVersion.Channel.ToLowerInvariant() switch
+    {
+        "release" => "ok",
+        "nightly" => "accent",
+        _ => "plain"
+    };
 }
 
-<section class="dashboard-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("gear")
-            <h1>System</h1>
-        </div>
-    </div>
+<partial name="_SystemTabs" model="Model.ActiveTab" />
 
-    <partial name="_SystemTabs" model="Model.ActiveTab" />
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    @if (Model.IsActiveTab("general"))
-    {
-        <div class="config-grid">
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("gear")<span>Runtime</span></h2>
-                    <a class="panel-hint config-about-link" asp-page="/About">About →</a>
-                </div>
-
-                <dl class="config-list">
-                    <div class="config-row">
-                        <dt>Version</dt>
-                        <dd>@Matmon.Probe.MatmonVersion.Current <span class="config-channel-tag" data-channel="@Matmon.Probe.MatmonVersion.Channel.ToLowerInvariant()">@Matmon.Probe.MatmonVersion.Channel</span></dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Mode</dt>
-                        <dd>@Model.Overview.Mode</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Heartbeat</dt>
-                        <dd>@Model.Overview.HeartbeatIntervalSeconds s</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Polling workers</dt>
-                        <dd>@Model.Overview.PollingWorkers</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Probe ID</dt>
-                        <dd>@(Model.Overview.ProbeId ?? "-")</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Probe name</dt>
-                        <dd>@(Model.Overview.ProbeName ?? "-")</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Primary URL</dt>
-                        <dd>@(Model.Overview.MasterUrl ?? "-")</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Workspace</dt>
-                        <dd>@Model.Overview.WorkspacePath</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Seed login</dt>
-                        <dd>@Model.Overview.AuthUsername / @Model.Overview.AuthPassword</dd>
-                    </div>
+@if (Model.IsActiveTab("general"))
+{
+    <div class="mat-grid mat-grid--2">
+        <section class="mat-card">
+            <div class="mat-card__head">
+                @MatUi.Icon("settings")<h2 class="mat-card__title">Runtime</h2>
+                <a class="mat-btn mat-btn--ghost mat-btn--sm mm-push-end" asp-page="/About">@MatUi.Icon("info")<span>About</span></a>
+            </div>
+            <div class="mat-card__body">
+                <dl class="mat-kv">
+                    <dt>Version</dt>
+                    <dd>
+                        <span class="mat-mono">@Matmon.Probe.MatmonVersion.Current</span>
+                        <span class="@MatUi.PillClass(channelTone)">@Matmon.Probe.MatmonVersion.Channel</span>
+                    </dd>
+                    <dt>Mode</dt><dd>@Model.Overview.Mode</dd>
+                    <dt>Heartbeat</dt><dd class="mat-mono">@Model.Overview.HeartbeatIntervalSeconds s</dd>
+                    <dt>Polling workers</dt><dd class="mat-mono">@Model.Overview.PollingWorkers</dd>
+                    <dt>Probe ID</dt><dd class="mat-mono">@(Model.Overview.ProbeId ?? "-")</dd>
+                    <dt>Probe name</dt><dd>@(Model.Overview.ProbeName ?? "-")</dd>
+                    <dt>Primary URL</dt><dd class="mat-mono">@(Model.Overview.MasterUrl ?? "-")</dd>
+                    <dt>Workspace</dt><dd class="mat-mono">@Model.Overview.WorkspacePath</dd>
+                    <dt>Seed login</dt><dd class="mat-mono">@Model.Overview.AuthUsername / @Model.Overview.AuthPassword</dd>
                 </dl>
-            </section>
+            </div>
+        </section>
 
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Endpoints</span></h2>
-                    <span class="panel-hint">anonymous health</span>
-                </div>
-
-                <dl class="config-list">
-                    <div class="config-row"><dt>Health</dt><dd><a href="/healthz" target="_blank" rel="noopener">/healthz</a></dd></div>
-                    <div class="config-row"><dt>Mode API</dt><dd><a href="/api/mode" target="_blank" rel="noopener">/api/mode</a></dd></div>
-                    <div class="config-row"><dt>About</dt><dd><a asp-page="/About">/About</a></dd></div>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Endpoints</h2><span class="mat-text-muted mm-push-end">anonymous health</span></div>
+            <div class="mat-card__body mat-stack">
+                <dl class="mat-kv">
+                    <dt>Health</dt><dd class="mat-mono"><a href="/healthz" target="_blank" rel="noopener">/healthz</a></dd>
+                    <dt>Mode API</dt><dd class="mat-mono"><a href="/api/mode" target="_blank" rel="noopener">/api/mode</a></dd>
+                    <dt>About</dt><dd class="mat-mono"><a asp-page="/About">/About</a></dd>
                 </dl>
+                <p class="mat-muted">Configuration changes are made on the topology and editor pages.</p>
+            </div>
+        </section>
 
-                <p class="workspace-inline-note">Configuration changes are made on the topology and editor pages.</p>
-            </section>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("network")<h2 class="mat-card__title">SNMP MIBs</h2><span class="mat-text-muted mm-push-end">names for SNMP walks</span></div>
+            <div class="mat-card__body">
+                <p class="mat-muted">Upload vendor MIB files so SNMP walks show names, status texts and units instead of bare OIDs. The standard MIBs (interfaces, system, storage, IP, Net-SNMP / UCD) are built in.</p>
+            </div>
+            <div class="mat-card__foot">
+                <a class="mat-btn mat-btn--secondary" href="/system/mibs">@MatUi.Icon("upload")<span>Manage MIBs</span></a>
+            </div>
+        </section>
 
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("network")<span>SNMP MIBs</span></h2>
-                    <span class="panel-hint">names for SNMP walks</span>
-                </div>
-                <p class="workspace-inline-note">Upload vendor MIB files so SNMP walks show names, status texts and units instead of bare OIDs. The standard MIBs (interfaces, system, storage, IP, Net-SNMP / UCD) are built in.</p>
-                <a class="workspace-secondary-submit" href="/system/mibs">Manage MIBs</a>
-            </section>
-
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("lock")<span>Local program allow-list</span></h2>
-                    <span class="panel-hint">Local Program sensor</span>
-                </div>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("terminal")<h2 class="mat-card__title">Local program allow-list</h2><span class="mat-text-muted mm-push-end">Local Program sensor</span></div>
+            <div class="mat-card__body mat-stack">
                 @{
                     var allowedPrograms = Matmon.Core.Domain.LocalProgramSensorExecutor.ReadAllowList();
                 }
                 @if (allowedPrograms.Count == 0)
                 {
-                    <p class="workspace-inline-note">No program paths are allowed yet. The <strong>Local Program</strong> sensor only runs executables listed here - set the <code>Matmon__AllowedProgramPaths</code> environment variable (semicolon-separated absolute paths or directories), then restart.</p>
+                    <p class="mat-muted">No program paths are allowed yet. The <strong>Local Program</strong> sensor only runs executables listed here - set the <code>Matmon__AllowedProgramPaths</code> environment variable (semicolon-separated absolute paths or directories), then restart.</p>
                 }
                 else
                 {
-                    <dl class="config-list">
+                    <dl class="mat-kv">
                         @foreach (var allowed in allowedPrograms)
                         {
-                            <div class="config-row"><dt>Allowed</dt><dd><code>@allowed</code></dd></div>
+                            <dt>Allowed</dt><dd class="mat-mono">@allowed</dd>
                         }
                     </dl>
-                    <p class="workspace-inline-note">Configured via <code>Matmon__AllowedProgramPaths</code>. Each entry is an exact executable path or a directory whose programs may run.</p>
-                }
-            </section>
-
-            @if (canManageSystem)
-            {
-                <section class="panel config-block">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("clock")<span>Display timezone</span></h2>
-                        <span class="panel-hint">system default</span>
-                    </div>
-                    <form method="post" asp-page-handler="DisplayTimeZone" class="workspace-form" style="padding:14px 18px;">
-                        <label class="workspace-field">
-                            <span class="workspace-label">Timezone</span>
-                            <select asp-for="DisplayTimeZoneId" asp-items="Model.TimeZoneItems" class="form-select workspace-select"></select>
-                            <span class="workspace-inline-note" style="margin-top:6px;">Default zone for rendering timestamps. Each user can override it on their own <a asp-page="/Account">Account</a> page. Data is always stored in UTC.</span>
-                        </label>
-                        <button type="submit" class="workspace-submit" style="margin-top:10px;">Save</button>
-                    </form>
-                </section>
-
-                <section class="panel config-block">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("spark")<span>Setup assistant</span></h2>
-                        <span class="panel-hint">guided setup</span>
-                    </div>
-                    <div style="padding:14px 18px;">
-                        <p class="workspace-inline-note" style="margin:0 0 10px;">Re-run the guided setup any time - reconnect the cloud, add networks, run discovery, enable two-factor. Nothing is reset; each step is optional and picks up your current configuration.</p>
-                        <a class="workspace-submit" href="/setup/wizard">@MatmonIcons.Render("spark")<span>Launch setup assistant</span></a>
-                    </div>
-                </section>
-            }
-        </div>
-    }
-    else if (Model.IsActiveTab("probes"))
-    {
-        <section class="panel config-block system-probe-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("probe")<span>Probe status</span></h2>
-                <span class="panel-hint">@Model.Overview.Probes.Count configured</span>
-            </div>
-
-            <div class="system-table system-probe-table" role="table" aria-label="Configured probes">
-                <div class="system-table-row system-table-head system-probe-row @(canManageSystem ? "has-actions" : string.Empty)" role="row">
-                    <span role="columnheader">Probe</span>
-                    <span role="columnheader">Role</span>
-                    <span role="columnheader">Status</span>
-                    <span role="columnheader">Last seen</span>
-                    <span role="columnheader">Sensors</span>
-                    <span role="columnheader">Token</span>
-                    @if (canManageSystem)
-                    {
-                        <span role="columnheader">Actions</span>
-                    }
-                </div>
-                @foreach (var probe in Model.Overview.Probes)
-                {
-                    var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
-                        ? "error"
-                        : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
-                    <div class="system-table-row system-probe-row @(canManageSystem ? "has-actions" : string.Empty)" role="row">
-                        <span role="cell">
-                            <strong>@probe.Name</strong>
-                            <small>@probe.ProbeId</small>
-                            @if (!string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-")
-                            {
-                                <small class="system-probe-os">@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")</small>
-                            }
-                            @if (probe.Networks is { Count: > 0 })
-                            {
-                                <span class="system-probe-subnets">
-                                    @foreach (var net in probe.Networks)
-                                    {
-                                        <span class="sensor-chip">@net</span>
-                                    }
-                                </span>
-                            }
-                        </span>
-                        <span role="cell">@probe.Role</span>
-                        <span role="cell">
-                            <span class="state-pill" data-state="@state">@probe.State</span>
-                            <small>@probe.Message</small>
-                        </span>
-                        <span role="cell">@Model.FormatDateTime(probe.LastSeenUtc)</span>
-                        <span role="cell">@probe.SensorCount</span>
-                        <span role="cell">@(probe.EnrollmentToken ?? "-")</span>
-                        @if (canManageSystem)
-                        {
-                            <span role="cell" class="system-probe-actions">
-                                <a class="workspace-secondary-submit" asp-page="/ElementEditor" asp-route-selectedId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes">
-                                    @MatmonIcons.Render("pencil")
-                                    <span>Edit</span>
-                                </a>
-                                @if (Model.CanInstallProbe(probe))
-                                {
-                                    <a class="workspace-secondary-submit" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes">
-                                        @MatmonIcons.Render("play")
-                                        <span>Install</span>
-                                    </a>
-                                }
-                                <form method="post" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId">
-                                    <button type="submit" class="workspace-secondary-submit">
-                                        @MatmonIcons.Render("arrow-right")
-                                        <span>Rotate</span>
-                                    </button>
-                                </form>
-                            </span>
-                        }
-                    </div>
+                    <p class="mat-muted">Configured via <code>Matmon__AllowedProgramPaths</code>. Each entry is an exact executable path or a directory whose programs may run.</p>
                 }
             </div>
-
-            @if (canManageSystem)
-            {
-                <div class="page-actions workspace-toolbar system-probe-create-actions">
-                    <a class="workspace-submit" asp-page="/ProbeCreate" asp-route-returnUrl="/Config?tab=probes">
-                        @MatmonIcons.Render("plus")
-                        <span>New probe</span>
-                    </a>
-                </div>
-            }
         </section>
 
-        @if (string.Equals(Model.Overview.Mode, "Secondary", StringComparison.OrdinalIgnoreCase))
+        @if (canManageSystem)
         {
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("signal")<span>Secondary exchange</span></h2>
-                    <span class="panel-hint">@Model.Overview.SlaveRuntime.StatusMessage</span>
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("clock")<h2 class="mat-card__title">Display timezone</h2><span class="mat-text-muted mm-push-end">system default</span></div>
+                <div class="mat-card__body">
+                    <form method="post" asp-page-handler="DisplayTimeZone" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="DisplayTimeZoneId">Timezone</label>
+                            <select asp-for="DisplayTimeZoneId" asp-items="Model.TimeZoneItems" class="mat-select"></select>
+                            <span class="mat-hint">Default zone for rendering timestamps. Each user can override it on their own <a asp-page="/Account">Account</a> page. Data is always stored in UTC.</span>
+                        </div>
+                        <div class="mat-btn-row">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
+                        </div>
+                    </form>
                 </div>
+            </section>
 
-                <dl class="config-list compact-config-list">
-                    <div class="config-row">
-                        <dt>Connected</dt>
-                        <dd>@(Model.Overview.SlaveRuntime.IsConnected ? "yes" : "no")</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Last heartbeat</dt>
-                        <dd>@Model.FormatDateTime(Model.Overview.SlaveRuntime.LastHeartbeatUtc)</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Assignments</dt>
-                        <dd>@Model.Overview.SlaveRuntime.AssignedSensorCount</dd>
-                    </div>
-                    <div class="config-row">
-                        <dt>Last results</dt>
-                        <dd>@Model.Overview.SlaveRuntime.LastExecutedSensorCount</dd>
-                    </div>
-                </dl>
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("sparkles")<h2 class="mat-card__title">Setup assistant</h2><span class="mat-text-muted mm-push-end">guided setup</span></div>
+                <div class="mat-card__body">
+                    <p class="mat-muted">Re-run the guided setup any time - reconnect the cloud, add networks, run discovery, enable two-factor. Nothing is reset; each step is optional and picks up your current configuration.</p>
+                </div>
+                <div class="mat-card__foot">
+                    <a class="mat-btn mat-btn--primary" href="/setup/wizard">@MatUi.Icon("sparkles")<span>Launch setup assistant</span></a>
+                </div>
             </section>
         }
-    }
-    else if (Model.IsActiveTab("storage"))
+    </div>
+}
+else if (Model.IsActiveTab("probes"))
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("server")<h2 class="mat-card__title">Probe status</h2><span class="mat-text-muted mm-push-end">@Model.Overview.Probes.Count configured</span></div>
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Configured probes</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Probe</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" class="mat-hide-sm">Last seen</th>
+                        <th scope="col" class="mat-num">Sensors</th>
+                        <th scope="col" class="mat-hide-sm">Token</th>
+                        @if (canManageSystem)
+                        {
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var probe in Model.Overview.Probes)
+                    {
+                        var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
+                            ? "error"
+                            : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
+                        var hasOs = !string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-";
+                        <tr>
+                            <td data-label="Probe" class="mat-table__primary">
+                                <div class="mat-table__name">
+                                    <span>
+                                        @if (canManageSystem)
+                                        {
+                                            <a asp-page="/ElementEditor" asp-route-selectedId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes">@probe.Name</a>
+                                        }
+                                        else
+                                        {
+                                            @probe.Name
+                                        }
+                                        <small class="mat-mono">@probe.ProbeId</small>
+                                        @if (hasOs)
+                                        {
+                                            <small>@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")</small>
+                                        }
+                                    </span>
+                                </div>
+                                @if (probe.Networks is { Count: > 0 })
+                                {
+                                    <span class="mat-chips">
+                                        @foreach (var net in probe.Networks)
+                                        {
+                                            <span class="mat-tag mat-mono">@net</span>
+                                        }
+                                    </span>
+                                }
+                            </td>
+                            <td data-label="Role">@probe.Role</td>
+                            <td data-label="Status">
+                                <span class="@MatUi.PillClass(state)">@probe.State</span>
+                                @if (!string.IsNullOrWhiteSpace(probe.Message))
+                                {
+                                    <small class="mat-d-block mat-text-muted">@probe.Message</small>
+                                }
+                            </td>
+                            <td data-label="Last seen" class="mat-hide-sm mat-mono">@Model.FormatDateTime(probe.LastSeenUtc)</td>
+                            <td data-label="Sensors" class="mat-num mat-mono">@probe.SensorCount</td>
+                            <td data-label="Token" class="mat-hide-sm mat-mono mm-break">@(probe.EnrollmentToken ?? "-")</td>
+                            @if (canManageSystem)
+                            {
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ElementEditor" asp-route-selectedId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes" aria-label="Edit @probe.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        @if (Model.CanInstallProbe(probe))
+                                        {
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes" aria-label="Install @probe.Name" data-tip="Install">@MatUi.Icon("download")</a>
+                                        }
+                                        <form method="post" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Rotate the token of @probe.Name" data-tip="Rotate token">@MatUi.Icon("refresh")</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    @if (canManageSystem)
     {
-        var workspaceBytes = storage.WorkspaceFileBytes ?? 0;
-        var telemetryBytes = storage.TelemetryFileBytes ?? 0;
-        var backupBytes = storage.BackupFileBytes ?? 0;
-        var totalDataBytes = storage.DataDirectoryBytes;
-        var otherBytes = Math.Max(0, totalDataBytes - workspaceBytes - telemetryBytes - backupBytes);
-        string SegWidth(long part) => (totalDataBytes > 0 ? Math.Round((double)part / totalDataBytes * 100, 3) : 0)
-            .ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" asp-page="/ProbeCreate" asp-route-returnUrl="/Config?tab=probes">@MatUi.Icon("plus")<span>New probe</span></a>
+        </div>
+    }
 
-        <div class="storage-layout">
-            <section class="panel config-block storage-hero">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("chart")<span>Storage breakdown</span></h2>
-                    <span class="panel-hint">@storage.DataFileCount files</span>
-                </div>
+    @if (string.Equals(Model.Overview.Mode, "Secondary", StringComparison.OrdinalIgnoreCase))
+    {
+        var slave = Model.Overview.SlaveRuntime;
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Secondary exchange</h2><span class="mat-text-muted mm-push-end">@slave.StatusMessage</span></div>
+            <div class="mat-card__body">
+                <dl class="mat-kv">
+                    <dt>Connected</dt><dd><span class="@MatUi.PillClass(slave.IsConnected ? "ok" : "error")">@(slave.IsConnected ? "Connected" : "Not connected")</span></dd>
+                    <dt>Last heartbeat</dt><dd class="mat-mono">@Model.FormatDateTime(slave.LastHeartbeatUtc)</dd>
+                    <dt>Assignments</dt><dd class="mat-mono">@slave.AssignedSensorCount</dd>
+                    <dt>Last results</dt><dd class="mat-mono">@slave.LastExecutedSensorCount</dd>
+                </dl>
+            </div>
+        </section>
+    }
+}
+else if (Model.IsActiveTab("storage"))
+{
+    var workspaceBytes = storage.WorkspaceFileBytes ?? 0;
+    var telemetryBytes = storage.TelemetryFileBytes ?? 0;
+    var backupBytes = storage.BackupFileBytes ?? 0;
+    var totalDataBytes = storage.DataDirectoryBytes;
+    var otherBytes = Math.Max(0, totalDataBytes - workspaceBytes - telemetryBytes - backupBytes);
+    string SegWidth(long part) => (totalDataBytes > 0 ? Math.Round((double)part / totalDataBytes * 100, 3) : 0)
+        .ToString("0.###", invariant);
+    var usedValue = usedPercent.ToString("0.##", invariant);
+    var diskTone = usedPercent >= 90 ? "error" : usedPercent >= 80 ? "warn" : "ok";
 
-                <div class="storage-hero-total">
-                    <strong>@storage.FormatBytes(totalDataBytes)</strong>
-                    <span>total Matmon data in @storage.DataPath</span>
-                </div>
-
-                <div class="storage-stack" role="img" aria-label="Storage breakdown by area">
-                    <span class="storage-stack-seg" data-kind="telemetry" style="width:@SegWidth(telemetryBytes)%" title="Telemetry DB"></span>
-                    <span class="storage-stack-seg" data-kind="workspace" style="width:@SegWidth(workspaceBytes)%" title="Workspace"></span>
-                    <span class="storage-stack-seg" data-kind="backup" style="width:@SegWidth(backupBytes)%" title="Backups"></span>
-                    <span class="storage-stack-seg" data-kind="other" style="width:@SegWidth(otherBytes)%" title="Other"></span>
-                </div>
-
-                <ul class="storage-legend">
-                    <li data-kind="telemetry"><span class="storage-legend-dot"></span><span class="storage-legend-label">Telemetry DB</span><strong>@storage.FormatBytes(telemetryBytes)</strong></li>
-                    <li data-kind="workspace"><span class="storage-legend-dot"></span><span class="storage-legend-label">Workspace</span><strong>@storage.FormatBytes(workspaceBytes)</strong></li>
-                    <li data-kind="backup"><span class="storage-legend-dot"></span><span class="storage-legend-label">Backups</span><strong>@storage.FormatBytes(backupBytes)</strong></li>
-                    <li data-kind="other"><span class="storage-legend-dot"></span><span class="storage-legend-label">Other</span><strong>@storage.FormatBytes(otherBytes)</strong></li>
-                </ul>
-            </section>
-
-            <div class="storage-cards">
-                <section class="panel config-block storage-card">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("signal")<span>Disk capacity</span></h2>
-                        <span class="panel-hint">@storage.DriveName</span>
-                    </div>
-
-                    <div class="storage-gauge-value">
-                        <strong>@ConfigModel.FormatPercent(storage.DriveFreePercent)</strong>
-                        <span>free</span>
-                    </div>
-                    <div class="storage-meter" aria-label="Host disk usage">
-                        <span style="width: @usedPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span>
-                    </div>
-                    <dl class="config-list compact-config-list">
-                        <div class="config-row">
-                            <dt>Available</dt>
-                            <dd>@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : "-")</dd>
-                        </div>
-                        <div class="config-row">
-                            <dt>Total</dt>
-                            <dd>@(storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveTotalGigabytes.Value:0.##} GB" : "-")</dd>
-                        </div>
-                    </dl>
-                </section>
-
-                <section class="panel config-block storage-card">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("chart")<span>Telemetry database</span></h2>
-                        <span class="panel-hint">SQLite · WAL</span>
-                    </div>
-
-                    <div class="storage-gauge-value">
-                        <strong>@storage.FormatBytes(storage.TelemetryFileBytes)</strong>
-                        <span>@(storage.TelemetryFileExists ? "telemetry.db incl. WAL" : "not created yet")</span>
-                    </div>
-                    <div class="storage-db-counts">
-                        <div><strong>@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</strong><span>Observations</span></div>
-                        <div><strong>@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</strong><span>Statistics</span></div>
-                        <div><strong>@ConfigModel.FormatCount(telemetry.EventCount)</strong><span>Events</span></div>
-                    </div>
-                </section>
-
-                <section class="panel config-block storage-card">
-                    <div class="panel-header">
-                        <h2 class="section-title">@MatmonIcons.Render("folder")<span>Locations</span></h2>
-                        <span class="panel-hint">@(storage.DataDirectoryExists ? "data dir ready" : "data dir missing")</span>
-                    </div>
-                    <dl class="config-list storage-paths">
-                        <div class="config-row"><dt>Workspace</dt><dd title="@storage.WorkspacePath">@storage.WorkspacePath</dd></div>
-                        <div class="config-row"><dt>Telemetry</dt><dd title="@storage.TelemetryPath">@storage.TelemetryPath</dd></div>
-                        <div class="config-row"><dt>Backups</dt><dd title="@storage.BackupPath">@storage.BackupPath</dd></div>
-                    </dl>
-                </section>
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("bar-chart")<h2 class="mat-card__title">Storage breakdown</h2><span class="mat-text-muted mm-push-end">@storage.DataFileCount files</span></div>
+        <div class="mat-card__body mat-stack">
+            <div class="mat-stat">
+                <span class="mat-stat__value">@storage.FormatBytes(totalDataBytes)</span>
+                <span class="mat-stat__label">total Matmon data in <span class="mat-mono mm-break">@storage.DataPath</span></span>
+            </div>
+            <div class="mat-meter mat-meter--lg mat-meter--stack" role="img"
+                 aria-label="Storage breakdown: Telemetry DB @storage.FormatBytes(telemetryBytes), Workspace @storage.FormatBytes(workspaceBytes), Backups @storage.FormatBytes(backupBytes), Other @storage.FormatBytes(otherBytes)">
+                <div class="mat-meter__fill" data-value="@SegWidth(telemetryBytes)"></div>
+                <div class="mat-meter__fill" data-value="@SegWidth(workspaceBytes)" data-tone="ok"></div>
+                <div class="mat-meter__fill" data-value="@SegWidth(backupBytes)" data-tone="warn"></div>
+            </div>
+            <div class="mat-row">
+                <span class="mat-pill mat-pill--accent">Telemetry DB @storage.FormatBytes(telemetryBytes)</span>
+                <span class="mat-pill mat-pill--ok">Workspace @storage.FormatBytes(workspaceBytes)</span>
+                <span class="mat-pill mat-pill--warn">Backups @storage.FormatBytes(backupBytes)</span>
+                <span class="mat-pill mat-pill--plain">Other @storage.FormatBytes(otherBytes)</span>
             </div>
         </div>
+    </section>
 
-        <section class="panel config-block system-cleanup-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("trash")<span>Cleanup</span></h2>
-                <span class="panel-hint">Remove old telemetry without touching the structure</span>
+    <div class="mat-grid mat-grid--3">
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("hard-drive")<h2 class="mat-card__title">Disk capacity</h2><span class="mat-text-muted mat-mono mm-push-end">@storage.DriveName</span></div>
+            <div class="mat-card__body mat-stack">
+                <div class="mat-stat">
+                    <span class="mat-stat__value">@ConfigModel.FormatPercent(storage.DriveFreePercent)</span>
+                    <span class="mat-stat__label">free</span>
+                </div>
+                <div class="mat-meter" role="progressbar" aria-valuenow="@usedValue" aria-valuemin="0" aria-valuemax="100" aria-label="Host disk usage">
+                    <div class="mat-meter__fill" data-value="@usedValue" data-tone="@diskTone"></div>
+                </div>
+                <dl class="mat-kv">
+                    <dt>Available</dt><dd class="mat-mono">@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : "-")</dd>
+                    <dt>Total</dt><dd class="mat-mono">@(storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveTotalGigabytes.Value:0.##} GB" : "-")</dd>
+                </dl>
             </div>
+        </section>
 
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("database")<h2 class="mat-card__title">Telemetry database</h2><span class="mat-text-muted mm-push-end">SQLite · WAL</span></div>
+            <div class="mat-card__body mat-stack">
+                <div class="mat-stat">
+                    <span class="mat-stat__value">@storage.FormatBytes(storage.TelemetryFileBytes)</span>
+                    <span class="mat-stat__label">@(storage.TelemetryFileExists ? "telemetry.db incl. WAL" : "not created yet")</span>
+                </div>
+                <dl class="mat-kv">
+                    <dt>Observations</dt><dd class="mat-mono">@ConfigModel.FormatCount(telemetry.SensorHistoryCount)</dd>
+                    <dt>Statistics</dt><dd class="mat-mono">@ConfigModel.FormatCount(telemetry.StatisticsBucketCount)</dd>
+                    <dt>Events</dt><dd class="mat-mono">@ConfigModel.FormatCount(telemetry.EventCount)</dd>
+                </dl>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("folder")<h2 class="mat-card__title">Locations</h2><span class="mat-text-muted mm-push-end">@(storage.DataDirectoryExists ? "data dir ready" : "data dir missing")</span></div>
+            <div class="mat-card__body">
+                <dl class="mat-kv">
+                    <dt>Workspace</dt><dd class="mat-mono" title="@storage.WorkspacePath">@storage.WorkspacePath</dd>
+                    <dt>Telemetry</dt><dd class="mat-mono" title="@storage.TelemetryPath">@storage.TelemetryPath</dd>
+                    <dt>Backups</dt><dd class="mat-mono" title="@storage.BackupPath">@storage.BackupPath</dd>
+                </dl>
+            </div>
+        </section>
+    </div>
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("broom")<h2 class="mat-card__title">Cleanup</h2><span class="mat-text-muted mm-push-end">Remove old telemetry without touching the structure</span></div>
+        <div class="mat-card__body">
             @if (canManageSystem)
             {
-                <form method="post" asp-page-handler="CleanupStorage" class="workspace-form-grid storage-cleanup-form" onsubmit="return confirm('Cleanup permanently removes the selected historical data. Continue?');">
-                    <label class="workspace-field">
-                        <span>Scope</span>
-                        <select asp-for="StorageCleanup.Scope" asp-items="Model.StorageCleanupScopeOptions"></select>
-                    </label>
-                    <label class="workspace-field">
-                        <span>Delete</span>
-                        <select asp-for="StorageCleanup.OlderThanDays" asp-items="Model.StorageCleanupAgeOptions"></select>
-                    </label>
-                    <p class="workspace-inline-note workspace-span-2">
-                        Current topology, templates, credentials and alerts stay untouched. If you choose "All selected data", graphs and latest values are rebuilt on the next sensor runs.
-                    </p>
-                    <div class="workspace-form-actions workspace-span-2">
-                        <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Run cleanup</span></button>
+                <form method="post" asp-page-handler="CleanupStorage" class="mat-form" novalidate>
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" for="StorageCleanup_Scope">Scope</label>
+                            <select asp-for="StorageCleanup.Scope" asp-items="Model.StorageCleanupScopeOptions" class="mat-select"></select>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="StorageCleanup_OlderThanDays">Delete</label>
+                            <select asp-for="StorageCleanup.OlderThanDays" asp-items="Model.StorageCleanupAgeOptions" class="mat-select"></select>
+                        </div>
+                    </div>
+                    <p class="mat-muted">Current topology, templates, credentials and alerts stay untouched. If you choose "All selected data", graphs and latest values are rebuilt on the next sensor runs.</p>
+                    <div class="mat-btn-row">
+                        <span class="mat-btn-row__spacer"></span>
+                        <button type="submit" class="mat-btn mat-btn--danger" data-confirm="Cleanup permanently removes the selected historical data. Continue?" data-confirm-ok="Run cleanup">@MatUi.Icon("trash")<span>Run cleanup</span></button>
                     </div>
                 </form>
             }
             else
             {
-                <p class="workspace-inline-note">Only admins can run storage cleanup.</p>
+                <p class="mat-muted">Only admins can run storage cleanup.</p>
             }
-        </section>
+        </div>
+    </section>
 
-        @if (!string.IsNullOrWhiteSpace(storage.ErrorMessage))
-        {
-            <section class="workspace-banner workspace-banner-warning">
-                @MatmonIcons.Render("warning")
-                <span>@storage.ErrorMessage</span>
-            </section>
-        }
-    }
-    else if (Model.IsActiveTab("backup") && canManageSystem)
+    @if (!string.IsNullOrWhiteSpace(storage.ErrorMessage))
     {
-        <div class="config-grid config-grid-stack backup-overview-layout">
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("clock")<span>Backup jobs</span></h2>
-                    <span class="panel-hint">@Model.BackupJobs.Count jobs</span>
-                </div>
-
-                @if (Model.BackupJobs.Count == 0)
-                {
-                    <div class="empty-state">No backup jobs configured yet.</div>
-                }
-                else
-                {
-                    <div class="backup-job-list" role="list" aria-label="Backup jobs">
+        <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">@storage.ErrorMessage</div></div>
+    }
+}
+else if (Model.IsActiveTab("backup") && canManageSystem)
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("clock")<h2 class="mat-card__title">Backup jobs</h2><span class="mat-text-muted mm-push-end">@Model.BackupJobs.Count jobs</span></div>
+        @if (Model.BackupJobs.Count == 0)
+        {
+            <div class="mat-card__body"><p class="mat-muted">No backup jobs configured yet.</p></div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Backup jobs</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Job</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Destination</th>
+                            <th scope="col" class="mat-hide-sm">Next run</th>
+                            <th scope="col" class="mat-hide-sm">Last run</th>
+                            <th scope="col" class="mat-hide-sm">Last message</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         @foreach (var job in Model.BackupJobs)
                         {
-                            var statusState = string.Equals(job.LastStatus, "ok", StringComparison.OrdinalIgnoreCase)
-                                ? "ok"
-                                : string.Equals(job.LastStatus, "running", StringComparison.OrdinalIgnoreCase)
-                                    ? "warning"
-                                    : "error";
-                            <article class="backup-job-card" role="listitem">
-                                <div class="backup-job-card-head">
-                                    <div class="backup-job-card-main">
-                                        <strong>@job.Name</strong>
-                                        <small>@(job.Description ?? "-")</small>
-                                    </div>
-                                    <div class="backup-job-card-side">
-                                        <span class="state-pill" data-state="@statusState">@(job.LastStatus ?? "idle")</span>
-                                        <small>@job.Schedule.Summary()</small>
-                                    </div>
-                                </div>
-
-                                <div class="backup-job-card-meta">
-                                    <div class="backup-job-card-meta-item">
-                                        <span>Destination</span>
-                                        <strong>@(job.Destination == BackupDestination.Cloud ? "Matmon.Cloud (off-site)" : "Local disk")</strong>
-                                    </div>
-                                    <div class="backup-job-card-meta-item">
-                                        <span>Sections</span>
-                                        <strong>@(job.Destination == BackupDestination.Cloud ? "Config only (off-site)" : ConfigModel.FormatBackupSections(job.Sections))</strong>
-                                    </div>
-                                    <div class="backup-job-card-meta-item">
-                                        <span>Next run</span>
-                                        <strong>@Model.FormatDateTime(job.NextRunUtc)</strong>
-                                    </div>
-                                    <div class="backup-job-card-meta-item">
-                                        <span>Last run</span>
-                                        <strong>@Model.FormatDateTime(job.LastRunUtc)</strong>
-                                    </div>
-                                    <div class="backup-job-card-meta-item">
-                                        <span>Last message</span>
-                                        <strong>@(job.LastMessage ?? "-")</strong>
-                                    </div>
-                                </div>
-
-                                <div class="backup-job-card-actions">
-                                    <a class="workspace-secondary-submit" asp-page="/BackupJobEditor" asp-route-jobId="@job.Id" asp-route-returnUrl="/Config?tab=backup">
-                                        @MatmonIcons.Render("pencil")
-                                        <span>Edit</span>
-                                    </a>
-                                    <form method="post" asp-page-handler="RunBackupJob" asp-route-backupJobId="@job.Id">
-                                        <button type="submit" class="workspace-secondary-submit">
-                                            @MatmonIcons.Render("spark")
-                                            <span>Run now</span>
-                                        </button>
-                                    </form>
-                                    @if (!string.IsNullOrWhiteSpace(job.LastSnapshotFileName))
-                                    {
-                                        <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-route-fileName="@job.LastSnapshotFileName">
-                                            @MatmonIcons.Render("arrow-right")
-                                            <span>Restore</span>
-                                        </a>
-                                    }
-                                    <form method="post" asp-page-handler="DeleteBackupJob" asp-route-backupJobId="@job.Id" onsubmit="return confirm('Delete backup job @job.Name?');">
-                                        <button type="submit" class="workspace-danger-submit">
-                                            @MatmonIcons.Render("trash")
-                                            <span>Delete</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </article>
-                        }
-                    </div>
-                }
-
-                <div class="page-actions workspace-toolbar system-backup-create-actions">
-                    <a class="workspace-submit" asp-page="/BackupJobEditor" asp-route-returnUrl="/Config?tab=backup">
-                        @MatmonIcons.Render("plus")
-                        <span>New backup job</span>
-                    </a>
-                </div>
-            </section>
-
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Cloud backup</span></h2>
-                    @if (Model.CloudBackupsAvailable)
-                    {
-                        <span class="panel-hint">@Model.CloudBackups.Count in cloud</span>
-                    }
-                </div>
-                <div style="padding:14px 18px;">
-                    @if (Model.CloudSettings?.Configured == true || Model.CloudBackupsAvailable)
-                    {
-                        <p class="workspace-hint" style="margin:0 0 12px;max-width:640px;">Store this instance's configuration (topology, sensors, templates, notifications, maps) in Matmon.Cloud for disaster recovery or re-provisioning. Telemetry and local users are excluded; the newest 10 are kept. <strong>Set a passphrase</strong> to make the backup <strong>portable</strong> - its credentials then restore onto <em>any</em> instance that has the passphrase; without one, secrets restore only on this same instance.</p>
-                        <form method="post" asp-page-handler="CloudBackupNow" style="margin-bottom:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                            <input type="password" name="passphrase" class="workspace-input" placeholder="Optional passphrase (portable secrets)" autocomplete="new-password" style="max-width:340px;" />
-                            <button type="submit" class="workspace-submit">@MatmonIcons.Render("cloud")<span>Back up to cloud now</span></button>
-                        </form>
-                        <p class="workspace-hint" style="margin:0 0 14px;max-width:640px;font-size:.8rem;">Keep the passphrase safe - it cannot be recovered, and without it the credentials in a portable backup can't be restored.</p>
-                        @if (Model.CloudBackups.Count == 0)
-                        {
-                            <div class="empty-state">@(Model.CloudBackupsAvailable ? "No cloud backups yet." : "Cloud backups are currently unavailable (cloud offline?).")</div>
-                        }
-                        else
-                        {
-                            <div class="system-table" role="table" aria-label="Cloud backups">
-                                <div class="system-table-row system-table-head" role="row">
-                                    <span role="columnheader">Backup</span>
-                                    <span role="columnheader">Created</span>
-                                    <span role="columnheader">Size</span>
-                                    <span role="columnheader">Actions</span>
-                                </div>
-                                @foreach (var cloudBackup in Model.CloudBackups)
-                                {
-                                    <div class="system-table-row" role="row">
-                                        <span role="cell">@cloudBackup.Label</span>
-                                        <span role="cell">@cloudBackup.CreatedUtc.ToLocalTime().ToString("g")</span>
-                                        <span role="cell">@($"{cloudBackup.SizeBytes / 1024.0:0.#} KB")</span>
-                                        <span role="cell" style="display:flex;gap:8px;flex-wrap:wrap;">
-                                            <form method="post" asp-page-handler="CloudRestoreBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Restore this cloud backup? It overwrites the current configuration.');" style="display:flex;gap:6px;align-items:center;">
-                                                <input type="password" name="passphrase" class="workspace-input" placeholder="Passphrase (if encrypted)" autocomplete="off" style="max-width:180px;" />
-                                                <button type="submit" class="workspace-secondary-submit">Restore</button>
-                                            </form>
-                                            <form method="post" asp-page-handler="CloudDeleteBackup" asp-route-backupId="@cloudBackup.Id" onsubmit="return confirm('Delete this cloud backup?');">
-                                                <button type="submit" class="workspace-danger-submit">Delete</button>
-                                            </form>
+                            var statusTone = job.LastStatus is null
+                                ? "plain"
+                                : string.Equals(job.LastStatus, "ok", StringComparison.OrdinalIgnoreCase)
+                                    ? "ok"
+                                    : string.Equals(job.LastStatus, "running", StringComparison.OrdinalIgnoreCase)
+                                        ? "warning"
+                                        : "error";
+                            var isCloud = job.Destination == BackupDestination.Cloud;
+                            <tr>
+                                <td data-label="Job" class="mat-table__primary">
+                                    <div class="mat-table__name">
+                                        <span>
+                                            <a asp-page="/BackupJobEditor" asp-route-jobId="@job.Id" asp-route-returnUrl="/Config?tab=backup">@job.Name</a>
+                                            <small>@(job.Description ?? "-")</small>
                                         </span>
                                     </div>
-                                }
-                            </div>
+                                </td>
+                                <td data-label="Status">
+                                    <span class="@MatUi.PillClass(statusTone)">@(job.LastStatus ?? "idle")</span>
+                                    <small class="mat-d-block mat-text-muted">@job.Schedule.Summary()</small>
+                                </td>
+                                <td data-label="Destination">
+                                    @(isCloud ? "Matmon.Cloud (off-site)" : "Local disk")
+                                    <small class="mat-d-block mat-text-muted">@(isCloud ? "Config only (off-site)" : ConfigModel.FormatBackupSections(job.Sections))</small>
+                                </td>
+                                <td data-label="Next run" class="mat-hide-sm mat-mono">@Model.FormatDateTime(job.NextRunUtc)</td>
+                                <td data-label="Last run" class="mat-hide-sm mat-mono">@Model.FormatDateTime(job.LastRunUtc)</td>
+                                <td data-label="Last message" class="mat-hide-sm">@(job.LastMessage ?? "-")</td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupJobEditor" asp-route-jobId="@job.Id" asp-route-returnUrl="/Config?tab=backup" aria-label="Edit @job.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        <form method="post" asp-page-handler="RunBackupJob" asp-route-backupJobId="@job.Id">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Run @job.Name now" data-tip="Run now">@MatUi.Icon("play")</button>
+                                        </form>
+                                        @if (!string.IsNullOrWhiteSpace(job.LastSnapshotFileName))
+                                        {
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupRestore" asp-route-fileName="@job.LastSnapshotFileName" aria-label="Restore the last backup of @job.Name" data-tip="Restore">@MatUi.Icon("restore")</a>
+                                        }
+                                        <form method="post" asp-page-handler="DeleteBackupJob" asp-route-backupJobId="@job.Id">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Delete @job.Name" data-tip="Delete"
+                                                    data-confirm="Delete backup job @job.Name?" data-confirm-ok="Delete">@MatUi.Icon("trash")</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
                         }
-                    }
-                    else
-                    {
-                        <div class="empty-state">Connect this instance to Matmon.Cloud (System → Cloud) to store backups off-site.</div>
-                    }
-                </div>
-            </section>
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 
-            <section class="panel config-block">
-                <div class="panel-header">
-                    <h2 class="section-title">@MatmonIcons.Render("folder")<span>Snapshots</span></h2>
-                    <span class="panel-hint">@Model.BackupSnapshots.Count files</span>
-                </div>
+    <div class="mat-actions">
+        <a class="mat-btn mat-btn--primary" asp-page="/BackupJobEditor" asp-route-returnUrl="/Config?tab=backup">@MatUi.Icon("plus")<span>New backup job</span></a>
+    </div>
 
-                @if (Model.BackupSnapshots.Count == 0)
+    <section class="mat-card">
+        <div class="mat-card__head">
+            @MatUi.Icon("cloud")<h2 class="mat-card__title">Cloud backup</h2>
+            @if (Model.CloudBackupsAvailable)
+            {
+                <span class="mat-text-muted mm-push-end">@Model.CloudBackups.Count in cloud</span>
+            }
+        </div>
+        @if (Model.CloudSettings?.Configured == true || Model.CloudBackupsAvailable)
+        {
+            <div class="mat-card__body mat-stack">
+                <p class="mat-muted">Store this instance's configuration (topology, sensors, templates, notifications, maps) in Matmon.Cloud for disaster recovery or re-provisioning. Telemetry and local users are excluded; the newest 10 are kept. <strong>Set a passphrase</strong> to make the backup <strong>portable</strong> - its credentials then restore onto <em>any</em> instance that has the passphrase; without one, secrets restore only on this same instance.</p>
+                <form method="post" asp-page-handler="CloudBackupNow" class="mat-form mat-form--inline" novalidate>
+                    <div class="mat-field">
+                        <label class="mat-label" for="cloud-backup-passphrase">Passphrase <span class="mat-text-muted">(optional)</span></label>
+                        <input type="password" id="cloud-backup-passphrase" name="passphrase" class="mat-input" placeholder="Optional passphrase (portable secrets)" autocomplete="new-password" />
+                    </div>
+                    <div class="mat-field mat-field--auto">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Back up to cloud now</span></button>
+                    </div>
+                </form>
+                <p class="mat-hint">Keep the passphrase safe - it cannot be recovered, and without it the credentials in a portable backup can't be restored.</p>
+                @if (Model.CloudBackups.Count == 0)
                 {
-                    <div class="empty-state">No backups have been created yet.</div>
+                    <p class="mat-muted">@(Model.CloudBackupsAvailable ? "No cloud backups yet." : "Cloud backups are currently unavailable (cloud offline?).")</p>
                 }
-                else
-                {
-                    <div class="system-table system-backup-snapshot-table" role="table" aria-label="Backup snapshots">
-                        <div class="system-table-row system-table-head" role="row">
-                            <span role="columnheader">Snapshot</span>
-                            <span role="columnheader">Created</span>
-                            <span role="columnheader">Size</span>
-                            <span role="columnheader">Contents</span>
-                            <span role="columnheader">Actions</span>
-                        </div>
+            </div>
+            @if (Model.CloudBackups.Count > 0)
+            {
+                <div class="mat-table-wrap">
+                    <table class="mat-table">
+                        <caption class="mat-sr-only">Cloud backups</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Backup</th>
+                                <th scope="col">Created</th>
+                                <th scope="col" class="mat-num">Size</th>
+                                <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cloudBackup in Model.CloudBackups)
+                            {
+                                <tr>
+                                    <td data-label="Backup" class="mat-table__primary">@cloudBackup.Label</td>
+                                    <td data-label="Created" class="mat-mono">@cloudBackup.CreatedUtc.ToLocalTime().ToString("g")</td>
+                                    <td data-label="Size" class="mat-num mat-mono">@($"{cloudBackup.SizeBytes / 1024.0:0.#} KB")</td>
+                                    <td class="mat-table__cell-actions">
+                                        <div class="mat-table__actions">
+                                            <form method="post" asp-page-handler="CloudRestoreBackup" asp-route-backupId="@cloudBackup.Id" class="system-restore-form">
+                                                <div class="mat-input-group mat-input-group--sm">
+                                                    <input type="password" name="passphrase" class="mat-input" placeholder="Passphrase (if encrypted)" autocomplete="off" aria-label="Passphrase for @cloudBackup.Label (if encrypted)" />
+                                                    <button type="submit" class="mat-btn mat-btn--secondary"
+                                                            data-confirm="Restore this cloud backup? It overwrites the current configuration." data-confirm-ok="Restore">@MatUi.Icon("restore")<span>Restore</span></button>
+                                                </div>
+                                            </form>
+                                            <form method="post" asp-page-handler="CloudDeleteBackup" asp-route-backupId="@cloudBackup.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Delete @cloudBackup.Label" data-tip="Delete"
+                                                        data-confirm="Delete this cloud backup?" data-confirm-ok="Delete">@MatUi.Icon("trash")</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="mat-card__body">
+                <div class="mat-empty">
+                    <span class="mat-empty__icon">@MatUi.Icon("cloud")</span>
+                    <div class="mat-empty__title">Not connected</div>
+                    <p>Connect this instance to Matmon.Cloud (System → Cloud) to store backups off-site.</p>
+                    <a class="mat-btn mat-btn--secondary" asp-page="/Config" asp-route-tab="cloud">@MatUi.Icon("cloud")<span>Open Cloud</span></a>
+                </div>
+            </div>
+        }
+    </section>
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("archive")<h2 class="mat-card__title">Snapshots</h2><span class="mat-text-muted mm-push-end">@Model.BackupSnapshots.Count files</span></div>
+        @if (Model.BackupSnapshots.Count == 0)
+        {
+            <div class="mat-card__body"><p class="mat-muted">No backups have been created yet.</p></div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Backup snapshots</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Snapshot</th>
+                            <th scope="col">Created</th>
+                            <th scope="col" class="mat-num">Size</th>
+                            <th scope="col" class="mat-hide-sm">Contents</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         @foreach (var snapshot in Model.BackupSnapshots)
                         {
-                            <div class="system-table-row system-backup-row system-backup-snapshot-row" role="row">
-                                <span role="cell">
-                                    <strong>@snapshot.DisplayName</strong>
-                                    <small>@(snapshot.Description ?? "-")</small>
-                                    <small>@snapshot.FileName</small>
-                                </span>
-                                <span role="cell">@Model.FormatDateTime(snapshot.CreatedUtc)</span>
-                                <span role="cell">@storage.FormatBytes(snapshot.Bytes)</span>
-                                <span role="cell">
-                                    <span class="state-pill" data-state="ok">@snapshot.SectionsLabel</span>
-                                    <small>@snapshot.ProbeCount probes, @snapshot.SensorCount sensors</small>
-                                </span>
-                                <span role="cell" class="system-backup-actions">
-                                    <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-route-fileName="@snapshot.FileName">
-                                        @MatmonIcons.Render("arrow-right")
-                                        <span>Restore</span>
-                                    </a>
-                                    <a class="workspace-secondary-submit" asp-page="/BackupRestore" asp-page-handler="Download" asp-route-fileName="@snapshot.FileName">
-                                        @MatmonIcons.Render("download")
-                                        <span>Download</span>
-                                    </a>
-                                </span>
-                            </div>
+                            <tr>
+                                <td data-label="Snapshot" class="mat-table__primary">
+                                    <div class="mat-table__name">
+                                        <span>
+                                            <a asp-page="/BackupRestore" asp-route-fileName="@snapshot.FileName">@snapshot.DisplayName</a>
+                                            <small>@(snapshot.Description ?? "-")</small>
+                                            <small class="mat-mono mm-break">@snapshot.FileName</small>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td data-label="Created" class="mat-mono">@Model.FormatDateTime(snapshot.CreatedUtc)</td>
+                                <td data-label="Size" class="mat-num mat-mono">@storage.FormatBytes(snapshot.Bytes)</td>
+                                <td data-label="Contents" class="mat-hide-sm">
+                                    <span class="mat-tag">@snapshot.SectionsLabel</span>
+                                    <small class="mat-d-block mat-text-muted">@snapshot.ProbeCount probes, @snapshot.SensorCount sensors</small>
+                                </td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupRestore" asp-route-fileName="@snapshot.FileName" aria-label="Restore @snapshot.DisplayName" data-tip="Restore">@MatUi.Icon("restore")</a>
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupRestore" asp-page-handler="Download" asp-route-fileName="@snapshot.FileName" aria-label="Download @snapshot.DisplayName" data-tip="Download">@MatUi.Icon("download")</a>
+                                    </div>
+                                </td>
+                            </tr>
                         }
-                    </div>
-                }
-            </section>
-        </div>
-
-        <section class="panel config-block backup-upload-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("upload")<span>Import backup</span></h2>
-                <span class="panel-hint">upload a backup file from disk</span>
+                    </tbody>
+                </table>
             </div>
+        }
+    </section>
 
-            <form method="post" asp-page-handler="UploadBackupSnapshot" enctype="multipart/form-data" class="workspace-form backup-upload-form">
-                <div class="workspace-form-grid workspace-core-grid">
-                    <label class="workspace-field workspace-span-2">
-                        <span>Backup file</span>
-                        <input type="file" asp-for="BackupUpload" accept=".json,application/json" class="form-control workspace-input" />
-                    </label>
-                    <p class="workspace-inline-note workspace-span-2">
-                        Matmon backup files are stored as JSON. Uploading a file validates it and copies it into the backup archive before opening the restore assistant.
-                    </p>
-                    <div class="workspace-form-actions workspace-span-2">
-                        <button type="submit" class="workspace-submit">
-                            @MatmonIcons.Render("upload")
-                            <span>Upload backup</span>
-                        </button>
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("upload")<h2 class="mat-card__title">Import backup</h2><span class="mat-text-muted mm-push-end">upload a backup file from disk</span></div>
+        <div class="mat-card__body">
+            <form method="post" asp-page-handler="UploadBackupSnapshot" enctype="multipart/form-data" class="mat-form" novalidate>
+                <div class="mat-field">
+                    <label class="mat-label" for="BackupUpload">Backup file</label>
+                    <div class="mat-upload mat-upload--compact" data-upload>
+                        <input type="file" asp-for="BackupUpload" accept=".json,application/json" class="mat-upload__input" aria-describedby="backup-upload-hint" />
                     </div>
+                    <span class="mat-hint" id="backup-upload-hint">Matmon backup files are stored as JSON. Uploading a file validates it and copies it into the backup archive before opening the restore assistant.</span>
+                </div>
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("upload")<span>Upload backup</span></button>
                 </div>
             </form>
-        </section>
-    }
-    else if (Model.IsActiveTab("reports") && canManageSystem)
-    {
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("mail")<span>Summary report</span></h2>
-                <span class="panel-hint">Moved to Notifications</span>
-            </div>
-            <div style="padding:16px 18px;">
-                <p class="workspace-inline-note" style="margin-top:0;">The scheduled summary report now lives with the other notifications - as the <strong>Scheduled</strong> entry in the unified Notifications list, with the same Sender/Receiver options.</p>
-                <a class="workspace-submit" asp-page="/NotificationReportEditor">@MatmonIcons.Render("mail")<span>Open scheduled report</span></a>
-            </div>
-        </section>
-    }
-    else if (Model.IsActiveTab("cloud") && canManageSystem)
-    {
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("network")<span>Matmon.Cloud connection</span></h2>
-                <span class="panel-hint">Link this instance to the Matmon.Cloud control plane (heartbeat, public status, notification gateway)</span>
-            </div>
-            <div style="padding:16px 18px;">
-                @{
-                    var linkActive = Model.CloudSettings.Configured ? Model.CloudSettings.Enabled : Model.CloudEnvBootstrapSet;
-                    var ok = string.Equals(Model.CloudConnection.LastStatus, "ok", StringComparison.OrdinalIgnoreCase);
-                    var overLimit = !Model.License.IsUnlimited && Model.ProbeCount > Model.License.ProbeLimit;
-                }
+        </div>
+    </section>
+}
+else if (Model.IsActiveTab("reports") && canManageSystem)
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("mail")<h2 class="mat-card__title">Summary report</h2><span class="mat-text-muted mm-push-end">Moved to Notifications</span></div>
+        <div class="mat-card__body">
+            <p class="mat-muted">The scheduled summary report now lives with the other notifications - as the <strong>Scheduled</strong> entry in the unified Notifications list, with the same Sender/Receiver options.</p>
+        </div>
+        <div class="mat-card__foot">
+            <a class="mat-btn mat-btn--primary" asp-page="/NotificationReportEditor">@MatUi.Icon("mail")<span>Open scheduled report</span></a>
+        </div>
+    </section>
+}
+else if (Model.IsActiveTab("cloud") && canManageSystem)
+{
+    var linkActive = Model.CloudSettings.Configured ? Model.CloudSettings.Enabled : Model.CloudEnvBootstrapSet;
+    var lastStatus = Model.CloudConnection.LastStatus;
+    var ok = string.Equals(lastStatus, "ok", StringComparison.OrdinalIgnoreCase);
+    var overLimit = !Model.License.IsUnlimited && Model.ProbeCount > Model.License.ProbeLimit;
+    // The link and the tunnel as pills with words (COLOR-04); the full sentence stays next to the pill when it says more.
+    var statusTone = ok ? "ok" : lastStatus is null ? "busy" : "warn";
+    var statusWord = ok ? "Connected" : lastStatus is null ? "Connecting" : "Problem";
+    var tunnel = Model.TunnelStatus;
+    var tunnelTone = !tunnel.Enabled || tunnel.NotIncludedInPlan ? "plain" : tunnel.Connected ? "ok" : "warn";
+    var tunnelWord = !tunnel.Enabled ? "Off" : tunnel.NotIncludedInPlan ? "Not in plan" : tunnel.Connected ? "Connected" : "Not connected";
 
-                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;border:1px solid var(--matmon-border);border-radius:8px;background:var(--matmon-surface-soft);">
-                    <strong>Plan:</strong>
-                    <span>@Model.License.DisplayName@(Model.License.IsFallback ? " (unlicensed)" : "")</span>
-                    <span style="color:var(--matmon-muted);">·</span>
-                    <span>Probes: @Model.ProbeCount / @Model.License.ProbeLimitDisplay</span>
+    <section class="mat-card">
+        <div class="mat-card__head">
+            @MatUi.Icon("key")<h2 class="mat-card__title">Plan</h2>
+            <a class="mat-btn mat-btn--ghost mat-btn--sm mm-push-end" asp-page="/Config" asp-route-tab="license">@MatUi.Icon("arrow-right")<span>License</span></a>
+        </div>
+        <div class="mat-card__body">
+            <dl class="mat-kv">
+                <dt>Plan</dt><dd>@Model.License.DisplayName@(Model.License.IsFallback ? " (unlicensed)" : "")</dd>
+                <dt>Probes</dt>
+                <dd>
+                    <span class="mat-mono">@Model.ProbeCount / @Model.License.ProbeLimitDisplay</span>
                     @if (overLimit)
                     {
-                        <span style="color:var(--matmon-danger);">· over limit - can't add more</span>
+                        <span class="mat-pill mat-pill--error">Over limit - can't add more</span>
                     }
-                    <span style="color:var(--matmon-muted);">·</span>
-                    <span>Sensors: @Model.SensorCount / @Model.License.SensorLimitDisplay</span>
-                    <span style="color:var(--matmon-muted);">·</span>
-                    <span>Full Access: @(Model.License.TunnelEnabled ? "included" : "not included")</span>
-                    @if (Model.License.CloudSensorsEnabled)
-                    {
-                        <span style="color:var(--matmon-muted);">·</span>
-                        <span>Cloud sensors: @(Model.License.CloudSensorLimit < 0 ? "∞" : Model.License.CloudSensorLimit.ToString())</span>
-                    }
-                    @if (Model.License.ExpiresUtc is not null)
-                    {
-                        <span style="color:var(--matmon-muted);">· expires @Model.FormatDateTime(Model.License.ExpiresUtc)</span>
-                    }
-                </div>
-
-                @if (linkActive)
+                </dd>
+                <dt>Sensors</dt><dd class="mat-mono">@Model.SensorCount / @Model.License.SensorLimitDisplay</dd>
+                <dt>Full Access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>
+                @if (Model.License.CloudSensorsEnabled)
                 {
-                    @* Connected: connection identity is locked (disconnect to change). Only the display name is editable. *@
-                    @if (Model.CloudEnvLinkActive)
-                    {
-                        <div class="workspace-banner workspace-banner-warning" style="max-width:640px;margin-bottom:14px;">
-                            <div>
-                                <strong>This link comes from environment variables</strong> (<code>Matmon__CloudInstanceId</code> and <code>Matmon__CloudInstanceToken</code>),
-                                not from this instance's own data. A fresh installation started with the same environment links itself to the same cloud
-                                instance again - license included. Keep the link here, or unlink to make this installation a different instance.
-                                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-                                    <form method="post" asp-page-handler="CloudKeepEnvLink"><button type="submit" class="workspace-submit">Keep this link</button></form>
-                                    <form method="post" asp-page-handler="CloudUnlinkEnvLink"><button type="submit" class="workspace-secondary-submit" onclick="return confirm('Unlink this installation from the cloud instance set in the environment?');">Unlink</button></form>
-                                </div>
+                    <dt>Cloud sensors</dt><dd class="mat-mono">@(Model.License.CloudSensorLimit < 0 ? "∞" : Model.License.CloudSensorLimit.ToString())</dd>
+                }
+                @if (Model.License.ExpiresUtc is not null)
+                {
+                    <dt>Expires</dt><dd class="mat-mono">@Model.FormatDateTime(Model.License.ExpiresUtc)</dd>
+                }
+            </dl>
+        </div>
+    </section>
+
+    @if (linkActive)
+    {
+        @* Connected: the connection identity is locked (disconnect to change). Only the display name is editable. *@
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Matmon.Cloud connection</h2></div>
+            <div class="mat-card__body mat-stack">
+                <p class="mat-muted">Link this instance to the Matmon.Cloud control plane (heartbeat, public status, notification gateway).</p>
+
+                @if (Model.CloudEnvLinkActive)
+                {
+                    <div class="mat-alert mat-alert--warning" role="status">
+                        @MatUi.Icon("alert")
+                        <div class="mat-alert__body">
+                            <span class="mat-alert__title">This link comes from environment variables</span>
+                            <span>(<code>Matmon__CloudInstanceId</code> and <code>Matmon__CloudInstanceToken</code>), not from this instance's own data. A fresh installation started with the same environment links itself to the same cloud instance again - license included. Keep the link here, or unlink to make this installation a different instance.</span>
+                            <div class="mat-alert__actions">
+                                <form method="post" asp-page-handler="CloudKeepEnvLink">
+                                    <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm">@MatUi.Icon("check")<span>Keep this link</span></button>
+                                </form>
+                                <form method="post" asp-page-handler="CloudUnlinkEnvLink">
+                                    <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm"
+                                            data-confirm="Unlink this installation from the cloud instance set in the environment?" data-confirm-ok="Unlink">@MatUi.Icon("plug")<span>Unlink</span></button>
+                                </form>
                             </div>
                         </div>
-                    }
-                    <dl class="config-list" style="max-width:640px;">
-                        <div class="config-row"><dt>Cloud URL</dt><dd>@(Model.CloudUrl ?? "–")</dd></div>
-                        <div class="config-row"><dt>Instance id</dt><dd>@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</dd></div>
-                        <div class="config-row"><dt>Status</dt><dd style="color:@(ok ? "var(--matmon-success)" : "var(--matmon-warning)");">@(Model.CloudConnection.LastStatus ?? "connecting…")</dd></div>
-                        <div class="config-row"><dt>Last heartbeat</dt><dd>@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)@(Model.HeartbeatStale ? " ⚠ link degraded — no recent successful heartbeat" : "")</dd></div>
-                        <div class="config-row"><dt>Full Access</dt><dd style="color:@Model.TunnelStatusColor;">@Model.TunnelStatusText</dd></div>
-                    </dl>
-                    @if (Model.CloudStatusUnauthorized || Model.CloudStatusDeactivated)
-                    {
-                        <div class="workspace-banner workspace-banner-warning" style="margin-top:14px;">
+                    </div>
+                }
+
+                <dl class="mat-kv">
+                    <dt>Cloud URL</dt><dd class="mat-mono">@(Model.CloudUrl ?? "–")</dd>
+                    <dt>Instance id</dt><dd class="mat-mono">@(Model.CloudConnection.InstanceId?.ToString() ?? Model.CloudSettings.InstanceId ?? "–")</dd>
+                    <dt>Status</dt>
+                    <dd>
+                        <span class="@MatUi.PillClass(statusTone)">@statusWord</span>
+                        @if (!ok && lastStatus is not null)
+                        {
+                            <span class="mat-text-muted">@lastStatus</span>
+                        }
+                    </dd>
+                    <dt>Last heartbeat</dt>
+                    <dd>
+                        <span class="mat-mono">@Model.FormatDateTime(Model.CloudConnection.LastHeartbeatUtc)</span>
+                        @if (Model.HeartbeatStale)
+                        {
+                            <span class="mat-pill mat-pill--warn">Link degraded</span>
+                            <span class="mat-text-muted">no recent successful heartbeat</span>
+                        }
+                    </dd>
+                    <dt>Full Access</dt>
+                    <dd>
+                        <span class="@MatUi.PillClass(tunnelTone)">@tunnelWord</span>
+                        @if (!string.Equals(Model.TunnelStatusText, tunnelWord, StringComparison.Ordinal))
+                        {
+                            <span class="mat-text-muted">@Model.TunnelStatusText</span>
+                        }
+                    </dd>
+                </dl>
+
+                @if (Model.CloudStatusUnauthorized || Model.CloudStatusDeactivated)
+                {
+                    <div class="mat-alert mat-alert--warning" role="alert">
+                        @MatUi.Icon("alert")
+                        <div class="mat-alert__body">
                             @if (Model.CloudStatusDeactivated)
                             {
                                 <span>This instance was <strong>deactivated by the cloud administrator</strong>. Contact your provider to reactivate it - reconnecting won't lift an admin deactivation.</span>
@@ -723,304 +721,418 @@
                             else
                             {
                                 <span>Matmon.Cloud no longer accepts this instance's token (it was disconnected in the cloud, or the token was rotated). <strong>Reconnect</strong> to link it again with a fresh token.</span>
-                                <form method="post" asp-page-handler="CloudReconnect" style="margin-top:10px;">
-                                    <button type="submit" class="workspace-submit">Disconnect &amp; reconnect</button>
+                                <form method="post" asp-page-handler="CloudReconnect" class="mat-alert__actions">
+                                    <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm">@MatUi.Icon("refresh")<span>Disconnect &amp; reconnect</span></button>
                                 </form>
                             }
                         </div>
-                    }
-                    <form method="post" asp-page-handler="CloudRename" class="workspace-form" style="margin-top:16px;">
-                        <label class="workspace-field">
-                            <span>Cloud display name</span>
-                            <input asp-for="CloudRenameName" class="workspace-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
-                        </label>
-                        <button type="submit" class="workspace-submit">Update name</button>
-                        <p class="workspace-inline-note" style="margin-top:8px;">Sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
-                    </form>
-                    <form method="post" asp-page-handler="CloudBeat" class="workspace-form" style="margin-top:16px;">
-                        <label class="workspace-field">
-                            <span>Heartbeat interval (seconds)</span>
-                            <input asp-for="CloudHeartbeatSeconds" type="number" min="15" step="5" class="workspace-input" style="max-width:160px;" />
-                        </label>
-                        <button type="submit" class="workspace-submit">Update interval</button>
-                        <p class="workspace-inline-note" style="margin-top:8px;">How often this instance checks in with the cloud (min 15s, default 30s). The cloud derives its offline grace from this value, so any cadence is safe - a slower beat just means the cloud notices an outage a little later.</p>
-                    </form>
-                    <form method="post" asp-page-handler="CloudDisconnect" style="margin-top:14px;">
-                        <button type="submit" class="workspace-danger-submit">Disconnect</button>
-                    </form>
-                    <p class="workspace-inline-note" style="margin-top:12px;">Connection details are locked while connected - <strong>Disconnect</strong> to change the cloud URL or link a different instance. Takes effect within a few seconds, no restart needed.</p>
-                }
-                else
-                {
-                    <p class="workspace-inline-note">Give this instance a name, then <strong>Connect</strong> - you'll sign in to Matmon.Cloud in your browser and confirm. The instance links itself to your account automatically; no password is entered here.</p>
-                    <form method="post" asp-page-handler="CloudClaim" class="workspace-form" style="margin-top:14px;">
-                        <label class="workspace-field">
-                            <span>Cloud URL</span>
-                            <input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" />
-                        </label>
-                        <label class="workspace-field">
-                            <span>Instance name</span>
-                            <input asp-for="CloudProvision.Name" class="workspace-input" />
-                        </label>
-                        <button type="submit" class="workspace-submit">Connect</button>
-                    </form>
-
-                    <details style="margin-top:14px;">
-                        <summary style="cursor:pointer;color:var(--matmon-muted);">Advanced - connect with e-mail + password, or an existing instance id + token</summary>
-                        <form method="post" asp-page-handler="CloudProvision" class="workspace-form" style="margin-top:12px;">
-                            <p class="workspace-inline-note" style="margin-top:0;">Headless sign-in: register this instance with your cloud account credentials.</p>
-                            <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudProvision.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
-                            <label class="workspace-field"><span>Cloud account e-mail</span><input asp-for="CloudProvision.Email" type="email" class="workspace-input" autocomplete="off" /></label>
-                            <label class="workspace-field"><span>Password</span><input asp-for="CloudProvision.Password" type="password" class="workspace-input" autocomplete="off" /></label>
-                            <label class="workspace-field"><span>Instance name</span><input asp-for="CloudProvision.Name" class="workspace-input" /></label>
-                            <label style="display:flex;gap:8px;align-items:flex-start;margin:6px 0 12px;">
-                                <input asp-for="CloudProvision.TakeOver" type="checkbox" style="margin-top:0.25rem;" />
-                                <span>Take over my existing <em>offline</em> instance with this name <small style="color:var(--matmon-muted);display:block;">Keeps its plan, license and history; the installation that used it before can no longer connect. Unchecked, this becomes a new instance.</small></span>
-                            </label>
-                            <button type="submit" class="workspace-submit">Connect with password</button>
-                        </form>
-                        <form method="post" asp-page-handler="CloudConnect" class="workspace-form" style="margin-top:16px;">
-                            <p class="workspace-inline-note" style="margin-top:0;">Manual: paste an instance id + token already created in the cloud UI.</p>
-                            <label class="workspace-field"><span>Cloud URL</span><input asp-for="CloudConnect.Url" class="workspace-input" placeholder="https://cloud.matmon.eu" autocomplete="off" /></label>
-                            <label class="workspace-field"><span>Instance id</span><input asp-for="CloudConnect.InstanceId" class="workspace-input" placeholder="GUID from the cloud UI" autocomplete="off" /></label>
-                            <label class="workspace-field"><span>Instance token</span><input asp-for="CloudConnect.Token" type="password" class="workspace-input" autocomplete="new-password" placeholder="token from the cloud UI" /></label>
-                            <button type="submit" class="workspace-submit">Connect with token</button>
-                        </form>
-                        <form method="post" asp-page-handler="CloudOfflineToken" class="workspace-form" style="margin-top:16px;">
-                            <p class="workspace-inline-note" style="margin-top:0;">Offline / air-gapped: paste a long-lived license token a platform admin issued for this instance (cloud Admin → the instance → Offline token). No network needed - it is verified locally. A connected instance's licence is cloud-managed and would overwrite this.</p>
-                            <label class="workspace-field"><span>Offline license token</span><textarea asp-for="OfflineLicenseToken" class="workspace-input" rows="4" style="font-family:monospace;font-size:0.78rem;" placeholder="paste the token issued in the cloud"></textarea></label>
-                            <button type="submit" class="workspace-submit">Apply offline license</button>
-                        </form>
-                    </details>
-
-                    @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)
-                    {
-                        <p class="workspace-inline-note" style="margin-top:12px;">Currently bootstrapped from environment variables - connecting here makes it UI-managed.</p>
-                    }
+                    </div>
                 }
 
-                @if (linkActive)
-                {
-                    <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
-                    <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Alert relay</span></h3>
-                    <p class="panel-hint" style="margin-bottom:12px;">Let Matmon.Cloud deliver your alerts - useful when this instance has no SMTP of its own. When enabled, a <strong>Matmon Cloud</strong> notification sender becomes available: pick it in a <a asp-page="/Notifications">notification rule</a> and the cloud delivers to that rule's receiver. No SMTP or recipients to configure here.</p>
-                    <form method="post" asp-page-handler="CloudRelay" class="workspace-form">
-                        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-                            <input asp-for="CloudRelay.RelayAlerts" type="checkbox" />
-                            <span>Enable the Matmon Cloud sender</span>
-                        </label>
-                        <button type="submit" class="workspace-submit">Save relay settings</button>
-                    </form>
+                <p class="mat-muted">Connection details are locked while connected - <strong>Disconnect</strong> to change the cloud URL or link a different instance. Takes effect within a few seconds, no restart needed.</p>
+                <form method="post" asp-page-handler="CloudDisconnect">
+                    <div class="mat-btn-row">
+                        <span class="mat-btn-row__spacer"></span>
+                        <button type="submit" class="mat-btn mat-btn--danger"
+                                data-confirm="Disconnect this instance from Matmon.Cloud? The heartbeat stops, and the alert relay and Full Access are switched off - turn them on again after reconnecting." data-confirm-ok="Disconnect">@MatUi.Icon("plug")<span>Disconnect</span></button>
+                    </div>
+                </form>
+            </div>
+        </section>
 
-                    <hr style="border:none;border-top:1px solid var(--matmon-border);margin:22px 0 16px;" />
-                    <h3 class="section-title" style="font-size:0.95rem;margin-bottom:4px;"><span>Full Access</span></h3>
-                    <p class="panel-hint" style="margin-bottom:12px;">Keep an outbound tunnel open so you can operate this instance's UI directly from Matmon.Cloud (no inbound port). You still sign in on this instance.</p>
-                    <form method="post" asp-page-handler="CloudFullAccess" class="workspace-form">
-                        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-                            <input asp-for="CloudFullAccess" type="checkbox" />
-                            <span>Allow operating this instance through Matmon.Cloud</span>
-                        </label>
-                        <button type="submit" class="workspace-submit">Save Full Access</button>
-                    </form>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Name and heartbeat</h2></div>
+            <div class="mat-card__body mat-stack">
+                <form method="post" asp-page-handler="CloudRename" class="mat-form mat-form--inline" novalidate>
+                    <div class="mat-field">
+                        <label class="mat-label" for="CloudRenameName">Cloud display name</label>
+                        <input asp-for="CloudRenameName" class="mat-input" placeholder="@(Model.CloudSettings.InstanceId is null ? "This instance" : "Name shown in Matmon.Cloud")" autocomplete="off" />
+                    </div>
+                    <div class="mat-field mat-field--auto">
+                        <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("save")<span>Update name</span></button>
+                    </div>
+                </form>
+                <p class="mat-hint">Sets how this instance is named across Matmon.Cloud (switcher, dashboard).</p>
+
+                <form method="post" asp-page-handler="CloudBeat" class="mat-form mat-form--inline" novalidate>
+                    <div class="mat-field">
+                        <label class="mat-label" for="CloudHeartbeatSeconds">Heartbeat interval (seconds)</label>
+                        <input asp-for="CloudHeartbeatSeconds" type="number" min="15" step="5" class="mat-input mat-mono" data-msg-range="At least 15 seconds." />
+                    </div>
+                    <div class="mat-field mat-field--auto">
+                        <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("save")<span>Update interval</span></button>
+                    </div>
+                </form>
+                <p class="mat-hint">How often this instance checks in with the cloud (min 15s, default 30s). The cloud derives its offline grace from this value, so any cadence is safe - a slower beat just means the cloud notices an outage a little later.</p>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("bell")<h2 class="mat-card__title">Alert relay</h2></div>
+            <div class="mat-card__body">
+                <form method="post" asp-page-handler="CloudRelay" class="mat-form" novalidate>
+                    <p class="mat-muted">Let Matmon.Cloud deliver your alerts - useful when this instance has no SMTP of its own. When enabled, a <strong>Matmon Cloud</strong> notification sender becomes available: pick it in a <a asp-page="/Notifications">notification rule</a> and the cloud delivers to that rule's receiver. No SMTP or recipients to configure here.</p>
+                    <label class="mat-switch">
+                        <input asp-for="CloudRelay.RelayAlerts" type="checkbox" />
+                        <span class="mat-switch__track"></span>
+                        <span>Enable the Matmon Cloud sender</span>
+                    </label>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save relay settings</span></button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("monitor")<h2 class="mat-card__title">Full Access</h2><span class="@MatUi.PillClass(tunnelTone) mm-push-end">@tunnelWord</span></div>
+            <div class="mat-card__body">
+                <form method="post" asp-page-handler="CloudFullAccess" class="mat-form" novalidate>
+                    <p class="mat-muted">Keep an outbound tunnel open so you can operate this instance's UI directly from Matmon.Cloud (no inbound port). You still sign in on this instance.</p>
+                    <label class="mat-switch">
+                        <input asp-for="CloudFullAccess" type="checkbox" />
+                        <span class="mat-switch__track"></span>
+                        <span>Allow operating this instance through Matmon.Cloud</span>
+                    </label>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save Full Access</span></button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Matmon.Cloud connection</h2><span class="mat-pill mat-pill--plain mm-push-end">Not connected</span></div>
+            <div class="mat-card__body mat-stack">
+                <p class="mat-muted">Link this instance to the Matmon.Cloud control plane (heartbeat, public status, notification gateway).</p>
+                <p>Give this instance a name, then <strong>Connect</strong> - you'll sign in to Matmon.Cloud in your browser and confirm. The instance links itself to your account automatically; no password is entered here.</p>
+                <form method="post" asp-page-handler="CloudClaim" class="mat-form" novalidate>
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" for="CloudProvision_Url">Cloud URL</label>
+                            <input asp-for="CloudProvision.Url" class="mat-input mat-mono" placeholder="https://cloud.matmon.eu" autocomplete="off" />
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" for="CloudProvision_Name">Instance name</label>
+                            <input asp-for="CloudProvision.Name" class="mat-input" />
+                        </div>
+                    </div>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("link")<span>Connect</span></button>
+                    </div>
+                </form>
+
+                <details class="mat-collapse">
+                    <summary><span>Advanced - connect with e-mail + password, or an existing instance id + token</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+                    <div class="mat-accordion__body">
+                        <div class="mat-form__section">
+                            <div class="mat-form__section-head">
+                                <h3>With e-mail and password</h3>
+                                <p>Headless sign-in: register this instance with your cloud account credentials.</p>
+                            </div>
+                            <form method="post" asp-page-handler="CloudProvision" class="mat-form" novalidate>
+                                <div class="mat-form__grid">
+                                    <div class="mat-field mat-field--full">
+                                        <label class="mat-label" for="provision-url">Cloud URL</label>
+                                        <input asp-for="CloudProvision.Url" id="provision-url" class="mat-input mat-mono" placeholder="https://cloud.matmon.eu" autocomplete="off" />
+                                    </div>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="provision-email">Cloud account e-mail</label>
+                                        <input asp-for="CloudProvision.Email" id="provision-email" type="email" class="mat-input" autocomplete="off" />
+                                    </div>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="provision-password">Password</label>
+                                        <input asp-for="CloudProvision.Password" id="provision-password" type="password" class="mat-input" autocomplete="off" />
+                                    </div>
+                                    <div class="mat-field mat-field--full">
+                                        <label class="mat-label" for="provision-name">Instance name</label>
+                                        <input asp-for="CloudProvision.Name" id="provision-name" class="mat-input" />
+                                    </div>
+                                    <div class="mat-field mat-field--full">
+                                        <label class="mat-check">
+                                            <input asp-for="CloudProvision.TakeOver" id="provision-takeover" type="checkbox" />
+                                            <span class="mat-check__text">
+                                                <span>Take over my existing <em>offline</em> instance with this name</span>
+                                                <small class="mat-muted">Keeps its plan, license and history; the installation that used it before can no longer connect. Unchecked, this becomes a new instance.</small>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="mat-btn-row">
+                                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("login")<span>Connect with password</span></button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="mat-form__section">
+                            <div class="mat-form__section-head">
+                                <h3>With an instance id and token</h3>
+                                <p>Manual: paste an instance id + token already created in the cloud UI.</p>
+                            </div>
+                            <form method="post" asp-page-handler="CloudConnect" class="mat-form" novalidate>
+                                <div class="mat-form__grid">
+                                    <div class="mat-field mat-field--full">
+                                        <label class="mat-label" for="CloudConnect_Url">Cloud URL</label>
+                                        <input asp-for="CloudConnect.Url" class="mat-input mat-mono" placeholder="https://cloud.matmon.eu" autocomplete="off" />
+                                    </div>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="CloudConnect_InstanceId">Instance id</label>
+                                        <input asp-for="CloudConnect.InstanceId" class="mat-input mat-mono" placeholder="GUID from the cloud UI" autocomplete="off" />
+                                    </div>
+                                    <div class="mat-field">
+                                        <label class="mat-label" for="CloudConnect_Token">Instance token</label>
+                                        <input asp-for="CloudConnect.Token" type="password" class="mat-input mat-mono" autocomplete="new-password" placeholder="token from the cloud UI" />
+                                    </div>
+                                </div>
+                                <div class="mat-btn-row">
+                                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("key")<span>Connect with token</span></button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="mat-form__section">
+                            <div class="mat-form__section-head">
+                                <h3>Offline license</h3>
+                                <p>Offline / air-gapped: paste a long-lived license token a platform admin issued for this instance (cloud Admin → the instance → Offline token). No network needed - it is verified locally. A connected instance's licence is cloud-managed and would overwrite this.</p>
+                            </div>
+                            <form method="post" asp-page-handler="CloudOfflineToken" class="mat-form" novalidate>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="OfflineLicenseToken">Offline license token</label>
+                                    <textarea asp-for="OfflineLicenseToken" class="mat-textarea mat-mono mm-break" rows="4" placeholder="paste the token issued in the cloud"></textarea>
+                                </div>
+                                <div class="mat-btn-row">
+                                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Apply offline license</span></button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </details>
+
+                @if (Model.CloudEnvBootstrapSet && !Model.CloudSettings.Configured)
+                {
+                    <p class="mat-muted">Currently bootstrapped from environment variables - connecting here makes it UI-managed.</p>
                 }
             </div>
         </section>
     }
-    else if (Model.IsActiveTab("license") && canManageSystem)
-    {
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("lock")<span>License</span></h2>
-                <span class="panel-hint">@Model.License.DisplayName@(Model.License.IsFallback ? " · unlicensed (Free)" : "")</span>
-            </div>
-            <div style="padding:16px 18px;display:grid;gap:18px;">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;">
-                    <div><div class="panel-hint">Plan</div><div style="font-weight:600;">@Model.License.DisplayName</div></div>
-                    <div><div class="panel-hint">Probes</div><div>@Model.ProbeCount / @Model.License.ProbeLimitDisplay</div></div>
-                    <div><div class="panel-hint">Sensors</div><div>@Model.SensorCount / @Model.License.SensorLimitDisplay</div></div>
-                    <div><div class="panel-hint">Cloud sensors</div><div>@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "-")</div></div>
-                    <div><div class="panel-hint">Full Access</div><div>@(Model.License.TunnelEnabled ? "included" : "not included")</div></div>
-                    <div><div class="panel-hint">Valid until</div><div>@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</div></div>
+}
+else if (Model.IsActiveTab("license") && canManageSystem)
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">License</h2><span class="mat-text-muted mm-push-end">@Model.License.DisplayName@(Model.License.IsFallback ? " · unlicensed (Free)" : "")</span></div>
+        <div class="mat-card__body mat-stack">
+            <dl class="mat-kv">
+                <dt>Plan</dt><dd><strong>@Model.License.DisplayName</strong></dd>
+                <dt>Probes</dt><dd class="mat-mono">@Model.ProbeCount / @Model.License.ProbeLimitDisplay</dd>
+                <dt>Sensors</dt><dd class="mat-mono">@Model.SensorCount / @Model.License.SensorLimitDisplay</dd>
+                <dt>Cloud sensors</dt><dd class="mat-mono">@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "-")</dd>
+                <dt>Full Access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>
+                <dt>Valid until</dt><dd class="mat-mono">@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</dd>
+            </dl>
+            <p class="mat-muted">
+                The license is a short <strong>lease</strong>, verified <strong>offline</strong> against Matmon's public key. While
+                connected, Matmon.Cloud renews it on every heartbeat, so the "valid until" date keeps rolling forward - you don't
+                need to do anything. If this instance can't reach the cloud for about two weeks (or its license is revoked), the
+                lease lapses and it falls back to the <strong>Free</strong> tier until it checks in again.
+            </p>
+
+            @if (Model.CloudLinkActive && Model.License.IsFallback)
+            {
+                <div class="mat-alert mat-alert--warning" role="status">
+                    @MatUi.Icon("alert")
+                    <div class="mat-alert__body">Connected to Matmon.Cloud, but no valid license token has arrived yet - this instance is on the <strong>Free</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.</div>
                 </div>
-                <p class="panel-hint" style="margin:0;max-width:680px;">
-                    The license is a short <strong>lease</strong>, verified <strong>offline</strong> against Matmon's public key. While
-                    connected, Matmon.Cloud renews it on every heartbeat, so the "valid until" date keeps rolling forward - you don't
-                    need to do anything. If this instance can't reach the cloud for about two weeks (or its license is revoked), the
-                    lease lapses and it falls back to the <strong>Free</strong> tier until it checks in again.
-                </p>
+            }
 
-                @if (Model.CloudLinkActive && Model.License.IsFallback)
+            @if (Model.CloudLinkActive)
+            {
+                <p class="mat-muted">Manual license entry is disabled while connected to Matmon.Cloud - the license is managed by the cloud and refreshed on each heartbeat. <strong>Disconnect</strong> the cloud (System → Cloud) to license this instance offline.</p>
+            }
+        </div>
+    </section>
+
+    @if (!Model.CloudLinkActive)
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("upload")<h2 class="mat-card__title">Apply a token manually</h2></div>
+            <div class="mat-card__body">
+                @if (Model.HasStoredLicenseToken)
                 {
-                    <div class="workspace-banner workspace-banner-warning" style="max-width:680px;margin:0;">
-                        Connected to Matmon.Cloud, but no valid license token has arrived yet - this instance is on the <strong>Free</strong> fallback. If Matmon.Cloud shows a paid plan for it, the cloud likely can't <strong>sign</strong> the token (its <code>License__PrivateKey</code> is unset or doesn't match Matmon's baked public key). It applies automatically once a valid token is issued.
-                    </div>
+                    @* "Clear" posts its own handler: a hidden form of its own, so it sits in the same button row as "Apply". *@
+                    <form method="post" asp-page-handler="ClearLicenseToken" id="license-clear" hidden></form>
                 }
-
-                @if (!Model.CloudLinkActive)
-                {
-                    <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
-                        <h2 class="section-title" style="font-size:15px;margin:0 0 6px;"><span>Apply a token manually</span></h2>
-                        <p class="panel-hint" style="margin:0 0 10px;max-width:680px;">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored - an invalid or expired token is rejected.</p>
-                        <form method="post" asp-page-handler="SetLicenseToken" class="workspace-form" style="display:grid;gap:10px;">
-                            <label class="workspace-field">
-                                <span>License token</span>
-                                <textarea asp-for="LicenseTokenInput" class="workspace-input" rows="4" placeholder="paste the signed token here" style="font-family:monospace;font-size:12px;"></textarea>
-                            </label>
-                            <div><button type="submit" class="workspace-submit">Apply token</button></div>
-                        </form>
+                <form method="post" asp-page-handler="SetLicenseToken" class="mat-form" novalidate>
+                    <p class="mat-muted">For an offline / air-gapped instance: paste the signed license token issued by Matmon.Cloud. It's validated before it's stored - an invalid or expired token is rejected.</p>
+                    <div class="mat-field">
+                        <label class="mat-label" for="LicenseTokenInput">License token</label>
+                        <textarea asp-for="LicenseTokenInput" class="mat-textarea mat-mono mm-break" rows="4" placeholder="paste the signed token here"></textarea>
+                    </div>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Apply token</span></button>
                         @if (Model.HasStoredLicenseToken)
                         {
-                            <form method="post" asp-page-handler="ClearLicenseToken" style="margin-top:10px;"
-                                  onsubmit="return confirm('Clear the cached license token? The instance drops to the Free fallback until the cloud re-issues one.');">
-                                <button type="submit" class="workspace-danger-submit">Clear license token</button>
-                            </form>
+                            <span class="mat-btn-row__spacer"></span>
+                            <button type="submit" form="license-clear" class="mat-btn mat-btn--danger"
+                                    data-confirm="Clear the cached license token? The instance drops to the Free fallback until the cloud re-issues one." data-confirm-ok="Clear">@MatUi.Icon("trash")<span>Clear license token</span></button>
                         }
                     </div>
-                }
-                else
-                {
-                    <div style="border-top:1px solid var(--matmon-border);padding-top:16px;">
-                        <p class="workspace-inline-note" style="margin:0;max-width:680px;">Manual license entry is disabled while connected to Matmon.Cloud - the license is managed by the cloud and refreshed on each heartbeat. <strong>Disconnect</strong> the cloud (System → Cloud) to license this instance offline.</p>
-                    </div>
-                }
-            </div>
-        </section>
-    }
-    else if (Model.IsActiveTab("partner") && canManageSystem && Model.ServicePartnerInfo?.HasPartner == true)
-    {
-        var sp = Model.ServicePartnerInfo;
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("cloud")<span>Service partner</span></h2>
-                <span class="panel-hint">@sp.Name</span>
-            </div>
-            <div style="padding:16px 18px;">
-                @{
-                    var safeContactUrl = ConfigModel.SafeContactUrl(sp.ContactUrl);
-                    var brandColorStyle = ConfigModel.IsHexColor(sp.BrandColor) ? $"color:{sp.BrandColor};" : "";
-                }
-                @if (sp.LogoPng is { Length: > 0 } || safeContactUrl is not null)
-                {
-                    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--matmon-border);flex-wrap:wrap;">
-                        @if (sp.LogoPng is { Length: > 0 } logo)
-                        {
-                            <img src="data:@(string.IsNullOrWhiteSpace(sp.LogoContentType) ? "image/png" : sp.LogoContentType);base64,@Convert.ToBase64String(logo)" alt="@sp.Name logo" style="max-height:48px;max-width:200px;" />
-                        }
-                        <div>
-                            <div style="font-weight:600;@brandColorStyle">Managed by @sp.Name</div>
-                            @if (safeContactUrl is not null)
-                            {
-                                <a href="@safeContactUrl" target="_blank" rel="noopener noreferrer">Support &amp; contact</a>
-                            }
-                        </div>
-                    </div>
-                }
-                <dl class="config-list">
-                    <div class="config-row"><dt>Partner</dt><dd>@sp.Name</dd></div>
-                    @if (!string.IsNullOrWhiteSpace(sp.ContactEmail))
-                    {
-                        <div class="config-row"><dt>Contact</dt><dd><a href="mailto:@sp.ContactEmail">@sp.ContactEmail</a></dd></div>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(sp.ContactPhone))
-                    {
-                        <div class="config-row"><dt>Phone</dt><dd>@sp.ContactPhone</dd></div>
-                    }
-                    <div class="config-row"><dt>Access</dt><dd><span class="state-pill" data-state="@(sp.CanManage ? "ok" : "warning")">@(sp.CanManage ? "Allowed" : "Not allowed")</span></dd></div>
-                </dl>
-
-                <form method="post" asp-page-handler="ServicePartnerConsent" class="workspace-form" style="margin-top:14px;">
-                    <label style="display:flex;gap:8px;align-items:flex-start;">
-                        <input type="checkbox" name="canManage" value="true" checked="@sp.CanManage" style="margin-top:3px;" />
-                        <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (Full Access + reporting).</span>
-                    </label>
-                    <button type="submit" class="workspace-submit" style="margin-top:10px;">Save consent</button>
                 </form>
-                <p class="workspace-inline-note" style="margin-top:8px;max-width:680px;">This is your consent for the partner shown above. It's stored in Matmon.Cloud and re-synced on each heartbeat; revoking it stops their access.</p>
             </div>
         </section>
     }
-    else if (Model.IsActiveTab("users") && canManageUsers)
-    {
-        <section class="panel config-block">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("lock")<span>Users</span></h2>
-            </div>
-
-            <div class="system-table system-user-table" role="table" aria-label="Matmon users">
-                <div class="system-table-row system-table-head" role="row">
-                    <span role="columnheader">User</span>
-                    <span role="columnheader">Role</span>
-                    <span role="columnheader">Enabled</span>
-                    <span role="columnheader">Updated</span>
-                    <span role="columnheader">Actions</span>
-                </div>
-                @foreach (var user in Model.Users)
-                {
-                    <div class="system-table-row system-user-row" role="row">
-                        <span role="cell">
-                            @{
-                                var hasLocalPw = Model.HasLocalPassword(user);
-                                // Deleting a cloud-linked account only clears the LOCAL shadow: the cloud owns
-                                // membership, and the account is re-created on the next SSO/tunnel access while
-                                // they are still a member. Make the confirm say so (apostrophe-free for the JS string).
-                                var deleteConfirm = user.CloudLinked
-                                    ? $"Delete {user.Username}? This clears only the LOCAL account. If they are still a member of this instance in Matmon.Cloud it is re-created on their next cloud sign-in - to fully revoke access, remove them in the cloud (Instance members)."
-                                    : $"Delete user {user.Username}?";
-                            }
-                            <strong>@user.Username</strong>
-                            <small>@user.Id</small>
-                            @* An account can sign in locally (password) and/or via Cloud SSO - show both. *@
-                            @if (hasLocalPw)
+}
+else if (Model.IsActiveTab("partner") && canManageSystem && Model.ServicePartnerInfo?.HasPartner == true)
+{
+    var sp = Model.ServicePartnerInfo;
+    var safeContactUrl = ConfigModel.SafeContactUrl(sp.ContactUrl);
+    var brandColor = ConfigModel.IsHexColor(sp.BrandColor) ? sp.BrandColor : null;
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("briefcase")<h2 class="mat-card__title">Service partner</h2><span class="mat-text-muted mm-push-end">@sp.Name</span></div>
+        <div class="mat-card__body mat-stack">
+            @if (sp.LogoPng is { Length: > 0 } || safeContactUrl is not null)
+            {
+                <div class="mat-row mat-gap-4">
+                    @if (sp.LogoPng is { Length: > 0 } logo)
+                    {
+                        <img class="system-partner-logo" src="data:@(string.IsNullOrWhiteSpace(sp.LogoContentType) ? "image/png" : sp.LogoContentType);base64,@Convert.ToBase64String(logo)" alt="@sp.Name logo" />
+                    }
+                    <div class="mat-stack mat-stack--sm">
+                        <span class="mat-row mat-row--nowrap mat-gap-2">
+                            @if (brandColor is not null)
                             {
-                                <span class="account-role-chip" title="Can sign in with a local e-mail + password">Local</span>
+                                <span class="mat-dot" data-colour="@brandColor" aria-hidden="true"></span>
                             }
-                            @if (user.CloudLinked)
-                            {
-                                <span class="account-role-chip" title="Signs in via Matmon.Cloud (SSO / tunnel). Access is governed by cloud membership - remove them in the cloud to revoke; deleting here only clears the local copy.">Cloud</span>
-                            }
-                            @if (!hasLocalPw && !user.CloudLinked)
-                            {
-                                <span class="account-role-chip" title="Local account">Local</span>
-                            }
-                            @if (Model.IsCurrentUser(user))
-                            {
-                                <span class="state-pill" data-state="ok">Current</span>
-                            }
-                            @if (user.LastLoginUtc is not null)
-                            {
-                                <small style="display:block;color:var(--matmon-muted);">Last login: @Model.FormatDateTime(user.LastLoginUtc)</small>
-                            }
+                            <strong>Managed by @sp.Name</strong>
                         </span>
-                        <span role="cell">@user.Role</span>
-                        <span role="cell">
-                            <span class="state-pill" data-state="@(user.IsEnabled ? "ok" : "error")">@(user.IsEnabled ? "Enabled" : "Disabled")</span>
-                        </span>
-                        <span role="cell">@Model.FormatDateTime(user.UpdatedUtc)</span>
-                        <span role="cell" class="system-user-actions">
-                            @if (!Model.IsCurrentUser(user))
-                            {
-                                <a class="workspace-secondary-submit" asp-page="/UserEdit" asp-route-userId="@user.Id" asp-route-returnUrl="/Config?tab=users">
-                                    @MatmonIcons.Render("pencil")
-                                    <span>Edit</span>
-                                </a>
-                                <form method="post" asp-page-handler="DeleteUser" asp-route-userId="@user.Id" onsubmit="return confirm('@deleteConfirm');">
-                                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete</span></button>
-                                </form>
-                            }
-                            else
-                            {
-                                <span class="workspace-inline-note">Current account</span>
-                            }
-                        </span>
+                        @if (safeContactUrl is not null)
+                        {
+                            <a href="@safeContactUrl" target="_blank" rel="noopener noreferrer">Support &amp; contact</a>
+                        }
                     </div>
+                </div>
+            }
+            <dl class="mat-kv">
+                <dt>Partner</dt><dd>@sp.Name</dd>
+                @if (!string.IsNullOrWhiteSpace(sp.ContactEmail))
+                {
+                    <dt>Contact</dt><dd><a href="mailto:@sp.ContactEmail">@sp.ContactEmail</a></dd>
                 }
-            </div>
-            <div class="page-actions workspace-toolbar system-user-create-actions">
-                <a class="workspace-submit" asp-page="/UserCreate" asp-route-returnUrl="/Config?tab=users">
-                    @MatmonIcons.Render("plus")
-                    <span>Create user</span>
-                </a>
-            </div>
-        </section>
-    }
-</section>
+                @if (!string.IsNullOrWhiteSpace(sp.ContactPhone))
+                {
+                    <dt>Phone</dt><dd class="mat-mono">@sp.ContactPhone</dd>
+                }
+                <dt>Access</dt><dd><span class="@MatUi.PillClass(sp.CanManage ? "ok" : "warn")">@(sp.CanManage ? "Allowed" : "Not allowed")</span></dd>
+            </dl>
+
+            <form method="post" asp-page-handler="ServicePartnerConsent" class="mat-form" novalidate>
+                <label class="mat-check">
+                    <input type="checkbox" id="partner-can-manage" name="canManage" value="true" checked="@sp.CanManage" />
+                    <span class="mat-check__text">
+                        <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (Full Access + reporting).</span>
+                        <small class="mat-muted">This is your consent for the partner shown above. It's stored in Matmon.Cloud and re-synced on each heartbeat; revoking it stops their access.</small>
+                    </span>
+                </label>
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save consent</span></button>
+                </div>
+            </form>
+        </div>
+    </section>
+}
+else if (Model.IsActiveTab("users") && canManageUsers)
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("users")<h2 class="mat-card__title">Users</h2><span class="mat-text-muted mm-push-end">@Model.Users.Count</span></div>
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Matmon users</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">User</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Enabled</th>
+                        <th scope="col" class="mat-hide-sm">Updated</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in Model.Users)
+                    {
+                        var hasLocalPw = Model.HasLocalPassword(user);
+                        var isCurrent = Model.IsCurrentUser(user);
+                        // Deleting a cloud-linked account only clears the LOCAL shadow: the cloud owns membership, and the
+                        // account is re-created on the next SSO/tunnel access while they are still a member. The confirm says so.
+                        var deleteConfirm = user.CloudLinked
+                            ? $"Delete {user.Username}? This clears only the LOCAL account. If they are still a member of this instance in Matmon.Cloud it is re-created on their next cloud sign-in - to fully revoke access, remove them in the cloud (Instance members)."
+                            : $"Delete user {user.Username}?";
+                        <tr>
+                            <td data-label="User" class="mat-table__primary">
+                                <div class="mat-table__name">
+                                    <span>
+                                        @if (isCurrent)
+                                        {
+                                            @user.Username
+                                        }
+                                        else
+                                        {
+                                            <a asp-page="/UserEdit" asp-route-userId="@user.Id" asp-route-returnUrl="/Config?tab=users">@user.Username</a>
+                                        }
+                                        <small class="mat-mono">@user.Id</small>
+                                        @if (user.LastLoginUtc is not null)
+                                        {
+                                            <small>Last login: @Model.FormatDateTime(user.LastLoginUtc)</small>
+                                        }
+                                    </span>
+                                </div>
+                                @* An account can sign in locally (password) and/or via Cloud SSO - show both. *@
+                                <span class="mat-chips">
+                                    @if (hasLocalPw)
+                                    {
+                                        <span class="mat-tag" data-tip="Can sign in with a local e-mail + password">Local</span>
+                                    }
+                                    @if (user.CloudLinked)
+                                    {
+                                        <span class="mat-tag" data-tip="Signs in via Matmon.Cloud (SSO / tunnel). Access is governed by cloud membership - remove them in the cloud to revoke; deleting here only clears the local copy.">Cloud</span>
+                                    }
+                                    @if (!hasLocalPw && !user.CloudLinked)
+                                    {
+                                        <span class="mat-tag" data-tip="Local account">Local</span>
+                                    }
+                                    @if (isCurrent)
+                                    {
+                                        <span class="mat-pill mat-pill--info">Current</span>
+                                    }
+                                </span>
+                            </td>
+                            <td data-label="Role">@user.Role</td>
+                            <td data-label="Enabled"><span class="@MatUi.PillClass(user.IsEnabled ? "ok" : "error")">@(user.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                            <td data-label="Updated" class="mat-hide-sm mat-mono">@Model.FormatDateTime(user.UpdatedUtc)</td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    @if (!isCurrent)
+                                    {
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/UserEdit" asp-route-userId="@user.Id" asp-route-returnUrl="/Config?tab=users" aria-label="Edit @user.Username" data-tip="Edit">@MatUi.Icon("edit")</a>
+                                        <form method="post" asp-page-handler="DeleteUser" asp-route-userId="@user.Id">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Delete @user.Username" data-tip="Delete"
+                                                    data-confirm="@deleteConfirm" data-confirm-ok="Delete">@MatUi.Icon("trash")</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span class="mat-text-muted">Current account</span>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="mat-actions">
+        <a class="mat-btn mat-btn--primary" asp-page="/UserCreate" asp-route-returnUrl="/Config?tab=users">@MatUi.Icon("plus")<span>Create user</span></a>
+    </div>
+}

@@ -259,6 +259,9 @@ builder.Services.AddSingleton<LoginCodeStore>();
 // Holds the "newer build available" signal the cloud returns on each heartbeat. Registered globally (the
 // layout reads it) even though only the Primary's CloudConnectionService writes it.
 builder.Services.AddSingleton<CloudUpdateState>();
+// The MatUi shell: the toolkit's sprite + version (read once) and the per-request menu/brand/breadcrumb model.
+builder.Services.AddSingleton<Matmon.Host.Ui.MatUiToolkit>();
+builder.Services.AddScoped<Matmon.Host.Ui.InstanceShellBuilder>();
 
 // Talks to Matmon.Cloud's backup endpoints (push/list/download/delete + account-scoped restore). Shared by the
 // Config Backup tab, the backup scheduler and the setup wizard, so registered globally.
@@ -362,7 +365,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
             path.StartsWith("/_", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/matui/", StringComparison.OrdinalIgnoreCase) ||
             path.Contains('.');
         if (!isExempt)
         {

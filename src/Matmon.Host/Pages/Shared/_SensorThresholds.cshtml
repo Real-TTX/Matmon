@@ -1,143 +1,169 @@
 @model ISensorThresholdEditor
+@*
+    Channels & thresholds of a sensor: the sensor editors' tab panel "thresholds" (id panel-thresholds, its tab is
+    tab-thresholds). ViewData["SensorEditorPanels"] = false draws it without the panel; ViewData["SensorEditorTab"] =
+    "thresholds" opens it. The hooks of initializeThresholdEditors (sensor-editor.js) are the data-threshold-* attributes.
+*@
 @{
     var hasFixedChannels = Model.SensorChannelMode == SensorChannelMode.Fixed;
+    var asPanel = ViewData["SensorEditorPanels"] is not false;
+    var open = string.Equals(ViewData["SensorEditorTab"] as string, "thresholds", StringComparison.OrdinalIgnoreCase);
 }
-<div class="sensor-threshold-section" data-threshold-section data-sensor-tab="thresholds">
-    <div class="panel-header">
-        <h2 class="section-title">@MatmonIcons.Render("signal")<span>Channels & thresholds</span></h2>
-        <span class="channel-mode-pill" data-mode="@(hasFixedChannels ? "fixed" : "dynamic")">@(hasFixedChannels ? "FIXED" : "DYNAMIC")</span>
-    </div>
-
-    @if (Model.SensorChannelThresholdFields.Count == 0)
-    {
-        <div class="empty-state">No channels yet.</div>
-    }
-    else
-    {
-        @if (Model.SensorChannelThresholdVisibleCount == 0)
-        {
-            <div class="empty-state">
-                @if (hasFixedChannels)
-                {
-                    <text>No channels yet.</text>
-                }
-                else
-                {
-                    <text>This sensor discovers its channels at runtime - they appear after the first run. Use <strong>Test</strong> to preview them, or add one manually below.</text>
-                }
-            </div>
-        }
-        <div class="sensor-threshold-list" data-threshold-list>
-            @for (var i = 0; i < Model.SensorChannelThresholdFields.Count; i++)
+<div class="@(asPanel ? "mat-tabpanel mat-stack" : "mat-stack")" role="@(asPanel ? "tabpanel" : null)" id="@(asPanel ? "panel-thresholds" : null)" aria-labelledby="@(asPanel ? "tab-thresholds" : null)" hidden="@(asPanel && !open)">
+    <section class="mat-card sensor-threshold-section" data-threshold-section>
+        <div class="mat-card__head">
+            @MatUi.Icon("activity")
+            <h2 class="mat-card__title">Channels &amp; thresholds</h2>
+            @if (hasFixedChannels)
             {
-                var field = Model.SensorChannelThresholdFields[i];
-                var isHidden = i >= Model.SensorChannelThresholdVisibleCount || field.IsDeleted;
-                <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" data-threshold-virtual="@(field.IsVirtual ? "true" : "false")" data-threshold-orphaned="@(field.IsOrphaned ? "true" : "false")" hidden="@(isHidden ? "hidden" : null)">
-                    <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDefault" />
-                    <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDeleted" />
-                    <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsVirtual" />
-                    <div class="sensor-threshold-head">
-                        <div>
-                            <div class="sensor-threshold-name">@(!string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel")@if (field.IsVirtual){<span class="tree-tag is-mini sensor-threshold-virtual-pill">virtual</span>}@if (field.IsOrphaned){<span class="tree-tag is-mini sensor-threshold-orphan-pill" title="Configured, but not in the sensor's latest run. Delete it if the channel is gone for good.">no longer reported</span>}</div>
-                            <div class="sensor-threshold-help">
-                                @(!string.IsNullOrWhiteSpace(field.ChannelKey) ? field.ChannelKey : "channel key")
-                                @if (!string.IsNullOrWhiteSpace(field.Unit))
-                                {
-                                    <text> / @field.Unit</text>
-                                }
+                <span class="mat-pill mat-pill--ok mm-push-end" data-tip="The sensor type defines its channels">Fixed</span>
+            }
+            else
+            {
+                <span class="mat-pill mat-pill--accent mm-push-end" data-tip="The sensor reports its channels when it runs">Dynamic</span>
+            }
+        </div>
+        <div class="mat-card__body mat-stack">
+            @if (Model.SensorChannelThresholdFields.Count == 0)
+            {
+                <p class="mat-muted">No channels yet.</p>
+            }
+            else
+            {
+                @if (Model.SensorChannelThresholdVisibleCount == 0)
+                {
+                    <p class="mat-muted">
+                        @if (hasFixedChannels)
+                        {
+                            <text>No channels yet.</text>
+                        }
+                        else
+                        {
+                            <text>This sensor discovers its channels at runtime - they appear after the first run. Use <strong>Test</strong> to preview them, or add one manually below.</text>
+                        }
+                    </p>
+                }
+                <div class="sensor-threshold-list" data-threshold-list>
+                    @for (var i = 0; i < Model.SensorChannelThresholdFields.Count; i++)
+                    {
+                        var field = Model.SensorChannelThresholdFields[i];
+                        var isHidden = i >= Model.SensorChannelThresholdVisibleCount || field.IsDeleted;
+                        var channelName = !string.IsNullOrWhiteSpace(field.ChannelLabel) ? field.ChannelLabel : "Channel";
+                        <div class="sensor-threshold-card" data-threshold-row data-threshold-deleted="@(field.IsDeleted ? "true" : "false")" data-threshold-virtual="@(field.IsVirtual ? "true" : "false")" data-threshold-orphaned="@(field.IsOrphaned ? "true" : "false")" hidden="@isHidden">
+                            <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDefault" />
+                            <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsDeleted" />
+                            <input type="hidden" asp-for="SensorChannelThresholdFields[i].IsVirtual" />
+                            <div class="sensor-threshold-head">
+                                <div class="sensor-threshold-title">
+                                    <div class="mat-row">
+                                        <strong>@channelName</strong>
+                                        @if (field.IsVirtual)
+                                        {
+                                            <span class="mat-tag">virtual</span>
+                                        }
+                                        @if (field.IsOrphaned)
+                                        {
+                                            <span class="mat-pill mat-pill--warn" data-tip="Configured, but not in the sensor's latest run. Delete it if the channel is gone for good.">no longer reported</span>
+                                        }
+                                    </div>
+                                    <span class="mat-text-muted mat-mono sensor-threshold-key">
+                                        @(!string.IsNullOrWhiteSpace(field.ChannelKey) ? field.ChannelKey : "channel key")
+                                        @if (!string.IsNullOrWhiteSpace(field.Unit))
+                                        {
+                                            <text> / @field.Unit</text>
+                                        }
+                                    </span>
+                                </div>
+                                <div class="mat-row sensor-threshold-head-actions">
+                                    <div class="mat-btn-group" role="group" aria-label="Primary channel">
+                                        <button type="button"
+                                                class="mat-btn mat-btn--secondary mat-btn--sm @(field.IsDefault ? "is-active" : null)"
+                                                data-threshold-default
+                                                aria-pressed="@(field.IsDefault ? "true" : "false")"
+                                                data-tip="Used for the overview, graph &amp; statistics">
+                                            @MatUi.Icon("bar-chart")
+                                            <span data-threshold-default-label>@(field.IsDefault ? "Primary" : "Set primary")</span>
+                                        </button>
+                                    </div>
+                                    @if (!hasFixedChannels && !field.IsVirtual)
+                                    {
+                                        <button type="button" class="mat-btn mat-btn--danger mat-btn--icon mat-btn--sm" data-threshold-delete aria-label="Delete channel @channelName" data-tip="Delete channel">@MatUi.Icon("trash")</button>
+                                    }
+                                </div>
                             </div>
-                        </div>
-                        <div class="sensor-threshold-head-actions">
-                            <button type="button"
-                                    class="workspace-secondary-submit sensor-threshold-default @(field.IsDefault ? "is-active" : string.Empty)"
-                                    data-threshold-default
-                                    aria-pressed="@(field.IsDefault ? "true" : "false")"
-                                    title="Set as primary channel (used for the overview, graph &amp; statistics)">
-                                @MatmonIcons.Render("chart")
-                                <span data-threshold-default-label>@(field.IsDefault ? "Primary" : "Set primary")</span>
-                            </button>
-                            @if (!hasFixedChannels && !field.IsVirtual)
-                            {
-                                <button type="button"
-                                        class="workspace-danger-submit sensor-threshold-delete"
-                                        data-threshold-delete
-                                        aria-label="Delete channel"
-                                        title="Delete channel">
-                                    @MatmonIcons.Render("trash")
-                                    <span class="workspace-sr-only">Delete channel</span>
-                                </button>
-                            }
-                        </div>
-                    </div>
 
-                    @if (field.IsVirtual)
-                    {
-                        <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
-                        <div class="sensor-threshold-virtual-note">Derived status channel (healthy = 1, problem = 0). It has no thresholds - its value is the sensor's overall state. Pick it as the primary channel to make that state the sensor's main value &amp; graph.</div>
-                    }
-                    else
-                    {
-                        <div class="sensor-threshold-grid">
-                            @if (!hasFixedChannels)
+                            @if (field.IsVirtual)
                             {
-                                <label class="sensor-threshold-channel">
-                                    <span>Channel</span>
-                                    <input asp-for="SensorChannelThresholdFields[i].ChannelKey" class="form-control workspace-input" placeholder="latency" />
-                                </label>
+                                <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
+                                <p class="mat-muted sensor-threshold-note">Derived status channel (healthy = 1, problem = 0). It has no thresholds - its value is the sensor's overall state. Pick it as the primary channel to make that state the sensor's main value &amp; graph.</p>
                             }
                             else
                             {
-                                <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
+                                <div class="sensor-threshold-grid">
+                                    @if (!hasFixedChannels)
+                                    {
+                                        <div class="mat-field">
+                                            <label class="mat-label" asp-for="SensorChannelThresholdFields[i].ChannelKey">Channel</label>
+                                            <input asp-for="SensorChannelThresholdFields[i].ChannelKey" class="mat-input mat-mono" placeholder="latency" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
+                                    }
+                                    <div class="mat-field sensor-threshold-rule" data-threshold-rule>
+                                        <label class="mat-switch">
+                                            <input type="checkbox" data-threshold-enable />
+                                            <span class="mat-switch__track"></span>
+                                            <span class="mat-text-warning sensor-threshold-rule-name">Warn if</span>
+                                        </label>
+                                        <div class="mat-input-group">
+                                            <select asp-for="SensorChannelThresholdFields[i].WarningComparison" class="mat-select" asp-items="WorkspaceModel.ThresholdComparisonOptions" aria-label="Warning comparison for @channelName"></select>
+                                            <input asp-for="SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="mat-input mat-mono" placeholder="@field.WarningValuePlaceholder" aria-label="Warning value for @channelName" data-threshold-value />
+                                        </div>
+                                    </div>
+                                    <div class="mat-field sensor-threshold-rule" data-threshold-rule>
+                                        <label class="mat-switch">
+                                            <input type="checkbox" data-threshold-enable />
+                                            <span class="mat-switch__track"></span>
+                                            <span class="mat-text-danger sensor-threshold-rule-name">Alarm if</span>
+                                        </label>
+                                        <div class="mat-input-group">
+                                            <select asp-for="SensorChannelThresholdFields[i].CriticalComparison" class="mat-select" asp-items="WorkspaceModel.ThresholdComparisonOptions" aria-label="Alarm comparison for @channelName"></select>
+                                            <input asp-for="SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="mat-input mat-mono" placeholder="@field.CriticalValuePlaceholder" aria-label="Alarm value for @channelName" data-threshold-value />
+                                        </div>
+                                    </div>
+                                </div>
                             }
-                            <div class="sensor-threshold-field sensor-threshold-field--warning" data-threshold-rule>
-                                <label class="sensor-threshold-toggle">
-                                    <input type="checkbox" class="sensor-threshold-switch" data-threshold-enable />
-                                    <span>Warn if</span>
-                                </label>
-                                <div class="sensor-threshold-rule">
-                                    <select asp-for="SensorChannelThresholdFields[i].WarningComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                    <input asp-for="SensorChannelThresholdFields[i].WarningValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.WarningValuePlaceholder" data-threshold-value />
+
+                            <div class="sensor-threshold-options">
+                                <div class="mat-field sensor-threshold-visual">
+                                    <label class="mat-label" asp-for="SensorChannelThresholdFields[i].Visual">Display</label>
+                                    <select asp-for="SensorChannelThresholdFields[i].Visual" class="mat-select">
+                                        <option value="auto">Auto (by unit)</option>
+                                        <option value="value">Value</option>
+                                        <option value="progress">Progress bar</option>
+                                        <option value="gauge">Gauge</option>
+                                        <option value="graph">Graph</option>
+                                    </select>
                                 </div>
-                            </div>
-                            <div class="sensor-threshold-field sensor-threshold-field--critical" data-threshold-rule>
-                                <label class="sensor-threshold-toggle">
-                                    <input type="checkbox" class="sensor-threshold-switch" data-threshold-enable />
-                                    <span>Alarm if</span>
+                                <input type="hidden" asp-for="SensorChannelThresholdFields[i].LogByDefault" />
+                                <label class="mat-check" data-tip="Record this channel into long-term statistics">
+                                    <input type="checkbox" asp-for="SensorChannelThresholdFields[i].Logged" />
+                                    <span class="mat-check__text">Log to statistics@(field.LogByDefault ? null : " (off by default)")</span>
                                 </label>
-                                <div class="sensor-threshold-rule">
-                                    <select asp-for="SensorChannelThresholdFields[i].CriticalComparison" class="form-select workspace-select" asp-items="WorkspaceModel.ThresholdComparisonOptions"></select>
-                                    <input asp-for="SensorChannelThresholdFields[i].CriticalValue" type="number" step="any" class="form-control workspace-input" placeholder="@field.CriticalValuePlaceholder" data-threshold-value />
-                                </div>
                             </div>
                         </div>
                     }
-
-                    <div class="sensor-threshold-options">
-                        <label class="sensor-threshold-visual">
-                            <span>Display</span>
-                            <select asp-for="SensorChannelThresholdFields[i].Visual" class="form-select workspace-select">
-                                <option value="auto">Auto (by unit)</option>
-                                <option value="value">Value</option>
-                                <option value="progress">Progress bar</option>
-                                <option value="gauge">Gauge</option>
-                                <option value="graph">Graph</option>
-                            </select>
-                        </label>
-                        <input type="hidden" asp-for="SensorChannelThresholdFields[i].LogByDefault" />
-                        <label class="sensor-threshold-log workspace-check-field" title="Record this channel into long-term statistics">
-                            <input type="checkbox" asp-for="SensorChannelThresholdFields[i].Logged" />
-                            <span>Log to statistics@(field.LogByDefault ? null : " (off by default)")</span>
-                        </label>
-                    </div>
                 </div>
+
+                @if (!hasFixedChannels && Model.SensorChannelThresholdFields.Count > Model.SensorChannelThresholdVisibleCount)
+                {
+                    <div class="mat-actions">
+                        <button type="button" class="mat-btn mat-btn--secondary" data-threshold-add>@MatUi.Icon("plus")<span>Add channel</span></button>
+                    </div>
+                }
             }
         </div>
-
-        @if (!hasFixedChannels && Model.SensorChannelThresholdFields.Count > Model.SensorChannelThresholdVisibleCount)
-        {
-            <div class="sensor-threshold-actions">
-                <button type="button" class="workspace-secondary-submit" data-threshold-add>@MatmonIcons.Render("plus")<span>Add channel</span></button>
-            </div>
-        }
-    }
+    </section>
 </div>

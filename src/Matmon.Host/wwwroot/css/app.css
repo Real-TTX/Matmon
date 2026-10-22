@@ -1,0 +1,45 @@
+/* ==========================================================================
+   Matmon - the few app styles every feature shares, on top of MatUi.
+   The look is MatUi's (wwwroot/matui, copied by scripts/sync-matui.ps1). What only Matmon has lives in this file and in
+   one file per feature (wwwroot/css/features/*.css): colours only from the tokens (COLOR-01), no gradients, glow or
+   lifted cards (COLOR-06, SPACE-03), and nothing that overrides a toolkit class (SPACE-06).
+   App classes use the prefix mm-, or the name of their feature (map-, sensor-chart-, discovery-, ...).
+   ========================================================================== */
+
+/* ---- Inside the Matmon.Cloud console: no menu and no header bar, the cloud draws one menu around the frame ---- */
+.mat-app.mm-embedded { display: block; }
+.mat-app.mm-embedded > .mat-main { min-height: 100vh; min-height: 100dvh; }
+
+/* ---- A partner's logo above its name instead of beside it (the white label's "stacked" sidebar style) ---- */
+.mat-nav__brand .mm-brand--stacked { flex-direction: column; align-items: flex-start; gap: var(--mat-space-2); }
+
+/* ---- A sensor state as a dot (tree rows, map pins, compact lists). The word is always next to it (COLOR-04). ---- */
+.mm-state-dot {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--mat-radius-pill);
+  background: var(--mat-text-faint);
+}
+.mm-state-dot[data-state="ok"] { background: var(--mat-success); }
+.mm-state-dot[data-state="warning"] { background: var(--mat-warning); }
+.mm-state-dot[data-state="error"] { background: var(--mat-danger); }
+.mm-state-dot[data-state="ack"] { background: var(--mat-info); }
+.mm-state-dot[data-state="paused"],
+.mm-state-dot[data-state="disabled"] { background: var(--mat-border-strong); }
+
+/* ---- Inline helpers ---- */
+.mm-push-end { margin-inline-start: auto; }
+.mm-break { overflow-wrap: anywhere; }
+.mm-prewrap { white-space: pre-wrap; }
+/* A code snippet to copy: the block and its copy button side by side. */
+.mm-snippet { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--mat-space-2); align-items: start; }
+.mm-snippet > .mat-code { margin: 0; }
+
+/* ---- A button that is busy ---- */
+/* MatUi draws its busy spinner in the colour that stands on the accent: right on a primary button, white on white on a
+   light secondary one. Run now / Test / Walk - the buttons that show it most - are secondary, so there it takes the
+   muted text colour. Only the token changes; the toolkit's rule stays as it is. */
+.mat-btn--secondary.is-loading,
+.mat-btn--ghost.is-loading { --mat-on-accent: var(--mat-text-muted); }

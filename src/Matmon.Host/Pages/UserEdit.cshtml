@@ -2,101 +2,94 @@
 @model UserEditModel
 @{
     ViewData["Title"] = "Edit user";
-    ViewData["WorkspaceSummarySuppress"] = true;
+    ViewData["Width"] = "narrow";
     var backUrl = Model.GetSafeReturnUrl("/Config?tab=users");
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("pencil")
-            <h1>Edit user</h1>
-        </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.UserRecord is null)
+{
+    <div class="mat-empty mat-empty--framed">
+        <span class="mat-empty__icon">@MatUi.Icon("user")</span>
+        <div class="mat-empty__title">User not found</div>
+        <p>The account may have been deleted in the meantime.</p>
+        <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back to the users</span></a>
     </div>
+}
+else
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("user")<h2 class="mat-card__title">@Model.UserRecord.Username</h2></div>
+        <div class="mat-card__body">
+            <dl class="mat-kv">
+                <dt>Id</dt><dd class="mat-mono">@Model.UserRecord.Id</dd>
+                <dt>Role</dt><dd>@Model.UserRecord.Role</dd>
+                <dt>Status</dt><dd><span class="@MatUi.PillClass(Model.UserRecord.IsEnabled ? "ok" : "error")">@(Model.UserRecord.IsEnabled ? "Enabled" : "Disabled")</span></dd>
+            </dl>
+        </div>
+    </section>
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    @if (!Model.CanEdit)
     {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    @if (Model.UserRecord is null)
-    {
-        <div class="empty-state">User not found.</div>
+        <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Your own account cannot be edited here.</div></div>
+        <div class="mat-btn-row">
+            <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+        </div>
     }
     else
     {
-        <section class="panel panel-stack workspace-editor-panel">
-            <div class="workspace-summary-card user-edit-summary" aria-label="User summary">
-                <div class="workspace-summary-main">
-                    <span class="workspace-summary-kicker">User</span>
-                    <strong>@Model.UserRecord.Username</strong>
-                    <span class="panel-hint">@Model.UserRecord.Id</span>
-                </div>
-                <div class="workspace-summary-metrics">
-                    <span class="workspace-summary-chip">
-                        <strong>@Model.UserRecord.Role</strong>
-                        <span>Role</span>
-                    </span>
-                    <span class="workspace-summary-chip">
-                        <strong>@(Model.UserRecord.IsEnabled ? "Enabled" : "Disabled")</strong>
-                        <span>Status</span>
-                    </span>
-                </div>
-            </div>
+        <form method="post" class="mat-form" novalidate>
+            <input type="hidden" asp-for="UserId" />
+            <input type="hidden" asp-for="ReturnUrl" />
 
-            @if (!Model.CanEdit)
-            {
-                <div class="workspace-banner workspace-banner-warning">
-                    Your own account cannot be edited here.
-                </div>
-            }
-            else
-            {
-                <form method="post" class="workspace-form">
-                    <input type="hidden" asp-for="UserId" />
-                    <input type="hidden" asp-for="ReturnUrl" />
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">Account</h2></div>
+                <div class="mat-card__body">
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" for="UserInput_Username">Username</label>
+                            <input asp-for="UserInput.Username" class="mat-input" autocomplete="username" />
+                        </div>
 
-                    <div class="workspace-form-grid">
-                        <label class="workspace-field">
-                            <span class="workspace-label">Username</span>
-                            <input asp-for="UserInput.Username" class="form-control workspace-input" autocomplete="username" />
-                        </label>
+                        <div class="mat-field">
+                            <label class="mat-label" for="UserInput_Role">Role</label>
+                            <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="mat-select"></select>
+                        </div>
 
-                        <label class="workspace-field">
-                            <span class="workspace-label">Role</span>
-                            <select asp-for="UserInput.Role" asp-items="Model.RoleOptions" class="form-select workspace-select"></select>
-                        </label>
+                        <div class="mat-field">
+                            <label class="mat-label" for="UserInput_Password">Password</label>
+                            <input asp-for="UserInput.Password" type="password" class="mat-input" autocomplete="new-password" placeholder="leave unchanged" />
+                        </div>
 
-                        <label class="workspace-field">
-                            <span class="workspace-label">Password</span>
-                            <input asp-for="UserInput.Password" type="password" class="form-control workspace-input" autocomplete="new-password" placeholder="leave unchanged" />
-                        </label>
+                        <div class="mat-field">
+                            <label class="mat-label" for="UserInput_PasswordConfirm">Confirm password</label>
+                            <input asp-for="UserInput.PasswordConfirm" type="password" class="mat-input" autocomplete="new-password" placeholder="repeat new password" />
+                        </div>
 
-                        <label class="workspace-field">
-                            <span class="workspace-label">Confirm password</span>
-                            <input asp-for="UserInput.PasswordConfirm" type="password" class="form-control workspace-input" autocomplete="new-password" placeholder="repeat new password" />
-                        </label>
-
-                        <label class="workspace-field">
-                            <span class="workspace-label">Enabled</span>
-                            <label class="workspace-check">
+                        <div class="mat-field mat-field--full">
+                            <label class="mat-switch">
                                 <input asp-for="UserInput.IsEnabled" />
-                                Active
+                                <span class="mat-switch__track"></span>
+                                <span>Active</span>
                             </label>
-                        </label>
+                        </div>
                     </div>
+                </div>
+            </section>
 
-                    <div class="workspace-form-actions">
-                        <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                        <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save</span></button>
-                    </div>
-                </form>
-            }
-        </section>
+            <div class="mat-btn-row">
+                <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
+                <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+            </div>
+        </form>
     }
-</section>
+}

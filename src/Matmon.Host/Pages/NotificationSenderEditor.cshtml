@@ -2,240 +2,248 @@
 @model WorkspaceModel
 @{
     ViewData["Title"] = "Notification sender";
+    ViewData["Width"] = "narrow";
+    ViewData["Breadcrumbs"] = new[]
+    {
+        new BreadcrumbItem("Monitoring", "/Index"),
+        new BreadcrumbItem("Notifications", "/Notifications"),
+        new BreadcrumbItem("Senders", "/NotificationSettings"),
+        new BreadcrumbItem("Notification sender")
+    };
     var isCreateMode = Model.SelectedNotificationSenderId is null || Model.NotificationSenderEditor.Id == Guid.Empty;
     var backUrl = Model.GetSafeReturnUrl("/NotificationSettings");
     var senderKind = isCreateMode ? Model.NewNotificationSender.Kind : Model.NotificationSenderEditor.Kind;
 }
 
-<section class="dashboard-shell">
-    <div class="page-header">
-        <div class="page-title">
-            @MatmonIcons.Render("mail")
-            <h1>Notification sender</h1>
-        </div>
-    </div>
+<nav class="mat-tabs" aria-label="Notifications">
+    <a class="mat-tab" asp-page="/Notifications">Rules</a>
+    <a class="mat-tab is-active" aria-current="true" asp-page="/Notifications" asp-fragment="senders">Senders</a>
+    <a class="mat-tab" asp-page="/Notifications" asp-fragment="receivers">Receivers</a>
+</nav>
 
-    <div class="sensor-tabs">
-        <a class="sensor-tab" asp-page="/Notifications">@MatmonIcons.Render("bell")<span>Rules</span></a>
-        <a class="sensor-tab is-active" asp-page="/NotificationSettings">@MatmonIcons.Render("mail")<span>Senders</span></a>
-        <a class="sensor-tab" asp-page="/NotificationReceivers">@MatmonIcons.Render("inbox")<span>Receivers</span></a>
-    </div>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (isCreateMode)
+{
+    <form method="post" asp-page-handler="CreateNotificationSender" class="mat-form" novalidate>
+        <input type="hidden" asp-for="ReturnUrl" />
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section class="panel panel-stack workspace-editor-panel">
-        <div class="panel-header">
-            <h2 class="section-title">@MatmonIcons.Render("mail")<span>@(isCreateMode ? "Create sender" : "Edit sender")</span></h2>
-            <span class="panel-hint">@Model.View.SelectedNotificationSenderKind</span>
-        </div>
-
-        @if (isCreateMode)
-        {
-            <form method="post" asp-page-handler="CreateNotificationSender" class="workspace-form">
-                <input type="hidden" asp-for="ReturnUrl" />
-                <div class="workspace-form-grid">
-                    <label class="workspace-span-2">
-                        <span>Name</span>
-                        <input asp-for="NewNotificationSender.Name" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Enabled</span>
-                        <select asp-for="NewNotificationSender.Enabled" class="form-select workspace-select">
-                            <option value="true">true</option>
-                            <option value="false">false</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Type</span>
-                        <select asp-for="NewNotificationSender.Kind" class="form-select workspace-select" data-notification-kind-select>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("mail")<h2 class="mat-card__title">Create sender</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.Name">Name</label>
+                        <input asp-for="NewNotificationSender.Name" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.Kind">Type</label>
+                        <select asp-for="NewNotificationSender.Kind" class="mat-select" data-notification-kind-select>
                             <option value="Email">Email</option>
                             <option value="Webhook">Webhook</option>
                         </select>
-                    </label>
-                </div>
-
-                <div class="workspace-details workspace-span-2" data-notification-kind-panel="email" hidden="@(senderKind == NotificationEndpointKind.Email ? null : "hidden")">
-                    <div class="workspace-details-body">
-                        <div class="workspace-form-grid">
-                            <label>
-                                <span>Sender name</span>
-                                <input asp-for="NewNotificationSender.SenderName" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>Sender email</span>
-                                <input asp-for="NewNotificationSender.SenderEmail" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>SMTP host</span>
-                                <input asp-for="NewNotificationSender.SmtpHost" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>SMTP port</span>
-                                <input asp-for="NewNotificationSender.SmtpPort" type="number" min="1" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>SSL</span>
-                                <select asp-for="NewNotificationSender.UseSsl" class="form-select workspace-select">
-                                    <option value="true">true</option>
-                                    <option value="false">false</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Username</span>
-                                <input asp-for="NewNotificationSender.Username" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>Password</span>
-                                <input asp-for="NewNotificationSender.Password" type="password" class="form-control workspace-input" placeholder="leave blank to keep current" />
-                            </label>
-                        </div>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="NewNotificationSender.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="workspace-details workspace-span-2" data-notification-kind-panel="webhook" hidden="@(senderKind == NotificationEndpointKind.Webhook ? null : "hidden")">
-                    <div class="workspace-details-body">
-                        <div class="workspace-form-grid">
-                            <label class="workspace-span-2">
-                                <span>Webhook URL</span>
-                                <input asp-for="NewNotificationSender.EndpointUrl" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>Timeout seconds</span>
-                                <input asp-for="NewNotificationSender.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>Secret</span>
-                                <input asp-for="NewNotificationSender.Secret" type="password" class="form-control workspace-input" placeholder="leave blank to keep current" />
-                            </label>
-                        </div>
+        <section class="mat-card" data-notification-kind-panel="email" hidden="@(senderKind != NotificationEndpointKind.Email)">
+            <div class="mat-card__head">@MatUi.Icon("mail")<h2 class="mat-card__title">E-mail (SMTP)</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.SenderName">Sender name</label>
+                        <input asp-for="NewNotificationSender.SenderName" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.SenderEmail">Sender email</label>
+                        <input asp-for="NewNotificationSender.SenderEmail" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.SmtpHost">SMTP host</label>
+                        <input asp-for="NewNotificationSender.SmtpHost" class="mat-input mat-mono" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.SmtpPort">SMTP port</label>
+                        <input asp-for="NewNotificationSender.SmtpPort" type="number" min="1" class="mat-input mat-mono" data-msg-range="The port is 1 or higher." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.Username">Username</label>
+                        <input asp-for="NewNotificationSender.Username" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.Password">Password</label>
+                        <input asp-for="NewNotificationSender.Password" type="password" class="mat-input" />
+                        <span class="mat-hint">Leave blank to keep the current one.</span>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="NewNotificationSender.UseSsl" /><span class="mat-switch__track"></span><span>Use SSL</span></label>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="workspace-details workspace-span-2" data-notification-kind-panel="cloud" hidden="@(senderKind == NotificationEndpointKind.Cloud ? null : "hidden")">
-                    <div class="workspace-details-body">
-                        <p class="panel-hint" style="margin:0;">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+        <section class="mat-card" data-notification-kind-panel="webhook" hidden="@(senderKind != NotificationEndpointKind.Webhook)">
+            <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Webhook</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-label" asp-for="NewNotificationSender.EndpointUrl">Webhook URL</label>
+                        <input asp-for="NewNotificationSender.EndpointUrl" class="mat-input mat-mono" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.TimeoutSeconds">Timeout seconds</label>
+                        <input asp-for="NewNotificationSender.TimeoutSeconds" type="number" min="1" class="mat-input mat-mono" data-msg-range="The timeout is 1 second or more." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NewNotificationSender.Secret">Secret</label>
+                        <input asp-for="NewNotificationSender.Secret" type="password" class="mat-input" />
+                        <span class="mat-hint">Leave blank to keep the current one.</span>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="workspace-form-actions">
-                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("plus")<span>Create sender</span></button>
-                </div>
-            </form>
-        }
-        else
-        {
-            <form method="post" asp-page-handler="SaveNotificationSender" class="workspace-form">
-                <input type="hidden" asp-for="NotificationSenderEditor.Id" />
-                <input type="hidden" asp-for="ReturnUrl" />
-                <div class="workspace-form-grid">
-                    <label class="workspace-span-2">
-                        <span>Name</span>
-                        <input asp-for="NotificationSenderEditor.Name" class="form-control workspace-input" />
-                    </label>
-                    <label>
-                        <span>Enabled</span>
-                        <select asp-for="NotificationSenderEditor.Enabled" class="form-select workspace-select">
-                            <option value="true">true</option>
-                            <option value="false">false</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Type</span>
+        <section class="mat-card" data-notification-kind-panel="cloud" hidden="@(senderKind != NotificationEndpointKind.Cloud)">
+            <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Matmon Cloud</h2></div>
+            <div class="mat-card__body">
+                <p class="mat-muted">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+            </div>
+        </section>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create sender</span></button>
+            <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+        </div>
+    </form>
+}
+else
+{
+    <form method="post" asp-page-handler="SaveNotificationSender" class="mat-form" novalidate>
+        <input type="hidden" asp-for="NotificationSenderEditor.Id" />
+        <input type="hidden" asp-for="ReturnUrl" />
+
+        <section class="mat-card">
+            <div class="mat-card__head">
+                @MatUi.Icon("mail")<h2 class="mat-card__title">Edit sender</h2>
+                @if (!string.IsNullOrWhiteSpace(Model.View.SelectedNotificationSenderKind))
+                {
+                    <span class="mat-text-muted mm-push-end">@Model.View.SelectedNotificationSenderKind</span>
+                }
+            </div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.Name">Name</label>
+                        <input asp-for="NotificationSenderEditor.Name" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
                         @if (senderKind == NotificationEndpointKind.Cloud)
                         {
                             @* The built-in Matmon Cloud sender's type is fixed - read-only. *@
-                            <input type="text" class="form-control workspace-input" value="Cloud" readonly />
+                            <label class="mat-label" for="sender-kind-fixed">Type</label>
+                            <input type="text" id="sender-kind-fixed" class="mat-input" value="Cloud" readonly />
                             <input type="hidden" asp-for="NotificationSenderEditor.Kind" />
                         }
                         else
                         {
-                            <select asp-for="NotificationSenderEditor.Kind" class="form-select workspace-select" data-notification-kind-select>
+                            <label class="mat-label" asp-for="NotificationSenderEditor.Kind">Type</label>
+                            <select asp-for="NotificationSenderEditor.Kind" class="mat-select" data-notification-kind-select>
                                 <option value="Email">Email</option>
                                 <option value="Webhook">Webhook</option>
                             </select>
                         }
-                    </label>
-                </div>
-
-                <div class="workspace-details workspace-span-2" data-notification-kind-panel="email" hidden="@(senderKind == NotificationEndpointKind.Email ? null : "hidden")">
-                    <div class="workspace-details-body">
-                        <div class="workspace-form-grid">
-                            <label>
-                                <span>Sender name</span>
-                                <input asp-for="NotificationSenderEditor.SenderName" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>Sender email</span>
-                                <input asp-for="NotificationSenderEditor.SenderEmail" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>SMTP host</span>
-                                <input asp-for="NotificationSenderEditor.SmtpHost" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>SMTP port</span>
-                                <input asp-for="NotificationSenderEditor.SmtpPort" type="number" min="1" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>SSL</span>
-                                <select asp-for="NotificationSenderEditor.UseSsl" class="form-select workspace-select">
-                                    <option value="true">true</option>
-                                    <option value="false">false</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Username</span>
-                                <input asp-for="NotificationSenderEditor.Username" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>Password</span>
-                                <input asp-for="NotificationSenderEditor.Password" type="password" class="form-control workspace-input" placeholder="leave blank to keep current" />
-                            </label>
-                        </div>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="NotificationSenderEditor.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="workspace-details workspace-span-2" data-notification-kind-panel="webhook" hidden="@(senderKind == NotificationEndpointKind.Webhook ? null : "hidden")">
-                    <div class="workspace-details-body">
-                        <div class="workspace-form-grid">
-                            <label class="workspace-span-2">
-                                <span>Webhook URL</span>
-                                <input asp-for="NotificationSenderEditor.EndpointUrl" class="form-control workspace-input" />
-                            </label>
-                            <label>
-                                <span>Timeout seconds</span>
-                                <input asp-for="NotificationSenderEditor.TimeoutSeconds" type="number" min="1" class="form-control workspace-input" />
-                            </label>
-                            <label class="workspace-span-2">
-                                <span>Secret</span>
-                                <input asp-for="NotificationSenderEditor.Secret" type="password" class="form-control workspace-input" placeholder="leave blank to keep current" />
-                            </label>
-                        </div>
+        <section class="mat-card" data-notification-kind-panel="email" hidden="@(senderKind != NotificationEndpointKind.Email)">
+            <div class="mat-card__head">@MatUi.Icon("mail")<h2 class="mat-card__title">E-mail (SMTP)</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.SenderName">Sender name</label>
+                        <input asp-for="NotificationSenderEditor.SenderName" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.SenderEmail">Sender email</label>
+                        <input asp-for="NotificationSenderEditor.SenderEmail" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.SmtpHost">SMTP host</label>
+                        <input asp-for="NotificationSenderEditor.SmtpHost" class="mat-input mat-mono" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.SmtpPort">SMTP port</label>
+                        <input asp-for="NotificationSenderEditor.SmtpPort" type="number" min="1" class="mat-input mat-mono" data-msg-range="The port is 1 or higher." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.Username">Username</label>
+                        <input asp-for="NotificationSenderEditor.Username" class="mat-input" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.Password">Password</label>
+                        <input asp-for="NotificationSenderEditor.Password" type="password" class="mat-input" />
+                        <span class="mat-hint">Leave blank to keep the current one.</span>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="NotificationSenderEditor.UseSsl" /><span class="mat-switch__track"></span><span>Use SSL</span></label>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="workspace-details workspace-span-2" data-notification-kind-panel="cloud" hidden="@(senderKind == NotificationEndpointKind.Cloud ? null : "hidden")">
-                    <div class="workspace-details-body">
-                        <p class="panel-hint" style="margin:0;">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+        <section class="mat-card" data-notification-kind-panel="webhook" hidden="@(senderKind != NotificationEndpointKind.Webhook)">
+            <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Webhook</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.EndpointUrl">Webhook URL</label>
+                        <input asp-for="NotificationSenderEditor.EndpointUrl" class="mat-input mat-mono" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.TimeoutSeconds">Timeout seconds</label>
+                        <input asp-for="NotificationSenderEditor.TimeoutSeconds" type="number" min="1" class="mat-input mat-mono" data-msg-range="The timeout is 1 second or more." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="NotificationSenderEditor.Secret">Secret</label>
+                        <input asp-for="NotificationSenderEditor.Secret" type="password" class="mat-input" />
+                        <span class="mat-hint">Leave blank to keep the current one.</span>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="workspace-form-actions">
-                    <a class="workspace-secondary-submit" href="@backUrl">@MatmonIcons.Render("arrow-left")<span>Back</span></a>
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save sender</span></button>
-                    <span class="workspace-form-actions-spacer"></span>
-                    <button type="submit" asp-page-handler="DeleteNotificationSender" formnovalidate class="workspace-danger-submit" onclick="return confirm('Delete this notification sender?');">@MatmonIcons.Render("trash")<span>Delete sender</span></button>
-                </div>
-            </form>
-        }
-    </section>
-</section>
+        <section class="mat-card" data-notification-kind-panel="cloud" hidden="@(senderKind != NotificationEndpointKind.Cloud)">
+            <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Matmon Cloud</h2></div>
+            <div class="mat-card__body">
+                <p class="mat-muted">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+            </div>
+        </section>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save sender</span></button>
+            <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+            <span class="mat-btn-row__spacer"></span>
+            <button type="submit" asp-page-handler="DeleteNotificationSender" formnovalidate class="mat-btn mat-btn--danger" data-confirm="Delete this notification sender?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete sender</span></button>
+        </div>
+    </form>
+}

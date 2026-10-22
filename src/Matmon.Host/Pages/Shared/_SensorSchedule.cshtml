@@ -1,78 +1,90 @@
 @model ISensorScheduleEditor
+@*
+    The mode-based schedule editor (inherit / every / daily / weekly / monthly) with a live "next runs" preview
+    (initializeScheduleEditors in sensor-editor.js, hooked on the data-schedule-* attributes). It is the sensor editors'
+    tab panel "schedule" (id panel-schedule, its tab is tab-schedule); ViewData["SensorEditorPanels"] = false draws it
+    without the panel, ViewData["SensorEditorTab"] = "schedule" opens it.
+*@
 @{
     var inheritedLabel = string.IsNullOrWhiteSpace(Model.ScheduleInheritedLabel) ? "default" : Model.ScheduleInheritedLabel;
+    var asPanel = ViewData["SensorEditorPanels"] is not false;
+    var open = string.Equals(ViewData["SensorEditorTab"] as string, "schedule", StringComparison.OrdinalIgnoreCase);
 }
-<div class="sensor-schedule-section workspace-span-2" data-schedule-editor data-sensor-tab="schedule">
-    <div class="panel-header">
-        <h2 class="section-title">@MatmonIcons.Render("clock")<span>Schedule</span></h2>
-        <span class="panel-hint" data-schedule-inherited="@inheritedLabel">inherit: @inheritedLabel</span>
-    </div>
-
-    <div class="schedule-editor-grid">
-        <label class="schedule-mode-field">
-            <span>Run</span>
-            <select asp-for="SchedulePreset" class="form-select workspace-select" data-schedule-mode>
-                <option value="inherit">Inherit (@inheritedLabel)</option>
-                <option value="every">Every interval</option>
-                <option value="daily">Daily at time</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-            </select>
-        </label>
-
-        <div class="schedule-every-fields" data-schedule-every hidden>
-            <div class="schedule-interval">
-                <label>
-                    <span>Every</span>
-                    <input asp-for="ScheduleEveryValue" type="number" min="1" class="form-control workspace-input" placeholder="5" data-schedule-every-value />
-                </label>
-                <label>
-                    <span>Unit</span>
-                    <select asp-for="ScheduleEveryUnit" class="form-select workspace-select" data-schedule-every-unit>
-                        <option value="seconds">seconds</option>
-                        <option value="minutes">minutes</option>
-                        <option value="hours">hours</option>
-                        <option value="days">days</option>
+<div class="@(asPanel ? "mat-tabpanel mat-stack" : "mat-stack")" role="@(asPanel ? "tabpanel" : null)" id="@(asPanel ? "panel-schedule" : null)" aria-labelledby="@(asPanel ? "tab-schedule" : null)" hidden="@(asPanel && !open)">
+    <section class="mat-card sensor-schedule-section" data-schedule-editor>
+        <div class="mat-card__head">
+            @MatUi.Icon("clock")
+            <h2 class="mat-card__title">Schedule</h2>
+            <span class="mat-text-muted mm-push-end" data-schedule-inherited="@inheritedLabel">inherit: @inheritedLabel</span>
+        </div>
+        <div class="mat-card__body mat-stack">
+            <div class="mat-form__grid">
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="SchedulePreset">Run</label>
+                    <select asp-for="SchedulePreset" class="mat-select" data-schedule-mode>
+                        <option value="inherit">Inherit (@inheritedLabel)</option>
+                        <option value="every">Every interval</option>
+                        <option value="daily">Daily at time</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
                     </select>
-                </label>
+                </div>
+
+                <div class="mat-field" data-schedule-time hidden>
+                    <label class="mat-label" asp-for="ScheduleTime">Time of day</label>
+                    <input asp-for="ScheduleTime" type="time" class="mat-input mat-mono" data-schedule-time-input />
+                </div>
+
+                <div class="mat-field" data-schedule-monthday hidden>
+                    <label class="mat-label" asp-for="ScheduleDayOfMonth">Day of month</label>
+                    <input asp-for="ScheduleDayOfMonth" type="number" min="1" max="31" class="mat-input mat-mono" data-schedule-monthday-input />
+                </div>
+
+                <div class="mat-field mat-field--full mat-stack mat-stack--sm" data-schedule-every hidden>
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="ScheduleEveryValue">Every</label>
+                            <input asp-for="ScheduleEveryValue" type="number" min="1" class="mat-input mat-mono" placeholder="5" data-schedule-every-value />
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="ScheduleEveryUnit">Unit</label>
+                            <select asp-for="ScheduleEveryUnit" class="mat-select" data-schedule-every-unit>
+                                <option value="seconds">seconds</option>
+                                <option value="minutes">minutes</option>
+                                <option value="hours">hours</option>
+                                <option value="days">days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mat-row" role="group" aria-label="Common intervals" data-schedule-chips>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="30" data-chip-unit="seconds">30s</button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="1" data-chip-unit="minutes">1m</button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="5" data-chip-unit="minutes">5m</button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="15" data-chip-unit="minutes">15m</button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="1" data-chip-unit="hours">1h</button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="6" data-chip-unit="hours">6h</button>
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-chip-value="1" data-chip-unit="days">1d</button>
+                    </div>
+                </div>
+
+                <fieldset class="mat-field mat-field--full mat-fieldset" data-schedule-weekday hidden>
+                    <legend class="mat-legend">Weekdays</legend>
+                    <div class="mat-checks mat-checks--inline">
+                        @foreach (var day in Enum.GetValues<DayOfWeek>())
+                        {
+                            <label class="mat-check">
+                                <input type="checkbox" name="@Html.NameFor(m => m.ScheduleDaysOfWeek)" value="@day" checked="@(Model.ScheduleDaysOfWeek.Contains(day))" data-schedule-weekday-input />
+                                <span class="mat-check__text">@day.ToString().Substring(0, 3)</span>
+                            </label>
+                        }
+                    </div>
+                </fieldset>
             </div>
-            <div class="schedule-chips" data-schedule-chips>
-                <button type="button" class="schedule-chip" data-chip-value="30" data-chip-unit="seconds">30s</button>
-                <button type="button" class="schedule-chip" data-chip-value="1" data-chip-unit="minutes">1m</button>
-                <button type="button" class="schedule-chip" data-chip-value="5" data-chip-unit="minutes">5m</button>
-                <button type="button" class="schedule-chip" data-chip-value="15" data-chip-unit="minutes">15m</button>
-                <button type="button" class="schedule-chip" data-chip-value="1" data-chip-unit="hours">1h</button>
-                <button type="button" class="schedule-chip" data-chip-value="6" data-chip-unit="hours">6h</button>
-                <button type="button" class="schedule-chip" data-chip-value="1" data-chip-unit="days">1d</button>
+
+            <div class="schedule-preview" data-schedule-preview hidden>
+                <span class="schedule-preview-label">@MatUi.Icon("calendar")<span>Next runs</span></span>
+                <div class="mat-chips" data-schedule-preview-times></div>
             </div>
         </div>
-
-        <label data-schedule-time hidden>
-            <span>Time of day</span>
-            <input asp-for="ScheduleTime" type="time" class="form-control workspace-input" data-schedule-time-input />
-        </label>
-
-        <div data-schedule-weekday hidden>
-            <span class="workspace-label">Weekdays</span>
-            <div class="schedule-weekday-grid">
-                @foreach (var day in Enum.GetValues<DayOfWeek>())
-                {
-                    <label class="schedule-weekday-option">
-                        <input type="checkbox" name="@Html.NameFor(m => m.ScheduleDaysOfWeek)" value="@day" checked="@(Model.ScheduleDaysOfWeek.Contains(day))" data-schedule-weekday-input />
-                        <span>@day.ToString().Substring(0, 3)</span>
-                    </label>
-                }
-            </div>
-        </div>
-
-        <label data-schedule-monthday hidden>
-            <span>Day of month</span>
-            <input asp-for="ScheduleDayOfMonth" type="number" min="1" max="31" class="form-control workspace-input" data-schedule-monthday-input />
-        </label>
-    </div>
-
-    <div class="schedule-preview" data-schedule-preview hidden>
-        <span class="schedule-preview-label">@MatmonIcons.Render("clock")<span>Next runs</span></span>
-        <div class="schedule-preview-times" data-schedule-preview-times></div>
-    </div>
+    </section>
 </div>

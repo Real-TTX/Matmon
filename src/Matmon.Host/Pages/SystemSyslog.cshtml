@@ -3,7 +3,9 @@
 @using Matmon.Core.Syslog
 @using Matmon.Host.Services
 @{
-    ViewData["Title"] = "System - Syslog";
+    // Syslog is a tab of System: the same h1 as the Config page, the tab strip says where in System this is.
+    ViewData["Title"] = "System";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Syslog") };
     var settings = Model.Settings;
     var receiver = Model.Receiver;
     var storage = Model.Storage;
@@ -25,319 +27,316 @@
         status.State switch { "listening" => "Listening", "error" => "Problem", _ => "Off" };
 }
 
-<section class="dashboard-shell">
-    <div class="page-header has-summary">
-        <div class="page-title">
-            @MatmonIcons.Render("gear")
-            <h1>System</h1>
-        </div>
-    </div>
+<partial name="_SystemTabs" model="@("syslog")" />
 
-    <partial name="_SystemTabs" model="@("syslog")" />
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-    {
-        <div class="workspace-banner workspace-banner-success">@Model.StatusMessage</div>
-    }
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="workspace-banner workspace-banner-error">@Model.ErrorMessage</div>
-    }
-
-    <section class="panel syslog-status">
-        <span class="state-pill" data-state="@head.State">@head.Label</span>
-        <span class="syslog-status-text">@head.Text</span>
-        <span class="syslog-status-meta">
-            @storage.Messages.ToString("N0") stored@(newest is { } latest ? $" · newest {Model.Ago(latest)}" : string.Empty)
-        </span>
+<section class="mat-card">
+    <div class="mat-card__body mat-row">
+        <span class="@MatUi.PillClass(head.State)">@head.Label</span>
+        <span>@head.Text</span>
+        <span class="mat-text-muted">@storage.Messages.ToString("N0") stored@(newest is { } latest ? $" · newest {Model.Ago(latest)}" : string.Empty)</span>
         @if (settings.Enabled || storage.Messages > 0)
         {
-            <a class="workspace-secondary-submit" asp-page="/Events" asp-fragment="syslog">@MatmonIcons.Render("list")<span>Read the log</span></a>
+            <a class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" asp-page="/Events" asp-fragment="syslog">@MatUi.Icon("list")<span>Read the log</span></a>
         }
-    </section>
+    </div>
+</section>
 
-    <div class="syslog-settings-grid">
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("gear")<span>Receiver</span></h2>
-                <span class="panel-hint">changes apply within a few seconds</span>
-            </div>
+<div class="mat-grid mat-grid--2">
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Receiver</h2><span class="mat-text-muted mm-push-end">changes apply within a few seconds</span></div>
+        <div class="mat-card__body">
+            <form method="post" asp-page-handler="SaveSettings" class="mat-form" novalidate>
+                @if (!string.IsNullOrWhiteSpace(Model.FormError))
+                {
+                    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+                }
 
-            @if (!string.IsNullOrWhiteSpace(Model.FormError))
-            {
-                <div class="workspace-banner workspace-banner-error">@Model.FormError</div>
-            }
-
-            <form method="post" asp-page-handler="SaveSettings" class="workspace-form">
-                <div>
-                    <label class="workspace-check-field syslog-check">
-                        <input asp-for="Input.Enabled" type="checkbox" value="true" />
+                <div class="mat-field">
+                    <label class="mat-switch">
+                        <input asp-for="Input.Enabled" type="checkbox" value="true" aria-describedby="syslog-enabled-hint" />
+                        <span class="mat-switch__track"></span>
                         <span><strong>Receive syslog messages</strong></span>
                     </label>
-                    <small class="workspace-hint">Off by default: switching it on opens a network port that takes messages from the sources allowed below. The log then appears as a Syslog tab on Events.</small>
+                    <span class="mat-hint" id="syslog-enabled-hint">Off by default: switching it on opens a network port that takes messages from the sources allowed below. The log then appears as a Syslog tab on Events.</span>
                 </div>
 
-                <div class="syslog-proto">
-                    <div>
-                        <label class="workspace-check-field syslog-check">
-                            <input asp-for="Input.UdpEnabled" type="checkbox" value="true" />
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-switch">
+                            <input asp-for="Input.UdpEnabled" type="checkbox" value="true" aria-describedby="syslog-udp-hint" />
+                            <span class="mat-switch__track"></span>
                             <span><strong>UDP</strong></span>
                         </label>
-                        <small class="workspace-hint">What most switches, routers and firewalls send.</small>
+                        <span class="mat-hint" id="syslog-udp-hint">What most switches, routers and firewalls send.</span>
                     </div>
-                    <label class="workspace-field syslog-port">
-                        <span class="workspace-label">Port</span>
-                        <input asp-for="Input.UdpPort" type="number" min="1" max="65535" class="form-control workspace-input" />
-                    </label>
-                </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_UdpPort">UDP port</label>
+                        <input asp-for="Input.UdpPort" type="number" min="1" max="65535" class="mat-input mat-mono" data-msg-range="A port from 1 to 65535." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
 
-                <div class="syslog-proto">
-                    <div>
-                        <label class="workspace-check-field syslog-check">
-                            <input asp-for="Input.TcpEnabled" type="checkbox" value="true" />
+                    <div class="mat-field">
+                        <label class="mat-switch">
+                            <input asp-for="Input.TcpEnabled" type="checkbox" value="true" aria-describedby="syslog-tcp-hint" />
+                            <span class="mat-switch__track"></span>
                             <span><strong>TCP</strong></span>
                         </label>
-                        <small class="workspace-hint">For devices that cannot afford to lose a message.</small>
+                        <span class="mat-hint" id="syslog-tcp-hint">For devices that cannot afford to lose a message.</span>
                     </div>
-                    <label class="workspace-field syslog-port">
-                        <span class="workspace-label">Port</span>
-                        <input asp-for="Input.TcpPort" type="number" min="1" max="65535" class="form-control workspace-input" />
-                    </label>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_TcpPort">TCP port</label>
+                        <input asp-for="Input.TcpPort" type="number" min="1" max="65535" class="mat-input mat-mono" data-msg-range="A port from 1 to 65535." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
                 </div>
 
-                <label class="workspace-field">
-                    <span class="workspace-label">Allowed sources <em>optional - empty accepts anyone who can reach the port</em></span>
-                    <textarea asp-for="Input.AllowedSources" class="form-control workspace-input" rows="3" placeholder="192.168.1.0/24, 10.0.0.5"></textarea>
-                    <small class="panel-hint">IP addresses and ranges, separated by commas or new lines. Syslog has no login, so this list is the only thing that decides who may write to the log.</small>
-                </label>
-
-                <div class="syslog-limits">
-                    <label class="workspace-field">
-                        <span class="workspace-label">Keep for (days)</span>
-                        <input asp-for="Input.RetentionDays" type="number" min="@SyslogSettings.MinRetentionDays" max="@SyslogSettings.MaxRetentionDays" class="form-control workspace-input" />
-                    </label>
-                    <label class="workspace-field">
-                        <span class="workspace-label">Keep at most (messages)</span>
-                        <input asp-for="Input.MaxMessages" type="number" min="@SyslogSettings.MinMessages" max="@SyslogSettings.MaxMessagesLimit" step="10000" class="form-control workspace-input" />
-                    </label>
+                <div class="mat-field">
+                    <label class="mat-label" for="Input_AllowedSources">Allowed sources <span class="mat-text-muted">optional - empty accepts anyone who can reach the port</span></label>
+                    <textarea asp-for="Input.AllowedSources" class="mat-textarea mat-mono" rows="3" placeholder="192.168.1.0/24, 10.0.0.5"></textarea>
+                    <span class="mat-hint">IP addresses and ranges, separated by commas or new lines. Syslog has no login, so this list is the only thing that decides who may write to the log.</span>
                 </div>
-                <small class="panel-hint">Whichever limit is reached first deletes the oldest messages. A device that reboots in a loop can write thousands of lines a minute - the message limit is what keeps it from filling the disk.</small>
+
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_RetentionDays">Keep for (days)</label>
+                        <input asp-for="Input.RetentionDays" type="number" min="@SyslogSettings.MinRetentionDays" max="@SyslogSettings.MaxRetentionDays" class="mat-input mat-mono" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_MaxMessages">Keep at most (messages)</label>
+                        <input asp-for="Input.MaxMessages" type="number" min="@SyslogSettings.MinMessages" max="@SyslogSettings.MaxMessagesLimit" step="10000" class="mat-input mat-mono" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                </div>
+                <p class="mat-hint">Whichever limit is reached first deletes the oldest messages. A device that reboots in a loop can write thousands of lines a minute - the message limit is what keeps it from filling the disk.</p>
 
                 @if (settings.Enabled && string.IsNullOrWhiteSpace(settings.AllowedSources))
                 {
-                    <div class="workspace-banner workspace-banner-warning">Anyone who can reach the port can send messages. Restrict it with Allowed sources.</div>
+                    <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Anyone who can reach the port can send messages. Restrict it with Allowed sources.</div></div>
                 }
 
-                <div class="workspace-form-actions">
-                    <button type="submit" class="workspace-submit">@MatmonIcons.Render("check")<span>Save</span></button>
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
                 </div>
             </form>
-        </section>
+        </div>
+    </section>
 
-        <section class="panel panel-stack workspace-panel">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("signal")<span>Status</span></h2>
-                <span class="panel-hint">since the last start</span>
-            </div>
-
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Status</h2><span class="mat-text-muted mm-push-end">since the last start</span></div>
+        <div class="mat-card__body mat-stack">
             @if (!storage.Available)
             {
-                <div class="workspace-banner workspace-banner-error">The log database cannot be used: @storage.Error</div>
+                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">The log database cannot be used: @storage.Error</div></div>
             }
 
             @if (!string.IsNullOrWhiteSpace(receiver.Warning))
             {
-                <div class="workspace-banner workspace-banner-warning">@receiver.Warning</div>
+                <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">@receiver.Warning</div></div>
             }
 
-            <dl class="syslog-facts">
-                <div>
-                    <dt>UDP</dt>
-                    <dd>
-                        <span class="state-pill" data-state="@ListenerState(receiver.Udp)">@ListenerLabel(receiver.Udp)</span>
-                        @if (!string.IsNullOrWhiteSpace(receiver.Udp.Detail)) { <small>@receiver.Udp.Detail</small> }
-                    </dd>
-                </div>
-                <div>
-                    <dt>TCP</dt>
-                    <dd>
-                        <span class="state-pill" data-state="@ListenerState(receiver.Tcp)">@ListenerLabel(receiver.Tcp)</span>
-                        @if (!string.IsNullOrWhiteSpace(receiver.Tcp.Detail)) { <small>@receiver.Tcp.Detail</small> }
-                        @if (receiver.TcpConnections > 0) { <small>@receiver.TcpConnections open connection(s)</small> }
-                    </dd>
-                </div>
-                <div>
-                    <dt>Received</dt>
-                    <dd>@receiver.Received.ToString("N0")@(receiver.LastReceivedUtc is { } lastReceived ? $" · last {Model.Ago(lastReceived)}" : string.Empty)</dd>
-                </div>
-                <div>
-                    <dt>Refused</dt>
-                    <dd>@receiver.Rejected.ToString("N0") <small>from addresses not in Allowed sources</small></dd>
-                </div>
-                <div>
-                    <dt>Stored</dt>
-                    <dd>@storage.Messages.ToString("N0") messages · @FormatBytes(storage.DatabaseBytes)</dd>
-                </div>
-                <div>
-                    <dt>Oldest</dt>
-                    <dd>@(storage.OldestUtc is { } oldest ? oldest.ToDisplay().ToString("g") : "-")</dd>
-                </div>
-                <div>
-                    <dt>Lost</dt>
-                    <dd>@storage.Dropped.ToString("N0") <small>@(storage.Dropped > 0 ? "messages that could not be written - the log was flooded or the disk refused them" : "none")</small></dd>
-                </div>
+            <dl class="mat-kv">
+                <dt>UDP</dt>
+                <dd>
+                    <span class="@MatUi.PillClass(ListenerState(receiver.Udp))">@ListenerLabel(receiver.Udp)</span>
+                    @if (!string.IsNullOrWhiteSpace(receiver.Udp.Detail))
+                    {
+                        <small class="mat-d-block mat-text-muted">@receiver.Udp.Detail</small>
+                    }
+                </dd>
+                <dt>TCP</dt>
+                <dd>
+                    <span class="@MatUi.PillClass(ListenerState(receiver.Tcp))">@ListenerLabel(receiver.Tcp)</span>
+                    @if (!string.IsNullOrWhiteSpace(receiver.Tcp.Detail))
+                    {
+                        <small class="mat-d-block mat-text-muted">@receiver.Tcp.Detail</small>
+                    }
+                    @if (receiver.TcpConnections > 0)
+                    {
+                        <small class="mat-d-block mat-text-muted">@receiver.TcpConnections open connection(s)</small>
+                    }
+                </dd>
+                <dt>Received</dt>
+                <dd><span class="mat-mono">@receiver.Received.ToString("N0")</span>@(receiver.LastReceivedUtc is { } lastReceived ? $" · last {Model.Ago(lastReceived)}" : string.Empty)</dd>
+                <dt>Refused</dt>
+                <dd><span class="mat-mono">@receiver.Rejected.ToString("N0")</span> <span class="mat-text-muted">from addresses not in Allowed sources</span></dd>
+                <dt>Stored</dt>
+                <dd><span class="mat-mono">@storage.Messages.ToString("N0")</span> messages · <span class="mat-mono">@FormatBytes(storage.DatabaseBytes)</span></dd>
+                <dt>Oldest</dt>
+                <dd class="mat-mono">@(storage.OldestUtc is { } oldest ? oldest.ToDisplay().ToString("g") : "-")</dd>
+                <dt>Lost</dt>
+                <dd><span class="mat-mono">@storage.Dropped.ToString("N0")</span> <span class="mat-text-muted">@(storage.Dropped > 0 ? "messages that could not be written - the log was flooded or the disk refused them" : "none")</span></dd>
             </dl>
 
-            <div class="workspace-form-actions syslog-status-actions">
-                <form method="post" asp-page-handler="Test">
-                    <button type="submit" class="workspace-secondary-submit" title="Sends one message to this machine's own receiver and checks it was stored">@MatmonIcons.Render("signal")<span>Send a test message</span></button>
-                </form>
-                <form method="post" asp-page-handler="Clear" onsubmit="return confirm('Delete every stored syslog message? This cannot be undone.');">
-                    <button type="submit" class="workspace-danger-submit">@MatmonIcons.Render("trash")<span>Delete all messages</span></button>
-                </form>
+            @* Two handlers in one button row: each button posts its own hidden form (form=), which carries the anti-forgery token. *@
+            <form method="post" asp-page-handler="Test" id="syslog-test" hidden></form>
+            <form method="post" asp-page-handler="Clear" id="syslog-clear" hidden></form>
+            <div class="mat-btn-row">
+                <button type="submit" form="syslog-test" class="mat-btn mat-btn--secondary" data-tip="Sends one message to this machine's own receiver and checks it was stored">@MatUi.Icon("activity")<span>Send a test message</span></button>
+                <span class="mat-btn-row__spacer"></span>
+                <button type="submit" form="syslog-clear" class="mat-btn mat-btn--danger"
+                        data-confirm="Delete every stored syslog message? This cannot be undone." data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete all messages</span></button>
             </div>
-        </section>
+        </div>
+    </section>
+</div>
 
-        <section class="panel panel-stack workspace-panel syslog-wide">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("host")<span>Who has been sending</span></h2>
-                <form method="get" asp-page="/SystemSyslog" class="syslog-days-form">
-                    <select name="Days" class="form-select workspace-select" aria-label="Time range" onchange="this.form.submit()">
-                        @foreach (var choice in Model.SourceWindows)
-                        {
-                            <option value="@choice.Days" selected="@(Model.Days == choice.Days)">@choice.Label</option>
-                        }
-                    </select>
-                </form>
-            </div>
-
-            @if (Model.Sources.Count == 0)
+<section class="mat-card">
+    <div class="mat-card__head">@MatUi.Icon("server")<h2 class="mat-card__title">Who has been sending</h2></div>
+    <div class="mat-card__body mat-stack">
+        @* The time range as link pills: each is a plain GET (?Days=), so the list changes without a script. *@
+        <nav class="mat-tabs mat-tabs--pills" aria-label="Time range">
+            @foreach (var choice in Model.SourceWindows)
             {
-                <div class="empty-state">
-                    @if (!settings.Enabled && storage.Messages == 0)
-                    {
-                        <span>Nothing has been received - the receiver is off.</span>
-                    }
-                    else if (storage.Messages == 0)
-                    {
-                        <span>Nothing has arrived yet. Point a device's syslog setting at this machine and it appears here within seconds.</span>
-                    }
-                    else
-                    {
-                        <span>Nobody sent anything in this time range.</span>
-                    }
-                </div>
+                var isActive = Model.Days == choice.Days;
+                <a class="mat-tab@(isActive ? " is-active" : string.Empty)" aria-current="@(isActive ? "page" : null)" asp-page="/SystemSyslog" asp-route-Days="@choice.Days">@choice.Label</a>
             }
-            else
-            {
-                <div class="system-table syslog-source-table" role="table" aria-label="Senders">
-                    <div class="system-table-row system-table-head syslog-source-row" role="row">
-                        <span role="columnheader">Sender</span>
-                        <span role="columnheader">Messages</span>
-                        <span role="columnheader">Errors</span>
-                        <span role="columnheader">Last message</span>
-                        <span role="columnheader">In your tree</span>
-                        <span role="columnheader"></span>
-                    </div>
+        </nav>
 
-                    @foreach (var row in Model.Sources)
-                    {
-                        var sender = row.Sender;
-                        var messagesSensor = row.Sensors.FirstOrDefault(sensor => string.Equals(sensor.SensorTypeKey, SyslogSensorTypes.Messages, StringComparison.OrdinalIgnoreCase));
-                        var shownWindow = Model.Days == 0 ? 0 : Model.Days * 1440;
+        @if (Model.Sources.Count == 0)
+        {
+            <div class="mat-empty">
+                <span class="mat-empty__icon">@MatUi.Icon("server")</span>
+                @if (!settings.Enabled && storage.Messages == 0)
+                {
+                    <div class="mat-empty__title">Nothing received</div>
+                    <p>Nothing has been received - the receiver is off.</p>
+                }
+                else if (storage.Messages == 0)
+                {
+                    <div class="mat-empty__title">Nothing yet</div>
+                    <p>Nothing has arrived yet. Point a device's syslog setting at this machine and it appears here within seconds.</p>
+                }
+                else
+                {
+                    <div class="mat-empty__title">Nobody sent anything</div>
+                    <p>Nobody sent anything in this time range.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Senders</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Sender</th>
+                            <th scope="col" class="mat-num">Messages</th>
+                            <th scope="col" class="mat-num">Errors</th>
+                            <th scope="col">Last message</th>
+                            <th scope="col" class="mat-hide-sm">In your tree</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Sources)
+                        {
+                            var sender = row.Sender;
+                            var messagesSensor = row.Sensors.FirstOrDefault(sensor => string.Equals(sensor.SensorTypeKey, SyslogSensorTypes.Messages, StringComparison.OrdinalIgnoreCase));
+                            var shownWindow = Model.Days == 0 ? 0 : Model.Days * 1440;
 
-                        <div class="system-table-row syslog-source-row" role="row">
-                            <span role="cell">
-                                @if (sender.SharedAddress && sender.Hostname is not null)
-                                {
-                                    @* behind a relay or Docker's gateway the name is the device; the address is only the way in *@
-                                    <strong>@sender.Hostname</strong>
-                                    <small title="Several devices send through this address - they are told apart by the host name in their messages">via @sender.SourceAddress</small>
-                                }
-                                else
-                                {
-                                    <strong>@sender.SourceAddress</strong>
-                                    @if (sender.Hostname is not null)
-                                    {
-                                        <small>@sender.Hostname</small>
-                                    }
-                                }
-                            </span>
-                            <span role="cell">@sender.Messages.ToString("N0")</span>
-                            <span role="cell">
-                                @if (sender.Errors > 0)
-                                {
-                                    <span class="state-pill" data-state="error">@sender.Errors.ToString("N0")</span>
-                                }
-                                else
-                                {
-                                    <span class="syslog-none">0</span>
-                                }
-                            </span>
-                            <span role="cell" title="@sender.LastReceivedUtc.ToDisplay().ToString("g")">@Model.Ago(sender.LastReceivedUtc)</span>
-                            <span role="cell">
-                                @if (row.Host is { } host)
-                                {
-                                    <strong>@host.Name</strong>
-                                    @if (row.Sensors.Count > 0)
-                                    {
-                                        <small>
-                                            @foreach (var sensor in row.Sensors)
+                            <tr>
+                                <td data-label="Sender" class="mat-table__primary">
+                                    <div class="mat-table__name">
+                                        <span>
+                                            @if (sender.SharedAddress && sender.Hostname is not null)
                                             {
-                                                <a class="sensor-chip" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" title="Open the sensor">@sensor.Name</a>
+                                                @* behind a relay or Docker's gateway the name is the device; the address is only the way in *@
+                                                @sender.Hostname
+                                                <small class="mat-mono" title="Several devices send through this address - they are told apart by the host name in their messages">via @sender.SourceAddress</small>
                                             }
-                                        </small>
+                                            else
+                                            {
+                                                <span class="mat-mono">@sender.SourceAddress</span>
+                                                @if (sender.Hostname is not null)
+                                                {
+                                                    <small>@sender.Hostname</small>
+                                                }
+                                            }
+                                        </span>
+                                    </div>
+                                </td>
+                                <td data-label="Messages" class="mat-num mat-mono">@sender.Messages.ToString("N0")</td>
+                                <td data-label="Errors" class="mat-num">
+                                    @if (sender.Errors > 0)
+                                    {
+                                        <span class="mat-pill mat-pill--error">@sender.Errors.ToString("N0")</span>
                                     }
                                     else
                                     {
-                                        <small>no syslog sensor yet</small>
+                                        <span class="mat-text-muted mat-mono">0</span>
                                     }
-                                }
-                                else
-                                {
-                                    <span class="syslog-none" title="No host in the tree has this address or name">not in your tree</span>
-                                }
-                            </span>
-                            <span role="cell" class="syslog-source-actions">
-                                <a class="workspace-secondary-submit" asp-page="/Events" asp-route-source="@sender.Filter" asp-route-window="@shownWindow" asp-fragment="syslog" title="Show this sender's messages">
-                                    @MatmonIcons.Render("list")
-                                    <span>Messages</span>
-                                </a>
-                                @if (row.Host is { } monitorHost && messagesSensor is null)
-                                {
-                                    <form method="post" asp-page-handler="Monitor" asp-route-days="@Model.Days">
-                                        <input type="hidden" name="hostId" value="@monitorHost.Id" />
-                                        <input type="hidden" name="source" value="@row.WatchSender" />
-                                        <button type="submit" class="workspace-submit" title="Add a Syslog Messages sensor to @monitorHost.Name">
-                                            @MatmonIcons.Render("plus")
-                                            <span>Watch</span>
-                                        </button>
-                                    </form>
-                                }
-                                else if (row.Host is null)
-                                {
-                                    <a class="workspace-secondary-submit" asp-page="/HostCreate" title="Add this device as a host, then watch its log">
-                                        @MatmonIcons.Render("plus")
-                                        <span>Add host</span>
-                                    </a>
-                                }
-                            </span>
-                        </div>
-                    }
-                </div>
-                <p class="panel-hint">A sender is matched to a host by its address, or by the host name it puts in its messages. "Watch" adds a Syslog Messages sensor that counts the device's errors and warnings and goes into warning on the first error.</p>
-            }
-        </section>
-
-        <section class="panel panel-stack workspace-panel syslog-howto">
-            <div class="panel-header">
-                <h2 class="section-title">@MatmonIcons.Render("network")<span>Pointing a device at it</span></h2>
+                                </td>
+                                <td data-label="Last message" title="@sender.LastReceivedUtc.ToDisplay().ToString("g")">@Model.Ago(sender.LastReceivedUtc)</td>
+                                <td data-label="In your tree" class="mat-hide-sm">
+                                    @if (row.Host is { } host)
+                                    {
+                                        <strong>@host.Name</strong>
+                                        @if (row.Sensors.Count > 0)
+                                        {
+                                            <span class="mat-chips">
+                                                @foreach (var sensor in row.Sensors)
+                                                {
+                                                    <a class="mat-tag" asp-page="/SensorDetails" asp-route-sensorId="@sensor.Id" title="Open the sensor">@sensor.Name</a>
+                                                }
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <small class="mat-d-block mat-text-muted">no syslog sensor yet</small>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="mat-text-muted" title="No host in the tree has this address or name">not in your tree</span>
+                                    }
+                                </td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/Events" asp-route-source="@sender.Filter" asp-route-window="@shownWindow" asp-fragment="syslog" title="Show this sender's messages">@MatUi.Icon("list")<span>Messages</span></a>
+                                        @if (row.Host is { } monitorHost && messagesSensor is null)
+                                        {
+                                            <form method="post" asp-page-handler="Monitor" asp-route-days="@Model.Days">
+                                                <input type="hidden" name="hostId" value="@monitorHost.Id" />
+                                                <input type="hidden" name="source" value="@row.WatchSender" />
+                                                <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" title="Add a Syslog Messages sensor to @monitorHost.Name">@MatUi.Icon("eye")<span>Watch</span></button>
+                                            </form>
+                                        }
+                                        else if (row.Host is null)
+                                        {
+                                            <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/HostCreate" title="Add this device as a host, then watch its log">@MatUi.Icon("plus")<span>Add host</span></a>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
-            <p class="panel-hint">In the device's remote logging (syslog) settings, enter this machine as the server: <code>@Model.ReceiverHost</code> on port <code>@settings.UdpPort</code> (UDP)@(settings.TcpEnabled ? $" or {settings.TcpPort} (TCP)" : string.Empty). Messages appear here within seconds. The device's own clock does not matter: they are ordered by when they arrive, which is what you want from a switch that has just rebooted.</p>
-            <details class="syslog-examples">
-                <summary>Examples</summary>
-<pre class="config-code">Cisco IOS     logging host @Model.ReceiverHost
+            <p class="mat-muted">A sender is matched to a host by its address, or by the host name it puts in its messages. "Watch" adds a Syslog Messages sensor that counts the device's errors and warnings and goes into warning on the first error.</p>
+        }
+    </div>
+</section>
+
+<section class="mat-card">
+    <div class="mat-card__head">@MatUi.Icon("network")<h2 class="mat-card__title">Pointing a device at it</h2></div>
+    <div class="mat-card__body mat-stack">
+        <p class="mat-muted">In the device's remote logging (syslog) settings, enter this machine as the server: <code>@Model.ReceiverHost</code> on port <code>@settings.UdpPort</code> (UDP)@(settings.TcpEnabled ? $" or {settings.TcpPort} (TCP)" : string.Empty). Messages appear here within seconds. The device's own clock does not matter: they are ordered by when they arrive, which is what you want from a switch that has just rebooted.</p>
+        <details class="mat-collapse">
+            <summary><span>Examples</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+            <div class="mat-accordion__body">
+<pre class="mat-code"><code>Cisco IOS     logging host @Model.ReceiverHost
               logging trap informational
 
 Linux         echo '*.* @@@Model.ReceiverHost:@settings.UdpPort' > /etc/rsyslog.d/90-matmon.conf
@@ -346,9 +345,9 @@ Linux         echo '*.* @@@Model.ReceiverHost:@settings.UdpPort' > /etc/rsyslog.
 MikroTik      /system logging action add name=matmon target=remote remote=@Model.ReceiverHost
               /system logging add action=matmon topics=info,warning,error,critical
 
-Synology      Log Center > Log Sending > Create (server @Model.ReceiverHost, port @settings.UdpPort, UDP)</pre>
-            </details>
-            <p class="panel-hint"><strong>Running Matmon in Docker?</strong> The container listens on its own ports, but nothing outside can reach them until they are published: add <code>-p @settings.UdpPort:@settings.UdpPort/udp -p @settings.TcpPort:@settings.TcpPort/tcp</code> to <code>docker run</code>, or the same two lines under <code>ports:</code> in the compose file. On Docker Desktop (Windows, macOS) every message then arrives from Docker's own gateway address instead of the device's - the sender's <em>host name</em> still identifies it, so give the sensors that host name as their Sender.</p>
-        </section>
+Synology      Log Center > Log Sending > Create (server @Model.ReceiverHost, port @settings.UdpPort, UDP)</code></pre>
+            </div>
+        </details>
+        <p class="mat-muted"><strong>Running Matmon in Docker?</strong> The container listens on its own ports, but nothing outside can reach them until they are published: add <code>-p @settings.UdpPort:@settings.UdpPort/udp -p @settings.TcpPort:@settings.TcpPort/tcp</code> to <code>docker run</code>, or the same two lines under <code>ports:</code> in the compose file. On Docker Desktop (Windows, macOS) every message then arrives from Docker's own gateway address instead of the device's - the sender's <em>host name</em> still identifies it, so give the sensors that host name as their Sender.</p>
     </div>
 </section>

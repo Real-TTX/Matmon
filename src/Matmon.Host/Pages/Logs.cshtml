@@ -2,158 +2,100 @@
 @model Matmon.Host.Pages.LogsModel
 @{
     ViewData["Title"] = "Logs";
+    ViewData["PageSub"] = "The log of this process, newest first. It lives in memory and starts empty after a restart.";
+
+    // The lowest level shown. As before, no level in the address means "Info & up", and a level the list does not know
+    // selects nothing - the view then shows everything (Trace), which is what the old select fell back to.
+    // The same view as Matmon.Cloud's Admin > Logs: the search in the toolbar, the level in a dialog of its own, Live and
+    // Refresh at the toolbar's end (logs.js, initializeLogViewer).
+    var levels = new (string Value, string Label)[]
+    {
+        ("Trace", "All"),
+        ("Debug", "Debug & up"),
+        ("Information", "Info & up"),
+        ("Warning", "Warning & up"),
+        ("Error", "Error & up"),
+        ("Critical", "Critical only")
+    };
+    var level = Model.Level is null ? "Information" : Model.Level;
+    if (!levels.Any(l => l.Value == level))
+    {
+        level = "Trace";
+    }
+    var levelLabel = levels.First(l => l.Value == level).Label;
 }
 
-<div class="page-header">
-    <div class="page-title"><h1>Logs</h1></div>
-</div>
-
-<section class="panel panel-stack monitoring-controls">
-    <div class="monitoring-filter-bar">
-        <label class="monitoring-filter-field">
-            <span>Level</span>
-            <select id="logLevel" class="form-select workspace-select">
-                <option value="Trace" selected="@(Model.Level == "Trace")">All</option>
-                <option value="Debug" selected="@(Model.Level == "Debug")">Debug &amp; up</option>
-                <option value="Information" selected="@(Model.Level is null or "Information")">Info &amp; up</option>
-                <option value="Warning" selected="@(Model.Level == "Warning")">Warning &amp; up</option>
-                <option value="Error" selected="@(Model.Level == "Error")">Error &amp; up</option>
-                <option value="Critical" selected="@(Model.Level == "Critical")">Critical only</option>
-            </select>
-        </label>
-        <label class="monitoring-filter-field" style="flex:1 1 16rem;">
-            <span>Search</span>
-            <input id="logSearch" class="workspace-input" value="@Model.Q" placeholder="message or source…" autocomplete="off" />
-        </label>
-        <label class="monitoring-filter-field monitoring-filter-inline">
-            <span>Live</span>
-            <input type="checkbox" id="logLive" checked />
-        </label>
-        <div class="monitoring-filter-actions">
-            <button type="button" id="logRefresh" class="workspace-secondary-submit">Refresh</button>
-            <form method="post" asp-page-handler="Clear" style="display:inline;" onsubmit="return confirm('Clear the in-memory log buffer?');">
-                <input type="hidden" name="Level" value="@Model.Level" />
-                <input type="hidden" name="Q" value="@Model.Q" />
-                <button type="submit" class="workspace-danger-submit">Clear</button>
-            </form>
+<div class="mat-list" data-log>
+    <div class="mat-toolbar" role="toolbar" aria-label="Log tools">
+        <div class="mat-input-icon mat-toolbar__search">
+            @MatUi.Icon("search")
+            <input class="mat-input" type="search" id="log-search" value="@Model.Q" placeholder="Message or source…" aria-label="Search the log"
+                   autocomplete="off" enterkeyhint="search" data-shortcut="/" data-log-search />
+        </div>
+        <span class="mat-toolbar__spacer"></span>
+        <span class="mat-toolbar__info"><span data-log-count>0</span> lines · buffer @Model.Capacity</span>
+        <div class="mat-toolbar__end">
+            <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn@(level != "Information" ? " is-active" : string.Empty)" data-dialog-open="log-level" aria-haspopup="dialog" data-log-level-button>
+                @MatUi.Icon("sliders")<span>Level</span><small data-log-level-label>@levelLabel</small>
+            </button>
+            <label class="mat-switch"><input type="checkbox" id="log-live" checked data-log-live /><span class="mat-switch__track"></span><span>Live</span></label>
+            <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn" data-log-refresh>@MatUi.Icon("refresh")<span>Refresh</span></button>
         </div>
     </div>
-</section>
 
-<div class="panel workspace-panel">
-    <div class="panel-header">
-        <h2 class="section-title"><span>Application log</span></h2>
-        <span class="panel-count"><span id="logCount">0</span> lines · buffer @Model.Capacity</span>
-    </div>
-    <div class="log-viewport">
-        <table class="log-table">
+    <div class="mat-table-wrap" data-log-table>
+        <table class="mat-table mat-table--compact">
+            <caption class="mat-sr-only">Application log, newest first</caption>
             <thead>
-                <tr><th class="log-col-time">Time</th><th class="log-col-lvl">Level</th><th class="log-col-src">Source</th><th>Message</th></tr>
+                <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">Level</th>
+                    <th scope="col" class="mat-hide-sm">Source</th>
+                    <th scope="col">Message</th>
+                </tr>
             </thead>
-            <tbody id="logRows"></tbody>
+            <tbody data-log-rows></tbody>
         </table>
-        <p id="logEmpty" class="panel-hint" style="padding:14px 16px;" hidden>No log lines match.</p>
+    </div>
+
+    <div class="mat-empty" data-log-empty hidden>
+        <span class="mat-empty__icon">@MatUi.Icon("file-text")</span>
+        <div class="mat-empty__title">No log lines match</div>
+        <p>Change the search or the level - or wait for the next lines while Live is on.</p>
+    </div>
+
+    <div class="mat-actions">
+        <form method="post" asp-page-handler="Clear">
+            <input type="hidden" name="Level" value="@Model.Level" />
+            <input type="hidden" name="Q" value="@Model.Q" />
+            <button type="submit" class="mat-btn mat-btn--danger" data-confirm="Clear the in-memory log buffer?" data-confirm-ok="Clear">@MatUi.Icon("trash")<span>Clear</span></button>
+        </form>
     </div>
 </div>
 
-<script>
-    (function () {
-        var rows = document.getElementById("logRows");
-        var empty = document.getElementById("logEmpty");
-        var count = document.getElementById("logCount");
-        var levelSel = document.getElementById("logLevel");
-        var search = document.getElementById("logSearch");
-        var live = document.getElementById("logLive");
-        var refreshBtn = document.getElementById("logRefresh");
-        var timer = null;
-
-        function shortSource(cat) {
-            if (!cat) { return ""; }
-            var i = cat.lastIndexOf(".");
-            return i >= 0 ? cat.slice(i + 1) : cat;
-        }
-        function fmtTime(iso) {
-            var d = new Date(iso);
-            if (isNaN(d)) { return iso; }
-            return d.toLocaleTimeString(undefined, { hour12: false }) +
-                "." + String(d.getMilliseconds()).padStart(3, "0");
-        }
-
-        function render(items) {
-            rows.textContent = "";
-            if (!items.length) { empty.hidden = false; count.textContent = "0"; return; }
-            empty.hidden = true;
-            count.textContent = items.length;
-            var frag = document.createDocumentFragment();
-            items.forEach(function (e) {
-                var tr = document.createElement("tr");
-                tr.className = "log-row";
-
-                var tdT = document.createElement("td");
-                tdT.className = "log-time";
-                tdT.textContent = fmtTime(e.ts);
-                tdT.title = e.ts;
-
-                var tdL = document.createElement("td");
-                var badge = document.createElement("span");
-                badge.className = "log-lvl log-lvl-" + (e.level || "").toLowerCase();
-                badge.textContent = e.level;
-                tdL.appendChild(badge);
-
-                var tdS = document.createElement("td");
-                tdS.className = "log-source";
-                tdS.textContent = shortSource(e.category);
-                tdS.title = e.category;
-
-                var tdM = document.createElement("td");
-                tdM.className = "log-msg";
-                var msg = document.createElement("div");
-                msg.textContent = e.message;
-                tdM.appendChild(msg);
-                if (e.exception) {
-                    var det = document.createElement("details");
-                    det.className = "log-exc";
-                    var sum = document.createElement("summary");
-                    sum.textContent = "Exception";
-                    var pre = document.createElement("pre");
-                    pre.textContent = e.exception;
-                    det.appendChild(sum);
-                    det.appendChild(pre);
-                    tdM.appendChild(det);
-                }
-
-                tr.appendChild(tdT);
-                tr.appendChild(tdL);
-                tr.appendChild(tdS);
-                tr.appendChild(tdM);
-                frag.appendChild(tr);
-            });
-            rows.appendChild(frag);
-        }
-
-        function load() {
-            var params = new URLSearchParams({ handler: "Data", level: levelSel.value, q: search.value });
-            fetch("?" + params.toString(), { headers: { "X-Requested-With": "fetch" } })
-                .then(function (r) { return r.ok ? r.json() : { items: [] }; })
-                .then(function (d) { render(d.items || []); })
-                .catch(function () { /* keep the last view on a transient error */ });
-        }
-
-        function schedule() {
-            if (timer) { clearInterval(timer); timer = null; }
-            if (live.checked) { timer = setInterval(load, 4000); }
-        }
-
-        levelSel.addEventListener("change", load);
-        var searchDebounce;
-        search.addEventListener("input", function () {
-            clearTimeout(searchDebounce);
-            searchDebounce = setTimeout(load, 250);
-        });
-        refreshBtn.addEventListener("click", load);
-        live.addEventListener("change", schedule);
-
-        load();
-        schedule();
-    })();
-</script>
+<dialog class="mat-dialog mat-dialog--sm" id="log-level" aria-labelledby="log-level-title">
+    <div class="mat-dialog__form">
+        <div class="mat-dialog__head">
+            @MatUi.Icon("sliders")
+            <h2 class="mat-dialog__title" id="log-level-title">Level</h2>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+        </div>
+        <div class="mat-dialog__body mat-form">
+            <fieldset class="mat-field mat-fieldset">
+                <legend class="mat-label">Show lines from</legend>
+                <div class="mat-options">
+                    @foreach (var l in levels)
+                    {
+                        <label class="mat-option"><input type="radio" id="log-level-@l.Value.ToLowerInvariant()" name="log-level" value="@l.Value" checked="@(l.Value == level)" data-log-level /><span>@l.Label</span></label>
+                    }
+                </div>
+            </fieldset>
+            <p class="mat-hint">The view follows the choice at once.</p>
+        </div>
+        <div class="mat-dialog__foot">
+            <div class="mat-btn-row mat-btn-row--plain">
+                <button type="button" class="mat-btn mat-btn--primary" data-dialog-close>@MatUi.Icon("check")<span>Done</span></button>
+            </div>
+        </div>
+    </div>
+</dialog>
