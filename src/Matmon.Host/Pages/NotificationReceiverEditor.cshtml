@@ -13,7 +13,12 @@
     var isCreateMode = Model.SelectedNotificationReceiverId is null || Model.NotificationReceiverEditor.Id == Guid.Empty;
     var backUrl = Model.GetSafeReturnUrl("/NotificationReceivers");
     var receiverKind = isCreateMode ? Model.NewNotificationReceiver.Kind : Model.NotificationReceiverEditor.Kind;
-    var targetLabel = receiverKind == NotificationEndpointKind.Webhook ? "Value for the webhook" : "Email address";
+    var targetLabel = receiverKind switch
+    {
+        NotificationEndpointKind.Webhook => "Value for the webhook",
+        NotificationEndpointKind.Sms or NotificationEndpointKind.Voice => "Phone number",
+        _ => "Email address"
+    };
 }
 
 <nav class="mat-tabs" aria-label="Notifications">
@@ -49,12 +54,14 @@
                         <select asp-for="NewNotificationReceiver.Kind" class="mat-select" data-notification-kind-select>
                             <option value="Email">Email</option>
                             <option value="Webhook">Webhook value (topic, user key, chat id)</option>
+                            <option value="Sms">SMS (via Matmon Cloud)</option>
+                            <option value="Voice">Phone call (via Matmon Cloud)</option>
                         </select>
                     </div>
                     <div class="mat-field mat-field--full">
                         <label class="mat-label" asp-for="NewNotificationReceiver.Target">@targetLabel</label>
                         <input asp-for="NewNotificationReceiver.Target" class="mat-input mat-mono" />
-                        <span class="mat-hint">Email: one address or several, separated by commas. Webhook value: what a webhook sender inserts as <code>{{receiver.target}}</code> - an ntfy topic, a Pushover user key, a Telegram chat id.</span>
+                        <span class="mat-hint">Email: one address or several, separated by commas. Webhook value: what a webhook sender inserts as <code>{{receiver.target}}</code> - an ntfy topic, a Pushover user key, a Telegram chat id. SMS or phone call: a number in international format (+49 170 1234567), used with the Matmon Cloud sender - for critical problems only, a few per half hour at most (the cloud's limits).</span>
                     </div>
                     <div class="mat-field mat-field--full">
                         <label class="mat-switch"><input asp-for="NewNotificationReceiver.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>
@@ -94,12 +101,14 @@ else
                         <select asp-for="NotificationReceiverEditor.Kind" class="mat-select" data-notification-kind-select>
                             <option value="Email">Email</option>
                             <option value="Webhook">Webhook value (topic, user key, chat id)</option>
+                            <option value="Sms">SMS (via Matmon Cloud)</option>
+                            <option value="Voice">Phone call (via Matmon Cloud)</option>
                         </select>
                     </div>
                     <div class="mat-field mat-field--full">
                         <label class="mat-label" asp-for="NotificationReceiverEditor.Target">@targetLabel</label>
                         <input asp-for="NotificationReceiverEditor.Target" class="mat-input mat-mono" />
-                        <span class="mat-hint">Email: one address or several, separated by commas. Webhook value: what a webhook sender inserts as <code>{{receiver.target}}</code> - an ntfy topic, a Pushover user key, a Telegram chat id.</span>
+                        <span class="mat-hint">Email: one address or several, separated by commas. Webhook value: what a webhook sender inserts as <code>{{receiver.target}}</code> - an ntfy topic, a Pushover user key, a Telegram chat id. SMS or phone call: a number in international format (+49 170 1234567), used with the Matmon Cloud sender - for critical problems only, a few per half hour at most (the cloud's limits).</span>
                     </div>
                     <div class="mat-field mat-field--full">
                         <label class="mat-switch"><input asp-for="NotificationReceiverEditor.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>

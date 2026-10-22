@@ -40,6 +40,12 @@ public sealed class NotificationDelivery
 
     public string? CloudToken { get; init; }
 
+    /// <summary>The cloud relay's channel: email, sms or voice (a call that reads the alert out).</summary>
+    public string CloudChannel { get; init; } = "email";
+
+    /// <summary>The alert's state for the cloud (critical, warning, recovered, ...) - it accepts SMS and calls for critical only.</summary>
+    public string? Severity { get; init; }
+
     /// <summary>"escalation 2" and the like - added to the log line.</summary>
     public string? Label { get; init; }
 
@@ -73,6 +79,17 @@ public sealed record NotificationRoute(
         rule.SubjectTemplate, rule.TextTemplate, rule.HtmlTemplate, rule.ShortTemplate);
 }
 
+/// <summary>"critical" for an urgent alert (Critical and not recovered), else its state key - what the cloud relay
+/// is told, and what decides whether an SMS or a call goes out at all.</summary>
+public static class NotificationSeverity
+{
+    public static bool IsCritical(NotificationTemplateContext context) =>
+        context.Values.TryGetValue("state.urgent", out var urgent) && urgent == "1";
+
+    public static string Of(NotificationTemplateContext context) =>
+        IsCritical(context) ? "critical" : context.Values.TryGetValue("state.key", out var key) && key.Length > 0 ? key : "unknown";
+}
+
 /// <summary>
 /// Decides how a notification goes out - the sender picks the channel (no sender = the workspace's default SMTP, an
 /// e-mail sender = its SMTP, a webhook sender = its HTTP request, the Matmon Cloud sender = the cloud gateway) - and
@@ -89,6 +106,13 @@ public sealed class NotificationDeliveryFactory
     {
         _store = store;
     }
+
+    /// <summary>Whether a route ends at an SMS or a call receiver - those go out for critical problems only, so the
+    /// dispatcher skips the rest quietly instead of logging "nothing was sent" for every warning.</summary>
+    public static bool IsPhoneRoute(NotificationRoute route, MonitoringWorkspaceSnapshot workspace) =>
+        route.ReceiverId is Guid receiverId
+        && workspace.NotificationReceivers.FirstOrDefault(candidate => candidate.Id == receiverId) is { } receiver
+        && PhoneNumbers.IsPhoneKind(receiver.Kind);
 
     public (NotificationDelivery? Delivery, string? Problem) Create(
         NotificationRoute route,
@@ -146,9 +170,15 @@ public sealed class NotificationDeliveryFactory
 
             case NotificationEndpointKind.Cloud:
             {
-                if (receiver.Kind != NotificationEndpointKind.Email || string.IsNullOrWhiteSpace(receiver.Target))
+                var phone = PhoneNumbers.IsPhoneKind(receiver.Kind);
+                if (string.IsNullOrWhiteSpace(receiver.Target) || (receiver.Kind != NotificationEndpointKind.Email && !phone))
                 {
-                    return (null, "the Matmon Cloud sender delivers e-mail - pick a receiver with an e-mail address");
+                    return (null, "the Matmon Cloud sender delivers e-mail, SMS and calls - pick a receiver with an e-mail address or a phone number");
+                }
+
+                if (phone && !NotificationSeverity.IsCritical(context))
+                {
+                    return (null, "an SMS or a phone call goes out for critical problems only");
                 }
 
                 var relay = ResolveCloudRelay();
@@ -157,15 +187,23 @@ public sealed class NotificationDeliveryFactory
                     return (null, "it uses the Matmon Cloud sender, but the cloud relay is off or the cloud link is down (System > Cloud)");
                 }
 
+                var channel = receiver.Kind switch
+                {
+                    NotificationEndpointKind.Sms => "sms",
+                    NotificationEndpointKind.Voice => "voice",
+                    _ => "email"
+                };
                 return (new NotificationDelivery
                 {
                     Transport = NotificationTransport.Cloud,
                     RuleName = route.RuleName,
-                    RecipientLabel = receiver.Target,
+                    RecipientLabel = phone ? $"{PhoneNumbers.Mask(receiver.Target)} ({(channel == "sms" ? "SMS" : "call")} via Matmon Cloud)" : receiver.Target,
                     Recipient = receiver.Target,
                     Content = content,
                     CloudUrl = relay.Value.Url,
                     CloudToken = relay.Value.Token,
+                    CloudChannel = channel,
+                    Severity = NotificationSeverity.Of(context),
                     Label = label,
                     NextAttemptUtc = DateTimeOffset.UtcNow
                 }, null);
@@ -177,7 +215,9 @@ public sealed class NotificationDeliveryFactory
                 {
                     return (null, string.IsNullOrWhiteSpace(receiver.Target)
                         ? "it has no recipient"
-                        : "an e-mail sender needs a receiver with an e-mail address (a topic or user key belongs to a webhook sender)");
+                        : PhoneNumbers.IsPhoneKind(receiver.Kind)
+                            ? "an SMS or call receiver needs the Matmon Cloud sender (System > Cloud: relay alerts)"
+                            : "an e-mail sender needs a receiver with an e-mail address (a topic or user key belongs to a webhook sender)");
                 }
 
                 var smtp = sender is { Kind: NotificationEndpointKind.Email }
@@ -328,7 +368,10 @@ public sealed class NotificationTransportClient
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, delivery.CloudUrl)
         {
-            Content = JsonContent.Create(new CloudRelayBody("email", delivery.Recipient, delivery.Content.Subject, delivery.Content.Text, delivery.Content.Html))
+            // An SMS or a call carries the short text (the rule's short template) - the cloud reads it out or sends it as it is.
+            Content = JsonContent.Create(delivery.CloudChannel is "sms" or "voice"
+                ? new CloudRelayBody(delivery.CloudChannel, delivery.Recipient, delivery.Content.Subject, delivery.Content.Summary, null, delivery.Severity)
+                : new CloudRelayBody(delivery.CloudChannel, delivery.Recipient, delivery.Content.Subject, delivery.Content.Text, delivery.Content.Html, delivery.Severity))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", delivery.CloudToken);
         await SendHttpAsync(request, 15, "the Matmon Cloud gateway", cancellationToken);
@@ -385,6 +428,6 @@ public sealed class NotificationTransportClient
         }
     }
 
-    // Mirrors Matmon.Cloud's NotificationRelayRequest (Channel, To, Subject, Text, Html).
-    private sealed record CloudRelayBody(string Channel, string To, string Subject, string? Text, string? Html);
+    // Mirrors Matmon.Cloud's NotificationRelayRequest (Channel, To, Subject, Text, Html, ..., Severity).
+    private sealed record CloudRelayBody(string Channel, string To, string Subject, string? Text, string? Html, string? Severity);
 }

@@ -15,7 +15,44 @@ public enum NotificationEndpointKind
 
     /// <summary>Delivered via the Matmon.Cloud notification gateway (no local SMTP). Enabled from
     /// System → Cloud; recipients come from the rule's receiver, like any other sender.</summary>
-    Cloud = 2
+    Cloud = 2,
+
+    /// <summary>A RECEIVER kind: a mobile number that gets an SMS through the Matmon Cloud sender - for critical
+    /// problems only, within the cloud's limits (it costs money per message).</summary>
+    Sms = 3,
+
+    /// <summary>A RECEIVER kind: a phone number the cloud calls and reads the alert to - critical problems only.</summary>
+    Voice = 4
+}
+
+/// <summary>Phone numbers of SMS / call receivers: international format, the same rule the cloud applies.</summary>
+public static class PhoneNumbers
+{
+    /// <summary>+4917012345678 from "+49 170 1234567", "0049-170/1234567" and the like; null for anything else - a
+    /// national number cannot be dialled from a gateway in another country.</summary>
+    public static string? Normalize(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        var compact = new string(input.Where(character => !char.IsWhiteSpace(character) && character is not ('-' or '/' or '(' or ')' or '.')).ToArray());
+        if (compact.StartsWith("00", StringComparison.Ordinal))
+        {
+            compact = "+" + compact[2..];
+        }
+
+        return compact.Length is >= 9 and <= 16 && compact[0] == '+' && compact[1] is >= '1' and <= '9' && compact.Skip(1).All(char.IsAsciiDigit)
+            ? compact
+            : null;
+    }
+
+    /// <summary>"+49••••••67" - a log line says which number without printing it whole.</summary>
+    public static string Mask(string number) =>
+        number.Length <= 6 ? number : number[..3] + new string('•', number.Length - 5) + number[^2..];
+
+    public static bool IsPhoneKind(NotificationEndpointKind kind) => kind is NotificationEndpointKind.Sms or NotificationEndpointKind.Voice;
 }
 
 public sealed class NotificationWorkspaceConfiguration

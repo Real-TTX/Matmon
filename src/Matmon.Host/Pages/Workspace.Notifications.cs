@@ -113,6 +113,14 @@ public sealed partial class WorkspaceModel
                 _workspaceStore.GetLatestSensorObservations(),
                 DateTimeOffset.UtcNow);
 
+            // An SMS or a call goes out for critical problems only - the test pretends to be one, or it could never be tested.
+            if (NotificationDeliveryFactory.IsPhoneRoute(route, snapshot))
+            {
+                NotificationRendering.SetStateValues(context, SensorState.Critical, recovered: false);
+                context.SetValue("state.label", MonitoringStatePresentation.Label(SensorState.Critical));
+                context.SetValue("state.key", MonitoringStatePresentation.Key(SensorState.Critical));
+            }
+
             var services = HttpContext.RequestServices;
             var (delivery, problem) = services.GetRequiredService<NotificationDeliveryFactory>().Create(route, context, snapshot, label: "test");
             if (delivery is null)
@@ -537,10 +545,18 @@ public sealed partial class WorkspaceModel
 
     private static void ApplyNotificationReceiverEditor(NotificationReceiver receiver, CreateNotificationReceiverInput editor)
     {
+        // Checked BEFORE anything is applied - the receiver being edited is the live one.
+        var target = string.IsNullOrWhiteSpace(editor.Target) ? receiver.Target : editor.Target.Trim();
+        if (PhoneNumbers.IsPhoneKind(editor.Kind))
+        {
+            target = PhoneNumbers.Normalize(target)
+                ?? throw new InvalidOperationException("Enter the phone number in international format, e.g. +49 170 1234567.");
+        }
+
         receiver.Name = string.IsNullOrWhiteSpace(editor.Name) ? "Notification receiver" : editor.Name.Trim();
         receiver.Enabled = editor.Enabled;
         receiver.Kind = editor.Kind;
-        receiver.Target = string.IsNullOrWhiteSpace(editor.Target) ? receiver.Target : editor.Target.Trim();
+        receiver.Target = target;
 
         if (!string.IsNullOrWhiteSpace(editor.Secret))
         {
@@ -883,6 +899,8 @@ public sealed partial class WorkspaceModel
         return receiver.Kind switch
         {
             NotificationEndpointKind.Webhook => $"{receiver.Name} · webhook value",
+            NotificationEndpointKind.Sms => $"{receiver.Name} · SMS via Matmon Cloud",
+            NotificationEndpointKind.Voice => $"{receiver.Name} · call via Matmon Cloud",
             _ => $"{receiver.Name} · email"
         };
     }

@@ -143,7 +143,15 @@ public sealed class NotificationDispatchService : BackgroundService
             }
 
             var context = BuildContext(notificationEvent, rule, element, alert, latest, elementsById);
-            var (delivery, problem) = _deliveryFactory.Create(NotificationRoute.For(rule), context, workspace);
+            var route = NotificationRoute.For(rule);
+            if (!NotificationSeverity.IsCritical(context) && NotificationDeliveryFactory.IsPhoneRoute(route, workspace))
+            {
+                // SMS and calls are for critical problems only - a warning or a recovery is not a failure to report.
+                _logger.LogDebug("Rule {Rule} sends SMS / calls for critical problems only - skipped {State}", rule.Name, notificationEvent.State);
+                continue;
+            }
+
+            var (delivery, problem) = _deliveryFactory.Create(route, context, workspace);
             if (delivery is null)
             {
                 _logger.LogWarning("Notification rule {Rule} matched but nothing was sent: {Problem}", rule.Name, problem);
@@ -233,6 +241,12 @@ public sealed class NotificationDispatchService : BackgroundService
                         rule.TextTemplate,
                         rule.HtmlTemplate,
                         prefix + (string.IsNullOrWhiteSpace(rule.ShortTemplate) ? NotificationTemplateCatalog.DefaultShortTemplate : rule.ShortTemplate));
+                    if (!NotificationSeverity.IsCritical(context) && NotificationDeliveryFactory.IsPhoneRoute(route, workspace))
+                    {
+                        _logger.LogDebug("Escalation {Level} of rule {Rule} is an SMS / call - critical problems only, skipped for {Element}", level, rule.Name, alert.ElementPath);
+                        continue;
+                    }
+
                     var (delivery, problem) = _deliveryFactory.Create(route, context, workspace, label: $"escalation {level}");
                     if (delivery is null)
                     {

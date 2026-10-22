@@ -143,6 +143,73 @@ public sealed class NotificationDeliveryFactoryTests : IDisposable
         Assert.Contains("System > Cloud", problem);
     }
 
+    // --- SMS and calls through the cloud -------------------------------------------------------------------------
+
+    private (NotificationSender Sender, NotificationReceiver Receiver) CloudPhone(NotificationEndpointKind kind)
+    {
+        _store.SetCloudConnectionSettings("https://cloud.example", Guid.NewGuid().ToString(), "instance-token", enabled: true);
+        _store.SetCloudRelaySettings(true);
+        var sender = _store.Workspace.NotificationSenders.Single(candidate => candidate.Kind == NotificationEndpointKind.Cloud);
+        var receiver = _store.CreateNotificationReceiver("On call");
+        receiver.Kind = kind;
+        receiver.Target = "+491701234567";
+        return (sender, receiver);
+    }
+
+    [Theory]
+    [InlineData(NotificationEndpointKind.Sms, "sms")]
+    [InlineData(NotificationEndpointKind.Voice, "voice")]
+    public void A_critical_alert_to_a_phone_receiver_goes_to_the_cloud_as_an_sms_or_a_call(NotificationEndpointKind kind, string channel)
+    {
+        var (sender, receiver) = CloudPhone(kind);
+
+        var (delivery, problem) = new NotificationDeliveryFactory(_store).Create(Route(sender.Id, receiver.Id), Context(), _store.Workspace);
+
+        Assert.Null(problem);
+        Assert.Equal(NotificationTransport.Cloud, delivery!.Transport);
+        Assert.Equal(channel, delivery.CloudChannel);
+        Assert.Equal("critical", delivery.Severity);
+        Assert.Equal("+491701234567", delivery.Recipient);
+        Assert.DoesNotContain("1701234567", delivery.RecipientLabel); // log lines carry a masked number
+        Assert.True(NotificationDeliveryFactory.IsPhoneRoute(Route(sender.Id, receiver.Id), _store.Workspace));
+    }
+
+    [Fact]
+    public void A_warning_or_a_recovery_never_becomes_an_sms()
+    {
+        var (sender, receiver) = CloudPhone(NotificationEndpointKind.Sms);
+        var warning = Context();
+        NotificationRendering.SetStateValues(warning, SensorState.Warning, recovered: false);
+        var recovered = Context();
+        NotificationRendering.SetStateValues(recovered, SensorState.Critical, recovered: true);
+
+        var factory = new NotificationDeliveryFactory(_store);
+        Assert.Contains("critical problems only", factory.Create(Route(sender.Id, receiver.Id), warning, _store.Workspace).Problem);
+        Assert.Contains("critical problems only", factory.Create(Route(sender.Id, receiver.Id), recovered, _store.Workspace).Problem);
+    }
+
+    [Fact]
+    public void A_phone_receiver_without_the_cloud_sender_says_what_it_needs()
+    {
+        var receiver = _store.CreateNotificationReceiver("On call");
+        receiver.Kind = NotificationEndpointKind.Sms;
+        receiver.Target = "+491701234567";
+
+        var (delivery, problem) = new NotificationDeliveryFactory(_store).Create(Route(null, receiver.Id), Context(), _store.Workspace);
+
+        Assert.Null(delivery);
+        Assert.Contains("Matmon Cloud sender", problem);
+    }
+
+    [Theory]
+    [InlineData("+49 170 1234567", "+491701234567")]
+    [InlineData("0049 (170) 123-4567", "+491701234567")]
+    [InlineData("0170 1234567", null)]
+    [InlineData("+0170", null)]
+    [InlineData("ops@example.com", null)]
+    public void A_phone_number_is_kept_in_international_format(string input, string? expected) =>
+        Assert.Equal(expected, PhoneNumbers.Normalize(input));
+
     [Fact]
     public void A_webhook_that_cannot_be_built_names_the_sender_and_the_reason()
     {
