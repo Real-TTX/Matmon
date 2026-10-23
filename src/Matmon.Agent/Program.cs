@@ -99,6 +99,10 @@ builder.Services.AddSingleton<IProbeStorageSource>(new DirectoryProbeStorageSour
 builder.Services.AddMatmonSensorExecutors();
 builder.Services.AddMatmonProbeLocalSensors();
 builder.Services.AddMatmonProbe();
+// Plugins: the built-in ones plus whatever is in "plugins" beside the executable (Matmon__PluginsPath).
+builder.Services.AddMatmonPlugins(string.IsNullOrWhiteSpace(options.PluginsPath)
+    ? Path.Combine(Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, "plugins")
+    : options.PluginsPath);
 
 // Auto-update: follow the instance's agent build (see AgentUpdateService). On unless switched off; the check
 // interval has a floor so a typo cannot turn it into a download loop.

@@ -1,6 +1,7 @@
 using Matmon.Core.Domain;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
+using Matmon.Probe.Syslog;
 
 namespace Matmon.Tests;
 

@@ -287,6 +287,17 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Stores the trap receiver's settings; the receiver notices within seconds.</summary>
     void UpdateSnmpTrapSettings(Matmon.Core.SnmpTraps.SnmpTrapSettings settings);
 
+    /// <summary>Which plugin runs where (System > Plugins) - detached clones.</summary>
+    IReadOnlyList<PluginAssignment> GetPluginAssignments();
+
+    /// <summary>The assignments of the probe with this probe id (what it is told to run); empty for an unknown probe.</summary>
+    IReadOnlyList<PluginAssignment> GetPluginAssignmentsForProbe(string probeId);
+
+    /// <summary>Adds or replaces (by id) an assignment. Throws for a probe element that does not exist.</summary>
+    PluginAssignment SavePluginAssignment(PluginAssignment assignment);
+
+    bool DeletePluginAssignment(Guid id);
+
     /// <summary>This instance's persisted Matmon.Cloud link credentials (a detached clone).</summary>
     CloudConnectionState GetCloudConnection();
 

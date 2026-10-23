@@ -189,3 +189,10 @@ public sealed record SyslogSenderSummary(
     long Messages,
     long Errors,
     DateTimeOffset LastReceivedUtc);
+
+/// <summary>Where received messages go: the primary's syslog store, or - on a probe - the plugin event queue that carries
+/// them to the primary. A full sink drops and counts; it never blocks a listener.</summary>
+public interface ISyslogSink
+{
+    bool TryEnqueue(SyslogMessage message);
+}

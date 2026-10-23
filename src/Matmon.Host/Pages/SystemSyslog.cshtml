@@ -20,10 +20,10 @@
         : bytes < 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024):0.#} MB"
         : $"{bytes / (1024.0 * 1024 * 1024):0.##} GB";
 
-    private static string ListenerState(Matmon.Host.Services.SyslogListenerStatus status) =>
+    private static string ListenerState(Matmon.Probe.Syslog.SyslogListenerStatus status) =>
         status.State switch { "listening" => "ok", "error" => "error", _ => "paused" };
 
-    private static string ListenerLabel(Matmon.Host.Services.SyslogListenerStatus status) =>
+    private static string ListenerLabel(Matmon.Probe.Syslog.SyslogListenerStatus status) =>
         status.State switch { "listening" => "Listening", "error" => "Problem", _ => "Off" };
 }
 

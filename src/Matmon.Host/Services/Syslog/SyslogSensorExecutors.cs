@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using Matmon.Core.Domain;
 using Matmon.Core.Syslog;
+using Matmon.Probe.Syslog;
 
 namespace Matmon.Host.Services;
 

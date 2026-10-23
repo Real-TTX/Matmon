@@ -1,5 +1,6 @@
 using System.Net;
 using Matmon.Core.Syslog;
+using Matmon.Probe.Syslog;
 
 namespace Matmon.Host.Services;
 

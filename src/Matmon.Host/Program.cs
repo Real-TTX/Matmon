@@ -4,6 +4,7 @@ using Matmon.Core;
 using Matmon.Core.Domain;
 using Matmon.Core.Telemetry;
 using Matmon.Host.Services;
+using Matmon.Probe.Syslog;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -88,6 +89,13 @@ var resolvedWorkspacePath = Path.IsPathRooted(workspacePath)
 if (runtimeOptions.Mode == AppMode.Secondary && string.IsNullOrWhiteSpace(runtimeOptions.OfflineBufferPath))
 {
     runtimeOptions.OfflineBufferPath = Path.Combine(Path.GetDirectoryName(resolvedWorkspacePath) ?? builder.Environment.ContentRootPath, "offline-observations.jsonl");
+}
+
+// Plugins are loaded from the data directory too (Matmon__PluginsPath overrides it) - a plugin is installed by putting
+// it there, the same way any software is: whoever can write the data volume can run code anyway.
+if (string.IsNullOrWhiteSpace(runtimeOptions.PluginsPath))
+{
+    runtimeOptions.PluginsPath = Path.Combine(Path.GetDirectoryName(resolvedWorkspacePath) ?? builder.Environment.ContentRootPath, "plugins");
 }
 
 var workspaceDirectory = Path.GetDirectoryName(resolvedWorkspacePath)
@@ -258,6 +266,7 @@ builder.Services.AddRazorPages(options =>
     // device logs can name users and addresses.)
     options.Conventions.AuthorizePage("/SystemSyslog", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemSnmpTraps", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SystemPlugins", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options =>
 {
     options.Filters.Add<MatmonPageWriteGuard>();
@@ -299,6 +308,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
     var syslogDatabasePath = ResolveSyslogPath(builder.Environment, runtimeOptions, workspaceDirectory);
     builder.Services.AddSingleton<ISyslogStore>(provider =>
         new SyslogStore(syslogDatabasePath, provider.GetRequiredService<ILogger<SyslogStore>>()));
+    // The receiver writes into the store through the small sink interface it shares with the probes' collector.
+    builder.Services.AddSingleton<Matmon.Core.Syslog.ISyslogSink>(provider => provider.GetRequiredService<ISyslogStore>());
     builder.Services.AddSingleton<SyslogReceiverState>();
     builder.Services.AddSingleton<SyslogIngest>();
     builder.Services.AddHostedService<SyslogReceiverService>();
@@ -309,12 +320,21 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddSingleton<SensorWakeService>();
     builder.Services.AddSingleton<SnmpTrapIngest>();
     builder.Services.AddHostedService<SnmpTrapReceiverService>();
+
+    // Plugins: what the plugins on probes (and on the primary itself) report is handled here, by event kind.
+    builder.Services.AddSingleton<Matmon.Host.Services.Plugins.IPluginEventHandler, Matmon.Host.Services.Plugins.SyslogPluginEventHandler>();
+    builder.Services.AddSingleton<Matmon.Host.Services.Plugins.IPluginEventHandler, Matmon.Host.Services.Plugins.SnmpTrapPluginEventHandler>();
+    builder.Services.AddSingleton<Matmon.Host.Services.Plugins.PluginEventDispatcher>();
+    builder.Services.AddSingleton<Matmon.Host.Services.Plugins.PluginStatusRegistry>();
+    builder.Services.AddHostedService<Matmon.Host.Services.Plugins.PrimaryPluginService>();
 }
 else
 {
     // The same probe wiring Matmon.Agent uses - see ProbeServiceRegistration.
     builder.Services.AddMatmonProbe();
 }
+
+builder.Services.AddMatmonPlugins(runtimeOptions.PluginsPath);
 
 builder.Services.AddHttpContextAccessor();
 
@@ -820,6 +840,57 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
     // A remote probe pulls its queued on-demand runs here (Pending -> Running), same token auth as the
     // sensor-assignment/discovery endpoints.
+    // --- Plugins on probes: what to run, and what they saw (events, with their real times, after an outage too) ---------
+    app.MapGet("/api/probes/{probeId}/plugins", (string probeId, HttpRequest request, IMonitoringWorkspaceStore workspaceStore) =>
+    {
+        if (!workspaceStore.TryValidateProbe(probeId, ReadProbeToken(request)))
+        {
+            return Results.Unauthorized();
+        }
+
+        var assignments = workspaceStore.GetPluginAssignmentsForProbe(probeId)
+            .Select(assignment => new Matmon.Probe.Plugins.ProbePluginAssignment(
+                assignment.Id, assignment.PluginId, assignment.Enabled, new Dictionary<string, string>(assignment.Settings)))
+            .ToList();
+        return Results.Ok(new Matmon.Probe.Plugins.ProbePluginAssignmentsResponse(assignments));
+    }).AllowAnonymous();
+
+    app.MapPost("/api/probes/{probeId}/plugins/events", (
+        string probeId,
+        Matmon.Probe.Plugins.ProbePluginUpload upload,
+        HttpRequest request,
+        IMonitoringWorkspaceStore workspaceStore,
+        Matmon.Host.Services.Plugins.PluginEventDispatcher dispatcher,
+        Matmon.Host.Services.Plugins.PluginStatusRegistry registry) =>
+    {
+        if (!workspaceStore.TryValidateProbe(probeId, ReadProbeToken(request)))
+        {
+            return Results.Unauthorized();
+        }
+
+        var events = upload.Events ?? [];
+        if (events.Count > 2000)
+        {
+            return Results.BadRequest(new { error = "at most 2000 events per request" });
+        }
+
+        foreach (var pluginEvent in events)
+        {
+            dispatcher.Dispatch(pluginEvent, probeId);
+        }
+
+        // A probe speaks for its own assignments only - never for another probe's.
+        var now = DateTimeOffset.UtcNow;
+        var own = workspaceStore.GetPluginAssignmentsForProbe(probeId).Select(assignment => assignment.Id).ToHashSet();
+        foreach (var status in (upload.Statuses ?? []).Where(status => own.Contains(status.AssignmentId)))
+        {
+            registry.ReportAssignment(status.AssignmentId, new Matmon.Probe.Plugins.PluginStatus(status.State, status.Detail), now);
+        }
+
+        registry.ReportProbe(probeId, upload.AvailablePlugins ?? [], upload.QueuedEvents, upload.DroppedEvents, events.Count, now);
+        return Results.Ok(new { accepted = events.Count });
+    }).AllowAnonymous();
+
     app.MapGet("/api/probes/{probeId}/run-jobs", (
         string probeId,
         HttpRequest request,

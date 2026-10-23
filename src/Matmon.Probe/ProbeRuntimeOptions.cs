@@ -39,6 +39,11 @@ public class ProbeRuntimeOptions
     /// agent to its state directory; set via <c>Matmon__OfflineBufferPath</c>. Empty = memory only (lost on a restart).</summary>
     public string? OfflineBufferPath { get; set; }
 
+    /// <summary>The directory plugins are loaded from at start (one DLL or one sub-directory per plugin). The Docker
+    /// image defaults to <c>plugins</c> in its data directory, the agent to <c>plugins</c> beside its executable; set via
+    /// <c>Matmon__PluginsPath</c>. A plugin runs with the rights of the process - only put trusted code there.</summary>
+    public string? PluginsPath { get; set; }
+
     /// <summary>Hard cap on buffered observations (RAM safety for a long outage); the oldest are dropped past it.
     /// Set via <c>Matmon__OfflineBufferMaxObservations</c>. Default 100000; ≤0 = no count cap (retention only).</summary>
     public int OfflineBufferMaxObservations { get; set; } = 100_000;

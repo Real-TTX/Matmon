@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Matmon.Core.Domain;
+using Matmon.Probe;
 using Matmon.Core.SnmpTraps;
 using Matmon.Core.Syslog;
 
@@ -152,11 +153,19 @@ public sealed class SnmpTrapIngest
     }
 
     /// <summary>Handles one datagram; returns the bytes to send back (an inform's response) or null.</summary>
-    public byte[]? Accept(ReadOnlySpan<byte> datagram, IPAddress sender)
+    public byte[]? Accept(ReadOnlySpan<byte> datagram, IPAddress sender) =>
+        Process(datagram, sender, DateTimeOffset.UtcNow, checkAllowList: true, viaProbe: null);
+
+    /// <summary>A trap the collector plugin on a probe received and forwarded: the probe applied its own allow-list (and
+    /// answered an inform); here it is parsed, checked against the communities and the v3 users and logged - at the time it
+    /// ARRIVED at the probe, so a trap from an outage of the primary lands where it belongs in the log.</summary>
+    public void AcceptForwarded(ReadOnlySpan<byte> datagram, IPAddress sender, DateTimeOffset receivedUtc, string probeId) =>
+        Process(datagram, sender, receivedUtc, checkAllowList: false, viaProbe: probeId);
+
+    private byte[]? Process(ReadOnlySpan<byte> datagram, IPAddress sender, DateTimeOffset now, bool checkAllowList, string? viaProbe)
     {
         var source = sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender;
-        var now = DateTimeOffset.UtcNow;
-        if (!_allowList.IsEmpty && !_allowList.Allows(source))
+        if (checkAllowList && !_allowList.IsEmpty && !_allowList.Allows(source))
         {
             _state.Rejected();
             return null;
@@ -204,7 +213,7 @@ public sealed class SnmpTrapIngest
         }
 
         _state.Received($"{name} from {source}", woken, now);
-        _logger.LogInformation("SNMP trap {Trap} from {Source} ({Woken} sensor(s) polled)", name, source, woken);
+        _logger.LogInformation("SNMP trap {Trap} from {Source}{Via} ({Woken} sensor(s) polled)", name, source, viaProbe is null ? string.Empty : $" via probe {viaProbe}", woken);
         return trap.PduType == SnmpTrapPduType.Inform ? SnmpTrapParser.BuildInformResponse(trap) : null;
     }
 
@@ -395,116 +404,22 @@ public sealed class SensorWakeService
     }
 }
 
-/// <summary>The UDP socket: receives datagrams, hands them to <see cref="SnmpTrapIngest"/>, sends an inform's answer back.</summary>
+/// <summary>The UDP socket: receives datagrams, hands them to <see cref="SnmpTrapIngest"/>, sends an inform's answer back
+/// (the socket itself is <see cref="UdpDatagramListener"/>, shared with the trap collector plugin on probes).</summary>
 public sealed class SnmpTrapUdpListener : IDisposable
 {
-    private readonly Socket _socket;
-    private readonly SnmpTrapIngest _ingest;
-    private readonly ILogger _logger;
-    private readonly CancellationTokenSource _stopping = new();
-    private Task? _loop;
+    private readonly UdpDatagramListener _listener;
 
-    private SnmpTrapUdpListener(Socket socket, SnmpTrapIngest ingest, ILogger logger)
-    {
-        _socket = socket;
-        _ingest = ingest;
-        _logger = logger;
-        Port = ((IPEndPoint)socket.LocalEndPoint!).Port;
-    }
+    private SnmpTrapUdpListener(UdpDatagramListener listener) => _listener = listener;
 
-    public int Port { get; }
+    public int Port => _listener.Port;
 
     /// <summary>Binds and starts receiving (port 0 picks a free one, for tests). Throws <see cref="SocketException"/> when the
     /// port is taken or needs rights this process does not have.</summary>
-    public static SnmpTrapUdpListener Start(int port, SnmpTrapIngest ingest, ILogger logger)
-    {
-        Socket socket;
-        try
-        {
-            socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp) { DualMode = true };
-            socket.Bind(new IPEndPoint(IPAddress.IPv6Any, port));
-        }
-        catch (SocketException exception) when (exception.SocketErrorCode is SocketError.AddressFamilyNotSupported or SocketError.ProtocolNotSupported or SocketError.OperationNotSupported)
-        {
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            socket.Bind(new IPEndPoint(IPAddress.Any, port));
-        }
+    public static SnmpTrapUdpListener Start(int port, SnmpTrapIngest ingest, ILogger logger) =>
+        new(UdpDatagramListener.Start(port, (datagram, sender) => ingest.Accept(datagram.Span, sender), logger, "SNMP trap"));
 
-        if (OperatingSystem.IsWindows())
-        {
-            try
-            {
-                // Windows reports an ICMP "port unreachable" from an earlier send (an inform's answer) as a reset on the next receive.
-                socket.IOControl((IOControlCode)(-1744830452), [0], null);
-            }
-            catch (SocketException)
-            {
-            }
-        }
-
-        var listener = new SnmpTrapUdpListener(socket, ingest, logger);
-        listener._loop = Task.Run(listener.ReceiveLoopAsync);
-        return listener;
-    }
-
-    private async Task ReceiveLoopAsync()
-    {
-        var buffer = new byte[65535];
-        var remote = _socket.AddressFamily == AddressFamily.InterNetworkV6 ? new IPEndPoint(IPAddress.IPv6Any, 0) : new IPEndPoint(IPAddress.Any, 0);
-        while (!_stopping.IsCancellationRequested)
-        {
-            try
-            {
-                var result = await _socket.ReceiveFromAsync(buffer, SocketFlags.None, remote, _stopping.Token).ConfigureAwait(false);
-                if (result.RemoteEndPoint is not IPEndPoint sender)
-                {
-                    continue;
-                }
-
-                var answer = _ingest.Accept(buffer.AsSpan(0, result.ReceivedBytes), sender.Address);
-                if (answer is not null)
-                {
-                    await _socket.SendToAsync(answer, SocketFlags.None, sender, _stopping.Token).ConfigureAwait(false);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (ObjectDisposedException)
-            {
-                return;
-            }
-            catch (SocketException exception) when (exception.SocketErrorCode is SocketError.OperationAborted or SocketError.Interrupted or SocketError.Shutdown)
-            {
-                return;
-            }
-            catch (SocketException exception) when (exception.SocketErrorCode == SocketError.ConnectionReset)
-            {
-                // see Start: not a failure of ours
-            }
-            catch (Exception exception)
-            {
-                _logger.LogWarning(exception, "SNMP trap receive failed; carrying on");
-                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
-            }
-        }
-    }
-
-    public void Dispose()
-    {
-        _stopping.Cancel();
-        _socket.Dispose();
-        try
-        {
-            _loop?.Wait(TimeSpan.FromSeconds(2));
-        }
-        catch (AggregateException)
-        {
-        }
-
-        _stopping.Dispose();
-    }
+    public void Dispose() => _listener.Dispose();
 }
 
 /// <summary>

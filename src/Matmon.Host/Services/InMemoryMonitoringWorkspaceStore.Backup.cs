@@ -694,6 +694,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // them - switching a network listener on is a decision made on the machine it runs on - so they are not carried.
         document.Syslog = new();
         document.SnmpTraps = new();
+        document.Plugins = [];
 
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {

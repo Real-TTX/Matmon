@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
+using Matmon.Probe.Syslog;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Matmon.Tests;

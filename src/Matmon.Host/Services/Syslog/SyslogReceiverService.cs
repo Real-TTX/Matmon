@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Matmon.Core.Syslog;
+using Matmon.Probe.Syslog;
 
 namespace Matmon.Host.Services;
 

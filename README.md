@@ -67,6 +67,9 @@ optional and connect outbound, so they work behind firewalls and NAT.
   servers searchable - including what a switch forgets when it reboots
 - A built-in **SNMP trap receiver** (v1, v2c, informs and signed/encrypted SNMPv3 traps; off until you switch it on): a trap lands in the same
   log, and the sending device's sensors poll at once - a UPS that sends "on battery" is red within seconds
+- **Plugins**: the syslog server and the trap receiver also run *on a remote probe or agent* - next to the devices,
+  switched on and configured from the instance (*System → Plugins*); what they collect is queued on the probe's disk
+  and arrives with its real times, even after an outage of the primary
 - **Maps / wallboards** with tiles that roll up sensor state (element- or tag-targeted)
 - **Dark & light** themes, a mobile-responsive UI, users with **Viewer / User / Admin** roles and
   optional two-factor sign-in
@@ -198,6 +201,10 @@ Then enter the Matmon host as the syslog server in each device and give it a *Sy
 devices by the *host name* they put in the message; and syslog has no login, so use *Allowed sources* to say
 who may write to the log.
 
+Devices at another site can send to their **remote probe** instead: *System → Plugins → Add* the *Syslog collector*
+(or the *SNMP trap collector*) on that probe and publish the port there. The probe keeps collecting while the primary
+is unreachable and delivers the messages with their arrival times afterwards.
+
 ### 4. From source
 
 The repository's `docker-compose.yml` also carries a `build:` section, so you can build the image
@@ -229,6 +236,7 @@ of them are optional:
 | `Matmon__AllowedProgramPaths` | – | Allow-list for the *Local Program* sensor (`;`-separated) |
 | `Matmon__WorkspacePath` | `data/workspace.json` | Where state is stored (inside `/app/data`) |
 | `Matmon__SyslogPath` | `data/syslog.db` | Where received syslog messages are stored |
+| `Matmon__PluginsPath` | `data/plugins` | Folder for additional plugin DLLs (they run with Matmon's own rights - only install what you trust) |
 
 Secondary probes additionally take `Matmon__ProbeId`, `Matmon__ProbeName`, `Matmon__ProbeToken`
 and `Matmon__PrimaryUrl` (see the remote-probe example above). The Matmon.Cloud link is set up in
@@ -243,6 +251,7 @@ Everything Matmon owns lives under one directory — one volume to back up or mo
 ├─ workspace.json          topology, templates, notifications, maps, users, settings
 ├─ telemetry.db            SQLite: observations, events, statistics (WAL)
 ├─ syslog.db               SQLite: received syslog messages (only once the receiver is on)
+├─ plugins/                optional: additional plugin DLLs
 ├─ dataprotection-keys/    encryption keys (credentials + secrets at rest)
 └─ backups/                local config backups
 ```

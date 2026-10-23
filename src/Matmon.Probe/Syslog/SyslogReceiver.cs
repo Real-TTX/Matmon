@@ -1,8 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
 using Matmon.Core.Syslog;
+using Microsoft.Extensions.Logging;
 
-namespace Matmon.Host.Services;
+namespace Matmon.Probe.Syslog;
 
 /// <summary>What one listener is doing, for the settings page: "off", "listening" or "error" plus a human sentence.</summary>
 public sealed record SyslogListenerStatus(string State, string? Detail)
@@ -71,11 +72,11 @@ public sealed class SyslogReceiverState
 /// </summary>
 public sealed class SyslogIngest
 {
-    private readonly ISyslogStore _store;
+    private readonly ISyslogSink _store;
     private readonly TimeProvider _time;
     private volatile IpAllowList _allowList = IpAllowList.Parse(null, out _);
 
-    public SyslogIngest(ISyslogStore store, SyslogReceiverState state, TimeProvider? time = null)
+    public SyslogIngest(ISyslogSink store, SyslogReceiverState state, TimeProvider? time = null)
     {
         _store = store;
         State = state;

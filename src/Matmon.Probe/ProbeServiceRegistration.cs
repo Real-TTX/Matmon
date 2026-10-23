@@ -1,6 +1,8 @@
 using Matmon.Core.Domain;
+using Matmon.Probe.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Matmon.Probe;
 
@@ -23,6 +25,24 @@ public static class ProbeServiceRegistration
         services.TryAddSingleton<NetworkDiscoveryService>();
         services.AddHostedService<SlaveHeartbeatService>();
         services.AddHostedService<SlaveSensorWorker>();
+        services.AddHostedService<ProbePluginWorker>();
+        return services;
+    }
+
+    /// <summary>
+    /// The plugins this host knows: the built-in ones plus those in <paramref name="pluginsDirectory"/> (loaded at start),
+    /// and the event sink a probe's plugins publish into. Every mode registers it - the primary needs the catalog for the
+    /// Plugins page, a probe or agent to run what it is assigned. Adding a built-in plugin = one line here.
+    /// </summary>
+    public static IServiceCollection AddMatmonPlugins(this IServiceCollection services, string? pluginsDirectory)
+    {
+        services.AddSingleton<IMatmonPlugin, SyslogCollectorPlugin>();
+        services.AddSingleton<IMatmonPlugin, SnmpTrapCollectorPlugin>();
+        services.TryAddSingleton<ProbePluginEventSink>();
+        services.TryAddSingleton(provider => new PluginCatalog(
+            provider.GetServices<IMatmonPlugin>(),
+            provider.GetRequiredService<ILogger<PluginCatalog>>(),
+            pluginsDirectory));
         return services;
     }
 

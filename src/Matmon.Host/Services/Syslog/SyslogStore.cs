@@ -20,11 +20,10 @@ public sealed record SyslogStorageInfo(
 /// its own terms (a switch that reboots in a loop can write thousands of lines a minute), and clearing or losing it must
 /// never touch sensor history.
 /// </summary>
-public interface ISyslogStore
+public interface ISyslogStore : ISyslogSink
 {
-    /// <summary>Queues a message for storage. False when the queue is full - the message is dropped and counted, so a
-    /// flood costs log lines rather than the monitor.</summary>
-    bool TryEnqueue(SyslogMessage message);
+    // TryEnqueue (from ISyslogSink): queues a message for storage. False when the queue is full - the message is dropped
+    // and counted, so a flood costs log lines rather than the monitor.
 
     /// <summary>Newest first, at most <paramref name="limit"/>.</summary>
     IReadOnlyList<SyslogMessage> Search(SyslogQuery query, int limit);

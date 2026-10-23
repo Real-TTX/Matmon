@@ -1,0 +1,218 @@
+@page "/system/plugins"
+@model Matmon.Host.Pages.SystemPluginsModel
+@using Matmon.Probe.Plugins
+@{
+    ViewData["Title"] = "System";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Plugins") };
+    var definition = Model.EditingDefinition;
+    string Placement(PluginPlacement placement) => placement switch
+    {
+        PluginPlacement.Primary => "the primary",
+        PluginPlacement.Probe => "probes and agents",
+        _ => "the primary, probes and agents"
+    };
+}
+
+<partial name="_SystemTabs" model="@("plugins")" />
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.Editing && definition is not null)
+{
+    <form method="post" asp-page-handler="Save" class="mat-form" novalidate>
+        <input type="hidden" asp-for="Input.Id" />
+        <input type="hidden" asp-for="Input.PluginId" />
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("plug")<h2 class="mat-card__title">@definition.DisplayName</h2><span class="mat-text-muted mm-push-end">@(Model.Input.Id is null ? "new" : "edit")</span></div>
+            <div class="mat-card__body">
+                @if (!string.IsNullOrWhiteSpace(Model.FormError))
+                {
+                    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+                }
+
+                <p class="mat-text-muted">@definition.Description</p>
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_ProbeElementId">Runs on</label>
+                        <select asp-for="Input.ProbeElementId" class="mat-select">
+                            @foreach (var location in Model.LocationsFor(definition))
+                            {
+                                <option value="@location.Id">@location.Name</option>
+                            }
+                        </select>
+                        <span class="mat-hint">@definition.DisplayName runs on @Placement(definition.Placement).</span>
+                    </div>
+                    <div class="mat-field mat-self-end">
+                        <label class="mat-switch">
+                            <input asp-for="Input.Enabled" type="checkbox" value="true" />
+                            <span class="mat-switch__track"></span>
+                            <span>Running</span>
+                        </label>
+                    </div>
+                    @foreach (var setting in definition.Settings)
+                    {
+                        var value = Model.Input.Settings.TryGetValue(setting.Key, out var current) ? current : setting.DefaultValue ?? string.Empty;
+                        var name = $"Input.Settings[{setting.Key}]";
+                        var id = $"setting-{setting.Key}";
+                        switch (setting.Kind)
+                        {
+                            case PluginSettingKind.Boolean:
+                                <div class="mat-field">
+                                    <label class="mat-switch">
+                                        <input type="checkbox" id="@id" name="@name" value="true" checked="@(string.Equals(value, "true", StringComparison.OrdinalIgnoreCase))" />
+                                        <span class="mat-switch__track"></span>
+                                        <span>@setting.Label</span>
+                                    </label>
+                                    @if (!string.IsNullOrWhiteSpace(setting.Description))
+                                    {
+                                        <span class="mat-hint">@setting.Description</span>
+                                    }
+                                </div>
+                                break;
+                            case PluginSettingKind.MultilineText:
+                                <div class="mat-field mat-field--full">
+                                    <label class="mat-label" for="@id">@setting.Label</label>
+                                    <textarea id="@id" name="@name" rows="3" class="mat-textarea mat-mono">@value</textarea>
+                                    @if (!string.IsNullOrWhiteSpace(setting.Description))
+                                    {
+                                        <span class="mat-hint">@setting.Description</span>
+                                    }
+                                </div>
+                                break;
+                            default:
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@id">@setting.Label</label>
+                                    @if (setting.Kind is PluginSettingKind.Port or PluginSettingKind.Number)
+                                    {
+                                        <input id="@id" name="@name" value="@value" type="number" class="mat-input mat-mono" min="@(setting.Kind == PluginSettingKind.Port ? "1" : null)" max="@(setting.Kind == PluginSettingKind.Port ? "65535" : null)" required="@setting.Required" />
+                                    }
+                                    else
+                                    {
+                                        <input id="@id" name="@name" value="@value" class="mat-input" required="@setting.Required" />
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(setting.Description))
+                                    {
+                                        <span class="mat-hint">@setting.Description</span>
+                                    }
+                                    <span class="mat-error" aria-live="polite"></span>
+                                </div>
+                                break;
+                        }
+                    }
+                </div>
+            </div>
+        </section>
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
+            <a class="mat-btn mat-btn--secondary" asp-page="/SystemPlugins">@MatUi.Icon("back")<span>Back</span></a>
+        </div>
+    </form>
+}
+else
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("plug")<h2 class="mat-card__title">Where plugins run</h2><span class="mat-text-muted mm-push-end">@Model.Rows.Count</span></div>
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="mat-card__body">
+                <div class="mat-empty">
+                    <div class="mat-empty__icon">@MatUi.Icon("plug")</div>
+                    <div class="mat-empty__title">No plugin runs yet</div>
+                    <p>Pick a plugin below and the place it should run - the primary itself, or a probe or agent where the devices are.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Plugins and where they run</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Plugin</th>
+                            <th scope="col">Runs on</th>
+                            <th scope="col">State</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Rows)
+                        {
+                            var (tone, label) = row.Pill;
+                            <tr>
+                                <td data-label="Plugin" class="mat-table__primary"><a asp-page="/SystemPlugins" asp-route-edit="@row.Assignment.Id">@(row.Definition?.DisplayName ?? row.Assignment.PluginId)</a></td>
+                                <td data-label="Runs on">@(row.Location?.Name ?? "a deleted probe")</td>
+                                <td data-label="State">
+                                    <span class="@MatUi.PillClass(tone)">@label</span>
+                                    <span class="mat-text-muted">@row.Detail</span>
+                                    @if (row.ProbeState is { QueuedEvents: > 0 } queued)
+                                    {
+                                        <span class="mat-text-muted">· @queued.QueuedEvents.ToString("N0") waiting on the probe</span>
+                                    }
+                                </td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <form method="post" asp-page-handler="Delete" asp-route-id="@row.Assignment.Id">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm mat-btn--icon" data-tip="Remove" aria-label="Remove" data-confirm="Stop and remove this plugin there?" data-confirm-ok="Remove">@MatUi.Icon("trash")</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("box")<h2 class="mat-card__title">Available plugins</h2><span class="mat-text-muted mm-push-end">@Model.Plugins.Count</span></div>
+        <div class="mat-card__body mat-stack">
+            @foreach (var error in Model.LoadErrors)
+            {
+                <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Not loaded: @error</div></div>
+            }
+
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Available plugins</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Plugin</th>
+                            <th scope="col">Runs on</th>
+                            <th scope="col">Source</th>
+                            <th scope="col"><span class="mat-sr-only">Add</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var plugin in Model.Plugins)
+                        {
+                            <tr>
+                                <td data-label="Plugin" class="mat-table__primary">
+                                    <strong>@plugin.Definition.DisplayName</strong>
+                                    <span class="mat-text-muted"> @plugin.Definition.Description</span>
+                                </td>
+                                <td data-label="Runs on">@Placement(plugin.Definition.Placement)</td>
+                                <td data-label="Source">@(Matmon.Host.Pages.SystemPluginsModel.IsBuiltIn(plugin) ? "built in" : $"plugins folder (v{plugin.Definition.Version})")</td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--secondary mat-btn--sm" asp-page="/SystemPlugins" asp-route-add="@plugin.Definition.Id">@MatUi.Icon("plus")<span>Add</span></a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="mat-hint">More plugins are loaded at start from <code class="mm-break">@Model.PluginsPath</code> on the primary (and from <code>plugins</code> beside the executable on an agent) - one DLL or one folder per plugin. A plugin runs with Matmon's rights: install only code you trust.</p>
+        </div>
+    </section>
+}

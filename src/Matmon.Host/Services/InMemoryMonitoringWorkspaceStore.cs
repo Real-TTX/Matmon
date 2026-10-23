@@ -1363,6 +1363,68 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public IReadOnlyList<PluginAssignment> GetPluginAssignments()
+    {
+        lock (_gate)
+        {
+            return (_document.Plugins ??= []).Select(assignment => assignment.Clone()).ToList();
+        }
+    }
+
+    public IReadOnlyList<PluginAssignment> GetPluginAssignmentsForProbe(string probeId)
+    {
+        lock (_gate)
+        {
+            var probe = EnumerateElements(_document.RootProbe).OfType<ProbeElement>()
+                .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
+            return probe is null
+                ? []
+                : (_document.Plugins ??= []).Where(assignment => assignment.ProbeElementId == probe.Id).Select(assignment => assignment.Clone()).ToList();
+        }
+    }
+
+    public PluginAssignment SavePluginAssignment(PluginAssignment assignment)
+    {
+        ArgumentNullException.ThrowIfNull(assignment);
+        lock (_gate)
+        {
+            if (EnumerateElements(_document.RootProbe).OfType<ProbeElement>().All(probe => probe.Id != assignment.ProbeElementId))
+            {
+                throw new InvalidOperationException("That probe does not exist (any more).");
+            }
+
+            var plugins = _document.Plugins ??= [];
+            var stored = assignment.Clone();
+            stored.PluginId = stored.PluginId.Trim();
+            var index = plugins.FindIndex(existing => existing.Id == stored.Id);
+            if (index >= 0)
+            {
+                plugins[index] = stored;
+            }
+            else
+            {
+                plugins.Add(stored);
+            }
+
+            QueueSave(SavePriority.Configuration);
+            return stored.Clone();
+        }
+    }
+
+    public bool DeletePluginAssignment(Guid id)
+    {
+        lock (_gate)
+        {
+            var removed = (_document.Plugins ??= []).RemoveAll(assignment => assignment.Id == id) > 0;
+            if (removed)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+
+            return removed;
+        }
+    }
+
     public SummaryReportSettings GetSummaryReportSettings()
     {
         lock (_gate)
@@ -4511,6 +4573,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>The SNMP trap receiver - like <see cref="Syslog"/>, decided on this machine and never carried in a backup.</summary>
         public Matmon.Core.SnmpTraps.SnmpTrapSettings SnmpTraps { get; set; } = new();
+
+        /// <summary>Which plugin runs where (System > Plugins) - like the receivers, never carried in a backup.</summary>
+        public List<PluginAssignment> Plugins { get; set; } = [];
 
         public CloudConnectionState Cloud { get; set; } = new();
 
