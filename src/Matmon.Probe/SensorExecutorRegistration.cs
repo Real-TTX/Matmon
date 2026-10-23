@@ -32,6 +32,12 @@ public static class SensorExecutorRegistration
         services.AddTransient<ISensorExecutor>(_ => new FritzBoxSensorExecutor());
         services.AddTransient<ISensorExecutor>(_ => new RedfishSensorExecutor());
         services.AddTransient<ISensorExecutor>(_ => new ProxmoxBackupSensorExecutor());
+        services.AddTransient<ISensorExecutor, PrinterSensorExecutor>();
+        services.AddTransient<ISensorExecutor>(_ => new DomainExpirySensorExecutor());
+        services.AddTransient<ISensorExecutor, SipSensorExecutor>();
+        services.AddTransient<ISensorExecutor, LdapSensorExecutor>();
+        services.AddTransient<ISensorExecutor>(_ => new OpnsenseSensorExecutor());
+        services.AddTransient<ISensorExecutor, HyperVSensorExecutor>();
         // NB: ProxmoxPveSensorExecutor is intentionally NOT registered as a selectable type - the legacy
         // scope-based "proxmox" type was retired in favour of proxmox-health / proxmox-node-health, which
         // instantiate it directly as the shared REST/auth engine.

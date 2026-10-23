@@ -35,6 +35,15 @@ public static class SensorScheduleDefaults
         // The internet line: an outage has to show within a minute, and the box answers four tiny SOAP calls.
         ["fritzbox"] = TimeSpan.FromMinutes(1),
 
+        // A phone system: one small datagram - a dead PBX should not go unnoticed for five minutes.
+        ["sip"] = TimeSpan.FromMinutes(1),
+
+        // The firewall's gateways are the internet line - as quick as the FRITZ!Box.
+        ["opnsense"] = TimeSpan.FromMinutes(1),
+
+        // Toner and paper run out over days; a printer that jams is noticed by the person standing at it first.
+        ["snmp-printer"] = TimeSpan.FromMinutes(15),
+
         // Backups arrive hours apart and a datastore fills over days - a quarter of an hour is plenty.
         ["proxmox-backup"] = TimeSpan.FromMinutes(15),
 
@@ -63,6 +72,8 @@ public static class SensorScheduleDefaults
         ["synology-update"] = OncePerDay,
         ["ssl-certificate"] = OncePerDay,
         ["certificate-chain"] = OncePerDay,
+        // A registry is asked once a day - an expiry date moves by a year at a time, and registries rate-limit WHOIS.
+        ["domain-expiry"] = OncePerDay,
 
         // Mail round-trip: a send + receive probe every 15 min balances freshness against mail-server
         // load; the sensor's tolerance parameter (default 15 min) governs the actual alarm window.

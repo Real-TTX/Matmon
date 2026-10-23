@@ -246,7 +246,10 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 varBind.Value.Syntax,
                 varBind.Value.DisplayValue,
                 varBind.Value.NumericValue.HasValue,
-                varBind.Value.NumericValue.HasValue));
+                varBind.Value.NumericValue.HasValue)
+            {
+                RawHex = varBind.Value.Raw is { } raw ? Convert.ToHexString(raw) : null
+            });
 
             previousOid = varBind.Oid;
 
@@ -609,12 +612,13 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
     private static SnmpValue DecodeOctetStringValue(ReadOnlySpan<byte> content)
     {
         var text = DecodeOctetString(content);
+        var raw = content.ToArray();
         if (TryParseNumber(text, out var numericValue))
         {
-            return new SnmpValue("OctetString", text, numericValue, null, false);
+            return new SnmpValue("OctetString", text, numericValue, null, false) { Raw = raw };
         }
 
-        return new SnmpValue("OctetString", text, null, null, false);
+        return new SnmpValue("OctetString", text, null, null, false) { Raw = raw };
     }
 
     private static SnmpValue DecodeTimeTicksValue(ReadOnlySpan<byte> content)
@@ -936,7 +940,10 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 varBind.Value.Syntax,
                 varBind.Value.DisplayValue,
                 varBind.Value.NumericValue.HasValue,
-                varBind.Value.NumericValue.HasValue));
+                varBind.Value.NumericValue.HasValue)
+            {
+                RawHex = varBind.Value.Raw is { } raw ? Convert.ToHexString(raw) : null
+            });
 
             previousOid = varBind.Oid;
 
@@ -1728,7 +1735,12 @@ public sealed record SnmpDiscoveryItem(
     string Syntax,
     string Value,
     bool IsNumeric,
-    bool SelectedByDefault);
+    bool SelectedByDefault)
+{
+    /// <summary>An OCTET STRING's bytes as hex - the display value is text where the bytes look like text, so a bit
+    /// mask (hrPrinterDetectedErrorState) cannot be read back from it.</summary>
+    public string? RawHex { get; init; }
+}
 
 internal enum SnmpPduType : byte
 {
@@ -1752,7 +1764,11 @@ internal sealed record SnmpValue(
     string DisplayValue,
     double? NumericValue,
     string? Unit,
-    bool IsEndOfMib);
+    bool IsEndOfMib)
+{
+    /// <summary>The bytes of an OCTET STRING (null for other types).</summary>
+    public byte[]? Raw { get; init; }
+}
 
 internal sealed record SnmpResponse(
     int ErrorStatus,

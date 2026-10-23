@@ -37,10 +37,15 @@ optional and connect outbound, so they work behind firewalls and NAT.
   an embedded SQLite store
 
 **Sensors** (a selection)
-- Reachability & web: **Ping** (latency, packet loss, jitter), **HTTP(S), TCP port, DNS, NTP, SSL certificate** (+ chain)
+- Reachability & web: **Ping** (latency, packet loss, jitter), **HTTP(S), TCP port, DNS, NTP, SSL certificate** (+ chain),
+  **domain expiry** (from the registry: RDAP, else WHOIS)
+- Services: **SIP** (OPTIONS ping of a phone system or trunk), **LDAP / Active Directory** (bind, search, AD clock skew)
 - Network: **SNMP** with a MIB library, **SNMP interfaces** with traffic in Mbit/s and utilisation
 - Platforms: **Synology, Proxmox** (cluster + per-node), **Proxmox Backup Server** (datastores, last backup, failed
-  tasks), **VMware/vSphere, UniFi**, Windows / Linux (SSH) / **health & disk & update** sensors
+  tasks), **VMware/vSphere, Hyper-V, UniFi**, Windows / Linux (SSH) / **health & disk & update** sensors
+- Printers: **any network printer** through the standard Printer-MIB (toner / ink levels, paper trays, page count, jam /
+  door / offline)
+- Firewalls: **OPNsense** (gateway state, latency and loss, pending firmware updates)
 - Hardware: **server management controllers over Redfish** (iDRAC, iLO, XClarity, Supermicro …: the controller's health
   verdict, power, temperatures, fans, power supplies, power draw)
 - Internet: **FRITZ!Box** (connected, line speed, current throughput without a login; DSL noise margin and attenuation

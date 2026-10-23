@@ -995,7 +995,7 @@ public sealed class DiscoveryInput
 
     public bool UseTcpPorts { get; set; } = true;
 
-    public string TcpPortsText { get; set; } = "22, 80, 135, 139, 443, 445, 1433, 3389, 3493, 5000, 5001, 5985, 5986, 8006, 8007, 8080, 8099, 8443, 49000";
+    public string TcpPortsText { get; set; } = "22, 80, 135, 139, 389, 443, 445, 636, 1433, 3389, 3493, 5000, 5001, 5060, 5985, 5986, 8006, 8007, 8080, 8099, 8443, 9100, 49000";
 
     public bool UseSnmp { get; set; } = true;
 

@@ -39,6 +39,9 @@ public static class SensorTypeCategories
         ["ups-snmp"] = "Network",
         ["nut-ups"] = "Network",
         ["fritzbox"] = "Network",
+        ["sip"] = "Network",
+        ["ldap"] = "Network",
+        ["opnsense"] = "Network",
         ["mail-health"] = "Network",
 
         ["syslog-messages"] = "Logs",
@@ -47,12 +50,14 @@ public static class SensorTypeCategories
 
         ["ssl-certificate"] = "Certificates",
         ["certificate-chain"] = "Certificates",
+        ["domain-expiry"] = "Certificates",
 
         ["windows-health"] = "Windows",
         ["windows-service"] = "Windows",
         ["windows-process"] = "Windows",
         ["windows-disk"] = "Windows",
         ["windows-update"] = "Windows",
+        ["hyperv-health"] = "Windows",
 
         ["linux-ssh-health"] = "Linux",
         ["linux-disk"] = "Linux",
@@ -77,6 +82,7 @@ public static class SensorTypeCategories
         ["docker-container"] = "Virtualization & NAS",
 
         ["redfish"] = "Hardware",
+        ["snmp-printer"] = "Hardware",
 
         ["windows-eventlog"] = "Windows",
 

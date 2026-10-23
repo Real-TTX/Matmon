@@ -95,6 +95,30 @@ public static class SensorThresholdDefaults
         new("proxmox-backup", "diskUsedPercent", "warning", ThresholdDirection.Above, 85),
         new("proxmox-backup", "diskUsedPercent", "critical", ThresholdDirection.Above, 95),
 
+        // ── Printer: a supply under 10 % is time to order one. Empty is the printer's own "no toner" bit (critical).
+        new("snmp-printer", PrinterSensorExecutor.LowestSupplyChannel, "warning", ThresholdDirection.Below, 10),
+
+        // ── Domain expiry: a month to renew, a week before it is urgent. An expired domain is critical by itself.
+        new("domain-expiry", DomainExpirySensorExecutor.DaysChannel, "warning", ThresholdDirection.Below, 30),
+        new("domain-expiry", DomainExpirySensorExecutor.DaysChannel, "critical", ThresholdDirection.Below, 7),
+
+        // ── LDAP / Active Directory: Kerberos refuses logons once a clock is five minutes off - warn at two.
+        new("ldap", LdapSensorExecutor.ClockSkewChannel, "warning", ThresholdDirection.Above, 120),
+        new("ldap", LdapSensorExecutor.ClockSkewChannel, "critical", ThresholdDirection.Above, 300),
+
+        // ── OPNsense: a gateway down / over its dpinger limits is the state itself. Pending firmware updates are a
+        // warning like on every other update sensor; disk and memory as on the other health sensors (FreeBSD keeps
+        // memory busy, hence 90/97).
+        new("opnsense", OpnsenseSensorExecutor.UpdatesChannel, "warning", ThresholdDirection.Above, 0),
+        new("opnsense", "diskUsedPercent", "warning", ThresholdDirection.Above, 85),
+        new("opnsense", "diskUsedPercent", "critical", ThresholdDirection.Above, 95),
+        new("opnsense", "memoryUsedPercent", "warning", ThresholdDirection.Above, 90),
+        new("opnsense", "memoryUsedPercent", "critical", ThresholdDirection.Above, 97),
+
+        // ── Hyper-V: the host's memory (VMs take it all at start-up, so 90/97).
+        new("hyperv-health", "hostmemoryusedpercent", "warning", ThresholdDirection.Above, 90),
+        new("hyperv-health", "hostmemoryusedpercent", "critical", ThresholdDirection.Above, 97),
+
         // ── FRITZ!Box: not connected is critical by itself. A DSL noise margin under 6 dB is a line that resyncs.
         new("fritzbox", "dslDownstreamSnrDb", "warning", ThresholdDirection.Below, 6),
         new("fritzbox", "dslUpstreamSnrDb", "warning", ThresholdDirection.Below, 6),
