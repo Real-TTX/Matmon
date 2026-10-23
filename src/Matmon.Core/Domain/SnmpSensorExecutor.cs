@@ -765,7 +765,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             : DefaultPort;
     }
 
-    private static List<SnmpOidSelection> ParseOidSelections(string rawOids)
+    internal static List<SnmpOidSelection> ParseOidSelections(string rawOids)
     {
         var lines = rawOids
             .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -818,7 +818,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
         return trimmed;
     }
 
-    private static string NormalizeKey(string key)
+    internal static string NormalizeKey(string key)
     {
         if (string.IsNullOrWhiteSpace(key))
         {

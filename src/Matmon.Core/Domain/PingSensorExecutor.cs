@@ -12,10 +12,21 @@ public sealed class PingSensorExecutor : ISensorExecutor
     {
         Key = "ping",
         DisplayName = "Ping",
-        Description = "Checks host reachability and round-trip latency via ICMP echo (ping).",
+        Description = "Checks host reachability, round-trip latency, packet loss and jitter via ICMP echo (ping).",
         ChannelMode = SensorChannelMode.Fixed,
         Parameters =
         [
+            new SensorParameterDefinition
+            {
+                Key = CountParameter,
+                Label = "Packets per check",
+                Kind = SensorParameterKind.Integer,
+                Description = "Echo requests sent per check, 200 ms apart - more than one measures packet loss and jitter. 1 = just reachability and latency.",
+                DefaultValue = DefaultCount.ToString(CultureInfo.InvariantCulture),
+                Min = 1,
+                Max = MaxCount,
+                Step = "1"
+            },
             new SensorParameterDefinition
             {
                 Key = "payloadSize",
@@ -37,6 +48,18 @@ public sealed class PingSensorExecutor : ISensorExecutor
             }
         ]
     };
+
+    public const string CountParameter = "count";
+
+    /// <summary>Packets per check when the sensor says nothing - also what a sensor created before the parameter existed
+    /// gets, so every ping measures loss and jitter. Three keep a 30-second ping cheap.</summary>
+    public const int DefaultCount = 3;
+
+    public const int MaxCount = 20;
+
+    /// <summary>The gap between two echo requests of one check (they are sent staggered, not one after another's answer,
+    /// so a check of a dead host takes one timeout, not one per packet).</summary>
+    private static readonly TimeSpan Gap = TimeSpan.FromMilliseconds(200);
 
     public string SensorTypeKey => Definition.Key;
 
@@ -98,30 +121,56 @@ public sealed class PingSensorExecutor : ISensorExecutor
                 return SensorExecutionResult.Critical(watch.Elapsed, resolutionMessage ?? "target could not be resolved");
             }
 
-            using var ping = new Ping();
-            var reply = await ping.SendPingAsync(resolvedTarget, timeoutMs, buffer, options);
-            watch.Stop();
-
-            if (reply.Status != IPStatus.Success)
+            var count = MonitoringSettings.TryReadParameterInt(context.Settings, CountParameter, out var configuredCount)
+                ? Math.Clamp(configuredCount, 1, MaxCount)
+                : DefaultCount;
+            var sends = new List<Task<PingReply>>(count);
+            for (var index = 0; index < count; index++)
             {
-                return SensorExecutionResult.Critical(watch.Elapsed, reply.Status.ToString());
+                if (index > 0)
+                {
+                    await Task.Delay(Gap, cancellationToken);
+                }
+
+                sends.Add(SendOneAsync(resolvedTarget, timeoutMs, buffer, options));
             }
 
-            var latencyChannel = new SensorChannelValue
+            var replies = await Task.WhenAll(sends);
+            watch.Stop();
+
+            var series = PingSeries.From(replies.Select(reply => reply.Status == IPStatus.Success ? (long?)reply.RoundtripTime : null).ToList());
+            if (series.Received == 0)
             {
-                Key = "latency",
-                Label = "Latency",
-                Value = reply.RoundtripTime,
-                Unit = "ms",
-                IsDefault = true
+                var status = replies.Select(reply => reply.Status).FirstOrDefault(candidate => candidate != IPStatus.Success);
+                return SensorExecutionResult.Critical(watch.Elapsed, count == 1 ? status.ToString() : $"{status} - no reply to {count} of {count}")
+                    with
+                    {
+                        Channels = count == 1 ? [] : [LossChannel(series)]
+                    };
+            }
+
+            var channels = new List<SensorChannelValue>
+            {
+                new() { Key = "latency", Label = "Latency", Value = series.Average, Unit = "ms", MeasurementKind = SensorMeasurementKind.Duration, IsDefault = true }
             };
+            if (count > 1)
+            {
+                channels.Add(LossChannel(series));
+                if (series.Jitter is not null)
+                {
+                    channels.Add(new SensorChannelValue { Key = "jitter", Label = "Jitter", Value = series.Jitter, Unit = "ms", MeasurementKind = SensorMeasurementKind.Duration });
+                }
+
+                channels.Add(new SensorChannelValue { Key = "latencyMin", Label = "Latency (min)", Value = series.Min, Unit = "ms", MeasurementKind = SensorMeasurementKind.Duration, LogByDefault = false });
+                channels.Add(new SensorChannelValue { Key = "latencyMax", Label = "Latency (max)", Value = series.Max, Unit = "ms", MeasurementKind = SensorMeasurementKind.Duration });
+            }
 
             var result = SensorExecutionResult.Healthy(
                 watch.Elapsed,
-                $"latency {reply.RoundtripTime} ms",
-                reply.RoundtripTime,
-                latencyChannel.Key,
-                [latencyChannel]);
+                series.Describe(),
+                series.Average,
+                "latency",
+                channels);
 
             return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
         }
@@ -136,6 +185,21 @@ public sealed class PingSensorExecutor : ISensorExecutor
             return SensorExecutionResult.Critical(watch.Elapsed, ex.Message);
         }
     }
+
+    private static async Task<PingReply> SendOneAsync(IPAddress target, int timeoutMs, byte[] buffer, PingOptions options)
+    {
+        using var ping = new Ping();
+        return await ping.SendPingAsync(target, timeoutMs, buffer, options);
+    }
+
+    private static SensorChannelValue LossChannel(PingSeries series) => new()
+    {
+        Key = "packetLoss",
+        Label = "Packet loss",
+        Value = series.LossPercent,
+        Unit = "%",
+        MeasurementKind = SensorMeasurementKind.Percent
+    };
 
     private static async Task<(IPAddress? Address, string? ErrorMessage)> ResolveTargetAsync(
         string target,
@@ -169,4 +233,48 @@ public sealed class PingSensorExecutor : ISensorExecutor
             return (null, ex.Message);
         }
     }
+}
+
+/// <summary>
+/// What one ping check measured: the round-trip times of the packets that came back (null = lost), in the order they were
+/// sent. Pure, so the arithmetic is tested rather than eyeballed: loss is lost/sent, latency the mean of what came back,
+/// jitter the mean absolute difference between CONSECUTIVE answered packets (RFC 3550's idea, without its smoothing - a
+/// check is a handful of packets, not a stream).
+/// </summary>
+public sealed record PingSeries(int Sent, int Received, double LossPercent, double? Average, double? Min, double? Max, double? Jitter)
+{
+    public static PingSeries From(IReadOnlyList<long?> roundTrips)
+    {
+        var answered = roundTrips.Where(value => value is not null).Select(value => (double)value!.Value).ToList();
+        var sent = roundTrips.Count;
+        var loss = sent == 0 ? 0 : Math.Round((sent - answered.Count) * 100.0 / sent, 1);
+        if (answered.Count == 0)
+        {
+            return new PingSeries(sent, 0, loss, null, null, null, null);
+        }
+
+        double? jitter = answered.Count < 2
+            ? null
+            : Math.Round(answered.Zip(answered.Skip(1), (first, second) => Math.Abs(second - first)).Average(), 2);
+        return new PingSeries(sent, answered.Count, loss, Math.Round(answered.Average(), 2), answered.Min(), answered.Max(), jitter);
+    }
+
+    /// <summary>"latency 12 ms" / "latency 12 ms, jitter 1.5 ms" / "latency 12 ms, 1 of 3 lost, jitter 4 ms".</summary>
+    public string Describe()
+    {
+        var parts = new List<string> { $"latency {Format(Average)} ms" };
+        if (Received < Sent)
+        {
+            parts.Add($"{Sent - Received} of {Sent} lost");
+        }
+
+        if (Sent > 1 && Jitter is { } jitter)
+        {
+            parts.Add($"jitter {Format(jitter)} ms");
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    private static string Format(double? value) => value is { } number ? number.ToString("0.#", CultureInfo.InvariantCulture) : "-";
 }

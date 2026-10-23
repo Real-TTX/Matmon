@@ -37,7 +37,8 @@ optional and connect outbound, so they work behind firewalls and NAT.
   an embedded SQLite store
 
 **Sensors** (a selection)
-- Reachability & web: **Ping, HTTP(S), TCP port, DNS, NTP, SSL certificate** (+ chain)
+- Reachability & web: **Ping** (latency, packet loss, jitter), **HTTP(S), TCP port, DNS, NTP, SSL certificate** (+ chain)
+- Network: **SNMP** with a MIB library, **SNMP interfaces** with traffic in Mbit/s and utilisation
 - Platforms: **Synology, Proxmox** (cluster + per-node), **VMware/vSphere, UniFi**, Windows /
   Linux (SSH) / **health & disk & update** sensors
 - Data & services: **MSSQL, PostgreSQL, MySQL/MariaDB, Docker, Windows Event Log, Mail round-trip**

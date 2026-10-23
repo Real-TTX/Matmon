@@ -22,6 +22,11 @@ public sealed class SlaveSensorWorker : BackgroundService
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly ILogger<SlaveSensorWorker> _logger;
     private readonly Dictionary<Guid, DateTimeOffset> _lastExecutedUtc = new();
+
+    // The last result of each sensor on THIS probe. A sensor that works from its previous result (interface traffic as a
+    // rate, the mail round-trip) needs the one before it - the copy the assignment carries is only as fresh as the
+    // primary's, and while the primary is away it does not move at all.
+    private readonly Dictionary<Guid, SensorObservation> _lastObservations = new();
     // Store-and-forward: the last assignments received from the primary (so the probe keeps executing on
     // schedule while the primary is unreachable) + the observations produced meanwhile (flushed on reconnect).
     private ProbeSensorAssignmentsResponse? _cachedAssignments;
@@ -151,6 +156,17 @@ public sealed class SlaveSensorWorker : BackgroundService
                 result.Message,
                 executedUtc));
             _lastExecutedUtc[assignment.SensorId] = executedUtc;
+            _lastObservations[assignment.SensorId] = new SensorObservation
+            {
+                SensorId = assignment.SensorId,
+                TimestampUtc = executedUtc,
+                State = result.State,
+                Value = result.Value,
+                DefaultChannelKey = result.DefaultChannelKey,
+                Channels = result.Channels.ToList(),
+                Duration = result.Duration,
+                Message = result.Message
+            };
         }
 
         PruneStaleLastExecuted(assignments.Sensors);
@@ -341,8 +357,16 @@ public sealed class SlaveSensorWorker : BackgroundService
         foreach (var staleId in _lastExecutedUtc.Keys.Where(id => !assignedIds.Contains(id)).ToArray())
         {
             _lastExecutedUtc.Remove(staleId);
+            _lastObservations.Remove(staleId);
         }
     }
+
+    /// <summary>This probe's own last result when it is newer than the one the assignment carries.</summary>
+    private SensorObservation? PreviousObservation(ProbeSensorAssignment assignment) =>
+        _lastObservations.TryGetValue(assignment.SensorId, out var local)
+            && (assignment.LastObservation is null || local.TimestampUtc > assignment.LastObservation.TimestampUtc)
+                ? local
+                : assignment.LastObservation;
 
     private async ValueTask<SensorExecutionResult> ExecuteAssignmentAsync(
         ProbeSensorAssignment assignment,
@@ -364,7 +388,7 @@ public sealed class SlaveSensorWorker : BackgroundService
                     assignment.Target,
                     assignment.Settings,
                     assignment.SensorId,
-                    assignment.LastObservation),
+                    PreviousObservation(assignment)),
                 cancellationToken);
             result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(assignment.Settings, result);
 

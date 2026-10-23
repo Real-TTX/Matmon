@@ -29,6 +29,15 @@ public static class SensorThresholdDefaults
         // ── Reachability / latency (ms) ───────────────────────────────────────────────────────
         new("ping", "latency", "warning", ThresholdDirection.Above, 80),
         new("ping", "latency", "critical", ThresholdDirection.Above, 200),
+        // Loss: one packet of three (33 %) is worth a look, most of them gone is not a network you can rely on. A check
+        // where nothing comes back is Critical by itself.
+        new("ping", "packetLoss", "warning", ThresholdDirection.Above, 30),
+        new("ping", "packetLoss", "critical", ThresholdDirection.Above, 70),
+        // An interface busy on average over a whole poll interval is a link that is too small.
+        new("snmp-interface", "utilization_in", "warning", ThresholdDirection.Above, 80),
+        new("snmp-interface", "utilization_in", "critical", ThresholdDirection.Above, 95),
+        new("snmp-interface", "utilization_out", "warning", ThresholdDirection.Above, 80),
+        new("snmp-interface", "utilization_out", "critical", ThresholdDirection.Above, 95),
         new("http", "latency", "warning", ThresholdDirection.Above, 250),
         new("http", "latency", "critical", ThresholdDirection.Above, 1000),
         new("http-advanced", "latency", "warning", ThresholdDirection.Above, 500),
