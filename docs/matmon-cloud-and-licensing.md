@@ -33,6 +33,10 @@ Turn Matmon (self-hosted monitor) into a product with a commercial control plane
 | Self-hosted Matmon.Cloud | – | – | yes (air-gapped) |
 | Support / SLA | community | e-mail/priority | SLA, SSO/RBAC, dedicated |
 
+**Decided 2026-10-22/23 (supersedes the limits above):** Personal (free, personal use only) - unlimited sensors,
+1 probe; Business - unlimited sensors, 1 probe; Enterprise - unlimited everything. **Agents are not probes** in the
+licence model: no plan counts them (`LicenseInfo.CountLicensedProbes`).
+
 **⚠️ Open question - "Cloud Required" for Free:** forcing cloud on free users conflicts
 with the self-hosted selling point and costs us infra money. Recommendation: make Free
 **cloud-optional** (cloud *features* gated by account, but the app runs offline), or if

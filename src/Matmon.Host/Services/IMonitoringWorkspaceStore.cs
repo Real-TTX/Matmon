@@ -430,12 +430,10 @@ public interface IMonitoringWorkspaceStore
     /// <summary>
     /// Consumes a code: creates the probe the agent becomes, or - for a re-enrolment code - gives the existing
     /// probe a new token. Wrong, used, expired and orphaned codes are all <see cref="AgentEnrollmentStatus.Invalid"/>,
-    /// deliberately indistinguishable. With <paramref name="allowNewProbe"/> false (licence full) a NEW-probe
-    /// code answers <see cref="AgentEnrollmentStatus.ProbeLimit"/> and is NOT consumed; a re-enrolment code
-    /// still works, because it adds no probe.
+    /// deliberately indistinguishable. No licence check: agents are not probes in the licence model.
     /// </summary>
     /// <param name="operatingSystem">What the agent reported (e.g. "Microsoft Windows 10.0.26200"); picks its baseline sensors.</param>
-    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe, string? operatingSystem = null);
+    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null);
 
     void Save();
 }
@@ -449,7 +447,6 @@ public sealed record AgentEnrollmentRedemption(Guid ElementId, string ProbeId, s
 public enum AgentEnrollmentStatus
 {
     Invalid,
-    ProbeLimit,
     Enrolled
 }
 

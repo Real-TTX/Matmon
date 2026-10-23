@@ -112,7 +112,11 @@ public class ConfigModel : PageModel
     [BindProperty]
     public string? LicenseTokenInput { get; set; }
 
+    /// <summary>The probes the licence counts - agents excluded (<see cref="LicenseInfo.CountLicensedProbes"/>).</summary>
     public int ProbeCount { get; private set; }
+
+    /// <summary>Agents, shown beside the probe count because they do not count against the limit.</summary>
+    public int AgentCount { get; private set; }
 
     public int SensorCount { get; private set; }
 
@@ -1072,7 +1076,8 @@ public class ConfigModel : PageModel
         License = _licenseService.Current;
         HasStoredLicenseToken = !string.IsNullOrEmpty(_workspaceStore.GetLicenseToken());
         var allElements = _workspaceStore.GetAllElements();
-        ProbeCount = allElements.OfType<ProbeElement>().Count();
+        ProbeCount = LicenseInfo.CountLicensedProbes(allElements);
+        AgentCount = allElements.OfType<ProbeElement>().Count() - ProbeCount;
         SensorCount = allElements.OfType<SensorElement>().Count();
         CloudConnection = _workspaceStore.GetCloudConnection();
         CloudSettings = _workspaceStore.GetCloudConnectionSettings();

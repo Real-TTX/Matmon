@@ -40,7 +40,7 @@ public sealed class AgentHostBindingTests : IDisposable
     private AgentEnrollmentRedemption Enrol(string? name, string machine, Guid? hostElementId = null, string? operatingSystem = "Microsoft Windows 10.0.26200")
     {
         var issue = _store.CreateAgentEnrollment(name, TimeSpan.FromHours(1), "admin", hostElementId: hostElementId);
-        return _store.RedeemAgentEnrollment(issue.Code, machine, allowNewProbe: true, operatingSystem).Redemption!;
+        return _store.RedeemAgentEnrollment(issue.Code, machine, operatingSystem).Redemption!;
     }
 
     private ProbeElement ProbeOf(AgentEnrollmentRedemption redeemed) => (ProbeElement)_store.FindElement(redeemed.ElementId)!;
@@ -124,7 +124,7 @@ public sealed class AgentHostBindingTests : IDisposable
         Assert.Equal(host.Id, issue.Enrollment.HostElementId);
         Assert.Equal("SRV-01", issue.Enrollment.Name); // the agent's probe is named after the machine it is for
 
-        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "SRV-01-LIVE", allowNewProbe: true, "Microsoft Windows 10.0.26200").Redemption!;
+        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "SRV-01-LIVE", "Microsoft Windows 10.0.26200").Redemption!;
         var probe = ProbeOf(redeemed);
 
         // The same host - same id, same address, same sensors - now inside the agent's probe.
@@ -178,7 +178,7 @@ public sealed class AgentHostBindingTests : IDisposable
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), "admin", hostElementId: host.Id);
         Assert.True(_store.DeleteElement(host.Id));
 
-        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "SRV-01-LIVE", allowNewProbe: true).Redemption;
+        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "SRV-01-LIVE").Redemption;
 
         Assert.NotNull(redeemed);
         var bound = ProbeOf(redeemed).FindBoundHost();
@@ -194,8 +194,8 @@ public sealed class AgentHostBindingTests : IDisposable
         var first = _store.CreateAgentEnrollment("first", TimeSpan.FromHours(1), null, hostElementId: host.Id);
         var second = _store.CreateAgentEnrollment("second", TimeSpan.FromHours(1), null, hostElementId: host.Id);
 
-        var one = _store.RedeemAgentEnrollment(first.Code, "A", allowNewProbe: true).Redemption!;
-        var two = _store.RedeemAgentEnrollment(second.Code, "B", allowNewProbe: true).Redemption!;
+        var one = _store.RedeemAgentEnrollment(first.Code, "A").Redemption!;
+        var two = _store.RedeemAgentEnrollment(second.Code, "B").Redemption!;
 
         Assert.Equal(host.Id, ProbeOf(one).BoundHostId);
         var other = ProbeOf(two).FindBoundHost();
@@ -213,7 +213,7 @@ public sealed class AgentHostBindingTests : IDisposable
         var hostId = ProbeOf(redeemed).BoundHostId;
         var again = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, redeemed.ElementId);
 
-        var back = _store.RedeemAgentEnrollment(again.Code, "WS-01-RENAMED", allowNewProbe: false).Redemption!;
+        var back = _store.RedeemAgentEnrollment(again.Code, "WS-01-RENAMED").Redemption!;
 
         Assert.True(back.Reenrolled);
         Assert.Equal(hostId, ProbeOf(back).BoundHostId);
@@ -228,7 +228,7 @@ public sealed class AgentHostBindingTests : IDisposable
         var switchHost = _store.CreateHost(docker.Id, "Switch-01", "10.0.0.2", null);
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), "admin", docker.Id);
 
-        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "NUC-01", allowNewProbe: false, "Ubuntu 24.04.1 LTS").Redemption!;
+        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "NUC-01", "Ubuntu 24.04.1 LTS").Redemption!;
         var probe = ProbeOf(redeemed);
 
         var machine = probe.FindBoundHost();

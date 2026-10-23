@@ -111,7 +111,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
-    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, bool allowNewProbe, string? operatingSystem = null)
+    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null)
     {
         var invalid = new AgentEnrollmentResult(AgentEnrollmentStatus.Invalid);
         var hash = AgentEnrollmentCode.Hash(code);
@@ -157,13 +157,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                     new AgentEnrollmentRedemption(existing.Id, existing.ProbeId, existing.EnrollmentToken, existing.Name, Reenrolled: true));
             }
 
-            // Checked BEFORE the code is consumed: a full licence must not burn the code on an install that
-            // is going to be refused anyway.
-            if (!allowNewProbe)
-            {
-                return new AgentEnrollmentResult(AgentEnrollmentStatus.ProbeLimit);
-            }
-
+            // No licence check: agents are not probes in the licence model, so a plan's probe limit never stops one.
             // Single use: gone before the probe exists, so a second agent racing the same code cannot also win.
             _document.AgentEnrollments.Remove(enrollment);
 

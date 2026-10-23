@@ -12,7 +12,7 @@ public interface ILicenseService
     /// <summary>The current effective license (verified; expired/invalid/missing → the free Personal plan).</summary>
     LicenseInfo Current { get; }
 
-    /// <summary>Whether another probe may be added under the current license.</summary>
+    /// <summary>Whether another probe may be added under the current license. Agents do not count and need no check.</summary>
     bool CanAddProbe(out string reason);
 
     /// <summary>Whether another sensor may be added under the current license.</summary>
@@ -51,15 +51,14 @@ public sealed class LicenseService : ILicenseService
             return true;
         }
 
-        var probeCount = _store.GetAllElements().OfType<ProbeElement>().Count();
-        if (probeCount < license.ProbeLimit)
+        if (LicenseInfo.CountLicensedProbes(_store.GetAllElements()) < license.ProbeLimit)
         {
             reason = string.Empty;
             return true;
         }
 
         reason = $"Probe limit reached ({license.ProbeLimit} on the {license.DisplayName} plan). " +
-            "Upgrade the plan in Matmon.Cloud to add more probes.";
+            "Upgrade the plan in Matmon.Cloud to add more probes - agents do not count and can still be added.";
         return false;
     }
 

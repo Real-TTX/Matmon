@@ -31,7 +31,7 @@ public sealed class AgentEnrollmentTests : IDisposable
             NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
 
     private static AgentEnrollmentRedemption? Redeem(InMemoryMonitoringWorkspaceStore store, string? code, string? host) =>
-        store.RedeemAgentEnrollment(code, host, allowNewProbe: true).Redemption;
+        store.RedeemAgentEnrollment(code, host).Redemption;
 
     private ProbeElement RemoteProbe(string name)
     {
@@ -96,7 +96,7 @@ public sealed class AgentEnrollmentTests : IDisposable
     public void AnAgentGetsTheUpdateSensorForItsOperatingSystem(string? operatingSystem, string? expectedUpdateType)
     {
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
-        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "box", allowNewProbe: true, operatingSystem).Redemption!;
+        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "box", operatingSystem).Redemption!;
 
         var types = _store.GetAllElements().OfType<SensorElement>()
             .Where(sensor => sensor.ParentId == BoundHostOf(redeemed.ElementId))
@@ -116,18 +116,32 @@ public sealed class AgentEnrollmentTests : IDisposable
     }
 
     [Fact]
-    public void AFullLicenceStopsANewProbeButNotAReenrolment()
+    public void AgentsAreNotProbesInTheLicence()
     {
-        var probe = RemoteProbe("Existing");
-        var newProbeCode = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
-        var reenrolCode = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
+        // The free Personal plan allows one probe - the instance's own - so the licence is full from the start.
+        var licence = new LicenseService(_store);
+        Assert.False(licence.CanAddProbe(out _));
 
-        var refused = _store.RedeemAgentEnrollment(newProbeCode.Code, "x", allowNewProbe: false);
-        Assert.Equal(AgentEnrollmentStatus.ProbeLimit, refused.Status);
-        Assert.True(_store.IsAgentEnrollmentCodeValid(newProbeCode.Code)); // not burnt by the refusal
+        var first = _store.RedeemAgentEnrollment(_store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null).Code, "srv-01");
+        var second = _store.RedeemAgentEnrollment(_store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null).Code, "srv-02");
 
-        var reenrolled = _store.RedeemAgentEnrollment(reenrolCode.Code, "x", allowNewProbe: false);
-        Assert.Equal(AgentEnrollmentStatus.Enrolled, reenrolled.Status);
+        Assert.Equal(AgentEnrollmentStatus.Enrolled, first.Status);
+        Assert.Equal(AgentEnrollmentStatus.Enrolled, second.Status);
+        Assert.Equal(1, LicenseInfo.CountLicensedProbes(_store.GetAllElements()));
+        Assert.False(licence.CanAddProbe(out var reason)); // a real probe still needs a free slot
+        Assert.Contains("agents do not count", reason);
+    }
+
+    [Fact]
+    public void MovingAProbeOntoAnAgentFreesItsLicenceSlot()
+    {
+        var probe = RemoteProbe("Docker probe");
+        Assert.Equal(2, LicenseInfo.CountLicensedProbes(_store.GetAllElements()));
+
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
+        Assert.Equal(AgentEnrollmentStatus.Enrolled, _store.RedeemAgentEnrollment(issue.Code, "srv-01").Status);
+
+        Assert.Equal(1, LicenseInfo.CountLicensedProbes(_store.GetAllElements()));
     }
 
     [Fact]
@@ -137,7 +151,7 @@ public sealed class AgentEnrollmentTests : IDisposable
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
         _store.DeleteElement(probe.Id);
 
-        Assert.Equal(AgentEnrollmentStatus.Invalid, _store.RedeemAgentEnrollment(issue.Code, "x", allowNewProbe: true).Status);
+        Assert.Equal(AgentEnrollmentStatus.Invalid, _store.RedeemAgentEnrollment(issue.Code, "x").Status);
         Assert.Empty(_store.GetPendingAgentEnrollments());
     }
 

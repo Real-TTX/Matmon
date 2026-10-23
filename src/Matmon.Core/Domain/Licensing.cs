@@ -27,7 +27,8 @@ public sealed class LicenseInfo
     /// <summary>The plan's display name from the cloud template (e.g. "Business-2026"). Null for legacy tokens.</summary>
     public string? PlanName { get; init; }
 
-    /// <summary>Max number of probes (nodes) allowed; <see cref="Unlimited"/> for no limit.</summary>
+    /// <summary>Max number of probes (nodes) allowed; <see cref="Unlimited"/> for no limit. Agents are not counted -
+    /// see <see cref="CountLicensedProbes"/>.</summary>
     public int ProbeLimit { get; init; }
 
     /// <summary>Max number of sensors allowed; <see cref="Unlimited"/> for no limit.</summary>
@@ -69,6 +70,13 @@ public sealed class LicenseInfo
     public string DisplayName => string.IsNullOrWhiteSpace(PlanName) ? TierName(Tier) : PlanName;
 
     public static string TierName(LicenseTier tier) => tier == LicenseTier.Free ? PersonalPlanName : tier.ToString();
+
+    /// <summary>
+    /// The probes the <see cref="ProbeLimit"/> counts: the instance's own and every remote probe - but no agent. Agents
+    /// are not probes in the licence model (decided 2026-10-23): a plan with one probe still takes any number of agents.
+    /// </summary>
+    public static int CountLicensedProbes(IEnumerable<MonitoringElement> elements) =>
+        elements.OfType<ProbeElement>().Count(probe => probe.AgentEnrolledUtc is null);
 
     /// <summary>
     /// The license when none is present: the free Personal plan - personal use only, unlimited sensors, one probe (the

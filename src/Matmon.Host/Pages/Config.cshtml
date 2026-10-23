@@ -632,6 +632,10 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
                 <dt>Probes</dt>
                 <dd>
                     <span class="mat-mono">@Model.ProbeCount / @Model.License.ProbeLimitDisplay</span>
+                    @if (Model.AgentCount > 0)
+                    {
+                        <span class="mat-text-muted">+ @Model.AgentCount agent@(Model.AgentCount == 1 ? "" : "s") (not counted)</span>
+                    }
                     @if (overLimit)
                     {
                         <span class="mat-pill mat-pill--error">Over limit - can't add more</span>
@@ -925,7 +929,7 @@ else if (Model.IsActiveTab("license") && canManageSystem)
         <div class="mat-card__body mat-stack">
             <dl class="mat-kv">
                 <dt>Plan</dt><dd><strong>@Model.License.DisplayName</strong></dd>
-                <dt>Probes</dt><dd class="mat-mono">@Model.ProbeCount / @Model.License.ProbeLimitDisplay</dd>
+                <dt>Probes</dt><dd><span class="mat-mono">@Model.ProbeCount / @Model.License.ProbeLimitDisplay</span> <span class="mat-text-muted">- agents do not count@(Model.AgentCount > 0 ? $" ({Model.AgentCount} in use)" : "")</span></dd>
                 <dt>Sensors</dt><dd class="mat-mono">@Model.SensorCount / @Model.License.SensorLimitDisplay</dd>
                 <dt>Cloud sensors</dt><dd class="mat-mono">@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "-")</dd>
                 <dt>Full Access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>

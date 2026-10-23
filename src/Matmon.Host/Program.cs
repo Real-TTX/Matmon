@@ -616,21 +616,15 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
     // An agent trades a one-time enrolment code (issued on the Agents page) for a probe of its own. Wrong,
     // used and expired codes all answer the same 400 - which codes once existed is not the caller's business.
-    app.MapPost("/api/agents/enroll", (AgentEnrollRequest request, IMonitoringWorkspaceStore workspaceStore, ILicenseService licenseService, ILogger<Program> logger) =>
+    // No licence check: agents are not probes in the licence model.
+    app.MapPost("/api/agents/enroll", (AgentEnrollRequest request, IMonitoringWorkspaceStore workspaceStore, ILogger<Program> logger) =>
     {
         if (string.IsNullOrWhiteSpace(request.Code))
         {
             return Results.BadRequest(new { error = "code_required" });
         }
 
-        // The licence only matters for a code that CREATES a probe; re-enrolling an existing one adds nothing.
-        var allowNewProbe = licenseService.CanAddProbe(out var reason);
-        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, allowNewProbe, request.OperatingSystem);
-        if (result.Status == AgentEnrollmentStatus.ProbeLimit)
-        {
-            return Results.Json(new { error = "probe_limit", message = reason }, statusCode: StatusCodes.Status403Forbidden);
-        }
-
+        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, request.OperatingSystem);
         if (result.Redemption is not { } redemption)
         {
             logger.LogWarning("Agent enrolment rejected: invalid, used or expired code (host {Host})", request.HostName);

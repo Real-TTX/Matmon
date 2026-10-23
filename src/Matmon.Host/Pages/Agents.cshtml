@@ -285,11 +285,7 @@
             <span class="mat-text-muted mm-push-end">creates a single-use enrolment code</span>
         </div>
         <div class="mat-card__body mat-stack">
-            @if (Model.ProbeLimitReason is { } limitReason)
-            {
-                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@limitReason An agent enrolling now would be refused.</div></div>
-            }
-
+            <p class="mat-muted">Agents do not count against the plan's probe limit - add as many as you need.</p>
             <form method="post" asp-page-handler="Create" class="mat-form" novalidate>
                 <div class="mat-form__grid">
                     <div class="mat-field">

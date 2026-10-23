@@ -17,18 +17,15 @@ public sealed class AgentsModel : PageModel
 
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
-    private readonly ILicenseService _licenseService;
     private readonly AgentPackageStore _packageStore;
 
     public AgentsModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
-        ILicenseService licenseService,
         AgentPackageStore packageStore)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
-        _licenseService = licenseService;
         _packageStore = packageStore;
     }
 
@@ -80,8 +77,6 @@ public sealed class AgentsModel : PageModel
 
     [TempData]
     public string? ErrorMessage { get; set; }
-
-    public string? ProbeLimitReason { get; private set; }
 
     public IReadOnlyList<int> ValidityChoices => ValidityHours;
 
@@ -242,12 +237,5 @@ public sealed class AgentsModel : PageModel
 
         PendingEnrollments = _workspaceStore.GetPendingAgentEnrollments();
         Packages = _packageStore.GetPackages();
-
-        // Said up front rather than discovered at install time: the code would be issued fine and then
-        // refused at the endpoint, on a customer's machine, in a terminal.
-        if (!_licenseService.CanAddProbe(out var reason))
-        {
-            ProbeLimitReason = reason;
-        }
     }
 }

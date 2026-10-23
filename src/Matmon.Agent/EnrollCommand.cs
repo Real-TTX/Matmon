@@ -92,7 +92,8 @@ public static class EnrollCommand
     private static string DescribeFailure(HttpStatusCode status, string? error) => (status, error) switch
     {
         (HttpStatusCode.BadRequest, "invalid_code") => "The code is wrong, already used or expired. Create a new one under Agents on the instance.",
-        (HttpStatusCode.Forbidden, "probe_limit") => "The instance's licence allows no further probes.",
+        // Only an older instance answers this: agents no longer count as probes in the licence.
+        (HttpStatusCode.Forbidden, "probe_limit") => "The instance's licence allows no further probes - update the instance, newer versions do not count agents as probes.",
         (HttpStatusCode.TooManyRequests, _) => "Too many enrolment attempts from this address. Wait a minute and try again.",
         (HttpStatusCode.NotFound, _) => "The instance has no enrolment endpoint - it is either not a Matmon primary or older than this agent.",
         _ => $"Enrolment failed: {(int)status} {status}{(string.IsNullOrWhiteSpace(error) ? string.Empty : $" ({error})")}."
