@@ -27,12 +27,12 @@
     }
 }
 <!DOCTYPE html>
-<html lang="en" data-app="matmon" data-embedded="@(shell.Embedded ? "1" : "0")" data-custom-accent="@shell.PartnerAccent">
+<html lang="en" data-app="matmon" data-embedded="@(shell.Embedded ? "1" : "0")" data-custom-accent="@shell.PartnerAccent" data-rendered="@DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="@(shell.PartnerAccent ?? "#295cff")" />
+    <partial name="_PwaHead" />
     <title>@title · @shell.BrandName</title>
     @if (shell.PartnerFavicon)
     {

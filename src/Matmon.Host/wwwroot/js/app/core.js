@@ -13,6 +13,7 @@ const monitoringSizeStorageKey = "matmon-monitoring-size";
 // Each feature starts on its own: one that throws is reported in the console and the others still start (one long
 // chain used to stop at the first error, and everything after it - often the whole rest of the page - stayed dead).
 const featureStarters = [
+  "initializePwa", // first: it watches the connection, and the live refreshes below start fetching at once
   "initializeTabHash",
   "initializeMonitoringTree",
   "initializeTreeContextMenu",

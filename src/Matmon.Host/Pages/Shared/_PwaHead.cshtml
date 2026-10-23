@@ -1,0 +1,25 @@
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
+@*
+    The installed app (PWA), in the <head> of both layouts: the manifest (/manifest.webmanifest - its name and icons follow a
+    managing partner's white label), what iOS takes from the page instead (title, touch icon, the status bar), the colour
+    of the status bar and where the service worker is (pwa.js registers it).
+
+    The status bar has the colour of the top bar (--mat-glass): one value per system scheme here, and pwa.js keeps it in
+    step with the theme someone chose. iOS gets "default" - a status bar of its own above the app, dark text on light and
+    light on dark. "black-translucent" would put the top bar under it, but its text is always white: unreadable over the
+    light theme.
+*@
+@{
+    var productName = WorkspaceStore.GetServicePartnerProductName();
+    var brandName = string.IsNullOrWhiteSpace(productName) ? "Matmon" : productName;
+    var touchIcon = WorkspaceStore.GetServicePartnerHasSmallLogo() ? "/api/branding/favicon" : Url.Content("~/brand/apple-touch-icon.png");
+}
+<link rel="manifest" href="~/manifest.webmanifest" />
+<meta name="theme-color" content="#f5f4f1" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#151514" media="(prefers-color-scheme: dark)" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="@brandName" />
+<link rel="apple-touch-icon" href="@touchIcon" />
+<meta name="matmon-sw" content="@(Url.Content("~/sw.js"))?v=@Uri.EscapeDataString(Matmon.Probe.MatmonVersion.Current)" />

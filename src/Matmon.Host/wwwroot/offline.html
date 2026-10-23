@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!-- What the service worker (sw.js) shows when a page cannot be loaded and no copy of it is kept. Static on purpose: it
+     has to work with nothing but the cache. No brand on it - a managing partner's white label would have to come from the
+     server. data-offline-reason is filled in by the service worker: "post" = a form could not be sent. -->
+<html lang="en" data-app="matmon">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f4f1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#151514" media="(prefers-color-scheme: dark)" />
+    <title>No connection</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script src="/matui/matui.boot.js"></script>
+    <link rel="stylesheet" href="/matui/matui.css" />
+</head>
+<body data-offline-reason="">
+    <main class="mat-auth" id="main">
+        <div class="mat-auth__card">
+            <div class="mat-auth__brand">
+                <h1 data-offline-title>No connection</h1>
+                <p class="mat-muted" data-offline-text>The server cannot be reached right now. This page tries again by itself and carries on as soon as the connection is back.</p>
+            </div>
+            <p class="mat-muted" role="status" aria-live="polite" data-offline-status>Trying again shortly…</p>
+            <div class="mat-btn-row">
+                <button type="button" class="mat-btn mat-btn--primary" data-offline-retry>Try again</button>
+                <button type="button" class="mat-btn mat-btn--secondary" data-offline-back>Back</button>
+            </div>
+        </div>
+    </main>
+    <script src="/js/offline.js"></script>
+</body>
+</html>

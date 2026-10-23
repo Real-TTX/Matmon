@@ -80,6 +80,10 @@ optional and connect outbound, so they work behind firewalls and NAT.
 - **Maps / wallboards** with tiles that roll up sensor state (element- or tag-targeted)
 - **Dark & light** themes, a mobile-responsive UI, users with **Viewer / User / Admin** roles and
   optional two-factor sign-in
+- **Installable as an app** (PWA) on a phone or a desktop, with the status bar in the app's colours. When the connection
+  drops, a bar says so and reconnects by itself, forms are not sent into the void, and the overview pages (dashboard,
+  sensors, alerts, events, maps) stay readable as they were last loaded - marked with their age. Installing and the
+  offline copies need **https** (or localhost); over plain http the reconnect bar still works
 - Optional **Matmon.Cloud** link for an off-site dead-man-switch, config backup, remote access and
   licensing — entirely opt-in; empty means fully offline
 

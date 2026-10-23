@@ -42,6 +42,8 @@ function initializeDashboardRefresh() {
 
   refresh();
   window.setInterval(refresh, dashboardRefreshMs);
+  // The connection is back (pwa.js): the current numbers now, not at the next tick.
+  window.addEventListener("matmon:online", refresh);
 }
 
 function renderDashboard(snapshot) {

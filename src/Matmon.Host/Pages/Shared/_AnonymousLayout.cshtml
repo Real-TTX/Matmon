@@ -11,12 +11,12 @@
     var title = ViewData["Title"]?.ToString() ?? brandName;
 }
 <!DOCTYPE html>
-<html lang="en" data-app="matmon" data-custom-accent="@partnerAccent">
+<html lang="en" data-app="matmon" data-custom-accent="@partnerAccent" data-rendered="@DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="@(partnerAccent ?? "#295cff")" />
+    <partial name="_PwaHead" />
     <title>@title · @brandName</title>
     @if (partnerHasSmallLogo)
     {

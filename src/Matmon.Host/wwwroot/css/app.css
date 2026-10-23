@@ -116,3 +116,34 @@
 .mm-navinfo__stat[data-tone="info"]:not(.is-zero) { background: var(--mat-info-bg); color: var(--mat-info-text); }
 .mm-navinfo__stat:not(.is-zero):is([data-tone="error"], [data-tone="warn"], [data-tone="info"]) strong { color: inherit; }
 .mm-navinfo__stat.is-zero strong { color: var(--mat-text-muted); font-weight: 500; }
+
+/* ---- Touch (pwa.js / the installed app). MatUi already keeps fields from zooming a phone (MOBILE-06) and makes the
+   targets big enough (MOBILE-04). This adds: a double tap does not zoom in the middle of using the app - pinch zoom stays,
+   so nothing is taken from someone who needs it (WCAG 1.4.4) - the text keeps its size when a phone turns, and a tap does
+   not flash a grey box over a control (MatUi draws its own pressed and focus states). ---- */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+a, button, label, summary, select, [role="button"], [role="tab"], [role="menuitem"], [role="option"] { -webkit-tap-highlight-color: transparent; }
+
+/* ---- The connection bar (pwa.js): "No connection to the server", where a toast stands - at the bottom on a wide screen,
+   under the header bar on a phone (the bottom is the thumb's) - clear of notches and the home indicator. ---- */
+.mm-connection {
+  position: fixed;
+  z-index: var(--mat-z-toast);
+  left: calc(var(--mat-space-4) + var(--mat-safe-left));
+  right: calc(var(--mat-space-4) + var(--mat-safe-right));
+  bottom: calc(var(--mat-space-4) + var(--mat-safe-bottom));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+/* Opaque like a toast (the tint of an alert is see-through, and the bar floats over the page); the icon keeps the tone. */
+.mm-connection > .mat-alert {
+  pointer-events: auto;
+  width: min(40rem, 100%);
+  background: var(--mat-surface);
+  border-color: var(--mat-border-strong);
+  box-shadow: var(--mat-shadow-2);
+}
+@media (max-width: 600px) {
+  .mm-connection { top: calc(var(--mat-topbar-h) + var(--mat-space-2) + var(--mat-safe-top)); bottom: auto; }
+}

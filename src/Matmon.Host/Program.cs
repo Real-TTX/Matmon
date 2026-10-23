@@ -506,6 +506,49 @@ app.MapGet("/api/branding/favicon", (HttpContext http, IMonitoringWorkspaceStore
     return Results.File(icon.Value.Bytes, icon.Value.ContentType, entityTag: etag);
 }).AllowAnonymous();
 
+// The installed app (PWA). Its name follows a managing partner's white label (the product name), and its square logo
+// leads the icons when it is a PNG big enough for a home screen (192 px or more); Matmon's own icons are always there.
+// The colours are the light top bar's - an installed app opens with the system's theme, so a manifest that cannot follow
+// the theme takes the default one. Anonymous: a browser fetches it without cookies.
+app.MapGet("/manifest.webmanifest", (IMonitoringWorkspaceStore store) =>
+{
+    var productName = store.GetServicePartnerProductName();
+    var name = string.IsNullOrWhiteSpace(productName) ? "Matmon" : productName.Trim();
+    var icons = new List<object>();
+    if (store.GetServicePartnerSmallLogo() is { } partnerIcon && PngSize(partnerIcon.Bytes) is { } size && size.Width >= 192 && size.Width == size.Height)
+    {
+        icons.Add(new { src = "/api/branding/favicon", sizes = $"{size.Width}x{size.Height}", type = "image/png", purpose = "any" });
+    }
+
+    icons.Add(new { src = "/brand/app-icon-192.png", sizes = "192x192", type = "image/png", purpose = "any" });
+    icons.Add(new { src = "/brand/app-icon-512.png", sizes = "512x512", type = "image/png", purpose = "any" });
+    icons.Add(new { src = "/brand/app-icon-maskable-512.png", sizes = "512x512", type = "image/png", purpose = "maskable" });
+    icons.Add(new { src = "/favicon.svg", sizes = "any", type = "image/svg+xml", purpose = "any" });
+    var shortcutIcon = new[] { new { src = "/brand/app-icon-192.png", sizes = "192x192" } };
+    return Results.Json(new
+    {
+        id = "/",
+        name,
+        short_name = name.Length <= 12 ? name : name[..12].TrimEnd(),
+        description = "Network monitoring - sensors, alerts and maps.",
+        start_url = "/",
+        scope = "/",
+        display = "standalone",
+        display_override = new[] { "standalone", "minimal-ui" },
+        orientation = "any",
+        background_color = "#f5f4f1",
+        theme_color = "#f5f4f1",
+        categories = new[] { "utilities", "business" },
+        icons,
+        shortcuts = new[]
+        {
+            new { name = "Dashboard", short_name = "Dashboard", url = "/", icons = shortcutIcon },
+            new { name = "Alerts", short_name = "Alerts", url = "/Alerts", icons = shortcutIcon },
+            new { name = "Sensors", short_name = "Sensors", url = "/monitoring", icons = shortcutIcon }
+        }
+    }, contentType: "application/manifest+json");
+}).AllowAnonymous();
+
 // Public, anonymous catalog of the built-in sensor TYPES (metadata only - no secrets, no workspace data):
 // key, name, description, category + whether/what credentials it needs. Lets the marketing site (and anyone)
 // show "what Matmon can monitor" without logging in. Same shipped list on every instance.
@@ -1049,6 +1092,18 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
         services.TryAddSingleton<PushRegistry>();
         services.AddTransient<ISensorExecutor, PushSensorExecutor>();
     }
+}
+
+/// <summary>Width and height of a PNG (from its IHDR chunk), or null when the bytes are not one.</summary>
+static (int Width, int Height)? PngSize(byte[] bytes)
+{
+    ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    if (bytes.Length < 24 || !bytes.AsSpan(0, 8).SequenceEqual(signature))
+    {
+        return null;
+    }
+
+    return (System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4)), System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4)));
 }
 
 static bool IsAgentDownloadAuthorized(HttpContext http, IMonitoringWorkspaceStore workspaceStore)
