@@ -13,6 +13,11 @@ A change that an app can see is written down under **Unreleased** in the pull re
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-23
+### Fixed
+
+- A POST form is sent once. A second submit of the same form right after the first is dropped - typically Enter pressed while a complete code field sends itself (`data-submit`), or a double click. The second request reached the server after the first had already done its work; in an app a two-factor sign-in that had just succeeded turned the second request down with a **400** (its antiforgery token was issued before the sign-in), and the user saw an error page although they were signed in. The listener runs after validation and `data-confirm`, so a form they stopped is not held back; a form whose answer does not replace the page (a download, another `target`) can be sent again after 2 s, a page brought back by Back at once; a GET form (a filter) is never held back. Nothing to do for an app but copy the files. One browser check more in run.js.
+
 ## [0.9.1] - 2026-10-22
 ### Fixed
 
