@@ -1,37 +1,20 @@
 using System.Net;
 using Matmon.Core.Syslog;
+using Matmon.Host.Services.Plugins;
 using Matmon.Probe.Syslog;
 
 namespace Matmon.Host.Services;
 
-/// <summary>The settings form as it is posted. Kept apart from <see cref="SyslogSettings"/> so a half-typed form can be
-/// refused with a reason instead of being clamped into something the admin did not ask for.</summary>
-public sealed class SyslogSettingsInput
+/// <summary>The storage form as it is posted (how long and how much the log keeps). Kept apart from <see cref="SyslogSettings"/>
+/// so a half-typed form can be refused with a reason instead of being clamped into something the admin did not ask for.</summary>
+public sealed class SyslogStorageInput
 {
-    public bool Enabled { get; set; }
-
-    public bool UdpEnabled { get; set; }
-
-    public int UdpPort { get; set; } = SyslogSettings.DefaultPort;
-
-    public bool TcpEnabled { get; set; }
-
-    public int TcpPort { get; set; } = SyslogSettings.DefaultPort;
-
-    public string? AllowedSources { get; set; }
-
     public int RetentionDays { get; set; } = SyslogSettings.DefaultRetentionDays;
 
     public int MaxMessages { get; set; } = SyslogSettings.DefaultMaxMessages;
 
-    public static SyslogSettingsInput From(SyslogSettings settings) => new()
+    public static SyslogStorageInput From(SyslogSettings settings) => new()
     {
-        Enabled = settings.Enabled,
-        UdpEnabled = settings.UdpEnabled,
-        UdpPort = settings.UdpPort,
-        TcpEnabled = settings.TcpEnabled,
-        TcpPort = settings.TcpPort,
-        AllowedSources = settings.AllowedSources,
         RetentionDays = settings.RetentionDays,
         MaxMessages = settings.MaxMessages
     };
@@ -167,26 +150,13 @@ internal static class SyslogPageSupport
     }
 
     /// <summary>
-    /// A posted form into settings, or the reason it is refused. It refuses rather than corrects: a port outside 1-65535
-    /// or an allow-list entry that is not an address would otherwise be quietly replaced or ignored, and for an allow-list
-    /// "ignored" means "wider than the admin meant".
+    /// The posted storage form on top of the current settings, or the reason it is refused - it refuses rather than clamps,
+    /// so a typo does not quietly become another retention than the one the admin meant.
     /// </summary>
-    public static bool TryBuildSettings(SyslogSettingsInput input, out SyslogSettings settings, out string? error)
+    public static bool TryBuildStorage(SyslogStorageInput input, SyslogSettings current, out SyslogSettings settings, out string? error)
     {
-        settings = new SyslogSettings();
+        settings = current.Clone();
         error = null;
-
-        if (input.UdpPort is < 1 or > 65535 || input.TcpPort is < 1 or > 65535)
-        {
-            error = "A port must be a number between 1 and 65535.";
-            return false;
-        }
-
-        if (input.Enabled && !input.UdpEnabled && !input.TcpEnabled)
-        {
-            error = "Switch on UDP, TCP or both - with neither there is nothing to listen on.";
-            return false;
-        }
 
         if (input.RetentionDays is < SyslogSettings.MinRetentionDays or > SyslogSettings.MaxRetentionDays)
         {
@@ -200,28 +170,9 @@ internal static class SyslogPageSupport
             return false;
         }
 
-        var allowed = input.AllowedSources?.Trim();
-        if (!string.IsNullOrEmpty(allowed))
-        {
-            IpAllowList.Parse(allowed, out var invalid);
-            if (invalid.Count > 0)
-            {
-                error = $"Not an IP address or range: {string.Join(", ", invalid)}. Use addresses like 192.168.1.2 or ranges like 192.168.1.0/24, separated by commas or new lines.";
-                return false;
-            }
-        }
-
-        settings = new SyslogSettings
-        {
-            Enabled = input.Enabled,
-            UdpEnabled = input.UdpEnabled,
-            UdpPort = input.UdpPort,
-            TcpEnabled = input.TcpEnabled,
-            TcpPort = input.TcpPort,
-            AllowedSources = allowed,
-            RetentionDays = input.RetentionDays,
-            MaxMessages = input.MaxMessages
-        }.Normalized();
+        settings.RetentionDays = input.RetentionDays;
+        settings.MaxMessages = input.MaxMessages;
+        settings = settings.Normalized();
         return true;
     }
 
@@ -380,12 +331,12 @@ internal static class SyslogPageSupport
             .ToArray();
 
     /// <summary>
-    /// Whether the Events page offers its Syslog tab: to someone who may read the log, once the receiver is on or the log
-    /// holds something - what was collected stays readable after the receiver is switched off again. Until then the page
-    /// is exactly what it was, and the admin who wants it finds the switch under System > Syslog.
+    /// Whether the Events page offers its Syslog tab: to someone who may read the log, while a collector runs (syslog or
+    /// SNMP traps - both write the central log) or the log holds something - what was collected stays readable after the
+    /// collectors are switched off. Until then the page is exactly what it was.
     /// </summary>
-    public static bool ShowSyslogTab(bool canRead, bool receiverEnabled, bool logHasMessages) =>
-        canRead && (receiverEnabled || logHasMessages);
+    public static bool ShowSyslogTab(bool canRead, bool collectorActive, bool logHasMessages) =>
+        canRead && (collectorActive || logHasMessages);
 
     /// <summary>One message as the page's script receives it - everything it shows, nothing it should not trust: the text
     /// travels as a JSON string and goes onto the page as text.</summary>
@@ -407,39 +358,30 @@ internal static class SyslogPageSupport
         text = message.Message
     };
 
-    /// <summary>The receiver in one line - state pill, label, sentence - for the Syslog tab and the System page alike, so
-    /// they cannot tell two stories. Worst first: an unusable log, then off, then a listener that could not start.</summary>
-    public static SyslogReceiverHead DescribeReceiver(SyslogSettings settings, SyslogReceiverSnapshot receiver, bool storageAvailable = true, string? storageError = null)
+    /// <summary>The collectors in one line - state pill, label, sentence - for the Syslog tab and the System pages alike, so
+    /// they cannot tell two stories. Worst first: an unusable log, then nothing running, then a collector that could not start.</summary>
+    public static SyslogReceiverHead DescribeCollectors(IReadOnlyList<PluginPlacementView> collectors, bool storageAvailable = true, string? storageError = null)
     {
         if (!storageAvailable)
         {
             return new SyslogReceiverHead("error", "Log unusable", "The log database cannot be used: " + storageError);
         }
 
-        if (!settings.Enabled)
+        var enabled = collectors.Where(collector => collector.Assignment.Enabled).ToList();
+        if (enabled.Count == 0)
         {
-            return new SyslogReceiverHead("paused", "Receiver off", "Nothing new is collected. Messages that are already stored can still be read.");
+            return new SyslogReceiverHead("paused", "No collector", "No collector runs - nothing new is collected. Messages that are already stored can still be read.");
         }
 
-        if (receiver.Udp.State == "error" || receiver.Tcp.State == "error")
+        if (enabled.FirstOrDefault(collector => collector.State?.State == "error") is { } failed)
         {
-            return new SyslogReceiverHead("error", "Problem", "A listener could not start - the details are under System > Syslog.");
+            return new SyslogReceiverHead("error", "Problem", $"{failed.Location?.Name ?? "A collector"}: {failed.Detail}");
         }
 
-        var listening = new List<string>();
-        if (receiver.Udp.IsListening)
-        {
-            listening.Add($"UDP {settings.UdpPort}");
-        }
-
-        if (receiver.Tcp.IsListening)
-        {
-            listening.Add($"TCP {settings.TcpPort}");
-        }
-
-        return listening.Count > 0
-            ? new SyslogReceiverHead("ok", "Receiving", "Listening on " + string.Join(" and ", listening) + ".")
-            : new SyslogReceiverHead("warning", "Starting", "The receiver is starting - this page shows its state again in a few seconds.");
+        var running = enabled.Where(collector => collector.IsRunning).ToList();
+        return running.Count > 0
+            ? new SyslogReceiverHead("ok", "Receiving", "Collecting on " + string.Join(", ", running.Select(collector => collector.Location?.Name ?? "a deleted probe").Distinct()) + ".")
+            : new SyslogReceiverHead("warning", "Starting", "The collector has not reported yet - this page shows its state again in a few seconds.");
     }
 
     /// <summary>"3 min ago" - how long since a sender last spoke.</summary>

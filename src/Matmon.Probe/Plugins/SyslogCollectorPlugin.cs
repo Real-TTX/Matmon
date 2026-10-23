@@ -6,11 +6,11 @@ using Matmon.Probe.Syslog;
 namespace Matmon.Probe.Plugins;
 
 /// <summary>
-/// The syslog receiver as a plugin for a probe or agent: it listens where the devices are (a branch office, a site behind
-/// NAT), parses with the same code as the primary and sends every message home as a <c>syslog</c> event - with the
-/// time it ARRIVED at the probe and the address it came from, so on the primary it reads exactly as if the device had
-/// sent it there. While the primary is unreachable the messages wait in the probe's on-disk queue. (The primary's own
-/// receiver is System > Syslog.)
+/// The syslog receiver as a plugin - on the primary (the main probe) or on a probe or agent where the devices are (a
+/// branch office, a site behind NAT). It parses with the same code everywhere and sends every message to the central log
+/// as a <c>syslog</c> event, with the time it ARRIVED and the address it came from, so a message reads the same whichever
+/// collector took it. On a probe the messages wait in its on-disk queue while the primary is unreachable. It brings the
+/// System > Syslog page and the Syslog tab of Events with it: neither is there while no collector runs.
 /// </summary>
 public sealed class SyslogCollectorPlugin : IMatmonPlugin
 {
@@ -20,16 +20,23 @@ public sealed class SyslogCollectorPlugin : IMatmonPlugin
     public PluginDefinition Definition { get; } = new(
         Id,
         "Syslog collector",
-        "Receives the syslog messages of the devices near a probe or agent and forwards them to the central log - also after an outage of the primary, with their real arrival times.",
-        PluginPlacement.Probe,
+        "Receives the syslog messages of your devices - on the primary or on a probe or agent near them - and puts them into the central log, after an outage of the primary too, with their real arrival times.",
+        PluginPlacement.Both,
         [
-            new("udpEnabled", "Receive over UDP", PluginSettingKind.Boolean, "true"),
+            new("udpEnabled", "Receive over UDP", PluginSettingKind.Boolean, "true", "What most switches, routers and firewalls send."),
             new("udpPort", "UDP port", PluginSettingKind.Port, "514", "514 is the standard; on Linux a port below 1024 needs root or CAP_NET_BIND_SERVICE."),
-            new("tcpEnabled", "Receive over TCP", PluginSettingKind.Boolean, "true"),
+            new("tcpEnabled", "Receive over TCP", PluginSettingKind.Boolean, "true", "For devices that cannot afford to lose a message."),
             new("tcpPort", "TCP port", PluginSettingKind.Port, "514"),
-            new("allowedSources", "Allowed sources", PluginSettingKind.MultilineText, null,
-                "IP addresses and ranges, separated by commas or new lines. Empty = anyone who can reach the port.")
-        ]);
+            new("allowedSources", "Allowed sources", PluginSettingKind.AddressList, null,
+                "IP addresses and ranges, separated by commas or new lines. Empty = anyone who can reach the port - syslog has no login, so this list is what decides who may write to the log.")
+        ])
+    {
+        Links =
+        [
+            new(PluginUiArea.System, "syslog", "Syslog", "/system/syslog"),
+            new(PluginUiArea.Events, "syslog", "Syslog", "/Events#syslog")
+        ]
+    };
 
     public Task<IPluginInstance> StartAsync(PluginContext context, CancellationToken cancellationToken)
     {

@@ -1,13 +1,15 @@
 using Matmon.Core.Domain;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
+using Matmon.Host.Services.Plugins;
+using Matmon.Probe.Plugins;
 using Matmon.Probe.Syslog;
 
 namespace Matmon.Tests;
 
 /// <summary>
-/// What the syslog UI (the Events tab and System > Syslog) decides without a request: how the filter bar becomes a query, when a posted settings form is
-/// refused (and why), and which host in the tree a sender belongs to.
+/// What the syslog UI (the Events tab and System > Syslog) decides without a request: how the filter bar becomes a query, when a posted storage form is
+/// refused (and why), how the collectors are described, and which host in the tree a sender belongs to.
 /// </summary>
 public sealed class SyslogPageSupportTests
 {
@@ -116,84 +118,19 @@ public sealed class SyslogPageSupportTests
         Assert.Contains(SyslogPageSupport.SourceWindows, choice => choice.Days == 0);
     }
 
-    // ---- the settings form ----------------------------------------------------------------------------------------------
-
-    private static SyslogSettingsInput GoodInput() => new()
-    {
-        Enabled = true,
-        UdpEnabled = true,
-        UdpPort = 5514,
-        TcpEnabled = true,
-        TcpPort = 5515,
-        AllowedSources = " 192.168.1.0/24, 10.0.0.5 ",
-        RetentionDays = 30,
-        MaxMessages = 500_000
-    };
+    // ---- the storage form -----------------------------------------------------------------------------------------------
 
     [Fact]
-    public void AGoodFormBecomesSettings()
+    public void AGoodStorageFormChangesOnlyRetentionAndTheLimit()
     {
-        Assert.True(SyslogPageSupport.TryBuildSettings(GoodInput(), out var settings, out var error), error);
+        var current = new SyslogSettings { RetentionDays = 14, MaxMessages = 2_000_000, AllowedSources = "10.0.0.0/8" };
 
-        Assert.True(settings.Enabled);
-        Assert.Equal(5514, settings.UdpPort);
-        Assert.Equal(5515, settings.TcpPort);
-        Assert.Equal("192.168.1.0/24, 10.0.0.5", settings.AllowedSources);
+        Assert.True(SyslogPageSupport.TryBuildStorage(new SyslogStorageInput { RetentionDays = 30, MaxMessages = 500_000 }, current, out var settings, out var error), error);
+
         Assert.Equal(30, settings.RetentionDays);
         Assert.Equal(500_000, settings.MaxMessages);
-    }
-
-    [Fact]
-    public void ABlankAllowListMeansNoRestrictionAndIsStoredAsNull()
-    {
-        var input = GoodInput();
-        input.AllowedSources = "  \r\n ";
-
-        Assert.True(SyslogPageSupport.TryBuildSettings(input, out var settings, out _));
-        Assert.Null(settings.AllowedSources);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(65536)]
-    [InlineData(-1)]
-    public void APortOutsideTheRangeIsRefusedNotCorrected(int port)
-    {
-        var udp = GoodInput();
-        udp.UdpPort = port;
-        Assert.False(SyslogPageSupport.TryBuildSettings(udp, out _, out var udpError));
-        Assert.Contains("port", udpError, StringComparison.OrdinalIgnoreCase);
-
-        var tcp = GoodInput();
-        tcp.TcpPort = port;
-        Assert.False(SyslogPageSupport.TryBuildSettings(tcp, out _, out _));
-    }
-
-    [Fact]
-    public void AnEnabledReceiverNeedsAProtocol()
-    {
-        var input = GoodInput();
-        input.UdpEnabled = false;
-        input.TcpEnabled = false;
-        Assert.False(SyslogPageSupport.TryBuildSettings(input, out _, out var error));
-        Assert.Contains("UDP", error);
-
-        // switched off, neither is fine - that is just "off"
-        input.Enabled = false;
-        Assert.True(SyslogPageSupport.TryBuildSettings(input, out _, out _));
-    }
-
-    [Fact]
-    public void AnAllowListEntryThatIsNotAnAddressRefusesTheWholeForm()
-    {
-        var input = GoodInput();
-        input.AllowedSources = "192.168.1.0/24, switch-1, 10.0.0.300";
-
-        Assert.False(SyslogPageSupport.TryBuildSettings(input, out _, out var error));
-
-        // a typo must never silently widen who may write to the log
-        Assert.Contains("switch-1", error);
-        Assert.Contains("10.0.0.300", error);
+        Assert.Equal("10.0.0.0/8", settings.AllowedSources); // whatever else is stored stays
+        Assert.Equal(14, current.RetentionDays);             // and the stored object is not changed behind the store's back
     }
 
     [Theory]
@@ -203,23 +140,18 @@ public sealed class SyslogPageSupportTests
     [InlineData(30, 60_000_000)]
     public void RetentionAndTheMessageLimitHaveToBeInsideTheirRanges(int days, int messages)
     {
-        var input = GoodInput();
-        input.RetentionDays = days;
-        input.MaxMessages = messages;
-
-        Assert.False(SyslogPageSupport.TryBuildSettings(input, out _, out var error));
+        Assert.False(SyslogPageSupport.TryBuildStorage(new SyslogStorageInput { RetentionDays = days, MaxMessages = messages }, new SyslogSettings(), out _, out var error));
         Assert.False(string.IsNullOrWhiteSpace(error));
     }
 
     [Fact]
-    public void TheFormStartsFromTheStoredSettings()
+    public void TheStorageFormStartsFromTheStoredSettings()
     {
-        var stored = new SyslogSettings { Enabled = true, UdpPort = 1514, TcpEnabled = false, AllowedSources = "10.0.0.0/8", RetentionDays = 7, MaxMessages = 20_000 };
+        var stored = new SyslogSettings { RetentionDays = 7, MaxMessages = 20_000 };
 
-        var input = SyslogSettingsInput.From(stored);
+        var input = SyslogStorageInput.From(stored);
 
-        Assert.True(SyslogPageSupport.TryBuildSettings(input, out var roundTripped, out _));
-        Assert.Equal(stored.ListenerSignature(), roundTripped.ListenerSignature());
+        Assert.True(SyslogPageSupport.TryBuildStorage(input, stored, out var roundTripped, out _));
         Assert.Equal(7, roundTripped.RetentionDays);
         Assert.Equal(20_000, roundTripped.MaxMessages);
     }
@@ -227,80 +159,71 @@ public sealed class SyslogPageSupportTests
     // ---- when the Events page shows the Syslog tab ----------------------------------------------------------------------
 
     [Theory]
-    [InlineData(true, true, false, true)]    // the receiver is on, nothing arrived yet: the tab says so
+    [InlineData(true, true, false, true)]    // a collector runs, nothing arrived yet: the tab says so
     [InlineData(true, false, true, true)]    // switched off again, but what was collected stays readable
     [InlineData(true, true, true, true)]
     [InlineData(true, false, false, false)]  // never used: the Events page is what it always was
     [InlineData(false, true, true, false)]   // a viewer does not get device logs, however much is there
     [InlineData(false, false, false, false)]
-    public void TheSyslogTabAppearsForSomeoneWhoMayReadItOnceThereIsAnythingToRead(bool canRead, bool enabled, bool hasMessages, bool expected) =>
-        Assert.Equal(expected, SyslogPageSupport.ShowSyslogTab(canRead, enabled, hasMessages));
+    public void TheSyslogTabAppearsForSomeoneWhoMayReadItOnceThereIsAnythingToRead(bool canRead, bool collectorActive, bool hasMessages, bool expected) =>
+        Assert.Equal(expected, SyslogPageSupport.ShowSyslogTab(canRead, collectorActive, hasMessages));
 
-    // ---- the receiver in one line ---------------------------------------------------------------------------------------
+    // ---- the collectors in one line -------------------------------------------------------------------------------------
 
-    private static SyslogReceiverSnapshot Receiver(SyslogListenerStatus udp, SyslogListenerStatus tcp) =>
-        new(udp, tcp, Received: 0, Rejected: 0, TcpConnections: 0, LastReceivedUtc: null, Warning: null);
+    private static readonly PluginLocation Primary = new(Guid.NewGuid(), "Primary Probe (this primary)", true, "primary");
+    private static readonly PluginLocation Branch = new(Guid.NewGuid(), "Branch office", false, "branch-01");
 
-    private static readonly SyslogListenerStatus Listening = new("listening", "Listening.");
-    private static readonly SyslogListenerStatus Broken = new("error", "port in use");
+    private static PluginPlacementView Collector(PluginLocation location, bool enabled, string? state, string? detail = null) =>
+        new(new PluginAssignment { PluginId = SyslogCollectorPlugin.Id, ProbeElementId = location.Id, Enabled = enabled }, null, location,
+            state is null ? null : new PluginAssignmentState(state, detail, Now), null);
 
     [Fact]
-    public void AReceiverThatListensIsReceivingAndSaysOnWhat()
+    public void RunningCollectorsAreReceivingAndSayWhere()
     {
-        var settings = new SyslogSettings { Enabled = true, UdpPort = 5514, TcpPort = 5515 };
+        var head = SyslogPageSupport.DescribeCollectors([Collector(Primary, true, "running"), Collector(Branch, true, "running")]);
 
-        var both = SyslogPageSupport.DescribeReceiver(settings, Receiver(Listening, Listening));
-        Assert.Equal(("ok", "Receiving"), (both.State, both.Label));
-        Assert.Contains("UDP 5514 and TCP 5515", both.Text);
-
-        var onlyTcp = SyslogPageSupport.DescribeReceiver(settings, Receiver(SyslogListenerStatus.Off, Listening));
-        Assert.Equal("ok", onlyTcp.State);
-        Assert.Contains("TCP 5515", onlyTcp.Text);
-        Assert.DoesNotContain("UDP", onlyTcp.Text);
+        Assert.Equal(("ok", "Receiving"), (head.State, head.Label));
+        Assert.Contains("Primary Probe (this primary)", head.Text);
+        Assert.Contains("Branch office", head.Text);
     }
 
     [Fact]
-    public void ASwitchedOffReceiverSaysSoAndStillOffersWhatIsStored()
+    public void NoCollectorSaysSoAndStillOffersWhatIsStored()
     {
-        var head = SyslogPageSupport.DescribeReceiver(new SyslogSettings { Enabled = false }, Receiver(SyslogListenerStatus.Off, SyslogListenerStatus.Off));
+        foreach (var collectors in new[] { Array.Empty<PluginPlacementView>(), [Collector(Primary, false, null)] })
+        {
+            var head = SyslogPageSupport.DescribeCollectors(collectors);
 
-        Assert.Equal(("paused", "Receiver off"), (head.State, head.Label));
-        Assert.Contains("already stored", head.Text);
+            Assert.Equal(("paused", "No collector"), (head.State, head.Label));
+            Assert.Contains("already stored", head.Text);
+        }
     }
 
     [Fact]
-    public void AListenerThatCouldNotStartIsAProblemAndPointsToTheSettings()
+    public void ACollectorThatCouldNotStartIsAProblemAndSaysWhichAndWhy()
     {
-        var settings = new SyslogSettings { Enabled = true };
-
-        var head = SyslogPageSupport.DescribeReceiver(settings, Receiver(Broken, Listening));
+        var head = SyslogPageSupport.DescribeCollectors([Collector(Primary, true, "running"), Collector(Branch, true, "error", "The port is in use")]);
 
         Assert.Equal(("error", "Problem"), (head.State, head.Label));
-        Assert.Contains("System > Syslog", head.Text);
+        Assert.Contains("Branch office", head.Text);
+        Assert.Contains("The port is in use", head.Text);
     }
 
     [Fact]
-    public void AReceiverThatHasNotOpenedItsSocketsYetIsStartingNotBroken()
+    public void ACollectorThatHasNotReportedYetIsStartingNotBroken()
     {
-        var head = SyslogPageSupport.DescribeReceiver(new SyslogSettings { Enabled = true }, Receiver(SyslogListenerStatus.Off, SyslogListenerStatus.Off));
+        var head = SyslogPageSupport.DescribeCollectors([Collector(Branch, true, null)]);
 
         Assert.Equal(("warning", "Starting"), (head.State, head.Label));
     }
 
     [Fact]
-    public void TheWorstThingIsSaidFirst()
+    public void AnUnusableLogIsSaidFirst()
     {
-        var off = new SyslogSettings { Enabled = false };
-        var on = new SyslogSettings { Enabled = true };
+        var head = SyslogPageSupport.DescribeCollectors([Collector(Primary, true, "error", "port in use")], storageAvailable: false, storageError: "disk full");
 
-        // an unusable log beats everything - nothing else matters if it cannot be read or written
-        var unusable = SyslogPageSupport.DescribeReceiver(off, Receiver(Broken, Broken), storageAvailable: false, storageError: "disk full");
-        Assert.Equal("Log unusable", unusable.Label);
-        Assert.Contains("disk full", unusable.Text);
-
-        // off beats a stale listener error: nobody asked it to listen
-        Assert.Equal("Receiver off", SyslogPageSupport.DescribeReceiver(off, Receiver(Broken, SyslogListenerStatus.Off)).Label);
-        Assert.Equal("Problem", SyslogPageSupport.DescribeReceiver(on, Receiver(Broken, SyslogListenerStatus.Off)).Label);
+        Assert.Equal("Log unusable", head.Label);
+        Assert.Contains("disk full", head.Text);
     }
 
     // ---- the contract with the page's script ----------------------------------------------------------------------------

@@ -1,7 +1,8 @@
 using Matmon.Core.Domain;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
-using Matmon.Probe.Syslog;
+using Matmon.Host.Services.Plugins;
+using Matmon.Probe.Plugins;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -13,10 +14,10 @@ namespace Matmon.Host.Pages;
 public sealed record SyslogSourceRow(SyslogSender Sender, HostElement? Host, string? WatchSender, IReadOnlyList<SensorElement> Sensors);
 
 /// <summary>
-/// System > Syslog (admins): the receiver - on/off, ports, who may send, how long to keep the log - its status, and who has
-/// been sending, with a button that puts a sensor on a device that turned up. Reading the log itself is the Syslog tab of
-/// the Events page. A system setting lives here rather than next to the log because the log is for everybody who works
-/// with alerts, and the receiver is for whoever runs the machine.
+/// System > Syslog (admins) - a page that comes with the syslog collector plugin: where the log is collected (the collector
+/// on the main probe and on probes near the devices, each with its state), how long and how much it keeps, a test message,
+/// and who has been sending, with a button that puts a sensor on a device that turned up. The collectors' ports and
+/// allow-lists are their plugin settings (System > Plugins). Reading the log itself is the Syslog tab of the Events page.
 ///
 /// Every change is an admin's (the page is admin-only and the page write guard agrees).
 /// </summary>
@@ -24,20 +25,16 @@ public sealed class SystemSyslogModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspace;
     private readonly ILicenseService _license;
+    private readonly PluginUi _plugins;
     private readonly ISyslogStore? _store;
-    private readonly SyslogReceiverState? _state;
 
-    // The store and the receiver state exist on a primary only; on a probe the page is simply not there.
-    public SystemSyslogModel(
-        IMonitoringWorkspaceStore workspace,
-        ILicenseService license,
-        ISyslogStore? store = null,
-        SyslogReceiverState? state = null)
+    // The store exists on a primary only; on a probe the page is simply not there.
+    public SystemSyslogModel(IMonitoringWorkspaceStore workspace, ILicenseService license, PluginUi plugins, ISyslogStore? store = null)
     {
         _workspace = workspace;
         _license = license;
+        _plugins = plugins;
         _store = store;
-        _state = state;
     }
 
     /// <summary>How far back the Senders list looks (days, 0 = everything kept).</summary>
@@ -45,7 +42,7 @@ public sealed class SystemSyslogModel : PageModel
     public int Days { get; set; } = 7;
 
     [BindProperty]
-    public SyslogSettingsInput Input { get; set; } = new();
+    public SyslogStorageInput Input { get; set; } = new();
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -53,12 +50,20 @@ public sealed class SystemSyslogModel : PageModel
     [TempData]
     public string? ErrorMessage { get; set; }
 
-    /// <summary>Why the settings form was refused - shown with the form, which keeps what was typed.</summary>
+    /// <summary>Why the storage form was refused - shown with the form, which keeps what was typed.</summary>
     public string? FormError { get; private set; }
 
     public SyslogSettings Settings { get; private set; } = new();
 
-    public SyslogReceiverSnapshot Receiver { get; private set; } = EmptyReceiver;
+    /// <summary>Where the syslog collector runs (the main probe, probes) with its last state.</summary>
+    public IReadOnlyList<PluginPlacementView> Collectors { get; private set; } = [];
+
+    /// <summary>The collector on this machine, when it runs - the one a test message and the device examples go to.</summary>
+    public PluginPlacementView? LocalCollector { get; private set; }
+
+    public bool Active => Collectors.Any(collector => collector.Assignment.Enabled);
+
+    public SyslogReceiverHead Head { get; private set; } = new("paused", "No collector", string.Empty);
 
     public SyslogStorageInfo Storage { get; private set; } = new(false, null, 0, 0, null, null, 0);
 
@@ -71,6 +76,9 @@ public sealed class SystemSyslogModel : PageModel
 
     public string Ago(DateTimeOffset when) => SyslogPageSupport.Ago(when, DateTimeOffset.UtcNow);
 
+    /// <summary>The ports the collector on this machine listens on (null = that protocol is off).</summary>
+    public (int? Udp, int? Tcp) LocalPorts => LocalCollector is { } local ? Ports(local.Assignment) : (null, null);
+
     public IActionResult OnGet()
     {
         if (_store is null)
@@ -82,14 +90,14 @@ public sealed class SystemSyslogModel : PageModel
         return Page();
     }
 
-    public IActionResult OnPostSaveSettings()
+    public IActionResult OnPostSaveStorage()
     {
         if (_store is null)
         {
             return NotFound();
         }
 
-        if (!SyslogPageSupport.TryBuildSettings(Input, out var settings, out var error))
+        if (!SyslogPageSupport.TryBuildStorage(Input, _workspace.GetSyslogSettings(), out var settings, out var error))
         {
             FormError = error;
             ModelState.Clear(); // the inputs show what was typed, not what an earlier post left in the model state
@@ -98,25 +106,26 @@ public sealed class SystemSyslogModel : PageModel
         }
 
         _workspace.UpdateSyslogSettings(settings);
-
-        StatusMessage = settings.Enabled
-            ? "Saved. The receiver applies it within a few seconds." +
-              (string.IsNullOrWhiteSpace(settings.AllowedSources)
-                  ? " Anyone who can reach the port can send messages - restrict it with Allowed sources."
-                  : string.Empty) +
-              " The log is on the Syslog tab of Events."
-            : "Saved. The receiver is off - nothing is collected, and what is already stored stays until it ages out.";
+        StatusMessage = $"Saved. The log keeps {settings.RetentionDays} days and at most {settings.MaxMessages:N0} messages.";
         return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostTestAsync(CancellationToken cancellationToken)
     {
-        if (_store is null || _state is null)
+        if (_store is null)
         {
             return NotFound();
         }
 
-        var (ok, message) = await SyslogSelfTest.RunAsync(_workspace.GetSyslogSettings(), _store, _state, cancellationToken);
+        Load(resetInput: true);
+        if (LocalCollector is not { IsRunning: true })
+        {
+            ErrorMessage = "No syslog collector runs on this machine - the test sends to it. Switch one on for the main probe under System > Plugins.";
+            return RedirectToPage();
+        }
+
+        var (udp, tcp) = LocalPorts;
+        var (ok, message) = await SyslogSelfTest.RunAsync(udp, tcp, _store, cancellationToken);
         if (ok)
         {
             StatusMessage = message;
@@ -186,17 +195,26 @@ public sealed class SystemSyslogModel : PageModel
         return RedirectToPage(new { days = Days });
     }
 
+    /// <summary>The ports a syslog collector assignment listens on, with the plugin's defaults for what was left empty.</summary>
+    public static (int? Udp, int? Tcp) Ports(PluginAssignment assignment)
+    {
+        bool On(string key) => !assignment.Settings.TryGetValue(key, out var value) || !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+        int Port(string key) => assignment.Settings.TryGetValue(key, out var value) && int.TryParse(value, out var port) ? port : SyslogSettings.DefaultPort;
+        return (On("udpEnabled") ? Port("udpPort") : null, On("tcpEnabled") ? Port("tcpPort") : null);
+    }
+
     private void Load(bool resetInput)
     {
-        var settings = _workspace.GetSyslogSettings();
-        Settings = settings;
+        Settings = _workspace.GetSyslogSettings();
         if (resetInput)
         {
-            Input = SyslogSettingsInput.From(settings);
+            Input = SyslogStorageInput.From(Settings);
         }
 
-        Receiver = _state?.Snapshot() ?? EmptyReceiver;
         Storage = _store!.GetStorageInfo();
+        Collectors = _plugins.Placements(SyslogCollectorPlugin.Id);
+        LocalCollector = Collectors.FirstOrDefault(collector => collector.Assignment.Enabled && collector.Location?.IsPrimary == true);
+        Head = SyslogPageSupport.DescribeCollectors(Collectors, Storage.Available, Storage.Error);
 
         var now = DateTimeOffset.UtcNow;
         var since = Days > 0 ? now - TimeSpan.FromDays(Math.Min(Days, 3650)) : DateTimeOffset.UnixEpoch;
@@ -215,7 +233,4 @@ public sealed class SystemSyslogModel : PageModel
             })
             .ToArray();
     }
-
-    private static readonly SyslogReceiverSnapshot EmptyReceiver =
-        new(SyslogListenerStatus.Off, SyslogListenerStatus.Off, 0, 0, 0, null, null);
 }

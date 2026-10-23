@@ -10,11 +10,12 @@ namespace Matmon.Probe.Plugins;
 public sealed record SnmpTrapForward(string Datagram);
 
 /// <summary>
-/// The SNMP trap receiver as a plugin for a probe or agent: it listens where the devices are, keeps out senders that are
-/// not allowed, answers a v2c inform at once (the device stops repeating it) and forwards every trap as it arrived, with
-/// the time and the address. The primary does the rest exactly as for a trap it received itself - communities, SNMPv3
-/// users, MIB names, the central log, polling the device's sensors - so those stay configured in ONE place (System >
-/// SNMP traps). While the primary is unreachable the traps wait in the probe's on-disk queue.
+/// The SNMP trap receiver as a plugin - on the primary (the main probe) or on a probe or agent where the devices are: it
+/// keeps out senders that are not allowed, answers a v2c inform at once (the device stops repeating it) and hands every
+/// trap on as it arrived, with the time and the address. The primary does the rest the same way for every collector -
+/// communities, SNMPv3 users, MIB names, the central log, polling the device's sensors - so those are configured in ONE
+/// place (System > SNMP traps, a page that comes with this plugin). On a probe the traps wait in its on-disk queue while
+/// the primary is unreachable.
 /// </summary>
 public sealed class SnmpTrapCollectorPlugin : IMatmonPlugin
 {
@@ -24,13 +25,21 @@ public sealed class SnmpTrapCollectorPlugin : IMatmonPlugin
     public PluginDefinition Definition { get; } = new(
         Id,
         "SNMP trap collector",
-        "Receives the SNMP traps of the devices near a probe or agent and forwards them to the primary, which logs them with their MIB names and polls the device's sensors - also after an outage, with their real arrival times.",
-        PluginPlacement.Probe,
+        "Receives the SNMP traps of your devices - on the primary or on a probe or agent near them. The primary logs them with their MIB names and polls the device's sensors, after an outage too, with their real arrival times.",
+        PluginPlacement.Both,
         [
-            new("port", "UDP port", PluginSettingKind.Port, "162", "162 is the standard; on Linux a port below 1024 needs root or CAP_NET_BIND_SERVICE."),
-            new("allowedSources", "Allowed sources", PluginSettingKind.MultilineText, null,
+            new("port", "UDP port", PluginSettingKind.Port, "162", "162 is the standard (snmptrapd on the same machine uses it too); on Linux a port below 1024 needs root or CAP_NET_BIND_SERVICE."),
+            new("allowedSources", "Allowed sources", PluginSettingKind.AddressList, null,
                 "IP addresses and ranges, separated by commas or new lines. Empty = anyone who can reach the port. Communities and SNMPv3 users are checked on the primary (System > SNMP traps).")
-        ]);
+        ])
+    {
+        // Traps land in the central log, so they bring its tab on Events along too.
+        Links =
+        [
+            new(PluginUiArea.System, "traps", "SNMP traps", "/system/snmp-traps"),
+            new(PluginUiArea.Events, "syslog", "Syslog", "/Events#syslog")
+        ]
+    };
 
     public Task<IPluginInstance> StartAsync(PluginContext context, CancellationToken cancellationToken)
     {

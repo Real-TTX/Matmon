@@ -39,8 +39,12 @@ public sealed class SnmpV3TrapInteropTests : IDisposable
             new() { Username = "authpriv", AuthProtocol = "sha1", AuthPassword = "auth-secret-1", PrivProtocol = "aes128", PrivPassword = "priv-secret-1" },
             new() { Username = "authdes", AuthProtocol = "md5", AuthPassword = "auth-secret-1", PrivProtocol = "des", PrivPassword = "priv-secret-1" }
         ];
-        ingest.Configure(IpAllowList.Parse(null, out _), [], pollOnTrap: false, users);
-        using var listener = SnmpTrapUdpListener.Start(0, ingest, NullLogger.Instance);
+        ingest.Configure([], pollOnTrap: false, users);
+        using var listener = Matmon.Probe.UdpDatagramListener.Start(0, (datagram, sender) =>
+        {
+            ingest.Accept(datagram.Span, sender, DateTimeOffset.UtcNow);
+            return null;
+        }, NullLogger.Instance, "SNMP trap test");
 
         var target = $"host.docker.internal:{listener.Port}";
         const string engine = "0x80001F8880AABBCCDDEEFF0011";

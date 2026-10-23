@@ -1,9 +1,12 @@
 @model string
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore Workspace
+@inject Matmon.Host.Services.Plugins.PluginUi PluginUi
 @* The tab strip of the System section. System is one page (Config) with a tab per area and a few areas that are
    pages of their own (Syslog): both render this strip, so the section looks like one place whichever it is on.
    The tabs are LINKS (each area is its own request: ?tab=backup asks the cloud for its backup list, for one), so they
-   are MatUi's link tabs, not a [data-tabs] group. Model = the active tab's name. *@
+   are MatUi's link tabs, not a [data-tabs] group. Model = the active tab's name.
+   Some tabs come with a PLUGIN (Syslog, SNMP traps): they are there while the plugin runs somewhere (PluginUi.Links),
+   and on their own page even when it was just switched off, so the strip still says where you are. *@
 @{
     var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var active = Model ?? "general";
@@ -18,8 +21,10 @@
     <a class="@Css("storage")" aria-current="@Current("storage")" asp-page="/Config" asp-route-tab="storage">Storage</a>
     @if (canManage)
     {
-        <a class="@Css("syslog")" aria-current="@Current("syslog")" asp-page="/SystemSyslog">Syslog</a>
-        <a class="@Css("traps")" aria-current="@Current("traps")" asp-page="/SystemSnmpTraps">SNMP traps</a>
+        @foreach (var link in PluginUi.Links(Matmon.Probe.Plugins.PluginUiArea.System, active))
+        {
+            <a class="@Css(link.Key)" aria-current="@Current(link.Key)" href="@Url.Content("~" + link.Path)">@link.Title</a>
+        }
         <a class="@Css("plugins")" aria-current="@Current("plugins")" asp-page="/SystemPlugins">Plugins</a>
         <a class="@Css("backup")" aria-current="@Current("backup")" asp-page="/Config" asp-route-tab="backup">Backup</a>
         <a class="@Css("cloud")" aria-current="@Current("cloud")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>

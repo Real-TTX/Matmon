@@ -4,6 +4,8 @@ using System.Net.Sockets;
 using System.Text;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
+using Matmon.Host.Services.Plugins;
+using Matmon.Probe.Plugins;
 using Matmon.Probe.Syslog;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -11,7 +13,9 @@ namespace Matmon.Tests;
 
 /// <summary>
 /// The receiver over real sockets: what arrives by UDP and TCP is parsed and stored, who may send is enforced, and the
-/// supervisor opens, moves and closes the listeners as the settings change. Every test uses free ports, never 514.
+/// syslog collector plugin - run by the plugin runtime the way the primary runs it on the main probe, its events going
+/// through the dispatcher into the store - opens, moves and closes the listeners as its settings change. Every test uses
+/// free ports, never 514.
 /// </summary>
 public sealed class SyslogReceiverTests : IDisposable
 {
@@ -19,20 +23,27 @@ public sealed class SyslogReceiverTests : IDisposable
     private readonly SyslogStore _store;
     private readonly SyslogReceiverState _state = new();
     private readonly SyslogIngest _ingest;
-    private readonly SyslogReceiverService _service;
+    private readonly PluginRuntime _runtime;
+    private readonly Guid _assignment = Guid.NewGuid();
     private readonly List<IDisposable> _disposables = [];
 
     public SyslogReceiverTests()
     {
         _store = new SyslogStore(Path.Combine(_dir, "syslog.db"), NullLogger<SyslogStore>.Instance);
         _ingest = new SyslogIngest(_store, _state);
-        // Reconcile never touches the workspace store - only the polling loop does - so the test hands it nothing.
-        _service = new SyslogReceiverService(null!, _store, _ingest, _state, NullLogger<SyslogReceiverService>.Instance);
+        var catalog = new PluginCatalog([new SyslogCollectorPlugin()], NullLogger<PluginCatalog>.Instance);
+        var dispatcher = new PluginEventDispatcher([new SyslogPluginEventHandler(_store)], NullLogger<PluginEventDispatcher>.Instance);
+        _runtime = new PluginRuntime(catalog, new DispatchingSink(dispatcher), NullLoggerFactory.Instance, _dir, probeId: null);
+    }
+
+    private sealed class DispatchingSink(PluginEventDispatcher dispatcher) : IPluginEventSink
+    {
+        public void Publish(PluginEvent pluginEvent) => dispatcher.Dispatch(pluginEvent, probeId: null);
     }
 
     public void Dispose()
     {
-        _service.Dispose();
+        _runtime.DisposeAsync().AsTask().GetAwaiter().GetResult();
         foreach (var disposable in _disposables)
         {
             disposable.Dispose();
@@ -49,30 +60,21 @@ public sealed class SyslogReceiverTests : IDisposable
         }
     }
 
-    // The receiver opens the same number on UDP and on TCP, so a port is only usable when it is free on BOTH. A number
-    // that was free for TCP can still be somebody's ephemeral UDP port - a DNS query from another test class running at
-    // the same time is enough - so each candidate is tried the way the service binds it, on both protocols.
-    private static int FreePort()
+    // A free port per protocol, handed out by the system for that protocol - a number taken from TCP's ephemeral range
+    // and then tried on UDP (what the old receiver needed: one number for both) failed often enough under a busy parallel
+    // run to fail a test now and then. Bound the way the collector binds it (dual-stack), so free here means free there.
+    private static int FreeUdpPort()
     {
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            try
-            {
-                using var udp = OccupyUdp(port);
-                using var tcp = OccupyTcp(port);
-                return port;
-            }
-            catch (SocketException)
-            {
-                // taken on the other protocol (or in the other address family): try another number
-            }
-        }
+        using var socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp) { DualMode = true };
+        socket.Bind(new IPEndPoint(IPAddress.IPv6Any, 0));
+        return ((IPEndPoint)socket.LocalEndPoint!).Port;
+    }
 
-        throw new InvalidOperationException("No port is free on both TCP and UDP.");
+    private static int FreeTcpPort()
+    {
+        using var socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp) { DualMode = true };
+        socket.Bind(new IPEndPoint(IPAddress.IPv6Any, 0));
+        return ((IPEndPoint)socket.LocalEndPoint!).Port;
     }
 
     private static byte[] Bytes(string text) => Encoding.UTF8.GetBytes(text);
@@ -93,15 +95,37 @@ public sealed class SyslogReceiverTests : IDisposable
         }
     }
 
-    private SyslogSettings Settings(bool udp = true, bool tcp = true, string? allowed = null) => new()
+    /// <summary>A collector's settings as System > Plugins stores them, on free ports.</summary>
+    private sealed record Collector(bool Udp, int UdpPort, bool Tcp, int TcpPort, string? Allowed)
     {
-        Enabled = true,
-        UdpEnabled = udp,
-        UdpPort = FreePort(),
-        TcpEnabled = tcp,
-        TcpPort = FreePort(),
-        AllowedSources = allowed
-    };
+        public Dictionary<string, string> ToSettings()
+        {
+            var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["udpEnabled"] = Udp ? "true" : "false",
+                ["udpPort"] = UdpPort.ToString(CultureInfo.InvariantCulture),
+                ["tcpEnabled"] = Tcp ? "true" : "false",
+                ["tcpPort"] = TcpPort.ToString(CultureInfo.InvariantCulture)
+            };
+            if (Allowed is not null)
+            {
+                settings["allowedSources"] = Allowed;
+            }
+
+            return settings;
+        }
+    }
+
+    private static Collector Settings(bool udp = true, bool tcp = true, string? allowed = null) => new(udp, FreeUdpPort(), tcp, FreeTcpPort(), allowed);
+
+    /// <summary>What the primary does every few seconds: the runtime made to match the assignment (or none).</summary>
+    private async Task<PluginStatus?> Run(Collector? collector, bool enabled = true)
+    {
+        await _runtime.ReconcileAsync(
+            collector is null ? [] : [new PluginAssignmentSpec(_assignment, SyslogCollectorPlugin.Id, enabled, collector.ToSettings())],
+            DateTimeOffset.UtcNow, default);
+        return _runtime.Statuses().Select(status => status.Status).SingleOrDefault();
+    }
 
     private static async Task SendUdp(int port, string text)
     {
@@ -294,31 +318,32 @@ public sealed class SyslogReceiverTests : IDisposable
         }
     }
 
-    // ---- the supervisor ---------------------------------------------------------------------------------------------
+    // ---- the collector plugin ---------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task SwitchingTheReceiverOnOpensBothListeners_AndTheStatusSaysSo()
+    public async Task SwitchingTheCollectorOnOpensBothListeners_AndTheStatusSaysSo()
     {
         var settings = Settings();
 
-        _service.Reconcile(settings);
+        var status = await Run(settings);
 
-        var status = _state.Snapshot();
-        Assert.True(status.Udp.IsListening);
-        Assert.Contains(settings.UdpPort.ToString(), status.Udp.Detail);
-        Assert.True(status.Tcp.IsListening);
+        Assert.Equal("running", status?.State);
+        Assert.Contains($"UDP {settings.UdpPort}", status!.Detail);
+        Assert.Contains($"TCP {settings.TcpPort}", status.Detail);
         await SendUdp(settings.UdpPort, "<13>Oct 15 10:11:12 sw1 app: over udp");
         await SendTcp(settings.TcpPort, "<13>Oct 15 10:11:12 sw1 app: over tcp\n");
         Assert.Equal(2, (await WaitForMessages(2)).Count);
     }
 
     [Fact]
-    public void ItStaysOffUntilSwitchedOn()
+    public async Task NothingListensUntilACollectorIsSwitchedOn()
     {
-        _service.Reconcile(new SyslogSettings { Enabled = false });
+        var settings = Settings();
 
-        Assert.Equal("off", _state.Snapshot().Udp.State);
-        Assert.Equal("off", _state.Snapshot().Tcp.State);
+        Assert.Null(await Run(settings, enabled: false));
+
+        await SendUdp(settings.UdpPort, "<13>Oct 15 10:11:12 sw1 app: nobody is listening");
+        Assert.Empty(await WaitForMessages(1, timeoutMs: 300));
     }
 
     [Fact]
@@ -326,10 +351,10 @@ public sealed class SyslogReceiverTests : IDisposable
     {
         var settings = Settings(udp: false, tcp: true);
 
-        _service.Reconcile(settings);
+        var status = await Run(settings);
 
-        Assert.Equal("off", _state.Snapshot().Udp.State);
-        Assert.True(_state.Snapshot().Tcp.IsListening);
+        Assert.DoesNotContain("UDP", status!.Detail);
+        Assert.Contains($"TCP {settings.TcpPort}", status.Detail);
         await SendUdp(settings.UdpPort, "<13>Oct 15 10:11:12 sw1 app: nobody is listening");
         Assert.Empty(await WaitForMessages(1, timeoutMs: 300));
     }
@@ -338,11 +363,10 @@ public sealed class SyslogReceiverTests : IDisposable
     public async Task MovingAPortMovesTheListener()
     {
         var first = Settings(tcp: false);
-        _service.Reconcile(first);
-        var moved = first.Clone();
-        moved.UdpPort = FreePort();
+        await Run(first);
+        var moved = first with { UdpPort = FreeUdpPort() };
 
-        _service.Reconcile(moved);
+        await Run(moved);
 
         await SendUdp(moved.UdpPort, "<13>Oct 15 10:11:12 sw1 app: on the new port");
         await SendUdp(first.UdpPort, "<13>Oct 15 10:11:12 sw1 app: on the old port");
@@ -351,14 +375,13 @@ public sealed class SyslogReceiverTests : IDisposable
     }
 
     [Fact]
-    public async Task SwitchingItOffClosesTheSockets()
+    public async Task RemovingTheCollectorClosesTheSockets()
     {
         var settings = Settings();
-        _service.Reconcile(settings);
+        await Run(settings);
 
-        _service.Reconcile(new SyslogSettings { Enabled = false, UdpPort = settings.UdpPort, TcpPort = settings.TcpPort });
+        Assert.Null(await Run(null));
 
-        Assert.Equal("off", _state.Snapshot().Udp.State);
         await SendUdp(settings.UdpPort, "<13>Oct 15 10:11:12 sw1 app: too late");
         Assert.Empty(await WaitForMessages(1, timeoutMs: 300));
         using var client = new TcpClient(AddressFamily.InterNetwork);
@@ -366,38 +389,17 @@ public sealed class SyslogReceiverTests : IDisposable
     }
 
     [Fact]
-    public async Task ChangingOnlyTheRetentionKeepsTheConnectionsOpen()
-    {
-        var settings = Settings(udp: false);
-        _service.Reconcile(settings);
-
-        using var client = new TcpClient(AddressFamily.InterNetwork);
-        await client.ConnectAsync(IPAddress.Loopback, settings.TcpPort);
-        var stream = client.GetStream();
-        await stream.WriteAsync(Bytes("<13>Oct 15 10:11:12 sw1 app: before\n"));
-        await WaitForMessages(1);
-
-        var changed = settings.Clone();
-        changed.RetentionDays = 90;
-        changed.MaxMessages = 5_000_000;
-        _service.Reconcile(changed);
-        await stream.WriteAsync(Bytes("<13>Oct 15 10:11:12 sw1 app: after\n"));
-
-        Assert.Equal(2, (await WaitForMessages(2)).Count);
-    }
-
-    [Fact]
-    public void AnAllowListThatParsesToNothingKeepsTheReceiverOff_SoATypoCannotOpenItToEveryone()
+    public async Task AnAllowListThatParsesToNothingKeepsTheCollectorOff_SoATypoCannotOpenItToEveryone()
     {
         var settings = Settings(allowed: "switch-1, 10.0.0.300");
 
-        _service.Reconcile(settings);
+        var status = await Run(settings);
 
-        var status = _state.Snapshot();
-        Assert.Equal("error", status.Udp.State);
-        Assert.Equal("error", status.Tcp.State);
-        Assert.Contains("stays off", status.Warning);
-        Assert.Contains("switch-1", status.Warning);
+        Assert.Equal("error", status?.State);
+        Assert.Contains("stays off", status!.Detail);
+        Assert.Contains("switch-1", status.Detail);
+        using var client = new TcpClient(AddressFamily.InterNetwork);
+        await Assert.ThrowsAnyAsync<SocketException>(() => client.ConnectAsync(IPAddress.Loopback, settings.TcpPort));
     }
 
     [Fact]
@@ -405,26 +407,24 @@ public sealed class SyslogReceiverTests : IDisposable
     {
         var settings = Settings(udp: true, tcp: false, allowed: "127.0.0.0/8, typo");
 
-        _service.Reconcile(settings);
+        var status = await Run(settings);
 
-        Assert.True(_state.Snapshot().Udp.IsListening);
-        Assert.Contains("typo", _state.Snapshot().Warning);
+        Assert.Equal("running", status?.State);
+        Assert.Contains("typo", status!.Detail);
         await SendUdp(settings.UdpPort, "<13>Oct 15 10:11:12 sw1 app: allowed");
         Assert.Single(await WaitForMessages(1));
     }
 
     [Fact]
-    public void APortAnotherProgramHoldsIsReported_AndTheOtherProtocolStillWorks()
+    public async Task APortAnotherProgramHoldsIsReportedInWords()
     {
         var settings = Settings();
         using var blocker = OccupyUdp(settings.UdpPort);
 
-        _service.Reconcile(settings);
+        var status = await Run(settings);
 
-        var status = _state.Snapshot();
-        Assert.Equal("error", status.Udp.State);
-        Assert.Contains("already used", status.Udp.Detail);
-        Assert.True(status.Tcp.IsListening);
+        Assert.Equal("error", status?.State);
+        Assert.Contains("in use", status!.Detail);
     }
 
     private static Socket OccupyUdp(int port)
@@ -443,7 +443,7 @@ public sealed class SyslogReceiverTests : IDisposable
         }
     }
 
-    // Holds a TCP port the way the service itself would take it (dual-stack): an IPv4-only listener next to it would
+    // Holds a TCP port the way the collector itself would take it (dual-stack): an IPv4-only listener next to it would
     // not stop a dual-stack bind on Windows, which is not what a "port in use" test is about.
     private static Socket OccupyTcp(int port)
     {
@@ -464,10 +464,10 @@ public sealed class SyslogReceiverTests : IDisposable
     }
 
     [Fact]
-    public async Task TheAllowListChangesLiveWithoutDroppingTheListener()
+    public async Task ANarrowerAllowListKeepsOutWhatTheOldOneLetIn()
     {
         var open = Settings(udp: true, tcp: false);
-        _service.Reconcile(open);
+        await Run(open);
         // UDP may lose a datagram - Windows does drop one on loopback under a busy test run - so the "open" message is
         // sent again until it is stored; what this test is about is the CLOSED one never getting in.
         for (var send = 0; send < 5 && _store.Search(new SyslogQuery { Contains = "while open" }, 10).Count == 0; send++)
@@ -478,10 +478,8 @@ public sealed class SyslogReceiverTests : IDisposable
 
         Assert.NotEmpty(_store.Search(new SyslogQuery { Contains = "while open" }, 10));
 
-        var closed = open.Clone();
-        closed.AllowedSources = "10.0.0.0/8";
-        _service.Reconcile(closed);
-        await SendUdp(closed.UdpPort, "<13>Oct 15 10:11:12 sw1 app: while closed");
+        await Run(open with { Allowed = "10.0.0.0/8" });
+        await SendUdp(open.UdpPort, "<13>Oct 15 10:11:12 sw1 app: while closed");
         await Task.Delay(300);
         await _store.FlushAsync();
 
@@ -494,12 +492,24 @@ public sealed class SyslogReceiverTests : IDisposable
     public async Task TheSelfTestGoesThroughTheRealSocketAndTheDatabase()
     {
         var settings = Settings();
-        _service.Reconcile(settings);
+        await Run(settings);
 
-        var (ok, message) = await SyslogSelfTest.RunAsync(settings, _store, _state);
+        var (ok, message) = await SyslogSelfTest.RunAsync(settings.UdpPort, settings.TcpPort, _store);
 
         Assert.True(ok, message);
         Assert.Contains("syslog self test", message);
+    }
+
+    [Fact]
+    public async Task TheSelfTestUsesTcpWhenTheCollectorHasNoUdp()
+    {
+        var settings = Settings(udp: false);
+        await Run(settings);
+
+        var (ok, message) = await SyslogSelfTest.RunAsync(null, settings.TcpPort, _store);
+
+        Assert.True(ok, message);
+        Assert.Contains("TCP", message);
     }
 
     [Fact]
@@ -512,9 +522,9 @@ public sealed class SyslogReceiverTests : IDisposable
         try
         {
             var settings = Settings();
-            _service.Reconcile(settings);
+            await Run(settings);
 
-            var (ok, message) = await SyslogSelfTest.RunAsync(settings, _store, _state);
+            var (ok, message) = await SyslogSelfTest.RunAsync(settings.UdpPort, settings.TcpPort, _store);
 
             Assert.True(ok, message);
             var stored = Assert.Single(await WaitForMessages(1));
@@ -532,34 +542,20 @@ public sealed class SyslogReceiverTests : IDisposable
     public async Task TheSelfTestSaysWhenTheAllowListKeptItOut()
     {
         var settings = Settings(allowed: "10.0.0.0/8");
-        _service.Reconcile(settings);
+        await Run(settings);
 
-        var (ok, message) = await SyslogSelfTest.RunAsync(settings, _store, _state);
+        var (ok, message) = await SyslogSelfTest.RunAsync(settings.UdpPort, settings.TcpPort, _store);
 
         Assert.False(ok);
         Assert.Contains("Allowed sources", message);
     }
 
     [Fact]
-    public async Task TheSelfTestSaysWhenTheReceiverIsOff()
+    public async Task TheSelfTestSaysWhenThereIsNothingToSendTo()
     {
-        var (ok, message) = await SyslogSelfTest.RunAsync(new SyslogSettings { Enabled = false }, _store, _state);
+        var (ok, message) = await SyslogSelfTest.RunAsync(null, null, _store);
 
         Assert.False(ok);
-        Assert.Contains("switched off", message);
-    }
-
-    [Fact]
-    public async Task TheSelfTestSaysWhenNoListenerIsRunning()
-    {
-        var settings = Settings();
-        using var udpBlocker = OccupyUdp(settings.UdpPort);
-        using var tcpBlocker = OccupyTcp(settings.TcpPort);
-        _service.Reconcile(settings);
-
-        var (ok, message) = await SyslogSelfTest.RunAsync(settings, _store, _state);
-
-        Assert.False(ok);
-        Assert.Contains("Neither", message);
+        Assert.Contains("neither UDP nor TCP", message);
     }
 }

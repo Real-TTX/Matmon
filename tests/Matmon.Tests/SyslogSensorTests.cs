@@ -55,7 +55,12 @@ public sealed class SyslogSensorTests : IDisposable
         }
     }
 
-    private void ReceiverOn() => _workspace.UpdateSyslogSettings(new SyslogSettings { Enabled = true });
+    // A syslog collector runs on the main probe - what makes the sensors judge the log instead of saying "unknown".
+    private void ReceiverOn() => _workspace.SavePluginAssignment(new PluginAssignment
+    {
+        PluginId = Matmon.Probe.Plugins.SyslogCollectorPlugin.Id,
+        ProbeElementId = _workspace.GetAllElements().OfType<ProbeElement>().Single(probe => probe.ParentId is null).Id
+    });
 
     private async Task Log(params SyslogMessage[] messages)
     {
@@ -180,7 +185,7 @@ public sealed class SyslogSensorTests : IDisposable
         var result = await _messages.ExecuteAsync(MessagesContext(Switch));
 
         Assert.Equal(SensorState.Unknown, result.State);
-        Assert.Contains("switched off", result.Message);
+        Assert.Contains("No syslog collector runs", result.Message);
     }
 
     [Fact]
@@ -361,25 +366,31 @@ public sealed class SyslogSensorTests : IDisposable
         var result = await _match.ExecuteAsync(MatchContext(Switch, "anything"));
 
         Assert.Equal(SensorState.Unknown, result.State);
-        Assert.Contains("switched off", result.Message);
+        Assert.Contains("No syslog collector runs", result.Message);
     }
 
     // ---- the receiver's settings and backups --------------------------------------------------------------------------
 
     [Fact]
-    public void ABackupNeverCarriesTheReceiversSettingsAndRestoringOneNeverSwitchesTheReceiverOn()
+    public void ABackupNeverCarriesACollectorAndRestoringOneNeverSwitchesOneOn()
     {
-        _workspace.UpdateSyslogSettings(new SyslogSettings { Enabled = true, UdpPort = 5514, AllowedSources = "203.0.113.0/24" });
+        var root = _workspace.GetAllElements().OfType<ProbeElement>().Single(probe => probe.ParentId is null);
+        var collector = _workspace.SavePluginAssignment(new PluginAssignment
+        {
+            PluginId = Matmon.Probe.Plugins.SyslogCollectorPlugin.Id,
+            ProbeElementId = root.Id,
+            Settings = { ["udpPort"] = "5514", ["allowedSources"] = "203.0.113.0/24" }
+        });
 
         var backup = _workspace.CreateBackupBytes(WorkspaceBackupSection.All);
 
         Assert.DoesNotContain("203.0.113.0/24", System.Text.Encoding.UTF8.GetString(backup));
-        Assert.True(_workspace.GetSyslogSettings().Enabled); // taking the backup changed nothing here
+        Assert.Single(_workspace.GetPluginAssignments()); // taking the backup changed nothing here
 
-        // ...and a restore - onto this machine or any other - leaves the receiver as its admin set it
-        _workspace.UpdateSyslogSettings(new SyslogSettings { Enabled = false });
+        // ...and a restore - onto this machine or any other - leaves the collectors as their admin set them
+        _workspace.DeletePluginAssignment(collector.Id);
         _workspace.RestoreBackupBytes(backup, WorkspaceBackupSection.All);
-        Assert.False(_workspace.GetSyslogSettings().Enabled);
+        Assert.Empty(_workspace.GetPluginAssignments());
     }
 
     // ---- what the catalog and the defaults say ------------------------------------------------------------------------

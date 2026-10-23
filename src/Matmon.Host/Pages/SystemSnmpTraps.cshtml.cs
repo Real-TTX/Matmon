@@ -2,19 +2,16 @@ using Matmon.Core.Domain;
 using Matmon.Core.SnmpTraps;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
+using Matmon.Host.Services.Plugins;
+using Matmon.Probe.Plugins;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Matmon.Host.Pages;
 
+/// <summary>How the primary processes traps, as the form posts it (the collectors' ports and allow-lists are plugin settings).</summary>
 public sealed class SnmpTrapSettingsInput
 {
-    public bool Enabled { get; set; }
-
-    public int Port { get; set; } = SnmpTrapSettings.DefaultPort;
-
-    public string? AllowedSources { get; set; }
-
     public string? Communities { get; set; }
 
     public bool PollOnTrap { get; set; } = true;
@@ -43,20 +40,24 @@ public sealed class SnmpTrapV3UserInput
 }
 
 /// <summary>
-/// System > SNMP traps (admins): the trap receiver - on/off, port, who may send, which communities count, whether a trap
-/// makes the device's sensors poll at once - its status and a test trap. The traps themselves are in the central log
-/// (Events > Syslog, filtered to "SNMP trap"). Self-contained like System > Syslog; both are to become plugins.
+/// System > SNMP traps (admins) - a page that comes with the SNMP trap collector plugin: where traps are collected (the
+/// collector on the main probe and on probes near the devices, each with its state), how the primary processes them -
+/// which communities count, the SNMPv3 users, whether a trap makes the device's sensors poll at once - and a test trap.
+/// The collectors' ports and allow-lists are their plugin settings. The traps themselves are in the central log (Events >
+/// Syslog, filtered to "SNMP trap").
 /// </summary>
 public sealed class SystemSnmpTrapsModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspace;
+    private readonly PluginUi _plugins;
     private readonly ISyslogStore? _store;
     private readonly SnmpTrapReceiverState? _state;
 
-    // The log and the receiver exist on a primary only; on a probe the page is simply not there.
-    public SystemSnmpTrapsModel(IMonitoringWorkspaceStore workspace, ISyslogStore? store = null, SnmpTrapReceiverState? state = null)
+    // The log and the trap processing exist on a primary only; on a probe the page is simply not there.
+    public SystemSnmpTrapsModel(IMonitoringWorkspaceStore workspace, PluginUi plugins, ISyslogStore? store = null, SnmpTrapReceiverState? state = null)
     {
         _workspace = workspace;
+        _plugins = plugins;
         _store = store;
         _state = state;
     }
@@ -79,7 +80,19 @@ public sealed class SystemSnmpTrapsModel : PageModel
 
     public SnmpTrapSettings Settings { get; private set; } = new();
 
-    public SnmpTrapReceiverSnapshot Receiver { get; private set; } = new("off", null, null, 0, 0, 0, 0, null, null);
+    public SnmpTrapReceiverSnapshot Receiver { get; private set; } = new(null, 0, 0, 0, 0, null, null);
+
+    /// <summary>Where the SNMP trap collector runs (the main probe, probes) with its last state.</summary>
+    public IReadOnlyList<PluginPlacementView> Collectors { get; private set; } = [];
+
+    /// <summary>The collector on this machine, when it runs - the one a test trap and the device hint go to.</summary>
+    public PluginPlacementView? LocalCollector { get; private set; }
+
+    public bool Active => Collectors.Any(collector => collector.Assignment.Enabled);
+
+    public int LocalPort => LocalCollector is { } local && local.Assignment.Settings.TryGetValue("port", out var value) && int.TryParse(value, out var port)
+        ? port
+        : SnmpTrapSettings.DefaultPort;
 
     /// <summary>The name devices should be pointed at: the one this page was opened on.</summary>
     public string ReceiverHost => Request.Host.Host;
@@ -115,10 +128,7 @@ public sealed class SystemSnmpTrapsModel : PageModel
         // The v3 users have their own form; this one leaves them as they are.
         settings.V3Users = _workspace.GetSnmpTrapSettings().V3Users;
         _workspace.UpdateSnmpTrapSettings(settings);
-        StatusMessage = settings.Enabled
-            ? "Saved. The receiver applies it within a few seconds." +
-              (string.IsNullOrWhiteSpace(settings.AllowedSources) ? " Anyone who can reach the port can send traps - restrict it with Allowed sources." : string.Empty)
-            : "Saved. The receiver is off.";
+        StatusMessage = "Saved. It applies to the next trap.";
         return RedirectToPage();
     }
 
@@ -153,7 +163,14 @@ public sealed class SystemSnmpTrapsModel : PageModel
             return NotFound();
         }
 
-        var (ok, message) = await SnmpTrapSelfTest.RunAsync(_workspace.GetSnmpTrapSettings(), _store, _state, cancellationToken);
+        Load(resetInput: true);
+        if (LocalCollector is not { IsRunning: true })
+        {
+            ErrorMessage = "No SNMP trap collector runs on this machine - the test sends to it. Switch one on for the main probe under System > Plugins.";
+            return RedirectToPage();
+        }
+
+        var (ok, message) = await SnmpTrapSelfTest.RunAsync(LocalPort, _workspace.GetSnmpTrapSettings(), _store, _state, cancellationToken);
         if (ok)
         {
             StatusMessage = message;
@@ -166,34 +183,13 @@ public sealed class SystemSnmpTrapsModel : PageModel
         return RedirectToPage();
     }
 
-    /// <summary>Refuses rather than corrects: a port out of range or an allow-list entry that is no address would, ignored,
-    /// either break the receiver or widen who may send.</summary>
+    /// <summary>The processing settings from the form. The collectors' ports and allow-lists are not here: they are each
+    /// collector's own settings (System > Plugins).</summary>
     public static bool TryBuildSettings(SnmpTrapSettingsInput input, out SnmpTrapSettings settings, out string? error)
     {
-        settings = new SnmpTrapSettings();
         error = null;
-        if (input.Port is < 1 or > 65535)
-        {
-            error = "The port must be a number between 1 and 65535.";
-            return false;
-        }
-
-        var allowed = input.AllowedSources?.Trim();
-        if (!string.IsNullOrEmpty(allowed))
-        {
-            IpAllowList.Parse(allowed, out var invalid);
-            if (invalid.Count > 0)
-            {
-                error = $"Not an IP address or range: {string.Join(", ", invalid)}. Use addresses like 192.168.1.2 or ranges like 192.168.1.0/24, separated by commas or new lines.";
-                return false;
-            }
-        }
-
         settings = new SnmpTrapSettings
         {
-            Enabled = input.Enabled,
-            Port = input.Port,
-            AllowedSources = allowed,
             Communities = input.Communities?.Trim(),
             PollOnTrap = input.PollOnTrap
         }.Normalized();
@@ -280,6 +276,8 @@ public sealed class SystemSnmpTrapsModel : PageModel
     {
         Settings = _workspace.GetSnmpTrapSettings();
         Receiver = _state?.Snapshot() ?? Receiver;
+        Collectors = _plugins.Placements(SnmpTrapCollectorPlugin.Id);
+        LocalCollector = Collectors.FirstOrDefault(collector => collector.Assignment.Enabled && collector.Location?.IsPrimary == true);
         if (resetUsers)
         {
             V3Users = Settings.V3Users.Select(user => new SnmpTrapV3UserInput
@@ -315,9 +313,6 @@ public sealed class SystemSnmpTrapsModel : PageModel
         {
             Input = new SnmpTrapSettingsInput
             {
-                Enabled = Settings.Enabled,
-                Port = Settings.Port,
-                AllowedSources = Settings.AllowedSources,
                 Communities = Settings.Communities,
                 PollOnTrap = Settings.PollOnTrap
             };

@@ -9,12 +9,11 @@ using Matmon.Core.Syslog;
 
 namespace Matmon.Host.Services;
 
-/// <summary>What the System > SNMP traps page shows about the receiver. Thread-safe; reset by a restart.</summary>
+/// <summary>What the System > SNMP traps page shows about the traps the primary processed (from every collector). The
+/// collectors' own sockets report on their plugin rows. Thread-safe; reset by a restart.</summary>
 public sealed class SnmpTrapReceiverState
 {
     private readonly object _gate = new();
-    private string _state = "off";
-    private string? _detail;
     private string? _warning;
     private long _received;
     private long _rejected;
@@ -22,23 +21,6 @@ public sealed class SnmpTrapReceiverState
     private long _wokenSensors;
     private DateTimeOffset? _lastTrapUtc;
     private string? _lastTrap;
-
-    public void SetListener(string state, string? detail)
-    {
-        lock (_gate)
-        {
-            _state = state;
-            _detail = detail;
-        }
-    }
-
-    public void SetWarning(string? warning)
-    {
-        lock (_gate)
-        {
-            _warning = warning;
-        }
-    }
 
     public void Received(string summary, int woken, DateTimeOffset now)
     {
@@ -66,30 +48,26 @@ public sealed class SnmpTrapReceiverState
     {
         lock (_gate)
         {
-            return new SnmpTrapReceiverSnapshot(_state, _detail, _warning, _received, Interlocked.Read(ref _rejected),
+            return new SnmpTrapReceiverSnapshot(_warning, _received, Interlocked.Read(ref _rejected),
                 Interlocked.Read(ref _unreadable), _wokenSensors, _lastTrapUtc, _lastTrap);
         }
     }
 }
 
 public sealed record SnmpTrapReceiverSnapshot(
-    string State,
-    string? Detail,
     string? Warning,
     long Received,
     long Rejected,
     long Unreadable,
     long WokenSensors,
     DateTimeOffset? LastTrapUtc,
-    string? LastTrap)
-{
-    public bool IsListening => State == "listening";
-}
+    string? LastTrap);
 
 /// <summary>
-/// What happens to a datagram: the allow-list and the community decide whether it counts, an inform is answered, the trap
-/// goes into the central log (the syslog database - so it is searchable on Events > Syslog and a Syslog Match sensor can
-/// alarm on it) with the names from the MIB library, and the sending device's sensors poll at once.
+/// What happens to a trap a collector took (the SNMP trap collector plugin, on the primary or on a probe - it already kept
+/// out the senders its allow-list does not name and answered a v2c inform): the community or the SNMPv3 user decides whether
+/// it counts, the trap goes into the central log (the syslog database - so it is searchable on Events > Syslog and a Syslog
+/// Match sensor can alarm on it) with the names from the MIB library, and the sending device's sensors poll at once.
 /// </summary>
 public sealed class SnmpTrapIngest
 {
@@ -130,7 +108,6 @@ public sealed class SnmpTrapIngest
     private readonly MibLibrary? _mibs;
     private readonly SensorWakeService? _wake;
     private readonly ILogger<SnmpTrapIngest> _logger;
-    private volatile IpAllowList _allowList = IpAllowList.Parse(null, out _);
     private volatile IReadOnlyList<string> _communities = [];
     private volatile bool _pollOnTrap = true;
     private volatile IReadOnlyList<SnmpTrapV3User> _v3Users = [];
@@ -144,44 +121,31 @@ public sealed class SnmpTrapIngest
         _wake = wake;
     }
 
-    public void Configure(IpAllowList allowList, IReadOnlyList<string> communities, bool pollOnTrap, IReadOnlyList<SnmpTrapV3User>? v3Users = null)
+    public void Configure(IReadOnlyList<string> communities, bool pollOnTrap, IReadOnlyList<SnmpTrapV3User>? v3Users = null)
     {
-        _allowList = allowList;
         _communities = communities;
         _pollOnTrap = pollOnTrap;
         _v3Users = v3Users ?? [];
     }
 
-    /// <summary>Handles one datagram; returns the bytes to send back (an inform's response) or null.</summary>
-    public byte[]? Accept(ReadOnlySpan<byte> datagram, IPAddress sender) =>
-        Process(datagram, sender, DateTimeOffset.UtcNow, checkAllowList: true, viaProbe: null);
-
-    /// <summary>A trap the collector plugin on a probe received and forwarded: the probe applied its own allow-list (and
-    /// answered an inform); here it is parsed, checked against the communities and the v3 users and logged - at the time it
-    /// ARRIVED at the probe, so a trap from an outage of the primary lands where it belongs in the log.</summary>
-    public void AcceptForwarded(ReadOnlySpan<byte> datagram, IPAddress sender, DateTimeOffset receivedUtc, string probeId) =>
-        Process(datagram, sender, receivedUtc, checkAllowList: false, viaProbe: probeId);
-
-    private byte[]? Process(ReadOnlySpan<byte> datagram, IPAddress sender, DateTimeOffset now, bool checkAllowList, string? viaProbe)
+    /// <summary>One trap a collector took, logged at the time it ARRIVED there (a trap from an outage of the primary lands
+    /// where it belongs in the log). <paramref name="viaProbe"/> is the probe whose collector took it, null for the primary's
+    /// own. False when it was refused (community, v3 check) or is no trap.</summary>
+    public bool Accept(ReadOnlySpan<byte> datagram, IPAddress sender, DateTimeOffset receivedUtc, string? viaProbe = null)
     {
         var source = sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender;
-        if (checkAllowList && !_allowList.IsEmpty && !_allowList.Allows(source))
-        {
-            _state.Rejected();
-            return null;
-        }
-
+        var now = receivedUtc;
         if (!SnmpTrapParser.TryParse(datagram, _v3Users, out var trap, out var error) || trap is null)
         {
             _state.Unreadable($"{source}: {error}", now);
-            return null;
+            return false;
         }
 
         // A v3 trap has no community: the user it came from passed authentication, which is the stronger check.
         if (trap.Version != 3 && _communities.Count > 0 && !_communities.Contains(trap.Community, StringComparer.Ordinal))
         {
             _state.Rejected();
-            return null;
+            return false;
         }
 
         var name = Name(trap.TrapOid);
@@ -214,7 +178,7 @@ public sealed class SnmpTrapIngest
 
         _state.Received($"{name} from {source}", woken, now);
         _logger.LogInformation("SNMP trap {Trap} from {Source}{Via} ({Woken} sensor(s) polled)", name, source, viaProbe is null ? string.Empty : $" via probe {viaProbe}", woken);
-        return trap.PduType == SnmpTrapPduType.Inform ? SnmpTrapParser.BuildInformResponse(trap) : null;
+        return true;
     }
 
     private string Name(string oid)
@@ -404,158 +368,17 @@ public sealed class SensorWakeService
     }
 }
 
-/// <summary>The UDP socket: receives datagrams, hands them to <see cref="SnmpTrapIngest"/>, sends an inform's answer back
-/// (the socket itself is <see cref="UdpDatagramListener"/>, shared with the trap collector plugin on probes).</summary>
-public sealed class SnmpTrapUdpListener : IDisposable
-{
-    private readonly UdpDatagramListener _listener;
-
-    private SnmpTrapUdpListener(UdpDatagramListener listener) => _listener = listener;
-
-    public int Port => _listener.Port;
-
-    /// <summary>Binds and starts receiving (port 0 picks a free one, for tests). Throws <see cref="SocketException"/> when the
-    /// port is taken or needs rights this process does not have.</summary>
-    public static SnmpTrapUdpListener Start(int port, SnmpTrapIngest ingest, ILogger logger) =>
-        new(UdpDatagramListener.Start(port, (datagram, sender) => ingest.Accept(datagram.Span, sender), logger, "SNMP trap"));
-
-    public void Dispose() => _listener.Dispose();
-}
-
-/// <summary>
-/// Keeps the trap socket in line with the settings, like the syslog receiver: read every few seconds, the listener rebuilt
-/// only when port, switch or allow-list changed. An allow-list that parses to nothing keeps it OFF (fail closed).
-/// </summary>
-public sealed class SnmpTrapReceiverService : BackgroundService
-{
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
-
-    private readonly IMonitoringWorkspaceStore _workspace;
-    private readonly SnmpTrapIngest _ingest;
-    private readonly SnmpTrapReceiverState _state;
-    private readonly ILogger<SnmpTrapReceiverService> _logger;
-    private SnmpTrapUdpListener? _listener;
-    private string? _signature;
-
-    public SnmpTrapReceiverService(IMonitoringWorkspaceStore workspace, SnmpTrapIngest ingest, SnmpTrapReceiverState state, ILogger<SnmpTrapReceiverService> logger)
-    {
-        _workspace = workspace;
-        _ingest = ingest;
-        _state = state;
-        _logger = logger;
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    Reconcile(_workspace.GetSnmpTrapSettings());
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    _logger.LogWarning(exception, "The SNMP trap receiver could not apply its settings; trying again");
-                }
-
-                await Task.Delay(PollInterval, stoppingToken).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // shutting down
-        }
-        finally
-        {
-            Stop();
-        }
-    }
-
-    public void Reconcile(SnmpTrapSettings settings)
-    {
-        var normalized = settings.Normalized();
-        var allowList = IpAllowList.Parse(normalized.AllowedSources, out var invalid);
-        // Communities and the poll switch change without touching the socket.
-        _ingest.Configure(allowList, normalized.CommunityList(), normalized.PollOnTrap, normalized.V3Users);
-
-        var signature = normalized.ListenerSignature();
-        if (signature == _signature)
-        {
-            return;
-        }
-
-        Stop();
-        _signature = signature;
-        if (!normalized.Enabled)
-        {
-            _state.SetWarning(null);
-            _state.SetListener("off", null);
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(normalized.AllowedSources) && allowList.IsEmpty)
-        {
-            var message = $"None of the entries in Allowed sources is an IP address or range ({string.Join(", ", invalid)}), so the receiver stays off.";
-            _state.SetWarning(message);
-            _state.SetListener("error", "Not started: " + message);
-            return;
-        }
-
-        _state.SetWarning(invalid.Count > 0 ? $"Ignored in Allowed sources (not an IP address or range): {string.Join(", ", invalid)}." : null);
-        try
-        {
-            _listener = SnmpTrapUdpListener.Start(normalized.Port, _ingest, _logger);
-            _state.SetListener("listening", $"Listening on UDP port {normalized.Port}.");
-            _logger.LogInformation("SNMP trap receiver listening on UDP port {Port}", normalized.Port);
-        }
-        catch (SocketException exception)
-        {
-            var detail = exception.SocketErrorCode switch
-            {
-                SocketError.AddressAlreadyInUse => $"UDP port {normalized.Port} is already used by another program on this machine (snmptrapd?).",
-                SocketError.AccessDenied => $"UDP port {normalized.Port} needs more rights than this process has - choose a port above 1023 and point the devices at it, or let Matmon bind low ports.",
-                _ => $"UDP port {normalized.Port} could not be opened: {exception.Message}"
-            };
-            _state.SetListener("error", detail);
-            _logger.LogWarning("SNMP trap receiver could not start on UDP port {Port}: {Message}", normalized.Port, exception.Message);
-        }
-    }
-
-    private void Stop()
-    {
-        _listener?.Dispose();
-        _listener = null;
-    }
-
-    public override void Dispose()
-    {
-        Stop();
-        base.Dispose();
-    }
-}
-
-/// <summary>"Send a test trap": one real SNMPv2c trap to this instance's own port, then a look in the log - through the
-/// socket, the allow-list, the community check and the database, the way a device's trap goes.</summary>
+/// <summary>"Send a test trap": one real SNMPv2c trap to the port of the collector on this machine (the main probe's),
+/// then a look in the log - through the collector's socket and allow-list, the community check and the database, the way
+/// a device's trap goes.</summary>
 public static class SnmpTrapSelfTest
 {
     public const string TrapOid = "1.3.6.1.6.3.1.1.5.1"; // coldStart - every receiver knows it
 
-    public static async Task<(bool Ok, string Message)> RunAsync(SnmpTrapSettings settings, ISyslogStore store, SnmpTrapReceiverState state, CancellationToken cancellationToken = default)
+    public static async Task<(bool Ok, string Message)> RunAsync(int port, SnmpTrapSettings settings, ISyslogStore store, SnmpTrapReceiverState state, CancellationToken cancellationToken = default)
     {
         var normalized = settings.Normalized();
-        if (!normalized.Enabled)
-        {
-            return (false, "The receiver is switched off - enable it first.");
-        }
-
         var before = state.Snapshot();
-        if (!before.IsListening)
-        {
-            return (false, "The receiver is not listening: " + (before.Detail ?? "see the status above."));
-        }
-
         var marker = Guid.NewGuid().ToString("N")[..8];
         var community = normalized.CommunityList().FirstOrDefault() ?? "public";
         var datagram = SnmpTrapParser.BuildV2Trap(community, TrapOid, TimeSpan.FromSeconds(1), [("1.3.6.1.2.1.1.1.0", $"Matmon test trap {marker}")]);
@@ -563,7 +386,7 @@ public static class SnmpTrapSelfTest
         try
         {
             using var udp = new UdpClient(AddressFamily.InterNetwork);
-            await udp.SendAsync(datagram, new IPEndPoint(IPAddress.Loopback, normalized.Port), cancellationToken).ConfigureAwait(false);
+            await udp.SendAsync(datagram, new IPEndPoint(IPAddress.Loopback, port), cancellationToken).ConfigureAwait(false);
         }
         catch (SocketException exception)
         {
@@ -582,7 +405,7 @@ public static class SnmpTrapSelfTest
         }
 
         return state.Snapshot().Rejected > before.Rejected
-            ? (false, "The receiver refused the test trap: 127.0.0.1 is not in Allowed sources, or the community did not match. Add 127.0.0.1 to test.")
-            : (false, "The test trap was sent but did not show up in the log.");
+            ? (false, "The test trap was refused: its community is not in the list above.")
+            : (false, "The test trap was sent but did not show up in the log - is 127.0.0.1 in the collector's Allowed sources?");
     }
 }

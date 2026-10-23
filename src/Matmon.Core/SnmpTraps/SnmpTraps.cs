@@ -6,14 +6,18 @@ using Matmon.Core.Domain;
 namespace Matmon.Core.SnmpTraps;
 
 /// <summary>
-/// The SNMP trap receiver's configuration - edited under System > SNMP traps, stored in workspace.json. OFF by default,
-/// like the syslog receiver: it opens a UDP port that takes input from the network. Kept self-contained (settings,
-/// parser, receiver, page) so it can move into a plugin later, together with the syslog receiver.
+/// How the primary processes SNMP traps - which communities count, the SNMPv3 users, whether a trap polls the device's
+/// sensors - edited under System > SNMP traps, stored in workspace.json. Receiving them is the SNMP trap collector plugin's
+/// job (on the main probe or on a probe near the devices); every collector's traps are processed with these settings.
 /// </summary>
 public sealed class SnmpTrapSettings
 {
     public const int DefaultPort = 162;
 
+    /// <summary>Before migration 9 the primary had a trap socket of its own; <see cref="Enabled"/>, <see cref="Port"/> and
+    /// <see cref="AllowedSources"/> are what it used. The migration turns a receiver that was on into the trap collector
+    /// plugin on the main probe and clears the switch; receiving is the plugin's job, the rest of this class is how the
+    /// primary processes what any collector took.</summary>
     public bool Enabled { get; set; }
 
     public int Port { get; set; } = DefaultPort;

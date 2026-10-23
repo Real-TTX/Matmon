@@ -23,7 +23,14 @@
             }
             @if (Model.CanConfigure)
             {
-                <a class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" asp-page="/SystemSyslog">@MatUi.Icon("settings")<span>@(Model.ReceiverEnabled ? "Settings" : "Turn it on")</span></a>
+                if (Model.ReceiverEnabled)
+                {
+                    <a class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" asp-page="/SystemSyslog">@MatUi.Icon("settings")<span>Settings</span></a>
+                }
+                else
+                {
+                    <a class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" asp-page="/SystemPlugins" asp-route-add="syslog-collector">@MatUi.Icon("plug")<span>Switch a collector on</span></a>
+                }
             }
         </div>
     </section>

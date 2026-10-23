@@ -129,9 +129,9 @@ public sealed class SnmpV3TrapTests : IDisposable
         var ingest = new SnmpTrapIngest(store, state, NullLogger<SnmpTrapIngest>.Instance);
         var user = User("sha256", "aes128");
         // Communities only concern v1/v2c: the v3 user passed a real check.
-        ingest.Configure(IpAllowList.Parse(null, out _), ["only-this-community"], pollOnTrap: false, [user]);
+        ingest.Configure(["only-this-community"], pollOnTrap: false, [user]);
 
-        ingest.Accept(Trap(user), IPAddress.Parse("192.0.2.10"));
+        Assert.True(ingest.Accept(Trap(user), IPAddress.Parse("192.0.2.10"), DateTimeOffset.UtcNow));
         await store.FlushAsync();
 
         var message = Assert.Single(store.Search(new SyslogQuery { Contains = "SNMP trap" }, 10));

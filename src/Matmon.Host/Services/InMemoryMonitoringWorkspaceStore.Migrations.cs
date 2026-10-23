@@ -1,4 +1,6 @@
+using System.Globalization;
 using Matmon.Core.Domain;
+using Matmon.Probe.Plugins;
 using Microsoft.Extensions.Logging;
 
 namespace Matmon.Host.Services;
@@ -34,7 +36,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -72,7 +74,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             store => store.MigrateUpsSensorsToPowerChannels()),
 
         new(8, "Rules the load fix-up had pointed at a webhook sender while they mail a user group go back to the default SMTP",
-            store => store.MigrateGuessedWebhookSendersOffUserGroupRules())
+            store => store.MigrateGuessedWebhookSendersOffUserGroupRules()),
+
+        new(9, "The primary's syslog and SNMP trap receivers become collector plugins on the main probe",
+            store => store.MigrateReceiversToPlugins())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step
@@ -158,6 +163,65 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 rule.SenderId = null;
                 rule.ChannelKind = NotificationChannelKind.Email;
             }
+        }
+    }
+
+    /// <summary>
+    /// Migration 9. The primary's own syslog and SNMP trap receivers were switched on under System > Syslog / SNMP traps;
+    /// now receiving is a plugin's job wherever it runs, the main probe included, and the pages come with the plugin. A
+    /// receiver that was ON becomes the collector plugin on the main probe with the same ports and allow-list (unless one is
+    /// already assigned there); one that was off becomes nothing - the plugin is not switched on behind the admin's back.
+    /// The old switch is cleared either way: the plugin assignment is where it lives now.
+    /// </summary>
+    private void MigrateReceiversToPlugins()
+    {
+        var root = _document.RootProbe;
+        var plugins = _document.Plugins ??= [];
+        bool Assigned(string pluginId) => plugins.Any(assignment =>
+            assignment.ProbeElementId == root.Id && string.Equals(assignment.PluginId, pluginId, StringComparison.OrdinalIgnoreCase));
+        static string Flag(bool value) => value ? "true" : "false";
+        static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+        var syslog = _document.Syslog;
+        if (syslog is { Enabled: true } && !Assigned(SyslogCollectorPlugin.Id))
+        {
+            var normalized = syslog.Normalized();
+            var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["udpEnabled"] = Flag(normalized.UdpEnabled),
+                ["udpPort"] = Number(normalized.UdpPort),
+                ["tcpEnabled"] = Flag(normalized.TcpEnabled),
+                ["tcpPort"] = Number(normalized.TcpPort)
+            };
+            if (normalized.AllowedSources is { } allowed)
+            {
+                settings["allowedSources"] = allowed;
+            }
+
+            plugins.Add(new PluginAssignment { PluginId = SyslogCollectorPlugin.Id, ProbeElementId = root.Id, Settings = settings });
+        }
+
+        if (syslog is not null)
+        {
+            syslog.Enabled = false;
+        }
+
+        var traps = _document.SnmpTraps;
+        if (traps is { Enabled: true } && !Assigned(SnmpTrapCollectorPlugin.Id))
+        {
+            var normalized = traps.Normalized();
+            var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["port"] = Number(normalized.Port) };
+            if (normalized.AllowedSources is { } allowed)
+            {
+                settings["allowedSources"] = allowed;
+            }
+
+            plugins.Add(new PluginAssignment { PluginId = SnmpTrapCollectorPlugin.Id, ProbeElementId = root.Id, Settings = settings });
+        }
+
+        if (traps is not null)
+        {
+            traps.Enabled = false;
         }
     }
 }

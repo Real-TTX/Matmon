@@ -1,7 +1,8 @@
 using Matmon.Core.Domain;
 using Matmon.Core.Syslog;
 using Matmon.Host.Services;
-using Matmon.Probe.Syslog;
+using Matmon.Host.Services.Plugins;
+using Matmon.Probe.Plugins;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -9,23 +10,23 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Matmon.Host.Pages;
 
 /// <summary>
-/// Events: what Matmon saw happen (state changes, alerts, edits) - and, as a second tab once syslog is on, what the
-/// network's devices said. The syslog half is read here by operators and admins; the receiver itself is set up under
-/// System > Syslog.
+/// Events: what Matmon saw happen (state changes, alerts, edits) - and, as a second tab while a syslog or SNMP trap collector
+/// runs (a tab the collector plugins bring along), what the network's devices said. The syslog half is read here by
+/// operators and admins; the collectors are set up under System > Plugins, the log under System > Syslog.
 /// </summary>
 [Authorize]
 public sealed class EventsModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly PluginUi _plugins;
     private readonly ISyslogStore? _syslog;
-    private readonly SyslogReceiverState? _syslogState;
 
-    // The syslog store and receiver state exist on a primary only; on a probe the tab is simply not there.
-    public EventsModel(IMonitoringWorkspaceStore workspaceStore, ISyslogStore? syslog = null, SyslogReceiverState? syslogState = null)
+    // The syslog store exists on a primary only; on a probe the tab is simply not there.
+    public EventsModel(IMonitoringWorkspaceStore workspaceStore, PluginUi plugins, ISyslogStore? syslog = null)
     {
         _workspaceStore = workspaceStore;
+        _plugins = plugins;
         _syslog = syslog;
-        _syslogState = syslogState;
     }
 
     // ---- the Syslog tab's filter, so a link can open the tab already filtered (a sensor's "Log" button, a sender) -------
@@ -93,25 +94,25 @@ public sealed class EventsModel : PageModel
             return null;
         }
 
-        var settings = _workspaceStore.GetSyslogSettings();
-        var hasMessages = _syslog!.Latest(new SyslogQuery()) is not null;
-        if (!SyslogPageSupport.ShowSyslogTab(canRead: true, settings.Enabled, hasMessages))
+        var latest = _syslog!.Latest(new SyslogQuery());
+        var collectors = _plugins.Placements(SyslogCollectorPlugin.Id).Concat(_plugins.Placements(SnmpTrapCollectorPlugin.Id)).ToList();
+        var active = collectors.Any(collector => collector.Assignment.Enabled);
+        if (!SyslogPageSupport.ShowSyslogTab(canRead: true, active, latest is not null))
         {
             return null;
         }
 
-        var receiver = _syslogState?.Snapshot() ?? EmptyReceiver;
         return new SyslogMessagesViewModel(
             SyslogWindow,
             SyslogSource,
             SyslogMinSeverity,
             SyslogText,
             SyslogUseRegex,
-            settings.Enabled,
-            hasMessages,
+            active,
+            latest is not null,
             CanConfigure: MatmonSecurity.IsAdmin(User),
-            SyslogPageSupport.DescribeReceiver(settings, receiver),
-            receiver.LastReceivedUtc is { } at ? "last message " + SyslogPageSupport.Ago(at, DateTimeOffset.UtcNow) : null);
+            SyslogPageSupport.DescribeCollectors(collectors),
+            latest is not null ? "last message " + SyslogPageSupport.Ago(latest.ReceivedUtc, DateTimeOffset.UtcNow) : null);
     }
 
     /// <summary>The log as JSON, newest first, one page at a time (<paramref name="before"/> is the id of the oldest row the
@@ -176,9 +177,6 @@ public sealed class EventsModel : PageModel
         var senders = SyslogPageSupport.BuildSenders(_syslog!.GetSenders(DateTimeOffset.UtcNow.AddDays(-30)));
         return new JsonResult(new { names = SyslogPageSupport.KnownSenderNames(senders) });
     }
-
-    private static readonly SyslogReceiverSnapshot EmptyReceiver =
-        new(SyslogListenerStatus.Off, SyslogListenerStatus.Off, 0, 0, 0, null, null);
 
     private IEnumerable<MonitoringEvent> ApplyFilters(IEnumerable<MonitoringEvent> events)
     {

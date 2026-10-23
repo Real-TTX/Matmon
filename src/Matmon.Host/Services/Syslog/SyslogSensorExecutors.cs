@@ -136,12 +136,14 @@ internal static class SyslogSensorSupport
         return line.Length <= max ? line : line[..max].TrimEnd() + "…";
     }
 
-    /// <summary>The state to report when the receiver is off: not "healthy with zero errors" - nothing is being collected,
-    /// so nothing can be said.</summary>
+    /// <summary>The state to report when no collector runs (syslog or SNMP traps - both write the central log): not "healthy
+    /// with zero errors" - nothing is being collected, so nothing can be said.</summary>
     public static SensorExecutionResult? ReceiverOff(IMonitoringWorkspaceStore workspace) =>
-        workspace.GetSyslogSettings().Enabled
+        workspace.GetPluginAssignments().Any(assignment => assignment.Enabled &&
+            (string.Equals(assignment.PluginId, Matmon.Probe.Plugins.SyslogCollectorPlugin.Id, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(assignment.PluginId, Matmon.Probe.Plugins.SnmpTrapCollectorPlugin.Id, StringComparison.OrdinalIgnoreCase)))
             ? null
-            : SensorExecutionResult.Unknown("The syslog receiver is switched off - turn it on under System > Syslog, otherwise no messages are collected.");
+            : SensorExecutionResult.Unknown("No syslog collector runs - switch one on under System > Plugins (on the main probe or a probe near the device), otherwise no messages are collected.");
 
     public static SensorExecutionResult NoSender() =>
         SensorExecutionResult.Critical(TimeSpan.Zero, "No sender to look for: fill in Sender, or put the sensor under a host that has an address.");

@@ -2,16 +2,13 @@
 @model Matmon.Host.Pages.SystemSnmpTrapsModel
 @using Matmon.Core.SnmpTraps
 @{
-    // SNMP traps is a tab of System, like Syslog: the same h1 as the Config page, the tab strip says where in System this is.
+    // SNMP traps is a tab of System (it comes with the SNMP trap collector plugin), like Syslog: the same h1 as the Config
+    // page, the tab strip says where in System this is.
     ViewData["Title"] = "System";
     ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("SNMP traps") };
     var settings = Model.Settings;
     var receiver = Model.Receiver;
-    var (headState, headLabel, headText) = !settings.Enabled
-        ? ("paused", "Off", "The trap receiver is off - devices' traps are not received.")
-        : receiver.IsListening
-            ? ("ok", "Listening", receiver.Detail ?? "Listening.")
-            : ("error", "Problem", receiver.Detail ?? "The receiver is not listening.");
+    var head = Matmon.Host.Services.SyslogPageSupport.DescribeCollectors(Model.Collectors);
 }
 
 <partial name="_SystemTabs" model="@("traps")" />
@@ -28,8 +25,8 @@
 
 <section class="mat-card">
     <div class="mat-card__body mat-row">
-        <span class="@MatUi.PillClass(headState)">@headLabel</span>
-        <span>@headText</span>
+        <span class="@MatUi.PillClass(head.State)">@head.Label</span>
+        <span>@head.Text</span>
         <span class="mat-text-muted">@receiver.Received.ToString("N0") received@(receiver.LastTrapUtc is { } last ? $" · last {Model.Ago(last)}" : string.Empty)</span>
         <a class="mat-btn mat-btn--secondary mat-btn--sm mm-push-end" href="/Events?q=SNMP+trap#syslog">@MatUi.Icon("list")<span>Read the traps</span></a>
     </div>
@@ -37,7 +34,42 @@
 
 <div class="mat-grid mat-grid--2">
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Receiver</h2><span class="mat-text-muted mm-push-end">changes apply within a few seconds</span></div>
+        <div class="mat-card__head">@MatUi.Icon("plug")<h2 class="mat-card__title">Collectors</h2><span class="mat-text-muted mm-push-end">the SNMP trap collector plugin</span></div>
+        <div class="mat-card__body mat-stack">
+            @if (Model.Collectors.Count == 0)
+            {
+                <div class="mat-empty">
+                    <span class="mat-empty__icon">@MatUi.Icon("plug")</span>
+                    <div class="mat-empty__title">No collector</div>
+                    <p>Nothing receives traps yet. Switch the SNMP trap collector on for this machine (the main probe) or for a probe or agent near the devices - it opens the port there.</p>
+                </div>
+            }
+            else
+            {
+                <ul class="mat-listgroup">
+                    @foreach (var collector in Model.Collectors)
+                    {
+                        var (tone, label) = collector.Pill;
+                        <li class="mat-listgroup__item">
+                            <div class="mat-listgroup__text">
+                                <strong>@(collector.Location?.Name ?? "a deleted probe")</strong>
+                                <small class="mat-d-block mat-text-muted">@collector.Detail</small>
+                            </div>
+                            <span class="@MatUi.PillClass(tone)">@label</span>
+                            <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/SystemPlugins" asp-route-edit="@collector.Assignment.Id">@MatUi.Icon("edit")<span>Settings</span></a>
+                        </li>
+                    }
+                </ul>
+            }
+            <div class="mat-btn-row">
+                <a class="mat-btn mat-btn--secondary" asp-page="/SystemPlugins" asp-route-add="snmptrap-collector">@MatUi.Icon("plus")<span>Add a collector</span></a>
+            </div>
+            <p class="mat-hint">The port and the allowed sources are the collector's settings. A collector answers a v2c inform itself; one on a probe or agent keeps collecting while this instance is unreachable.</p>
+        </div>
+    </section>
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Processing</h2><span class="mat-text-muted mm-push-end">for every collector's traps</span></div>
         <div class="mat-card__body">
             <form method="post" asp-page-handler="SaveSettings" class="mat-form" novalidate>
                 @if (!string.IsNullOrWhiteSpace(Model.FormError))
@@ -46,32 +78,9 @@
                 }
 
                 <div class="mat-field">
-                    <label class="mat-switch">
-                        <input asp-for="Input.Enabled" type="checkbox" value="true" aria-describedby="traps-enabled-hint" />
-                        <span class="mat-switch__track"></span>
-                        <span><strong>Receive SNMP traps</strong></span>
-                    </label>
-                    <span class="mat-hint" id="traps-enabled-hint">Off by default: switching it on opens a UDP port that takes traps from the sources allowed below. SNMPv1 and v2c traps and informs, and SNMPv3 traps from the users set up below.</span>
-                </div>
-
-                <div class="mat-form__grid">
-                    <div class="mat-field">
-                        <label class="mat-label" for="Input_Port">UDP port</label>
-                        <input asp-for="Input.Port" type="number" min="1" max="65535" class="mat-input mat-mono" data-msg-range="A port from 1 to 65535." />
-                        <span class="mat-hint">162 is the standard. Already used by snmptrapd on this machine? Pick another and point the devices at it.</span>
-                        <span class="mat-error" aria-live="polite"></span>
-                    </div>
-                    <div class="mat-field">
-                        <label class="mat-label" for="Input_Communities">Communities <span class="mat-text-muted">optional</span></label>
-                        <input asp-for="Input.Communities" class="mat-input mat-mono" placeholder="public" />
-                        <span class="mat-hint">Traps with another community are refused. Empty = any community.</span>
-                    </div>
-                </div>
-
-                <div class="mat-field">
-                    <label class="mat-label" for="Input_AllowedSources">Allowed sources <span class="mat-text-muted">optional - empty accepts anyone who can reach the port</span></label>
-                    <textarea asp-for="Input.AllowedSources" class="mat-textarea mat-mono" rows="3" placeholder="192.168.1.0/24, 10.0.0.5"></textarea>
-                    <span class="mat-hint">IP addresses and ranges, separated by commas or new lines. A trap has no login (a community travels in clear text), so this list is what decides who may send.</span>
+                    <label class="mat-label" for="Input_Communities">Communities <span class="mat-text-muted">optional</span></label>
+                    <input asp-for="Input.Communities" class="mat-input mat-mono" placeholder="public" />
+                    <span class="mat-hint">SNMPv1/v2c traps with another community are refused. Empty = any community.</span>
                 </div>
 
                 <div class="mat-field">
@@ -83,18 +92,15 @@
                     <span class="mat-hint" id="traps-poll-hint">A trap says that something happened; the sensors say what. With this on, a UPS that sends "on battery" is red within seconds instead of at its next poll. Each sensor at most once per 10 seconds.</span>
                 </div>
 
-                @if (settings.Enabled && string.IsNullOrWhiteSpace(settings.AllowedSources))
-                {
-                    <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Anyone who can reach the port can send traps. Restrict it with Allowed sources.</div></div>
-                }
-
                 <div class="mat-btn-row">
-                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
+                    <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
                 </div>
             </form>
         </div>
     </section>
+</div>
 
+<div class="mat-grid mat-grid--2">
     <section class="mat-card">
         <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Status</h2><span class="mat-text-muted mm-push-end">since the last start</span></div>
         <div class="mat-card__body mat-stack">
@@ -107,17 +113,20 @@
                 <dt>Received</dt>
                 <dd><span class="mat-mono">@receiver.Received.ToString("N0")</span>@(receiver.LastTrap is { } lastTrap ? $" · last: {lastTrap}" : string.Empty)</dd>
                 <dt>Refused</dt>
-                <dd><span class="mat-mono">@receiver.Rejected.ToString("N0")</span> <span class="mat-text-muted">not in Allowed sources, or another community</span></dd>
+                <dd><span class="mat-mono">@receiver.Rejected.ToString("N0")</span> <span class="mat-text-muted">another community (a sender not in a collector's Allowed sources is counted there)</span></dd>
                 <dt>Unreadable</dt>
                 <dd><span class="mat-mono">@receiver.Unreadable.ToString("N0")</span> <span class="mat-text-muted">not a trap, or an SNMPv3 trap that failed its check (unknown user, wrong password)</span></dd>
                 <dt>Sensors polled</dt>
                 <dd><span class="mat-mono">@receiver.WokenSensors.ToString("N0")</span> <span class="mat-text-muted">because their device sent a trap</span></dd>
             </dl>
 
-            <form method="post" asp-page-handler="Test" id="traps-test" hidden></form>
-            <div class="mat-btn-row">
-                <button type="submit" form="traps-test" class="mat-btn mat-btn--secondary" data-tip="Sends one SNMPv2c trap to this machine's own receiver and checks it arrived in the log">@MatUi.Icon("activity")<span>Send a test trap</span></button>
-            </div>
+            @if (Model.LocalCollector is { IsRunning: true })
+            {
+                <form method="post" asp-page-handler="Test" id="traps-test" hidden></form>
+                <div class="mat-btn-row">
+                    <button type="submit" form="traps-test" class="mat-btn mat-btn--secondary" data-tip="Sends one SNMPv2c trap to the collector on this machine and checks it arrived in the log">@MatUi.Icon("activity")<span>Send a test trap</span></button>
+                </div>
+            }
         </div>
     </section>
 </div>
@@ -188,8 +197,8 @@
 <section class="mat-card">
     <div class="mat-card__head">@MatUi.Icon("help-circle")<h2 class="mat-card__title">Pointing a device at it</h2></div>
     <div class="mat-card__body mat-prose">
-        <p>In the device's SNMP settings, add a trap receiver (also called trap destination or trap host): <code>@Model.ReceiverHost</code>, UDP port <code>@settings.Port</code>, version v2c (or v1) with the community set above - or v3 with one of the users above (v3 informs are not supported: choose "trap"). A UPS network card usually lists the events it sends a trap for - "on battery" and "battery low" are the ones to tick.</p>
+        <p>In the device's SNMP settings, add a trap receiver (also called trap destination or trap host): @(Model.LocalCollector is not null ? "this machine," : "the machine its collector runs on (a probe or agent near it, or this machine once the collector runs here), for this machine") <code>@Model.ReceiverHost</code>, UDP port <code>@Model.LocalPort</code>, version v2c (or v1) with the community set above - or v3 with one of the users above (v3 informs are not supported: choose "trap"). A UPS network card usually lists the events it sends a trap for - "on battery" and "battery low" are the ones to tick.</p>
         <p>Every trap lands in the central log with the names from the MIB library (upload a vendor's MIB under System > MIBs to get readable names for its traps). A <strong>Syslog Match</strong> sensor on the phrase - for example <code>upsTrapOnBattery</code> - turns a trap into an alert of its own; the device's other sensors poll at once when the switch above is on.</p>
-        <p>In Docker the port has to be published: <code>-p 162:162/udp</code> (or the commented line in <code>docker-compose.yml</code>). On Docker Desktop (Windows, macOS) a trap then arrives from the gateway address, not from the device - the sensors of that device cannot be told apart and are not polled; on Linux the device's own address arrives.</p>
+        <p>In Docker the port has to be published: <code>-p @Model.LocalPort:@Model.LocalPort/udp</code> (or the commented line in <code>docker-compose.yml</code>). On Docker Desktop (Windows, macOS) a trap then arrives from the gateway address, not from the device - the sensors of that device cannot be told apart and are not polled; on Linux the device's own address arrives.</p>
     </div>
 </section>

@@ -1,8 +1,10 @@
 namespace Matmon.Core.Syslog;
 
 /// <summary>
-/// The syslog receiver's configuration - edited under System > Syslog, stored in workspace.json. OFF by default: it opens
-/// a network listener that accepts unauthenticated input, which an admin should switch on deliberately.
+/// The central log's settings - how long and how much it keeps (System > Syslog), stored in workspace.json. Receiving is
+/// the syslog collector plugin's job now (System > Plugins, on the main probe or a probe near the devices); the receiver
+/// fields below are what the primary's own receiver used before - read once by migration 9, which turns a receiver that
+/// was on into the collector on the main probe, and not used otherwise.
 /// </summary>
 public sealed class SyslogSettings
 {
@@ -14,6 +16,7 @@ public sealed class SyslogSettings
     public const int MaxMessagesLimit = 50_000_000;
     public const int DefaultMaxMessages = 2_000_000;
 
+    /// <summary>Before migration 9: the primary's own receiver was on. Cleared by the migration.</summary>
     public bool Enabled { get; set; }
 
     public bool UdpEnabled { get; set; } = true;

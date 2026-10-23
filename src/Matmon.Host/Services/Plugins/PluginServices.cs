@@ -148,9 +148,10 @@ public sealed class PrimaryPluginService(
     }
 }
 
-/// <summary>An <c>snmptrap</c> event (the trap collector on a probe): the datagram goes through the primary's own trap path -
-/// communities, SNMPv3 users, MIB names, the central log, polling the device's sensors - at the time it reached the probe.</summary>
-public sealed class SnmpTrapPluginEventHandler(SnmpTrapIngest ingest) : IPluginEventHandler
+/// <summary>An <c>snmptrap</c> event (a trap collector, on the primary or on a probe): the datagram goes through the primary's
+/// trap path - communities, SNMPv3 users, MIB names, the central log, polling the device's sensors - at the time it reached
+/// the collector. The processing settings (System > SNMP traps) are read per trap, so a change applies to the next one.</summary>
+public sealed class SnmpTrapPluginEventHandler(SnmpTrapIngest ingest, IMonitoringWorkspaceStore store) : IPluginEventHandler
 {
     public string Kind => SnmpTrapCollectorPlugin.EventKind;
 
@@ -162,6 +163,98 @@ public sealed class SnmpTrapPluginEventHandler(SnmpTrapIngest ingest) : IPluginE
             return;
         }
 
-        ingest.AcceptForwarded(Convert.FromBase64String(forward.Datagram), source, pluginEvent.OccurredUtc, probeId ?? "primary");
+        var settings = store.GetSnmpTrapSettings().Normalized();
+        ingest.Configure(settings.CommunityList(), settings.PollOnTrap, settings.V3Users);
+        ingest.Accept(Convert.FromBase64String(forward.Datagram), source, pluginEvent.OccurredUtc, probeId);
     }
+}
+
+/// <summary>A place a plugin can run: the primary (the root probe) or a remote probe / agent.</summary>
+public sealed record PluginLocation(Guid Id, string Name, bool IsPrimary, string ProbeId);
+
+/// <summary>One plugin assignment as the pages show it: where it runs and what it reported last.</summary>
+public sealed record PluginPlacementView(
+    PluginAssignment Assignment,
+    PluginDefinition? Definition,
+    PluginLocation? Location,
+    PluginAssignmentState? State,
+    ProbePluginState? ProbeState)
+{
+    public bool IsRunning => Assignment.Enabled && State?.State == "running";
+
+    /// <summary>The pill: off / running / error / waiting (the probe has not reported it yet).</summary>
+    public (string Tone, string Label) Pill => !Assignment.Enabled
+        ? ("paused", "Off")
+        : State is null
+            ? ("plain", "Waiting")
+            : State.State switch
+            {
+                "running" => ("ok", "Running"),
+                "error" => ("error", "Error"),
+                _ => ("info", State.State)
+            };
+
+    public string Detail => !Assignment.Enabled
+        ? "Switched off."
+        : State is not null
+            ? State.Detail ?? string.Empty
+            : Location?.IsPrimary == true
+                ? "Starting..."
+                : "The probe has not reported it yet - it is offline, or an agent from before plugins (update it).";
+}
+
+/// <summary>
+/// What the UI shows of the plugins: the menu entries of the ACTIVE ones - a plugin with an enabled assignment somewhere;
+/// one that runs nowhere adds no tab to System and none to Events - and where each one runs, with its last state.
+/// </summary>
+public sealed class PluginUi(IMonitoringWorkspaceStore store, PluginCatalog catalog, PluginStatusRegistry? registry = null)
+{
+    public bool IsActive(params string[] pluginIds) =>
+        store.GetPluginAssignments().Any(assignment => assignment.Enabled && pluginIds.Contains(assignment.PluginId, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>The entries of one area from the plugins that run somewhere, in catalog order, one per key - plus the entry
+    /// of the page that is open (<paramref name="openKey"/>), so the tab strip still says where you are on a page whose
+    /// plugin was just switched off. Only paths on this instance.</summary>
+    public IReadOnlyList<PluginUiLink> Links(PluginUiArea area, string? openKey = null)
+    {
+        var active = store.GetPluginAssignments()
+            .Where(assignment => assignment.Enabled)
+            .Select(assignment => assignment.PluginId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return catalog.Plugins
+            .SelectMany(plugin => plugin.Definition.Links.Select(link => (link, active: active.Contains(plugin.Definition.Id))))
+            .Where(entry => entry.link.Area == area && IsLocalPath(entry.link.Path)
+                && (entry.active || string.Equals(entry.link.Key, openKey, StringComparison.OrdinalIgnoreCase)))
+            .Select(entry => entry.link)
+            .DistinctBy(link => link.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public IReadOnlyList<PluginLocation> Locations() =>
+        store.GetAllElements().OfType<ProbeElement>()
+            .Select(probe => new PluginLocation(probe.Id, probe.ParentId is null ? $"{probe.Name} (this primary)" : probe.Name, probe.ParentId is null, probe.ProbeId))
+            .OrderBy(location => !location.IsPrimary)
+            .ThenBy(location => location.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>Where plugins run - all of them, or one plugin's.</summary>
+    public IReadOnlyList<PluginPlacementView> Placements(string? pluginId = null)
+    {
+        var locations = Locations();
+        return store.GetPluginAssignments()
+            .Where(assignment => pluginId is null || string.Equals(assignment.PluginId, pluginId, StringComparison.OrdinalIgnoreCase))
+            .Select(assignment =>
+            {
+                var location = locations.FirstOrDefault(candidate => candidate.Id == assignment.ProbeElementId);
+                var probeState = location is { IsPrimary: false } ? registry?.Probe(location.ProbeId) : null;
+                return new PluginPlacementView(assignment, catalog.Find(assignment.PluginId)?.Definition, location, registry?.Assignment(assignment.Id), probeState);
+            })
+            .OrderBy(view => view.Definition?.DisplayName ?? view.Assignment.PluginId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(view => !(view.Location?.IsPrimary ?? false))
+            .ThenBy(view => view.Location?.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsLocalPath(string path) =>
+        path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal) && !path.StartsWith("/\\", StringComparison.Ordinal) && !path.Contains("://", StringComparison.Ordinal);
 }

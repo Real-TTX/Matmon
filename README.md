@@ -63,13 +63,13 @@ optional and connect outbound, so they work behind firewalls and NAT.
 
 **Operations**
 - **Remote probes** connect outbound to the primary — no inbound ports at the remote site
-- A built-in **syslog server** (UDP + TCP, off until you switch it on) keeps the logs of your switches, routers and
-  servers searchable - including what a switch forgets when it reboots
-- A built-in **SNMP trap receiver** (v1, v2c, informs and signed/encrypted SNMPv3 traps; off until you switch it on): a trap lands in the same
-  log, and the sending device's sensors poll at once - a UPS that sends "on battery" is red within seconds
-- **Plugins**: the syslog server and the trap receiver also run *on a remote probe or agent* - next to the devices,
-  switched on and configured from the instance (*System → Plugins*); what they collect is queued on the probe's disk
-  and arrives with its real times, even after an outage of the primary
+- A **syslog server** (UDP + TCP) keeps the logs of your switches, routers and servers searchable - including what a
+  switch forgets when it reboots
+- An **SNMP trap receiver** (v1, v2c, informs and signed/encrypted SNMPv3 traps): a trap lands in the same log, and the
+  sending device's sensors poll at once - a UPS that sends "on battery" is red within seconds
+- Both are **plugins** that ship with Matmon and stay off until you switch them on (*System → Plugins*) - on the
+  primary or *on a remote probe or agent* next to the devices. Their pages appear in the menu once they run; on a probe
+  what they collect is queued on its disk and arrives with its real times, even after an outage of the primary
 - **Maps / wallboards** with tiles that roll up sensor state (element- or tag-targeted)
 - **Dark & light** themes, a mobile-responsive UI, users with **Viewer / User / Admin** roles and
   optional two-factor sign-in
@@ -184,8 +184,9 @@ The probe then appears in the tree; assign sensors to it and it executes them fr
 
 ### 3. Receive syslog from your devices (optional)
 
-Matmon can be the syslog server for your switches, routers and servers. It is **off until you switch it on**
-(*System → Syslog*), and a container only receives what you publish, so add the port next to `8099`:
+Matmon can be the syslog server for your switches, routers and servers. It is **off until you switch it on**:
+*System → Plugins → Add* the *Syslog collector* on the primary (or on a probe near the devices, see below). A
+container only receives what you publish, so add the port next to `8099`:
 
 ```yaml
     ports:
@@ -195,14 +196,14 @@ Matmon can be the syslog server for your switches, routers and servers. It is **
 ```
 
 Then enter the Matmon host as the syslog server in each device and give it a *Syslog Messages* sensor (the
-*Senders* list there adds one with a click; the log itself is the *Syslog* tab on *Events*). Messages are kept for 14 days by default and ordered by the time they
+*Senders* list under *System → Syslog* adds one with a click; the log itself is the *Syslog* tab on *Events*). Messages are kept for 14 days by default and ordered by the time they
 **arrive** - a switch that has just rebooted often has a wrong clock. Two things worth knowing: on Docker Desktop
 (Windows, macOS) every message arrives from Docker's own gateway address instead of the device's, so identify
 devices by the *host name* they put in the message; and syslog has no login, so use *Allowed sources* to say
 who may write to the log.
 
-Devices at another site can send to their **remote probe** instead: *System → Plugins → Add* the *Syslog collector*
-(or the *SNMP trap collector*) on that probe and publish the port there. The probe keeps collecting while the primary
+Devices at another site can send to their **remote probe** instead: add the *Syslog collector* (or the *SNMP trap
+collector*) on that probe and publish the port there. The probe keeps collecting while the primary
 is unreachable and delivers the messages with their arrival times afterwards.
 
 ### 4. From source

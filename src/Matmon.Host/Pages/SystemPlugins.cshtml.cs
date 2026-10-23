@@ -1,5 +1,6 @@
 using System.Globalization;
 using Matmon.Core.Domain;
+using Matmon.Core.Syslog;
 using Matmon.Host.Services;
 using Matmon.Host.Services.Plugins;
 using Matmon.Probe.Plugins;
@@ -23,20 +24,23 @@ public sealed class PluginAssignmentInput
 
 /// <summary>
 /// System > Plugins (admins): which plugins this instance knows (built in, or loaded from its plugins folder), where each
-/// runs - on the primary or on a probe / agent - with which settings, and what each reported last. A probe picks up a
-/// change within seconds; its events (syslog lines, ...) arrive in the same places as the primary's own.
+/// runs - on the primary (the main probe) or on a probe / agent - with which settings, and what each reported last. A probe
+/// picks up a change within seconds; its events (syslog lines, ...) arrive in the same places as the primary's own. A
+/// plugin that runs somewhere brings its menu entries (System > Syslog, ...); one that runs nowhere adds none.
 /// </summary>
 public sealed class SystemPluginsModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _store;
     private readonly PluginCatalog _catalog;
+    private readonly PluginUi _ui;
     private readonly PluginStatusRegistry? _registry;
     private readonly MatmonRuntimeOptions _options;
 
-    public SystemPluginsModel(IMonitoringWorkspaceStore store, PluginCatalog catalog, MatmonRuntimeOptions options, PluginStatusRegistry? registry = null)
+    public SystemPluginsModel(IMonitoringWorkspaceStore store, PluginCatalog catalog, PluginUi ui, MatmonRuntimeOptions options, PluginStatusRegistry? registry = null)
     {
         _store = store;
         _catalog = catalog;
+        _ui = ui;
         _options = options;
         _registry = registry;
     }
@@ -60,7 +64,11 @@ public sealed class SystemPluginsModel : PageModel
 
     public IReadOnlyList<PluginLocation> Locations { get; private set; } = [];
 
-    public IReadOnlyList<PluginAssignmentRow> Rows { get; private set; } = [];
+    public IReadOnlyList<PluginPlacementView> Rows { get; private set; } = [];
+
+    /// <summary>The page a plugin brings along (its System tab), for the "open" link on its rows.</summary>
+    public static PluginUiLink? PageOf(PluginDefinition? definition) =>
+        definition?.Links.FirstOrDefault(link => link.Area == PluginUiArea.System);
 
     public bool Editing { get; private set; }
 
@@ -131,7 +139,9 @@ public sealed class SystemPluginsModel : PageModel
         }
 
         var location = Locations.FirstOrDefault(candidate => candidate.Id == assignment.ProbeElementId);
-        StatusMessage = $"Saved. {(location?.IsPrimary == true ? "The primary" : $"The probe '{location?.Name}'")} applies it within a few seconds.";
+        var page = PageOf(_catalog.Find(assignment.PluginId)?.Definition);
+        StatusMessage = $"Saved. {(location?.IsPrimary == true ? "The primary" : $"The probe '{location?.Name}'")} applies it within a few seconds." +
+            (assignment.Enabled && page is not null ? $" Its page is under System > {page.Title}." : string.Empty);
         return RedirectToPage();
     }
 
@@ -166,6 +176,16 @@ public sealed class SystemPluginsModel : PageModel
             return false;
         }
 
+        // One assignment per plugin and place: a second "Add" of the same collector on the same probe would only fail
+        // with "port in use" - the existing one is the one to change.
+        var existingId = input.Id ?? Guid.Empty;
+        if (_store.GetPluginAssignments().Any(other => other.Id != existingId && other.ProbeElementId == location.Id &&
+            string.Equals(other.PluginId, plugin.Definition.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = $"'{plugin.Definition.DisplayName}' is already set up on {location.Name} - change that one instead.";
+            return false;
+        }
+
         var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var definition in plugin.Definition.Settings)
         {
@@ -181,6 +201,16 @@ public sealed class SystemPluginsModel : PageModel
                 case PluginSettingKind.Number when value.Length > 0 && !int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _):
                     error = $"{definition.Label}: a whole number.";
                     return false;
+                case PluginSettingKind.AddressList when value.Length > 0:
+                    // Refused, not ignored: an entry dropped from an allow-list makes it wider than the admin meant.
+                    IpAllowList.Parse(value, out var invalid);
+                    if (invalid.Count > 0)
+                    {
+                        error = $"{definition.Label}: not an IP address or range: {string.Join(", ", invalid)}. Use addresses like 192.168.1.2 or ranges like 192.168.1.0/24, separated by commas or new lines.";
+                        return false;
+                    }
+
+                    break;
             }
 
             if (definition.Required && value.Length == 0)
@@ -213,53 +243,7 @@ public sealed class SystemPluginsModel : PageModel
 
     private void Load()
     {
-        var probes = _store.GetAllElements().OfType<ProbeElement>().ToList();
-        Locations = probes
-            .Select(probe => new PluginLocation(probe.Id, probe.ParentId is null ? $"{probe.Name} (this primary)" : probe.Name, probe.ParentId is null, probe.ProbeId))
-            .OrderBy(location => !location.IsPrimary)
-            .ThenBy(location => location.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        Rows = _store.GetPluginAssignments()
-            .Select(assignment =>
-            {
-                var location = Locations.FirstOrDefault(candidate => candidate.Id == assignment.ProbeElementId);
-                var state = _registry?.Assignment(assignment.Id);
-                var probeState = location is { IsPrimary: false } ? _registry?.Probe(location.ProbeId) : null;
-                return new PluginAssignmentRow(assignment, _catalog.Find(assignment.PluginId)?.Definition, location, state, probeState);
-            })
-            .OrderBy(row => row.Definition?.DisplayName ?? row.Assignment.PluginId, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => row.Location?.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        Locations = _ui.Locations();
+        Rows = _ui.Placements();
     }
-}
-
-public sealed record PluginLocation(Guid Id, string Name, bool IsPrimary, string ProbeId);
-
-public sealed record PluginAssignmentRow(
-    PluginAssignment Assignment,
-    PluginDefinition? Definition,
-    PluginLocation? Location,
-    PluginAssignmentState? State,
-    ProbePluginState? ProbeState)
-{
-    /// <summary>The pill: off / running / error / waiting (the probe has not reported it yet).</summary>
-    public (string Tone, string Label) Pill => !Assignment.Enabled
-        ? ("paused", "Off")
-        : State is null
-            ? ("plain", "Waiting")
-            : State.State switch
-            {
-                "running" => ("ok", "Running"),
-                "error" => ("error", "Error"),
-                _ => ("info", State.State)
-            };
-
-    public string Detail => !Assignment.Enabled
-        ? "Switched off."
-        : State is not null
-            ? State.Detail ?? string.Empty
-            : Location?.IsPrimary == true
-                ? "Starting..."
-                : "The probe has not reported it yet - it is offline, or an agent from before plugins (update it).";
 }

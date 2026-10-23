@@ -303,23 +303,18 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<TunnelClient>();
 
     // Syslog: the central log of the network's devices. The database is its own file (syslog.db) so a chatty switch
-    // can never bloat or lock the sensor history, and the receiver follows the settings live - off until an admin
-    // switches it on, because it listens for unauthenticated input.
+    // can never bloat or lock the sensor history. Receiving is the syslog collector plugin's job (System > Plugins - on
+    // the main probe or on a probe near the devices); nothing listens until an admin switches one on.
     var syslogDatabasePath = ResolveSyslogPath(builder.Environment, runtimeOptions, workspaceDirectory);
     builder.Services.AddSingleton<ISyslogStore>(provider =>
         new SyslogStore(syslogDatabasePath, provider.GetRequiredService<ILogger<SyslogStore>>()));
-    // The receiver writes into the store through the small sink interface it shares with the probes' collector.
-    builder.Services.AddSingleton<Matmon.Core.Syslog.ISyslogSink>(provider => provider.GetRequiredService<ISyslogStore>());
-    builder.Services.AddSingleton<SyslogReceiverState>();
-    builder.Services.AddSingleton<SyslogIngest>();
-    builder.Services.AddHostedService<SyslogReceiverService>();
+    builder.Services.AddHostedService<SyslogHousekeepingService>();
 
-    // SNMP traps: off until an admin switches it on (System > SNMP traps). A trap lands in the same central log and makes
-    // the sending device's sensors poll at once. Self-contained like the syslog receiver - both are to become plugins.
+    // SNMP traps: the trap collector plugin takes them (wherever it runs) and hands them here - the central log, the MIB
+    // names and polling the sending device's sensors at once (System > SNMP traps).
     builder.Services.AddSingleton<SnmpTrapReceiverState>();
     builder.Services.AddSingleton<SensorWakeService>();
     builder.Services.AddSingleton<SnmpTrapIngest>();
-    builder.Services.AddHostedService<SnmpTrapReceiverService>();
 
     // Plugins: what the plugins on probes (and on the primary itself) report is handled here, by event kind.
     builder.Services.AddSingleton<Matmon.Host.Services.Plugins.IPluginEventHandler, Matmon.Host.Services.Plugins.SyslogPluginEventHandler>();
@@ -335,6 +330,7 @@ else
 }
 
 builder.Services.AddMatmonPlugins(runtimeOptions.PluginsPath);
+builder.Services.AddSingleton<Matmon.Host.Services.Plugins.PluginUi>();
 
 builder.Services.AddHttpContextAccessor();
 

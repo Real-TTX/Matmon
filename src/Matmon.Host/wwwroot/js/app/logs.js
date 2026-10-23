@@ -364,10 +364,10 @@ function initializeSyslogMessages() {
     let title = "No message matches this filter";
     let text = "Change the search or the filters, or reset them.";
     if (!hasMessages) {
-      title = enabled ? "Nothing has arrived yet" : "The receiver is off";
+      title = enabled ? "Nothing has arrived yet" : "No collector runs";
       text = enabled
-        ? "Point a device's syslog setting at this machine and its messages appear here within seconds."
-        : "Nothing has been collected. An admin turns it on under System > Syslog.";
+        ? "Point a device's syslog setting at the machine its collector runs on and its messages appear here within seconds."
+        : "Nothing has been collected. An admin switches a syslog collector on under System > Plugins.";
     }
     if (els.emptyTitle) {
       els.emptyTitle.textContent = title;

@@ -1,9 +1,16 @@
 using System.Net;
 using System.Net.Sockets;
+using Matmon.Core.Domain;
 using Matmon.Core.SnmpTraps;
 using Matmon.Core.Syslog;
+using Matmon.Core.Telemetry;
 using Matmon.Host.Pages;
 using Matmon.Host.Services;
+using Matmon.Host.Services.Plugins;
+using Matmon.Probe.Plugins;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Matmon.Tests;
@@ -98,23 +105,74 @@ public sealed class SnmpTrapTests : IDisposable
     // --- the settings form -----------------------------------------------------------------------------------
 
     [Fact]
-    public void The_settings_form_refuses_a_bad_port_or_allow_list_entry_instead_of_correcting_it()
+    public void The_processing_form_keeps_the_communities_and_the_poll_switch()
     {
-        Assert.False(SystemSnmpTrapsModel.TryBuildSettings(new SnmpTrapSettingsInput { Port = 70000 }, out _, out var portError));
-        Assert.Contains("port", portError);
-        Assert.False(SystemSnmpTrapsModel.TryBuildSettings(new SnmpTrapSettingsInput { AllowedSources = "10.0.0.0/8, nas" }, out _, out var listError));
-        Assert.Contains("nas", listError);
-        Assert.True(SystemSnmpTrapsModel.TryBuildSettings(new SnmpTrapSettingsInput { Enabled = true, Port = 1162, Communities = " public , ups " }, out var settings, out _));
+        Assert.True(SystemSnmpTrapsModel.TryBuildSettings(new SnmpTrapSettingsInput { Communities = " public , ups ", PollOnTrap = false }, out var settings, out _));
         Assert.Equal(["public", "ups"], settings.CommunityList());
+        Assert.False(settings.PollOnTrap);
     }
 
-    // --- the real UDP path -----------------------------------------------------------------------------------
+    // --- the real UDP path: the collector plugin, its event, the primary's processing ---------------------------
 
-    private (SyslogStore Store, SnmpTrapReceiverState State, SnmpTrapIngest Ingest) Pipeline()
+    private sealed class Pipeline : IAsyncDisposable
     {
-        var store = new SyslogStore(Path.Combine(_dir, $"log-{Guid.NewGuid():N}.db"), NullLogger<SyslogStore>.Instance);
-        var state = new SnmpTrapReceiverState();
-        return (store, state, new SnmpTrapIngest(store, state, NullLogger<SnmpTrapIngest>.Instance));
+        private readonly SqliteTelemetryRepository _telemetry;
+        private readonly PluginRuntime _runtime;
+
+        public Pipeline(string dir)
+        {
+            Store = new SyslogStore(Path.Combine(dir, $"log-{Guid.NewGuid():N}.db"), NullLogger<SyslogStore>.Instance);
+            State = new SnmpTrapReceiverState();
+            var ingest = new SnmpTrapIngest(Store, State, NullLogger<SnmpTrapIngest>.Instance);
+            _telemetry = new SqliteTelemetryRepository(Path.Combine(dir, $"t-{Guid.NewGuid():N}.db"));
+            Workspace = new InMemoryMonitoringWorkspaceStore(
+                new TrapTestHostEnvironment(dir), new MatmonRuntimeOptions { WorkspacePath = Path.Combine(dir, $"ws-{Guid.NewGuid():N}.json") },
+                new MatmonAuthOptions(), new EphemeralDataProtectionProvider(), _telemetry, NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+            var dispatcher = new PluginEventDispatcher([new SnmpTrapPluginEventHandler(ingest, Workspace)], NullLogger<PluginEventDispatcher>.Instance);
+            _runtime = new PluginRuntime(new PluginCatalog([new SnmpTrapCollectorPlugin()], NullLogger<PluginCatalog>.Instance),
+                new DispatchingSink(dispatcher), NullLoggerFactory.Instance, dir, probeId: null);
+        }
+
+        public SyslogStore Store { get; }
+
+        public SnmpTrapReceiverState State { get; }
+
+        public InMemoryMonitoringWorkspaceStore Workspace { get; }
+
+        public int Port { get; private set; }
+
+        /// <summary>Runs the collector the way the primary runs it on the main probe; returns its status.</summary>
+        public async Task<PluginStatus> CollectAsync(string? allowedSources = null)
+        {
+            Port = FreeUdpPort();
+            var settings = new Dictionary<string, string> { ["port"] = Port.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+            if (allowedSources is not null)
+            {
+                settings["allowedSources"] = allowedSources;
+            }
+
+            await _runtime.ReconcileAsync([new PluginAssignmentSpec(Guid.NewGuid(), SnmpTrapCollectorPlugin.Id, true, settings)], DateTimeOffset.UtcNow, default);
+            return _runtime.Statuses().Single().Status;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _runtime.DisposeAsync();
+            Workspace.Dispose();
+            _telemetry.Dispose();
+            Store.Dispose();
+        }
+
+        private static int FreeUdpPort()
+        {
+            using var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            return ((IPEndPoint)probe.Client.LocalEndPoint!).Port;
+        }
+
+        private sealed class DispatchingSink(PluginEventDispatcher dispatcher) : IPluginEventSink
+        {
+            public void Publish(PluginEvent pluginEvent) => dispatcher.Dispatch(pluginEvent, probeId: null);
+        }
     }
 
     private static async Task<byte[]?> SendAsync(int port, byte[] datagram, bool expectAnswer = false)
@@ -151,87 +209,92 @@ public sealed class SnmpTrapTests : IDisposable
     [Fact]
     public async Task A_trap_lands_in_the_central_log_with_its_name_and_a_warning_severity()
     {
-        var (store, state, ingest) = Pipeline();
-        using (store)
-        using (var listener = SnmpTrapUdpListener.Start(0, ingest, NullLogger.Instance))
-        {
-            await SendAsync(listener.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.FromSeconds(9), [("1.3.6.1.2.1.33.1.2.3.0", "23")]));
+        await using var pipeline = new Pipeline(_dir);
+        Assert.Equal("running", (await pipeline.CollectAsync()).State);
 
-            var message = Assert.Single(await WaitForAsync(store, 1));
-            Assert.StartsWith("SNMP trap upsTrapOnBattery (1.3.6.1.2.1.33.2.1)", message.Message);
-            Assert.Contains("1.3.6.1.2.1.33.1.2.3.0 = 23", message.Message);
-            Assert.Equal(SyslogSeverity.Warning, message.Severity);
-            Assert.Equal(SnmpTrapIngest.AppName, message.AppName);
-            Assert.Equal("upsTrapOnBattery", message.MsgId);
-            Assert.Equal(1, state.Snapshot().Received);
-        }
+        await SendAsync(pipeline.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.FromSeconds(9), [("1.3.6.1.2.1.33.1.2.3.0", "23")]));
+
+        var message = Assert.Single(await WaitForAsync(pipeline.Store, 1));
+        Assert.StartsWith("SNMP trap upsTrapOnBattery (1.3.6.1.2.1.33.2.1)", message.Message);
+        Assert.Contains("1.3.6.1.2.1.33.1.2.3.0 = 23", message.Message);
+        Assert.Equal(SyslogSeverity.Warning, message.Severity);
+        Assert.Equal(SnmpTrapIngest.AppName, message.AppName);
+        Assert.Equal("upsTrapOnBattery", message.MsgId);
+        Assert.Equal(1, pipeline.State.Snapshot().Received);
     }
 
     [Fact]
-    public async Task A_wrong_community_or_an_address_outside_the_allow_list_is_refused()
+    public async Task A_wrong_community_is_refused_by_the_primarys_settings()
     {
-        var (store, state, ingest) = Pipeline();
-        using (store)
-        using (var listener = SnmpTrapUdpListener.Start(0, ingest, NullLogger.Instance))
+        await using var pipeline = new Pipeline(_dir);
+        pipeline.Workspace.UpdateSnmpTrapSettings(new SnmpTrapSettings { Communities = "ups-only", PollOnTrap = false });
+        await pipeline.CollectAsync();
+
+        // UDP may lose a datagram (Windows does drop one on loopback under a busy test run), so the trap is sent again
+        // until its refusal is counted - what matters is that nothing gets into the log.
+        for (var send = 0; send < 5 && pipeline.State.Snapshot().Rejected == 0; send++)
         {
-            // UDP may lose a datagram (Windows does drop one on loopback under a busy test run), so each case is sent
-            // again until its refusal is counted - what matters is that nothing gets into the log.
-            async Task RefusedAsync(long expected)
+            await SendAsync(pipeline.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.Zero, []));
+            for (var attempt = 0; attempt < 40 && pipeline.State.Snapshot().Rejected == 0; attempt++)
             {
-                for (var send = 0; send < 5 && state.Snapshot().Rejected < expected; send++)
-                {
-                    await SendAsync(listener.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.Zero, []));
-                    for (var attempt = 0; attempt < 40 && state.Snapshot().Rejected < expected; attempt++)
-                    {
-                        await Task.Delay(50);
-                    }
-                }
+                await Task.Delay(50);
             }
-
-            ingest.Configure(IpAllowList.Parse(null, out _), ["ups-only"], pollOnTrap: false);
-            await RefusedAsync(1);
-
-            ingest.Configure(IpAllowList.Parse("10.0.0.0/8", out _), [], pollOnTrap: false);
-            await RefusedAsync(2);
-
-            Assert.True(state.Snapshot().Rejected >= 2);
-            Assert.Equal(0, state.Snapshot().Received);
-            Assert.Empty(await WaitForAsync(store, 0));
         }
+
+        Assert.True(pipeline.State.Snapshot().Rejected >= 1);
+        Assert.Equal(0, pipeline.State.Snapshot().Received);
+        Assert.Empty(await WaitForAsync(pipeline.Store, 0));
+    }
+
+    [Fact]
+    public async Task An_address_outside_the_collectors_allow_list_never_reaches_the_primary()
+    {
+        await using var pipeline = new Pipeline(_dir);
+        await pipeline.CollectAsync(allowedSources: "10.0.0.0/8");
+
+        await SendAsync(pipeline.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.Zero, []));
+        await Task.Delay(300);
+
+        Assert.Equal(0, pipeline.State.Snapshot().Received);
+        Assert.Empty(await WaitForAsync(pipeline.Store, 0));
     }
 
     [Fact]
     public async Task An_inform_is_acknowledged_over_the_wire_so_the_sender_stops_repeating_it()
     {
-        var (store, _, ingest) = Pipeline();
-        using (store)
-        using (var listener = SnmpTrapUdpListener.Start(0, ingest, NullLogger.Instance))
-        {
-            var answer = await SendAsync(listener.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.FromSeconds(1), [], requestId: 31, inform: true), expectAnswer: true);
+        await using var pipeline = new Pipeline(_dir);
+        await pipeline.CollectAsync();
 
-            Assert.NotNull(answer);
-            Assert.False(SnmpTrapParser.TryParse(answer, out _, out var error));
-            Assert.Contains("0xA2", error);
-            Assert.Single(await WaitForAsync(store, 1));
-        }
+        var answer = await SendAsync(pipeline.Port, SnmpTrapParser.BuildV2Trap("public", OnBattery, TimeSpan.FromSeconds(1), [], requestId: 31, inform: true), expectAnswer: true);
+
+        Assert.NotNull(answer);
+        Assert.False(SnmpTrapParser.TryParse(answer, out _, out var error));
+        Assert.Contains("0xA2", error);
+        Assert.Single(await WaitForAsync(pipeline.Store, 1));
     }
 
     [Fact]
     public async Task An_unreadable_packet_is_counted_and_said_not_stored()
     {
-        var (store, state, ingest) = Pipeline();
-        using (store)
-        using (var listener = SnmpTrapUdpListener.Start(0, ingest, NullLogger.Instance))
+        await using var pipeline = new Pipeline(_dir);
+        await pipeline.CollectAsync();
+
+        await SendAsync(pipeline.Port, [0x30, 0x03, 0x02, 0x01, 0x03]);
+
+        for (var attempt = 0; attempt < 200 && pipeline.State.Snapshot().Unreadable == 0; attempt++)
         {
-            await SendAsync(listener.Port, [0x30, 0x03, 0x02, 0x01, 0x03]);
-
-            for (var attempt = 0; attempt < 200 && state.Snapshot().Unreadable == 0; attempt++)
-            {
-                await Task.Delay(50);
-            }
-
-            Assert.Equal(1, state.Snapshot().Unreadable);
-            Assert.Contains("SNMPv3", state.Snapshot().Warning);
+            await Task.Delay(50);
         }
+
+        Assert.Equal(1, pipeline.State.Snapshot().Unreadable);
+        Assert.Contains("SNMPv3", pipeline.State.Snapshot().Warning);
     }
+}
+
+file sealed class TrapTestHostEnvironment(string contentRoot) : IHostEnvironment
+{
+    public string ApplicationName { get; set; } = "Matmon.Tests";
+    public string EnvironmentName { get; set; } = "Development";
+    public string ContentRootPath { get; set; } = contentRoot;
+    public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
 }

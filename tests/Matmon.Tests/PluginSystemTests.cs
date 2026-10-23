@@ -274,6 +274,126 @@ public sealed class PluginSystemTests : IDisposable
         var package = Encoding.UTF8.GetString(store.CreateBackupBytes(WorkspaceBackupSection.All));
         Assert.DoesNotContain("syslog-collector", package);
     }
+
+    // --- what the UI gets from the plugins ------------------------------------------------------------------------
+
+    private sealed class LinkingPlugin : IMatmonPlugin
+    {
+        public PluginDefinition Definition { get; } = new("linking", "Linking", "test", PluginPlacement.Both, [])
+        {
+            Links =
+            [
+                new(PluginUiArea.System, "elsewhere", "Elsewhere", "https://example.invalid/admin"),
+                new(PluginUiArea.System, "own", "Own page", "/system/own")
+            ]
+        };
+
+        public Task<IPluginInstance> StartAsync(PluginContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private static Guid Root(InMemoryMonitoringWorkspaceStore store) =>
+        store.GetAllElements().OfType<ProbeElement>().Single(probe => probe.ParentId is null).Id;
+
+    [Fact]
+    public void Both_collectors_run_on_the_main_probe_as_well_as_on_a_probe()
+    {
+        Assert.Equal(PluginPlacement.Both, new SyslogCollectorPlugin().Definition.Placement);
+        Assert.Equal(PluginPlacement.Both, new SnmpTrapCollectorPlugin().Definition.Placement);
+    }
+
+    [Fact]
+    public void A_plugin_brings_its_menu_entries_only_while_it_runs_somewhere()
+    {
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using var store = NewStore(telemetry);
+        var ui = new PluginUi(store, Catalog(new SyslogCollectorPlugin(), new SnmpTrapCollectorPlugin()));
+
+        Assert.Empty(ui.Links(PluginUiArea.System));
+        Assert.Empty(ui.Links(PluginUiArea.Events));
+        // on its own page the strip still says where you are, even with the plugin switched off
+        Assert.Equal(["syslog"], ui.Links(PluginUiArea.System, openKey: "syslog").Select(link => link.Key));
+
+        var traps = store.SavePluginAssignment(new PluginAssignment { PluginId = SnmpTrapCollectorPlugin.Id, ProbeElementId = Root(store) });
+        Assert.Equal(["traps"], ui.Links(PluginUiArea.System).Select(link => link.Key));
+        Assert.Equal(["syslog"], ui.Links(PluginUiArea.Events).Select(link => link.Key)); // traps land in the central log
+        Assert.True(ui.IsActive(SnmpTrapCollectorPlugin.Id));
+
+        store.SavePluginAssignment(new PluginAssignment { Id = traps.Id, PluginId = traps.PluginId, ProbeElementId = traps.ProbeElementId, Enabled = false });
+        Assert.Empty(ui.Links(PluginUiArea.System));
+        Assert.False(ui.IsActive(SnmpTrapCollectorPlugin.Id));
+    }
+
+    [Fact]
+    public void A_menu_entry_that_leaves_the_instance_is_not_shown()
+    {
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using var store = NewStore(telemetry);
+        var ui = new PluginUi(store, Catalog(new LinkingPlugin()));
+        store.SavePluginAssignment(new PluginAssignment { PluginId = "linking", ProbeElementId = Root(store) });
+
+        Assert.Equal(["own"], ui.Links(PluginUiArea.System).Select(link => link.Key));
+    }
+
+    [Fact]
+    public void The_plugins_page_refuses_an_allow_list_entry_that_is_not_an_address_and_offers_the_main_probe()
+    {
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using var store = NewStore(telemetry);
+        var catalog = Catalog(new SyslogCollectorPlugin());
+        var page = new Matmon.Host.Pages.SystemPluginsModel(store, catalog, new PluginUi(store, catalog), new MatmonRuntimeOptions(), new PluginStatusRegistry());
+        page.OnGet(null, null);
+        var input = new Matmon.Host.Pages.PluginAssignmentInput
+        {
+            PluginId = SyslogCollectorPlugin.Id,
+            ProbeElementId = Root(store),
+            Settings = { ["allowedSources"] = "10.0.0.0/8, nas" }
+        };
+
+        // a typo must never silently widen who may write to the log
+        Assert.False(page.TryBuild(input, out _, out var error));
+        Assert.Contains("nas", error);
+
+        input.Settings["allowedSources"] = "10.0.0.0/8";
+        Assert.True(page.TryBuild(input, out var assignment, out error), error);
+        Assert.Equal(Root(store), assignment.ProbeElementId);
+
+        // a second one on the same place would only fail with "port in use" - editing the first is what was meant
+        store.SavePluginAssignment(assignment);
+        Assert.False(page.TryBuild(input, out _, out error));
+        Assert.Contains("already set up", error);
+        input.Id = assignment.Id;
+        Assert.True(page.TryBuild(input, out _, out error), error);
+    }
+
+    [Fact]
+    public void A_receiver_that_was_on_becomes_the_collector_on_the_main_probe_and_one_that_was_off_becomes_nothing()
+    {
+        var workspacePath = Path.Combine(_dir, "ws.json");
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using (var before = NewStore(telemetry))
+        {
+            before.UpdateSyslogSettings(new SyslogSettings { Enabled = true, UdpPort = 1514, TcpEnabled = false, AllowedSources = "10.0.0.0/8", RetentionDays = 30 });
+            before.UpdateSnmpTrapSettings(new SnmpTrapSettings { Enabled = false, Port = 1162, Communities = "public" });
+        }
+
+        // what the version before the plugins wrote
+        File.WriteAllText(workspacePath, Regex.Replace(File.ReadAllText(workspacePath), "\"schemaVersion\"\\s*:\\s*\\d+", "\"schemaVersion\": 8", RegexOptions.IgnoreCase));
+
+        using var after = new InMemoryMonitoringWorkspaceStore(
+            new PluginTestHostEnvironment(_dir), new MatmonRuntimeOptions { WorkspacePath = workspacePath },
+            new MatmonAuthOptions(), new EphemeralDataProtectionProvider(), telemetry, NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+
+        var collector = Assert.Single(after.GetPluginAssignments());
+        Assert.Equal(SyslogCollectorPlugin.Id, collector.PluginId);
+        Assert.Equal(Root(after), collector.ProbeElementId);
+        Assert.True(collector.Enabled);
+        Assert.Equal("1514", collector.Settings["udpPort"]);
+        Assert.Equal("false", collector.Settings["tcpEnabled"]);
+        Assert.Equal("10.0.0.0/8", collector.Settings["allowedSources"]);
+        Assert.False(after.GetSyslogSettings().Enabled);       // the switch lives in the plugin now
+        Assert.Equal(30, after.GetSyslogSettings().RetentionDays); // what the log keeps is still the log's
+        Assert.Equal("public", after.GetSnmpTrapSettings().Communities);
+    }
 }
 
 file sealed class PluginTestHostEnvironment(string contentRoot) : IHostEnvironment

@@ -17,8 +17,26 @@ public enum PluginSettingKind
     Number,
     Boolean,
     Port,
-    MultilineText
+    MultilineText,
+
+    /// <summary>IP addresses and CIDR ranges (commas or new lines). The Plugins page refuses an entry that is not one
+    /// instead of ignoring it - for an allow-list, "ignored" means "wider than the admin meant".</summary>
+    AddressList
 }
+
+/// <summary>Where a plugin's menu entry goes.</summary>
+public enum PluginUiArea
+{
+    /// <summary>A tab of the System section, linking to <see cref="PluginUiLink.Path"/>.</summary>
+    System,
+
+    /// <summary>A tab on the Events page (the host knows what it shows; <see cref="PluginUiLink.Key"/> names it).</summary>
+    Events
+}
+
+/// <summary>A menu entry a plugin brings along. It is shown only while the plugin runs somewhere (an enabled assignment),
+/// so a plugin that is not switched on adds nothing to the menus. <see cref="Path"/> must be a path on the instance.</summary>
+public sealed record PluginUiLink(PluginUiArea Area, string Key, string Title, string Path);
 
 /// <summary>One setting of a plugin, as the instance's Plugins page renders and checks it.</summary>
 public sealed record PluginSettingDefinition(
@@ -36,7 +54,12 @@ public sealed record PluginDefinition(
     string Description,
     PluginPlacement Placement,
     IReadOnlyList<PluginSettingDefinition> Settings,
-    string Version = "1");
+    string Version = "1")
+{
+    /// <summary>The menu entries that come with the plugin (shown while it runs somewhere). An init property rather than
+    /// a constructor parameter, so a plugin built against the constructor without it still loads.</summary>
+    public IReadOnlyList<PluginUiLink> Links { get; init; } = [];
+}
 
 /// <summary>
 /// Something a plugin saw and the instance has to know: a log line, a trap, a status change. Created where the plugin
