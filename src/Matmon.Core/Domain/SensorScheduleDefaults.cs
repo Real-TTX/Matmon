@@ -32,6 +32,12 @@ public static class SensorScheduleDefaults
         ["ups-snmp"] = TimeSpan.FromSeconds(30),
         ["nut-ups"] = TimeSpan.FromSeconds(30),
 
+        // The internet line: an outage has to show within a minute, and the box answers four tiny SOAP calls.
+        ["fritzbox"] = TimeSpan.FromMinutes(1),
+
+        // Backups arrive hours apart and a datastore fills over days - a quarter of an hour is plenty.
+        ["proxmox-backup"] = TimeSpan.FromMinutes(15),
+
         // The probe's own machine, read locally: next to free, and CPU/memory are only interesting close up.
         ["local-health"] = TimeSpan.FromMinutes(1),
 

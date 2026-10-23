@@ -19,6 +19,7 @@ public static class SensorTypeCategories
         "Linux",
         "Scripting",
         "Virtualization & NAS",
+        "Hardware",
         "Storage",
         "Databases",
         "Probe",
@@ -37,6 +38,7 @@ public static class SensorTypeCategories
         ["snmp-interface"] = "Network",
         ["ups-snmp"] = "Network",
         ["nut-ups"] = "Network",
+        ["fritzbox"] = "Network",
         ["mail-health"] = "Network",
 
         ["syslog-messages"] = "Logs",
@@ -64,6 +66,7 @@ public static class SensorTypeCategories
         ["proxmox-health"] = "Virtualization & NAS",
         ["proxmox-node-health"] = "Virtualization & NAS",
         ["proxmox-disk"] = "Virtualization & NAS",
+        ["proxmox-backup"] = "Virtualization & NAS",
         ["vmware-health"] = "Virtualization & NAS",
         ["vmware-host-health"] = "Virtualization & NAS",
         ["synology"] = "Virtualization & NAS",
@@ -72,6 +75,8 @@ public static class SensorTypeCategories
         ["synology-update"] = "Virtualization & NAS",
         ["unifi-health"] = "Virtualization & NAS",
         ["docker-container"] = "Virtualization & NAS",
+
+        ["redfish"] = "Hardware",
 
         ["windows-eventlog"] = "Windows",
 

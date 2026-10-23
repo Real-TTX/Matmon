@@ -79,6 +79,26 @@ public static class SensorThresholdDefaults
 
         // ── Windows health / disk / updates ───────────────────────────────────────────────────
         // ── The probe's own machine (read locally) ────────────────────────────────────────────────
+        // ── Server hardware (Redfish): the controller's health verdict is the state; a server that is switched off is
+        // worth a look but may be intended (a spare, maintenance).
+        new("redfish", RedfishSensorExecutor.PowerOnChannel, "warning", ThresholdDirection.Below, 1),
+
+        // ── Proxmox Backup Server: a datastore filling up, PBS's own forecast, a day without any backup (26 h leaves room
+        // for a nightly job that ran late), a task that failed. Nothing on the most neglected group: a retired VM keeps its
+        // group, and its age only grows.
+        new("proxmox-backup", ProxmoxBackupSensorExecutor.DatastoreUsedChannel, "warning", ThresholdDirection.Above, 85),
+        new("proxmox-backup", ProxmoxBackupSensorExecutor.DatastoreUsedChannel, "critical", ThresholdDirection.Above, 95),
+        new("proxmox-backup", ProxmoxBackupSensorExecutor.DaysUntilFullChannel, "warning", ThresholdDirection.Below, 14),
+        new("proxmox-backup", ProxmoxBackupSensorExecutor.NewestBackupAgeChannel, "warning", ThresholdDirection.Above, 26),
+        new("proxmox-backup", ProxmoxBackupSensorExecutor.NewestBackupAgeChannel, "critical", ThresholdDirection.Above, 50),
+        new("proxmox-backup", ProxmoxBackupSensorExecutor.FailedTasksChannel, "warning", ThresholdDirection.Above, 0),
+        new("proxmox-backup", "diskUsedPercent", "warning", ThresholdDirection.Above, 85),
+        new("proxmox-backup", "diskUsedPercent", "critical", ThresholdDirection.Above, 95),
+
+        // ── FRITZ!Box: not connected is critical by itself. A DSL noise margin under 6 dB is a line that resyncs.
+        new("fritzbox", "dslDownstreamSnrDb", "warning", ThresholdDirection.Below, 6),
+        new("fritzbox", "dslUpstreamSnrDb", "warning", ThresholdDirection.Below, 6),
+
         new("local-health", "cpu", "warning", ThresholdDirection.Above, 85),
         new("local-health", "cpu", "critical", ThresholdDirection.Above, 95),
         new("local-health", "memoryUsedPercent", "warning", ThresholdDirection.Above, 85),

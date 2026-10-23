@@ -39,8 +39,12 @@ optional and connect outbound, so they work behind firewalls and NAT.
 **Sensors** (a selection)
 - Reachability & web: **Ping** (latency, packet loss, jitter), **HTTP(S), TCP port, DNS, NTP, SSL certificate** (+ chain)
 - Network: **SNMP** with a MIB library, **SNMP interfaces** with traffic in Mbit/s and utilisation
-- Platforms: **Synology, Proxmox** (cluster + per-node), **VMware/vSphere, UniFi**, Windows /
-  Linux (SSH) / **health & disk & update** sensors
+- Platforms: **Synology, Proxmox** (cluster + per-node), **Proxmox Backup Server** (datastores, last backup, failed
+  tasks), **VMware/vSphere, UniFi**, Windows / Linux (SSH) / **health & disk & update** sensors
+- Hardware: **server management controllers over Redfish** (iDRAC, iLO, XClarity, Supermicro …: the controller's health
+  verdict, power, temperatures, fans, power supplies, power draw)
+- Internet: **FRITZ!Box** (connected, line speed, current throughput without a login; DSL noise margin and attenuation
+  with one)
 - Data & services: **MSSQL, PostgreSQL, MySQL/MariaDB, Docker, Windows Event Log, Mail round-trip**
 - Power: **UPS** over SNMP (network card, standard UPS-MIB or APC PowerNet) or **NUT** (a UPS on the USB port of a NAS,
   Proxmox, a firewall or Home Assistant) - a power cut is critical at once, not when the battery runs low
