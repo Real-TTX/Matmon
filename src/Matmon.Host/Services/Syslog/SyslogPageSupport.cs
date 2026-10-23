@@ -332,11 +332,11 @@ internal static class SyslogPageSupport
 
     /// <summary>
     /// Whether the Events page offers its Syslog tab: to someone who may read the log, while a collector runs (syslog or
-    /// SNMP traps - both write the central log) or the log holds something - what was collected stays readable after the
-    /// collectors are switched off. Until then the page is exactly what it was.
+    /// SNMP traps - both write the central log). Like every menu entry a plugin brings, it is there only while the plugin
+    /// runs: what was collected before stays in the database (pruned as usual) and is readable again once a collector
+    /// runs. Until then the page is exactly what it was.
     /// </summary>
-    public static bool ShowSyslogTab(bool canRead, bool collectorActive, bool logHasMessages) =>
-        canRead && (collectorActive || logHasMessages);
+    public static bool ShowSyslogTab(bool canRead, bool collectorActive) => canRead && collectorActive;
 
     /// <summary>One message as the page's script receives it - everything it shows, nothing it should not trust: the text
     /// travels as a JSON string and goes onto the page as text.</summary>

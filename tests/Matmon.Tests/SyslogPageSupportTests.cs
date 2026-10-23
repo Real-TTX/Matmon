@@ -159,14 +159,12 @@ public sealed class SyslogPageSupportTests
     // ---- when the Events page shows the Syslog tab ----------------------------------------------------------------------
 
     [Theory]
-    [InlineData(true, true, false, true)]    // a collector runs, nothing arrived yet: the tab says so
-    [InlineData(true, false, true, true)]    // switched off again, but what was collected stays readable
-    [InlineData(true, true, true, true)]
-    [InlineData(true, false, false, false)]  // never used: the Events page is what it always was
-    [InlineData(false, true, true, false)]   // a viewer does not get device logs, however much is there
-    [InlineData(false, false, false, false)]
-    public void TheSyslogTabAppearsForSomeoneWhoMayReadItOnceThereIsAnythingToRead(bool canRead, bool collectorActive, bool hasMessages, bool expected) =>
-        Assert.Equal(expected, SyslogPageSupport.ShowSyslogTab(canRead, collectorActive, hasMessages));
+    [InlineData(true, true, true)]     // a collector runs: the tab is there (and says so when nothing arrived yet)
+    [InlineData(true, false, false)]   // no collector runs: no tab, like every menu entry of a plugin that runs nowhere
+    [InlineData(false, true, false)]   // a viewer does not get device logs
+    [InlineData(false, false, false)]
+    public void TheSyslogTabIsThereForSomeoneWhoMayReadItWhileACollectorRuns(bool canRead, bool collectorActive, bool expected) =>
+        Assert.Equal(expected, SyslogPageSupport.ShowSyslogTab(canRead, collectorActive));
 
     // ---- the collectors in one line -------------------------------------------------------------------------------------
 

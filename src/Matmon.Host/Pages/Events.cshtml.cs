@@ -97,7 +97,7 @@ public sealed class EventsModel : PageModel
         var latest = _syslog!.Latest(new SyslogQuery());
         var collectors = _plugins.Placements(SyslogCollectorPlugin.Id).Concat(_plugins.Placements(SnmpTrapCollectorPlugin.Id)).ToList();
         var active = collectors.Any(collector => collector.Assignment.Enabled);
-        if (!SyslogPageSupport.ShowSyslogTab(canRead: true, active, latest is not null))
+        if (!SyslogPageSupport.ShowSyslogTab(canRead: true, active))
         {
             return null;
         }

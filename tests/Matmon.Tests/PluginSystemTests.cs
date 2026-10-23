@@ -310,8 +310,6 @@ public sealed class PluginSystemTests : IDisposable
 
         Assert.Empty(ui.Links(PluginUiArea.System));
         Assert.Empty(ui.Links(PluginUiArea.Events));
-        // on its own page the strip still says where you are, even with the plugin switched off
-        Assert.Equal(["syslog"], ui.Links(PluginUiArea.System, openKey: "syslog").Select(link => link.Key));
 
         var traps = store.SavePluginAssignment(new PluginAssignment { PluginId = SnmpTrapCollectorPlugin.Id, ProbeElementId = Root(store) });
         Assert.Equal(["traps"], ui.Links(PluginUiArea.System).Select(link => link.Key));

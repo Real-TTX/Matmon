@@ -212,10 +212,10 @@ public sealed class PluginUi(IMonitoringWorkspaceStore store, PluginCatalog cata
     public bool IsActive(params string[] pluginIds) =>
         store.GetPluginAssignments().Any(assignment => assignment.Enabled && pluginIds.Contains(assignment.PluginId, StringComparer.OrdinalIgnoreCase));
 
-    /// <summary>The entries of one area from the plugins that run somewhere, in catalog order, one per key - plus the entry
-    /// of the page that is open (<paramref name="openKey"/>), so the tab strip still says where you are on a page whose
-    /// plugin was just switched off. Only paths on this instance.</summary>
-    public IReadOnlyList<PluginUiLink> Links(PluginUiArea area, string? openKey = null)
+    /// <summary>The entries of one area from the plugins that run somewhere (an enabled assignment), in catalog order, one
+    /// per key - nothing else: a plugin that runs nowhere brings no menu entry, and its pages send a visitor to the Plugins
+    /// page. Only paths on this instance.</summary>
+    public IReadOnlyList<PluginUiLink> Links(PluginUiArea area)
     {
         var active = store.GetPluginAssignments()
             .Where(assignment => assignment.Enabled)
@@ -223,8 +223,7 @@ public sealed class PluginUi(IMonitoringWorkspaceStore store, PluginCatalog cata
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return catalog.Plugins
             .SelectMany(plugin => plugin.Definition.Links.Select(link => (link, active: active.Contains(plugin.Definition.Id))))
-            .Where(entry => entry.link.Area == area && IsLocalPath(entry.link.Path)
-                && (entry.active || string.Equals(entry.link.Key, openKey, StringComparison.OrdinalIgnoreCase)))
+            .Where(entry => entry.active && entry.link.Area == area && IsLocalPath(entry.link.Path))
             .Select(entry => entry.link)
             .DistinctBy(link => link.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();

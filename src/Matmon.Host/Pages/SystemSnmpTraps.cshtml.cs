@@ -5,6 +5,7 @@ using Matmon.Host.Services;
 using Matmon.Host.Services.Plugins;
 using Matmon.Probe.Plugins;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Matmon.Host.Pages;
@@ -69,6 +70,17 @@ public sealed class SystemSnmpTrapsModel : PageModel
     public List<SnmpTrapV3UserInput> V3Users { get; set; } = [];
 
     public string? UsersFormError { get; private set; }
+
+    /// <summary>A plugin that runs nowhere brings no page: whoever arrives here (a bookmark, an old link) is sent to the
+    /// Plugins tab with a word on what to add.</summary>
+    public override void OnPageHandlerExecuting(PageHandlerExecutingContext context)
+    {
+        if (!_plugins.IsActive(SnmpTrapCollectorPlugin.Id))
+        {
+            TempData["StatusMessage"] = "System > SNMP traps comes with the SNMP trap collector plugin. Add it here - on the main probe or on a probe near the devices - and the SNMP traps tab is back.";
+            context.Result = RedirectToPage("/SystemPlugins");
+        }
+    }
 
     [TempData]
     public string? StatusMessage { get; set; }

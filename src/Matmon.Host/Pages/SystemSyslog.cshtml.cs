@@ -4,6 +4,7 @@ using Matmon.Host.Services;
 using Matmon.Host.Services.Plugins;
 using Matmon.Probe.Plugins;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Matmon.Host.Pages;
@@ -43,6 +44,17 @@ public sealed class SystemSyslogModel : PageModel
 
     [BindProperty]
     public SyslogStorageInput Input { get; set; } = new();
+
+    /// <summary>A plugin that runs nowhere brings no page: whoever arrives here (a bookmark, an old link) is sent to the
+    /// Plugins tab with a word on what to add.</summary>
+    public override void OnPageHandlerExecuting(PageHandlerExecutingContext context)
+    {
+        if (!_plugins.IsActive(SyslogCollectorPlugin.Id))
+        {
+            TempData["StatusMessage"] = "System > Syslog comes with the syslog collector plugin. Add it here - on the main probe or on a probe near the devices - and the Syslog tab is back.";
+            context.Result = RedirectToPage("/SystemPlugins");
+        }
+    }
 
     [TempData]
     public string? StatusMessage { get; set; }
