@@ -89,6 +89,9 @@ public static class SensorTelemetryProfiles
         // Counts per window: a number that moves, so hourly averages of it are worth keeping.
         ["syslog-messages"] = Responsive,
         ["syslog-match"] = Responsive,
+
+        // Up or down - did the job report in?
+        ["push"] = Availability,
     };
 
     /// <summary>All distinct profiles, for documentation/UI listing.</summary>

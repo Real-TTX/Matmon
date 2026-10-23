@@ -39,6 +39,9 @@ public static class SensorScheduleDefaults
         ["syslog-messages"] = TimeSpan.FromMinutes(1),
         ["syslog-match"] = TimeSpan.FromMinutes(1),
 
+        // A push sensor only works out whether the last call is overdue - nothing leaves the machine.
+        ["push"] = TimeSpan.FromMinutes(1),
+
         // Slow-changing hardware/health: SMART attributes and backup outcomes barely move between
         // polls, so 6 h keeps the noise/overhead down while still catching failures within hours.
         ["synology-disk"] = SixHours,

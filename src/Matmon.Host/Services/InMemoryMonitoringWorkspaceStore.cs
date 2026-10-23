@@ -117,6 +117,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureDefaultUsers();
         EnsureDefaultMaps(_runtimeOptions.CreateStarterMap);
         EnsureDefaultAlertCollection();
+        EnsurePushTokens();
         SaveNow();
     }
 
@@ -1243,6 +1244,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             // where the user hasn't set one), so a new sensor alarms sensibly out of the box.
             SensorThresholdDefaults.Apply(sensorTypeKey, sensor.Settings);
 
+            // A push sensor is reached by its token - it gets one at birth.
+            PushSensor.EnsureToken(sensorTypeKey, sensor.Settings);
+
             // SSL expiry warning/critical lives on the remainingDays channel thresholds; its own
             // seeder also migrates the legacy ssl.warningDays/criticalDays params.
             if (string.Equals(sensorTypeKey, SslCertificateSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
@@ -1253,6 +1257,40 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             AddChild(parent, sensor);
             QueueSave(SavePriority.Configuration);
             return sensor;
+        }
+    }
+
+    /// <summary>Invariant: every push sensor has a token (one restored or hand-edited without one would be unreachable).</summary>
+    private void EnsurePushTokens()
+    {
+        foreach (var sensor in EnumerateElements(_document.RootProbe).OfType<SensorElement>())
+        {
+            PushSensor.EnsureToken(sensor.SensorTypeKey, sensor.Settings);
+        }
+    }
+
+    public PushSensorTarget? FindPushSensor(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 128)
+        {
+            return null;
+        }
+
+        var wanted = System.Text.Encoding.UTF8.GetBytes(token.Trim());
+        lock (_gate)
+        {
+            foreach (var sensor in EnumerateElements(_document.RootProbe).OfType<SensorElement>())
+            {
+                if (string.Equals(sensor.SensorTypeKey, PushSensor.Key, StringComparison.OrdinalIgnoreCase)
+                    && sensor.Settings.Parameters.TryGetValue(PushSensor.TokenParameter, out var stored)
+                    && !string.IsNullOrWhiteSpace(stored)
+                    && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(wanted, System.Text.Encoding.UTF8.GetBytes(stored.Trim())))
+                {
+                    return new PushSensorTarget(sensor.Id, sensor.Name, sensor.IsPaused);
+                }
+            }
+
+            return null;
         }
     }
 

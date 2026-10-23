@@ -70,6 +70,9 @@ public sealed class SensorDetailsModel : PageModel
     /// <summary>The maintenance window covering this sensor right now (null = none).</summary>
     public MaintenanceStatus? Maintenance { get; private set; }
 
+    /// <summary>A push sensor's address - for someone who may operate, never for a Viewer (it is the credential).</summary>
+    public string? PushUrl { get; private set; }
+
     public IActionResult OnGet()
     {
         return LoadView() ? Page() : NotFound();
@@ -147,6 +150,11 @@ public sealed class SensorDetailsModel : PageModel
         }
 
         Dependency = _workspaceStore.GetDependency(sensor.Id);
+        PushUrl = string.Equals(sensor.SensorTypeKey, PushSensor.Key, StringComparison.OrdinalIgnoreCase)
+            && MatmonSecurity.CanOperateAlerts(User)
+            && sensor.Settings.Parameters.TryGetValue(PushSensor.TokenParameter, out var pushToken) && !string.IsNullOrWhiteSpace(pushToken)
+                ? $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/push/{pushToken.Trim()}"
+                : null;
         Maintenance = _workspaceStore.GetActiveMaintenance(sensor.Id, DateTimeOffset.UtcNow);
 
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
@@ -682,6 +690,7 @@ public sealed class SensorDetailsModel : PageModel
         }
 
         return latestObservation.Channels
+            .Where(channel => !SensorExecutionResultHelper.IsCarriedState(channel))
             .Select(channel =>
             {
                 var state = channel.State ?? SensorState.Healthy;

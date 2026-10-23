@@ -24,6 +24,7 @@ public static class SensorExecutionLoadRanking
         ["probe-health"] = Light,
         ["matmon-update"] = Light,
         ["syslog-messages"] = Light,
+        ["push"] = Light,
 
         // Moderate - a single API/cert/query round-trip.
         ["syslog-match"] = Moderate,

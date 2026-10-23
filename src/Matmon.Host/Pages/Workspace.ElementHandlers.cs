@@ -433,6 +433,11 @@ public sealed partial class WorkspaceModel
             var found = _workspaceStore.UpdateElement(ElementEditor.Id, element =>
             {
                 credentialIssueCount = ApplyElementEditor(element, ElementEditor);
+                if (element is SensorElement pushSensor)
+                {
+                    PushSensor.EnsureToken(pushSensor.SensorTypeKey, pushSensor.Settings); // emptied = a new address
+                }
+
                 elementName = element.Name;
                 elementKind = element.Kind;
             });

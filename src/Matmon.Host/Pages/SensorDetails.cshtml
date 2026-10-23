@@ -70,6 +70,28 @@
     }
 </div>
 
+@if (Model.PushUrl is { } pushUrl)
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Push address</h2><span class="mat-text-muted mm-push-end">call it from the job</span></div>
+        <div class="mat-card__body mat-stack mat-stack--sm">
+            <div class="mm-snippet">
+                <pre class="mat-code"><code id="push-url">@pushUrl</code></pre>
+                <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#push-url">@MatUi.Icon("copy")<span>Copy</span></button>
+            </div>
+            <p class="mat-hint">GET or POST, at the end of the job. Optional: <code>status=ok|warning|error</code>, <code>value=</code> a number, <code>message=</code> a line of text - in the query, a form or JSON. No call for longer than expected (plus grace) turns the sensor Critical. The address is the password: treat it like one; emptying the token in the sensor's settings gives a new one.</p>
+            <div class="mm-snippet">
+                <pre class="mat-code"><code id="push-example-sh">curl -fsS "@(pushUrl)?status=ok&amp;message=backup+done" &gt;/dev/null</code></pre>
+                <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#push-example-sh">@MatUi.Icon("copy")<span>Copy</span></button>
+            </div>
+            <div class="mm-snippet">
+                <pre class="mat-code"><code id="push-example-ps">Invoke-RestMethod "@(pushUrl)?status=error&amp;message=backup+failed"</code></pre>
+                <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#push-example-ps">@MatUi.Icon("copy")<span>Copy</span></button>
+            </div>
+        </div>
+    </section>
+}
+
 <div class="mat-grid mat-grid--4">
     <div class="mat-card">
         <div class="mat-card__body mat-stat">

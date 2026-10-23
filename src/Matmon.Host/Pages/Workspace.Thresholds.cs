@@ -186,6 +186,7 @@ public sealed partial class WorkspaceModel
         if (observedChannels is { Count: > 0 })
         {
             var ordered = observedChannels
+                .Where(channel => !SensorExecutionResultHelper.IsCarriedState(channel)) // nothing to set on a carried timestamp
                 .OrderBy(channel => channel.IsVirtual) // real channels first, virtual (sensorState) last
                 .ThenByDescending(channel => !string.IsNullOrWhiteSpace(defaultChannelKey) &&
                     string.Equals(channel.Key, defaultChannelKey, StringComparison.OrdinalIgnoreCase))

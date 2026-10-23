@@ -170,6 +170,9 @@ public interface IMonitoringWorkspaceStore
     /// null when it can (or when it is "inherit" / "none").</summary>
     string? DescribeDependencyProblem(Guid elementId, Guid? dependencySetting);
 
+    /// <summary>The push sensor a token belongs to (constant-time compare), or null.</summary>
+    PushSensorTarget? FindPushSensor(string token);
+
     /// <summary>Every maintenance window (one-time windows that ended over 30 days ago are tidied away).</summary>
     IReadOnlyList<MaintenanceWindow> GetMaintenanceWindows();
 
@@ -482,6 +485,9 @@ public enum AgentEnrollmentStatus
 public sealed record AgentEnrollmentResult(AgentEnrollmentStatus Status, AgentEnrollmentRedemption? Redemption = null);
 
 /// <summary>A currently-muted element for the Alerts page (name/path resolved, timing for display).</summary>
+/// <summary>The sensor a push address belongs to.</summary>
+public sealed record PushSensorTarget(Guid SensorId, string Name, bool IsPaused);
+
 /// <summary>A sensor's dependency as the pages show it.</summary>
 public sealed record MonitoringDependencyInfo(Guid SensorId, string Name, string Path, bool IsDown, bool HoldsThisSensor);
 

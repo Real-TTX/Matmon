@@ -20,6 +20,7 @@ public static class SensorUsageCatalog
             ["matmon-update"] = SensorUsageLevel.Low,
             ["syslog-messages"] = SensorUsageLevel.Low,
             ["syslog-match"] = SensorUsageLevel.Low,
+            ["push"] = SensorUsageLevel.Low,
 
             ["http"] = SensorUsageLevel.Moderate,
             ["http-advanced"] = SensorUsageLevel.Moderate,

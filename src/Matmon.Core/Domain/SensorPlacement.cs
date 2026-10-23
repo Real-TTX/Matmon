@@ -9,7 +9,8 @@ namespace Matmon.Core.Domain;
 /// answer "no executor"):
 /// <list type="bullet">
 /// <item>the probe heartbeat - it reads the primary's own picture of when a probe last reported;</item>
-/// <item>the syslog sensors - they query the central log the primary's receiver fills.</item>
+/// <item>the syslog sensors - they query the central log the primary's receiver fills;</item>
+/// <item>the push sensor - the pushes arrive at the primary's address.</item>
 /// </list>
 /// This is the one place that says so; the polling service, the probe assignments and the on-demand "run now" routing all
 /// ask it, so they cannot disagree.
@@ -20,7 +21,8 @@ public static class SensorPlacement
     {
         ProbeHeartbeatSensorExecutor.Definition.Key,
         SyslogSensorTypes.Messages,
-        SyslogSensorTypes.Match
+        SyslogSensorTypes.Match,
+        PushSensor.Key
     };
 
     public static bool RunsOnPrimaryOnly(string? sensorTypeKey) =>

@@ -4,6 +4,11 @@ public static class SensorExecutionResultHelper
 {
     private const string VirtualStateChannelKey = "sensorState";
 
+    /// <summary>A channel that only carries state from one run to the next (the push sensor's last push, Mail Health's send
+    /// time): virtual, and not the sensorState one. A number nobody should read - the pages leave it out.</summary>
+    public static bool IsCarriedState(SensorChannelValue channel) =>
+        channel.IsVirtual && !string.Equals(channel.Key, VirtualStateChannelKey, StringComparison.OrdinalIgnoreCase);
+
     public static SensorExecutionResult ApplyDefaultChannelSelection(
         MonitoringSettings settings,
         SensorExecutionResult result)

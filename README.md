@@ -45,6 +45,8 @@ optional and connect outbound, so they work behind firewalls and NAT.
 - Power: **UPS** over SNMP (network card, standard UPS-MIB or APC PowerNet) or **NUT** (a UPS on the USB port of a NAS,
   Proxmox, a firewall or Home Assistant) - a power cut is critical at once, not when the battery runs low
 - Scripting: **PowerShell Remote, Local Script, Local Program** (allow-listed)
+- Jobs: **Push (heartbeat)** - a backup script or cron job calls its address when it ran (with an optional status,
+  value and message); no call in time is the alarm
 - Logs: **Syslog Messages** (a device's errors and warnings in the last hour, and how long it has been quiet)
   and **Syslog Match** (a phrase or regular expression in its messages) - read from Matmon's own syslog server
 

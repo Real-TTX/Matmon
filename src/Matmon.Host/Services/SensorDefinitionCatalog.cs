@@ -66,6 +66,7 @@ public static class SensorDefinitionCatalog
         LocalHealthSensorExecutor.Definition,
         MatmonUpdateSensorExecutor.Definition,
         SyslogMessagesSensorExecutor.Definition,
-        SyslogMatchSensorExecutor.Definition
+        SyslogMatchSensorExecutor.Definition,
+        PushSensorExecutor.Definition
     ];
 }

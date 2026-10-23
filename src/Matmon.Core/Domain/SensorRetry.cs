@@ -18,7 +18,7 @@ public static class SensorRetry
     // (Mail Health sends a probe mail per run).
     private static readonly HashSet<string> NotRetried = new(StringComparer.OrdinalIgnoreCase)
     {
-        "probe-heartbeat", "probe-health", "local-health", "mail-health", "matmon-update", "syslog-messages", "syslog-match"
+        "probe-heartbeat", "probe-health", "local-health", "mail-health", "matmon-update", "syslog-messages", "syslog-match", "push"
     };
 
     public static int RetriesFor(string? sensorTypeKey, MonitoringSettings settings)

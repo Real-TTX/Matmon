@@ -41,6 +41,7 @@ public static class SensorTypeCategories
 
         ["syslog-messages"] = "Logs",
         ["syslog-match"] = "Logs",
+        ["push"] = "Logs",
 
         ["ssl-certificate"] = "Certificates",
         ["certificate-chain"] = "Certificates",

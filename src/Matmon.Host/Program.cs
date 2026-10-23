@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Claims;
 using System.IO;
 using Matmon.Core;
@@ -238,6 +239,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("agent-enroll", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // Push sensors: a job calls once per run, a few jobs behind one address are plenty - a flood is refused, not stored.
+    options.AddPolicy("push", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.AddRazorPages(options =>
 {
@@ -614,6 +619,40 @@ if (runtimeOptions.Mode == AppMode.Primary)
             job.Oids,
             job.Error));
     });
+
+    // A push sensor's address: a backup script or cron job reports in (GET or POST, optional status / value / message
+    // in the query, a form or JSON). The token is the only credential - anonymous by design, so a script needs no
+    // account - and an unknown token answers like a missing page. A paused sensor takes the call and ignores it.
+    app.MapMethods("/api/push/{token}", ["GET", "POST"], async (string token, HttpContext http, IMonitoringWorkspaceStore workspaceStore, PushRegistry registry, ILogger<Program> logger) =>
+    {
+        if (workspaceStore.FindPushSensor(token) is not { } target)
+        {
+            return Results.NotFound(new { error = "unknown_push_address" });
+        }
+
+        var fields = await PushRequestReader.ReadAsync(http.Request, http.RequestAborted);
+        if (PushSensor.ParseStatus(fields.Status) is not { } state)
+        {
+            return Results.BadRequest(new { error = "bad_status", allowed = "ok, warning, error (or 0, 1, 2)" });
+        }
+
+        if (!PushRequestReader.TryParseValue(fields.Value, out var value))
+        {
+            return Results.BadRequest(new { error = "bad_value", expected = "a number, for example 12.5" });
+        }
+
+        if (target.IsPaused)
+        {
+            return Results.Ok(new { ok = true, paused = true });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var push = new PushSensor.Push(now, state, value, PushSensor.CleanMessage(fields.Message));
+        registry.Record(target.SensorId, push);
+        workspaceStore.RecordSensorObservation(target.SensorId, PushSensor.FromPush(push), now);
+        logger.LogDebug("Push for sensor {Sensor}: {State}", target.Name, state);
+        return Results.Ok(new { ok = true });
+    }).AllowAnonymous().RequireRateLimiting("push");
 
     // An agent trades a one-time enrolment code (issued on the Agents page) for a probe of its own. Wrong,
     // used and expired codes all answer the same 400 - which codes once existed is not the caller's business.
@@ -1005,6 +1044,10 @@ static void RegisterSensorExecutors(IServiceCollection services, bool includePro
     {
         services.AddTransient<ISensorExecutor, SyslogMessagesSensorExecutor>();
         services.AddTransient<ISensorExecutor, SyslogMatchSensorExecutor>();
+
+        // The push sensor: the pushes arrive at the primary's /api/push/{token}.
+        services.TryAddSingleton<PushRegistry>();
+        services.AddTransient<ISensorExecutor, PushSensorExecutor>();
     }
 }
 
