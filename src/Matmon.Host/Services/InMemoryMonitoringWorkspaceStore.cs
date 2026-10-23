@@ -25,6 +25,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     // what an alert delay (MonitoringSettings.AlertDelaySeconds) is measured from. In memory: after a restart a streak
     // starts again, which can only delay an alert by one delay more, never raise a premature one. Guarded by _gate.
     private readonly Dictionary<Guid, DateTimeOffset> _problemSince = [];
+
+    // "Poll this sensor now" for the dependencies (InMemoryMonitoringWorkspaceStore.AlertSuppression.cs). Optional: a store
+    // without one (the unit tests) simply waits for the normal schedule.
+    private readonly SensorWakeQueue? _wakeQueue;
     private readonly object _saveGate = new();
     private readonly ILogger<InMemoryMonitoringWorkspaceStore> _logger;
     private readonly IDataProtector _credentialProtector;
@@ -55,8 +59,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         ILogger<InMemoryMonitoringWorkspaceStore> logger,
         INotificationSink? notificationSink = null,
         MapAssetStore? mapAssets = null,
-        MibLibrary? mibLibrary = null)
+        MibLibrary? mibLibrary = null,
+        SensorWakeQueue? wakeQueue = null)
     {
+        _wakeQueue = wakeQueue;
         // Optional: a store built without them simply does not carry uploaded map pictures or MIB files in its
         // backups, which is the honest behaviour for the unit tests that construct it directly.
         _mapAssets = mapAssets;
@@ -2283,6 +2289,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     continue;
                 }
 
+                // Same for a maintenance window and a dependency that still has to be checked - see the poll path.
+                if (existing is null && ActiveMaintenanceLocked(candidate.ElementId, now) is not null)
+                {
+                    continue;
+                }
+
+                if (existing is null && FindElementInternal(candidate.ElementId) is SensorElement dependent && IsDependencyCheckPendingLocked(dependent, now))
+                {
+                    continue;
+                }
+
                 if (existing is null)
                 {
                     _document.Alerts.Add(new MonitoringAlert
@@ -2352,7 +2369,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
             foreach (var alert in _document.Alerts.Where(alert => alert.IsActive))
             {
-                if (activeByElementId.ContainsKey(alert.ElementId))
+                // Held by a down dependency: Unknown, not recovered - its alert stays as it was.
+                if (activeByElementId.ContainsKey(alert.ElementId) || _heldByDependency.ContainsKey(alert.ElementId))
                 {
                     continue;
                 }
@@ -4271,6 +4289,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             return false; // the problem has not lasted long enough yet - the sensor shows it, the alert waits
         }
 
+        if (existing is null && ActiveMaintenanceLocked(sensorId, timestampUtc) is not null)
+        {
+            return false; // a maintenance window covers it: no new alert until it is over (the next check after it raises one)
+        }
+
+        if (existing is null && IsDependencyCheckPendingLocked(sensor, timestampUtc))
+        {
+            return false; // its dependency has not been checked since the problem began - it might be the router that is down
+        }
+
         if (existing is null)
         {
             var raised = new MonitoringAlert
@@ -4599,6 +4627,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public List<MonitoringAlert> Alerts { get; set; } = [];
 
         public List<AlertMute> AlertMutes { get; set; } = [];
+
+        /// <summary>Maintenance windows - alerting configuration, carried with the Notifications backup section.</summary>
+        public List<MaintenanceWindow> MaintenanceWindows { get; set; } = [];
 
         /// <summary>Pending agent enrolment codes (hashed). Instance-bound and short-lived: never in a backup.</summary>
         public List<AgentEnrollment> AgentEnrollments { get; set; } = [];

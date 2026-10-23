@@ -29,6 +29,24 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
             var previousObservation = _telemetry.GetLatestObservation(sensorId);
 
+            // A dependency that is down holds a failing result: recorded as Unknown with the reason, no alert. Whether this
+            // sensor is itself down for its own dependents is read BEFORE the result changes it.
+            var wasDown = IsDownForDependentsLocked(sensorId);
+            var holding = FindHoldingDependencyLocked(sensorId, result);
+            if (holding is not null)
+            {
+                _heldByDependency[sensorId] = (holding.Id, result.State == SensorState.Critical);
+                result = result with
+                {
+                    State = SensorState.Unknown,
+                    Message = MonitoringDependencies.HeldMessage(holding.Name, result.Message)
+                };
+            }
+            else
+            {
+                _heldByDependency.Remove(sensorId);
+            }
+
             var observation = new SensorObservation
             {
                 SensorId = sensorId,
@@ -66,7 +84,21 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             // Observations + events live in SQLite (already appended above); the ONLY workspace.json state the poll
             // path touches is _document.Alerts. So only re-save when the alert sync actually changed something -
             // a healthy poll, or an active alert whose only change is its LastSeenUtc, no longer churns the file.
-            var alertsChanged = SyncSensorAlertFromObservation(sensorId, result, timestampUtc);
+            bool alertsChanged;
+            if (holding is not null)
+            {
+                // Not judged while held: an alert it already had stays as it was (Unknown is not a recovery), and a problem
+                // streak starts again once the dependency is back.
+                _problemSince.Remove(sensorId);
+                _awaitingDependency.Remove(sensorId);
+                alertsChanged = false;
+            }
+            else
+            {
+                alertsChanged = SyncSensorAlertFromObservation(sensorId, result, timestampUtc);
+            }
+
+            alertsChanged |= AfterDependencyResultLocked(sensorId, wasDown, timestampUtc);
             // Statistics roll-up and telemetry retention run out-of-band in
             // RunTelemetryMaintenance (driven by StatisticsRollupService) so the
             // polling hot path only appends the raw observation and event.

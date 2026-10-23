@@ -160,7 +160,8 @@ public sealed class InstanceShellBuilder(
                     new("Agents", "/Agents", "terminal", Starts("/agents")),
                     new("Discovery", "/Discovery", "compass", Starts("/discovery")),
                     new("Templates", "/Templates", "template", templatesActive),
-                    new("Notifications", "/Notifications", "mail", Starts("/notifications"))
+                    new("Notifications", "/Notifications", "mail", Starts("/notifications")),
+                    new("Maintenance", "/Maintenance", "wrench", Starts("/maintenance"))
                 ]));
                 if (isAdmin)
                 {
@@ -193,6 +194,7 @@ public sealed class InstanceShellBuilder(
                 embedNav.Add(new { label = "Discovery", path = "Discovery" });
                 embedNav.Add(new { label = "Templates", path = "Templates" });
                 embedNav.Add(new { label = "Notifications", path = "Notifications" });
+                embedNav.Add(new { label = "Maintenance", path = "Maintenance" });
                 if (isAdmin)
                 {
                     embedNav.Add(new { label = "System", path = "Config" });

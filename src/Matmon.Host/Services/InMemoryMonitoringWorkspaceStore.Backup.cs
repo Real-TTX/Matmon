@@ -658,6 +658,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             document.NotificationReceivers = [];
             document.NotificationRules = [];
             document.SummaryReport = new();
+            document.MaintenanceWindows = [];
         }
 
         if (!sections.HasFlag(WorkspaceBackupSection.Maps))
@@ -921,6 +922,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             target.NotificationSenders = source.NotificationSenders;
             target.NotificationReceivers = source.NotificationReceivers;
             target.NotificationRules = source.NotificationRules;
+            target.MaintenanceWindows = source.MaintenanceWindows ?? [];
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.Maps))

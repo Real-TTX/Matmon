@@ -159,6 +159,35 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The currently-muted elements (expired mutes pruned), for the Alerts page.</summary>
     IReadOnlyList<AlertMuteInfo> GetActiveAlertMutes();
 
+    /// <summary>The sensor this sensor depends on (inherited, never itself, never through a loop), whether it is down and
+    /// whether it holds this sensor right now - null when there is none.</summary>
+    MonitoringDependencyInfo? GetDependency(Guid sensorId);
+
+    /// <summary>What an element would depend on if it set nothing itself (its parents' setting) - the editor's "inherit".</summary>
+    MonitoringDependencyInfo? GetInheritedDependency(Guid elementId);
+
+    /// <summary>Why <paramref name="dependencySetting"/> cannot be the element's dependency (not a sensor, itself, a loop) -
+    /// null when it can (or when it is "inherit" / "none").</summary>
+    string? DescribeDependencyProblem(Guid elementId, Guid? dependencySetting);
+
+    /// <summary>Every maintenance window (one-time windows that ended over 30 days ago are tidied away).</summary>
+    IReadOnlyList<MaintenanceWindow> GetMaintenanceWindows();
+
+    MaintenanceWindow? FindMaintenanceWindow(Guid id);
+
+    /// <summary>Creates or updates a window; throws <see cref="InvalidOperationException"/> with the reason when it is not valid.</summary>
+    MaintenanceWindow SaveMaintenanceWindow(MaintenanceWindow window);
+
+    bool DeleteMaintenanceWindow(Guid id);
+
+    /// <summary>The maintenance window that covers an element right now (the one ending last), or null.</summary>
+    MaintenanceStatus? GetActiveMaintenance(Guid elementId, DateTimeOffset now);
+
+    bool IsInMaintenance(Guid elementId, DateTimeOffset now);
+
+    /// <summary>The zone a window's wall-clock times are in (its own, else the workspace's display zone).</summary>
+    TimeZoneInfo MaintenanceZone(MaintenanceWindow window);
+
     /// <summary>Cheap counts of the persisted active alerts (open vs. acknowledged, plus the error/warning severity split) - no snapshot clone.</summary>
     (int Open, int Acknowledged, int Error, int Warning) GetActiveAlertCounts();
 
@@ -453,6 +482,12 @@ public enum AgentEnrollmentStatus
 public sealed record AgentEnrollmentResult(AgentEnrollmentStatus Status, AgentEnrollmentRedemption? Redemption = null);
 
 /// <summary>A currently-muted element for the Alerts page (name/path resolved, timing for display).</summary>
+/// <summary>A sensor's dependency as the pages show it.</summary>
+public sealed record MonitoringDependencyInfo(Guid SensorId, string Name, string Path, bool IsDown, bool HoldsThisSensor);
+
+/// <summary>The maintenance window covering an element right now.</summary>
+public sealed record MaintenanceStatus(Guid WindowId, string Name, DateTimeOffset EndsUtc);
+
 public sealed record AlertMuteInfo(
     Guid ElementId,
     string ElementName,

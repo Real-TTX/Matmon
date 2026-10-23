@@ -341,6 +341,9 @@ public sealed partial class WorkspaceModel : PageModel
             .Select(template => new SelectListItem($"{template.Name} ({template.TargetKind})", template.Id.ToString(), elementEditor.TemplateOriginId == template.Id))
             .ToList();
         elementEditor.SensorTypeOptions = BuildSensorTypeOptions(snapshot.SensorDefinitions, elementEditor.SensorTypeKey);
+        elementEditor.DependencyInheritedLabel = elementEditor.Id != Guid.Empty && _workspaceStore.GetInheritedDependency(elementEditor.Id) is { } inheritedDependency
+            ? ShortPath(inheritedDependency.Path)
+            : null;
 
         var elementCredentialKinds = selectedElement is SensorElement sensorElementForCredentials
             ? FindSensorDefinition(snapshot.SensorDefinitions, sensorElementForCredentials.SensorTypeKey)?.CredentialKinds ?? []
@@ -1095,6 +1098,17 @@ Matmon__WorkspacePath={_runtimeOptions.WorkspacePath}
     /// pages swap a parent/target &lt;select&gt; for the searchable picker without re-deriving
     /// the per-context valid set.
     /// </summary>
+    /// <summary>What a "Depends on" picker offers: every sensor but the element itself.</summary>
+    public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> DependencyPickerOptions(Guid elementId) =>
+        View.PickerElements.Where(option => option.Kind == MonitoringElementKind.Sensor && option.Id != elementId).ToList();
+
+    /// <summary>The last two parts of an element path ("Router / Ping") - enough to tell sensors apart in a select.</summary>
+    public static string ShortPath(string path)
+    {
+        var parts = path.Split(" / ", StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length <= 2 ? path : string.Join(" / ", parts[^2..]);
+    }
+
     public IReadOnlyList<Matmon.Host.Ui.ElementPickerOption> PickerOptionsFor(IEnumerable<SelectListItem> validOptions)
     {
         var ids = validOptions

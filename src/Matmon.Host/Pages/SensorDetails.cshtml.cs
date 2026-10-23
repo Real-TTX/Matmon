@@ -64,6 +64,12 @@ public sealed class SensorDetailsModel : PageModel
     /// for a viewer, who cannot open the log.</summary>
     public IDictionary<string, string>? SyslogLogRoute { get; private set; }
 
+    /// <summary>The sensor this one depends on (null = none) - with whether it is down and holds this one now.</summary>
+    public MonitoringDependencyInfo? Dependency { get; private set; }
+
+    /// <summary>The maintenance window covering this sensor right now (null = none).</summary>
+    public MaintenanceStatus? Maintenance { get; private set; }
+
     public IActionResult OnGet()
     {
         return LoadView() ? Page() : NotFound();
@@ -139,6 +145,9 @@ public sealed class SensorDetailsModel : PageModel
         {
             return false;
         }
+
+        Dependency = _workspaceStore.GetDependency(sensor.Id);
+        Maintenance = _workspaceStore.GetActiveMaintenance(sensor.Id, DateTimeOffset.UtcNow);
 
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         var lineage = MonitoringTopology.BuildLineage(sensor, elementsById);

@@ -156,7 +156,8 @@ builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemor
     provider.GetRequiredService<ILogger<InMemoryMonitoringWorkspaceStore>>(),
     provider.GetService<INotificationSink>(),
     provider.GetRequiredService<MapAssetStore>(),
-    provider.GetRequiredService<MibLibrary>()));
+    provider.GetRequiredService<MibLibrary>(),
+    provider.GetService<SensorWakeQueue>()));
 builder.Services.AddSingleton<StorageOverviewProvider>();
 builder.Services.AddSingleton<AgentPackageStore>();
 builder.Services.AddSingleton<IProbeStorageSource>(provider => provider.GetRequiredService<StorageOverviewProvider>());
@@ -315,6 +316,10 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddSingleton<SnmpTrapReceiverState>();
     builder.Services.AddSingleton<SensorWakeService>();
     builder.Services.AddSingleton<SnmpTrapIngest>();
+    // "Poll this sensor now" from the store (dependencies: check the dependency before a dependent alerts, look at the
+    // dependents again once it is back) - the store drops the id in the queue, the worker hands it to SensorWakeService.
+    builder.Services.AddSingleton<SensorWakeQueue>();
+    builder.Services.AddHostedService<SensorWakeWorker>();
 
     // Plugins: what the plugins on probes (and on the primary itself) report is handled here, by event kind.
     builder.Services.AddSingleton<Matmon.Host.Services.Plugins.IPluginEventHandler, Matmon.Host.Services.Plugins.SyslogPluginEventHandler>();

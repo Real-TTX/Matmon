@@ -38,6 +38,13 @@ public sealed class MonitoringSettings
     /// its notification wait.</summary>
     public int? AlertDelaySeconds { get; set; }
 
+    /// <summary>The sensor this element's sensors depend on - a site's router ping, a host's ping: while it is down, a
+    /// dependent sensor that fails is shown as Unknown ("&lt;dependency&gt; is down") and raises no alert, so one outage
+    /// is one alert instead of thirty. Inherited down the tree; <see cref="Guid.Empty"/> = "no dependency from here down";
+    /// null = inherit. A sensor never depends on itself (the router ping inside the folder it guards skips it and looks
+    /// further up). See <see cref="MonitoringDependencies"/>.</summary>
+    public Guid? DependencySensorId { get; set; }
+
     public int? EventRetentionDays { get; set; }
 
     public int? ObservationRetentionDays { get; set; }
@@ -92,6 +99,7 @@ public sealed class MonitoringSettings
         Timeout = source.Timeout ?? Timeout;
         RetryCount = source.RetryCount ?? RetryCount;
         AlertDelaySeconds = source.AlertDelaySeconds ?? AlertDelaySeconds;
+        DependencySensorId = source.DependencySensorId ?? DependencySensorId;
         EventRetentionDays = source.EventRetentionDays ?? EventRetentionDays;
         ObservationRetentionDays = source.ObservationRetentionDays ?? ObservationRetentionDays;
         StatisticsRetentionDays = source.StatisticsRetentionDays ?? StatisticsRetentionDays;
@@ -176,6 +184,11 @@ public sealed class MonitoringSettings
         if (target.AlertDelaySeconds == inherited.AlertDelaySeconds)
         {
             target.AlertDelaySeconds = null;
+        }
+
+        if (target.DependencySensorId == inherited.DependencySensorId)
+        {
+            target.DependencySensorId = null;
         }
 
         if (target.EventRetentionDays == inherited.EventRetentionDays)

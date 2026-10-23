@@ -50,6 +50,16 @@
     <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
 }
 
+@if (Model.Maintenance is { } maintenance)
+{
+    <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("wrench")<div class="mat-alert__body">In maintenance: <a asp-page="/Maintenance">@maintenance.Name</a> until @Matmon.Core.Domain.MaintenanceSchedule.Format(maintenance.EndsUtc, Matmon.Core.Domain.DisplayTimeZone.Current). The sensor keeps running; it raises no new alert until then.</div></div>
+}
+
+@if (Model.Dependency is { HoldsThisSensor: true } holding)
+{
+    <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("link")<div class="mat-alert__body">Its dependency <a asp-page="/SensorDetails" asp-route-sensorId="@holding.SensorId">@holding.Name</a> is down - this sensor shows Unknown and raises no alert until it is up again.</div></div>
+}
+
 <div class="mat-actions">
     <button type="submit" form="sensor-actions" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@view.SensorId" class="mat-btn mat-btn--primary">@MatUi.Icon("refresh")<span>Run now</span></button>
     <button type="submit" form="sensor-actions" asp-page-handler="ToggleSensorPause" asp-route-window="@Model.Window" asp-route-sensorId="@view.SensorId" class="mat-btn mat-btn--secondary">@MatUi.Icon(view.IsPaused ? "play" : "pause")<span>@(view.IsPaused ? "Resume" : "Pause")</span></button>
@@ -127,6 +137,17 @@
                     {
                         <dt>Probe</dt>
                         <dd>@view.ExecutionProbe</dd>
+                    }
+                    @if (Model.Dependency is { } dependency)
+                    {
+                        <dt>Depends on</dt>
+                        <dd>
+                            <a asp-page="/SensorDetails" asp-route-sensorId="@dependency.SensorId">@dependency.Path</a>
+                            @if (dependency.IsDown)
+                            {
+                                <span class="mat-pill mat-pill--error">down</span>
+                            }
+                        </dd>
                     }
                     <dt>Settings</dt>
                     <dd>@view.SettingsSummary</dd>

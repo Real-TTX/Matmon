@@ -101,6 +101,14 @@ public sealed class NotificationDispatchService : BackgroundService
         }
 
         var now = DateTimeOffset.UtcNow;
+        // A maintenance window: the store raises no new alert, and nothing goes out for one that was already open either
+        // (a re-alarm). A recovery still does - it only goes to a rule that sent the raise.
+        if (notificationEvent.Transition == NotificationTransition.Raised && _workspaceStore.GetActiveMaintenance(notificationEvent.ElementId, now) is { } maintenance)
+        {
+            _logger.LogDebug("No notification for {Element}: maintenance window '{Window}' until {Until}", notificationEvent.ElementId, maintenance.Name, maintenance.EndsUtc);
+            return deliveries;
+        }
+
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         elementsById.TryGetValue(notificationEvent.ElementId, out var element);
         _workspaceStore.GetLatestSensorObservations().TryGetValue(notificationEvent.ElementId, out var latest);
@@ -201,6 +209,12 @@ public sealed class NotificationDispatchService : BackgroundService
         IReadOnlyDictionary<Guid, SensorObservation>? latest = null;
         foreach (var alert in open)
         {
+            // In maintenance: no escalation now - a step that falls due meanwhile goes out once the window is over.
+            if (_workspaceStore.IsInMaintenance(alert.ElementId, now))
+            {
+                continue;
+            }
+
             foreach (var rule in rules)
             {
                 var due = NotificationEscalation.DueSteps(rule, alert, now);

@@ -59,6 +59,10 @@ optional and connect outbound, so they work behind firewalls and NAT.
   per-instance limits so a flapping sensor cannot run up a bill
 - **Alert delay** (a blip never alarms) and **escalation** (unacknowledged after N minutes: notify someone
   else, up to three steps)
+- **Dependencies**: while a site's router (or a host's ping) is down, everything behind it shows *Unknown* and raises
+  no alert - one outage, one alert instead of thirty
+- **Maintenance windows** (once, daily, weekly, monthly - for an element and everything below it, or a tag): patch night
+  raises no alerts, and a problem that is still there afterwards alarms at the next check
 - Optional **cloud alert relay** as just another notification sender
 
 **Operations**

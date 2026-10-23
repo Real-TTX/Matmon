@@ -417,6 +417,13 @@ public sealed partial class WorkspaceModel
                 throw new InvalidOperationException("No element selected.");
             }
 
+            // Checked before anything is changed: the editor applies its fields one after another, and a refusal half-way
+            // would leave half of them saved.
+            if (_workspaceStore.DescribeDependencyProblem(ElementEditor.Id, ResolveEditorDependency(ElementEditor)) is { } dependencyProblem)
+            {
+                throw new InvalidOperationException(dependencyProblem);
+            }
+
             var credentialIssueCount = 0;
             string? elementName = null;
             MonitoringElementKind elementKind = default;
@@ -602,6 +609,13 @@ public sealed partial class WorkspaceModel
             RetryCountPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.RetryCount),
             AlertDelaySeconds = localSettings.AlertDelaySeconds,
             AlertDelaySecondsPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.AlertDelaySeconds),
+            DependencyMode = localSettings.DependencySensorId switch
+            {
+                null => "inherit",
+                { } none when none == MonitoringDependencies.None => "none",
+                _ => "sensor"
+            },
+            DependencySensorId = localSettings.DependencySensorId is { } dependencyId && dependencyId != MonitoringDependencies.None ? dependencyId : null,
             EventRetentionDays = localSettings.EventRetentionDays,
             EventRetentionDaysPlaceholder = FormatNullableIntPlaceholder(effectiveSettings.EventRetentionDays ?? telemetryProfile?.EventRetentionDays),
             ObservationRetentionDays = localSettings.ObservationRetentionDays,
@@ -647,6 +661,16 @@ public sealed partial class WorkspaceModel
                 : BuildProbeBootstrapSnippet(probeElement.ProbeId, probeElement.Name, probeElement.EnrollmentToken)
         };
     }
+
+    /// <summary>The editor's dependency as a setting: null = inherit, <see cref="MonitoringDependencies.None"/> = none, else the sensor.</summary>
+    private static Guid? ResolveEditorDependency(WorkspaceElementEditorInput editor) => editor.DependencyMode switch
+    {
+        "none" => MonitoringDependencies.None,
+        "sensor" => editor.DependencySensorId is { } id && id != Guid.Empty
+            ? id
+            : throw new InvalidOperationException("Choose the sensor this depends on - or set \"Depends on\" back to inherit."),
+        _ => null
+    };
 
     private int ApplyElementEditor(MonitoringElement element, WorkspaceElementEditorInput editor)
     {
@@ -728,6 +752,8 @@ public sealed partial class WorkspaceModel
             ApplySettings(element.Settings, editor.EnabledMode, editor.PollingIntervalSeconds, editor.TimeoutSeconds, editor.RetryCount, null, editor.ParametersText, editor.ThresholdsText);
             element.Settings.AlertDelaySeconds = editor.AlertDelaySeconds is int alertDelay && alertDelay >= 0 ? alertDelay : null;
         }
+
+        element.Settings.DependencySensorId = ResolveEditorDependency(editor);
 
         ApplyScheduleSettings(
             element.Settings,

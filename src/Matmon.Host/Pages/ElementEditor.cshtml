@@ -215,6 +215,19 @@ else
                                 <span class="mat-hint">Raise the alert only once the problem has lasted this long - a blip never alarms. The state shows at once; 0 = alert at once.</span>
                                 <span class="mat-error" aria-live="polite"></span>
                             </div>
+                            <div class="mat-field">
+                                <label class="mat-label" asp-for="ElementEditor.DependencyMode">Depends on</label>
+                                <select asp-for="ElementEditor.DependencyMode" class="mat-select">
+                                    <option value="inherit">@(Model.ElementEditor.DependencyInheritedLabel is { } inheritedDependency ? $"inherit ({inheritedDependency})" : "inherit (nothing)")</option>
+                                    <option value="none">nothing</option>
+                                    <option value="sensor">a sensor…</option>
+                                </select>
+                                <span class="mat-hint">While that sensor is down, a sensor here that fails shows Unknown and raises no alert - one outage, one alert. Usually a site's router ping or a host's ping.</span>
+                            </div>
+                            <div class="mat-field" data-show-if="#ElementEditor_DependencyMode" data-show-value="sensor" hidden="@(Model.ElementEditor.DependencyMode != "sensor")">
+                                <label class="mat-label" for="picker-element-dependency-trigger">Dependency</label>
+                                <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "ElementEditor.DependencySensorId", DomId = "picker-element-dependency", SelectedId = Model.ElementEditor.DependencySensorId, AllowClear = false, Placeholder = "Select a sensor…", Options = Model.DependencyPickerOptions(Model.ElementEditor.Id) })" />
+                            </div>
                         </div>
                     </div>
                 </section>

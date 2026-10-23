@@ -8,11 +8,15 @@ namespace Matmon.Core.Domain;
 /// </summary>
 public static class NotificationRuleTargeting
 {
-    public static bool Matches(NotificationRule rule, Guid elementId, IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
+    public static bool Matches(NotificationRule rule, Guid elementId, IReadOnlyDictionary<Guid, MonitoringElement> elementsById) =>
+        Covers(rule.TargetElementId, rule.TargetTag, rule.IncludeDescendants, elementId, elementsById);
+
+    /// <summary>The same rule for anything with a target (a maintenance window covers its element's subtree or a tag).</summary>
+    public static bool Covers(Guid? targetElementId, string? targetTag, bool includeDescendants, Guid elementId, IReadOnlyDictionary<Guid, MonitoringElement> elementsById)
     {
         // A tag target: the element's EFFECTIVE tags - its own plus every ancestor's, the same cascade the map
         // tiles and the tree filter use - must include it.
-        if (rule.TargetTag is { Length: > 0 } tag)
+        if (targetTag is { Length: > 0 } tag)
         {
             var lineage = new List<MonitoringElement>();
             var cursor = elementsById.GetValueOrDefault(elementId);
@@ -25,7 +29,7 @@ public static class NotificationRuleTargeting
             return MonitoringTagResolver.HasTag(MonitoringTagResolver.ResolveEffective(lineage), tag);
         }
 
-        if (rule.TargetElementId is not Guid targetId)
+        if (targetElementId is not Guid targetId)
         {
             return true; // no target = all elements
         }
@@ -35,7 +39,7 @@ public static class NotificationRuleTargeting
             return true;
         }
 
-        if (!rule.IncludeDescendants)
+        if (!includeDescendants)
         {
             return false;
         }

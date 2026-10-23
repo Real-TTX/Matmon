@@ -355,6 +355,15 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
 
     public string? AlertDelaySecondsPlaceholder { get; set; }
 
+    /// <summary>"inherit" | "none" | "sensor" - see <see cref="MonitoringSettings.DependencySensorId"/>.</summary>
+    public string DependencyMode { get; set; } = "inherit";
+
+    /// <summary>The sensor, when <see cref="DependencyMode"/> is "sensor".</summary>
+    public Guid? DependencySensorId { get; set; }
+
+    /// <summary>What "inherit" means here: the parents' dependency (shortened path), or null for none.</summary>
+    public string? DependencyInheritedLabel { get; set; }
+
     public int? EventRetentionDays { get; set; }
 
     public string? EventRetentionDaysPlaceholder { get; set; }

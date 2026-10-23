@@ -1,0 +1,196 @@
+@page "/maintenance"
+@model Matmon.Host.Pages.MaintenanceModel
+@using Matmon.Core.Domain
+@{
+    ViewData["Title"] = "Maintenance";
+    ViewData["PageSub"] = "Times in which the elements a window covers raise no new alert";
+    var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
+    var recurrence = Model.Input.Recurrence;
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.Editing)
+{
+    <form method="post" asp-page-handler="Save" asp-route-edit="@Model.Edit" class="mat-form" novalidate>
+        <input type="hidden" asp-for="Input.Id" />
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("wrench")<h2 class="mat-card__title">Maintenance window</h2><span class="mat-text-muted mm-push-end">@(Model.IsNew ? "new" : "edit")</span></div>
+            <div class="mat-card__body">
+                @if (!string.IsNullOrWhiteSpace(Model.FormError))
+                {
+                    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+                }
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Name">Name</label>
+                        <input asp-for="Input.Name" class="mat-input" required maxlength="120" placeholder="Patch night" data-msg-required="Give the window a name." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="picker-maintenance-target-trigger">Covers</label>
+                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.TargetToken", DomId = "picker-maintenance-target", SelectedValue = Model.Input.TargetToken, AllowTags = true, AllowClear = false, Placeholder = "Select an element or a tag…", Options = Model.PickerOptions })" />
+                        <span class="mat-hint">An element with everything below it (a probe, a folder, a host, one sensor) - or every element with a tag.</span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Recurrence">When</label>
+                        <select asp-for="Input.Recurrence" class="mat-select">
+                            @foreach (var (value, label) in Matmon.Host.Pages.MaintenanceModel.Recurrences)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.TimeZoneId">Time zone</label>
+                        <select asp-for="Input.TimeZoneId" asp-items="Model.TimeZoneItems" class="mat-select"></select>
+                        <span class="mat-hint">The times below are wall-clock times there - 22:00 stays 22:00 across a daylight-saving change.</span>
+                    </div>
+
+                    <div class="mat-field" data-show-if="#Input_Recurrence" data-show-value="Once" hidden="@(recurrence != MaintenanceRecurrence.Once)">
+                        <label class="mat-label" asp-for="Input.StartLocal">Starts</label>
+                        <input asp-for="Input.StartLocal" type="datetime-local" class="mat-input mat-mono" required data-msg-required="When does it start?" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Recurrence" data-show-value="Once" hidden="@(recurrence != MaintenanceRecurrence.Once)">
+                        <label class="mat-label" asp-for="Input.EndLocal">Ends</label>
+                        <input asp-for="Input.EndLocal" type="datetime-local" class="mat-input mat-mono" required data-msg-required="When does it end?" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+
+                    <fieldset class="mat-field mat-field--full mat-fieldset" data-show-if="#Input_Recurrence" data-show-value="Weekly" hidden="@(recurrence != MaintenanceRecurrence.Weekly)">
+                        <legend class="mat-legend">On</legend>
+                        <div class="mat-checks mat-checks--inline">
+                            @foreach (var day in Matmon.Host.Pages.MaintenanceModel.Week)
+                            {
+                                <label class="mat-check">
+                                    <input type="checkbox" name="Input.DaysOfWeek" value="@day" checked="@Model.Input.DaysOfWeek.Contains(day)" />
+                                    <span class="mat-check__text">@System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedDayName(day)</span>
+                                </label>
+                            }
+                        </div>
+                    </fieldset>
+                    <div class="mat-field" data-show-if="#Input_Recurrence" data-show-value="Monthly" hidden="@(recurrence != MaintenanceRecurrence.Monthly)">
+                        <label class="mat-label" asp-for="Input.DayOfMonth">Day of the month</label>
+                        <input asp-for="Input.DayOfMonth" type="number" min="1" max="31" class="mat-input mat-mono" data-msg-range="1 to 31." />
+                        <span class="mat-hint">31 = the month's last day.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Recurrence" data-show-value="Daily,Weekly,Monthly" hidden="@(recurrence == MaintenanceRecurrence.Once)">
+                        <label class="mat-label" asp-for="Input.StartTime">Starts at</label>
+                        <input asp-for="Input.StartTime" type="time" class="mat-input mat-mono" required data-msg-required="When does it start?" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Recurrence" data-show-value="Daily,Weekly,Monthly" hidden="@(recurrence == MaintenanceRecurrence.Once)">
+                        <label class="mat-label" asp-for="Input.DurationMinutes">Lasts (minutes)</label>
+                        <input asp-for="Input.DurationMinutes" type="number" min="1" max="@MaintenanceSchedule.MaxDurationMinutes" class="mat-input mat-mono" data-msg-range="One minute to seven days (10080)." />
+                        <span class="mat-hint">120 = two hours. It may run past midnight.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-label" asp-for="Input.Note">Note <span class="mat-text-muted">optional</span></label>
+                        <textarea asp-for="Input.Note" class="mat-textarea" rows="2" maxlength="500" placeholder="What happens in it, who to ask"></textarea>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="Input.Enabled" type="checkbox" /><span class="mat-switch__track"></span><span>Enabled</span></label>
+                    </div>
+                </div>
+                <p class="mat-hint">In a window the sensors keep running and show what they see - only new alerts and their notifications wait. A problem still there when it ends alarms at the next check. An alert that was already open stays open, but sends nothing (no re-alarm, no escalation) until the window is over.</p>
+            </div>
+        </section>
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
+            <a class="mat-btn mat-btn--secondary" asp-page="/Maintenance" asp-route-edit="">@MatUi.Icon("back")<span>Back</span></a>
+        </div>
+    </form>
+}
+else
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("wrench")<h2 class="mat-card__title">Maintenance windows</h2><span class="mat-text-muted mm-push-end">@Model.Rows.Count</span></div>
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="mat-card__body">
+                <div class="mat-empty">
+                    <div class="mat-empty__icon">@MatUi.Icon("wrench")</div>
+                    <div class="mat-empty__title">No maintenance window yet</div>
+                    <p>Patch Tuesday 22:00 to midnight, a move next Saturday: in a window the elements it covers raise no new alert, so nobody is woken for a server that reboots on purpose. The sensors keep running.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Maintenance windows</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Covers</th>
+                            <th scope="col">When</th>
+                            <th scope="col">State</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Rows)
+                        {
+                            var isOn = row.StateTone == "warning";
+                            <tr>
+                                <td data-label="Name" class="mat-table__primary">
+                                    @if (canManage)
+                                    {
+                                        <a asp-page="/Maintenance" asp-route-edit="@row.Window.Id">@row.Window.Name</a>
+                                    }
+                                    else
+                                    {
+                                        @row.Window.Name
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(row.Window.Note))
+                                    {
+                                        <span class="mat-text-muted">@row.Window.Note</span>
+                                    }
+                                </td>
+                                <td data-label="Covers">@row.Covers</td>
+                                <td data-label="When">@row.Schedule</td>
+                                <td data-label="State"><span class="@MatUi.PillClass(row.StateTone)">@row.StateLabel</span></td>
+                                <td class="mat-table__cell-actions">
+                                    @if (canManage)
+                                    {
+                                        <div class="mat-table__actions">
+                                            @if (isOn && row.Window.Recurrence == MaintenanceRecurrence.Once)
+                                            {
+                                                <form method="post" asp-page-handler="EndNow" asp-route-id="@row.Window.Id">
+                                                    <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm" data-confirm="End this window now? Its elements alert again from their next check." data-confirm-ok="End now">@MatUi.Icon("stop")<span>End now</span></button>
+                                                </form>
+                                            }
+                                            <form method="post" asp-page-handler="Delete" asp-route-id="@row.Window.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm mat-btn--icon" data-tip="Delete" aria-label="Delete" data-confirm="Delete this maintenance window?" data-confirm-ok="Delete">@MatUi.Icon("trash")</button>
+                                            </form>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (canManage)
+    {
+        <div class="mat-btn-row">
+            <a class="mat-btn mat-btn--primary" asp-page="/Maintenance" asp-route-edit="new">@MatUi.Icon("plus")<span>Add a maintenance window</span></a>
+        </div>
+    }
+}

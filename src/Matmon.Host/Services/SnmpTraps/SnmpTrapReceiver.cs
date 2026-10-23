@@ -266,12 +266,28 @@ public sealed class SensorWakeService
     {
         var elements = _store.GetAllElements();
         var byId = elements.ToDictionary(element => element.Id);
+        return Wake(elements.OfType<SensorElement>().Where(sensor => BelongsTo(sensor, byId, address)), "after a trap");
+    }
+
+    /// <summary>Starts a poll of these sensors (a dependency to check, dependents to look again); returns how many.</summary>
+    public int WakeSensors(IReadOnlyCollection<Guid> sensorIds)
+    {
+        if (sensorIds.Count == 0)
+        {
+            return 0;
+        }
+
+        return Wake(_store.GetAllElements().OfType<SensorElement>().Where(sensor => sensorIds.Contains(sensor.Id)), "on request");
+    }
+
+    private int Wake(IEnumerable<SensorElement> sensors, string why)
+    {
         var now = DateTimeOffset.UtcNow;
         var local = new List<Guid>();
         var count = 0;
-        foreach (var sensor in elements.OfType<SensorElement>())
+        foreach (var sensor in sensors)
         {
-            if (sensor.IsPaused || !BelongsTo(sensor, byId, address))
+            if (sensor.IsPaused)
             {
                 continue;
             }
@@ -308,7 +324,7 @@ public sealed class SensorWakeService
                     }
                     catch (Exception exception)
                     {
-                        _logger.LogDebug(exception, "Polling sensor {Sensor} after a trap failed", id);
+                        _logger.LogDebug(exception, "Polling sensor {Sensor} {Why} failed", id, why);
                     }
                 }
             });
