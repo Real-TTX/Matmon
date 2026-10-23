@@ -166,18 +166,21 @@ public sealed class JsonLinesQueue<T> where T : class
 
     private void Compact()
     {
-        _consumed = 0;
         if (_path is null)
         {
+            _consumed = 0;
             return;
         }
 
+        // The sent-lines counter is reset only once the file really was rewritten: a compaction that failed leaves the
+        // file as it was, and a counter of 0 next to it would send those lines again after a restart.
         try
         {
             if (_items.Count == 0)
             {
                 File.Delete(_path);
                 File.Delete(ConsumedPath);
+                _consumed = 0;
                 return;
             }
 
@@ -191,12 +194,33 @@ public sealed class JsonLinesQueue<T> where T : class
                 }
             }
 
-            File.Move(temporary, _path, overwrite: true);
+            MoveWithRetry(temporary, _path);
             File.Delete(ConsumedPath);
+            _consumed = 0;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             _warn?.Invoke($"Could not compact {_path}: {exception.Message}");
+            // The file is unchanged, so at least the counter beside it has to say how much of it was sent.
+            WriteConsumed();
+        }
+    }
+
+    // On Windows a virus scanner or the indexer may hold a file for a moment right after it was written: a replace that
+    // fails with a sharing violation is tried again before it counts as failed.
+    private static void MoveWithRetry(string from, string to)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(from, to, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                Thread.Sleep(50 * attempt);
+            }
         }
     }
 
