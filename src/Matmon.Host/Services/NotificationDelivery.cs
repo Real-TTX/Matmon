@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using Matmon.Core.Domain;
 using Matmon.Core.Sample;
+using Matmon.Host.Services.WebPush;
 
 namespace Matmon.Host.Services;
 
@@ -10,7 +11,8 @@ public enum NotificationTransport
 {
     Email = 0,
     Webhook = 1,
-    Cloud = 2
+    Cloud = 2,
+    Push = 3
 }
 
 /// <summary>One notification ready to go out: the channel, what to send and where. Built by
@@ -48,6 +50,11 @@ public sealed class NotificationDelivery
 
     /// <summary>"escalation 2" and the like - added to the log line.</summary>
     public string? Label { get; init; }
+
+    /// <summary>Browser notifications: the devices, and what the notification shows.</summary>
+    public IReadOnlyList<PushDevice> PushDevices { get; init; } = [];
+
+    public BrowserNotification? PushNotification { get; init; }
 
     public int Attempt { get; set; }
 
@@ -131,6 +138,11 @@ public sealed class NotificationDeliveryFactory
         if (sender is { Enabled: false })
         {
             return (null, $"the sender '{sender.Name}' is switched off");
+        }
+
+        if (sender is { Kind: NotificationEndpointKind.Push })
+        {
+            return CreateBrowserPush(route, context, workspace, label);
         }
 
         var receiver = ResolveReceiver(route, workspace);
@@ -245,6 +257,81 @@ public sealed class NotificationDeliveryFactory
         }
     }
 
+    /// <summary>Browser notifications to the registered devices of the users the receiver names: a built-in user group, or a
+    /// receiver with users' e-mail addresses (their devices, not their mailboxes).</summary>
+    private (NotificationDelivery? Delivery, string? Problem) CreateBrowserPush(
+        NotificationRoute route,
+        NotificationTemplateContext context,
+        MonitoringWorkspaceSnapshot workspace,
+        string? label)
+    {
+        IReadOnlyList<PushDevice> devices;
+        string recipientLabel;
+        if (route.ReceiverId is Guid builtIn && NotificationReceiverDefaults.Find(builtIn) is { } group)
+        {
+            devices = _store.ResolvePushDevices(builtIn, null);
+            recipientLabel = group.Name;
+        }
+        else if (route.ReceiverId is Guid receiverId
+            && workspace.NotificationReceivers.FirstOrDefault(candidate => candidate.Id == receiverId) is { Kind: NotificationEndpointKind.Email } receiver)
+        {
+            if (!receiver.Enabled)
+            {
+                return (null, $"the receiver '{receiver.Name}' is switched off");
+            }
+
+            devices = _store.ResolvePushDevices(null, receiver.Target);
+            recipientLabel = receiver.Name;
+        }
+        else
+        {
+            return (null, "browser notifications go to users' devices - pick a user group (All users, admins, operators) or a receiver with users' e-mail addresses");
+        }
+
+        if (devices.Count == 0)
+        {
+            return (null, $"nobody in '{recipientLabel}' has switched browser notifications on yet (Account > Notifications on this device)");
+        }
+
+        var content = NotificationRendering.Render(context, route.SubjectTemplate, route.TextTemplate, route.HtmlTemplate, route.ShortTemplate);
+        return (new NotificationDelivery
+        {
+            Transport = NotificationTransport.Push,
+            RuleName = route.RuleName,
+            RecipientLabel = $"{devices.Count} device{(devices.Count == 1 ? string.Empty : "s")} of {recipientLabel}",
+            Content = content,
+            PushDevices = devices,
+            PushNotification = BrowserPushContent(content, context, _store.GetActiveAlertCounts().Open),
+            Label = label,
+            NextAttemptUtc = DateTimeOffset.UtcNow
+        }, null);
+    }
+
+    /// <summary>What the notification shows: the subject as its title, the short message as its text - without the subject
+    /// repeated at its start (the default short message begins with it) - and a tap opens the sensor.</summary>
+    public static BrowserNotification BrowserPushContent(RenderedNotification content, NotificationTemplateContext context, int openAlerts)
+    {
+        var title = string.IsNullOrWhiteSpace(content.Subject) ? "Matmon" : content.Subject.Trim();
+        var body = (content.Summary ?? string.Empty).Trim();
+        if (body.StartsWith(title, StringComparison.OrdinalIgnoreCase))
+        {
+            body = body[title.Length..].TrimStart(' ', '-', ':', '·', '–').Trim();
+        }
+
+        if (body.Length == 0)
+        {
+            body = context.Values.TryGetValue("message", out var message) ? message : string.Empty;
+        }
+
+        var values = context.Values;
+        var url = values.TryGetValue("element.id", out var id) && Guid.TryParse(id, out var elementId)
+            && values.TryGetValue("element.kind", out var kind) && string.Equals(kind, nameof(MonitoringElementKind.Sensor), StringComparison.OrdinalIgnoreCase)
+                ? $"/monitoring/sensor/{elementId}"
+                : "/Alerts";
+        var tag = values.TryGetValue("alert.id", out var alertId) && alertId.Length > 0 ? "alert-" + alertId : null;
+        return new BrowserNotification(title, body, url, tag, openAlerts, NotificationSeverity.IsCritical(context));
+    }
+
     private (string Target, NotificationEndpointKind Kind, string? Problem) ResolveReceiver(NotificationRoute route, MonitoringWorkspaceSnapshot workspace)
     {
         if (route.ReceiverId is Guid receiverId)
@@ -303,11 +390,13 @@ public sealed class NotificationTransportClient
 
     private readonly INotificationEmailSender _emailSender;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IServiceProvider? _services;
 
-    public NotificationTransportClient(INotificationEmailSender emailSender, IHttpClientFactory httpClientFactory)
+    public NotificationTransportClient(INotificationEmailSender emailSender, IHttpClientFactory httpClientFactory, IServiceProvider? services = null)
     {
         _emailSender = emailSender;
         _httpClientFactory = httpClientFactory;
+        _services = services;
     }
 
     /// <exception cref="NotificationDeliveryException">It did not go out; <see cref="NotificationDeliveryException.Retryable"/>
@@ -335,7 +424,28 @@ public sealed class NotificationTransportClient
             case NotificationTransport.Cloud:
                 await SendCloudAsync(delivery, cancellationToken);
                 break;
+
+            case NotificationTransport.Push:
+                await SendBrowserPushAsync(delivery, cancellationToken);
+                break;
         }
+    }
+
+    /// <summary>To every device; it went out when ONE push service took it. A retry would send it again to the devices that
+    /// already have it, so only "nobody got it, and some only failed" is retried; devices that are gone are forgotten.</summary>
+    private async Task SendBrowserPushAsync(NotificationDelivery delivery, CancellationToken cancellationToken)
+    {
+        var notifier = _services?.GetService<BrowserPushNotifier>()
+            ?? throw new NotificationDeliveryException("browser notifications are not available here", retryable: false);
+        var result = await notifier.SendAsync(delivery.PushDevices, delivery.PushNotification!, cancellationToken);
+        if (result.Delivered > 0)
+        {
+            return;
+        }
+
+        throw result.Failed > 0
+            ? new NotificationDeliveryException($"no push service took it ({result.Failed} failed{(result.Gone > 0 ? $", {result.Gone} gone" : string.Empty)})", retryable: true)
+            : new NotificationDeliveryException("every device had switched notifications off - they were removed", retryable: false);
     }
 
     private async Task SendWebhookAsync(NotificationDelivery delivery, CancellationToken cancellationToken)

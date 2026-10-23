@@ -691,6 +691,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // would let an agent enrol against a workspace whose admin never issued it.
         document.AgentEnrollments = [];
 
+        // A browser's push subscription belongs to this instance's VAPID key pair and to the browser - it means nothing anywhere
+        // else, and a restore must not make another machine notify someone's phone.
+        document.PushDevices = [];
+
         // The receiver's settings say which ports THIS machine opens and who may write to its log. No section restores
         // them - switching a network listener on is a decision made on the machine it runs on - so they are not carried.
         document.Syslog = new();

@@ -36,7 +36,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -77,7 +77,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             store => store.MigrateGuessedWebhookSendersOffUserGroupRules()),
 
         new(9, "The primary's syslog and SNMP trap receivers become collector plugins on the main probe",
-            store => store.MigrateReceiversToPlugins())
+            store => store.MigrateReceiversToPlugins()),
+
+        new(10, "The built-in browser notification sender and its rule (to the registered devices of all users)",
+            store => store.MigrateAddBrowserPushRule())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step

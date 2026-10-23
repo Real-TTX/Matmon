@@ -37,6 +37,9 @@ public sealed class DefaultNotificationRuleTests : IDisposable
             telemetry,
             NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
 
+    private static NotificationRule DefaultRule(InMemoryMonitoringWorkspaceStore store) =>
+        store.Workspace.NotificationRules.Single(rule => rule.Name == "Default alerts");
+
     [Fact]
     public void Fresh_setup_seeds_a_default_all_users_email_rule()
     {
@@ -44,11 +47,16 @@ public sealed class DefaultNotificationRuleTests : IDisposable
         using var store = NewStore(telemetry);
 
         Assert.True(store.IsSetupRequired());
-        Assert.Empty(store.Workspace.NotificationRules);
+        Assert.DoesNotContain(store.Workspace.NotificationRules, candidate => candidate.Name == "Default alerts");
 
         store.CompleteInitialSetup("admin@example.com", "password123");
 
-        var rule = Assert.Single(store.Workspace.NotificationRules);
+        // Two rules: the e-mail default and the browser notifications to registered devices (migration 10 / setup).
+        var rule = DefaultRule(store);
+        var browser = Assert.Single(store.Workspace.NotificationRules, candidate => candidate.Name == InMemoryMonitoringWorkspaceStore.BrowserPushRuleName);
+        Assert.Equal(NotificationEndpointKind.Push, store.Workspace.NotificationSenders.Single(sender => sender.Id == browser.SenderId).Kind);
+        Assert.Equal(NotificationReceiverDefaults.AllUsersReceiverId, browser.ReceiverId);
+        Assert.Equal(2, store.Workspace.NotificationRules.Count);
         Assert.True(rule.Enabled);
         Assert.Equal(NotificationChannelKind.Email, rule.ChannelKind);
         Assert.Null(rule.SenderId); // no fixed sender -> falls back to the workspace default SMTP
@@ -67,13 +75,13 @@ public sealed class DefaultNotificationRuleTests : IDisposable
         using (var store = NewStore(telemetry))
         {
             store.CompleteInitialSetup("admin@example.com", "password123");
-            ruleId = store.Workspace.NotificationRules.Single().Id;
+            ruleId = DefaultRule(store).Id;
         } // Dispose flushes the workspace to disk
 
         using var telemetry2 = new SqliteTelemetryRepository(_dbPath);
         using var reloaded = NewStore(telemetry2);
 
-        var rule = reloaded.Workspace.NotificationRules.Single();
+        var rule = DefaultRule(reloaded);
         Assert.Equal(ruleId, rule.Id);
         // The load-time fixup must NOT clobber the built-in "All users" receiver (it isn't in the
         // receivers list) nor invent a sender - otherwise the default rule silently stops working.
@@ -100,7 +108,7 @@ public sealed class DefaultNotificationRuleTests : IDisposable
         using var telemetry2 = new SqliteTelemetryRepository(_dbPath);
         using var reloaded = NewStore(telemetry2);
 
-        Assert.Null(reloaded.Workspace.NotificationRules.Single().SenderId);
+        Assert.Null(DefaultRule(reloaded).SenderId);
     }
 
     [Fact]

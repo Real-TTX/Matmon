@@ -22,7 +22,12 @@ public enum NotificationEndpointKind
     Sms = 3,
 
     /// <summary>A RECEIVER kind: a phone number the cloud calls and reads the alert to - critical problems only.</summary>
-    Voice = 4
+    Voice = 4,
+
+    /// <summary>A SENDER kind: browser notifications (Web Push) to the devices the users switched them on in (Account page).
+    /// Built in, one per instance; the receiver names the users - a built-in user group, or a receiver with a user's
+    /// e-mail address.</summary>
+    Push = 5
 }
 
 /// <summary>Phone numbers of SMS / call receivers: international format, the same rule the cloud applies.</summary>

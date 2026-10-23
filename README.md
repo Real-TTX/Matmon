@@ -66,6 +66,8 @@ optional and connect outbound, so they work behind firewalls and NAT.
   no alert - one outage, one alert instead of thirty
 - **Maintenance windows** (once, daily, weekly, monthly - for an element and everything below it, or a tag): patch night
   raises no alerts, and a problem that is still there afterwards alarms at the next check
+- **Browser notifications** on the phone (installed app) or desktop: switch them on per device in your account - a
+  built-in rule sends warnings and errors to every registered device out of the box
 - Optional **cloud alert relay** as just another notification sender
 
 **Operations**

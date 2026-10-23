@@ -170,3 +170,41 @@ async function offlinePage(reason) {
       + "<body><h1>No connection</h1><p>The server cannot be reached right now.</p><p><a href=\"\">Try again</a></p></body></html>";
   return new Response(html, { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
+
+// ---- browser notifications (Web Push; NotificationTransport.Push sends, the Account page subscribes) -------------------
+// A message is JSON: title, body, url (opened by a tap), tag (one notification per alert - a newer one replaces it),
+// badge (open alerts: the number on the app icon, where the system shows one).
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (error) { data = { body: event.data ? event.data.text() : "" }; }
+  const badge = typeof data.badge === "number" && "setAppBadge" in self.navigator
+    ? (data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge()).catch(() => {})
+    : Promise.resolve();
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(data.title || "Matmon", {
+      body: data.body || "",
+      icon: "/brand/app-icon-192.png",
+      badge: "/brand/badge-96.png",
+      tag: data.tag || undefined,
+      renotify: !!data.tag,
+      timestamp: Date.now(),
+      data: { url: data.url || "/" }
+    }),
+    badge
+  ]));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin);
+  if (target.origin !== self.location.origin) { return; }
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+    if (open) {
+      await open.focus();
+      if ("navigate" in open) { try { await open.navigate(target.href); return; } catch (error) { /* not controlled - open one */ } }
+    }
+    await self.clients.openWindow(target.href);
+  })());
+});

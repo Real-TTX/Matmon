@@ -348,6 +348,8 @@ public sealed class NotificationDispatchService : BackgroundService
         context.SetValue("message", notificationEvent.Message);
         context.SetValue("rendered_at", now);
 
+        context.SetValue("element.id", notificationEvent.ElementId.ToString());
+        context.SetValue("alert.id", (alert?.Id ?? notificationEvent.AlertId).ToString());
         context.SetValue("element.name", element?.Name ?? alert?.ElementName);
         context.SetValue("element.path", elementPath);
         context.SetValue("element.kind", (element?.Kind ?? alert?.ElementKind)?.ToString());

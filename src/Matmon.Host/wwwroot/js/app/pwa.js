@@ -24,6 +24,107 @@ function initializePwa() {
   if (!wallboard) {
     watchConnection();
   }
+
+  initializeDevicePush();
+}
+
+// The Account page's "This device": browser notifications on or off for THIS browser. On = permission, a push subscription
+// with the instance's key, and the subscription registered for the signed-in user. The page lists the endpoints the server
+// knows for this user, so a subscription the server forgot (removed in the list, gone) shows as off and can be turned on
+// again - re-registering it by itself would undo a Remove.
+function initializeDevicePush() {
+  const card = document.querySelector("[data-push-device]");
+  if (!card) {
+    return;
+  }
+
+  const stateText = card.querySelector("[data-push-state]");
+  const enable = card.querySelector("[data-push-enable]");
+  const disable = card.querySelector("[data-push-disable]");
+  const say = (text) => { stateText.textContent = text; };
+  const known = new Set(JSON.parse(card.dataset.pushEndpoints || "[]"));
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  if (!window.isSecureContext) {
+    say("Notifications need Matmon on https (or localhost) - this page is not.");
+    return;
+  }
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    say(ios && !standalone
+      ? "On iPhone and iPad, notifications work in the installed app: Share → Add to Home Screen, then open Matmon from the Home Screen and turn them on here."
+      : "This browser cannot show notifications from a web app.");
+    return;
+  }
+
+  const post = (url, body) => fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Matmon-Request": "1" },
+    body: JSON.stringify(body)
+  });
+  const ready = () => Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("the app's service worker is not running - reload the page")), 8000))
+  ]);
+  const keyBytes = (base64Url) => {
+    const base64 = (base64Url + "=".repeat((4 - base64Url.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+    return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+  };
+
+  const show = async () => {
+    const subscription = await (await ready()).pushManager.getSubscription();
+    const on = subscription !== null && known.has(subscription.endpoint);
+    enable.hidden = on || Notification.permission === "denied";
+    disable.hidden = !subscription;
+    say(Notification.permission === "denied"
+      ? "Notifications are blocked for this site in the browser's settings - allow them there, then come back."
+      : on ? "Notifications are on for this device." : "Notifications are off for this device.");
+  };
+
+  enable.addEventListener("click", async () => {
+    enable.disabled = true;
+    try {
+      if (await Notification.requestPermission() !== "granted") {
+        say("Notifications were not allowed.");
+        return;
+      }
+
+      const { publicKey } = await (await fetch("/api/browser-push/key", { headers: { Accept: "application/json" } })).json();
+      const registration = await ready();
+      const subscription = await registration.pushManager.getSubscription()
+        || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+      const response = await post("/api/browser-push/devices", subscription.toJSON());
+      if (!response.ok) {
+        say("Matmon did not take this device: " + ((await response.json().catch(() => ({}))).error || response.status));
+        return;
+      }
+
+      location.reload();
+    } catch (error) {
+      say("Notifications could not be turned on: " + error.message);
+    } finally {
+      enable.disabled = false;
+    }
+  });
+
+  disable.addEventListener("click", async () => {
+    disable.disabled = true;
+    try {
+      const subscription = await (await ready()).pushManager.getSubscription();
+      if (subscription) {
+        await post("/api/browser-push/devices/remove", { endpoint: subscription.endpoint });
+        await subscription.unsubscribe();
+      }
+
+      location.reload();
+    } catch (error) {
+      say("Notifications could not be turned off: " + error.message);
+      disable.disabled = false;
+    }
+  });
+
+  show().catch((error) => say("Notifications are not available: " + error.message));
 }
 
 function registerMatmonServiceWorker() {

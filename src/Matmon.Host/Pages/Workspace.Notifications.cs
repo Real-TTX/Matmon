@@ -246,6 +246,12 @@ public sealed partial class WorkspaceModel
             var sender = _workspaceStore.FindNotificationSender(NotificationSenderEditor.Id)
                 ?? throw new InvalidOperationException("Notification sender not found.");
 
+            // Built in, one per instance (it would come back at the next start) - switching it off is the way.
+            if (sender.Kind == NotificationEndpointKind.Push)
+            {
+                throw new InvalidOperationException("The built-in browser notification sender cannot be deleted - switch it off instead.");
+            }
+
             // A sender in use can't be deleted - tell the user which rules to repoint first (the store just
             // returns false otherwise, which reads as a mysterious "can't delete").
             var referencingRules = _workspaceStore.Workspace.NotificationRules.Count(rule => rule.SenderId == sender.Id);
@@ -794,7 +800,7 @@ public sealed partial class WorkspaceModel
                 BuildNotificationTriggerSummary(rule.TriggerStates),
                 BuildNotificationCooldownSummary(rule.CooldownMinutes, rule.Threshold)
                     + (rule.Escalations.Count == 0 ? string.Empty : $" · escalates after {string.Join(", ", rule.Escalations.Select(step => FormatEscalationMinutes(step.AfterMinutes)))}"),
-                rule.ChannelKind.ToString()))
+                RuleChannelLabel(snapshot.NotificationSenders, rule)))
             .ToArray();
     }
 
@@ -876,9 +882,21 @@ public sealed partial class WorkspaceModel
         {
             NotificationEndpointKind.Webhook => $"{sender.Name} · webhook",
             NotificationEndpointKind.Cloud => $"{sender.Name} · cloud",
+            NotificationEndpointKind.Push => $"{sender.Name} · browser",
             _ => $"{sender.Name} · email"
         };
     }
+
+    /// <summary>The channel a rule really uses - its SENDER decides (the legacy ChannelKind on the rule gates nothing and said
+    /// "Email" for a browser or webhook rule): no sender = the default SMTP.</summary>
+    private static string RuleChannelLabel(IReadOnlyList<NotificationSender> senders, NotificationRule rule) =>
+        (rule.SenderId is Guid senderId ? senders.FirstOrDefault(sender => sender.Id == senderId)?.Kind : null) switch
+        {
+            NotificationEndpointKind.Push => "Browser",
+            NotificationEndpointKind.Webhook => "Webhook",
+            NotificationEndpointKind.Cloud => "Cloud",
+            _ => "Email"
+        };
 
     private static string BuildNotificationReceiverSummary(
         IReadOnlyList<NotificationReceiver> receivers,
@@ -886,6 +904,12 @@ public sealed partial class WorkspaceModel
         NotificationChannelKind legacyKind,
         string legacyRecipient)
     {
+        // A built-in user group is no entry of the receivers list - it used to read "email · unset".
+        if (receiverId is Guid groupId && NotificationReceiverDefaults.Find(groupId) is { } group)
+        {
+            return group.Name;
+        }
+
         var receiver = receiverId is Guid id
             ? receivers.FirstOrDefault(candidate => candidate.Id == id)
             : null;

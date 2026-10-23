@@ -20,6 +20,72 @@
     <div class="mat-tabs" role="tablist" aria-label="Account">
         <button type="button" class="mat-tab" role="tab" id="tab-general" aria-controls="panel-general" aria-selected="@(security ? "false" : "true")" tabindex="@(security ? "-1" : null)">General</button>
         <button type="button" class="mat-tab" role="tab" id="tab-security" aria-controls="panel-security" aria-selected="@(security ? "true" : "false")" tabindex="@(security ? null : "-1")">Security</button>
+        <button type="button" class="mat-tab" role="tab" id="tab-notifications" aria-controls="panel-notifications" aria-selected="false" tabindex="-1">Notifications</button>
+    </div>
+
+    @* ---------------- Notifications: browser notifications on this device, and the user's devices ---------------- *@
+    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-notifications" aria-labelledby="tab-notifications" hidden>
+        <section class="mat-card" data-push-device data-push-endpoints="@System.Text.Json.JsonSerializer.Serialize(Model.Devices.Select(device => device.Endpoint))">
+            <div class="mat-card__head">@MatUi.Icon("bell")<h2 class="mat-card__title">This device</h2></div>
+            <div class="mat-card__body mat-stack">
+                <p role="status" aria-live="polite" data-push-state>Checking whether this browser can show notifications…</p>
+                <div class="mat-btn-row">
+                    <button type="button" class="mat-btn mat-btn--primary" data-push-enable hidden>@MatUi.Icon("bell")<span>Turn on notifications here</span></button>
+                    <button type="button" class="mat-btn mat-btn--secondary" data-push-disable hidden>@MatUi.Icon("x")<span>Turn them off here</span></button>
+                </div>
+                <p class="mat-hint">What arrives is what the notification rules with the <strong>Browser notifications</strong> sender say - out of the box warnings and errors of every sensor (the rule "Browser notifications" on the Notifications page). On iPhone and iPad they work in the installed app: Share → Add to Home Screen, then open Matmon from there and turn them on here.</p>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("smartphone")<h2 class="mat-card__title">My devices</h2><span class="mat-text-muted mm-push-end">@Model.Devices.Count</span></div>
+            @if (Model.Devices.Count == 0)
+            {
+                <div class="mat-card__body">
+                    <div class="mat-empty">
+                        <div class="mat-empty__icon">@MatUi.Icon("smartphone")</div>
+                        <div class="mat-empty__title">No device yet</div>
+                        <p>Turn notifications on above, in every browser or installed app that should get them.</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="mat-table-wrap">
+                    <table class="mat-table">
+                        <caption class="mat-sr-only">Devices with notifications on</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Device</th>
+                                <th scope="col">Turned on</th>
+                                <th scope="col">Last notification</th>
+                                <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var device in Model.Devices)
+                            {
+                                <tr>
+                                    <td data-label="Device" class="mat-table__primary">@device.Name</td>
+                                    <td data-label="Turned on">@device.CreatedUtc.ToDisplay().ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td data-label="Last notification">@(device.LastUsedUtc is { } used ? used.ToDisplay().ToString("yyyy-MM-dd HH:mm") : "-")</td>
+                                    <td class="mat-table__cell-actions">
+                                        <div class="mat-table__actions">
+                                            <form method="post" asp-page-handler="TestDevice" asp-route-id="@device.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm">@MatUi.Icon("bell")<span>Send a test</span></button>
+                                            </form>
+                                            <form method="post" asp-page-handler="RemoveDevice" asp-route-id="@device.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm mat-btn--icon" data-tip="Remove" aria-label="Remove @device.Name" data-confirm="Remove this device? It gets no more notifications." data-confirm-ok="Remove">@MatUi.Icon("trash")</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
     </div>
 
     @* ---------------- General ---------------- *@

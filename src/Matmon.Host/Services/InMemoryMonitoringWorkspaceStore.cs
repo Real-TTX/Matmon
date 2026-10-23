@@ -118,6 +118,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureDefaultMaps(_runtimeOptions.CreateStarterMap);
         EnsureDefaultAlertCollection();
         EnsurePushTokens();
+        EnsureBrowserPushSender();
         SaveNow();
     }
 
@@ -511,6 +512,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             }
 
             _document.Users.Remove(user);
+            _document.PushDevices?.RemoveAll(device => device.UserId == userId); // their devices go with them
             QueueSave(SavePriority.Configuration);
             return true;
         }
@@ -2986,8 +2988,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private void SeedDefaultNotificationRuleLocked()
     {
         _document.NotificationRules ??= [];
-        if (_document.NotificationRules.Count > 0)
+        // The browser notification rule (migration 10 adds it to a fresh document before setup) does not count: it must not
+        // keep the e-mail default from being seeded.
+        var browserSender = EnsureBrowserPushSenderLocked();
+        if (_document.NotificationRules.Any(rule => rule.SenderId != browserSender.Id))
         {
+            EnsureBrowserPushRuleLocked();
             return;
         }
 
@@ -3004,6 +3010,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             CooldownMinutes = 15,
             Threshold = 5
         });
+        EnsureBrowserPushRuleLocked();
     }
 
     private void EnsureDefaultUsers()
@@ -4668,6 +4675,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>Maintenance windows - alerting configuration, carried with the Notifications backup section.</summary>
         public List<MaintenanceWindow> MaintenanceWindows { get; set; } = [];
+
+        /// <summary>The browsers users switched notifications on in (Web Push subscriptions). Instance-bound: never in a backup.</summary>
+        public List<PushDevice> PushDevices { get; set; } = [];
 
         /// <summary>Pending agent enrolment codes (hashed). Instance-bound and short-lived: never in a backup.</summary>
         public List<AgentEnrollment> AgentEnrollments { get; set; } = [];

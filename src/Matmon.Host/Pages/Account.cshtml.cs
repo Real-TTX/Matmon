@@ -53,7 +53,33 @@ public class AccountModel : PageModel
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    /// <summary>This user's browsers with notifications on (the Notifications tab).</summary>
+    public IReadOnlyList<PushDevice> Devices { get; private set; } = [];
+
     public void OnGet() => LoadAll();
+
+    /// <summary>Forgets one of the user's devices (a lost phone, an old laptop) - that browser gets nothing more.</summary>
+    public IActionResult OnPostRemoveDevice(Guid id)
+    {
+        StatusMessage = _workspaceStore.RemovePushDevice(id, UserId) ? "Device removed - it gets no more notifications." : null;
+        return RedirectToPage(null, null, null, "notifications");
+    }
+
+    /// <summary>One test notification to one of the user's devices - the way to know it arrives before an alert depends on it.</summary>
+    public async Task<IActionResult> OnPostTestDeviceAsync(Guid id, [FromServices] Matmon.Host.Services.WebPush.BrowserPushNotifier notifier, CancellationToken cancellationToken)
+    {
+        var device = _workspaceStore.GetPushDevices(UserId).FirstOrDefault(candidate => candidate.Id == id);
+        if (device is not null)
+        {
+            var result = await notifier.SendAsync([device], new Matmon.Host.Services.WebPush.BrowserNotification(
+                "Matmon: test notification", "Notifications reach this device.", "/account#notifications", "matmon-test"), cancellationToken);
+            StatusMessage = result.Delivered > 0 ? $"Test sent to {device.Name} - it shows up in a moment."
+                : result.Gone > 0 ? $"{device.Name} had switched notifications off - it was removed."
+                : "The push service did not take it - try again in a while.";
+        }
+
+        return RedirectToPage(null, null, null, "notifications");
+    }
 
     private void LoadAll()
     {
@@ -62,6 +88,7 @@ public class AccountModel : PageModel
         var user = _workspaceStore.FindUser(UserId);
         TwoFactorEnabled = user?.TwoFactorEnabled ?? false;
         TwoFactorSince = user?.TotpEnrolledUtc;
+        Devices = _workspaceStore.GetPushDevices(UserId);
     }
 
     private void LoadTimeZone()

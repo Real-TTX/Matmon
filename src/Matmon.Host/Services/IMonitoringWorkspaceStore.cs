@@ -170,6 +170,26 @@ public interface IMonitoringWorkspaceStore
     /// null when it can (or when it is "inherit" / "none").</summary>
     string? DescribeDependencyProblem(Guid elementId, Guid? dependencySetting);
 
+    /// <summary>A user's browsers with notifications switched on (newest first).</summary>
+    IReadOnlyList<PushDevice> GetPushDevices(Guid userId);
+
+    int CountPushDevices();
+
+    /// <summary>Adds (or takes over, by its push address) a browser's subscription for a user; throws with the reason when the
+    /// subscription is not usable. At most <c>MaxPushDevicesPerUser</c> per user - the oldest go.</summary>
+    PushDevice RegisterPushDevice(Guid userId, string endpoint, string p256dh, string auth, string? name);
+
+    /// <summary>Forgets a device - only the user's own when <paramref name="userId"/> is given.</summary>
+    bool RemovePushDevice(Guid deviceId, Guid? userId);
+
+    PushDevice? FindPushDevice(Guid deviceId);
+
+    void MarkPushDeviceUsed(Guid deviceId, DateTimeOffset when);
+
+    /// <summary>The devices a browser-notification rule reaches: a built-in user group's members', or those of the users with
+    /// the given e-mail addresses.</summary>
+    IReadOnlyList<PushDevice> ResolvePushDevices(Guid? builtInReceiverId, string? emailTargets);
+
     /// <summary>The push sensor a token belongs to (constant-time compare), or null.</summary>
     PushSensorTarget? FindPushSensor(string token);
 

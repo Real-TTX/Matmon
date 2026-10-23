@@ -140,6 +140,13 @@ builder.Services.AddSingleton<INotificationEmailSender, MailKitEmailSender>();
 builder.Services.AddSingleton<NotificationDeliveryFactory>();
 builder.Services.AddSingleton<NotificationTransportClient>();
 builder.Services.AddHttpClient(NotificationTransportClient.HttpClientName);
+// Browser notifications (Web Push): the instance's VAPID key pair beside the workspace, a client that only ever connects
+// to a public address (the endpoint comes from a browser), and the notifier the transport uses.
+builder.Services.AddSingleton(provider => new Matmon.Host.Services.WebPush.WebPushKeys(
+    provider.GetRequiredService<IDataProtectionProvider>(), Path.Combine(workspaceDirectory, "push-keys.json")));
+builder.Services.AddHttpClient<Matmon.Host.Services.WebPush.WebPushClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { ConnectCallback = Matmon.Host.Services.WebPush.WebPushClient.ConnectToPublicAddressAsync });
+builder.Services.AddTransient<Matmon.Host.Services.WebPush.BrowserPushNotifier>();
 builder.Services.AddSingleton<SummaryReportDataCollector>();
 builder.Services.AddSingleton<AuditReportPdfBuilder>();
 builder.Services.AddSingleton<SummaryReportSender>();
@@ -662,6 +669,39 @@ if (runtimeOptions.Mode == AppMode.Primary)
             job.Oids,
             job.Error));
     });
+
+    // Browser notifications: the key a browser subscribes with, and the signed-in user's own devices. JSON with a custom
+    // header (a cross-site page cannot send that without a preflight this server never answers), on top of the cookie.
+    app.MapGet("/api/browser-push/key", (Matmon.Host.Services.WebPush.WebPushKeys keys) => Results.Ok(new { publicKey = keys.PublicKey }))
+        .RequireAuthorization();
+    app.MapPost("/api/browser-push/devices", (Matmon.Host.Services.WebPush.BrowserPushSubscription body, HttpContext http, IMonitoringWorkspaceStore workspaceStore) =>
+    {
+        if (!http.Request.Headers.ContainsKey("X-Matmon-Request") || !MatmonSecurity.TryGetCurrentUserId(http.User, out var userId))
+        {
+            return Results.BadRequest(new { error = "not_allowed" });
+        }
+
+        try
+        {
+            var device = workspaceStore.RegisterPushDevice(userId, body.Endpoint ?? string.Empty, body.Keys?.P256dh ?? string.Empty, body.Keys?.Auth ?? string.Empty,
+                PushDeviceNames.FromUserAgent(http.Request.Headers.UserAgent.ToString()));
+            return Results.Ok(new { id = device.Id, name = device.Name });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.BadRequest(new { error = exception.Message });
+        }
+    }).RequireAuthorization();
+    app.MapPost("/api/browser-push/devices/remove", (Matmon.Host.Services.WebPush.BrowserPushSubscription body, HttpContext http, IMonitoringWorkspaceStore workspaceStore) =>
+    {
+        if (!http.Request.Headers.ContainsKey("X-Matmon-Request") || !MatmonSecurity.TryGetCurrentUserId(http.User, out var userId))
+        {
+            return Results.BadRequest(new { error = "not_allowed" });
+        }
+
+        var device = workspaceStore.GetPushDevices(userId).FirstOrDefault(candidate => string.Equals(candidate.Endpoint, body.Endpoint, StringComparison.Ordinal));
+        return Results.Ok(new { removed = device is not null && workspaceStore.RemovePushDevice(device.Id, userId) });
+    }).RequireAuthorization();
 
     // A push sensor's address: a backup script or cron job reports in (GET or POST, optional status / value / message
     // in the query, a form or JSON). The token is the only credential - anonymous by design, so a script needs no
