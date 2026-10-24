@@ -5,9 +5,8 @@
     ViewData["Width"] = "narrow";
     ViewData["Breadcrumbs"] = new[]
     {
-        new BreadcrumbItem("Monitoring", "/Index"),
         new BreadcrumbItem("Notifications", "/Notifications"),
-        new BreadcrumbItem("Receivers", "/NotificationReceivers"),
+        new BreadcrumbItem("Receivers", "/Notifications#receivers"),
         new BreadcrumbItem("Notification receiver")
     };
     var isCreateMode = Model.SelectedNotificationReceiverId is null || Model.NotificationReceiverEditor.Id == Guid.Empty;

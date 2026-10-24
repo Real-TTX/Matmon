@@ -1,0 +1,14 @@
+@model string
+@* The tab strip of the Probes section: the probes themselves (where the sensors run - the local primary, Docker probes,
+   agents) and the Agents page (install codes and the agent downloads). An agent IS a probe, so the two are one section
+   with one menu item; the tabs are LINKS (each is its own page), like System's. Model = the active tab's name. *@
+@{
+    var active = Model ?? "probes";
+    string Css(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase) ? "mat-tab is-active" : "mat-tab";
+    string? Current(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase) ? "page" : null;
+}
+
+<nav class="mat-tabs" aria-label="Probe sections">
+    <a class="@Css("probes")" aria-current="@Current("probes")" asp-page="/Probes">Probes</a>
+    <a class="@Css("agents")" aria-current="@Current("agents")" asp-page="/Agents">Agents</a>
+</nav>

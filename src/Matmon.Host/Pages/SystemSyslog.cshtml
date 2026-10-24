@@ -6,7 +6,7 @@
     // Syslog is a tab of System (it comes with the syslog collector plugin): the same h1 as the Config page, the tab strip
     // says where in System this is.
     ViewData["Title"] = "System";
-    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Syslog") };
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Syslog") };
     var storage = Model.Storage;
     var head = Model.Head;
     var newest = storage.NewestUtc;

@@ -5,7 +5,7 @@
     var view = Model.View;
     ViewData["Title"] = $"{view.Name} usage";
     ViewData["OwnHead"] = true;
-    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("Probes", "/Probes"), new BreadcrumbItem($"{view.Name} usage") };
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Probes", "/Probes"), new BreadcrumbItem($"{view.Name} usage") };
     var isGroupedView = string.Equals(view.ViewMode, "grouped", StringComparison.OrdinalIgnoreCase);
     var request = HttpContext.Request;
     var usageActive = !string.Equals(view.UsageFilter, "all", StringComparison.OrdinalIgnoreCase);

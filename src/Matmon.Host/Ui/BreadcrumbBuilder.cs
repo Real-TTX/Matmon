@@ -1,5 +1,11 @@
 namespace Matmon.Host.Ui;
 
+/// <summary>
+/// The breadcrumb trail of a page. It starts at the MENU ITEM the page belongs to (Sensors, Probes, Notifications,
+/// System …) - the name the user just clicked - and ends at the page. It used to start with "Monitoring", a name no menu
+/// item carries, and put pages under sections they are not in (Probes under Sensors, new hosts under an "Infrastructure"
+/// page the menu does not have). A top-level page is a trail of one. A page can pass its own trail (ViewData).
+/// </summary>
 public static class BreadcrumbBuilder
 {
     public static IReadOnlyList<BreadcrumbItem> Build(string path, string? title, IEnumerable<BreadcrumbItem>? overrideTrail = null)
@@ -10,134 +16,55 @@ public static class BreadcrumbBuilder
             return customTrail;
         }
 
-        var normalizedPath = NormalizePath(path);
-        if (normalizedPath is "/" or "/login" or "/access-denied")
+        var normalizedPath = NormalizePath(path).ToLowerInvariant();
+        if (normalizedPath is "/" or "/index" or "/login" or "/access-denied")
         {
             return [];
         }
 
-        var items = new List<BreadcrumbItem>
+        // Sections whose sub-pages share a prefix: the section, then the page.
+        if (normalizedPath.StartsWith("/monitoring/sensor/", StringComparison.Ordinal) && normalizedPath != "/monitoring/sensor/new" && normalizedPath != "/monitoring/sensor/assistant")
         {
-            new("Monitoring", "/Index")
+            return [new("Sensors", "/Monitoring"), new(GetLeafTitle(title, "Sensor"))];
+        }
+
+        if (normalizedPath.StartsWith("/monitoring/probe/", StringComparison.Ordinal))
+        {
+            return [new("Probes", "/Probes"), new(GetLeafTitle(title, "Probe"))];
+        }
+
+        return normalizedPath switch
+        {
+            "/monitoring" => [new("Sensors")],
+            "/monitoring/sensor/new" => [new("Sensors", "/Monitoring"), new("New sensor")],
+            "/monitoring/sensor/assistant" => [new("Sensors", "/Monitoring"), new(GetLeafTitle(title, "Sensor assistant"))],
+            "/monitoring/folder/new" => [new("Sensors", "/Monitoring"), new("New folder")],
+            "/monitoring/host/new" => [new("Sensors", "/Monitoring"), new("New host")],
+            "/monitoring/element" => [new("Sensors", "/Monitoring"), new(GetLeafTitle(title, "Edit"))],
+            "/paused" => [new("Alerts", "/Alerts"), new("Paused sensors")],
+            "/maps/edit" => [new("Maps", "/Maps"), new(GetLeafTitle(title, "Map"))],
+
+            "/probes" => [new("Probes")],
+            "/agents" => [new("Probes", "/Probes"), new("Agents")],
+            "/system/probes/new" => [new("Probes", "/Probes"), new("New probe")],
+            "/system/probes/install" => [new("Probes", "/Probes"), new("Install")],
+
+            "/monitoring/template" => [new("Templates", "/Templates"), new(GetLeafTitle(title, "Template"))],
+
+            // One page with three tabs (rules, senders, receivers): the trail ends at the page, not at one tab.
+            "/notifications" => [new("Notifications")],
+            "/notifications/rule" => [new("Notifications", "/Notifications"), new(GetLeafTitle(title, "Rule"))],
+
+            "/config" => [new("System")],
+            "/logs" => [new("System", "/Config"), new("Logs")],
+            "/system/mibs" => [new("System", "/Config"), new("SNMP MIBs")],
+            "/system/users/new" => [new("System", "/Config"), new("Users", "/Config?tab=users"), new("New user")],
+            "/system/users/edit" => [new("System", "/Config"), new("Users", "/Config?tab=users"), new("Edit user")],
+            "/backupjobeditor" => [new("System", "/Config"), new("Backup", "/Config?tab=backup"), new("Backup job")],
+            "/backuprestore" => [new("System", "/Config"), new("Backup", "/Config?tab=backup"), new("Restore assistant")],
+
+            _ => [new(GetLeafTitle(title, "Page"))]
         };
-
-        if (normalizedPath.StartsWith("/monitoring/sensor/", StringComparison.OrdinalIgnoreCase))
-        {
-            items.Add(new("Sensors", "/Monitoring"));
-            items.Add(new(GetLeafTitle(title, "Sensor")));
-            return items;
-        }
-
-        switch (normalizedPath.ToLowerInvariant())
-        {
-            case "/monitoring":
-                items.Add(new("Sensors"));
-                break;
-            case "/probes":
-                items.Add(new("Sensors", "/Monitoring"));
-                items.Add(new("Probes"));
-                break;
-            case "/discovery":
-                items.Add(new("Discovery"));
-                break;
-            case "/workspace":
-                items.Add(new("Infrastructure"));
-                break;
-            case "/templates":
-                items.Add(new("Templates"));
-                break;
-            case "/maps":
-                items.Add(new("Maps"));
-                break;
-            case "/maps/edit":
-                items.Add(new("Maps", "/Maps"));
-                items.Add(new(GetLeafTitle(title, "Map")));
-                break;
-            case "/notifications":
-                // One page with three tabs (rules, senders, receivers): the trail ends at the page, not at one tab.
-                items.Add(new("Notifications"));
-                break;
-            case "/notifications/settings":
-                items.Add(new("Notifications", "/Notifications"));
-                items.Add(new("Settings"));
-                break;
-            case "/notifications/rule":
-                items.Add(new("Notifications", "/Notifications"));
-                items.Add(new("Rules", "/Notifications"));
-                items.Add(new(GetLeafTitle(title, "Rule")));
-                break;
-            case "/events":
-                items.Add(new("Events"));
-                break;
-            case "/alerts":
-                items.Add(new("Alerts"));
-                break;
-            case "/paused":
-                items.Add(new("Paused"));
-                break;
-            case "/config":
-                items.Add(new("System"));
-                break;
-            case "/system/mibs":
-                items.Add(new("System", "/Config"));
-                items.Add(new("SNMP MIBs"));
-                break;
-            case "/monitoring/sensor/new":
-                items.Add(new("Sensors", "/Monitoring"));
-                items.Add(new("New sensor"));
-                break;
-            case "/system/probes/new":
-                items.Add(new("System", "/Config"));
-                items.Add(new("Probes", "/Config"));
-                items.Add(new("New probe"));
-                break;
-            case "/system/probes/install":
-                items.Add(new("System", "/Config"));
-                items.Add(new("Probes", "/Config?tab=probes"));
-                items.Add(new("Install"));
-                break;
-            case "/system/users/new":
-                items.Add(new("System", "/Config"));
-                items.Add(new("Users", "/Config?tab=users"));
-                items.Add(new("New user"));
-                break;
-            case "/system/users/edit":
-                items.Add(new("System", "/Config"));
-                items.Add(new("Users", "/Config?tab=users"));
-                items.Add(new("Edit user"));
-                break;
-            case "/backupjobeditor":
-                items.Add(new("System", "/Config"));
-                items.Add(new("Backup", "/Config?tab=backup"));
-                items.Add(new("Backup job"));
-                break;
-            case "/backuprestore":
-                items.Add(new("System", "/Config"));
-                items.Add(new("Backup", "/Config?tab=backup"));
-                items.Add(new("Restore assistant"));
-                break;
-            case "/monitoring/folder/new":
-                items.Add(new("Infrastructure", "/Workspace"));
-                items.Add(new("New folder"));
-                break;
-            case "/monitoring/host/new":
-                items.Add(new("Infrastructure", "/Workspace"));
-                items.Add(new("New host"));
-                break;
-            case "/monitoring/element":
-                items.Add(new("Infrastructure", "/Workspace"));
-                items.Add(new(GetLeafTitle(title, "Edit")));
-                break;
-            case "/monitoring/template":
-                items.Add(new("Templates", "/Templates"));
-                items.Add(new(GetLeafTitle(title, "Template")));
-                break;
-            default:
-                items.Add(new(GetLeafTitle(title, "Page")));
-                break;
-        }
-
-        return items;
     }
 
     private static string NormalizePath(string path)

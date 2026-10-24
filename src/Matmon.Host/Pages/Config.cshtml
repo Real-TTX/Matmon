@@ -33,6 +33,23 @@
 
 @if (Model.IsActiveTab("general"))
 {
+    @* A secondary (Docker probe) node shows how its exchange with the primary goes - it has no Probes page of its own. *@
+    @if (string.Equals(Model.Overview.Mode, "Secondary", StringComparison.OrdinalIgnoreCase))
+    {
+        var slave = Model.Overview.SlaveRuntime;
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Secondary exchange</h2><span class="mat-text-muted mm-push-end">@slave.StatusMessage</span></div>
+            <div class="mat-card__body">
+                <dl class="mat-kv">
+                    <dt>Connected</dt><dd><span class="@MatUi.PillClass(slave.IsConnected ? "ok" : "error")">@(slave.IsConnected ? "Connected" : "Not connected")</span></dd>
+                    <dt>Last heartbeat</dt><dd class="mat-mono">@Model.FormatDateTime(slave.LastHeartbeatUtc)</dd>
+                    <dt>Assignments</dt><dd class="mat-mono">@slave.AssignedSensorCount</dd>
+                    <dt>Last results</dt><dd class="mat-mono">@slave.LastExecutedSensorCount</dd>
+                </dl>
+            </div>
+        </section>
+    }
+
     <div class="mat-grid mat-grid--2">
         <section class="mat-card">
             <div class="mat-card__head">
@@ -132,119 +149,6 @@
             </section>
         }
     </div>
-}
-else if (Model.IsActiveTab("probes"))
-{
-    <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("server")<h2 class="mat-card__title">Probe status</h2><span class="mat-text-muted mm-push-end">@Model.Overview.Probes.Count configured</span></div>
-        <div class="mat-table-wrap">
-            <table class="mat-table">
-                <caption class="mat-sr-only">Configured probes</caption>
-                <thead>
-                    <tr>
-                        <th scope="col">Probe</th>
-                        <th scope="col">Role</th>
-                        <th scope="col">Status</th>
-                        <th scope="col" class="mat-hide-sm">Last seen</th>
-                        <th scope="col" class="mat-num">Sensors</th>
-                        <th scope="col" class="mat-hide-sm">Token</th>
-                        @if (canManageSystem)
-                        {
-                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var probe in Model.Overview.Probes)
-                    {
-                        var state = probe.State.Equals("Offline", StringComparison.OrdinalIgnoreCase)
-                            ? "error"
-                            : probe.State.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ? "warning" : "ok";
-                        var hasOs = !string.IsNullOrWhiteSpace(probe.OperatingSystem) && probe.OperatingSystem != "-";
-                        <tr>
-                            <td data-label="Probe" class="mat-table__primary">
-                                <div class="mat-table__name">
-                                    <span>
-                                        @if (canManageSystem)
-                                        {
-                                            <a asp-page="/ElementEditor" asp-route-selectedId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes">@probe.Name</a>
-                                        }
-                                        else
-                                        {
-                                            @probe.Name
-                                        }
-                                        <small class="mat-mono">@probe.ProbeId</small>
-                                        @if (hasOs)
-                                        {
-                                            <small>@probe.OperatingSystem@(string.IsNullOrWhiteSpace(probe.Host) || probe.Host == "-" ? string.Empty : $" · {probe.Host}")</small>
-                                        }
-                                    </span>
-                                </div>
-                                @if (probe.Networks is { Count: > 0 })
-                                {
-                                    <span class="mat-chips">
-                                        @foreach (var net in probe.Networks)
-                                        {
-                                            <span class="mat-tag mat-mono">@net</span>
-                                        }
-                                    </span>
-                                }
-                            </td>
-                            <td data-label="Role">@probe.Role</td>
-                            <td data-label="Status">
-                                <span class="@MatUi.PillClass(state)">@probe.State</span>
-                                @if (!string.IsNullOrWhiteSpace(probe.Message))
-                                {
-                                    <small class="mat-d-block mat-text-muted">@probe.Message</small>
-                                }
-                            </td>
-                            <td data-label="Last seen" class="mat-hide-sm mat-mono">@Model.FormatDateTime(probe.LastSeenUtc)</td>
-                            <td data-label="Sensors" class="mat-num mat-mono">@probe.SensorCount</td>
-                            <td data-label="Token" class="mat-hide-sm mat-mono mm-break">@(probe.EnrollmentToken ?? "-")</td>
-                            @if (canManageSystem)
-                            {
-                                <td class="mat-table__cell-actions">
-                                    <div class="mat-table__actions">
-                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ElementEditor" asp-route-selectedId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes" aria-label="Edit @probe.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
-                                        @if (Model.CanInstallProbe(probe))
-                                        {
-                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Config?tab=probes" aria-label="Install @probe.Name" data-tip="Install">@MatUi.Icon("download")</a>
-                                        }
-                                        <form method="post" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId">
-                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Rotate the token of @probe.Name" data-tip="Rotate token">@MatUi.Icon("refresh")</button>
-                                        </form>
-                                    </div>
-                                </td>
-                            }
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </section>
-
-    @if (canManageSystem)
-    {
-        <div class="mat-actions">
-            <a class="mat-btn mat-btn--primary" asp-page="/ProbeCreate" asp-route-returnUrl="/Config?tab=probes">@MatUi.Icon("plus")<span>New probe</span></a>
-        </div>
-    }
-
-    @if (string.Equals(Model.Overview.Mode, "Secondary", StringComparison.OrdinalIgnoreCase))
-    {
-        var slave = Model.Overview.SlaveRuntime;
-        <section class="mat-card">
-            <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Secondary exchange</h2><span class="mat-text-muted mm-push-end">@slave.StatusMessage</span></div>
-            <div class="mat-card__body">
-                <dl class="mat-kv">
-                    <dt>Connected</dt><dd><span class="@MatUi.PillClass(slave.IsConnected ? "ok" : "error")">@(slave.IsConnected ? "Connected" : "Not connected")</span></dd>
-                    <dt>Last heartbeat</dt><dd class="mat-mono">@Model.FormatDateTime(slave.LastHeartbeatUtc)</dd>
-                    <dt>Assignments</dt><dd class="mat-mono">@slave.AssignedSensorCount</dd>
-                    <dt>Last results</dt><dd class="mat-mono">@slave.LastExecutedSensorCount</dd>
-                </dl>
-            </div>
-        </section>
-    }
 }
 else if (Model.IsActiveTab("storage"))
 {

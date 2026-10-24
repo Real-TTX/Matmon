@@ -29,7 +29,7 @@
     }
     else
     {
-        ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("Discovery", "/Discovery"), new BreadcrumbItem(Model.Mode == "scan" ? "Start a discovery" : "Job") };
+        ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Discovery", "/Discovery"), new BreadcrumbItem(Model.Mode == "scan" ? "Start a discovery" : "Job") };
         if (Model.Mode == "job" && selectedJob is not null)
         {
             ViewData["PageSub"] = $"{selectedJob.Request.Network} on {selectedJob.ProbeName}";

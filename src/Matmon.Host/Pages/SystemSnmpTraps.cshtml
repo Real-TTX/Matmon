@@ -5,7 +5,7 @@
     // SNMP traps is a tab of System (it comes with the SNMP trap collector plugin), like Syslog: the same h1 as the Config
     // page, the tab strip says where in System this is.
     ViewData["Title"] = "System";
-    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("SNMP traps") };
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("SNMP traps") };
     var settings = Model.Settings;
     var receiver = Model.Receiver;
     var head = Matmon.Host.Services.SyslogPageSupport.DescribeCollectors(Model.Collectors);

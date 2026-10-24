@@ -29,7 +29,7 @@ public sealed partial class WorkspaceModel
 
             var probe = _workspaceStore.CreateProbe(NewProbe.ParentId, NewProbe.Name, NewProbe.Description);
             StatusMessage = $"Probe '{probe.Name}' created. The install script is ready.";
-            var backUrl = GetSafeReturnUrl("/Config?tab=probes");
+            var backUrl = GetSafeReturnUrl("/Probes");
             return RedirectToPage("/ProbeInstall", new { probeId = probe.Id, returnUrl = backUrl });
         }
         catch (Exception ex)

@@ -304,7 +304,7 @@ else
     var statusLabel = $"{snapshot.HealthySensorCount} OK, {snapshot.WarningSensorCount} warning, {snapshot.AcknowledgedSensorCount} acknowledged, {snapshot.ErrorSensorCount} error, {snapshot.PausedSensorCount} paused, {snapshot.OtherSensorCount} other - of {sensorStatusTotal} sensors";
 
     <div class="mat-grid mat-grid--3">
-        <a class="mat-card" asp-page="/Config" asp-route-tab="probes">
+        <a class="mat-card" asp-page="/Probes">
             <div class="mat-card__body mat-stat">
                 <span class="mat-stat__label">Probes</span>
                 <span class="mat-stat__value">@snapshot.ConfiguredProbeCount</span>

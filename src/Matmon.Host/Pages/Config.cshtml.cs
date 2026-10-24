@@ -183,7 +183,14 @@ public class ConfigModel : PageModel
     {
         if (InstallProbeId.HasValue)
         {
-            return RedirectToPage("/ProbeInstall", new { probeId = InstallProbeId.Value, returnUrl = "/Config?tab=probes" });
+            return RedirectToPage("/ProbeInstall", new { probeId = InstallProbeId.Value, returnUrl = "/Probes" });
+        }
+
+        // System used to have a Probes tab - the same table as the Probes page with the admin buttons. It is one page
+        // now; an old link or bookmark lands there.
+        if (string.Equals(Tab?.Trim(), "probes", StringComparison.OrdinalIgnoreCase))
+        {
+            return RedirectToPage("/Probes");
         }
 
         if (IsRestrictedTabRequestedByNonAdmin())
@@ -249,7 +256,7 @@ public class ConfigModel : PageModel
             ErrorMessage = ex.Message;
         }
 
-        return RedirectToPage(new { tab = "probes" });
+        return RedirectToPage("/Probes");
     }
 
     public IActionResult OnPostCleanupStorage()
@@ -1047,7 +1054,6 @@ public class ConfigModel : PageModel
     {
         return tab?.Trim().ToLowerInvariant() switch
         {
-            "probes" => "probes",
             "storage" => "storage",
             "backup" => "backup",
             "reports" => "reports",

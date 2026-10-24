@@ -3,7 +3,7 @@
 @using Matmon.Probe.Plugins
 @{
     ViewData["Title"] = "System";
-    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Plugins") };
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Plugins") };
     var definition = Model.EditingDefinition;
     string Placement(PluginPlacement placement) => placement switch
     {

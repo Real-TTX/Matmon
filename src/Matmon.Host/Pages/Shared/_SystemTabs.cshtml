@@ -15,17 +15,15 @@
     string? Current(string tab) => IsActive(tab) ? "page" : null;
 }
 
+@* Order: the overview, then what an admin does most (users, backup), the instance's link outward (cloud, licence,
+   partner), what runs on it (storage, plugins and the tabs plugins bring), and the process log last - it is a
+   diagnostics tool, which is why it is a tab here and not a menu item. The probes are NOT here: they have their own
+   section (menu > Probes), and System used to show the same table a second time. *@
 <nav class="mat-tabs" aria-label="System sections">
     <a class="@Css("general")" aria-current="@Current("general")" asp-page="/Config" asp-route-tab="general">Overview</a>
-    <a class="@Css("probes")" aria-current="@Current("probes")" asp-page="/Config" asp-route-tab="probes">Probes</a>
-    <a class="@Css("storage")" aria-current="@Current("storage")" asp-page="/Config" asp-route-tab="storage">Storage</a>
     @if (canManage)
     {
-        @foreach (var link in PluginUi.Links(Matmon.Probe.Plugins.PluginUiArea.System))
-        {
-            <a class="@Css(link.Key)" aria-current="@Current(link.Key)" href="@Url.Content("~" + link.Path)">@link.Title</a>
-        }
-        <a class="@Css("plugins")" aria-current="@Current("plugins")" asp-page="/SystemPlugins">Plugins</a>
+        <a class="@Css("users")" aria-current="@Current("users")" asp-page="/Config" asp-route-tab="users">Users</a>
         <a class="@Css("backup")" aria-current="@Current("backup")" asp-page="/Config" asp-route-tab="backup">Backup</a>
         <a class="@Css("cloud")" aria-current="@Current("cloud")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
         <a class="@Css("license")" aria-current="@Current("license")" asp-page="/Config" asp-route-tab="license">License</a>
@@ -33,7 +31,15 @@
         {
             <a class="@Css("partner")" aria-current="@Current("partner")" asp-page="/Config" asp-route-tab="partner">Service partner</a>
         }
-
-        <a class="@Css("users")" aria-current="@Current("users")" asp-page="/Config" asp-route-tab="users">Users</a>
+    }
+    <a class="@Css("storage")" aria-current="@Current("storage")" asp-page="/Config" asp-route-tab="storage">Storage</a>
+    @if (canManage)
+    {
+        <a class="@Css("plugins")" aria-current="@Current("plugins")" asp-page="/SystemPlugins">Plugins</a>
+        @foreach (var link in PluginUi.Links(Matmon.Probe.Plugins.PluginUiArea.System))
+        {
+            <a class="@Css(link.Key)" aria-current="@Current(link.Key)" href="@Url.Content("~" + link.Path)">@link.Title</a>
+        }
+        <a class="@Css("logs")" aria-current="@Current("logs")" asp-page="/Logs">Logs</a>
     }
 </nav>

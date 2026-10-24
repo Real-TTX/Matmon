@@ -102,10 +102,12 @@ public sealed class InstanceShellBuilder(
         var path = http.Request.Path.Value ?? string.Empty;
         bool Starts(string prefix) => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
         var dashboardActive = string.Equals(path, "/", StringComparison.OrdinalIgnoreCase);
-        var probesActive = Starts("/probes") || Starts("/system/probes") || Starts("/monitoring/probe");
+        // Agents are probes (a probe installed on the machine it monitors), so they live under Probes; the process log is
+        // a System tab. Neither has a menu item of its own.
+        var probesActive = Starts("/probes") || Starts("/agents") || Starts("/system/probes") || Starts("/monitoring/probe");
         var templatesActive = Starts("/templates") || Starts("/monitoring/template");
         var alertsActive = Starts("/alerts");
-        var systemActive = Starts("/config") || Starts("/system") || Starts("/backup");
+        var systemActive = (Starts("/config") || Starts("/system") || Starts("/backup") || Starts("/logs")) && !probesActive;
         var sensorsActive = (Starts("/monitoring") || Starts("/paused")) && !templatesActive && !probesActive;
 
         WorkspaceSummary? summary = null;
@@ -146,9 +148,13 @@ public sealed class InstanceShellBuilder(
             }
             else
             {
+                // What the menu is for: the first group is what an operator looks at every day - the state
+                // (the alert status above it IS the way to Alerts, so there is no Alerts item), the things being watched,
+                // the boards, the history. Setup is what is set up once and touched now and then. System is the
+                // instance's own administration (users, backup, cloud, licence, plugins, the process log), admins only.
+                // Actions are not places: adding a sensor, a host or an agent are buttons on the page they belong to.
                 menu.Add(new InstanceNavGroup(null,
                 [
-                    // No "Alerts" item: the alert status above the menu is the entry to that page.
                     new("Dashboard", "/Index", "dashboard", dashboardActive),
                     new("Sensors", "/Monitoring", "activity", sensorsActive),
                     new("Maps", "/Maps", "globe", Starts("/maps")),
@@ -157,7 +163,6 @@ public sealed class InstanceShellBuilder(
                 menu.Add(new InstanceNavGroup("Setup",
                 [
                     new("Probes", "/Probes", "server", probesActive),
-                    new("Agents", "/Agents", "terminal", Starts("/agents")),
                     new("Discovery", "/Discovery", "compass", Starts("/discovery")),
                     new("Templates", "/Templates", "template", templatesActive),
                     new("Notifications", "/Notifications", "mail", Starts("/notifications")),
@@ -165,11 +170,7 @@ public sealed class InstanceShellBuilder(
                 ]));
                 if (isAdmin)
                 {
-                    menu.Add(new InstanceNavGroup("Administration",
-                    [
-                        new("System", "/Config", "settings", systemActive),
-                        new("Logs", "/Logs", "file-text", Starts("/logs"))
-                    ]));
+                    menu.Add(new InstanceNavGroup(null, [new("System", "/Config", "settings", systemActive)]));
                 }
             }
         }
@@ -190,7 +191,6 @@ public sealed class InstanceShellBuilder(
                 embedNav.Add(new { label = "Maps", path = "Maps" });
                 embedNav.Add(new { label = "Events", path = "Events" });
                 embedNav.Add(new { label = "Probes", path = "Probes" });
-                embedNav.Add(new { label = "Agents", path = "Agents" });
                 embedNav.Add(new { label = "Discovery", path = "Discovery" });
                 embedNav.Add(new { label = "Templates", path = "Templates" });
                 embedNav.Add(new { label = "Notifications", path = "Notifications" });
@@ -198,7 +198,6 @@ public sealed class InstanceShellBuilder(
                 if (isAdmin)
                 {
                     embedNav.Add(new { label = "System", path = "Config" });
-                    embedNav.Add(new { label = "Logs", path = "Logs" });
                 }
             }
         }

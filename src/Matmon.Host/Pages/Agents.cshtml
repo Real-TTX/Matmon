@@ -1,14 +1,16 @@
 @page "/agents"
 @model Matmon.Host.Pages.AgentsModel
 @{
-    ViewData["Title"] = "Agents";
-    ViewData["PageSub"] = "Probes installed on the machine they monitor - as a Windows service or a systemd unit.";
-    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Monitoring", "/Index"), new BreadcrumbItem("Sensors", "/Monitoring"), new BreadcrumbItem("Agents") };
+    ViewData["Title"] = "Probes";
+    ViewData["PageSub"] = "Agents are probes installed on the machine they monitor - as a Windows service or a systemd unit.";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Probes", "/Probes"), new BreadcrumbItem("Agents") };
     var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var issuedExpires = Model.IssuedExpiresUtc is { } expiresUtc
         ? new DateTimeOffset(DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc))
         : (DateTimeOffset?)null;
 }
+
+<partial name="_ProbesTabs" model="@("agents")" />
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
