@@ -41,32 +41,100 @@ function initializeMonitoringSizeToggle() {
 // toggle opens it (MatUi places it next to the toggle and moves the focus into it), then it is moved to the pointer. A
 // context menu from the keyboard (Shift+F10, the menu key) has no pointer position and stays next to the toggle.
 function initializeTreeContextMenu() {
+  // The element's menu for the chip or row under a point - only when the point is really over a sensor chip or a
+  // container row, not the gaps around them, where closest("[data-tree-node]") would grab an ancestor and open a menu
+  // for an element the user is not on. Inside an open menu the browser keeps its own context menu (copy a link ...).
+  const menuAt = (target) => {
+    if (!(target instanceof Element) || target.closest(".mat-menu")) {
+      return null;
+    }
+    const hit = target.closest(".monitoring-sensor-chip, .monitoring-tree-row");
+    const toggle = hit?.querySelector("[data-menu-toggle]");
+    const menu = toggle ? document.getElementById(toggle.getAttribute("data-menu-toggle") || "") : null;
+    return toggle && menu ? { toggle, menu } : null;
+  };
+
+  const open = ({ toggle, menu }, x, y) => {
+    if (toggle.getAttribute("aria-expanded") !== "true") {
+      toggle.click();
+    }
+    if (!menu.hidden && (x !== 0 || y !== 0)) {
+      placeTreeMenuAtPointer(menu, x, y);
+    }
+  };
+
+  // A long press on a touch screen opens the same menu as a right click. Android fires a contextmenu of its own for
+  // a long press, iOS does not (it shows its link preview instead - the stylesheet switches that off in the tree), so
+  // the press is timed here and the browser's own event is ignored for a moment after it.
+  const longPressMs = 500;
+  const slop = 10;
+  let press = null;
+  let openedByPressAt = 0;
+
   document.querySelectorAll("[data-monitoring-tree]").forEach((tree) => {
     tree.addEventListener("contextmenu", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      // Inside an open menu the browser keeps its own context menu (copy a link ...).
-      if (!target || target.closest(".mat-menu")) {
+      const found = menuAt(event.target);
+      if (!found) {
         return;
       }
-
-      // Only when the pointer is really over a sensor chip or a container row - not the gaps around them, where
-      // closest("[data-tree-node]") would grab an ancestor and open a menu for an element the user is not on.
-      const hit = target.closest(".monitoring-sensor-chip, .monitoring-tree-row");
-      const toggle = hit?.querySelector("[data-menu-toggle]");
-      const menu = toggle ? document.getElementById(toggle.getAttribute("data-menu-toggle") || "") : null;
-      if (!toggle || !menu) {
-        return;
-      }
-
       event.preventDefault();
-      if (toggle.getAttribute("aria-expanded") !== "true") {
-        toggle.click();
+      if (press) {
+        window.clearTimeout(press.timer);
+        press = null;
       }
+      if (Date.now() - openedByPressAt < 1000) {
+        return;
+      }
+      open(found, event.clientX, event.clientY);
+    });
 
-      if (!menu.hidden && (event.clientX !== 0 || event.clientY !== 0)) {
-        placeTreeMenuAtPointer(menu, event.clientX, event.clientY);
+    tree.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" || !event.isPrimary) {
+        return;
+      }
+      const found = menuAt(event.target);
+      if (!found) {
+        return;
+      }
+      const x = event.clientX;
+      const y = event.clientY;
+      press = {
+        x,
+        y,
+        timer: window.setTimeout(() => {
+          press = null;
+          if (navigator.vibrate) {
+            navigator.vibrate(10);
+          }
+          open(found, x, y);
+          // Stamped AFTER opening: the menu opens through a click on its toggle, which the guard below would eat.
+          openedByPressAt = Date.now();
+        }, longPressMs)
+      };
+    });
+
+    const cancel = () => {
+      if (press) {
+        window.clearTimeout(press.timer);
+        press = null;
+      }
+    };
+    tree.addEventListener("pointermove", (event) => {
+      if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > slop) {
+        cancel();
       }
     });
+    tree.addEventListener("pointerup", cancel);
+    tree.addEventListener("pointercancel", cancel);
+
+    // The finger lifting after a long press is not a tap: the link under it must not open.
+    tree.addEventListener("click", (event) => {
+      if (Date.now() - openedByPressAt < 1000 && !(event.target instanceof Element && event.target.closest(".mat-menu"))) {
+        event.preventDefault();
+        event.stopPropagation();
+        openedByPressAt = 0;
+      }
+    }, true);
   });
 }
 

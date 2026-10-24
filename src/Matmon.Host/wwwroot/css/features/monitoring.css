@@ -13,6 +13,13 @@
 .monitoring-tree-panel { --mat-card-pad: var(--mat-space-4); }
 .monitoring-tree-tools { display: flex; flex-wrap: wrap; gap: var(--mat-space-1); margin-bottom: var(--mat-space-3); }
 
+/* A long press on a touch screen opens the element's menu (initializeTreeContextMenu) - so no link preview (iOS) and no
+   text selection may start on the same press. */
+@media (hover: none) {
+  .monitoring-sensor-chip,
+  .monitoring-tree-row { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+}
+
 /* ---- The state colour of a node or a chip: one custom property, always from the state tokens (as mm-state-dot) ---- */
 .monitoring-tree-node,
 .monitoring-sensor-chip { --tree-state: var(--mat-text-faint); }
