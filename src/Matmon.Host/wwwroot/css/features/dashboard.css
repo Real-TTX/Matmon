@@ -1,35 +1,88 @@
 /* Matmon - dashboard, alerts, events and the log views. Only what MatUi does not have: tokens only (COLOR-01), no gradients or lifted cards (COLOR-06, SPACE-03), never overriding a mat- class (SPACE-06). */
 
-/* ---- Sensor status: the pills under the stacked meter are links to the list behind each number ---- */
-.dashboard-status-link { display: inline-flex; border-radius: var(--mat-radius-pill); text-decoration: none; }
-.dashboard-status-link:hover { text-decoration: none; }
-.dashboard-status-link:focus-visible { outline: none; box-shadow: var(--mat-focus-ring); }
+/* ---- Sensor status: the share of OK sensors as the figure, the stacked meter, and a legend whose items link to the
+   list behind each number. The legend item carries the word and the number - its dot is only the colour key. ---- */
+.mm-dash-status { display: grid; grid-template-columns: minmax(9rem, auto) 1fr; align-items: center; gap: var(--mat-space-4) var(--mat-space-8); }
+.mm-dash-status__figure { display: flex; flex-direction: column; gap: var(--mat-space-1); }
+.mm-dash-status__share { font-size: var(--mat-fs-3xl); font-weight: 650; line-height: 1; }
+.mm-dash-status__bar { display: flex; flex-direction: column; gap: var(--mat-space-3); min-width: 0; }
+.mm-dash-legend { display: flex; flex-wrap: wrap; gap: var(--mat-space-1) var(--mat-space-5); }
+.mm-dash-legend__item { --mm-legend: var(--mat-text-faint); display: inline-flex; align-items: baseline; gap: var(--mat-space-2); padding: var(--mat-space-1) 0; border-radius: var(--mat-radius-sm); color: var(--mat-text-muted); font-size: var(--mat-fs-sm); text-decoration: none; }
+.mm-dash-legend__item::before { content: ""; align-self: center; width: .6rem; height: .6rem; border-radius: 50%; background: var(--mm-legend); }
+.mm-dash-legend__item strong { color: var(--mat-text); font-size: var(--mat-fs-md); font-variant-numeric: tabular-nums; }
+.mm-dash-legend__item small { color: var(--mat-text-faint); font-size: var(--mat-fs-xs); font-variant-numeric: tabular-nums; }
+.mm-dash-legend__item:hover { color: var(--mat-text); text-decoration: none; }
+.mm-dash-legend__item:focus-visible { outline: none; box-shadow: var(--mat-focus-ring); }
+.mm-dash-legend__item[data-tone="ok"] { --mm-legend: var(--mat-success); }
+.mm-dash-legend__item[data-tone="warn"] { --mm-legend: var(--mat-warning); }
+.mm-dash-legend__item[data-tone="error"] { --mm-legend: var(--mat-danger); }
+.mm-dash-legend__item[data-tone="info"] { --mm-legend: var(--mat-accent); }
+@media (max-width: 640px) {
+  .mm-dash-status { grid-template-columns: 1fr; }
+}
 
-/* ---- Highlights: one card per pinned sensor - name and state, the latest value, its trend, type and target ---- */
-.dashboard-graph__body { display: flex; flex-direction: column; gap: var(--mat-space-3); height: 100%; }
-.dashboard-graph__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--mat-space-3); min-width: 0; }
-.dashboard-graph__name { display: flex; flex-direction: column; gap: var(--mat-space-1); min-width: 0; }
-.dashboard-graph__name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dashboard-graph__path { overflow: hidden; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); text-overflow: ellipsis; white-space: nowrap; }
-.dashboard-graph__value { display: flex; align-items: baseline; gap: var(--mat-space-1); min-width: 0; }
-.dashboard-graph__value strong { font-size: var(--mat-fs-2xl); font-variant-numeric: tabular-nums; line-height: 1.1; }
-.dashboard-graph__value span { color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }
-.dashboard-graph__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--mat-space-2); margin-top: auto; font-size: var(--mat-fs-xs); }
+/* ---- Section heads with an action at the end (Live sensors -> All) ---- */
+.mm-dash-section-head { display: flex; align-items: center; gap: var(--mat-space-3); margin-bottom: var(--mat-space-3); }
+.mm-dash-section-head h2 { margin: 0; font-size: var(--mat-fs-lg); }
 
-/* ---- Sparklines (drawn by drawSparkline in core.js): the colour follows the state of the card or row around them ----
-   drawSparkline writes stroke/fill attributes; these rules win over them, so the line is always a token colour and
-   follows the theme. */
-.dashboard-spark { display: block; width: 100%; height: var(--mat-space-12); overflow: visible; --dashboard-spark: var(--mat-accent); }
-.dashboard-spark--mini { width: 7rem; height: var(--mat-space-8); }
-[data-series-key][data-state="ok"] .dashboard-spark { --dashboard-spark: var(--mat-success); }
-[data-series-key][data-state="warning"] .dashboard-spark { --dashboard-spark: var(--mat-warning); }
-[data-series-key][data-state="error"] .dashboard-spark { --dashboard-spark: var(--mat-danger); }
-[data-series-key][data-state="paused"] .dashboard-spark,
-[data-series-key][data-state="disabled"] .dashboard-spark,
-[data-series-key][data-state="unknown"] .dashboard-spark { --dashboard-spark: var(--mat-text-faint); }
-.dashboard-spark path { vector-effect: non-scaling-stroke; }
-.dashboard-spark [data-role="line"] { fill: none; stroke: var(--dashboard-spark); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.dashboard-spark [data-role="area"] { fill: var(--dashboard-spark); fill-opacity: .14; stroke: none; }
+/* ---- Highlights: a large graph card per pinned sensor ---- */
+.mm-dash-highlights { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: var(--mat-gap); }
+.mm-dash-graph__body { display: flex; flex-direction: column; gap: var(--mat-space-3); height: 100%; }
+.mm-dash-graph__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--mat-space-3); min-width: 0; }
+.mm-dash-graph__name { display: flex; flex-direction: column; gap: var(--mat-space-1); min-width: 0; }
+.mm-dash-graph__name strong,
+.mm-dash-graph__name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-dash-graph__name small { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+.mm-dash-graph__value { display: flex; align-items: baseline; gap: var(--mat-space-1); }
+.mm-dash-graph__value strong { font-size: var(--mat-fs-2xl); line-height: 1.1; }
+.mm-dash-graph__value span { color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }
+.mm-dash-graph__message { margin: 0; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+
+/* ---- Live sensors: a tile per sensor - name and state, the latest value, its graph, and while it has a problem what
+   it said. A tile keeps its place while the page is open; the values and graphs refresh in it. ---- */
+.mm-dash-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: var(--mat-gap); }
+.mm-dash-tile { min-width: 0; }
+.mm-dash-tile__body { display: flex; flex-direction: column; gap: var(--mat-space-2); height: 100%; min-width: 0; }
+.mm-dash-tile__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--mat-space-2); min-width: 0; }
+.mm-dash-tile__name { display: flex; flex-direction: column; min-width: 0; }
+.mm-dash-tile__name strong,
+.mm-dash-tile__name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-dash-tile__name strong { font-size: var(--mat-fs-sm); }
+.mm-dash-tile__name small { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+.mm-dash-tile__value { display: flex; align-items: baseline; gap: var(--mat-space-1); min-width: 0; }
+.mm-dash-tile__value strong { font-size: var(--mat-fs-xl); line-height: 1.1; }
+.mm-dash-tile__value span { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
+.mm-dash-tile__star { margin-inline-start: auto; color: var(--mat-accent); }
+.mm-dash-tile__message { display: -webkit-box; margin: 0; overflow: hidden; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.mm-dash-tile[data-state="error"] { border-color: color-mix(in srgb, var(--mat-danger) 45%, var(--mat-border)); }
+.mm-dash-tile[data-state="warning"] { border-color: color-mix(in srgb, var(--mat-warning) 45%, var(--mat-border)); }
+
+/* ---- The trend (drawn by drawTrend in dashboard.js): the readings as a line placed by time, the state of every check
+   as a band under it, the latest reading as a dot. The line's colour follows the sensor's current state; the band
+   carries each check's own. --mm-x/--mm-y place the dot and the cursor (data, set by the script). ---- */
+.mm-trend { --mm-trend: var(--mat-accent); position: relative; display: flex; flex-direction: column; gap: 3px; }
+[data-state="ok"] .mm-trend { --mm-trend: var(--mat-success); }
+[data-state="warning"] .mm-trend { --mm-trend: var(--mat-warning); }
+[data-state="error"] .mm-trend { --mm-trend: var(--mat-danger); }
+[data-state="paused"] .mm-trend,
+[data-state="disabled"] .mm-trend,
+[data-state="unknown"] .mm-trend { --mm-trend: var(--mat-text-faint); }
+.mm-trend__plot { display: block; width: 100%; height: var(--mat-space-10); overflow: visible; }
+.mm-trend--lg .mm-trend__plot { height: 5.5rem; }
+.mm-trend__plot path { vector-effect: non-scaling-stroke; }
+.mm-trend__plot [data-role="line"] { fill: none; stroke: var(--mm-trend); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mm-trend__plot [data-role="area"] { fill: var(--mm-trend); fill-opacity: .12; stroke: none; }
+.mm-trend__states { display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--mat-surface-3); }
+.mm-trend__states rect { fill: var(--mat-text-faint); }
+.mm-trend__states rect[data-state="ok"] { fill: var(--mat-success); }
+.mm-trend__states rect[data-state="warning"] { fill: var(--mat-warning); }
+.mm-trend__states rect[data-state="error"] { fill: var(--mat-danger); }
+.mm-trend__dot { position: absolute; top: calc((100% - 7px) * var(--mm-y, .5)); left: var(--mm-x, 100%); width: 8px; height: 8px; border: 2px solid var(--mat-surface); border-radius: 50%; background: var(--mm-trend); transform: translate(-50%, -50%); pointer-events: none; }
+.mm-trend__empty { position: absolute; inset: 0 0 7px; display: grid; place-items: center; color: var(--mat-text-faint); font-size: var(--mat-fs-xs); text-align: center; pointer-events: none; }
+.mm-trend__cursor { position: absolute; top: 0; bottom: 0; left: var(--mm-x, 0); width: 1px; background: var(--mat-border-strong); pointer-events: none; }
+.mm-trend__tip { position: absolute; bottom: calc(100% + var(--mat-space-1)); left: var(--mm-x, 0); z-index: 2; display: flex; flex-direction: column; padding: var(--mat-space-1) var(--mat-space-2); border: 1px solid var(--mat-border); border-radius: var(--mat-radius-sm); background: var(--mat-surface); box-shadow: var(--mat-shadow-2); color: var(--mat-text); font-size: var(--mat-fs-xs); white-space: nowrap; transform: translateX(var(--mm-shift, -50%)); pointer-events: none; }
+.mm-trend__tip time { color: var(--mat-text-muted); }
+.mm-trend__tip strong { font-variant-numeric: tabular-nums; }
 
 /* ---- Alerts: the page size beside the pager ---- */
 .alerts-page-size { display: inline-flex; align-items: center; gap: var(--mat-space-2); color: var(--mat-text-muted); font-size: var(--mat-fs-sm); }

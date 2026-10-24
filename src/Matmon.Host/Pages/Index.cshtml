@@ -7,10 +7,6 @@
         // The probe's head carries its connection state next to the title.
         ViewData["OwnHead"] = true;
     }
-    else
-    {
-        ViewData["PageSub"] = $"Primary · {Model.Snapshot.WorkspaceName}";
-    }
 
     string FormatPercent(int count, int total)
     {
@@ -93,7 +89,6 @@
         <div class="mat-card__head">
             @MatUi.Icon("link")
             <h2 class="mat-card__title">Primary connection</h2>
-            <span class="mat-card__sub mm-push-end">Probe to primary only</span>
         </div>
         <div class="mat-card__body">
             <dl class="mat-kv">
@@ -105,10 +100,6 @@
                 <dd>@Model.RuntimeOptions.ProbeName <span class="mat-mono mat-text-muted">(@Model.RuntimeOptions.ProbeId)</span></dd>
                 <dt>Heartbeat interval</dt>
                 <dd class="mat-mono">@Model.RuntimeOptions.HeartbeatIntervalSeconds s</dd>
-                <dt>Heartbeat sender</dt>
-                <dd>Active independently from assigned sensors</dd>
-                <dt>Primary-side check</dt>
-                <dd>Probe Heartbeat sensor validates the last accepted heartbeat</dd>
                 <dt>Last heartbeat</dt>
                 <dd class="mat-mono">@FormatLocalTimestamp(Model.SlaveSnapshot.LastHeartbeatUtc)</dd>
                 <dt>Last assignment sync</dt>
@@ -129,9 +120,6 @@
             @MatUi.Icon("clock")
             <h2 class="mat-card__title">Next secondary sensor runs</h2>
             <span class="mat-card__sub mm-push-end">@Model.SlaveSnapshot.UpcomingExecutions.Count remote-executed sensor runs</span>
-        </div>
-        <div class="mat-card__body">
-            <p class="mat-muted">Heartbeat is sent by the probe service itself and is checked by the primary. It is not listed as an assigned remote sensor run.</p>
         </div>
         @if (Model.SlaveSnapshot.UpcomingExecutions.Count == 0)
         {
@@ -286,7 +274,12 @@
 else
 {
     var snapshot = Model.Snapshot;
-    var visibleDashboardSensors = snapshot.TelemetrySeries
+    // What a sensor said last (its message) - shown on a tile only while the sensor has a problem.
+    var sensorMessages = snapshot.Nodes
+        .Where(node => node.Kind == MonitoringElementKind.Sensor)
+        .GroupBy(node => node.Id)
+        .ToDictionary(group => group.Key, group => group.First().StateMessage);
+    var liveSensors = snapshot.TelemetrySeries
         .OrderByDescending(series => series.StateKey?.ToLowerInvariant() switch
         {
             "error" => 4,
@@ -302,225 +295,182 @@ else
     var sensorStatusTotal = Math.Max(0, snapshot.SensorCount);
     var alertTone = snapshot.ErrorAlertCount > 0 ? " mat-text-danger" : snapshot.ActiveAlertCount > 0 ? " mat-text-warning" : string.Empty;
     var statusLabel = $"{snapshot.HealthySensorCount} OK, {snapshot.WarningSensorCount} warning, {snapshot.AcknowledgedSensorCount} acknowledged, {snapshot.ErrorSensorCount} error, {snapshot.PausedSensorCount} paused, {snapshot.OtherSensorCount} other - of {sensorStatusTotal} sensors";
+    var hostsWithProblems = snapshot.Nodes.Count(node => node.Kind == MonitoringElementKind.Host && node.StateKey is "error" or "warning");
+    var probesDown = snapshot.Probes.Where(probe => probe.ConnectionStateKey != "ok").ToArray();
+    var okShare = sensorStatusTotal == 0 ? 0 : (int)Math.Round(snapshot.HealthySensorCount * 100d / sensorStatusTotal);
 
-    <div class="mat-grid mat-grid--3">
-        <a class="mat-card" asp-page="/Probes">
+    string ParentOf(string path)
+    {
+        var parts = path.Split(" / ");
+        return parts.Length > 1 ? parts[^2] : string.Empty;
+    }
+
+    string? ProblemMessage(Matmon.Host.Services.TelemetrySeriesSnapshot series)
+        => series.StateKey is "error" or "warning" && sensorMessages.TryGetValue(series.SensorId, out var message) ? message : null;
+
+    // A check that failed without a reading has no current value - its placeholder 0 is not one.
+    string FormatValue(Matmon.Host.Services.TelemetrySeriesSnapshot series)
+        => !series.CurrentValue.HasValue || series.Points.Count > 0 && !series.Points[^1].HasReading ? "-" : series.CurrentValue.Value.ToString("0.#");
+
+    @* The four things an operator looks at first, each a way into its list. Templates and notification rules used to have
+       a tile each: they are configuration, not the state of the network. *@
+    <div class="mat-grid mat-grid--4">
+        <a class="mat-card" asp-page="/Alerts">
             <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Probes</span>
-                <span class="mat-stat__value">@snapshot.ConfiguredProbeCount</span>
-                <span class="mat-stat__delta">Configured probes</span>
+                <span class="mat-stat__label">Open alerts</span>
+                <span class="mat-stat__value@(alertTone)">@snapshot.ActiveAlertCount</span>
+                <span class="mat-stat__delta">@(snapshot.ActiveAlertCount == 0 ? "none open" : $"{snapshot.ErrorAlertCount} error{(snapshot.ErrorAlertCount == 1 ? "" : "s")} · {snapshot.WarningAlertCount} warning{(snapshot.WarningAlertCount == 1 ? "" : "s")}")</span>
+            </div>
+        </a>
+        <a class="mat-card" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
+            <div class="mat-card__body mat-stat">
+                <span class="mat-stat__label">Sensors</span>
+                <span class="mat-stat__value">@snapshot.SensorCount</span>
+                <span class="mat-stat__delta">@(snapshot.PausedSensorCount > 0 ? $"{snapshot.PausedSensorCount} paused" : "none paused")</span>
             </div>
         </a>
         <a class="mat-card" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="host">
             <div class="mat-card__body mat-stat">
                 <span class="mat-stat__label">Hosts</span>
                 <span class="mat-stat__value">@snapshot.HostCount</span>
-                <span class="mat-stat__delta">Machines and devices</span>
+                <span class="mat-stat__delta@(hostsWithProblems > 0 ? " mat-text-danger" : string.Empty)">@(snapshot.HostCount == 0 ? "none yet" : hostsWithProblems == 0 ? "all OK" : $"{hostsWithProblems} with problems")</span>
             </div>
         </a>
-        <a class="mat-card" asp-page="/Monitoring" asp-route-monitoringKind="sensor">
+        <a class="mat-card" asp-page="/Probes">
             <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Sensors</span>
-                <span class="mat-stat__value">@snapshot.SensorCount</span>
-                <span class="mat-stat__delta">@(snapshot.PausedSensorCount > 0 ? $"{snapshot.PausedSensorCount} paused" : "None paused")</span>
-            </div>
-        </a>
-        <a class="mat-card" asp-page="/Alerts">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Open alerts</span>
-                <span class="mat-stat__value@(alertTone)">@snapshot.ActiveAlertCount</span>
-                <span class="mat-stat__delta">@snapshot.ErrorAlertCount error@(snapshot.ErrorAlertCount == 1 ? string.Empty : "s") · @snapshot.WarningAlertCount warning@(snapshot.WarningAlertCount == 1 ? string.Empty : "s")</span>
-            </div>
-        </a>
-        <a class="mat-card" asp-page="/Templates">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Templates</span>
-                <span class="mat-stat__value">@snapshot.TemplateCount</span>
-                <span class="mat-stat__delta">Reusable sensor settings</span>
-            </div>
-        </a>
-        <a class="mat-card" asp-page="/Notifications">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Notifications</span>
-                <span class="mat-stat__value">@snapshot.NotificationRuleCount</span>
-                <span class="mat-stat__delta">Rules that send alerts</span>
+                <span class="mat-stat__label">Probes</span>
+                <span class="mat-stat__value">@snapshot.ConfiguredProbeCount</span>
+                <span class="mat-stat__delta@(probesDown.Length > 0 ? " mat-text-danger" : string.Empty)">@(probesDown.Length == 0 ? "all connected" : probesDown.Length == 1 ? $"{probesDown[0].ProbeName} not connected" : $"{probesDown.Length} not connected")</span>
             </div>
         </a>
     </div>
 
     @* The status of every sensor as one bar: OK, warning, acknowledged and error each a part of it; paused and other are
-       the rest of the track. The pills under it carry the words and the numbers (colour alone never says the state) and
-       link to the list behind each number. dashboard.js keeps the numbers and the bar live. *@
+       the rest of the track. The legend under it carries the words and the numbers (colour alone never says the state)
+       and links to the list behind each number. dashboard.js keeps the numbers and the bar live. *@
     <section class="mat-card" data-dashboard-status-chart>
         <div class="mat-card__head">
             @MatUi.Icon("activity")
             <h2 class="mat-card__title">Sensor status</h2>
             <a class="mat-btn mat-btn--ghost mat-btn--sm mm-push-end" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("arrow-right")<span>All sensors</span></a>
         </div>
-        <div class="mat-card__body mat-stack">
-            <div class="mat-stat">
-                <span class="mat-stat__value" data-role="status-total">@sensorStatusTotal</span>
-                <span class="mat-stat__label">Sensors total</span>
+        <div class="mat-card__body mm-dash-status">
+            <div class="mm-dash-status__figure">
+                <span class="mm-dash-status__share"><span data-role="status-ok-share">@okShare</span>%</span>
+                <span class="mat-text-muted">OK of <span data-role="status-total">@sensorStatusTotal</span> sensors</span>
             </div>
-            <div class="mat-meter mat-meter--lg mat-meter--stack" role="img" aria-label="@statusLabel" data-role="status-meter">
-                <div class="mat-meter__fill" data-status-fill="ok" data-tone="ok" data-value="@MeterValue(snapshot.HealthySensorCount, sensorStatusTotal)"></div>
-                <div class="mat-meter__fill" data-status-fill="warning" data-tone="warn" data-value="@MeterValue(snapshot.WarningSensorCount, sensorStatusTotal)"></div>
-                <div class="mat-meter__fill" data-status-fill="ack" data-value="@MeterValue(snapshot.AcknowledgedSensorCount, sensorStatusTotal)"></div>
-                <div class="mat-meter__fill" data-status-fill="error" data-tone="error" data-value="@MeterValue(snapshot.ErrorSensorCount, sensorStatusTotal)"></div>
-            </div>
-            <div class="mat-row mat-gap-2">
-                <a class="dashboard-status-link" data-dashboard-status-item="ok" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" asp-route-monitoringState="ok">
-                    <span class="mat-pill mat-pill--ok">OK <span data-role="status-ok-count">@snapshot.HealthySensorCount</span> · <span data-role="status-ok-percent">@FormatPercent(snapshot.HealthySensorCount, sensorStatusTotal)</span></span>
-                </a>
-                <a class="dashboard-status-link" data-dashboard-status-item="warning" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" asp-route-monitoringState="warning">
-                    <span class="mat-pill mat-pill--warn">Warning <span data-role="status-warning-count">@snapshot.WarningSensorCount</span> · <span data-role="status-warning-percent">@FormatPercent(snapshot.WarningSensorCount, sensorStatusTotal)</span></span>
-                </a>
-                <a class="dashboard-status-link" data-dashboard-status-item="ack" asp-page="/Alerts" asp-route-alertFilter="ack">
-                    <span class="mat-pill mat-pill--accent">Ack <span data-role="status-ack-count">@snapshot.AcknowledgedSensorCount</span> · <span data-role="status-ack-percent">@FormatPercent(snapshot.AcknowledgedSensorCount, sensorStatusTotal)</span></span>
-                </a>
-                <a class="dashboard-status-link" data-dashboard-status-item="error" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" asp-route-monitoringState="error">
-                    <span class="mat-pill mat-pill--error">Error <span data-role="status-error-count">@snapshot.ErrorSensorCount</span> · <span data-role="status-error-percent">@FormatPercent(snapshot.ErrorSensorCount, sensorStatusTotal)</span></span>
-                </a>
-                <a class="dashboard-status-link" data-dashboard-status-item="paused" asp-page="/Paused" hidden="@(snapshot.PausedSensorCount == 0 ? "hidden" : null)">
-                    <span class="mat-pill mat-pill--plain">Paused <span data-role="status-paused-count">@snapshot.PausedSensorCount</span> · <span data-role="status-paused-percent">@FormatPercent(snapshot.PausedSensorCount, sensorStatusTotal)</span></span>
-                </a>
-                <a class="dashboard-status-link" data-dashboard-status-item="other" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" hidden="@(snapshot.OtherSensorCount == 0 ? "hidden" : null)">
-                    <span class="mat-pill">Other <span data-role="status-other-count">@snapshot.OtherSensorCount</span> · <span data-role="status-other-percent">@FormatPercent(snapshot.OtherSensorCount, sensorStatusTotal)</span></span>
-                </a>
+            <div class="mm-dash-status__bar">
+                <div class="mat-meter mat-meter--lg mat-meter--stack" role="img" aria-label="@statusLabel" data-role="status-meter">
+                    <div class="mat-meter__fill" data-status-fill="ok" data-tone="ok" data-value="@MeterValue(snapshot.HealthySensorCount, sensorStatusTotal)"></div>
+                    <div class="mat-meter__fill" data-status-fill="warning" data-tone="warn" data-value="@MeterValue(snapshot.WarningSensorCount, sensorStatusTotal)"></div>
+                    <div class="mat-meter__fill" data-status-fill="ack" data-value="@MeterValue(snapshot.AcknowledgedSensorCount, sensorStatusTotal)"></div>
+                    <div class="mat-meter__fill" data-status-fill="error" data-tone="error" data-value="@MeterValue(snapshot.ErrorSensorCount, sensorStatusTotal)"></div>
+                </div>
+                <div class="mm-dash-legend">
+                    <a class="mm-dash-legend__item" data-tone="ok" data-dashboard-status-item="ok" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" asp-route-monitoringState="ok">
+                        <span>OK</span><strong data-role="status-ok-count">@snapshot.HealthySensorCount</strong><small data-role="status-ok-percent">@FormatPercent(snapshot.HealthySensorCount, sensorStatusTotal)</small>
+                    </a>
+                    <a class="mm-dash-legend__item" data-tone="warn" data-dashboard-status-item="warning" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" asp-route-monitoringState="warning">
+                        <span>Warning</span><strong data-role="status-warning-count">@snapshot.WarningSensorCount</strong><small data-role="status-warning-percent">@FormatPercent(snapshot.WarningSensorCount, sensorStatusTotal)</small>
+                    </a>
+                    <a class="mm-dash-legend__item" data-tone="info" data-dashboard-status-item="ack" asp-page="/Alerts" asp-route-alertFilter="ack">
+                        <span>Acknowledged</span><strong data-role="status-ack-count">@snapshot.AcknowledgedSensorCount</strong><small data-role="status-ack-percent">@FormatPercent(snapshot.AcknowledgedSensorCount, sensorStatusTotal)</small>
+                    </a>
+                    <a class="mm-dash-legend__item" data-tone="error" data-dashboard-status-item="error" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" asp-route-monitoringState="error">
+                        <span>Error</span><strong data-role="status-error-count">@snapshot.ErrorSensorCount</strong><small data-role="status-error-percent">@FormatPercent(snapshot.ErrorSensorCount, sensorStatusTotal)</small>
+                    </a>
+                    <a class="mm-dash-legend__item" data-tone="plain" data-dashboard-status-item="paused" asp-page="/Paused" hidden="@(snapshot.PausedSensorCount == 0 ? "hidden" : null)">
+                        <span>Paused</span><strong data-role="status-paused-count">@snapshot.PausedSensorCount</strong><small data-role="status-paused-percent">@FormatPercent(snapshot.PausedSensorCount, sensorStatusTotal)</small>
+                    </a>
+                    <a class="mm-dash-legend__item" data-tone="plain" data-dashboard-status-item="other" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor" hidden="@(snapshot.OtherSensorCount == 0 ? "hidden" : null)">
+                        <span>No data</span><strong data-role="status-other-count">@snapshot.OtherSensorCount</strong><small data-role="status-other-percent">@FormatPercent(snapshot.OtherSensorCount, sensorStatusTotal)</small>
+                    </a>
+                </div>
             </div>
         </div>
     </section>
 
-    <section class="mat-section" data-dashboard-highlight-strip aria-labelledby="dashboard-highlights-title">
-        <div class="mat-section__head">
-            <h2 id="dashboard-highlights-title">Highlights</h2>
-            <p class="mat-section__lead">@snapshot.HighlightedTelemetrySeries.Count highlighted</p>
+    @if (snapshot.HighlightedTelemetrySeries.Count > 0)
+    {
+        <section class="mat-section" data-dashboard-highlight-strip aria-labelledby="dashboard-highlights-title">
+            <div class="mat-section__head">
+                <h2 id="dashboard-highlights-title">Highlights</h2>
+            </div>
+            <div class="mm-dash-highlights">
+                @foreach (var series in snapshot.HighlightedTelemetrySeries)
+                {
+                    <a class="mat-card mm-dash-graph" asp-page="/SensorDetails" asp-route-sensorId="@series.SensorId"
+                       data-series-key="@series.Key" data-sensor-id="@series.SensorId" data-state="@series.StateKey">
+                        <div class="mat-card__body mm-dash-graph__body">
+                            <div class="mm-dash-graph__head">
+                                <div class="mm-dash-graph__name">
+                                    <strong data-role="sensor-title">@series.Title</strong>
+                                    <small title="@series.Path">@ParentOf(series.Path)</small>
+                                </div>
+                                <span class="@MatUi.PillClass(series.StateKey)" data-role="state">@series.StateLabel</span>
+                            </div>
+                            <div class="mm-dash-graph__value">
+                                <strong data-role="current-value">@FormatValue(series)</strong>
+                                <span data-role="current-unit">@series.Unit</span>
+                            </div>
+                            <partial name="_DashboardTrend" model="@("lg")" />
+                            <p class="mm-dash-graph__message" data-role="message" hidden="@(ProblemMessage(series) is null ? "hidden" : null)">@ProblemMessage(series)</p>
+                        </div>
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="mat-section" aria-labelledby="dashboard-live-title">
+        <div class="mm-dash-section-head">
+            <h2 id="dashboard-live-title">Live sensors</h2>
+            <a class="mat-btn mat-btn--ghost mat-btn--sm mm-push-end" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("arrow-right")<span>All @snapshot.SensorCount</span></a>
         </div>
 
-        @if (snapshot.HighlightedTelemetrySeries.Count == 0)
+        @if (liveSensors.Length == 0)
         {
             <div class="mat-empty mat-empty--framed">
-                <span class="mat-empty__icon">@MatUi.Icon("star")</span>
-                <div class="mat-empty__title">No highlights yet</div>
-                <p>Mark a sensor as Highlight to pin it here.</p>
+                <span class="mat-empty__icon">@MatUi.Icon("activity")</span>
+                <div class="mat-empty__title">No sensor data yet</div>
+                <p>The sensors show here with their latest value once they have run.</p>
                 <a class="mat-btn mat-btn--secondary" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("activity")<span>Open the sensors</span></a>
             </div>
         }
         else
         {
-            <div class="mat-grid" id="matmon-graph-grid">
-                @foreach (var series in snapshot.HighlightedTelemetrySeries)
+            <div class="mm-dash-tiles">
+                @foreach (var series in liveSensors)
                 {
-                    <a class="mat-card dashboard-graph"
-                       asp-page="/SensorDetails"
-                       asp-route-sensorId="@series.SensorId"
-                       data-series-key="@series.Key"
-                       data-state="@series.StateKey">
-                        <div class="mat-card__body dashboard-graph__body">
-                            <div class="dashboard-graph__head">
-                                <div class="dashboard-graph__name">
+                    <a class="mat-card mm-dash-tile" asp-page="/SensorDetails" asp-route-sensorId="@series.SensorId"
+                       data-series-key="@series.Key" data-sensor-id="@series.SensorId" data-state="@series.StateKey">
+                        <div class="mat-card__body mm-dash-tile__body">
+                            <div class="mm-dash-tile__head">
+                                <span class="mm-dash-tile__name">
                                     <strong data-role="sensor-title">@series.Title</strong>
-                                    <span class="dashboard-graph__path" data-role="sensor-path">@series.Path</span>
-                                </div>
+                                    <small title="@series.Path">@(string.IsNullOrWhiteSpace(ParentOf(series.Path)) ? series.SensorTypeLabel : ParentOf(series.Path))</small>
+                                </span>
                                 <span class="@MatUi.PillClass(series.StateKey)" data-role="state">@series.StateLabel</span>
                             </div>
-                            <div class="dashboard-graph__value">
-                                <strong data-role="current-value">@(series.CurrentValue.HasValue ? series.CurrentValue.Value.ToString("0.0") : "-")</strong>
+                            <div class="mm-dash-tile__value">
+                                <strong data-role="current-value">@FormatValue(series)</strong>
                                 <span data-role="current-unit">@series.Unit</span>
+                                @if (series.IsHighlighted)
+                                {
+                                    <span class="mm-dash-tile__star" title="Highlight">@MatUi.Icon("star")</span>
+                                }
                             </div>
-                            <svg class="dashboard-spark" data-sparkline viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-                                <path data-role="area"></path>
-                                <path data-role="line"></path>
-                            </svg>
-                            <div class="dashboard-graph__foot">
-                                <span class="mat-chips">
-                                    <span class="mat-tag" data-role="sensor-type">@series.SensorTypeLabel</span>
-                                    @if (!string.IsNullOrWhiteSpace(series.Target))
-                                    {
-                                        <span class="mat-tag mat-mono mm-break" data-role="sensor-target">@series.Target</span>
-                                    }
-                                </span>
-                                <span class="mat-text-muted mat-nowrap">@(series.Points.Count == 0 ? "no data" : $"{series.Points.Count} checks")</span>
-                            </div>
+                            <partial name="_DashboardTrend" model="@("sm")" />
+                            <p class="mm-dash-tile__message" data-role="message" hidden="@(ProblemMessage(series) is null ? "hidden" : null)">@ProblemMessage(series)</p>
                         </div>
                     </a>
                 }
             </div>
-        }
-    </section>
 
-    <section class="mat-card">
-        <div class="mat-card__head">
-            @MatUi.Icon("activity")
-            <h2 class="mat-card__title">Live sensors</h2>
-            <a class="mat-btn mat-btn--ghost mat-btn--sm mm-push-end" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("arrow-right")<span>@snapshot.SensorCount all</span></a>
-        </div>
-
-        @if (visibleDashboardSensors.Length == 0)
-        {
-            <div class="mat-card__body">
-                <div class="mat-empty">
-                    <span class="mat-empty__icon">@MatUi.Icon("activity")</span>
-                    <div class="mat-empty__title">No sensor data yet</div>
-                    <p>The sensors show here with their latest value once they have run.</p>
-                    <a class="mat-btn mat-btn--secondary" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("activity")<span>Open the sensors</span></a>
-                </div>
-            </div>
-        }
-        else
-        {
-            <div class="mat-table-wrap">
-                <table class="mat-table dashboard-live">
-                    <caption class="mat-sr-only">Sensors with their latest value, the most urgent first</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Sensor</th>
-                            <th scope="col">State</th>
-                            <th scope="col" class="mat-num">Value</th>
-                            <th scope="col" class="mat-hide-sm">Trend</th>
-                            <th scope="col" class="mat-hide-sm">Type</th>
-                            <th scope="col" class="mat-hide-sm">Target</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var series in visibleDashboardSensors)
-                        {
-                            <tr data-series-key="@series.Key" data-state="@series.StateKey">
-                                <td data-label="Sensor" class="mat-table__primary">
-                                    <div class="mat-table__name">
-                                        <span class="mat-min-w-0">
-                                            <a asp-page="/SensorDetails" asp-route-sensorId="@series.SensorId" data-role="sensor-title">@series.Title</a>
-                                            <small class="mm-break" data-role="sensor-path">@series.Path</small>
-                                        </span>
-                                        @if (series.IsHighlighted)
-                                        {
-                                            <span class="mat-pill mat-pill--accent">@MatUi.Icon("star")<span>Highlight</span></span>
-                                        }
-                                    </div>
-                                </td>
-                                <td data-label="State"><span class="@MatUi.PillClass(series.StateKey)" data-role="state">@series.StateLabel</span></td>
-                                <td data-label="Value" class="mat-num mat-mono mat-nowrap">
-                                    <span data-role="current-value">@(series.CurrentValue.HasValue ? series.CurrentValue.Value.ToString("0.0") : "-")</span>
-                                    <span class="mat-text-muted" data-role="current-unit">@series.Unit</span>
-                                </td>
-                                <td data-label="Trend" class="mat-hide-sm">
-                                    <svg class="dashboard-spark dashboard-spark--mini" data-sparkline viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-                                        <path data-role="area"></path>
-                                        <path data-role="line"></path>
-                                    </svg>
-                                </td>
-                                <td data-label="Type" class="mat-hide-sm" data-role="sensor-type">@series.SensorTypeLabel</td>
-                                <td data-label="Target" class="mat-hide-sm mat-mono mm-break" data-role="sensor-target">@series.Target</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            @if (snapshot.SensorCount > visibleDashboardSensors.Length)
+            @if (snapshot.SensorCount > liveSensors.Length)
             {
-                <div class="mat-card__foot">
-                    <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("arrow-right")<span>@(snapshot.SensorCount - visibleDashboardSensors.Length) more sensors</span></a>
+                <div class="mat-actions">
+                    <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">@MatUi.Icon("arrow-right")<span>@(snapshot.SensorCount - liveSensors.Length) more sensors</span></a>
                 </div>
             }
         }

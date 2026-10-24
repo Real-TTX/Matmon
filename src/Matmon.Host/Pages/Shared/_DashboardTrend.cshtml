@@ -1,0 +1,16 @@
+@model string
+@* One sensor's recent history as drawn on the dashboard (dashboard.js drawTrend): the line of its readings placed by
+   TIME, broken where a check failed (a failed check has no reading - it used to be drawn as a 0 or pinned to the top),
+   and under it the state of every check as a band, so a failure is a red stretch rather than a spike. Hovering shows
+   the check under the pointer. The model is the size: "lg" (highlights) or "sm" (the sensor tiles). *@
+<div class="mm-trend mm-trend--@Model" data-trend>
+    <svg class="mm-trend__plot" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path data-role="area"></path>
+        <path data-role="line"></path>
+    </svg>
+    <span class="mm-trend__dot" data-role="dot" hidden></span>
+    <span class="mm-trend__empty" data-role="empty" hidden></span>
+    <svg class="mm-trend__states" viewBox="0 0 100 1" preserveAspectRatio="none" aria-hidden="true" focusable="false" data-role="states"></svg>
+    <span class="mm-trend__cursor" data-role="cursor" hidden></span>
+    <span class="mm-trend__tip" data-role="tip" hidden></span>
+</div>

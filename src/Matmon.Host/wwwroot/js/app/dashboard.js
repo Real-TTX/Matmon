@@ -58,6 +58,12 @@ function renderDashboard(snapshot) {
   renderNavCounters(snapshot);
   renderDashboardStatusChart(snapshot);
 
+  // A highlight was added elsewhere: the strip is only drawn when there is one, so it is not on the page yet.
+  if (!highlightStrip && highlightedKeys.size > 0 && document.querySelector("[data-dashboard-status-chart]")) {
+    window.location.reload();
+    return;
+  }
+
   if (highlightStrip) {
     const currentHighlightedCards = Array.from(highlightStrip.querySelectorAll("[data-series-key]"));
     const currentHighlightedKeys = currentHighlightedCards
@@ -72,6 +78,9 @@ function renderDashboard(snapshot) {
       return;
     }
   }
+
+  // What each sensor said last - a tile shows it while the sensor has a problem.
+  const messages = new Map((snapshot.nodes ?? []).map((node) => [node.id, node.stateMessage]));
 
   const seriesCards = document.querySelectorAll("[data-series-key]");
   seriesCards.forEach((card) => {
@@ -92,7 +101,9 @@ function renderDashboard(snapshot) {
 
     const valueElement = card.querySelector('[data-role="current-value"]');
     if (valueElement) {
-      valueElement.textContent = series.currentValue == null ? "-" : numberFormatter.format(series.currentValue);
+      // A check that failed without a reading has no current value - its placeholder 0 is not one.
+      const lastPoint = (series.points ?? [])[(series.points ?? []).length - 1];
+      valueElement.textContent = series.currentValue == null || (lastPoint && lastPoint.hasReading === false) ? "-" : numberFormatter.format(series.currentValue);
     }
 
     const unitElement = card.querySelector('[data-role="current-unit"]');
@@ -108,12 +119,216 @@ function renderDashboard(snapshot) {
       }
     }
 
+    const messageElement = card.querySelector('[data-role="message"]');
+    if (messageElement) {
+      const message = state === "error" || state === "warning" ? messages.get(series.sensorId) : null;
+      messageElement.textContent = message ?? "";
+      messageElement.hidden = !message;
+    }
+
+    const trend = card.querySelector("[data-trend]");
+    if (trend) {
+      drawTrend(trend, series.points ?? [], series.unit ?? "");
+      return;
+    }
+
     const svg = card.querySelector("svg[data-sparkline], svg.sparkline");
     if (svg) {
       drawSparkline(svg, series.points ?? [], lineColor);
     }
   });
 }
+// ---- The dashboard trend (_DashboardTrend.cshtml) ----
+// The readings are placed by TIME (a gap in the checks shows as a gap, not as an even step), a failed check has no
+// reading - its point is a 0 in the series - so the line is broken there instead of diving to zero, and the state of
+// every check is drawn as a band under the line: runs of the same state are one segment each.
+const trendData = new WeakMap();
+
+function drawTrend(trend, points, unit) {
+  const svgNs = "http://www.w3.org/2000/svg";
+  const line = trend.querySelector('[data-role="line"]');
+  const area = trend.querySelector('[data-role="area"]');
+  const band = trend.querySelector('[data-role="states"]');
+  const dot = trend.querySelector('[data-role="dot"]');
+  const empty = trend.querySelector('[data-role="empty"]');
+  if (!line || !area || !band) {
+    return;
+  }
+
+  const samples = points
+    .map((point) => ({
+      time: Date.parse(point.timestampUtc),
+      value: Number(point.value),
+      state: normalizeStateKey(point.state),
+      reading: point.hasReading !== false
+    }))
+    .filter((sample) => Number.isFinite(sample.time))
+    .sort((a, b) => a.time - b.time);
+  trendData.set(trend, { samples, unit });
+
+  band.replaceChildren();
+  const readingCount = samples.filter((sample) => sample.reading && Number.isFinite(sample.value)).length;
+  if (empty) {
+    // Said in words rather than left as an empty box: no check yet, or checks that all failed.
+    empty.textContent = samples.length === 0 ? "No checks yet" : readingCount === 0 ? "No readings - the checks failed" : "";
+    empty.hidden = readingCount > 0;
+  }
+  if (samples.length === 0) {
+    line.setAttribute("d", "");
+    area.setAttribute("d", "");
+    if (dot) {
+      dot.hidden = true;
+    }
+    return;
+  }
+
+  const start = samples[0].time;
+  const end = samples[samples.length - 1].time;
+  const span = end - start;
+  const xOf = (time) => (span > 0 ? ((time - start) / span) * 100 : 50);
+  const hasReading = (sample) => sample.reading && Number.isFinite(sample.value);
+
+  const readings = samples.filter(hasReading).map((sample) => sample.value);
+  let min = readings.length ? Math.min(...readings) : 0;
+  let max = readings.length ? Math.max(...readings) : 1;
+  if (max === min) {
+    // A flat series sits in the middle rather than on an edge.
+    min -= 1;
+    max += 1;
+  }
+  const height = 40;
+  const pad = 3;
+  const yOf = (value) => height - pad - ((value - min) / (max - min)) * (height - pad * 2);
+
+  // The line: one segment per run of checks that have a reading.
+  const segments = [];
+  let current = [];
+  samples.forEach((sample) => {
+    if (!hasReading(sample)) {
+      if (current.length) {
+        segments.push(current);
+      }
+      current = [];
+      return;
+    }
+    current.push({ x: xOf(sample.time), y: yOf(sample.value) });
+  });
+  if (current.length) {
+    segments.push(current);
+  }
+
+  const lineParts = [];
+  const areaParts = [];
+  segments.forEach((segment) => {
+    // A lone reading between two failures is drawn as a short dash, so it is still visible.
+    const pts = segment.length === 1
+      ? [{ x: Math.max(0, segment[0].x - 0.6), y: segment[0].y }, { x: Math.min(100, segment[0].x + 0.6), y: segment[0].y }]
+      : segment;
+    const path = pts.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(2) + " " + p.y.toFixed(2)).join(" ");
+    lineParts.push(path);
+    areaParts.push(path + " L" + pts[pts.length - 1].x.toFixed(2) + " " + height + " L" + pts[0].x.toFixed(2) + " " + height + " Z");
+  });
+  line.setAttribute("d", lineParts.join(" "));
+  area.setAttribute("d", areaParts.join(" "));
+
+  // The band: a check owns the stretch from halfway after the previous check to halfway before the next one.
+  let runStart = 0;
+  for (let index = 0; index < samples.length; index++) {
+    const next = samples[index + 1];
+    if (next && next.state === samples[index].state) {
+      continue;
+    }
+    const from = runStart === 0 ? 0 : (xOf(samples[runStart - 1].time) + xOf(samples[runStart].time)) / 2;
+    const to = next ? (xOf(samples[index].time) + xOf(next.time)) / 2 : 100;
+    const rect = document.createElementNS(svgNs, "rect");
+    rect.setAttribute("x", from.toFixed(3));
+    rect.setAttribute("y", "0");
+    rect.setAttribute("width", Math.max(0.4, to - from).toFixed(3));
+    rect.setAttribute("height", "1");
+    rect.setAttribute("data-state", samples[index].state);
+    band.appendChild(rect);
+    runStart = index + 1;
+  }
+
+  // The latest reading as a dot (HTML, so it stays round in a stretched plot).
+  if (dot) {
+    const last = samples[samples.length - 1];
+    dot.hidden = !hasReading(last);
+    if (hasReading(last)) {
+      dot.style.setProperty("--mm-x", xOf(last.time) + "%");
+      // A fraction of the plot's height; the stylesheet turns it into a position above the band.
+      dot.style.setProperty("--mm-y", (yOf(last.value) / height).toFixed(4));
+    }
+  }
+}
+
+// Hovering a trend shows the check nearest the pointer: its time, its reading and its state. Delegated, so a trend
+// drawn later works too; built with textContent only.
+function initializeDashboardTrends() {
+  if (!document.querySelector("[data-trend]")) {
+    return;
+  }
+
+  const hide = (trend) => {
+    trend.querySelectorAll('[data-role="cursor"], [data-role="tip"]').forEach((element) => {
+      element.hidden = true;
+    });
+  };
+
+  const show = (trend, clientX) => {
+    const data = trendData.get(trend);
+    const tip = trend.querySelector('[data-role="tip"]');
+    const cursor = trend.querySelector('[data-role="cursor"]');
+    if (!data || data.samples.length === 0 || !tip || !cursor) {
+      return;
+    }
+    const rect = trend.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+    const share = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const start = data.samples[0].time;
+    const span = data.samples[data.samples.length - 1].time - start;
+    const target = start + share * span;
+    let nearest = data.samples[0];
+    data.samples.forEach((sample) => {
+      if (Math.abs(sample.time - target) < Math.abs(nearest.time - target)) {
+        nearest = sample;
+      }
+    });
+    const x = span > 0 ? ((nearest.time - start) / span) * 100 : 50;
+
+    const time = document.createElement("time");
+    time.textContent = new Date(nearest.time).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const reading = document.createElement("strong");
+    const formatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const failed = !nearest.reading;
+    reading.textContent = failed ? "Check failed" : formatter.format(nearest.value) + (data.unit ? " " + data.unit : "");
+    const state = document.createElement("span");
+    state.textContent = defaultStateLabel(nearest.state);
+    tip.replaceChildren(time, reading, state);
+
+    cursor.style.setProperty("--mm-x", x + "%");
+    tip.style.setProperty("--mm-x", x + "%");
+    // Keep the tip inside the tile at either end.
+    tip.style.setProperty("--mm-shift", x < 20 ? "0%" : x > 80 ? "-100%" : "-50%");
+    cursor.hidden = false;
+    tip.hidden = false;
+  };
+
+  document.addEventListener("pointermove", (event) => {
+    const trend = event.target instanceof Element ? event.target.closest("[data-trend]") : null;
+    document.querySelectorAll("[data-trend]").forEach((other) => {
+      if (other !== trend) {
+        hide(other);
+      }
+    });
+    if (trend) {
+      show(trend, event.clientX);
+    }
+  });
+}
+
 
 // The tone of a MatUi state pill (as MatUi.PillClass draws it on the server): the word inside it is set by the caller.
 const statePillTones = ["mat-pill--ok", "mat-pill--warn", "mat-pill--error", "mat-pill--info", "mat-pill--plain"];
@@ -155,6 +370,8 @@ function renderDashboardStatusChart(snapshot) {
 
   charts.forEach((chart) => {
     setDashboardStatusText(chart, "status-total", numberFormatter.format(counts.total));
+    const ok = counts.items.find((item) => item.key === "ok");
+    setDashboardStatusText(chart, "status-ok-share", String(counts.total > 0 && ok ? Math.round((ok.count / counts.total) * 100) : 0));
 
     counts.items.forEach((item) => {
       setDashboardStatusText(chart, `status-${item.key}-count`, numberFormatter.format(item.count));

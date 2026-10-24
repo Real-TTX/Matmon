@@ -431,7 +431,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                         stateLabel,
                         stateColor,
                         probeItemHealth.LastSeen,
-                        probeItemHealth.Message));
+                        probeItemHealth.Message,
+                        MonitoringStatePresentation.Key(probeItemHealth.Severity)));
                 }
                 break;
             case MonitoringElementKind.Host:
@@ -545,13 +546,16 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             ?? latestObservation?.Channels.FirstOrDefault();
         var rawUnit = string.IsNullOrWhiteSpace(defaultChannel?.Unit) ? unit : defaultChannel!.Unit;
         var measurementKind = defaultChannel?.MeasurementKind ?? SensorUnitConverter.GuessMeasurementKind(rawUnit);
-        var currentValueDisplay = SensorUnitConverter.Format(display.CurrentValue, rawUnit, measurementKind);
+        // One scale for the current value AND the graph points, so a tooltip on the graph speaks the same unit as the
+        // figure above it (the points used to stay in the raw unit: 105216 "d" under a value of 1.2 d).
+        var valueScale = SensorUnitConverter.CreateScale(display.CurrentValue, rawUnit, measurementKind);
+        var currentValueDisplay = SensorUnitConverter.Format(display.CurrentValue, valueScale, measurementKind);
         var isHighlighted = effectiveSettings.Highlight == true;
         var sensorTypeLabel = sensorDefinitions.TryGetValue(sensor.SensorTypeKey, out var sensorDefinition)
             ? sensorDefinition.DisplayName
             : sensor.SensorTypeKey;
         var points = observations
-            .Select(observation => SensorHistoryAnalytics.BuildGraphPoint(observation, defaultChannelKey))
+            .Select(observation => SensorHistoryAnalytics.BuildGraphPoint(observation, defaultChannelKey, valueScale))
             .Where(point => point is not null)
             .Select(point => point!)
             .ToArray();

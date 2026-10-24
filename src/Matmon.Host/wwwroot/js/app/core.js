@@ -19,6 +19,7 @@ const featureStarters = [
   "initializeTreeContextMenu",
   "initializeMonitoringSizeToggle",
   "initializeDashboardRefresh",
+  "initializeDashboardTrends",
   "initializeSensorNameSuggestion",
   "initializeSensorTypePreview",
   "initializeSensorParameterVisibility",

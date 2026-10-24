@@ -126,7 +126,12 @@ public static class SensorHistoryAnalytics
     {
         if (observation.State == SensorState.Critical)
         {
-            return new TelemetrySamplePoint(observation.TimestampUtc, 0d, observation.State);
+            // A failed check stays in the series (its state matters) - with its reading only when a real channel
+            // measured one (a disk at 97 %). A check that failed outright carries just the virtual sensorState 0 or a
+            // bare 0 value, which is no reading.
+            var channel = GetDefaultChannel(observation, defaultChannelKeyOverride);
+            var reading = channel is { IsVirtual: false, Value: double measured } ? ApplyScale(measured, scale) : null;
+            return new TelemetrySamplePoint(observation.TimestampUtc, reading ?? 0d, observation.State, reading.HasValue);
         }
 
         var value = ApplyScale(GetDefaultValue(observation, defaultChannelKeyOverride), scale);
