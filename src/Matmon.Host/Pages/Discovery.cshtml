@@ -23,11 +23,7 @@
 
     // Home lists the jobs; a scan and a job are their own screens below it, so the breadcrumb leads back.
     ViewData["Title"] = Model.Mode switch { "scan" => "Start a discovery", "job" => "Discovery job", _ => "Discovery" };
-    if (Model.Mode == "home")
-    {
-        ViewData["PageSub"] = "Find the hosts of a network and the sensors that fit them.";
-    }
-    else
+    if (Model.Mode != "home")
     {
         ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Discovery", "/Discovery"), new BreadcrumbItem(Model.Mode == "scan" ? "Start a discovery" : "Job") };
         if (Model.Mode == "job" && selectedJob is not null)

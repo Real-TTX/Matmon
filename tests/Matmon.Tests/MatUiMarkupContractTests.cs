@@ -146,6 +146,16 @@ public sealed partial class MatUiMarkupContractTests
     }
 
     [Fact]
+    public void No_page_explains_itself_under_its_title()
+    {
+        // The line under a page title may NAME what is shown (a sensor's path, a job's network, a status) - it is no
+        // place for a sentence explaining the page. Those crept back twice and were removed twice (decided 2026-10-25):
+        // a page that needs explaining needs a better title or a better layout, not a caption.
+        var problems = Views().SelectMany(v => ExplainingSubtitle().Matches(v.Text).Select(m => $"{v.File}: {m.Value.Trim()}")).ToList();
+        Assert.True(problems.Count == 0, "Explanatory PageSub (only name the object, never explain the page):\n" + string.Join("\n", problems));
+    }
+
+    [Fact]
     public void Scripts_use_no_browser_dialogs()
     {
         var problems = new List<string>();
@@ -184,6 +194,9 @@ public sealed partial class MatUiMarkupContractTests
     }
 
     private static string SourceFile([System.Runtime.CompilerServices.CallerFilePath] string path = "") => path;
+
+    [GeneratedRegex("""ViewData\["PageSub"\]\s*=\s*(\$?"[A-Za-z]|[^;]*\?\s*"[A-Za-z])""")]
+    private static partial Regex ExplainingSubtitle();
 
     [GeneratedRegex(@"\sstyle\s*=\s*""([^""]*)""", RegexOptions.IgnoreCase)] private static partial Regex StyleAttribute();
     [GeneratedRegex(@"\son(click|input|submit|change|keydown|keyup|load|focus|blur)\s*=", RegexOptions.IgnoreCase)] private static partial Regex EventAttribute();

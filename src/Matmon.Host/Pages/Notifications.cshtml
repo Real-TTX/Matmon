@@ -3,7 +3,6 @@
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     ViewData["Title"] = "Notifications";
-    ViewData["PageSub"] = "Trigger rules and the scheduled report, and the senders and receivers they use.";
     var returnUrl = Request.Path + Request.QueryString;
 
     // The single scheduled "summary report" is shown as one row in the same list as the trigger rules.

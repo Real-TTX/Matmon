@@ -2,7 +2,6 @@
 @model WorkspaceModel
 @{
     ViewData["Title"] = "Sensor Assistant";
-    ViewData["PageSub"] = "Enter the target and credentials, press Analyze, then keep only the channels you want.";
     // No tabs here: the shared editor partials draw their sections one below another instead of as tab panels.
     ViewData["SensorEditorPanels"] = false;
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");

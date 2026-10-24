@@ -3,9 +3,6 @@
 @{
     ViewData["Title"] = "Events";
     var hasSyslog = Model.SyslogView is not null;
-    ViewData["PageSub"] = hasSyslog
-        ? "What Matmon saw happen, and what the network's devices said."
-        : "What Matmon saw happen: state changes, alerts and changes to the setup.";
     var returnUrl = Request.Path + Request.QueryString;
 
     // The Matmon list is filtered on the server: the search is a field in the toolbar, Kind / State / Limit sit in the

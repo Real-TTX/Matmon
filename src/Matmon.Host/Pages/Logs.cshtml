@@ -3,7 +3,6 @@
 @{
     ViewData["Title"] = "System";
     ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Logs") };
-    ViewData["PageSub"] = "The log of this process, newest first. It lives in memory and starts empty after a restart.";
 
     // The lowest level shown. As before, no level in the address means "Info & up", and a level the list does not know
     // selects nothing - the view then shows everything (Trace), which is what the old select fell back to.

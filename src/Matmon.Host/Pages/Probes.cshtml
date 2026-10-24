@@ -3,7 +3,6 @@
 @{
     ViewData["Title"] = "Probes";
     var probes = Model.Probes;
-    ViewData["PageSub"] = $"{probes.Count} configured: the local primary, remote probes and agents - where the sensors run.";
     var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
 }
 

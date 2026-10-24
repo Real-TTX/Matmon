@@ -2,7 +2,6 @@
 @model MapEditorModel
 @{
     ViewData["Title"] = Model.IsCreateMode ? "New Map" : $"Edit {Model.Input.Name}";
-    ViewData["PageSub"] = "Design your wallboard. Use the grid, add widgets and configure the slide rotation.";
     ViewData["Width"] = "wide";
 
     string WindowLabel(int hours) => hours switch

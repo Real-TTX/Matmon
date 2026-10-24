@@ -2,7 +2,6 @@
 @model Matmon.Host.Pages.MibsModel
 @{
     ViewData["Title"] = "SNMP MIBs";
-    ViewData["PageSub"] = $"{Model.Modules.Count} modules · {Model.NodeCount:N0} named OIDs";
     var uploaded = Model.Modules.Where(module => module.Source == "Uploaded").ToList();
     var builtIn = Model.Modules.Where(module => module.Source != "Uploaded").ToList();
 }

@@ -2,7 +2,6 @@
 @model ProbeInstallModel
 @{
     ViewData["Title"] = "Install probe";
-    ViewData["PageSub"] = "Copy one of the commands below and start the probe on the target host.";
     var backUrl = Model.GetSafeReturnUrl("/Probes");
     var probe = Model.Probe;
     var stateTone = probe is null

@@ -30,11 +30,15 @@ The layout draws the shell and the page head. A page sets:
 
 ```csharp
 ViewData["Title"] = "Sensors";                     // the h1, the last crumb and the window title
-ViewData["PageSub"] = "One line under the title."; // optional
+ViewData["PageSub"] = view.Path;                  // optional: NAMES what is shown - never explains the page
 ViewData["Width"] = "narrow";                     // optional: "narrow" (forms, 780 px) or "wide" (the map designer)
 ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Sensors", "/Monitoring"), new BreadcrumbItem("Ping") }; // a custom trail
 ViewData["OwnHead"] = true;                       // only when the page draws its own <div class="mat-page__head">
 ```
+
+**No explanation under the title.** The line under the h1 names the object on the page (a sensor's path, a job's
+network, a status) or is left out; a sentence describing what the page is for is not allowed (they crept back twice
+and were removed twice - `MatUiMarkupContractTests.No_page_explains_itself_under_its_title` refuses a literal text).
 
 `@section TopbarActions { <div class="mat-topbar__actions">…</div> }` puts at most four icon buttons at the right end of
 the header bar (SHELL-17). Exactly one `<h1>` per page. Back navigation is the breadcrumb. Pages without the menu (sign-in,

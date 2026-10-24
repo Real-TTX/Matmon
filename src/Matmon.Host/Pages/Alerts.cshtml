@@ -3,7 +3,6 @@
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore Store
 @{
     ViewData["Title"] = "Alerts";
-    ViewData["PageSub"] = "An alert stays open until it is acknowledged - also after its sensor recovered.";
     var returnUrl = Request.Path + Request.QueryString;
     var allAlerts = Model.View.Alerts;
     var activeMutes = Store.GetActiveAlertMutes();

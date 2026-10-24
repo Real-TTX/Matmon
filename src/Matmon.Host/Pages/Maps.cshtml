@@ -13,24 +13,17 @@
                 : Url.Page("/MapPublic", null, new { token = candidate.PublicToken }, Request.Scheme))
             ?? $"/Maps/Public/{candidate.PublicToken}";
 
-    // Boards have no aspect ratio and no letterbox mode - they lay out across their columns. Describing one
-    // as "1920:1080 · keep ratio" was left over from the canvas and told the reader nothing true.
-    string MapPresetText(MonitoringMap candidate) =>
-        $"{Math.Max(1, candidate.Columns)} columns · {Math.Max(1, candidate.Rows)} rows per screen";
-
     // The viewer is a page of its own: the map's name is the title and the breadcrumb leads back to the
     // library (it used to be a "Map Library" button above the board).
     var selectedPublicUrl = map is null ? null : PublicUrl(map);
     if (map is not null && Model.Display is not null)
     {
         ViewData["Title"] = map.Name;
-        ViewData["PageSub"] = MapPresetText(map);
         ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Maps", "/Maps"), new BreadcrumbItem(map.Name) };
     }
     else
     {
         ViewData["Title"] = "Maps";
-        ViewData["PageSub"] = "Boards of tiles for a screen or a TV - open one here, or share it as a wallboard.";
     }
 }
 

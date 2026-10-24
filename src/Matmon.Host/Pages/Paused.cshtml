@@ -4,7 +4,6 @@
     ViewData["Title"] = "Paused";
     var pausedSensors = Model.View.Nodes.Where(node => node.Kind == MonitoringElementKind.Sensor && node.IsPaused).ToArray();
     var countText = $"{pausedSensors.Length} {(pausedSensors.Length == 1 ? "sensor" : "sensors")} paused";
-    ViewData["PageSub"] = countText;
     var returnUrl = Request.Path + Request.QueryString;
 }
 

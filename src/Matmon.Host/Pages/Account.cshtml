@@ -2,7 +2,6 @@
 @model AccountModel
 @{
     ViewData["Title"] = "Account";
-    ViewData["PageSub"] = Model.AccountName;
     // An error, an enrollment in progress or the answer of a two-factor action opens the Security tab (decided here, not in script).
     var security = Model.ShowSecurityTab;
 }

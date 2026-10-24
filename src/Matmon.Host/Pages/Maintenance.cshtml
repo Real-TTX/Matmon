@@ -3,7 +3,6 @@
 @using Matmon.Core.Domain
 @{
     ViewData["Title"] = "Maintenance";
-    ViewData["PageSub"] = "Times in which the elements a window covers raise no new alert";
     var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var recurrence = Model.Input.Recurrence;
 }
