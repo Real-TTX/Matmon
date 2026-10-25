@@ -65,7 +65,8 @@ public sealed record PluginDefinition(
 /// Something a plugin saw and the instance has to know: a log line, a trap, a status change. Created where the plugin
 /// runs - on a probe it waits in the probe's on-disk queue while the primary is unreachable and arrives later with its
 /// real time (<see cref="OccurredUtc"/>). <see cref="Payload"/> is the plugin's own JSON, read by the matching handler
-/// on the primary (by <see cref="Kind"/>).
+/// on the primary (by <see cref="Kind"/>). <see cref="Id"/> is given on a probe (<c>ProbePluginEventSink</c>) and lets the
+/// primary recognise an event it already took when the probe sends a batch again; empty from an older probe.
 /// </summary>
 public sealed record PluginEvent(
     string PluginId,
@@ -73,7 +74,8 @@ public sealed record PluginEvent(
     DateTimeOffset OccurredUtc,
     string? Source,
     string Payload,
-    Guid AssignmentId = default);
+    Guid AssignmentId = default,
+    Guid Id = default);
 
 public interface IPluginEventSink
 {

@@ -48,7 +48,8 @@ public sealed class ProbePluginEventSink : IPluginEventSink
             return;
         }
 
-        _pending.Enqueue(pluginEvent);
+        // The id travels with the event through the disk queue, so a batch sent again is recognised on the primary.
+        _pending.Enqueue(pluginEvent.Id == Guid.Empty ? pluginEvent with { Id = Guid.NewGuid() } : pluginEvent);
     }
 
     public List<PluginEvent> Drain()

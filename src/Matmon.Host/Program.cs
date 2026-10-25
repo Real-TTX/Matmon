@@ -1037,9 +1037,13 @@ if (runtimeOptions.Mode == AppMode.Primary)
         // A log line is stamped with the time it reached the probe - by the probe's clock, so corrected like a result.
         var receivedUtc = DateTimeOffset.UtcNow;
         var clockOffset = ProbeClock.Offset(upload.SentUtc, receivedUtc);
+        var repeated = 0;
         foreach (var pluginEvent in events)
         {
-            dispatcher.Dispatch(pluginEvent with { OccurredUtc = ProbeClock.Correct(pluginEvent.OccurredUtc, clockOffset, receivedUtc) }, probeId);
+            if (!dispatcher.Dispatch(pluginEvent with { OccurredUtc = ProbeClock.Correct(pluginEvent.OccurredUtc, clockOffset, receivedUtc) }, probeId))
+            {
+                repeated++;
+            }
         }
 
         // A probe speaks for its own assignments only - never for another probe's.
@@ -1050,8 +1054,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
             registry.ReportAssignment(status.AssignmentId, new Matmon.Probe.Plugins.PluginStatus(status.State, status.Detail), now);
         }
 
-        registry.ReportProbe(probeId, upload.AvailablePlugins ?? [], upload.QueuedEvents, upload.DroppedEvents, events.Count, now);
-        return Results.Ok(new { accepted = events.Count });
+        registry.ReportProbe(probeId, upload.AvailablePlugins ?? [], upload.QueuedEvents, upload.DroppedEvents, events.Count - repeated, now);
+        return Results.Ok(new { accepted = events.Count, repeated });
     }).AllowAnonymous();
 
     app.MapGet("/api/probes/{probeId}/run-jobs", (

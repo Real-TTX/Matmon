@@ -236,6 +236,37 @@ public sealed class PluginSystemTests : IDisposable
         Assert.Equal(2, dispatcher.Unhandled);
     }
 
+    [Fact]
+    public void An_event_a_probe_sends_again_is_handled_once()
+    {
+        var handler = new CountingHandler();
+        var dispatcher = new PluginEventDispatcher([handler], NullLogger<PluginEventDispatcher>.Instance);
+        var sink = new ProbePluginEventSink();
+        sink.Publish(new PluginEvent("syslog-collector", "count", DateTimeOffset.UtcNow, "10.0.0.9", "{}"));
+        var queued = Assert.Single(sink.Drain());
+
+        Assert.NotEqual(Guid.Empty, queued.Id); // the probe gives it an id that travels with it
+        Assert.True(dispatcher.Dispatch(queued, "probe-01"));
+        Assert.False(dispatcher.Dispatch(queued, "probe-01")); // the same batch again
+        Assert.Equal(1, handler.Count);
+        Assert.Equal(1, dispatcher.Repeated);
+
+        // An older probe sends no id: nothing to recognise, so every copy is handled as before.
+        var legacy = new PluginEvent("syslog-collector", "count", DateTimeOffset.UtcNow, "10.0.0.9", "{}");
+        Assert.True(dispatcher.Dispatch(legacy, "probe-01"));
+        Assert.True(dispatcher.Dispatch(legacy, "probe-01"));
+        Assert.Equal(3, handler.Count);
+    }
+
+    private sealed class CountingHandler : IPluginEventHandler
+    {
+        public int Count { get; private set; }
+
+        public string Kind => "count";
+
+        public void Handle(PluginEvent pluginEvent, string? probeId) => Count++;
+    }
+
     private sealed class ThrowingHandler : IPluginEventHandler
     {
         public string Kind => "boom";

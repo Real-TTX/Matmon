@@ -36,18 +36,37 @@ public sealed class SyslogPluginEventHandler(ISyslogStore store) : IPluginEventH
 /// probe may carry a plugin this primary does not know yet.</summary>
 public sealed class PluginEventDispatcher(IEnumerable<IPluginEventHandler> handlers, ILogger<PluginEventDispatcher> logger)
 {
+    // A probe that did not see the answer to its POST sends the same batch again; every log line and trap of it used to
+    // be stored twice. The ids of the events taken in the last hour are remembered (at most this many - a probe sends
+    // 500 per batch and repeats one within seconds), in memory: a repeat across a primary restart is not recognised.
+    public const int RememberedEvents = 100_000;
+    public static readonly TimeSpan RememberFor = TimeSpan.FromHours(1);
+
     private readonly Dictionary<string, IPluginEventHandler> _handlers =
         handlers.ToDictionary(handler => handler.Kind, StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<Guid> _seen = [];
+    private readonly Queue<(Guid Id, DateTimeOffset At)> _seenOrder = new();
+    private readonly Lock _seenGate = new();
     private long _unhandled;
+    private long _repeated;
 
     public long Unhandled => Interlocked.Read(ref _unhandled);
 
-    public void Dispatch(PluginEvent pluginEvent, string? probeId)
+    public long Repeated => Interlocked.Read(ref _repeated);
+
+    /// <summary>Hands the event to its handler. False when it is one the primary already took (same id) - then nothing happens.</summary>
+    public bool Dispatch(PluginEvent pluginEvent, string? probeId)
     {
+        if (pluginEvent.Id != Guid.Empty && !Remember(pluginEvent.Id, DateTimeOffset.UtcNow))
+        {
+            Interlocked.Increment(ref _repeated);
+            return false;
+        }
+
         if (!_handlers.TryGetValue(pluginEvent.Kind, out var handler))
         {
             Interlocked.Increment(ref _unhandled);
-            return;
+            return true;
         }
 
         try
@@ -59,6 +78,27 @@ public sealed class PluginEventDispatcher(IEnumerable<IPluginEventHandler> handl
         {
             Interlocked.Increment(ref _unhandled);
             logger.LogDebug(exception, "A {Kind} event from {Probe} could not be handled", pluginEvent.Kind, probeId ?? "the primary");
+        }
+
+        return true;
+    }
+
+    private bool Remember(Guid id, DateTimeOffset now)
+    {
+        lock (_seenGate)
+        {
+            while (_seenOrder.TryPeek(out var oldest) && (_seenOrder.Count >= RememberedEvents || now - oldest.At > RememberFor))
+            {
+                _seen.Remove(_seenOrder.Dequeue().Id);
+            }
+
+            if (!_seen.Add(id))
+            {
+                return false;
+            }
+
+            _seenOrder.Enqueue((id, now));
+            return true;
         }
     }
 }
