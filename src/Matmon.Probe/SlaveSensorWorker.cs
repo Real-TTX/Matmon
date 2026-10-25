@@ -341,7 +341,7 @@ public sealed class SlaveSensorWorker : BackgroundService
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/probes/{Uri.EscapeDataString(probeId)}/observations")
             {
-                Content = JsonContent.Create(new ProbeSensorObservationBatch(reports), options: JsonOptions)
+                Content = JsonContent.Create(new ProbeSensorObservationBatch(reports, DateTimeOffset.UtcNow), options: JsonOptions)
             };
             AddProbeToken(request);
 
@@ -444,7 +444,7 @@ public sealed class SlaveSensorWorker : BackgroundService
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/probes/{Uri.EscapeDataString(probeId)}/observations")
         {
-            Content = JsonContent.Create(new ProbeSensorObservationBatch(reports), options: JsonOptions)
+            Content = JsonContent.Create(new ProbeSensorObservationBatch(reports, DateTimeOffset.UtcNow), options: JsonOptions)
         };
         AddProbeToken(request);
 
@@ -559,7 +559,7 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/probes/{Uri.EscapeDataString(probeId)}/run-jobs/results")
         {
-            Content = JsonContent.Create(new ProbeRunJobResultBatch(results), options: JsonOptions)
+            Content = JsonContent.Create(new ProbeRunJobResultBatch(results, DateTimeOffset.UtcNow), options: JsonOptions)
         };
         AddProbeToken(request);
 

@@ -16,6 +16,9 @@ public interface ITelemetryRepository
 
     void AppendObservation(SensorObservation observation);
 
+    /// <summary>Whether the sensor has an observation stamped between the two times (inclusive) - an indexed lookup.</summary>
+    bool HasObservation(Guid sensorId, DateTimeOffset fromUtc, DateTimeOffset toUtc);
+
     /// <summary>Most recent observation per sensor, keyed by sensor id.</summary>
     IReadOnlyDictionary<Guid, SensorObservation> GetLatestObservations();
 

@@ -257,6 +257,7 @@ of them are optional:
 | `Matmon__Auth__Username` / `Matmon__Auth__Password` | – | Pre-provision an admin and skip the setup wizard |
 | `Matmon__CloudHeartbeatIntervalSeconds` | `30` | How often the primary checks in with Matmon.Cloud (if linked) |
 | `Matmon__AllowedProgramPaths` | – | Allow-list for the *Local Program* sensor (`;`-separated) |
+| `Matmon__TrustedProxies` | loopback + private networks | Who may tell Matmon the real client address and scheme (`X-Forwarded-*`) - addresses or CIDR ranges, `;`-separated, or `any`. Set it when your reverse proxy sits on a public address |
 | `Matmon__WorkspacePath` | `data/workspace.json` | Where state is stored (inside `/app/data`) |
 | `Matmon__SyslogPath` | `data/syslog.db` | Where received syslog messages are stored |
 | `Matmon__PluginsPath` | `data/plugins` | Folder for additional plugin DLLs (they run with Matmon's own rights - only install what you trust) |

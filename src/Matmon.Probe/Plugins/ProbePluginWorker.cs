@@ -23,7 +23,8 @@ public sealed record ProbePluginUpload(
     IReadOnlyList<ProbePluginStatusReport> Statuses,
     IReadOnlyList<string> AvailablePlugins,
     int QueuedEvents = 0,
-    long DroppedEvents = 0);
+    long DroppedEvents = 0,
+    DateTimeOffset? SentUtc = null);
 
 /// <summary>
 /// The events of the plugins on a probe, on their way to the primary. <see cref="Publish"/> is called from a plugin's
@@ -272,7 +273,8 @@ public sealed class ProbePluginWorker : BackgroundService
             statuses.Select(status => new ProbePluginStatusReport(status.AssignmentId, status.Status.State, status.Status.Detail)).ToList(),
             _catalog.Plugins.Select(plugin => plugin.Definition.Id).ToList(),
             queue.Count - batch.Count,
-            _sink.Dropped);
+            _sink.Dropped,
+            DateTimeOffset.UtcNow);
 
         using var response = await client.PostAsJsonAsync($"api/probes/{Uri.EscapeDataString(probeId)}/plugins/events", upload, cancellationToken);
         if (response.IsSuccessStatusCode && batch.Count > 0)

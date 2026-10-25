@@ -21,8 +21,11 @@ public sealed record ProbeSensorAssignment(
     // remote probe. Nullable + defaulted so older probes/payloads stay compatible.
     SensorObservation? LastObservation = null);
 
+// SentUtc = the probe's clock when it sent the batch; the primary corrects the timestamps by the difference to its
+// own (ProbeClock). Null from an older probe.
 public sealed record ProbeSensorObservationBatch(
-    IReadOnlyList<ProbeSensorObservationReport> Observations);
+    IReadOnlyList<ProbeSensorObservationReport> Observations,
+    DateTimeOffset? SentUtc = null);
 
 public sealed record ProbeSensorObservationReport(
     Guid SensorId,
@@ -66,7 +69,8 @@ public sealed record ProbeRunJobResult(
     DateTimeOffset TimestampUtc);
 
 public sealed record ProbeRunJobResultBatch(
-    IReadOnlyList<ProbeRunJobResult> Results);
+    IReadOnlyList<ProbeRunJobResult> Results,
+    DateTimeOffset? SentUtc = null);
 
 // The UI poll shape for GET /api/run-jobs/{jobId} (a sensor test's result, or discovered OIDs).
 public sealed record RunJobStatusResponse(

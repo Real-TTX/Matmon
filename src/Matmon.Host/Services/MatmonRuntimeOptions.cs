@@ -94,6 +94,10 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
     /// </summary>
     public string? CloudUrl { get; set; }
 
+    /// <summary>Senders whose X-Forwarded-* headers are believed (<c>Matmon__TrustedProxies</c>): addresses or CIDR
+    /// ranges, or <c>any</c>. Empty = loopback and private networks - see <see cref="TrustedProxies"/>.</summary>
+    public string? TrustedProxies { get; set; }
+
     /// <summary>The instance id issued by Matmon.Cloud (<c>Matmon__CloudInstanceId</c>).</summary>
     public string? CloudInstanceId { get; set; }
 

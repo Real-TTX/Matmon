@@ -225,6 +225,21 @@ public interface IMonitoringWorkspaceStore
         string? executedByProbeId = null,
         string? executedByProbeName = null);
 
+    /// <summary>
+    /// Records a result a probe POSTed, unless the sensor already has one stamped within
+    /// <paramref name="duplicateTolerance"/> of it - a probe that did not see the answer to its POST (a timeout, a
+    /// dropped connection) sends the same batch again, and every result of it used to be stored, evented and
+    /// alert-synced a second time. False = it was such a repeat and nothing was recorded.
+    /// </summary>
+    bool RecordProbeObservation(
+        Guid sensorId,
+        SensorExecutionResult result,
+        DateTimeOffset timestampUtc,
+        TimeSpan duplicateTolerance,
+        MonitoringSettings? settings,
+        string? executedByProbeId,
+        string? executedByProbeName);
+
     IReadOnlyList<SensorObservation> GetSensorHistory();
 
     IReadOnlyList<SensorObservation> GetSensorHistory(Guid sensorId, TimeSpan? window = null, int? maxCount = null);

@@ -20,9 +20,20 @@ public sealed class CloudBackupClient
         _runtimeOptions = runtimeOptions;
     }
 
-    public sealed record CloudBackupItem(Guid Id, DateTimeOffset CreatedUtc, string Label, string Version, long SizeBytes);
+    // Encrypted is the cloud's own record of whether the push was passphrase-protected. A cloud that predates it
+    // sends nothing, so IsEncrypted still falls back to the "(encrypted)" the label has always carried.
+    public sealed record CloudBackupItem(Guid Id, DateTimeOffset CreatedUtc, string Label, string Version, long SizeBytes, bool Encrypted = false)
+    {
+        public bool IsEncrypted => Encrypted || LabelSaysEncrypted(Label);
+    }
 
-    public sealed record CloudAccountBackupItem(Guid Id, Guid InstanceId, string InstanceName, DateTimeOffset CreatedUtc, string Label, string Version, long SizeBytes);
+    public sealed record CloudAccountBackupItem(Guid Id, Guid InstanceId, string InstanceName, DateTimeOffset CreatedUtc, string Label, string Version, long SizeBytes, bool Encrypted = false)
+    {
+        public bool IsEncrypted => Encrypted || LabelSaysEncrypted(Label);
+    }
+
+    private static bool LabelSaysEncrypted(string? label) =>
+        label?.Contains("(encrypted)", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>True when this instance is linked to a cloud (url + instance id + token all present).</summary>
     public bool IsConnected
@@ -70,7 +81,8 @@ public sealed class CloudBackupClient
 
         // kind + encrypted let the cloud retain manual vs scheduled separately and let the restore UI know a
         // passphrase is needed. Older clouds ignore the extra query params.
-        var query = $"/backups?label={Uri.EscapeDataString(label)}&kind={(scheduled ? "scheduled" : "manual")}&encrypted={(encrypted ? "true" : "false")}";
+        // version = the build that made it, so the cloud's backup list can say which Matmon wrote a package.
+        var query = $"/backups?label={Uri.EscapeDataString(label)}&version={Uri.EscapeDataString(Matmon.Probe.MatmonVersion.Current)}&kind={(scheduled ? "scheduled" : "manual")}&encrypted={(encrypted ? "true" : "false")}";
         using var request = BuildRequest(HttpMethod.Post, url, instanceId, token, query, new ByteArrayContent(bytes));
         using var response = await Http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();

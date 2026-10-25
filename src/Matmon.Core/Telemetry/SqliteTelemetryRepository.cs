@@ -264,6 +264,19 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    public bool HasObservation(Guid sensorId, DateTimeOffset fromUtc, DateTimeOffset toUtc)
+    {
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT 1 FROM observation WHERE sensor_id = $sensor AND ts BETWEEN $from AND $to LIMIT 1;";
+            cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
+            cmd.Parameters.AddWithValue("$from", fromUtc.ToUnixTimeMilliseconds());
+            cmd.Parameters.AddWithValue("$to", toUtc.ToUnixTimeMilliseconds());
+            return cmd.ExecuteScalar() is not null;
+        }
+    }
+
     public IReadOnlyDictionary<Guid, SensorObservation> GetLatestObservations()
     {
         lock (_sync)

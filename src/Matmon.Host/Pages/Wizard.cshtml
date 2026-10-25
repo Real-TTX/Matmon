@@ -175,7 +175,7 @@
                     <div class="mat-stack">
                         @foreach (var backup in Model.AccountBackups)
                         {
-                            var encrypted = backup.Label.Contains("(encrypted)", StringComparison.OrdinalIgnoreCase);
+                            var encrypted = backup.IsEncrypted;
                             var passphraseId = $"wizard-passphrase-{backup.Id}";
                             <div class="mat-card">
                                 <div class="mat-card__head">@MatUi.Icon("cloud")<h3 class="mat-card__title">@backup.InstanceName</h3></div>

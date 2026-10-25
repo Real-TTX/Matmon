@@ -129,6 +129,29 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         | ForwardedHeaders.XForwardedHost;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
+    // Only a proxy on this machine, the LAN or the Docker network may say who the client is (TrustedProxies) - a
+    // header from anybody else would let a caller pick the address the rate limits count.
+    var trusted = TrustedProxies.Resolve(runtimeOptions.TrustedProxies, out var ignoredProxies);
+    if (ignoredProxies.Count > 0)
+    {
+        Console.Error.WriteLine($"Matmon__TrustedProxies: ignored {string.Join(", ", ignoredProxies)} (not an address or CIDR range)");
+    }
+
+    if (trusted is null)
+    {
+        return; // "any": the cleared lists mean every sender is trusted
+    }
+
+    foreach (var network in trusted)
+    {
+        options.KnownIPNetworks.Add(network);
+    }
+
+    if (trusted.Count == 0)
+    {
+        // A list that parsed to nothing must not read as "trust everybody", which is what empty lists mean here.
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("127.0.0.1/32"));
+    }
 });
 builder.Services.AddSingleton<ITelemetryRepository>(_ => new SqliteTelemetryRepository(telemetryDatabasePath));
 // Notification hand-off queue (no deps → no DI cycle with the store) + SMTP sender. The store enqueues
@@ -865,7 +888,14 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.Ok(new { recorded = 0 });
         }
 
+        // The probe's clock may be off: move its stamps by the difference to ours (ProbeClock). A moved stamp differs
+        // from one send to the next by the network time, so a repeat is then recognised within a couple of seconds -
+        // a sensor never runs that often - and otherwise only at the exact same millisecond.
+        var receivedUtc = DateTimeOffset.UtcNow;
+        var clockOffset = ProbeClock.Offset(batch.SentUtc, receivedUtc);
+        var duplicateTolerance = clockOffset == TimeSpan.Zero ? TimeSpan.Zero : TimeSpan.FromSeconds(2);
         var recorded = 0;
+        var repeated = 0;
         foreach (var observation in batch.Observations)
         {
             if (!assignmentProvider.TryBuildRecordingContext(
@@ -878,17 +908,24 @@ if (runtimeOptions.Mode == AppMode.Primary)
                 continue;
             }
 
-            workspaceStore.RecordSensorObservation(
-                observation.SensorId,
-                observation.Result,
-                observation.TimestampUtc,
-                settings,
-                probe.ProbeId,
-                probe.Name);
-            recorded++;
+            if (workspaceStore.RecordProbeObservation(
+                    observation.SensorId,
+                    observation.Result,
+                    ProbeClock.Correct(observation.TimestampUtc, clockOffset, receivedUtc),
+                    duplicateTolerance,
+                    settings,
+                    probe.ProbeId,
+                    probe.Name))
+            {
+                recorded++;
+            }
+            else
+            {
+                repeated++;
+            }
         }
 
-        return Results.Ok(new { recorded });
+        return Results.Ok(new { recorded, repeated });
     }).AllowAnonymous();
 
     app.MapGet("/api/probes/{probeId}/discovery-jobs", (
@@ -997,9 +1034,12 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.BadRequest(new { error = "at most 2000 events per request" });
         }
 
+        // A log line is stamped with the time it reached the probe - by the probe's clock, so corrected like a result.
+        var receivedUtc = DateTimeOffset.UtcNow;
+        var clockOffset = ProbeClock.Offset(upload.SentUtc, receivedUtc);
         foreach (var pluginEvent in events)
         {
-            dispatcher.Dispatch(pluginEvent, probeId);
+            dispatcher.Dispatch(pluginEvent with { OccurredUtc = ProbeClock.Correct(pluginEvent.OccurredUtc, clockOffset, receivedUtc) }, probeId);
         }
 
         // A probe speaks for its own assignments only - never for another probe's.
@@ -1051,6 +1091,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.Unauthorized();
         }
 
+        var receivedUtc = DateTimeOffset.UtcNow;
+        var clockOffset = ProbeClock.Offset(batch.SentUtc, receivedUtc);
         var recorded = 0;
         foreach (var result in batch.Results)
         {
@@ -1078,7 +1120,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
                 workspaceStore.RecordSensorObservation(
                     sensorId,
                     result.Result,
-                    result.TimestampUtc,
+                    ProbeClock.Correct(result.TimestampUtc, clockOffset, receivedUtc),
                     settings,
                     probe.ProbeId,
                     probe.Name);

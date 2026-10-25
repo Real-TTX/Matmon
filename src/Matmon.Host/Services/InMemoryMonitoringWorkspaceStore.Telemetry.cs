@@ -132,6 +132,28 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return _telemetry.GetLatestObservations();
     }
 
+    public bool RecordProbeObservation(
+        Guid sensorId,
+        SensorExecutionResult result,
+        DateTimeOffset timestampUtc,
+        TimeSpan duplicateTolerance,
+        MonitoringSettings? settings,
+        string? executedByProbeId,
+        string? executedByProbeName)
+    {
+        // Check and record under one lock: two copies of a batch arriving at once must not both get past the check.
+        lock (_gate)
+        {
+            if (_telemetry.HasObservation(sensorId, timestampUtc - duplicateTolerance, timestampUtc + duplicateTolerance))
+            {
+                return false;
+            }
+
+            RecordSensorObservation(sensorId, result, timestampUtc, settings, executedByProbeId, executedByProbeName);
+            return true;
+        }
+    }
+
     public SensorObservation? GetLatestObservation(Guid sensorId)
     {
         // O(1) cache read (thread-safe in the repo); no _gate needed - the polling hot path calls this

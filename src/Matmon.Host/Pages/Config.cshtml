@@ -392,17 +392,25 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                             @foreach (var cloudBackup in Model.CloudBackups)
                             {
                                 <tr>
-                                    <td data-label="Backup" class="mat-table__primary">@cloudBackup.Label</td>
+                                    <td data-label="Backup" class="mat-table__primary">@if (cloudBackup.IsEncrypted) {<span class="mat-pill" data-tip="Passphrase-protected">@MatUi.Icon("lock")<span>Encrypted</span></span> }@cloudBackup.Label</td>
                                     <td data-label="Created" class="mat-mono">@cloudBackup.CreatedUtc.ToLocalTime().ToString("g")</td>
                                     <td data-label="Size" class="mat-num mat-mono">@($"{cloudBackup.SizeBytes / 1024.0:0.#} KB")</td>
                                     <td class="mat-table__cell-actions">
                                         <div class="mat-table__actions">
                                             <form method="post" asp-page-handler="CloudRestoreBackup" asp-route-backupId="@cloudBackup.Id" class="system-restore-form">
-                                                <div class="mat-input-group mat-input-group--sm">
-                                                    <input type="password" name="passphrase" class="mat-input" placeholder="Passphrase (if encrypted)" autocomplete="off" aria-label="Passphrase for @cloudBackup.Label (if encrypted)" />
-                                                    <button type="submit" class="mat-btn mat-btn--secondary"
+                                                @if (cloudBackup.IsEncrypted)
+                                                {
+                                                    <div class="mat-input-group mat-input-group--sm">
+                                                        <input type="password" name="passphrase" class="mat-input" placeholder="Passphrase" autocomplete="off" aria-label="Passphrase for @cloudBackup.Label" />
+                                                        <button type="submit" class="mat-btn mat-btn--secondary"
+                                                                data-confirm="Restore this cloud backup? It overwrites the current configuration." data-confirm-ok="Restore">@MatUi.Icon("restore")<span>Restore</span></button>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm"
                                                             data-confirm="Restore this cloud backup? It overwrites the current configuration." data-confirm-ok="Restore">@MatUi.Icon("restore")<span>Restore</span></button>
-                                                </div>
+                                                }
                                             </form>
                                             <form method="post" asp-page-handler="CloudDeleteBackup" asp-route-backupId="@cloudBackup.Id">
                                                 <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Delete @cloudBackup.Label" data-tip="Delete"
