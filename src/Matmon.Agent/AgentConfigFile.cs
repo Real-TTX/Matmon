@@ -86,6 +86,10 @@ public static class AgentConfigFile
 
         var directory = Path.GetDirectoryName(path)!;
         Directory.CreateDirectory(directory);
+        if (OperatingSystem.IsWindows())
+        {
+            SecureDirectoryWindows(directory);
+        }
 
         // The token is the agent's credential for its whole life: only the service account (SYSTEM / root), an
         // administrator and whoever ran enroll may read it. The file is CREATED with those permissions - no
@@ -123,6 +127,60 @@ public static class AgentConfigFile
             Access = FileAccess.Write,
             UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
         });
+    }
+
+    /// <summary>
+    /// The folder holds the identity AND the update hand-shake files the SYSTEM service and its updater read
+    /// (pending.json, confirmed, last-update.json). Under ProgramData it would inherit "Users may create files":
+    /// a standard user could plant those files, or create the folder before the install and own it. So it gets an
+    /// ACL of its own - SYSTEM, Administrators and whoever ran enroll may change it, everyone else may only read
+    /// (the tray opens the log folder) - and is owned by Administrators, whoever created it.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void SecureDirectoryWindows(string directory)
+    {
+        try
+        {
+            var security = new DirectorySecurity();
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+            const InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+            var writers = new List<SecurityIdentifier>
+            {
+                new(WellKnownSidType.LocalSystemSid, null),
+                new(WellKnownSidType.BuiltinAdministratorsSid, null)
+            };
+            if (WindowsIdentity.GetCurrent().User is { } caller && !writers.Contains(caller))
+            {
+                writers.Add(caller);
+            }
+
+            foreach (var sid in writers)
+            {
+                security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+            }
+
+            security.AddAccessRule(new FileSystemAccessRule(
+                new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+                FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
+            new DirectoryInfo(directory).SetAccessControl(security);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException or PrivilegeNotHeldException)
+        {
+            // Not elevated and not the owner: leave the folder as it is - the identity file keeps its own ACL.
+            return;
+        }
+
+        try
+        {
+            // A folder a standard user created before the install would stay THEIRS (an owner can always rewrite
+            // the ACL). Taking it over needs elevation - which enroll/setup have when they install the service.
+            var owner = new DirectorySecurity();
+            owner.SetOwner(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null));
+            new DirectoryInfo(directory).SetAccessControl(owner);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException or PrivilegeNotHeldException)
+        {
+        }
     }
 
     [SupportedOSPlatform("windows")]

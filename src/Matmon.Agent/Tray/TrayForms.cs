@@ -191,7 +191,11 @@ internal sealed class SetupForm : Form
 
         var self = Environment.ProcessPath!;
         var resultFile = Path.Combine(Path.GetTempPath(), $"matmon-agent-setup-{Guid.NewGuid():N}.json");
-        var arguments = $"setup --url \"{url}\" --code \"{code}\" --result \"{resultFile}\"" + (_tray.Status is not null ? " --force" : string.Empty);
+        // --force whenever an identity is already on disk - not only when the service answers: a setup that failed
+        // after enrolling (or a service removed without its agent.json) otherwise refused every later attempt with
+        // "already enrolled", which nobody can answer from the tray.
+        var hasIdentity = _tray.Status is not null || File.Exists(AgentConfigFile.Resolve([]));
+        var arguments = $"setup --url \"{url}\" --code \"{code}\" --result \"{resultFile}\"" + (hasIdentity ? " --force" : string.Empty);
 
         _setUp.Enabled = false;
         ShowResult(null, "Setting up…");

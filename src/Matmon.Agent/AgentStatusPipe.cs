@@ -65,11 +65,13 @@ public sealed class AgentStatusPipeServer : BackgroundService
             return;
         }
 
+        var failures = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await using var pipe = CreatePipe();
+                failures = 0;
                 await pipe.WaitForConnectionAsync(stoppingToken);
 
                 using var reader = new StreamReader(pipe, leaveOpen: true);
@@ -86,8 +88,19 @@ public sealed class AgentStatusPipeServer : BackgroundService
             }
             catch (Exception ex)
             {
-                // A client that hangs up mid-answer is normal; anything else must not stop the agent.
+                // A client that hangs up mid-answer is normal; anything else must not stop the agent. A pipe that
+                // cannot be created (the name is taken - another process holds it) used to be retried at once,
+                // forever: one CPU core at 100 % for the life of the service. Back off instead.
                 _logger.LogDebug(ex, "Status pipe request failed");
+                failures++;
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Min(60, 0.5 * Math.Pow(2, Math.Min(failures, 7)))), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
             }
         }
     }

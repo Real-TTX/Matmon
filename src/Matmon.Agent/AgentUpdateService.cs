@@ -180,9 +180,29 @@ public sealed class AgentUpdateService : BackgroundService
         var staged = StagedPath(target);
         var updater = UpdaterPath(target);
 
-        _logger.LogInformation("Agent update available: {Current} -> {Version}; downloading {RuntimeId}", MatmonVersion.Current, decision.Version, runtimeId);
-        await DownloadAsync(client, package!, decision.Version!, staged, stoppingToken);
-        await VerifyRunsAsync(staged, decision.Version!, stoppingToken);
+        // A signed agent never runs an unsigned package - known from the manifest, so it is not downloaded (43-54 MB)
+        // only to be refused. Any refusal (signature, hash, --version) is recorded, so the 24 h pause applies: it used
+        // to throw and download the same package again at every hourly check, on every agent, for good.
+        try
+        {
+            if (AgentPackageSignature.RequiredByThisBuild && string.IsNullOrWhiteSpace(package!.Signature))
+            {
+                throw new InvalidOperationException("the instance offers an unsigned package and this agent only runs signed ones");
+            }
+
+            _logger.LogInformation("Agent update available: {Current} -> {Version}; downloading {RuntimeId}", MatmonVersion.Current, decision.Version, runtimeId);
+            await DownloadAsync(client, package!, decision.Version!, staged, stoppingToken);
+            await VerifyRunsAsync(staged, decision.Version!, stoppingToken);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException && !stoppingToken.IsCancellationRequested)
+        {
+            var refused = new AgentUpdateRecord(decision.Version!, MatmonVersion.Current, AgentUpdateOutcome.Failed, ex.Message, DateTimeOffset.UtcNow);
+            _files.WriteLastUpdate(refused);
+            _files.Log($"update to {decision.Version} refused: {ex.Message}");
+            _runtimeState.AgentUpdateStatus = AgentUpdatePolicy.Describe(refused);
+            _logger.LogWarning("Agent update to {Version} refused: {Reason}", decision.Version, ex.Message);
+            return;
+        }
 
         // The updater is a copy of THIS build. A copy still running from an earlier update locks the file -
         // then an update is already under way and this one waits for the next check.
