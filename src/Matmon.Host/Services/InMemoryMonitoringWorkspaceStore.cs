@@ -293,8 +293,18 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
                 // Same identity (matched by e-mail): mark it cloud-capable + stamp the login. It keeps its
                 // local password if it has one, so it can show as both "Local" and "Cloud".
+                // The Full Access tunnel calls this for EVERY request it replays (pages, static files, the live polls),
+                // so it only saves when something changed - a new link, a new role, or a login stamp older than a few
+                // minutes. It used to rewrite the whole workspace.json on each of them while a console was open.
+                var loginNow = DateTimeOffset.UtcNow;
+                var changed = !existing.CloudLinked;
                 existing.CloudLinked = true;
-                existing.LastLoginUtc = DateTimeOffset.UtcNow;
+                if (existing.LastLoginUtc is not { } lastLogin || loginNow - lastLogin >= TimeSpan.FromMinutes(5))
+                {
+                    existing.LastLoginUtc = loginNow;
+                    changed = true;
+                }
+
                 // Propagate the cloud-asserted role for SSO-ONLY accounts (cloud-linked, no local password): the
                 // cloud is their authority, so a demotion there (e.g. Owner->Viewer) must take effect on the
                 // instance. An account that also has a LOCAL password keeps its locally-managed role - the cloud
@@ -302,9 +312,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 if (string.IsNullOrWhiteSpace(existing.PasswordHash) && existing.Role != role)
                 {
                     existing.Role = role;
-                    existing.UpdatedUtc = DateTimeOffset.UtcNow;
+                    existing.UpdatedUtc = loginNow;
+                    changed = true;
                 }
-                QueueSave(SavePriority.Configuration);
+
+                if (changed)
+                {
+                    QueueSave(SavePriority.Configuration);
+                }
+
                 return CloneUser(existing);
             }
 
@@ -1567,8 +1583,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         lock (_gate)
         {
             var settings = _document.CloudSettings;
+            var newInstanceId = string.IsNullOrWhiteSpace(instanceId) ? null : instanceId.Trim();
+            if (!string.Equals(settings.InstanceId, newInstanceId, StringComparison.OrdinalIgnoreCase))
+            {
+                // Another cloud instance: the licence cached for the previous one is not this one's.
+                _document.LicenseToken = null;
+            }
+
             settings.Url = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
-            settings.InstanceId = string.IsNullOrWhiteSpace(instanceId) ? null : instanceId.Trim();
+            settings.InstanceId = newInstanceId;
             if (!string.IsNullOrWhiteSpace(token))
             {
                 settings.ProtectedToken = _credentialProtector.Protect(token.Trim());
@@ -1587,6 +1610,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             _document.CloudSettings.Enabled = false;
             _document.CloudSettings.ProtectedToken = null;
             _document.CloudSettings.Configured = true;
+            // The licence came with the link and leaves with it. It used to stay: a disconnected (or unlinked and
+            // reconnected) installation kept the old instance's paid plan until that token's lease ran out.
+            _document.LicenseToken = null;
             // Turn off the cloud-dependent features so they can't silently fail once unlinked: relay rules would
             // otherwise keep selecting the "Matmon Cloud" sender and drop every alert (only a log warning), and
             // Full Access would keep trying to open a tunnel with no token. Re-enable them after reconnecting.
@@ -2461,6 +2487,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 throw new InvalidOperationException($"Probe '{probeId}' does not exist.");
             }
 
+            if (probe.ParentId is null)
+            {
+                throw new InvalidOperationException("This instance's own probe has no token - it does not connect from outside.");
+            }
+
             probe.EnrollmentToken = CreateToken();
             QueueSave(SavePriority.Configuration);
             return probe.EnrollmentToken;
@@ -2480,7 +2511,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 .OfType<ProbeElement>()
                 .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
 
-            if (probe is null)
+            // The root is this instance itself: it runs in-process and never calls /api/probes/*. It must never pass,
+            // even when the element editor gave it a token - its assignments are every local sensor with its
+            // credentials inlined.
+            if (probe is null || probe.ParentId is null)
             {
                 return false;
             }
@@ -3771,7 +3805,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    private static void EnsureProbeHeartbeatSensor(ProbeElement probe)
+    private void EnsureProbeHeartbeatSensor(ProbeElement probe)
     {
         var sensor = probe.Children
             .OfType<SensorElement>()
@@ -3796,7 +3830,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
 
         ApplyParameterDefaults(sensor.Settings, ProbeHeartbeatSensorExecutor.Definition);
-        EnsureHeartbeatThresholdDefaults(sensor.Settings);
+        // Never tighter than an agent's own 30 s beat - an agent keeps that cadence whatever the primary is set to.
+        EnsureHeartbeatThresholdDefaults(sensor.Settings, Math.Max(_runtimeOptions.HeartbeatIntervalSeconds, 30));
     }
 
     private static void EnsureProbeHealthSensor(ProbeElement probe)
@@ -3831,20 +3866,42 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureProbeHealthThresholdDefaults(sensor.Settings);
     }
 
-    private static void EnsureHeartbeatThresholdDefaults(MonitoringSettings settings)
+    // The heartbeat's limits follow the beat it judges: warning after ~2 missed beats, critical after ~4 (+10 s for the
+    // request itself). They used to be a flat 30 / 60 s - at the default 30 s beat the warning sat ON the beat period, so
+    // latency alone tripped it, and a primary set to 60 s had every heartbeat sensor flapping. A sensor still carrying
+    // exactly the old flat defaults gets the new ones; a value an admin chose is left alone.
+    private static void EnsureHeartbeatThresholdDefaults(MonitoringSettings settings, int heartbeatIntervalSeconds)
     {
+        var interval = Math.Clamp(heartbeatIntervalSeconds, 5, 300);
         var warningKey = MonitoringSettings.BuildChannelThresholdKey("ageSeconds", "warning");
         var criticalKey = MonitoringSettings.BuildChannelThresholdKey("ageSeconds", "critical");
-
-        if (!settings.Thresholds.ContainsKey(warningKey))
+        settings.Thresholds.TryGetValue(warningKey, out var warning);
+        settings.Thresholds.TryGetValue(criticalKey, out var critical);
+        if (!IsDefaultHeartbeatPair(warning, critical))
         {
-            settings.Thresholds[warningKey] = MonitoringSettings.FormatThresholdRule(new ThresholdRule(ThresholdDirection.Above, 30));
+            return; // an admin's own limits
         }
 
-        if (!settings.Thresholds.ContainsKey(criticalKey))
+        settings.Thresholds[warningKey] = MonitoringSettings.FormatThresholdRule(new ThresholdRule(ThresholdDirection.Above, interval * 2 + 10));
+        settings.Thresholds[criticalKey] = MonitoringSettings.FormatThresholdRule(new ThresholdRule(ThresholdDirection.Above, interval * 4 + 10));
+    }
+
+    // Missing, the old flat 30 / 60, or a pair this method derived for some interval (so a changed interval moves them).
+    private static bool IsDefaultHeartbeatPair(string? warning, string? critical)
+    {
+        static double? Above(string? rule) =>
+            MonitoringSettings.TryParseThresholdRule(rule, out var parsed) && parsed.Direction == ThresholdDirection.Above
+                ? parsed.Value
+                : null;
+
+        if (warning is null && critical is null)
         {
-            settings.Thresholds[criticalKey] = MonitoringSettings.FormatThresholdRule(new ThresholdRule(ThresholdDirection.Above, 60));
+            return true;
         }
+
+        var w = Above(warning);
+        var c = Above(critical);
+        return (w, c) is (30, 60) || (w is { } derivedWarning && c is { } derivedCritical && derivedWarning > 10 && derivedCritical - 10 == 2 * (derivedWarning - 10));
     }
 
     private static void EnsureProbeHealthThresholdDefaults(MonitoringSettings settings)

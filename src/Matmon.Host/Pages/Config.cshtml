@@ -70,7 +70,8 @@
                     <dt>Probe name</dt><dd>@(Model.Overview.ProbeName ?? "-")</dd>
                     <dt>Primary URL</dt><dd class="mat-mono">@(Model.Overview.MasterUrl ?? "-")</dd>
                     <dt>Workspace</dt><dd class="mat-mono">@Model.Overview.WorkspacePath</dd>
-                    <dt>Seed login</dt><dd class="mat-mono">@Model.Overview.AuthUsername / @Model.Overview.AuthPassword</dd>
+                    @* The seed admin's user name only - its password is never shown (it used to be, in plain text). *@
+                    <dt>Seed login</dt><dd class="mat-mono">@(string.IsNullOrWhiteSpace(Model.Overview.AuthUsername) ? "-" : Model.Overview.AuthUsername)</dd>
                 </dl>
             </div>
         </section>
@@ -514,7 +515,7 @@ else if (Model.IsActiveTab("reports") && canManageSystem)
 }
 else if (Model.IsActiveTab("cloud") && canManageSystem)
 {
-    var linkActive = Model.CloudSettings.Configured ? Model.CloudSettings.Enabled : Model.CloudEnvBootstrapSet;
+    var linkActive = Model.CloudLinkActive;
     var lastStatus = Model.CloudConnection.LastStatus;
     var ok = string.Equals(lastStatus, "ok", StringComparison.OrdinalIgnoreCase);
     var overLimit = !Model.License.IsUnlimited && Model.ProbeCount > Model.License.ProbeLimit;

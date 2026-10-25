@@ -39,6 +39,33 @@ public class SensorThresholdEvaluatorTests
     }
 
     [Fact]
+    public void The_message_names_the_channel_that_crossed_its_limit_once()
+    {
+        // A Windows Health warning for pending updates used to read "Cpu Load 11" - the default channel's text.
+        var settings = new MonitoringSettings();
+        MonitoringSettings.SetChannelThreshold(
+            settings, "pendingUpdates", "warning", new ThresholdRule(ThresholdDirection.Above, 0.5));
+        var result = new SensorExecutionResult(SensorState.Healthy, TimeSpan.Zero, 11, "Cpu Load 11")
+        {
+            DefaultChannelKey = "cpuLoad",
+            Channels = new[]
+            {
+                new SensorChannelValue { Key = "cpuLoad", Label = "Cpu Load", Value = 11, Unit = "%", State = SensorState.Healthy },
+                new SensorChannelValue { Key = "pendingUpdates", Label = "Pending Updates", Value = 3, State = SensorState.Healthy }
+            }
+        };
+
+        var once = SensorThresholdEvaluator.ApplyChannelThresholds(settings, result, describeBreaches: true);
+        var twice = SensorThresholdEvaluator.ApplyChannelThresholds(settings, once, describeBreaches: true);
+        var handWritten = SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
+
+        Assert.Equal(SensorState.Warning, once.State);
+        Assert.StartsWith("Cpu Load 11; Pending Updates 3 (warning", once.Message);
+        Assert.Equal(once.Message, twice.Message);
+        Assert.Equal("Cpu Load 11", handWritten.Message);
+    }
+
+    [Fact]
     public void Warning_threshold_escalates_only_to_warning()
     {
         var settings = new MonitoringSettings();

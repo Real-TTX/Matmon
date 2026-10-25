@@ -349,7 +349,7 @@ if ($physical) {
             SensorState.Warning => SensorExecutionResult.Warning(elapsed, message, defaultChannel.Value, defaultChannel.Key, channels),
             _ => SensorExecutionResult.Healthy(elapsed, message, defaultChannel.Value, defaultChannel.Key, channels)
         };
-        return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
+        return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result, describeBreaches: true);
     }
 
     /// <summary>"This machine" - see <see cref="LocalTarget"/>.</summary>

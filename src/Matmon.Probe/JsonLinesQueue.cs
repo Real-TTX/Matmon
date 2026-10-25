@@ -34,7 +34,23 @@ public sealed class JsonLinesQueue<T> where T : class
 
     public void AddRange(IEnumerable<T> items)
     {
-        var added = items.ToList();
+        // An item that cannot be written as JSON could never be SENT either - kept, it would sit at the head of the
+        // queue and fail every batch behind it. It is dropped here, with a word, instead.
+        var added = new List<T>();
+        var lines = new List<string>();
+        foreach (var item in items)
+        {
+            try
+            {
+                lines.Add(JsonSerializer.Serialize(item, Json));
+                added.Add(item);
+            }
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException or JsonException)
+            {
+                _warn?.Invoke($"Dropped an item that cannot be written as JSON: {exception.Message}");
+            }
+        }
+
         if (added.Count == 0)
         {
             return;
@@ -50,9 +66,9 @@ public sealed class JsonLinesQueue<T> where T : class
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             using var writer = new StreamWriter(_path, append: true);
-            foreach (var item in added)
+            foreach (var line in lines)
             {
-                writer.WriteLine(JsonSerializer.Serialize(item, Json));
+                writer.WriteLine(line);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

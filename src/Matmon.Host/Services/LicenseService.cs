@@ -33,13 +33,26 @@ public sealed class LicenseService : ILicenseService
         get
         {
             var info = LicenseCrypto.Verify(_store.GetLicenseToken(), LicensePublicKey.Spki);
-            if (info is null || info.IsExpired(DateTimeOffset.UtcNow))
+            if (info is null || info.IsExpired(DateTimeOffset.UtcNow) || !IsForThisInstance(info))
             {
                 return LicenseInfo.Fallback();
             }
 
             return info;
         }
+    }
+
+    // A token names the cloud instance it was signed for. While this installation is linked (in the UI) to an
+    // instance, a token for ANOTHER instance is not its licence - it would let a box that was relinked keep a paid plan
+    // it does not hold. An unlinked box (an offline token pasted by hand) accepts the token it was given.
+    private bool IsForThisInstance(LicenseInfo info)
+    {
+        var link = _store.GetCloudConnectionSettings();
+        return string.IsNullOrWhiteSpace(info.InstanceId)
+            || !link.Configured
+            || !link.Enabled
+            || string.IsNullOrWhiteSpace(link.InstanceId)
+            || string.Equals(info.InstanceId, link.InstanceId, StringComparison.OrdinalIgnoreCase);
     }
 
     public bool CanAddProbe(out string reason)

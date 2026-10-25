@@ -56,7 +56,7 @@ internal static class SqlQuerySensorSupport
                     defaultChannel.Value,
                     defaultChannel.Key,
                     markedChannels);
-                return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result);
+                return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result, describeBreaches: true);
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

@@ -91,7 +91,8 @@ public sealed class SlaveHeartbeatService : BackgroundService
             system.OperatingSystem,
             system.Host,
             system.Networks,
-            _runtimeState.AgentUpdateStatus);
+            _runtimeState.AgentUpdateStatus,
+            Math.Clamp(_runtimeOptions.HeartbeatIntervalSeconds, 5, 300));
 
         try
         {

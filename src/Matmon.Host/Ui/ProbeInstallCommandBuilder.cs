@@ -8,6 +8,12 @@ public static class ProbeInstallCommandBuilder
 {
     private const string DefaultImage = "ghcr.io/real-ttx/matmon:latest";
 
+    // The probe's own status page gets a login of ITS OWN - a fresh random password in the snippet. It used to be the
+    // primary's admin password (from Matmon__Auth__*), copied into the probe host's container environment on a
+    // possibly less trusted machine, or admin/admin on a published port when the primary had none.
+    private static string ProbeUiPassword() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(12)).Replace('+', 'x').Replace('/', 'y').TrimEnd('=');
+
     public static bool CanInstallProbe(SystemProbeOverview probe)
     {
         return !string.Equals(probe.Role, "Primary", StringComparison.OrdinalIgnoreCase) &&
@@ -20,8 +26,8 @@ public static class ProbeInstallCommandBuilder
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
         var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
-        var authUsername = string.IsNullOrWhiteSpace(overview.AuthUsername) ? "admin" : overview.AuthUsername;
-        var authPassword = string.IsNullOrWhiteSpace(overview.AuthPassword) ? "admin" : overview.AuthPassword;
+        var authUsername = "admin";
+        var authPassword = ProbeUiPassword();
 
         return $"""
 docker run -d \
@@ -49,8 +55,8 @@ docker run -d \
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
         var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
-        var authUsername = string.IsNullOrWhiteSpace(overview.AuthUsername) ? "admin" : overview.AuthUsername;
-        var authPassword = string.IsNullOrWhiteSpace(overview.AuthPassword) ? "admin" : overview.AuthPassword;
+        var authUsername = "admin";
+        var authPassword = ProbeUiPassword();
 
         return $"""
 services:
@@ -87,8 +93,8 @@ volumes:
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
         var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
-        var authUsername = string.IsNullOrWhiteSpace(overview.AuthUsername) ? "admin" : overview.AuthUsername;
-        var authPassword = string.IsNullOrWhiteSpace(overview.AuthPassword) ? "admin" : overview.AuthPassword;
+        var authUsername = "admin";
+        var authPassword = ProbeUiPassword();
 
         return $"""
 curl -fsSL https://raw.githubusercontent.com/Real-TTX/Matmon/main/scripts/install-probe.sh | \

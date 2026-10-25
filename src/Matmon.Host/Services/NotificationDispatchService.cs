@@ -37,6 +37,12 @@ public sealed class NotificationDispatchService : BackgroundService
     // Owned by the single dispatch loop (not thread-safe by design).
     private readonly NotificationThrottle _throttle = new();
 
+    // A rule that cannot be delivered says why - once an hour per rule and reason, not on every alert. The built-in
+    // browser rule is in every workspace and has no device until someone switches notifications on, and the default
+    // e-mail rule has no SMTP until an admin sets one up: both used to write a warning for every single alert.
+    private static readonly TimeSpan UndeliverableWarningInterval = TimeSpan.FromHours(1);
+    private readonly Dictionary<(Guid Rule, string Problem), DateTimeOffset> _undeliverableWarned = [];
+
     private DateTimeOffset _nextEscalationCheck = DateTimeOffset.MinValue;
 
     public NotificationDispatchService(
@@ -162,7 +168,7 @@ public sealed class NotificationDispatchService : BackgroundService
             var (delivery, problem) = _deliveryFactory.Create(route, context, workspace);
             if (delivery is null)
             {
-                _logger.LogWarning("Notification rule {Rule} matched but nothing was sent: {Problem}", rule.Name, problem);
+                LogUndeliverable(rule.Id, rule.Name, problem, now);
                 continue;
             }
 
@@ -180,6 +186,19 @@ public sealed class NotificationDispatchService : BackgroundService
         }
 
         return deliveries;
+    }
+
+    private void LogUndeliverable(Guid ruleId, string ruleName, string? problem, DateTimeOffset now)
+    {
+        var key = (ruleId, problem ?? string.Empty);
+        if (_undeliverableWarned.TryGetValue(key, out var last) && now - last < UndeliverableWarningInterval)
+        {
+            _logger.LogDebug("Notification rule {Rule} matched but nothing was sent: {Problem}", ruleName, problem);
+            return;
+        }
+
+        _undeliverableWarned[key] = now;
+        _logger.LogWarning("Notification rule {Rule} matched but nothing was sent: {Problem} (repeated at most hourly)", ruleName, problem);
     }
 
     /// <summary>

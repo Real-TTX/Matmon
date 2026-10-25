@@ -439,7 +439,13 @@ public class WizardModel : PageModel
             return RedirectToPage(new { step = "cloud" });
         }
 
-        _workspaceStore.SetLicenseToken(token);
+        if (verified.IsExpired(DateTimeOffset.UtcNow))
+        {
+            ErrorMessage = "That license token has already expired. Ask your provider to issue a fresh one. Nothing changed.";
+            return RedirectToPage(new { step = "cloud" });
+        }
+
+        _workspaceStore.SetLicenseToken(token, persistImmediately: true);
         StatusMessage = $"License applied: {verified.DisplayName}.";
         return RedirectToPage(new { step = "cloud" });
     }

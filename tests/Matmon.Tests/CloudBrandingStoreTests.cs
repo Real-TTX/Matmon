@@ -62,6 +62,27 @@ public sealed class CloudBrandingStoreTests : IDisposable
     }
 
     [Fact]
+    public void The_licence_leaves_with_the_cloud_link()
+    {
+        // A disconnected or relinked installation used to keep the old instance's paid plan until the lease ran out.
+        using var telemetry = new SqliteTelemetryRepository(_dbPath);
+        using var store = NewStore(telemetry);
+        var first = Guid.NewGuid().ToString();
+
+        store.SetCloudConnectionSettings("http://cloud", first, "token-1", enabled: true);
+        store.SetLicenseToken("licence-of-first");
+        store.SetCloudConnectionSettings("http://cloud", first, null, enabled: true);
+        Assert.Equal("licence-of-first", store.GetLicenseToken()); // same instance: kept
+
+        store.SetCloudConnectionSettings("http://cloud", Guid.NewGuid().ToString(), "token-2", enabled: true);
+        Assert.Null(store.GetLicenseToken()); // another instance: dropped
+
+        store.SetLicenseToken("licence-of-second");
+        store.DisconnectCloud();
+        Assert.Null(store.GetLicenseToken()); // unlinked: dropped
+    }
+
+    [Fact]
     public void GetServicePartnerBrandColor_is_null_without_a_managing_partner()
     {
         using var telemetry = new SqliteTelemetryRepository(_dbPath);

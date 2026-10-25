@@ -208,7 +208,7 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
                 _ => SensorExecutionResult.Healthy(watch.Elapsed, message, defaultChannel.Value, defaultChannel.Key, channels)
             };
 
-            return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
+            return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result, describeBreaches: true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

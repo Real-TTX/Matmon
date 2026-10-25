@@ -40,6 +40,51 @@ public static class MonitoringTopology
         }
     }
 
+    /// <summary>What a probe RUNS: every element below it except what sits under a nested probe, which belongs to that
+    /// probe. A probe placed under another one used to hand its sensors - and their credentials - to the outer probe
+    /// as well, so both executed them.</summary>
+    public static IEnumerable<MonitoringElement> EnumerateOwnedDescendants(ProbeElement probe)
+    {
+        foreach (var child in probe.Children)
+        {
+            if (child is ProbeElement)
+            {
+                continue;
+            }
+
+            yield return child;
+
+            if (child is MonitoringContainerElement container)
+            {
+                foreach (var descendant in EnumerateOwnedBelow(container))
+                {
+                    yield return descendant;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<MonitoringElement> EnumerateOwnedBelow(MonitoringContainerElement parent)
+    {
+        foreach (var child in parent.Children)
+        {
+            if (child is ProbeElement)
+            {
+                continue;
+            }
+
+            yield return child;
+
+            if (child is MonitoringContainerElement container)
+            {
+                foreach (var descendant in EnumerateOwnedBelow(container))
+                {
+                    yield return descendant;
+                }
+            }
+        }
+    }
+
     /// <summary>The element itself plus every descendant (depth-first).</summary>
     public static IEnumerable<MonitoringElement> EnumerateSelfAndDescendants(MonitoringElement element)
     {

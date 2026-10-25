@@ -132,7 +132,7 @@ public sealed class TunnelClient : BackgroundService
                     }
 
                     await TunnelConnectPolicy.WaitForChangeAsync(
-                        () => TunnelConnectPolicy.Signature(_workspaceStore.GetCloudConnectionSettings(), _workspaceStore.GetCloudConnectionToken(), PlanIncludesFullAccess()),
+                        () => TunnelConnectPolicy.Signature(_workspaceStore.GetCloudConnectionSettings(), _workspaceStore.GetCloudConnectionToken(), PlanIncludesFullAccess(), _workspaceStore.GetCloudConnection().LastStatus),
                         TunnelConnectPolicy.RefusedRetry,
                         TunnelConnectPolicy.ChangePoll,
                         stoppingToken);

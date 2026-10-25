@@ -25,7 +25,8 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             request.Networks,
             request.AgentVersion,
             duplicateWarning,
-            request.UpdateStatus);
+            request.UpdateStatus,
+            request.HeartbeatIntervalSeconds is > 0 ? Math.Clamp(request.HeartbeatIntervalSeconds.Value, 5, 300) : null);
 
         _probes[request.ProbeId] = snapshot;
         return snapshot;
@@ -46,7 +47,11 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
     /// </summary>
     private string? DetectDuplicate(ProbeHeartbeatRequest request, DateTimeOffset receivedAtUtc)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(5, _runtimeOptions.HeartbeatIntervalSeconds));
+        // The probe's own cadence when it says so: an agent beating every 30 s against a primary set to 120 s was
+        // flagged as "heartbeats arrive faster than the configured interval".
+        var interval = TimeSpan.FromSeconds(Math.Max(5, request.HeartbeatIntervalSeconds is > 0
+            ? Math.Min(request.HeartbeatIntervalSeconds.Value, 300)
+            : _runtimeOptions.HeartbeatIntervalSeconds));
         var identity = $"{request.Host}|{request.AgentVersion}";
 
         var watch = _duplicateWatch.AddOrUpdate(

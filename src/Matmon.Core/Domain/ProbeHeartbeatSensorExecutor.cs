@@ -13,7 +13,22 @@ public sealed class ProbeHeartbeatSensorExecutor : ISensorExecutor
         Parameters = []
     };
 
+    private static readonly TimeSpan StartupGrace = TimeSpan.FromMinutes(3);
+    private static readonly DateTimeOffset ProcessStartedUtc = ReadProcessStart();
+
     private readonly IProbeHeartbeatLookup _probeHeartbeatLookup;
+
+    private static DateTimeOffset ReadProcessStart()
+    {
+        try
+        {
+            return new DateTimeOffset(Process.GetCurrentProcess().StartTime.ToUniversalTime(), TimeSpan.Zero);
+        }
+        catch (Exception)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+    }
 
     public ProbeHeartbeatSensorExecutor(IProbeHeartbeatLookup probeHeartbeatLookup)
     {
@@ -47,6 +62,23 @@ public sealed class ProbeHeartbeatSensorExecutor : ISensorExecutor
                     Unit = "s",
                     IsDefault = true
                 };
+
+                // The heartbeat registry lives in memory: right after the primary restarted it knows no probe yet, and
+                // a heartbeat sensor polled before the probe's next beat used to go Critical - an alert and a
+                // notification after every primary update, then a "Recovered" one. For the first minutes that is
+                // "no data yet", not a dead probe.
+                if (DateTimeOffset.UtcNow - ProcessStartedUtc < StartupGrace)
+                {
+                    return ValueTask.FromResult(new SensorExecutionResult(
+                        SensorState.Unknown,
+                        watch.Elapsed,
+                        null,
+                        $"waiting for the first heartbeat of probe '{context.Target}' since this primary started")
+                    {
+                        DefaultChannelKey = missingChannel.Key,
+                        Channels = [missingChannel]
+                    });
+                }
 
                 return ValueTask.FromResult(
                     SensorExecutionResult.Critical(

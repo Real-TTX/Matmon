@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,6 +23,7 @@ public sealed class SlaveSensorWorker : BackgroundService
     private readonly NetworkDiscoveryService _discoveryService;
     private readonly ILogger<SlaveSensorWorker> _logger;
     private readonly Dictionary<Guid, DateTimeOffset> _lastExecutedUtc = new();
+    private const int MaxParallelSensorTypes = 6;
 
     // The last result of each sensor on THIS probe. A sensor that works from its previous result (interface traffic as a
     // rate, the mail round-trip) needs the one before it - the copy the assignment carries is only as fresh as the
@@ -120,6 +122,7 @@ public sealed class SlaveSensorWorker : BackgroundService
         var reports = new List<ProbeSensorObservationReport>();
         var pendingResults = new List<SlaveProbePendingResult>();
         var upcomingExecutions = new List<SlaveProbeUpcomingExecution>();
+        var due = new List<ProbeSensorAssignment>();
         var now = DateTimeOffset.UtcNow;
         foreach (var assignment in assignments.Sensors)
         {
@@ -143,8 +146,35 @@ public sealed class SlaveSensorWorker : BackgroundService
                 continue;
             }
 
-            var result = await ExecuteAssignmentAsync(assignment, cancellationToken);
-            var executedUtc = DateTimeOffset.UtcNow;
+            due.Add(assignment);
+        }
+
+        // The due sensors run side by side, one lane per sensor TYPE: a pass used to run strictly one after another and
+        // post only at the end, so a few dead WinRM or SSH targets (each waiting out its timeout) made every other
+        // sensor on the probe late - overdue, then Unknown. Sensors of the same type still run one after another,
+        // because the probe holds ONE executor per type and an executor is not built to run twice at once.
+        var executed = new ConcurrentDictionary<Guid, (SensorExecutionResult Result, DateTimeOffset ExecutedUtc)>();
+        await Parallel.ForEachAsync(
+            due.GroupBy(assignment => assignment.SensorTypeKey, StringComparer.OrdinalIgnoreCase),
+            new ParallelOptions { MaxDegreeOfParallelism = MaxParallelSensorTypes, CancellationToken = cancellationToken },
+            async (lane, token) =>
+            {
+                foreach (var assignment in lane)
+                {
+                    var laneResult = await ExecuteAssignmentAsync(assignment, token);
+                    executed[assignment.SensorId] = (laneResult, DateTimeOffset.UtcNow);
+                }
+            });
+
+        foreach (var assignment in due)
+        {
+            if (!executed.TryGetValue(assignment.SensorId, out var outcome))
+            {
+                continue;
+            }
+
+            var result = outcome.Result;
+            var executedUtc = outcome.ExecutedUtc;
             reports.Add(new ProbeSensorObservationReport(assignment.SensorId, result, executedUtc));
             pendingResults.Add(new SlaveProbePendingResult(
                 assignment.SensorId,

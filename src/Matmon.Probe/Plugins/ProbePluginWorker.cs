@@ -74,6 +74,7 @@ public sealed class ProbePluginWorker : BackgroundService
     private const int BatchSize = 500;
     private static readonly TimeSpan Tick = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan AssignmentInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan UnsupportedRetry = TimeSpan.FromMinutes(10);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ProbeRuntimeOptions _options;
@@ -120,10 +121,14 @@ public sealed class ProbePluginWorker : BackgroundService
         var cachePath = dataDirectory is null ? null : Path.Combine(dataDirectory, "plugin-assignments.json");
         IReadOnlyList<PluginAssignmentSpec> assignments = ReadCachedAssignments(cachePath);
         var nextAssignments = DateTimeOffset.MinValue;
-        var supported = true;
+        // A 404 means the primary does not know the endpoint (an older build) - or is in the middle of an update, or a
+        // proxy answered for it. It used to switch the plugins off for good, until the probe was restarted; now the
+        // probe asks again after a while, so an updated primary is picked up by itself.
+        var unsupportedUntil = DateTimeOffset.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
             var now = DateTimeOffset.UtcNow;
+            var supported = now >= unsupportedUntil;
             try
             {
                 if (supported && now >= nextAssignments)
@@ -133,6 +138,7 @@ public sealed class ProbePluginWorker : BackgroundService
                     if (fetched is null)
                     {
                         supported = false; // an older primary - nothing to run, nothing to send
+                        unsupportedUntil = now + UnsupportedRetry;
                         assignments = [];
                     }
                     else if (fetched.Value.Answered)

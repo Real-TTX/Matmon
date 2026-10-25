@@ -88,6 +88,21 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             pausedSensorCount);
     }
 
+    private static readonly TimeSpan StartupGrace = TimeSpan.FromMinutes(3);
+    private static readonly DateTimeOffset ProcessStartedUtc = ReadProcessStart();
+
+    private static DateTimeOffset ReadProcessStart()
+    {
+        try
+        {
+            return new DateTimeOffset(System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime(), TimeSpan.Zero);
+        }
+        catch (Exception)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+    }
+
     public DashboardSnapshot CreateSnapshot()
     {
         // Deep-cloned snapshot: this method walks the entire element tree (health, severity, flatten)
@@ -213,15 +228,19 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
 
             if (!liveProbes.TryGetValue(probe.ProbeId, out var liveSnapshot))
             {
+                // The registry is in memory: right after this primary started it knows no probe yet. Calling every
+                // remote probe dead for that minute raised a probe alert on every restart.
+                var justStarted = now - ProcessStartedUtc < StartupGrace;
                 probeHealthMap[probe.Id] = new ProbeHealthSnapshot(
-                    MonitoringSeverity.Error,
+                    justStarted ? MonitoringSeverity.Ok : MonitoringSeverity.Error,
                     "-",
-                    "no heartbeat");
+                    justStarted ? "waiting for its first heartbeat since this primary started" : "no heartbeat");
                 continue;
             }
 
             var ageSeconds = Math.Max((now - liveSnapshot.LastSeenUtc).TotalSeconds, 0);
-            var severity = MonitoringStatePresentation.FromHeartbeatAge(ageSeconds, heartbeatWindowSeconds);
+            // Judged by the cadence the probe reported (an agent beats every 30 s whatever the primary is set to).
+            var severity = MonitoringStatePresentation.FromHeartbeatAge(ageSeconds, liveSnapshot.HeartbeatIntervalSeconds ?? heartbeatWindowSeconds);
             probeHealthMap[probe.Id] = new ProbeHealthSnapshot(
                 severity,
                 liveSnapshot.LastSeenUtc.ToDisplay().ToString("HH:mm:ss"),

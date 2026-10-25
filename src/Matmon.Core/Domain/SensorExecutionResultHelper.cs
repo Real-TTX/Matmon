@@ -13,6 +13,7 @@ public static class SensorExecutionResultHelper
         MonitoringSettings settings,
         SensorExecutionResult result)
     {
+        result = DropNonFiniteReadings(result);
         result = EnsureVirtualStateChannel(result);
 
         if (!string.IsNullOrWhiteSpace(settings.DefaultChannelKey))
@@ -62,6 +63,29 @@ public static class SensorExecutionResultHelper
         }
 
         return result;
+    }
+
+    // NaN / Infinity is no reading (a script printing "NaN" parses as one, a division by zero yields one), and JSON has
+    // no way to write it: on a probe ONE such value made every post of the offline buffer throw, so no observation of
+    // any sensor reached the primary until it aged out, and the dashboard's JSON failed the same way.
+    private static SensorExecutionResult DropNonFiniteReadings(SensorExecutionResult result)
+    {
+        var valueBad = result.Value is { } value && !double.IsFinite(value);
+        var channelBad = result.Channels.Any(channel => channel.Value is { } reading && !double.IsFinite(reading));
+        if (!valueBad && !channelBad)
+        {
+            return result;
+        }
+
+        return result with
+        {
+            Value = valueBad ? null : result.Value,
+            Channels = channelBad
+                ? result.Channels
+                    .Select(channel => channel.Value is { } reading && !double.IsFinite(reading) ? channel with { Value = null } : channel)
+                    .ToArray()
+                : result.Channels
+        };
     }
 
     private static SensorExecutionResult EnsureVirtualStateChannel(SensorExecutionResult result)

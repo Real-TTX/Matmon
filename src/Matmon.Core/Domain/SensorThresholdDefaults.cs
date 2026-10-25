@@ -225,8 +225,8 @@ public static class SensorThresholdDefaults
         new("syslog-match", "matches", "warning", ThresholdDirection.Above, 0),
 
         // ── Backup job / disk SMART / probe heartbeat ─────────────────────────────────────────
-        new("probe-heartbeat", "ageSeconds", "warning", ThresholdDirection.Above, 30),
-        new("probe-heartbeat", "ageSeconds", "critical", ThresholdDirection.Above, 60),
+        new("probe-heartbeat", "ageSeconds", "warning", ThresholdDirection.Above, 70), // 2 beats at the default 30 s + 10 s
+        new("probe-heartbeat", "ageSeconds", "critical", ThresholdDirection.Above, 130),
     ];
 
     // (type, channel, severity) → rule, for O(1) editor lookups. All three key parts are

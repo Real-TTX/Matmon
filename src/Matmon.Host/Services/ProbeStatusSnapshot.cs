@@ -12,4 +12,6 @@ public sealed record ProbeStatusSnapshot(
     string? Version = null,
     /// <summary>Set when two processes appear to share this probe id (see InMemoryProbeRegistry.DetectDuplicate).</summary>
     string? DuplicateWarning = null,
-    string? UpdateStatus = null);
+    string? UpdateStatus = null,
+    /// <summary>The interval the probe reported it beats at (null for an older probe - then the primary's own).</summary>
+    int? HeartbeatIntervalSeconds = null);

@@ -477,6 +477,11 @@ public sealed partial class WorkspaceModel
                 throw new InvalidOperationException("Tokens can only be rotated on probes.");
             }
 
+            if (probe.ParentId is null)
+            {
+                throw new InvalidOperationException("This instance's own probe has no token - it does not connect from outside.");
+            }
+
             _workspaceStore.RotateProbeToken(probe.Id);
             StatusMessage = $"Token for '{probe.Name}' rotated.";
             return RedirectToPage(new { selectedId = probe.Id, selectedTemplateId = SelectedTemplateId });
@@ -689,7 +694,9 @@ public sealed partial class WorkspaceModel
         if (element is ProbeElement probe)
         {
             probe.ProbeId = string.IsNullOrWhiteSpace(editor.ProbeId) ? probe.ProbeId : editor.ProbeId.Trim();
-            probe.EnrollmentToken = string.IsNullOrWhiteSpace(editor.EnrollmentToken) ? probe.EnrollmentToken : editor.EnrollmentToken.Trim();
+            // The root never gets a token (TryValidateProbe refuses it anyway): its assignments would be every local
+            // sensor with its credentials.
+            probe.EnrollmentToken = probe.ParentId is null || string.IsNullOrWhiteSpace(editor.EnrollmentToken) ? probe.EnrollmentToken : editor.EnrollmentToken.Trim();
             probe.Subnets = (editor.ProbeSubnetsText ?? string.Empty)
                 .Split(['\n', '\r', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

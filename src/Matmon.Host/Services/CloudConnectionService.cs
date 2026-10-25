@@ -64,6 +64,7 @@ public sealed class CloudConnectionService : BackgroundService
         HttpClient? client = null;
         string? clientBaseUrl = null;
         var lastHeartbeat = DateTimeOffset.MinValue;
+        var lastIntervalSeconds = 0;
 
         using var timer = new PeriodicTimer(PollInterval);
         do
@@ -107,7 +108,16 @@ public sealed class CloudConnectionService : BackgroundService
                     _logger.LogInformation("Matmon.Cloud link enabled -> {Url} (instance {InstanceId})", link.BaseUrl, link.InstanceId);
                 }
 
-                // The cadence is re-read from the resolved link each tick, so a UI change takes effect live.
+                // The cadence is re-read from the resolved link each tick, so a UI change takes effect live. A CHANGED
+                // cadence beats at once: the cloud's offline grace comes from the interval the last beat reported, so
+                // waiting out a longer new interval first made the cloud declare the instance offline (and mail/push
+                // everyone) before the beat that would have told it about the slower cadence.
+                if (link.IntervalSeconds != lastIntervalSeconds)
+                {
+                    lastIntervalSeconds = link.IntervalSeconds;
+                    lastHeartbeat = DateTimeOffset.MinValue;
+                }
+
                 if (DateTimeOffset.UtcNow - lastHeartbeat >= TimeSpan.FromSeconds(link.IntervalSeconds))
                 {
                     lastHeartbeat = DateTimeOffset.UtcNow;

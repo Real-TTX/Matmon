@@ -22,7 +22,7 @@ public sealed class ProbeSensorAssignmentProvider
         var definitionMap = snapshot.SensorDefinitions.ToDictionary(definition => definition.Key, StringComparer.OrdinalIgnoreCase);
         var latestBySensorId = _workspaceStore.GetLatestSensorObservations();
 
-        var sensors = MonitoringTopology.EnumerateDescendants(probe)
+        var sensors = MonitoringTopology.EnumerateOwnedDescendants(probe)
             .OfType<SensorElement>()
             .Where(sensor => !SensorPlacement.RunsOnPrimaryOnly(sensor.SensorTypeKey))
             .Select(sensor =>
@@ -71,7 +71,7 @@ public sealed class ProbeSensorAssignmentProvider
             return false;
         }
 
-        var foundSensor = MonitoringTopology.EnumerateDescendants(foundProbe)
+        var foundSensor = MonitoringTopology.EnumerateOwnedDescendants(foundProbe)
             .OfType<SensorElement>()
             .FirstOrDefault(candidate => candidate.Id == sensorId);
         if (foundSensor is null || SensorPlacement.RunsOnPrimaryOnly(foundSensor.SensorTypeKey))

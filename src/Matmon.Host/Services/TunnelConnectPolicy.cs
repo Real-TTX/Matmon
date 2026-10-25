@@ -67,10 +67,13 @@ public static class TunnelConnectPolicy
 
     /// <summary>Everything that could change the cloud's answer, as one comparable string. The token is hashed, not
     /// kept.</summary>
-    public static string Signature(Matmon.Core.Domain.CloudConnectionSettings settings, string? token, bool planIncludesFullAccess)
+    public static string Signature(Matmon.Core.Domain.CloudConnectionSettings settings, string? token, bool planIncludesFullAccess, string? heartbeatStatus = null)
     {
         var tokenHash = string.IsNullOrEmpty(token) ? "-" : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)))[..12];
-        return $"{settings.FullAccessEnabled}|{settings.Enabled}|{settings.Url?.Trim().TrimEnd('/')}|{settings.InstanceId?.Trim()}|{tokenHash}|{planIncludesFullAccess}";
+        // The heartbeat's last outcome too: a REACTIVATED instance changes none of the settings, but its heartbeat
+        // flips from "deactivated" back to "ok" - that has to end the wait, or Full Access stayed down for 10 minutes.
+        var heartbeatOk = string.Equals(heartbeatStatus, "ok", StringComparison.OrdinalIgnoreCase);
+        return $"{settings.FullAccessEnabled}|{settings.Enabled}|{settings.Url?.Trim().TrimEnd('/')}|{settings.InstanceId?.Trim()}|{tokenHash}|{planIncludesFullAccess}|{heartbeatOk}";
     }
 
     /// <summary>

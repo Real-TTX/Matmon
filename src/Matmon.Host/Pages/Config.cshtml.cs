@@ -458,7 +458,14 @@ public class ConfigModel : PageModel
             return RedirectToPage(new { tab = "license" });
         }
 
-        _workspaceStore.SetLicenseToken(token);
+        // Verify checks the signature, not the date: an expired token used to be "applied" while the plan stayed Personal.
+        if (verified.IsExpired(DateTimeOffset.UtcNow))
+        {
+            ErrorMessage = "That license token has already expired. Ask your provider to issue a fresh one. Nothing was changed.";
+            return RedirectToPage(new { tab = "license" });
+        }
+
+        _workspaceStore.SetLicenseToken(token, persistImmediately: true);
         StatusMessage = $"License applied: {verified.DisplayName}. Note: a connected cloud will overwrite this on its next heartbeat.";
         return RedirectToPage(new { tab = "license" });
     }
@@ -509,6 +516,8 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
+        AdoptEnvironmentLink();
+
         if (!_cloudBackups.IsConnected)
         {
             ErrorMessage = "Not connected to Matmon.Cloud.";
@@ -537,6 +546,8 @@ public class ConfigModel : PageModel
         {
             return Forbid();
         }
+
+        AdoptEnvironmentLink();
 
         if (!_cloudBackups.IsConnected)
         {
@@ -571,6 +582,8 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
+        AdoptEnvironmentLink();
+
         try
         {
             StatusMessage = await _cloudBackups.DeleteAsync(backupId, cancellationToken)
@@ -591,6 +604,8 @@ public class ConfigModel : PageModel
         {
             return Forbid();
         }
+
+        AdoptEnvironmentLink();
 
         var settings = _workspaceStore.GetCloudConnectionSettings();
         var token = _workspaceStore.GetCloudConnectionToken();
@@ -653,37 +668,51 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
-        // Tell the cloud we're unlinking FIRST (while the token is still present) so it marks this instance
-        // offline immediately, instead of showing it "online" until the heartbeat times out (~150s). Best-effort.
-        await NotifyCloudDisconnectAsync();
-
+        // Tell the cloud we're unlinking so it marks this instance offline immediately, instead of showing it "online"
+        // until the heartbeat times out. The link is dropped locally FIRST (its token kept aside for the notice): a
+        // heartbeat started after the notice used to mark the instance online again, and the cloud then e-mailed
+        // "is offline" for a deliberate disconnect. Best-effort.
+        var notice = DisconnectNoticeTarget();
         _workspaceStore.DisconnectCloud();
+        await SendDisconnectNoticeAsync(notice);
         StatusMessage = "Disconnected from Matmon.Cloud.";
         return RedirectToPage(new { tab = "cloud" });
     }
 
-    private async Task NotifyCloudDisconnectAsync()
+    private Task NotifyCloudDisconnectAsync() => SendDisconnectNoticeAsync(DisconnectNoticeTarget());
+
+    /// <summary>Where to send the "I am leaving" notice - the link in EFFECT: the stored one once the UI took over,
+    /// else the environment's. Null when there is no live link.</summary>
+    private (string BaseUrl, Guid InstanceId, string Token)? DisconnectNoticeTarget()
     {
+        var settings = _workspaceStore.GetCloudConnectionSettings();
+        var active = settings.Configured ? settings.Enabled : _runtimeOptions.HasCloudBootstrapLink;
+        var url = settings.Configured ? settings.Url : _runtimeOptions.CloudUrl;
+        var instanceIdRaw = settings.Configured ? settings.InstanceId : _runtimeOptions.CloudInstanceId;
+        var token = settings.Configured ? _workspaceStore.GetCloudConnectionToken() : _runtimeOptions.CloudInstanceToken;
+        if (!active
+            || string.IsNullOrWhiteSpace(url)
+            || !Guid.TryParse(instanceIdRaw, out var instanceId)
+            || string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        return (url.Trim().TrimEnd('/'), instanceId, token);
+    }
+
+    private static async Task SendDisconnectNoticeAsync((string BaseUrl, Guid InstanceId, string Token)? target)
+    {
+        if (target is not { } notice)
+        {
+            return;
+        }
+
         try
         {
-            // The link in EFFECT: the stored one once the UI took over, else the environment's.
-            var settings = _workspaceStore.GetCloudConnectionSettings();
-            var active = settings.Configured ? settings.Enabled : _runtimeOptions.HasCloudBootstrapLink;
-            var url = settings.Configured ? settings.Url : _runtimeOptions.CloudUrl;
-            var instanceIdRaw = settings.Configured ? settings.InstanceId : _runtimeOptions.CloudInstanceId;
-            var token = settings.Configured ? _workspaceStore.GetCloudConnectionToken() : _runtimeOptions.CloudInstanceToken;
-            if (!active
-                || string.IsNullOrWhiteSpace(url)
-                || !Guid.TryParse(instanceIdRaw, out var instanceId)
-                || string.IsNullOrWhiteSpace(token))
-            {
-                return;
-            }
-
-            var baseUrl = url.Trim().TrimEnd('/');
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/instances/{instanceId}/disconnect");
-            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{notice.BaseUrl}/api/instances/{notice.InstanceId}/disconnect");
+            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", notice.Token);
             using var response = await client.SendAsync(request);
         }
         catch
@@ -723,6 +752,17 @@ public class ConfigModel : PageModel
 
     /// <summary>The link in effect comes from environment variables only. KEEP it: store it, so it is managed in the
     /// UI from now on (and no longer depends on the environment carrying the instance id and token).</summary>
+    /// <summary>A cloud feature changed while the link still comes from environment variables adopts that link first,
+    /// as "Keep this link" does. Every feature but the heartbeat reads the STORED link, so relay, Full Access, the
+    /// interval, rename, consent and the cloud backups used to report success and then do nothing.</summary>
+    private void AdoptEnvironmentLink()
+    {
+        if (!_workspaceStore.GetCloudConnectionSettings().Configured && _runtimeOptions.HasCloudBootstrapLink)
+        {
+            _workspaceStore.SetCloudConnectionSettings(_runtimeOptions.CloudUrl, _runtimeOptions.CloudInstanceId, _runtimeOptions.CloudInstanceToken, enabled: true);
+        }
+    }
+
     public IActionResult OnPostCloudKeepEnvLink(string? returnUrl)
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -919,6 +959,8 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
+        AdoptEnvironmentLink();
+
         var name = (CloudRenameName ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -964,6 +1006,8 @@ public class ConfigModel : PageModel
             return Forbid();
         }
 
+        AdoptEnvironmentLink();
+
         _workspaceStore.SetCloudRelaySettings(CloudRelay.RelayAlerts);
         StatusMessage = CloudRelay.RelayAlerts
             ? "Cloud alert relay enabled - use the \"Matmon Cloud\" sender in your notification rules."
@@ -977,6 +1021,8 @@ public class ConfigModel : PageModel
         {
             return Forbid();
         }
+
+        AdoptEnvironmentLink();
 
         // Full Access is a licensed feature - refuse to enable it on a plan that doesn't include it.
         if (CloudFullAccess && !_licenseService.Current.TunnelEnabled)
@@ -998,6 +1044,8 @@ public class ConfigModel : PageModel
         {
             return Forbid();
         }
+
+        AdoptEnvironmentLink();
 
         // Blank or <=0 clears the override (env/default fallback); otherwise store it (the store floors at 15s).
         var seconds = CloudHeartbeatSeconds is > 0 ? CloudHeartbeatSeconds : null;

@@ -921,6 +921,12 @@ if (runtimeOptions.Mode == AppMode.Primary)
         var cancelled = false;
         foreach (var result in batch.Results)
         {
+            // Only the probe the scan was handed to may report on it.
+            if (discoveryJobs.Find(result.JobId) is not { } owned || !string.Equals(owned.ProbeId, probeId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (discoveryJobs.IsCancelled(result.JobId))
             {
                 cancelled = true;
@@ -1051,6 +1057,13 @@ if (runtimeOptions.Mode == AppMode.Primary)
             // Complete() returns true only for the transition that actually finishes the job, so recording is
             // idempotent: a duplicate JobId (re-POSTed batch, repeated id) can never write the observation twice.
             var job = onDemandRunStore.TryGet(result.JobId);
+            // Only the probe the job was handed to may finish it - another probe's token must not be able to put
+            // a made-up result in front of the user (the Test preview / Run now message).
+            if (job is null || !string.Equals(job.ProbeId, probeId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (!onDemandRunStore.Complete(result.JobId, result.Result, result.DiscoveredOids, result.Error))
             {
                 continue;

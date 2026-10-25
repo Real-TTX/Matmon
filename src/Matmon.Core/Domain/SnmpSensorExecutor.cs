@@ -356,7 +356,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 defaultChannel.Key,
                 MarkDefault(channels, defaultChannel.Key));
 
-            return ValueTask.FromResult(SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result));
+            return ValueTask.FromResult(SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result, describeBreaches: true));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1047,7 +1047,7 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
                 defaultChannel.Key,
                 MarkDefault(channels, defaultChannel.Key));
 
-            return ValueTask.FromResult(SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result));
+            return ValueTask.FromResult(SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result, describeBreaches: true));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

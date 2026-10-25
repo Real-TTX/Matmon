@@ -172,7 +172,7 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
                 defaultChannel.Key,
                 MarkDefault(channels, defaultChannel.Key));
 
-            return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result);
+            return SensorThresholdEvaluator.ApplyChannelThresholds(context.Settings, result, describeBreaches: true);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

@@ -116,10 +116,14 @@ else
                                     <label class="mat-label" asp-for="ElementEditor.ProbeId">Probe ID</label>
                                     <input asp-for="ElementEditor.ProbeId" class="mat-input mat-mono" />
                                 </div>
-                                <div class="mat-field">
-                                    <label class="mat-label" asp-for="ElementEditor.EnrollmentToken">Token</label>
-                                    <input asp-for="ElementEditor.EnrollmentToken" class="mat-input mat-mono" />
-                                </div>
+                                @* The root is this instance itself - it connects from nowhere, so it has no token. *@
+                                @if (Model.ElementEditor.ParentId is not null)
+                                {
+                                    <div class="mat-field">
+                                        <label class="mat-label" asp-for="ElementEditor.EnrollmentToken">Token</label>
+                                        <input asp-for="ElementEditor.EnrollmentToken" class="mat-input mat-mono" />
+                                    </div>
+                                }
                                 <div class="mat-field mat-field--full">
                                     <label class="mat-label" asp-for="ElementEditor.ProbeSubnetsText">Scan networks (subnets)</label>
                                     <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="mat-textarea mat-mono" placeholder="10.10.0.0/16&#10;192.168.1.0/24" aria-describedby="element-subnets-hint"></textarea>
@@ -573,7 +577,7 @@ else
                     @MatUi.Icon(Model.ElementEditor.IsPaused ? "play" : "pause")<span>@(Model.ElementEditor.IsPaused ? "Resume" : "Pause")</span>
                 </button>
             }
-            @if (Model.ElementEditor.Kind == "Probe")
+            @if (Model.ElementEditor.Kind == "Probe" && Model.ElementEditor.ParentId is not null)
             {
                 <button type="submit" asp-page-handler="RotateToken" formnovalidate class="mat-btn mat-btn--secondary mat-btn--end">@MatUi.Icon("refresh")<span>Rotate</span></button>
             }
