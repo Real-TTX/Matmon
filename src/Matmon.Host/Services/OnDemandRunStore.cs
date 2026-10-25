@@ -225,9 +225,13 @@ public sealed class OnDemandRunStore : IOnDemandRunStore
             return;
         }
 
+        // Only FINISHED jobs are evicted to stay under the limit. It used to evict by age alone, so 'Run' on a folder
+        // with 350 remote sensors dropped the oldest 150 still-pending jobs moments after queuing them, while the page
+        // said all 350 were queued. (Pending ones still go once they are stale - above.)
         foreach (var id in _jobs.Values
+            .Where(job => OnDemandRunStatus.IsFinished(job.Status))
             .OrderByDescending(job => job.CreatedUtc)
-            .Skip(RetainLimit)
+            .Skip(Math.Max(0, RetainLimit - _jobs.Values.Count(job => !OnDemandRunStatus.IsFinished(job.Status))))
             .Select(job => job.Id)
             .ToArray())
         {

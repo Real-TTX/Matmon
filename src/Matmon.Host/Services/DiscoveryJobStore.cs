@@ -80,13 +80,33 @@ public sealed class DiscoveryJobStore
         }
     }
 
+    // A running scan reports progress at least every ~1 % of its hosts. One that has said nothing for this long was
+    // lost - the probe restarted mid-scan (an agent update) or could not post its completion - and used to show
+    // "running on probe" until someone cancelled it or the primary restarted.
+    private static readonly TimeSpan StalledAfter = TimeSpan.FromMinutes(10);
+
+    private void FailStalled()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in _jobs.Values.Where(job => job.Status == DiscoveryJobStatus.Running).ToArray())
+        {
+            var lastSign = job.LastActivityUtc ?? job.StartedUtc ?? job.CreatedUtc;
+            if (now - lastSign > StalledAfter)
+            {
+                Complete(job.JobId, [], $"the probe stopped reporting on this scan ({StalledAfter.TotalMinutes:0} minutes without progress)");
+            }
+        }
+    }
+
     public DiscoveryJobSnapshot? Find(Guid jobId)
     {
+        FailStalled();
         return _jobs.TryGetValue(jobId, out var job) ? job : null;
     }
 
     public IReadOnlyList<DiscoveryJobSnapshot> GetRecent(int take = 20)
     {
+        FailStalled();
         return _jobs.Values
             .OrderByDescending(job => job.CreatedUtc)
             .Take(Math.Clamp(take, 1, 100))
@@ -139,6 +159,7 @@ public sealed class DiscoveryJobStore
                 job.StartedUtc ??= DateTimeOffset.UtcNow;
             }
 
+            job.LastActivityUtc = DateTimeOffset.UtcNow;
             var merged = job.Results
                 .Concat(results.Where(result => result.IsDiscovered))
                 .GroupBy(result => result.Address, StringComparer.OrdinalIgnoreCase)
@@ -186,6 +207,7 @@ public sealed class DiscoveryJobStore
                 job.ScannedHosts = Math.Max(scannedHosts, 0);
             }
 
+            job.LastActivityUtc = DateTimeOffset.UtcNow;
             job.Message = BuildProgressMessage(job);
         }
 
@@ -209,6 +231,7 @@ public sealed class DiscoveryJobStore
             {
                 job.Status = DiscoveryJobStatus.Running;
                 job.StartedUtc = now;
+                job.LastActivityUtc = now;
                 if (job.TotalHosts <= 0)
                 {
                     job.TotalHosts = CountTargets(job.Request);
@@ -460,6 +483,9 @@ public sealed class DiscoveryJobSnapshot
     public DateTimeOffset? StartedUtc { get; set; }
 
     public DateTimeOffset? CompletedUtc { get; set; }
+
+    /// <summary>The last time the scan said something (started, progress, results) - what the stall rule reads.</summary>
+    public DateTimeOffset? LastActivityUtc { get; set; }
 
     public IReadOnlyList<NetworkDiscoveryResult> Results { get; set; } = [];
 

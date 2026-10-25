@@ -522,14 +522,16 @@ public sealed class SlaveSensorWorker : BackgroundService
             }
 
             // Same execution path as a scheduled assignment (see ExecuteAssignmentAsync), including the
-            // default-channel selection. No previous observation is threaded through for an on-demand run.
+            // default-channel selection and the sensor's previous result on THIS probe - without it a Run now of an
+            // interface sensor lost its traffic / utilisation channels (a rate needs the counter before it).
             // A recorded run job (Run now) honours Retries like a scheduled check; a test runs once.
+            var previous = job.SensorId is Guid sensorId && _lastObservations.TryGetValue(sensorId, out var last) ? last : null;
             var context = new SensorExecutionContext(
                 job.SensorTypeKey,
                 job.Target,
                 job.Settings,
                 job.SensorId,
-                previousObservation: null);
+                previousObservation: previous);
             var result = job.RecordObservation
                 ? await SensorRetry.ExecuteAsync(executor, context, cancellationToken)
                 : await executor.ExecuteAsync(context, cancellationToken);
