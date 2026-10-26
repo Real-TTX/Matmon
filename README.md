@@ -263,17 +263,28 @@ How it updates depends on how Matmon runs:
         - /var/run/docker.sock:/var/run/docker.sock
   ```
 
-- **Windows** – download `matmon-windows-x64.zip` from the release
-  [windows-latest](https://github.com/Real-TTX/Matmon/releases/tag/windows-latest) (or `windows-nightly`),
-  unpack it and run, in an elevated prompt:
+- **Windows** – download `MatmonSetup-x64.exe` from the release
+  [windows-latest](https://github.com/Real-TTX/Matmon/releases/tag/windows-latest) (or `windows-nightly`)
+  and run it. The setup asks for the folders, the port, whether other computers may connect (Windows
+  firewall) and whether Matmon should show an icon in the notification area. Matmon then runs as the Windows
+  service `Matmon` (program in `%ProgramFiles%\Matmon`, data in `%ProgramData%\Matmon\data`) and updates
+  itself from the same release. Running the setup again updates an installation in place. Matmon is removed
+  under *Settings > Apps > Installed apps*, which keeps the data unless you tick the box that deletes it.
+
+  The **tray icon** shows whether Matmon is running. It opens the web interface, the logs and the update page,
+  and it starts, stops and restarts the service. Those three ask for administrator rights each time.
+
+  For scripts and software distribution the setup also runs without a window:
 
   ```powershell
-  .\Matmon.Host.exe install-service --port 8099
+  .\MatmonSetup-x64.exe /silent /port=8099 /firewall          # install or update
+  .\MatmonSetup-x64.exe /silent /dir="D:\Matmon" /notray      # other program folder, no tray icon
+  & "$env:ProgramData\Matmon\setup\Matmon Setup.exe" /uninstall /silent [/removedata]
   ```
 
-  Matmon then runs as the Windows service `Matmon` (program in `%ProgramFiles%\Matmon`, data in
-  `%ProgramData%\Matmon\data`) and updates itself from the same release. Add `--open-firewall` to allow the port
-  for other machines; `uninstall-service` removes the service and leaves program and data in place.
+  The exit code is 0 on success, and the log is `%TEMP%\matmon-setup.log`. You can also skip the setup: unpack
+  `matmon-windows-x64.zip` and run `.\Matmon.Host.exe install-service --port 8099 [--open-firewall]` in an
+  elevated prompt. That installs the same service, without the tray icon.
 
 Without either, update the container the usual way (`docker compose pull && docker compose up -d`).
 

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Windows setup: install, update in place and uninstall the Matmon instance as a Windows service, with a small
+    wizard (or silently). A WinForms program of its own, deliberately NOT referencing Matmon.Host / Probe / Core: they
+    would drag the whole sensor stack into a setup. The installation itself is the Host's WindowsInstallation (linked
+    below), so the setup and "Matmon.Host.exe install-service" install exactly the same thing.
+
+    Shipped as ONE file: this program, published self-contained single-file, with the program package appended
+    (SetupPayload, linked below) - see scripts/package-windows.cs. The bare program, installed as
+    %ProgramData%\Matmon\setup\Matmon Setup.exe, is also the uninstaller and the tray icon (/tray, TrayApp).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- The Linux-based Docker build publishes the setup too. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MatmonSetup</AssemblyName>
+    <RootNamespace>Matmon.Setup</RootNamespace>
+    <ApplicationIcon>matmon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- What Task Manager and the start-up list show for the tray icon (this file runs as /tray as well). -->
+    <AssemblyTitle>Matmon</AssemblyTitle>
+    <Product>Matmon</Product>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsInstallation.cs" Link="Shared\WindowsInstallation.cs" />
+    <Compile Include="..\Matmon.Probe\SetupPayload.cs" Link="Shared\SetupPayload.cs" />
+    <Compile Include="..\Matmon.Agent\Tray\TrayIcons.cs" Link="Shared\TrayIcons.cs" />
+    <EmbeddedResource Include="..\Matmon.Host\wwwroot\brand\app-icon-192.png" Link="Assets\app-icon-192.png" LogicalName="Matmon.Setup.app-icon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

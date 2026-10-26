@@ -1,7 +1,6 @@
 #if WINDOWS
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Matmon.Probe;
@@ -42,7 +41,13 @@ public sealed class TrayApplication : ApplicationContext
 
     private TrayApplication()
     {
-        _icons = Enum.GetValues<TrayState>().ToDictionary(state => state, TrayIcons.Create);
+        _icons = Enum.GetValues<TrayState>().ToDictionary(state => state, state => TrayIcons.Create(state switch
+        {
+            TrayState.Connected => TrayIcons.Ok,
+            TrayState.Unreachable => TrayIcons.Warning,
+            TrayState.Stopped => TrayIcons.Error,
+            _ => TrayIcons.Neutral
+        }));
         _installedWriteTimeAtStart = WriteTime(SetupCommand.InstalledPath);
 
         _openInstanceItem = new ToolStripMenuItem("Open instance", null, (_, _) => OpenInstance());
@@ -242,65 +247,4 @@ public sealed class TrayApplication : ApplicationContext
     private static extern bool FreeConsole();
 }
 
-/// <summary>The tray icons, drawn at start-up rather than shipped as files: the brand tile plus a status dot.</summary>
-internal static class TrayIcons
-{
-    public static Icon Create(TrayState state)
-    {
-        const int size = 32;
-        using var bitmap = new Bitmap(size, size);
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.Clear(Color.Transparent);
-
-            // The brand gradient (hue 211 -> 180) on a rounded tile, a white M on top.
-            using var tile = RoundedRectangle(new Rectangle(1, 1, 26, 26), 6);
-            using var gradient = new LinearGradientBrush(new Point(0, 0), new Point(28, 28), Color.FromArgb(0x2B, 0x7B, 0xD6), Color.FromArgb(0x1F, 0xB5, 0xB0));
-            graphics.FillPath(gradient, tile);
-            using var pen = new Pen(Color.White, 3.2f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
-            graphics.DrawLines(pen, [new PointF(7, 20), new PointF(7, 8), new PointF(14, 15), new PointF(21, 8), new PointF(21, 20)]);
-
-            // State: a dot in the corner, outlined so it reads on light and dark taskbars alike.
-            var color = state switch
-            {
-                TrayState.Connected => Color.FromArgb(0x3F, 0xC4, 0x7A),
-                TrayState.Unreachable => Color.FromArgb(0xF2, 0xB1, 0x3C),
-                TrayState.Stopped => Color.FromArgb(0xE5, 0x4B, 0x5E),
-                _ => Color.FromArgb(0x9A, 0xA4, 0xB1)
-            };
-            using var dot = new SolidBrush(color);
-            using var outline = new Pen(Color.White, 2f);
-            graphics.FillEllipse(dot, 18, 18, 13, 13);
-            graphics.DrawEllipse(outline, 18, 18, 13, 13);
-        }
-
-        var handle = bitmap.GetHicon();
-        try
-        {
-            // Clone so the icon owns its data and the native handle can be released right away.
-            using var temporary = Icon.FromHandle(handle);
-            return (Icon)temporary.Clone();
-        }
-        finally
-        {
-            DestroyIcon(handle);
-        }
-    }
-
-    private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
-    {
-        var path = new GraphicsPath();
-        var diameter = radius * 2;
-        path.AddArc(bounds.X, bounds.Y, diameter, diameter, 180, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Y, diameter, diameter, 270, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - diameter, diameter, diameter, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr handle);
-}
 #endif

@@ -22,6 +22,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The Windows instance's Matmon.Host.exe carries the Matmon icon (Explorer, Installed apps, the service list). -->
+    <ApplicationIcon>..\Matmon.Setup\matmon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

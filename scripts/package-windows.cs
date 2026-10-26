@@ -2,8 +2,10 @@
 //   matmon-windows-x64.zip   the program folder (Matmon.Host.exe, wwwroot, mibs, the agent packages)
 //   matmon-windows-x64.json  the manifest: version, file, size, sha256 and - when the signing key is given - the CI
 //                            signature over platform "instance-win-x64", version and hash (AgentPackageSignature)
+//   MatmonSetup-x64.exe      with --setup: the setup program with the zip appended (SetupPayload) - the one file a person
+//                            downloads to install Matmon on Windows
 // Run by the image build's windows-package stage:
-//   dotnet run scripts/package-windows.cs -- <published folder> <version> <output folder> [<private key file>]
+//   dotnet run scripts/package-windows.cs -- <published folder> <version> <output folder> [--key <private key file>] [--setup <MatmonSetup.exe>]
 // A key that does not belong to the public key baked into Matmon fails the build instead of shipping a package every
 // signed installation refuses.
 #:project ../src/Matmon.Probe/Matmon.Probe.csproj
@@ -12,14 +14,16 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Matmon.Probe;
 
-if (args.Length is < 3 or > 4)
+if (args.Length < 3)
 {
-    Console.Error.WriteLine("usage: dotnet run scripts/package-windows.cs -- <published folder> <version> <output folder> [<private key file>]");
+    Console.Error.WriteLine("usage: dotnet run scripts/package-windows.cs -- <published folder> <version> <output folder> [--key <file>] [--setup <exe>]");
     return 2;
 }
 
 var (published, version, output) = (args[0], args[1], args[2]);
-var keyFile = args.Length == 4 ? args[3] : null;
+string? Option(string name) => Array.IndexOf(args, name) is var index and >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+var keyFile = Option("--key");
+var setupProgram = Option("--setup");
 const string Platform = "instance-win-x64";
 const string PackageFile = "matmon-windows-x64.zip";
 const string ManifestFile = "matmon-windows-x64.json";
@@ -77,4 +81,17 @@ using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented 
 }
 
 Console.WriteLine($"{PackageFile}: {version}, {size / 1024 / 1024} MB, sha256 {sha256[..12]}..., {(signature is null ? "NOT signed" : "signed")}");
+if (!string.IsNullOrWhiteSpace(setupProgram))
+{
+    var setupFile = Path.Combine(output, "MatmonSetup-x64.exe");
+    using (var setup = File.OpenRead(setupProgram))
+    using (var zip = File.OpenRead(package))
+    using (var combined = File.Create(setupFile))
+    {
+        SetupPayload.Combine(setup, zip, combined);
+    }
+
+    Console.WriteLine($"MatmonSetup-x64.exe: {new FileInfo(setupFile).Length / 1024 / 1024} MB");
+}
+
 return 0;

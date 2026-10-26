@@ -142,6 +142,12 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
 
     public Task<SelfUpdateOutcome?> ReadLastOutcomeAsync(CancellationToken cancellationToken)
     {
+        // After a self-update Windows' "Installed apps" should name the version that runs now.
+        if (OperatingSystem.IsWindows())
+        {
+            WindowsInstallation.RefreshRegisteredVersion(MatmonVersion.Current);
+        }
+
         var files = new WindowsUpdateFiles(StateDirectory);
         if (files.IsPending)
         {
