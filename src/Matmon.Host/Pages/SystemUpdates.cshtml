@@ -1,0 +1,160 @@
+@page "/system/updates"
+@model Matmon.Host.Pages.SystemUpdatesModel
+@using Matmon.Host.Services.SelfUpdate
+@{
+    ViewData["Title"] = "System";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Updates") };
+    var status = Model.Status;
+    var offer = status.Offer;
+    var canUpdate = status.Mode != SelfUpdateMode.Unavailable;
+    string ModeText(SelfUpdateMode mode) => mode switch
+    {
+        SelfUpdateMode.Docker => "Docker (the container replaces itself)",
+        SelfUpdateMode.WindowsService => "Windows service (release feed)",
+        _ => "not from here"
+    };
+    var hours = Enumerable.Range(0, 24).ToList();
+}
+
+<partial name="_SystemTabs" model="@("updates")" />
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (status.Installing)
+{
+    <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("refresh")<div class="mat-alert__body">An update is being installed. Matmon restarts in a moment.</div></div>
+}
+
+<section class="mat-card">
+    <div class="mat-card__head">@MatUi.Icon("rocket")<h2 class="mat-card__title">This installation</h2></div>
+    <div class="mat-card__body mat-stack">
+        <dl class="mat-kv">
+            <dt>Version</dt><dd class="mat-mono">@status.CurrentVersion</dd>
+            <dt>Channel</dt><dd>@status.Channel</dd>
+            <dt>Updates</dt><dd>@ModeText(status.Mode)</dd>
+            @if (canUpdate)
+            {
+                <dt>Last check</dt><dd>@(status.LastCheckUtc is { } checkedAt ? checkedAt.ToDisplay().ToString("g") : "not yet")</dd>
+                <dt>Available</dt>
+                <dd>
+                    @if (status.LastError is not null)
+                    {
+                        <span class="mat-text-danger">The check failed: @status.LastError</span>
+                    }
+                    else if (offer is { Available: true })
+                    {
+                        <span class="mat-pill mat-pill--accent">@offer.Version</span>
+                        @if (status.AutomaticState is { } automatic)
+                        {
+                            <span class="mat-text-muted"> - @automatic</span>
+                        }
+                    }
+                    else if (offer is not null)
+                    {
+                        <span>@offer.Detail</span>
+                    }
+                    else
+                    {
+                        <span class="mat-text-muted">not checked yet</span>
+                    }
+                </dd>
+            }
+            @if (status.LastOutcome is { } outcome)
+            {
+                <dt>Last update</dt>
+                <dd>
+                    <span class="@(outcome.Kind == SelfUpdateOutcomeKind.Updated ? "mat-text-success" : "mat-text-danger")">@SystemUpdatesModel.Describe(outcome)</span>
+                    <span class="mat-text-muted"> - @outcome.AtUtc.ToDisplay().ToString("g")</span>
+                    @if (!string.IsNullOrWhiteSpace(outcome.Detail))
+                    {
+                        <br /><span class="mat-text-muted">@outcome.Detail</span>
+                    }
+                </dd>
+            }
+        </dl>
+
+        @if (canUpdate)
+        {
+            <div class="mat-btn-row">
+                @if (offer is { Available: true })
+                {
+                    <form method="post" asp-page-handler="Install">
+                        <button type="submit" class="mat-btn mat-btn--primary" disabled="@status.Installing"
+                                data-confirm="Install @offer.Version now? Matmon restarts and monitoring pauses for a minute or two. If the new version does not come up, the current one is started again."
+                                data-confirm-ok="Install">@MatUi.Icon("download")<span>Install @offer.Version</span></button>
+                    </form>
+                }
+                <form method="post" asp-page-handler="Check">
+                    <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("refresh")<span>Check now</span></button>
+                </form>
+            </div>
+        }
+    </div>
+</section>
+
+@if (canUpdate)
+{
+    <form method="post" asp-page-handler="Settings" class="mat-form" novalidate>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("clock")<h2 class="mat-card__title">Automatic updates</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch">
+                            <input asp-for="Input.AutoUpdate" type="checkbox" />
+                            <span class="mat-switch__track"></span>
+                            <span>Install updates automatically</span>
+                        </label>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_WindowStartHour">Between</label>
+                        <select asp-for="Input.WindowStartHour" class="mat-select">
+                            @foreach (var hour in hours)
+                            {
+                                <option value="@hour">@($"{hour:00}:00")</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="Input_WindowEndHour">and</label>
+                        <select asp-for="Input.WindowEndHour" class="mat-select">
+                            @foreach (var hour in hours)
+                            {
+                                <option value="@hour">@($"{hour:00}:00")</option>
+                            }
+                        </select>
+                        <span class="mat-hint">Time zone @Model.TimeZoneName. The same hour twice = any time of day.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="mat-card__foot">
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
+                </div>
+            </div>
+        </section>
+    </form>
+}
+else
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("info")<h2 class="mat-card__title">Updating this installation</h2></div>
+        <div class="mat-card__body mat-stack">
+            <p>This installation cannot update itself (@status.UnavailableReason). Two ways make it possible:</p>
+            <p><strong>Docker:</strong> mount the Docker socket into the container. Matmon can then pull the new image and replace its own container, and goes back to the current one when the new one does not start. The socket gives the container control over Docker on that machine - mount it only where that is acceptable.</p>
+            <pre class="mat-code"><code>volumes:
+  - matmon-data:/app/data
+  - /var/run/docker.sock:/var/run/docker.sock</code></pre>
+            <p><strong>Windows:</strong> install Matmon as a Windows service from the Windows package, in an elevated prompt:</p>
+            <pre class="mat-code"><code>Matmon.Host.exe install-service --port 8099</code></pre>
+        </div>
+    </section>
+}

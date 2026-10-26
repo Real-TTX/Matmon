@@ -245,6 +245,38 @@ docker compose -f docker-compose.dev.yml up -d --build
 #   primary → http://localhost:8099   sample probe → http://localhost:8100
 ```
 
+### 5. Updates
+
+**System → Updates** shows the running version, checks for a newer build, installs it on request or on its own
+in a nightly window (default 03:00–05:00), and goes back to the running version when the new one does not
+come up within three minutes. Before every install the configuration is saved as a local backup snapshot.
+How it updates depends on how Matmon runs:
+
+- **Docker** – mount the Docker socket, and Matmon pulls the new image of the tag it runs (`latest` or
+  `nightly`) and replaces its own container, keeping its settings (environment, volumes, ports, networks,
+  restart policy). The socket gives the container control over Docker on that machine, so mount it only where
+  that is acceptable:
+
+  ```yaml
+      volumes:
+        - matmon-data:/app/data
+        - /var/run/docker.sock:/var/run/docker.sock
+  ```
+
+- **Windows** – download `matmon-windows-x64.zip` from the release
+  [windows-latest](https://github.com/Real-TTX/Matmon/releases/tag/windows-latest) (or `windows-nightly`),
+  unpack it and run, in an elevated prompt:
+
+  ```powershell
+  .\Matmon.Host.exe install-service --port 8099
+  ```
+
+  Matmon then runs as the Windows service `Matmon` (program in `%ProgramFiles%\Matmon`, data in
+  `%ProgramData%\Matmon\data`) and updates itself from the same release. Add `--open-firewall` to allow the port
+  for other machines; `uninstall-service` removes the service and leaves program and data in place.
+
+Without either, update the container the usual way (`docker compose pull && docker compose up -d`).
+
 ## Configuration
 
 Matmon is configured **in the UI** — the environment only carries a few bootstrap settings, and all
@@ -257,6 +289,8 @@ of them are optional:
 | `Matmon__Auth__Username` / `Matmon__Auth__Password` | – | Pre-provision an admin and skip the setup wizard |
 | `Matmon__CloudHeartbeatIntervalSeconds` | `30` | How often the primary checks in with Matmon.Cloud (if linked) |
 | `Matmon__AllowedProgramPaths` | – | Allow-list for the *Local Program* sensor (`;`-separated) |
+| `Matmon__DockerSocketPath` | `/var/run/docker.sock` | Where the mounted Docker socket is inside the container (self-update) |
+| `Matmon__UpdateFeedUrl` | the GitHub release of the channel | Where a Windows installation looks for updates (a mirror) |
 | `Matmon__TrustedProxies` | loopback + private networks | Who may tell Matmon the real client address and scheme (`X-Forwarded-*`) - addresses or CIDR ranges, `;`-separated, or `any`. Set it when your reverse proxy sits on a public address |
 | `Matmon__WorkspacePath` | `data/workspace.json` | Where state is stored (inside `/app/data`) |
 | `Matmon__SyslogPath` | `data/syslog.db` | Where received syslog messages are stored |

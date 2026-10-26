@@ -77,7 +77,7 @@ public sealed class AgentUpdateService : BackgroundService
             return;
         }
 
-        if (!AgentServiceControl.IsRunningAsService())
+        if (!ServiceControl.IsRunningAsService())
         {
             _logger.LogInformation("Agent auto-update is off: not running as a Windows service or systemd unit");
             return;
@@ -175,7 +175,7 @@ public sealed class AgentUpdateService : BackgroundService
         }
 
         var target = Environment.ProcessPath ?? throw new InvalidOperationException("the agent does not know its own executable");
-        var service = AgentServiceControl.ResolveServiceName()
+        var service = ServiceControl.ResolveServiceName()
             ?? throw new InvalidOperationException("could not find the service this agent runs as");
         var staged = StagedPath(target);
         var updater = UpdaterPath(target);
@@ -210,7 +210,7 @@ public sealed class AgentUpdateService : BackgroundService
 
         _files.Log($"handing over to the updater for {MatmonVersion.Current} -> {decision.Version}");
         _logger.LogInformation("Handing over to the updater; this service will be restarted as {Version}", decision.Version);
-        AgentServiceControl.LaunchDetached(updater,
+        ServiceControl.LaunchDetached(updater,
         [
             "apply-update",
             "--target", target,

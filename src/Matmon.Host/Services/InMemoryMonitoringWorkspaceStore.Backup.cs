@@ -701,6 +701,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.SnmpTraps = new();
         document.Plugins = [];
 
+        // Whether and when this installation updates itself is decided on this machine, like its listeners.
+        document.SelfUpdate = new();
+        document.SelfUpdateOutcome = null;
+
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {
             document.BackupJobs = [];

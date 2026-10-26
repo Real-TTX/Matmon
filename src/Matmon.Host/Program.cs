@@ -14,8 +14,34 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
+using Matmon.Host.Services.SelfUpdate;
+using Microsoft.Extensions.Hosting.WindowsServices;
 
-var builder = WebApplication.CreateBuilder(args);
+// Commands that are not the web app: the version (the self-update asks a new build for it before swapping), installing
+// the Windows service, and the two updaters, which run in a process / container of their own.
+if (args is ["--version"])
+{
+    Console.WriteLine(Matmon.Probe.MatmonVersion.Current);
+    return 0;
+}
+
+switch (args.FirstOrDefault())
+{
+    case WindowsServiceInstaller.InstallCommand or WindowsServiceInstaller.UninstallCommand:
+        return WindowsServiceInstaller.Run(args);
+    case WindowsUpdateApplier.Command:
+        return await WindowsUpdateApplier.RunAsync(args);
+    case DockerUpdateHelper.Command:
+        return await DockerUpdateHelper.RunAsync(args);
+}
+
+// As a Windows service the working directory is System32: the content root (wwwroot, mibs) is the program folder.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null
+});
+builder.Services.AddWindowsService(options => options.ServiceName = WindowsServiceInstaller.ServiceName);
 
 // QuestPDF Community license (free for small businesses / < $1M revenue) - required before any PDF gen.
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
@@ -71,7 +97,7 @@ if (runtimeOptions.Mode == AppMode.Executor)
     });
 
     await executorApp.RunAsync();
-    return;
+    return 0;
 }
 
 // Auth credentials are intentionally left blank when not provided: a bare install (no
@@ -303,6 +329,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/SystemSyslog", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemSnmpTraps", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemPlugins", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SystemUpdates", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options =>
 {
     options.Filters.Add<MatmonPageWriteGuard>();
@@ -337,6 +364,16 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<ReportSchedulerService>();
     builder.Services.AddHostedService<CloudConnectionService>();
     builder.Services.AddHostedService<TunnelClient>();
+
+    // Updates of this installation itself (System > Updates): through the Docker socket when it is mounted, or as a
+    // Windows service from the release feed. The first method that applies wins; none = updated by hand.
+    builder.Services.AddSingleton<ISelfUpdateTarget>(new DockerSelfUpdateTarget(
+        string.IsNullOrWhiteSpace(runtimeOptions.DockerSocketPath) ? DockerEngineClient.DefaultSocketPath : runtimeOptions.DockerSocketPath,
+        Matmon.Probe.MatmonVersion.Current, Matmon.Probe.MatmonVersion.EnvironmentVariable));
+    builder.Services.AddSingleton<ISelfUpdateTarget>(provider => new WindowsSelfUpdateTarget(
+        runtimeOptions.UpdateFeedUrl, workspaceDirectory, provider.GetRequiredService<IHttpClientFactory>()));
+    builder.Services.AddSingleton<SelfUpdateService>();
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<SelfUpdateService>());
 
     // Syslog: the central log of the network's devices. The database is its own file (syslog.db) so a chatty switch
     // can never bloat or lock the sensor history. Receiving is the syslog collector plugin's job (System > Plugins - on
@@ -475,10 +512,12 @@ app.UseRateLimiter();
 
 app.MapStaticAssets().AllowAnonymous();
 
+// The version is what both updaters wait for before they call an update done.
 app.MapGet("/healthz", () => Results.Ok(new
 {
     status = "ok",
-    mode = runtimeOptions.Mode.ToString().ToLowerInvariant()
+    mode = runtimeOptions.Mode.ToString().ToLowerInvariant(),
+    version = Matmon.Probe.MatmonVersion.Current
 })).AllowAnonymous();
 
 app.MapGet("/api/mode", () => Results.Ok(new
@@ -1140,6 +1179,7 @@ app.MapRazorPages().WithStaticAssets();
 
 app.Logger.LogInformation("Matmon started in {Mode} mode", runtimeOptions.Mode);
 app.Run();
+return 0;
 
 // Executor run-mode auth: a shared bearer token in the X-Matmon-Executor-Token header (constant-time compared).
 // An unset token locks the endpoints entirely.

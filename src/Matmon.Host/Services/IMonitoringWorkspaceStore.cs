@@ -343,6 +343,16 @@ public interface IMonitoringWorkspaceStore
     void MarkSummaryReportSent(DateTimeOffset sentUtc);
 
     /// <summary>The syslog receiver's settings (a detached, normalised copy). Off by default.</summary>
+    /// <summary>System > Updates: automatic updates and their window. Instance-bound, never in a backup.</summary>
+    Matmon.Host.Services.SelfUpdate.SelfUpdateSettings GetSelfUpdateSettings();
+
+    void UpdateSelfUpdateSettings(Matmon.Host.Services.SelfUpdate.SelfUpdateSettings settings);
+
+    /// <summary>How the last self-update ended (read back from the updater and kept, so it survives the restart it causes).</summary>
+    Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome? GetSelfUpdateOutcome();
+
+    void RecordSelfUpdateOutcome(Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome outcome);
+
     Matmon.Core.Syslog.SyslogSettings GetSyslogSettings();
 
     /// <summary>Stores the settings, pulled into their legal ranges. The receiver notices within seconds.</summary>

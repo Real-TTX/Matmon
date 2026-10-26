@@ -1,3 +1,4 @@
+using Matmon.Probe;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Text.Json;
@@ -70,11 +71,11 @@ public static class SetupCommand
         var self = Environment.ProcessPath ?? throw new InvalidOperationException("the agent does not know its own executable");
         var target = InstalledPath;
         var installDirectory = Path.GetDirectoryName(target)!;
-        var service = AgentServiceControl.ResolveWindowsServiceName(target);
+        var service = ServiceControl.ResolveWindowsServiceName(target);
 
         if (service is not null)
         {
-            AgentServiceControl.Stop(service, TimeSpan.FromSeconds(60));
+            ServiceControl.Stop(service, TimeSpan.FromSeconds(60));
         }
 
         if (!string.Equals(Path.GetFullPath(self), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
@@ -93,7 +94,7 @@ public static class SetupCommand
             Sc("failure", $"\"{service}\"", "reset= 86400", "actions= restart/10000/restart/60000/restart/60000");
         }
 
-        AgentServiceControl.Start(service, TimeSpan.FromSeconds(60));
+        ServiceControl.Start(service, TimeSpan.FromSeconds(60));
 
         // The tray for every user who signs in on this machine. conhost --headless runs the (console) executable
         // without flashing a console window at sign-in.
@@ -111,7 +112,7 @@ public static class SetupCommand
 
     /// <summary>The installed service's name, or null when setup has not run on this machine.</summary>
     [SupportedOSPlatform("windows")]
-    public static string? InstalledServiceName() => AgentServiceControl.ResolveWindowsServiceName(InstalledPath);
+    public static string? InstalledServiceName() => ServiceControl.ResolveWindowsServiceName(InstalledPath);
 
     private static void Sc(params string[] arguments)
     {

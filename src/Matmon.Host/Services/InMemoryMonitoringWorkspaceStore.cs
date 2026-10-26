@@ -1390,6 +1390,40 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public Matmon.Host.Services.SelfUpdate.SelfUpdateSettings GetSelfUpdateSettings()
+    {
+        lock (_gate)
+        {
+            return (_document.SelfUpdate ?? new()).Normalized();
+        }
+    }
+
+    public void UpdateSelfUpdateSettings(Matmon.Host.Services.SelfUpdate.SelfUpdateSettings settings)
+    {
+        lock (_gate)
+        {
+            _document.SelfUpdate = settings.Normalized();
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    public Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome? GetSelfUpdateOutcome()
+    {
+        lock (_gate)
+        {
+            return _document.SelfUpdateOutcome;
+        }
+    }
+
+    public void RecordSelfUpdateOutcome(Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome outcome)
+    {
+        lock (_gate)
+        {
+            _document.SelfUpdateOutcome = outcome;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public Matmon.Core.Syslog.SyslogSettings GetSyslogSettings()
     {
         lock (_gate)
@@ -4703,6 +4737,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>The SNMP trap receiver - like <see cref="Syslog"/>, decided on this machine and never carried in a backup.</summary>
         public Matmon.Core.SnmpTraps.SnmpTrapSettings SnmpTraps { get; set; } = new();
+
+        /// <summary>System > Updates (automatic updates, their window) - decided on this machine, never carried in a backup.</summary>
+        public Matmon.Host.Services.SelfUpdate.SelfUpdateSettings SelfUpdate { get; set; } = new();
+
+        /// <summary>How the last self-update of this installation ended.</summary>
+        public Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome? SelfUpdateOutcome { get; set; }
 
         /// <summary>Which plugin runs where (System > Plugins) - like the receivers, never carried in a backup.</summary>
         public List<PluginAssignment> Plugins { get; set; } = [];

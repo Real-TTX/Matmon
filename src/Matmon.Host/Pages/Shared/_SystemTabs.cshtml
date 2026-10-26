@@ -27,6 +27,7 @@
         <a class="@Css("backup")" aria-current="@Current("backup")" asp-page="/Config" asp-route-tab="backup">Backup</a>
         <a class="@Css("cloud")" aria-current="@Current("cloud")" asp-page="/Config" asp-route-tab="cloud">Cloud</a>
         <a class="@Css("license")" aria-current="@Current("license")" asp-page="/Config" asp-route-tab="license">License</a>
+        <a class="@Css("updates")" aria-current="@Current("updates")" asp-page="/SystemUpdates">Updates</a>
         @if (Workspace.GetServicePartnerInfo()?.HasPartner == true)
         {
             <a class="@Css("partner")" aria-current="@Current("partner")" asp-page="/Config" asp-route-tab="partner">Service partner</a>

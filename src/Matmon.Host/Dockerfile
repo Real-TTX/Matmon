@@ -36,6 +36,25 @@ RUN --mount=type=secret,id=agent_signing_key \
         echo "agent packages are NOT signed (no signing key or no version)"; \
     fi
 
+# The Windows instance (a Windows service that updates itself from the release feed - WindowsUpdateFeed): the same
+# Host published self-contained for win-x64 with the agent packages beside it, zipped with its manifest and - with the
+# signing key - signed. Not part of the image: CI builds this stage on its own (--target windows-feed) and attaches the
+# two files to the rolling release of its channel. Placed BEFORE "final" on purpose - the last stage is the default
+# target of a plain "docker build".
+FROM build AS windows-package
+ARG MATMON_VERSION=""
+WORKDIR /src/src/Matmon.Host
+COPY --from=agent /app/agent /out/package/agent
+RUN --mount=type=secret,id=agent_signing_key \
+    require=false; \
+    if [ -s /run/secrets/agent_signing_key ] && [ -n "$MATMON_VERSION" ]; then require=true; fi; \
+    dotnet publish Matmon.Host.csproj -c Release -r win-x64 --self-contained true -o /out/package -p:MatmonVersion="$MATMON_VERSION" -p:MatmonAgentRequireSignature="$require" || exit 1; \
+    if [ "$require" = true ]; then key=/run/secrets/agent_signing_key; else key=""; fi; \
+    dotnet run --file /src/scripts/package-windows.cs -- /out/package "${MATMON_VERSION:-local}" /out/feed $key
+
+FROM scratch AS windows-feed
+COPY --from=windows-package /out/feed/ /
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 # PSWSMan (the WinRM client the PowerShell sensors use from Linux) is pinned to the last 2.x on purpose. 3.0.0,

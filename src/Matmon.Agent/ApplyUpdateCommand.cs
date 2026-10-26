@@ -1,3 +1,5 @@
+using Matmon.Probe;
+
 namespace Matmon.Agent;
 
 /// <summary>
@@ -38,7 +40,7 @@ public static class ApplyUpdateCommand
         var swapped = false;
         try
         {
-            AgentServiceControl.Stop(service, ServiceTimeout);
+            ServiceControl.Stop(service, ServiceTimeout);
             files.Log("service stopped");
 
             // The service reporting "stopped" and its process letting go of the executable are not the same
@@ -55,7 +57,7 @@ public static class ApplyUpdateCommand
             }
 
             files.Log("executable swapped, starting the new build");
-            AgentServiceControl.Start(service, ServiceTimeout);
+            ServiceControl.Start(service, ServiceTimeout);
 
             var deadline = DateTimeOffset.UtcNow + ConfirmationTimeout;
             while (DateTimeOffset.UtcNow < deadline)
@@ -100,7 +102,7 @@ public static class ApplyUpdateCommand
         {
             try
             {
-                AgentServiceControl.Stop(service, ServiceTimeout);
+                ServiceControl.Stop(service, ServiceTimeout);
             }
             catch (Exception ex)
             {
@@ -132,7 +134,7 @@ public static class ApplyUpdateCommand
     {
         try
         {
-            AgentServiceControl.Start(service, ServiceTimeout);
+            ServiceControl.Start(service, ServiceTimeout);
         }
         catch (Exception ex)
         {

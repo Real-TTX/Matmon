@@ -5,13 +5,13 @@ using Microsoft.Extensions.Hosting.Systemd;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Win32;
 
-namespace Matmon.Agent;
+namespace Matmon.Probe;
 
 /// <summary>
 /// The only platform-specific part of the auto-update: which service this process is, how to stop and start
 /// it, and how to launch the updater so that stopping the service does not take the updater with it.
 /// </summary>
-public static class AgentServiceControl
+public static class ServiceControl
 {
     /// <summary>
     /// The auto-update only runs under a service manager - an interactive agent (a terminal, a debugger) has
@@ -105,7 +105,7 @@ public static class AgentServiceControl
         {
             start = new ProcessStartInfo("systemd-run")
             {
-                ArgumentList = { "--unit", $"matmon-agent-update-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}", "--collect", "--quiet", executable }
+                ArgumentList = { "--unit", $"matmon-update-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}", "--collect", "--quiet", executable }
             };
         }
         else
@@ -134,7 +134,7 @@ public static class AgentServiceControl
     }
 
     [SupportedOSPlatform("windows")]
-    internal static string? ResolveWindowsServiceName(string? processPath)
+    public static string? ResolveWindowsServiceName(string? processPath)
     {
         if (string.IsNullOrWhiteSpace(processPath))
         {

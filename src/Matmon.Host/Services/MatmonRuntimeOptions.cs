@@ -98,6 +98,14 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
     /// ranges, or <c>any</c>. Empty = loopback and private networks - see <see cref="TrustedProxies"/>.</summary>
     public string? TrustedProxies { get; set; }
 
+    /// <summary>The Docker socket inside the container (<c>Matmon__DockerSocketPath</c>, default /var/run/docker.sock) -
+    /// mounted, it lets the instance update its own container (System > Updates).</summary>
+    public string? DockerSocketPath { get; set; }
+
+    /// <summary>Where a Windows instance looks for updates (<c>Matmon__UpdateFeedUrl</c>) - empty = the GitHub releases of
+    /// its channel (<see cref="Matmon.Host.Services.SelfUpdate.WindowsUpdateFeed"/>).</summary>
+    public string? UpdateFeedUrl { get; set; }
+
     /// <summary>The instance id issued by Matmon.Cloud (<c>Matmon__CloudInstanceId</c>).</summary>
     public string? CloudInstanceId { get; set; }
 

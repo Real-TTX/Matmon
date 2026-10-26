@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # write: the Windows package is attached to the rolling release of its channel (windows-latest / windows-nightly).
+  contents: write
   packages: write
 
 jobs:
@@ -115,3 +116,42 @@ jobs:
             agent_signing_key=${{ secrets.MATMON_AGENT_SIGNING_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The Windows instance: the same build as a win-x64 package + manifest (the Dockerfile's windows-feed stage, which
+      # reuses the cached build and agent stages), for the Windows service's self-update (WindowsUpdateFeed).
+      - name: Build the Windows package
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./src/Matmon.Host/Dockerfile
+          target: windows-feed
+          push: false
+          outputs: type=local,dest=windows-feed
+          build-args: |
+            MATMON_VERSION=${{ steps.version.outputs.version }}
+          secrets: |
+            agent_signing_key=${{ secrets.MATMON_AGENT_SIGNING_KEY }}
+          cache-from: type=gha
+
+      # One rolling release per channel; each build replaces its two files. The package goes up BEFORE the manifest, so
+      # an instance never reads a manifest whose package is not there yet.
+      - name: Publish the Windows package
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            tag="windows-latest"; title="Matmon for Windows (release channel)"; prerelease=""
+          else
+            tag="windows-nightly"; title="Matmon for Windows (nightly channel)"; prerelease="--prerelease"
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$title" --target "$GITHUB_SHA" $prerelease \
+              --notes "The Windows package of the newest ${tag#windows-} build. Unpack it and run 'Matmon.Host.exe install-service' in an elevated prompt; the service then updates itself from here (System > Updates)."
+          fi
+          gh release upload "$tag" windows-feed/matmon-windows-x64.zip --clobber
+          gh release upload "$tag" windows-feed/matmon-windows-x64.json --clobber
+          echo "Published $(jq -r .version windows-feed/matmon-windows-x64.json) to $tag"

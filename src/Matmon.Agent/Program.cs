@@ -34,7 +34,7 @@ if (args.FirstOrDefault() == "setup")
 // not set up yet, because a downloaded agent opened from Explorer has nothing to run as a service; the
 // useful thing to show is the setup dialog, not a console window that exits with "not enrolled".
 if (args.FirstOrDefault() == "tray" ||
-    (OperatingSystem.IsWindows() && args.Length == 0 && !AgentServiceControl.IsRunningAsService() &&
+    (OperatingSystem.IsWindows() && args.Length == 0 && !ServiceControl.IsRunningAsService() &&
      AgentConfigFile.ReadEnrolledProbeName(configPath) is null))
 {
     return RunTray();
