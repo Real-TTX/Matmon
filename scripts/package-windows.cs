@@ -4,6 +4,8 @@
 //                            signature over platform "instance-win-x64", version and hash (AgentPackageSignature)
 //   MatmonSetup-x64.exe      with --setup: the setup program with the zip appended (SetupPayload) - the one file a person
 //                            downloads to install Matmon on Windows
+//   MatmonSetup-x64-online.exe  with --setup: the same program WITHOUT the zip - the online setup, which downloads the
+//                            newest package of its channel from this feed and verifies it like the self-update does
 // Run by the image build's windows-package stage:
 //   dotnet run scripts/package-windows.cs -- <published folder> <version> <output folder> [--key <private key file>] [--setup <MatmonSetup.exe>]
 // A key that does not belong to the public key baked into Matmon fails the build instead of shipping a package every
@@ -92,6 +94,11 @@ if (!string.IsNullOrWhiteSpace(setupProgram))
     }
 
     Console.WriteLine($"MatmonSetup-x64.exe: {new FileInfo(setupFile).Length / 1024 / 1024} MB");
+
+    // The online setup: the same program with nothing appended - it downloads the package of its channel instead.
+    var onlineFile = Path.Combine(output, "MatmonSetup-x64-online.exe");
+    File.Copy(setupProgram, onlineFile, overwrite: true);
+    Console.WriteLine($"MatmonSetup-x64-online.exe: {new FileInfo(onlineFile).Length / 1024 / 1024} MB");
 }
 
 return 0;

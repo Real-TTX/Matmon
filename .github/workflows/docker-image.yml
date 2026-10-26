@@ -150,9 +150,10 @@ jobs:
           fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$title" --target "$GITHUB_SHA" $prerelease \
-              --notes "Matmon for Windows, newest ${tag#windows-} build: run MatmonSetup-x64.exe to install it as a Windows service (it also updates and uninstalls). An installation keeps itself up to date from here (System > Updates)."
+              --notes "Matmon for Windows, newest ${tag#windows-} build: run MatmonSetup-x64.exe to install it as a Windows service (it also updates and uninstalls) - or the small MatmonSetup-x64-online.exe, which downloads the newest build during setup. An installation keeps itself up to date from here (System > Updates)."
           fi
           gh release upload "$tag" windows-feed/MatmonSetup-x64.exe --clobber
+          gh release upload "$tag" windows-feed/MatmonSetup-x64-online.exe --clobber
           gh release upload "$tag" windows-feed/matmon-windows-x64.zip --clobber
           gh release upload "$tag" windows-feed/matmon-windows-x64.json --clobber
           echo "Published $(jq -r .version windows-feed/matmon-windows-x64.json) to $tag"

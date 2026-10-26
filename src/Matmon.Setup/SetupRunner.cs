@@ -7,10 +7,18 @@ using Matmon.Probe;
 
 namespace Matmon.Setup;
 
+internal enum PackageSource
+{
+    Embedded,
+    File,
+    Online
+}
+
 /// <summary>
 /// The setup's command line: <c>MatmonSetup.exe [/silent] [/dir=&lt;folder&gt;] [/data=&lt;folder&gt;] [/port=8099] [/firewall]
 /// [/notray]</c> installs or updates; <c>/uninstall [/silent] [/removedata]</c> removes. <c>/package=&lt;zip&gt;</c> installs from
-/// a separate package (a development build of the setup carries none). The installed copy also runs the tray icon
+/// a separate package. Without an appended package the setup is the ONLINE setup: it downloads the newest package of its
+/// channel (<c>/feed=&lt;url&gt;</c> another feed). The installed copy also runs the tray icon
 /// (<c>/tray</c>) and controls the service for it (<c>/service=start|stop|restart</c>).
 /// </summary>
 internal sealed record SetupArguments(
@@ -25,7 +33,8 @@ internal sealed record SetupArguments(
     bool Relaunched,
     bool Tray,
     bool NoTray,
-    string? ServiceAction)
+    string? ServiceAction,
+    string? FeedUrl)
 {
     /// <summary>What needs administrator rights: everything but the tray icon.</summary>
     public bool NeedsElevation => !Tray;
@@ -51,7 +60,8 @@ internal sealed record SetupArguments(
             Flag("relaunched"),
             Flag("tray"),
             Flag("notray"),
-            Value("service")?.ToLowerInvariant() is { } action && action is "start" or "stop" or "restart" ? action : null);
+            Value("service")?.ToLowerInvariant() is { } action && action is "start" or "stop" or "restart" ? action : null,
+            Value("feed"));
     }
 }
 
@@ -64,39 +74,61 @@ internal static class SetupRunner
 
     public static string SelfPath => Environment.ProcessPath ?? throw new InvalidOperationException("the setup does not know its own file");
 
-    /// <summary>Whether a package is there to install - appended to this file, or given with /package.</summary>
-    public static bool HasPackage(SetupArguments arguments)
+    /// <summary>
+    /// Where the package comes from: appended to this file (the full setup), a zip given with /package, or - the online
+    /// setup, which is the same program with nothing appended - downloaded from the release feed of its channel.
+    /// </summary>
+    public static PackageSource SourceOf(SetupArguments arguments)
     {
         if (arguments.PackagePath is not null)
         {
-            return File.Exists(arguments.PackagePath);
+            return PackageSource.File;
         }
 
         using var self = File.OpenRead(SelfPath);
-        return SetupPayload.Find(self) is not null;
+        return SetupPayload.Find(self) is not null ? PackageSource.Embedded : PackageSource.Online;
     }
 
-    public static void Install(SetupArguments arguments, WindowsInstallOptions options, Action<string> progress)
+    /// <summary>The feed the online setup downloads from: /feed=, else the channel of this setup's own build. A nightly
+    /// setup installs the newest nightly, a release (and a local development build) the newest release.</summary>
+    public static string FeedOf(SetupArguments arguments) =>
+        WindowsUpdateFeed.FeedUrl(arguments.FeedUrl, Version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "Nightly" : "Release")!;
+
+    public static string ChannelName => Version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "nightly" : "release";
+
+    /// <summary>Installs (or updates). <paramref name="download"/> gets the downloaded share 0..1 while the online setup
+    /// downloads; the version that ends up installed is returned.</summary>
+    public static string Install(SetupArguments arguments, WindowsInstallOptions options, Action<string> progress, Action<double>? download = null)
     {
         var temporary = Path.Combine(Path.GetTempPath(), $"matmon-setup-{Guid.NewGuid():N}");
+        var version = Version;
         try
         {
-            progress("Unpacking Matmon ...");
-            using (var self = File.OpenRead(SelfPath))
+            switch (SourceOf(arguments))
             {
-                if (arguments.PackagePath is not null)
-                {
-                    ZipFile.ExtractToDirectory(arguments.PackagePath, temporary);
-                }
-                else
-                {
-                    var (offset, length) = SetupPayload.Find(self) ?? throw new InvalidOperationException("this setup carries no Matmon package");
-                    using var package = SetupPayload.OpenPackage(self, offset, length);
-                    ZipFile.ExtractToDirectory(package, temporary);
-                }
+                case PackageSource.File:
+                    progress("Unpacking Matmon ...");
+                    ZipFile.ExtractToDirectory(arguments.PackagePath!, temporary);
+                    break;
+
+                case PackageSource.Embedded:
+                    progress("Unpacking Matmon ...");
+                    using (var self = File.OpenRead(SelfPath))
+                    {
+                        var (offset, length) = SetupPayload.Find(self)!.Value;
+                        using var package = SetupPayload.OpenPackage(self, offset, length);
+                        ZipFile.ExtractToDirectory(package, temporary);
+                    }
+
+                    break;
+
+                default:
+                    version = DownloadAndUnpack(arguments, temporary, progress, download);
+                    break;
             }
 
-            WindowsInstallation.Install(temporary, options, Version, BareSetup(), progress);
+            WindowsInstallation.Install(temporary, options, version, BareSetup(), progress);
+            return version;
         }
         finally
         {
@@ -105,6 +137,42 @@ internal static class SetupRunner
                 Directory.Delete(temporary, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static string DownloadAndUnpack(SetupArguments arguments, string target, Action<string> progress, Action<double>? download)
+    {
+        var feed = FeedOf(arguments);
+        var zip = Path.Combine(Path.GetTempPath(), $"matmon-setup-{Guid.NewGuid():N}.zip");
+        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd($"MatmonSetup/{Version}");
+        try
+        {
+            progress($"Looking up the newest Matmon ({ChannelName} channel) ...");
+            var manifest = WindowsUpdateFeed.ReadManifestAsync(client, feed, CancellationToken.None).GetAwaiter().GetResult();
+            progress($"Downloading Matmon {manifest.Version} ({manifest.Size / 1048576.0:0} MB) ...");
+            WindowsUpdateFeed.DownloadAsync(client, feed, manifest, zip, AgentPackageSignature.RequiredByThisBuild, download, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            progress(string.IsNullOrWhiteSpace(manifest.Signature)
+                ? "Download complete and checked (SHA-256; this build is not signed)."
+                : "Download complete, checksum and signature are valid.");
+            progress("Unpacking Matmon ...");
+            ZipFile.ExtractToDirectory(zip, target);
+            return manifest.Version;
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException($"Matmon could not be downloaded from {feed}: {ex.Message}", ex);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(zip);
+            }
+            catch (IOException)
             {
             }
         }

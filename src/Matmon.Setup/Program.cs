@@ -68,9 +68,9 @@ internal static class Program
                 return 0;
             }
 
-            if (!SetupRunner.HasPackage(arguments))
+            if (SetupRunner.SourceOf(arguments) == PackageSource.File && !File.Exists(arguments.PackagePath))
             {
-                SetupRunner.Log("This setup carries no Matmon package.");
+                SetupRunner.Log($"The package {arguments.PackagePath} does not exist.");
                 return 2;
             }
 
@@ -81,7 +81,17 @@ internal static class Program
                 arguments.Port ?? installed?.Port ?? 8099,
                 arguments.OpenFirewall,
                 !arguments.NoTray);
-            SetupRunner.Install(arguments, options, SetupRunner.Log);
+            // The online setup logs its download every 10 % - enough to see that it moves, not a line per percent.
+            var logged = -1;
+            SetupRunner.Install(arguments, options, SetupRunner.Log, share =>
+            {
+                var tenth = (int)(share * 10);
+                if (tenth != logged)
+                {
+                    logged = tenth;
+                    SetupRunner.Log($"Downloaded {tenth * 10} %");
+                }
+            });
             return 0;
         }
         catch (Exception ex)

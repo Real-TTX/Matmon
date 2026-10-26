@@ -265,7 +265,9 @@ How it updates depends on how Matmon runs:
 
 - **Windows** – download `MatmonSetup-x64.exe` from the release
   [windows-latest](https://github.com/Real-TTX/Matmon/releases/tag/windows-latest) (or `windows-nightly`)
-  and run it. The setup asks for the folders, the port, whether other computers may connect (Windows
+  and run it. Alternatively, `MatmonSetup-x64-online.exe` is the same setup without the program inside
+  (about 50 MB instead of about 240 MB). It downloads the newest build of its channel during setup and checks
+  its checksum and signature first. The setup asks for the folders, the port, whether other computers may connect (Windows
   firewall) and whether Matmon should show an icon in the notification area. Matmon then runs as the Windows
   service `Matmon` (program in `%ProgramFiles%\Matmon`, data in `%ProgramData%\Matmon\data`) and updates
   itself from the same release. Running the setup again updates an installation in place. Matmon is removed

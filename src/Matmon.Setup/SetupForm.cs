@@ -18,10 +18,12 @@ internal sealed class SetupForm : Form
 
     private readonly SetupArguments _arguments;
     private readonly WindowsInstallationInfo? _installed;
+    private readonly PackageSource _source;
     private readonly Panel _body = new() { Dock = DockStyle.Fill, Padding = new Padding(28, 22, 28, 12) };
-    private readonly Button _back = new() { Text = "< Back", AutoSize = true, MinimumSize = new Size(96, 30) };
-    private readonly Button _next = new() { Text = "Next >", AutoSize = true, MinimumSize = new Size(96, 30) };
-    private readonly Button _cancel = new() { Text = "Cancel", AutoSize = true, MinimumSize = new Size(96, 30) };
+    // Fixed size and the same margin for all three: AutoSize plus a margin of its own put Cancel a few pixels higher than the others.
+    private readonly Button _back = new() { Text = "< Back", Size = new Size(104, 32), Margin = new Padding(8, 0, 0, 0) };
+    private readonly Button _next = new() { Text = "Next >", Size = new Size(104, 32), Margin = new Padding(8, 0, 0, 0) };
+    private readonly Button _cancel = new() { Text = "Cancel", Size = new Size(104, 32), Margin = new Padding(16, 0, 0, 0) };
 
     private readonly TextBox _programFolder = new() { Width = 360 };
     private readonly TextBox _dataFolder = new() { Width = 360 };
@@ -54,13 +56,14 @@ internal sealed class SetupForm : Form
     {
         _arguments = arguments;
         _installed = WindowsInstallation.Find();
+        _source = arguments.Uninstall ? PackageSource.Embedded : SetupRunner.SourceOf(arguments);
 
-        Text = arguments.Uninstall ? "Uninstall Matmon" : $"Matmon {SetupRunner.Version} Setup";
+        Text = arguments.Uninstall ? "Uninstall Matmon" : _source == PackageSource.Online ? "Matmon Setup" : $"Matmon {SetupRunner.Version} Setup";
         Icon = Icon.ExtractAssociatedIcon(SetupRunner.SelfPath);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 470);
+        ClientSize = new Size(640, 540);
         Font = new Font("Segoe UI", 9.5f);
         BackColor = Color.White;
 
@@ -80,13 +83,16 @@ internal sealed class SetupForm : Form
             BackColor = Color.FromArgb(0xF4, 0xF6, 0xF9)
         };
         footer.Controls.AddRange([_cancel, _next, _back]);
-        _cancel.Margin = new Padding(12, 0, 0, 0);
         _back.Click += (_, _) => Show(Page.Welcome);
         _next.Click += (_, _) => Advance();
         _cancel.Click += (_, _) => Close();
         AcceptButton = _next;
 
-        var header = new BrandHeader(arguments.Uninstall ? "Uninstall" : _installed is null ? "Setup" : "Update")
+        // The online setup does not know the version it installs until it has asked the feed - so it names the channel instead.
+        var label = arguments.Uninstall ? "Uninstall" : _installed is null ? "Setup" : "Update";
+        var header = new BrandHeader(_source == PackageSource.Online && !arguments.Uninstall
+            ? $"{label} · online · {SetupRunner.ChannelName} channel"
+            : $"{label} · {SetupRunner.Version}")
         {
             Dock = DockStyle.Top,
             Height = 96
@@ -205,7 +211,13 @@ internal sealed class SetupForm : Form
                 }
                 else
                 {
-                    SetupRunner.Install(_arguments, options, Report);
+                    SetupRunner.Install(_arguments, options, Report, share => BeginInvoke(() =>
+                    {
+                        // While the online setup downloads, the bar shows how far it is; afterwards it goes back to "busy".
+                        _progress.Style = share >= 1 ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
+                        _progress.Value = (int)(share * 100);
+                        _step.Text = share >= 1 ? _step.Text : $"Downloading Matmon ... {share * 100:0} %";
+                    }));
                 }
 
                 return (string?)null;
@@ -231,7 +243,6 @@ internal sealed class SetupForm : Form
         _body.SuspendLayout();
         _body.Controls.Clear();
         var content = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        _body.Controls.Add(content);
 
         _back.Visible = page == Page.Options;
         _cancel.Visible = page is not (Page.Progress or Page.Finish);
@@ -248,15 +259,21 @@ internal sealed class SetupForm : Form
         {
             case Page.Welcome:
                 content.Controls.Add(Heading(_installed is null ? "Welcome to Matmon" : "Update Matmon"));
+                var target = _source == PackageSource.Online ? $"the newest Matmon ({SetupRunner.ChannelName} channel)" : $"Matmon {SetupRunner.Version}";
                 content.Controls.Add(Paragraph(_installed is null
-                    ? $"This installs Matmon {SetupRunner.Version} on this computer. Matmon runs as a Windows service in the background, starts with Windows and is used in the browser."
-                    : $"Matmon {_installed.Version ?? "(installed)"} is installed. Setup updates it to {SetupRunner.Version} - the configuration, the history and the sensors are kept."));
-                content.Controls.Add(Paragraph("Once installed, Matmon keeps itself up to date if you want it to (System > Updates)."));
-                if (!SetupRunner.HasPackage(_arguments))
+                    ? $"This installs {target} on this computer. Matmon runs as a Windows service in the background, starts with Windows and is used in the browser."
+                    : $"Matmon {_installed.Version ?? "(installed)"} is installed. Setup updates it to {target} - the configuration, the history and the sensors are kept."));
+                if (_source == PackageSource.Online)
                 {
-                    content.Controls.Add(Paragraph("This setup carries no Matmon package - it can only uninstall. Download the full setup from the Matmon releases.", Color.Firebrick));
+                    content.Controls.Add(Paragraph("Matmon is downloaded during the installation (about 190 MB) and checked before anything is changed: its checksum and its signature must match the release."));
+                }
+                else if (_source == PackageSource.File && !File.Exists(_arguments.PackagePath))
+                {
+                    content.Controls.Add(Paragraph($"The package {_arguments.PackagePath} does not exist.", Color.Firebrick));
                     _next.Enabled = false;
                 }
+
+                content.Controls.Add(Paragraph("Once installed, Matmon keeps itself up to date if you want it to (System > Updates)."));
 
                 break;
 
@@ -318,7 +335,12 @@ internal sealed class SetupForm : Form
                 break;
         }
 
+        // Added once it holds its controls and laid out at its final size: added empty first, it measured them at its default
+        // 200 px width and kept a scroll range for a page that fits (a scrollbar on the options page).
+        content.Size = _body.DisplayRectangle.Size;
+        _body.Controls.Add(content);
         _body.ResumeLayout();
+        content.PerformLayout();
 
         // Enter presses the focused button: left on Cancel it closed the setup.
         ActiveControl = _next.Enabled && _next.Visible ? _next : _cancel.Visible ? _cancel : null;
@@ -337,7 +359,7 @@ internal sealed class SetupForm : Form
     {
         Text = text,
         AutoSize = true,
-        MaximumSize = new Size(570, 0),
+        MaximumSize = new Size(560, 0),
         ForeColor = color ?? Color.FromArgb(0x3A, 0x45, 0x55),
         Margin = new Padding(0, 0, 0, 10)
     };
@@ -359,7 +381,7 @@ internal sealed class SetupForm : Form
         row.Controls.Add(box);
         row.Controls.Add(browse);
         panel.Controls.Add(row);
-        panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = Color.DimGray, MaximumSize = new Size(570, 0) });
+        panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = Color.DimGray, MaximumSize = new Size(560, 0) });
         return panel;
     }
 
@@ -405,7 +427,7 @@ internal sealed class SetupForm : Form
             using var soft = new SolidBrush(Color.FromArgb(225, Color.White));
             var left = 24 + size + 18;
             graphics.DrawString("Matmon", titleFont, text, left, 14);
-            graphics.DrawString($"{_subtitle} · {SetupRunner.Version}", subtitleFont, soft, left + 2, 54);
+            graphics.DrawString(_subtitle, subtitleFont, soft, left + 2, 54);
         }
 
         private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)

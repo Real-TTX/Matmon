@@ -1,49 +1,10 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Net.Http.Json;
 using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting.WindowsServices;
 
 namespace Matmon.Host.Services.SelfUpdate;
-
-/// <summary>
-/// Where the Windows instance finds its updates: a release feed per channel - by default the rolling GitHub releases
-/// <c>windows-latest</c> (release builds) and <c>windows-nightly</c> (dev builds) of the Matmon repository, each with a
-/// manifest (<see cref="ManifestFile"/>) and the package it describes. <c>Matmon__UpdateFeedUrl</c> replaces the
-/// address (a mirror, or a local test feed).
-/// </summary>
-public static class WindowsUpdateFeed
-{
-    public const string ManifestFile = "matmon-windows-x64.json";
-    public const string PackageFile = "matmon-windows-x64.zip";
-
-    /// <summary>The "platform" the package's signature covers - kept apart from the agent's platforms, so an agent
-    /// package can never pass as an instance package or the other way round (<see cref="AgentPackageSignature"/>).</summary>
-    public const string SignaturePlatform = "instance-win-x64";
-
-    public const string DefaultBaseUrl = "https://github.com/Real-TTX/Matmon/releases/download";
-
-    /// <summary>The feed folder for this build's channel, or null for a local build (nothing to follow).</summary>
-    public static string? FeedUrl(string? configured, string channel)
-    {
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            return configured.Trim().TrimEnd('/');
-        }
-
-        return channel switch
-        {
-            "Release" => $"{DefaultBaseUrl}/windows-latest",
-            "Nightly" => $"{DefaultBaseUrl}/windows-nightly",
-            _ => null
-        };
-    }
-}
-
-/// <summary>What the feed says about the newest package.</summary>
-public sealed record WindowsUpdateManifest(string Version, string File, long Size, string Sha256, string? Signature);
 
 /// <summary>
 /// The Windows way: the instance runs as a Windows service out of a program folder (<c>install-service</c>), checks the
@@ -89,8 +50,7 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         }
 
         using var client = Client();
-        _manifest = await client.GetFromJsonAsync<WindowsUpdateManifest>($"{_feed}/{WindowsUpdateFeed.ManifestFile}", ManifestJson, cancellationToken)
-            ?? throw new InvalidOperationException("the update feed returned no manifest");
+        _manifest = await WindowsUpdateFeed.ReadManifestAsync(client, _feed, cancellationToken);
         if (string.Equals(_manifest.Version, MatmonVersion.Current, StringComparison.OrdinalIgnoreCase))
         {
             return SelfUpdateOffer.None($"up to date ({MatmonVersion.Channel.ToLowerInvariant()} channel)");
@@ -116,7 +76,10 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         Directory.CreateDirectory(StateDirectory);
         var package = Path.Combine(StateDirectory, WindowsUpdateFeed.PackageFile);
 
-        await DownloadAsync(manifest, package, cancellationToken);
+        using (var client = Client())
+        {
+            await WindowsUpdateFeed.DownloadAsync(client, _feed!, manifest, package, AgentPackageSignature.RequiredByThisBuild, progress: null, cancellationToken);
+        }
 
         TryDeleteDirectory(staged);
         ZipFile.ExtractToDirectory(package, staged, overwriteFiles: true);
@@ -170,41 +133,6 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         return Task.FromResult(outcome);
     }
 
-    private async Task DownloadAsync(WindowsUpdateManifest manifest, string package, CancellationToken cancellationToken)
-    {
-        // A signed build never runs an unsigned package - known from the manifest, so nothing is downloaded for it.
-        if (AgentPackageSignature.RequiredByThisBuild && string.IsNullOrWhiteSpace(manifest.Signature))
-        {
-            throw new InvalidOperationException("the feed offers an unsigned package and this build only installs signed ones");
-        }
-
-        using var client = Client();
-        using var response = await client.GetAsync($"{_feed}/{manifest.File}", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        using var sha = SHA256.Create();
-        await using (var body = await response.Content.ReadAsStreamAsync(cancellationToken))
-        await using (var file = File.Create(package))
-        await using (var hashing = new CryptoStream(file, sha, CryptoStreamMode.Write))
-        {
-            await body.CopyToAsync(hashing, cancellationToken);
-        }
-
-        var actual = Convert.ToHexString(sha.Hash!).ToLowerInvariant();
-        if (!string.Equals(actual, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            File.Delete(package);
-            throw new InvalidOperationException($"the downloaded package does not match its manifest (sha256 {actual}, expected {manifest.Sha256})");
-        }
-
-        if (!string.IsNullOrWhiteSpace(manifest.Signature) &&
-            !AgentPackageSignature.Verify(manifest.Signature, WindowsUpdateFeed.SignaturePlatform, manifest.Version, actual))
-        {
-            File.Delete(package);
-            throw new InvalidOperationException("the package's signature is not valid");
-        }
-    }
-
     // Before anything is stopped: a truncated package or a build that does not start fails HERE.
     private static async Task VerifyRunsAsync(string executable, string expectedVersion, CancellationToken cancellationToken)
     {
@@ -243,8 +171,6 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         client.Timeout = TimeSpan.FromMinutes(15);
         return client;
     }
-
-    private static readonly JsonSerializerOptions ManifestJson = new(JsonSerializerDefaults.Web);
 
     private static string Sanitize(string version) =>
         string.Concat(version.Select(character => char.IsLetterOrDigit(character) || character is '.' or '-' ? character : '_'));
