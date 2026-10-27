@@ -41,6 +41,13 @@ public class LoginModel : PageModel
     /// and its cloud redirect can't survive the tunnel URL rewrite).</summary>
     public bool Embedded { get; private set; }
 
+    /// <summary>Some account can sign in with a local password. Without one and with the cloud link, the page offers only
+    /// the cloud; with neither, it says how the recovery file gets someone in.</summary>
+    public bool LocalSignIn { get; private set; }
+
+    /// <summary>The local form is folded away behind the cloud button (an instance whose people sign in through the cloud).</summary>
+    public bool LocalFolded => CloudSsoAvailable && !Embedded;
+
     public IActionResult OnGet()
     {
         if (User.Identity?.IsAuthenticated == true)
@@ -48,10 +55,7 @@ public class LoginModel : PageModel
             return RedirectToLocal(ReturnUrl);
         }
 
-        Embedded = string.Equals(Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
-
-        var cloud = _workspaceStore.GetCloudConnectionSettings();
-        CloudSsoAvailable = cloud.Enabled && !string.IsNullOrWhiteSpace(cloud.Url) && !string.IsNullOrWhiteSpace(cloud.InstanceId);
+        LoadState();
 
         ErrorMessage = Error switch
         {
@@ -72,6 +76,7 @@ public class LoginModel : PageModel
         if (string.IsNullOrWhiteSpace(enteredEmail) || string.IsNullOrWhiteSpace(Password))
         {
             ErrorMessage = "E-mail and password are required.";
+            LoadState();
             return Page();
         }
 
@@ -80,6 +85,7 @@ public class LoginModel : PageModel
         if (user is null)
         {
             ErrorMessage = "Invalid credentials.";
+            LoadState();
             return Page();
         }
 
@@ -93,6 +99,14 @@ public class LoginModel : PageModel
 
         await InstanceSignIn.SignInAsync(HttpContext, user);
         return RedirectToLocal(ReturnUrl);
+    }
+
+    private void LoadState()
+    {
+        Embedded = string.Equals(Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
+        var cloud = _workspaceStore.GetCloudConnectionSettings();
+        CloudSsoAvailable = cloud.Enabled && !string.IsNullOrWhiteSpace(cloud.Url) && !string.IsNullOrWhiteSpace(cloud.InstanceId);
+        LocalSignIn = _workspaceStore.AnyLocalSignIn();
     }
 
     private IActionResult RedirectToLocal(string? returnUrl)

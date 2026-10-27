@@ -782,6 +782,9 @@ public class ConfigModel : PageModel
         return ReturnTo(returnUrl);
     }
 
+    /// <summary>Some administrator can sign in with a local password - the way in once the cloud link is gone.</summary>
+    public bool LocalAdminSignIn => _workspaceStore.AnyLocalAdminSignIn();
+
     private IActionResult ReturnTo(string? returnUrl) =>
         !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)
             ? LocalRedirect(returnUrl)
@@ -809,48 +812,16 @@ public class ConfigModel : PageModel
             name = Environment.MachineName;
         }
 
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var cloudUri)
-            || (cloudUri.Scheme != Uri.UriSchemeHttp && cloudUri.Scheme != Uri.UriSchemeHttps))
+        if (CloudClaimFlow.CheckCloudUrl(url, out _) is { } urlProblem)
         {
-            ErrorMessage = "The cloud URL is not a valid address.";
+            ErrorMessage = urlProblem;
             return RedirectToPage(new { tab = "cloud" });
         }
-        if (!CloudUrlPolicy.IsPlainHttpAllowed(cloudUri))
-        {
-            ErrorMessage = "Use https for a public cloud address - a plain-http link would send the sign-in over the network unencrypted.";
-            return RedirectToPage(new { tab = "cloud" });
-        }
-
-        var nonce = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(24));
-        var verifier = CloudClaimFlow.Base64Url(RandomNumberGenerator.GetBytes(32));
-        var challenge = CloudClaimFlow.Challenge(verifier);
 
         // Carry a local return target (e.g. the setup wizard's cloud step) through the PKCE round-trip so the
         // callback sends the browser back there instead of always landing on System → Cloud.
         var safeReturn = !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : null;
-        var payload = JsonSerializer.Serialize(new CloudClaimFlow.State(nonce, verifier, url, safeReturn));
-        var protector = _dataProtection.CreateProtector(CloudClaimFlow.ProtectorPurpose);
-        Response.Cookies.Append(CloudClaimFlow.CookieName, protector.Protect(payload), new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = Request.IsHttps,
-            SameSite = SameSiteMode.Lax,
-            IsEssential = true,
-            MaxAge = TimeSpan.FromMinutes(10)
-        });
-
-        var redirectUri = $"{Request.Scheme}://{Request.Host}{Url.Content("~/CloudClaim")}";
-        var target = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString($"{url}/instances/claim", new Dictionary<string, string?>
-        {
-            ["redirect_uri"] = redirectUri,
-            ["state"] = nonce,
-            ["name"] = name,
-            ["code_challenge"] = challenge,
-            // Only a "disconnect & reconnect" knows which instance it is re-linking; a fresh install sends nothing,
-            // and the cloud then asks the admin instead of guessing from the name.
-            ["reconnect"] = Guid.TryParse(reconnectInstanceId, out var reconnectId) ? reconnectId.ToString() : null
-        });
-        return Redirect(target);
+        return Redirect(CloudClaimFlow.Start(HttpContext, _dataProtection, url, name, "/CloudClaim", safeReturn, reconnectInstanceId));
     }
 
     /// <summary>UniFi-style connect: sign in to the cloud account + self-register this instance by name.</summary>

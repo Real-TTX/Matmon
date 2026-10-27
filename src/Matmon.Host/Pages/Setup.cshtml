@@ -1,4 +1,4 @@
-@page "/setup"
+@page "/setup/{handler?}"
 @model SetupModel
 @inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
@@ -10,6 +10,7 @@
     var partnerProductName = WorkspaceStore.GetServicePartnerProductName();
     var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
     var brandName = partnerProductName ?? "Matmon";
+    var localOpen = Model.Mode == "local";
 }
 
 <div class="mat-auth__card">
@@ -23,7 +24,7 @@
             <img class="mat-brandmark--light mm-authlogo" src="/brand/matmon-logo-horizontal.svg" alt="" width="233" height="44" /><img class="mat-brandmark--dark mm-authlogo" src="/brand/matmon-logo-horizontal-dark.svg" alt="" width="233" height="44" />
         }
         <h1>Welcome to @brandName</h1>
-        <p class="mat-muted">Create the administrator account to continue.</p>
+        <p class="mat-muted">Choose how you sign in to this instance.</p>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -31,30 +32,64 @@
         <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
     }
 
-    <form method="post" class="mat-form" novalidate>
-        <div class="mat-field">
-            <label class="mat-label" for="Email">E-mail</label>
-            <input asp-for="Email" type="email" class="mat-input" autocomplete="username" autofocus required
-                   data-msg-required="Please enter the administrator's e-mail address." data-msg-type="Please enter an address like name@example.com." />
-            <span class="mat-error" aria-live="polite"></span>
-        </div>
-        <div class="mat-field">
-            <label class="mat-label" for="Password">Password</label>
-            <div class="mat-input-icon mat-input-icon--end">
-                <input asp-for="Password" type="password" class="mat-input" autocomplete="new-password" required minlength="8"
-                       data-msg-required="Please choose a password." data-msg-range="The password needs at least 8 characters." />
-                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="Password" aria-pressed="false" aria-label="Show the password" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
+    @if (!Model.CloudAlreadyLinked)
+    {
+        @* With a Matmon Cloud account: the instance is connected to the cloud and the account that connects it becomes its
+           administrator - no local password to keep. *@
+        <form method="post" asp-page-handler="Cloud" class="mat-form" novalidate>
+            <div class="mat-field">
+                <label class="mat-label" for="InstanceName">Name of this instance</label>
+                <input asp-for="InstanceName" class="mat-input" autocomplete="off" maxlength="80" />
+                <span class="mat-hint">How it is listed in Matmon Cloud.</span>
             </div>
-            <span class="mat-hint">At least 8 characters.</span>
-            <span class="mat-error" aria-live="polite"></span>
+            <details class="mat-collapse">
+                <summary><span>Cloud address</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+                <div class="mat-accordion__body">
+                    <div class="mat-field">
+                        <label class="mat-label" for="CloudUrl">Matmon Cloud</label>
+                        <input asp-for="CloudUrl" class="mat-input mat-mono" autocomplete="off" required data-msg-required="Please enter the cloud address." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                </div>
+            </details>
+            <div class="mat-btn-row mat-btn-row--plain">
+                <button type="submit" class="mat-btn mat-btn--primary mat-btn--block">@MatUi.Icon("cloud")<span>Sign in with Matmon Cloud</span></button>
+            </div>
+            <p class="mat-hint">You become the administrator of this instance with your Matmon Cloud account. Other members of the instance in the cloud sign in the same way.</p>
+        </form>
+
+        <p class="mm-auth-or">or</p>
+    }
+
+    <details class="mat-collapse" open="@localOpen">
+        <summary><span>Create a local account instead</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+        <div class="mat-accordion__body">
+            <form method="post" class="mat-form" novalidate>
+                <div class="mat-field">
+                    <label class="mat-label" for="Email">E-mail</label>
+                    <input asp-for="Email" type="email" class="mat-input" autocomplete="username" required
+                           data-msg-required="Please enter the administrator's e-mail address." data-msg-type="Please enter an address like name@example.com." />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="Password">Password</label>
+                    <div class="mat-input-icon mat-input-icon--end">
+                        <input asp-for="Password" type="password" class="mat-input" autocomplete="new-password" required minlength="8"
+                               data-msg-required="Please choose a password." data-msg-range="The password needs at least 8 characters." />
+                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="Password" aria-pressed="false" aria-label="Show the password" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
+                    </div>
+                    <span class="mat-hint">At least 8 characters.</span>
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="ConfirmPassword">Repeat password</label>
+                    <input asp-for="ConfirmPassword" type="password" class="mat-input" autocomplete="new-password" required data-msg-required="Please repeat the password." />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="submit" class="mat-btn @(localOpen ? "mat-btn--primary" : "mat-btn--secondary") mat-btn--block">@MatUi.Icon("shield")<span>Create account</span></button>
+                </div>
+            </form>
         </div>
-        <div class="mat-field">
-            <label class="mat-label" for="ConfirmPassword">Repeat password</label>
-            <input asp-for="ConfirmPassword" type="password" class="mat-input" autocomplete="new-password" required data-msg-required="Please repeat the password." />
-            <span class="mat-error" aria-live="polite"></span>
-        </div>
-        <div class="mat-btn-row mat-btn-row--plain">
-            <button type="submit" class="mat-btn mat-btn--primary mat-btn--block">@MatUi.Icon("shield")<span>Create account</span></button>
-        </div>
-    </form>
+    </details>
 </div>

@@ -90,6 +90,10 @@ public class WizardModel : PageModel
     /// <summary>Whether this instance is already linked to Matmon.Cloud.</summary>
     public bool CloudConnected { get; private set; }
 
+    /// <summary>The signed-in administrator has no local password - they set the instance up with Matmon Cloud and sign in
+    /// through it, so the cloud link is not optional for them (no "Skip" on the cloud step).</summary>
+    public bool SignsInWithCloud => !_workspaceStore.HasLocalPassword(UserId);
+
     /// <summary>This installation is ALREADY linked to a cloud instance - not by anything stored here, but by the
     /// environment (<c>Matmon__CloudInstanceId</c>/<c>CloudInstanceToken</c>): a fresh data folder started with the same
     /// environment becomes that instance again, license included. The wizard used to show "not connected" for this

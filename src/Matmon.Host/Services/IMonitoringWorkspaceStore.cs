@@ -32,6 +32,24 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Creates the first admin account (e-mail + password) and marks setup completed.</summary>
     MatmonUser CompleteInitialSetup(string email, string password);
 
+    /// <summary>First-run setup WITH a Matmon Cloud account: the account that connected this instance becomes its first
+    /// administrator, without a local password (it signs in through the cloud).</summary>
+    MatmonUser CompleteInitialSetupWithCloud(string email);
+
+    /// <summary>The recovery file in the data folder: creates or resets a LOCAL administrator (enabled, this password, no
+    /// second factor) and completes a setup that has not happened yet. No e-mail = the first administrator there is.</summary>
+    MatmonUser ApplyRecoveryAdmin(string? email, string password);
+
+    /// <summary>Switches the user's local password off (they sign in through Matmon Cloud from then on) - only for an
+    /// account that is cloud-linked while the cloud link is there, and with the current password.</summary>
+    RemovePasswordResult RemoveOwnPassword(Guid userId, string currentPassword);
+
+    /// <summary>Whether any enabled account can sign in with a local password.</summary>
+    bool AnyLocalSignIn();
+
+    /// <summary>Whether any enabled ADMINISTRATOR can sign in with a local password (the way in when the cloud is gone).</summary>
+    bool AnyLocalAdminSignIn();
+
     MatmonUser CreateUser(string username, string password, MatmonUserRole role);
 
     /// <summary>Find-or-create a user for a "Sign in with Matmon Cloud" identity (SSO). Existing accounts win.</summary>

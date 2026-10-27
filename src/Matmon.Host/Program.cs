@@ -33,6 +33,8 @@ switch (args.FirstOrDefault())
         return await WindowsUpdateApplier.RunAsync(args);
     case DockerUpdateHelper.Command:
         return await DockerUpdateHelper.RunAsync(args);
+    case RecoveryAdmin.Command:
+        return await RecoveryAdmin.RunCommandAsync(args);
 }
 
 // As a Windows service the working directory is System32: the content root (wwwroot, mibs) is the program folder.
@@ -364,6 +366,9 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddHostedService<ReportSchedulerService>();
     builder.Services.AddHostedService<CloudConnectionService>();
     builder.Services.AddHostedService<TunnelClient>();
+    // The way back in that never depends on the cloud: a recovery file in the data folder (RecoveryAdmin).
+    builder.Services.AddHostedService(provider => new RecoveryAdminService(
+        workspaceDirectory, provider.GetRequiredService<IMonitoringWorkspaceStore>(), provider.GetRequiredService<ILogger<RecoveryAdminService>>()));
 
     // Updates of this installation itself (System > Updates): through the Docker socket when it is mounted, or as a
     // Windows service from the release feed. The first method that applies wins; none = updated by hand.

@@ -77,7 +77,14 @@
         {
             case "welcome":
                 <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("sparkles")<span>Your account is ready</span></h2>
-                <p>A few optional steps, starting with the cloud connection.</p>
+                @if (Model.SignsInWithCloud)
+                {
+                    <p>You sign in with your Matmon Cloud account. A few optional steps follow - the cloud connection first.</p>
+                }
+                else
+                {
+                    <p>A few optional steps, starting with the cloud connection.</p>
+                }
                 break;
 
             case "cloud":
@@ -107,6 +114,16 @@
                 else if (Model.CloudConnected)
                 {
                     <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Connected to <strong>@Model.CloudLinkUrl</strong> · plan <strong>@Model.License.DisplayName</strong></span></p>
+                    @if (Model.SignsInWithCloud)
+                    {
+                        <div class="mat-alert mat-alert--info" role="status">
+                            @MatUi.Icon("info")
+                            <div class="mat-alert__body">
+                                You sign in through this connection - keep it. Should the cloud ever be out of reach, a local password
+                                (on <a href="/Account">your account page</a>) or a recovery file in the data folder still gets you in.
+                            </div>
+                        </div>
+                    }
                     <form method="post" asp-page-handler="CloudMonitoring" class="mat-form" novalidate>
                         <label class="mat-check"><input type="checkbox" id="wizard-notify-problems" name="notifyOnProblems" value="true" checked /><span class="mat-check__text">E-mail me if this instance goes offline (and when it recovers)</span></label>
                         @if (Model.License.TunnelEnabled)
@@ -459,7 +476,11 @@
         else
         {
             <a class="mat-btn mat-btn--primary" href="@StepUrl(Model.NextStep)"><span>Continue</span>@MatUi.Icon("arrow-right")</a>
-            <a class="mat-btn mat-btn--secondary" href="@StepUrl(Model.NextStep)"><span>Skip</span></a>
+            @* Whoever signs in through the cloud cannot skip the cloud step - it is how they get in. *@
+            @if (!(Model.Step == "cloud" && Model.SignsInWithCloud))
+            {
+                <a class="mat-btn mat-btn--secondary" href="@StepUrl(Model.NextStep)"><span>Skip</span></a>
+            }
         }
         @if (Model.PrevStep is not null)
         {

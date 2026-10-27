@@ -3,10 +3,6 @@ using Matmon.Host.Ui;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 
 namespace Matmon.Host.Pages;
 
@@ -14,11 +10,10 @@ namespace Matmon.Host.Pages;
 /// Callback for the OAuth-style cloud CLAIM flow (started by <c>Config.OnPostCloudClaim</c>). The cloud sends
 /// the browser back here with a one-time code; we validate the state against the data-protected cookie, redeem
 /// the code (with the PKCE verifier) for the instance id + token, and store the cloud link. Admin-only.
+/// (The first-run setup "with Matmon Cloud" has a callback of its own, <c>/setup/cloud</c>.)
 /// </summary>
 public class CloudClaimModel : PageModel
 {
-    private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(20) };
-
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly IDataProtectionProvider _dataProtection;
 
@@ -35,71 +30,34 @@ public class CloudClaimModel : PageModel
             return Forbid();
         }
 
-        // Always clear the one-shot cookie, whatever the outcome.
-        var cookie = Request.Cookies[CloudClaimFlow.CookieName];
-        Response.Cookies.Delete(CloudClaimFlow.CookieName);
+        // Always clears the one-shot cookie, whatever the outcome.
+        var pending = CloudClaimFlow.TakePending(HttpContext, _dataProtection, state);
 
-        // The cloud consent page sends ?error=access_denied when the user hits Cancel there - report it cleanly
-        // (the pending claim is already dropped by deleting the cookie above).
+        // The cloud consent page sends ?error=access_denied when the user hits Cancel there - report it cleanly.
         if (!string.IsNullOrWhiteSpace(error))
         {
-            return Fail("Connection cancelled in the cloud. Nothing was changed.");
+            return Fail("Connection cancelled in the cloud. Nothing was changed.", pending?.ReturnUrl);
         }
 
-        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(cookie))
+        if (string.IsNullOrWhiteSpace(code) || pending is null)
         {
-            return Fail("The cloud connection was cancelled or the link expired. Please try again.");
+            return Fail("The cloud connection was cancelled, expired or could not be verified. Please try again.");
         }
 
-        CloudClaimFlow.State? pending;
-        try
+        var (result, problem) = await CloudClaimFlow.ExchangeAsync(pending, code, cancellationToken);
+        if (result is null)
         {
-            var json = _dataProtection.CreateProtector(CloudClaimFlow.ProtectorPurpose).Unprotect(cookie);
-            pending = JsonSerializer.Deserialize<CloudClaimFlow.State>(json);
+            return Fail(problem!, pending.ReturnUrl);
         }
-        catch
+
+        _workspaceStore.SetCloudConnectionSettings(pending.Url, result.InstanceId, result.Token, enabled: true);
+        if (result.RemoteAccess)
         {
-            pending = null;
+            _workspaceStore.SetCloudFullAccess(true);
         }
-
-        if (pending is null || !CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(pending.Nonce), Encoding.ASCII.GetBytes(state)))
-        {
-            return Fail("The cloud connection could not be verified (state mismatch). Please try again.");
-        }
-
-        try
-        {
-            using var response = await CloudHttp.PostAsJsonAsync(
-                $"{pending.Url}/api/instances/claim/exchange",
-                new { code, codeVerifier = pending.Verifier },
-                cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return Fail($"Matmon.Cloud rejected the connection ({(int)response.StatusCode}). Please try again.", pending.ReturnUrl);
-            }
-
-            var result = await response.Content.ReadFromJsonAsync<ClaimExchangeResult>(cancellationToken);
-            if (result is null || string.IsNullOrWhiteSpace(result.InstanceId) || string.IsNullOrWhiteSpace(result.Token))
-            {
-                return Fail("Matmon.Cloud returned an unexpected response.", pending.ReturnUrl);
-            }
-
-            _workspaceStore.SetCloudConnectionSettings(pending.Url, result.InstanceId, result.Token, enabled: true);
-            if (result.RemoteAccess)
-            {
-                _workspaceStore.SetCloudFullAccess(true);
-            }
-            TempData["StatusMessage"] = result.RemoteAccess
-                ? "Connected to Matmon.Cloud for your customer - remote access is on, so you can open this instance from the cloud."
-                : "Connected to Matmon.Cloud - the first heartbeat is sent within a few seconds.";
-        }
-        catch (Exception ex)
-        {
-            return Fail($"Could not reach Matmon.Cloud: {ex.Message}", pending.ReturnUrl);
-        }
-
+        TempData["StatusMessage"] = result.RemoteAccess
+            ? "Connected to Matmon.Cloud for your customer - remote access is on, so you can open this instance from the cloud."
+            : "Connected to Matmon.Cloud - the first heartbeat is sent within a few seconds.";
         return Done(pending.ReturnUrl);
     }
 
@@ -114,27 +72,4 @@ public class CloudClaimModel : PageModel
         TempData["ErrorMessage"] = message;
         return Done(returnUrl);
     }
-
-    /// <param name="RemoteAccess">Set when a partner connected this instance for a customer it manages: the partner
-    /// administers it through the cloud, so remote access is switched on right away.</param>
-    private sealed record ClaimExchangeResult(string? InstanceId, string? Token, bool RemoteAccess = false);
-}
-
-/// <summary>Shared constants + PKCE helpers for the cloud claim flow (start handler + callback).</summary>
-internal static class CloudClaimFlow
-{
-    public const string CookieName = "matmon_cloud_claim";
-    public const string ProtectorPurpose = "Matmon.CloudClaim.v1";
-
-    /// <summary>The pending claim kept (data-protected) between the redirect out and the callback.
-    /// <paramref name="ReturnUrl"/> carries where to send the browser after the claim (e.g. back into the
-    /// setup wizard); null falls back to the System → Cloud page.</summary>
-    public sealed record State(string Nonce, string Verifier, string Url, string? ReturnUrl = null);
-
-    public static string Base64Url(byte[] bytes) =>
-        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    /// <summary>PKCE S256 challenge: base64url(SHA-256(verifier)). Must match the cloud's ClaimCodeStore.</summary>
-    public static string Challenge(string verifier) =>
-        Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
 }

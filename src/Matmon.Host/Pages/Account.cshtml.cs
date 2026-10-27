@@ -81,11 +81,45 @@ public class AccountModel : PageModel
         return RedirectToPage(null, null, null, "notifications");
     }
 
+    /// <summary>The cloud link is there (stored, switched on) - the cloud sign-in works.</summary>
+    public bool CloudLinked { get; private set; }
+
+    /// <summary>The account has signed in with Matmon Cloud before (it is cloud-linked).</summary>
+    public bool UserCloudLinked { get; private set; }
+
+    /// <summary>The local password may be switched off: the account signs in through the cloud while the link is there.</summary>
+    public bool CanRemovePassword => HasPassword && UserCloudLinked && CloudLinked;
+
+    /// <summary>Switch the local password off - only the cloud sign-in remains (the recovery file still gets someone in).</summary>
+    public IActionResult OnPostRemovePassword(string? removeCurrentPassword)
+    {
+        LoadAll();
+        FocusSecurity = true;
+        switch (_workspaceStore.RemoveOwnPassword(UserId, removeCurrentPassword ?? string.Empty))
+        {
+            case RemovePasswordResult.Success:
+                StatusMessage = "Local password switched off - you sign in with Matmon Cloud now.";
+                return RedirectToPage(null, null, null, "security");
+            case RemovePasswordResult.WrongCurrent:
+                ErrorMessage = "The current password is incorrect.";
+                return Page();
+            case RemovePasswordResult.NoCloudSignIn:
+                ErrorMessage = "Sign in with Matmon Cloud once first (and keep the cloud link) - without it nobody could sign in with this account any more.";
+                return Page();
+            default:
+                ErrorMessage = "This account has no local password.";
+                return Page();
+        }
+    }
+
     private void LoadAll()
     {
         HasPassword = _workspaceStore.HasLocalPassword(UserId);
+        var cloud = _workspaceStore.GetCloudConnectionSettings();
+        CloudLinked = cloud.Enabled && !string.IsNullOrWhiteSpace(cloud.Url) && !string.IsNullOrWhiteSpace(cloud.InstanceId);
         LoadTimeZone();
         var user = _workspaceStore.FindUser(UserId);
+        UserCloudLinked = user?.CloudLinked ?? false;
         TwoFactorEnabled = user?.TwoFactorEnabled ?? false;
         TwoFactorSince = user?.TotpEnrolledUtc;
         Devices = _workspaceStore.GetPushDevices(UserId);

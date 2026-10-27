@@ -153,6 +153,34 @@
             </div>
         </section>
 
+        @if (Model.HasPassword && Model.CloudLinked)
+        {
+            @* Signing in through the cloud only: the local password goes, the recovery file in the data folder stays the way back. *@
+            <section class="mat-card">
+                <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Sign in with Matmon Cloud only</h2></div>
+                <div class="mat-card__body mat-stack">
+                    @if (Model.CanRemovePassword)
+                    {
+                        <p class="mat-muted">Switch the local password off and you sign in with your Matmon Cloud account only. Should the cloud be out of reach, a recovery file in the data folder still creates a local administrator.</p>
+                        <form method="post" asp-page-handler="RemovePassword" class="mat-form" novalidate>
+                            <div class="mat-field">
+                                <label class="mat-label" for="remove-current-password">Current password <span class="mat-req" aria-hidden="true">*</span></label>
+                                <input id="remove-current-password" name="removeCurrentPassword" type="password" class="mat-input" autocomplete="current-password" required data-msg-required="Please enter your current password." />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-btn-row">
+                                <button type="submit" class="mat-btn mat-btn--danger" data-confirm="Switch the local password off? From now on you sign in with Matmon Cloud only." data-confirm-ok="Switch off">@MatUi.Icon("key")<span>Switch off local password</span></button>
+                            </div>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="mat-muted">Sign in once with Matmon Cloud (on the sign-in page) - then the local password can be switched off here.</p>
+                    }
+                </div>
+            </section>
+        }
+
         <section class="mat-card">
             <div class="mat-card__head">
                 @MatUi.Icon("shield")<h2 class="mat-card__title">Two-factor authentication</h2>

@@ -662,11 +662,25 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
                 }
 
                 <p class="mat-muted"><strong>Disconnect</strong> to change the cloud URL or link a different instance.</p>
+                @if (!Model.LocalAdminSignIn)
+                {
+                    @* Nobody could sign in afterwards: every administrator signs in through the cloud. *@
+                    <div class="mat-alert mat-alert--warning" role="status">
+                        @MatUi.Icon("alert")
+                        <div class="mat-alert__body">
+                            No administrator has a local password - everyone signs in with Matmon Cloud. Disconnected, nobody could sign in
+                            any more: set a local password on <a href="/Account#security">your account page</a> first. (A recovery file
+                            in the data folder would still create a local administrator.)
+                        </div>
+                    </div>
+                }
                 <form method="post" asp-page-handler="CloudDisconnect">
                     <div class="mat-btn-row">
                         <span class="mat-btn-row__spacer"></span>
                         <button type="submit" class="mat-btn mat-btn--danger"
-                                data-confirm="Disconnect this instance from Matmon.Cloud? The heartbeat stops, and the alert relay and remote access are switched off - turn them on again after reconnecting." data-confirm-ok="Disconnect">@MatUi.Icon("plug")<span>Disconnect</span></button>
+                                data-confirm="@(Model.LocalAdminSignIn
+                                    ? "Disconnect this instance from Matmon.Cloud? The heartbeat stops, and the alert relay and remote access are switched off - turn them on again after reconnecting."
+                                    : "No administrator has a local password: after disconnecting, nobody can sign in until a recovery file in the data folder creates one. Disconnect anyway?")" data-confirm-ok="Disconnect">@MatUi.Icon("plug")<span>Disconnect</span></button>
                     </div>
                 </form>
             </div>

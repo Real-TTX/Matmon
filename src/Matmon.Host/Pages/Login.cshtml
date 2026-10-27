@@ -15,6 +15,29 @@
     var slogan = WorkspaceStore.GetServicePartnerSlogan();
     var nameInLogo = productName is not null && partnerHasLogo && WorkspaceStore.GetServicePartnerLogoIsOem();
     var brandName = productName ?? "Matmon";
+
+    // The e-mail + password form - on its own, or folded under the cloud button.
+    Func<object?, Microsoft.AspNetCore.Html.IHtmlContent> localForm =
+        @<form method="post" class="mat-form" novalidate>
+            <input type="hidden" asp-for="ReturnUrl" />
+            <div class="mat-field">
+                <label class="mat-label" for="Email">E-mail</label>
+                <input asp-for="Email" type="email" class="mat-input" autocomplete="email" autofocus="@(!Model.LocalFolded)" required
+                       data-msg-required="Please enter your e-mail address." data-msg-type="Please enter an address like name@example.com." />
+                <span class="mat-error" aria-live="polite"></span>
+            </div>
+            <div class="mat-field">
+                <label class="mat-label" for="Password">Password</label>
+                <div class="mat-input-icon mat-input-icon--end">
+                    <input asp-for="Password" type="password" class="mat-input" autocomplete="current-password" required data-msg-required="Please enter your password." />
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="Password" aria-pressed="false" aria-label="Show the password" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
+                </div>
+                <span class="mat-error" aria-live="polite"></span>
+            </div>
+            <div class="mat-btn-row mat-btn-row--plain">
+                <button type="submit" class="mat-btn @(Model.LocalFolded ? "mat-btn--secondary" : "mat-btn--primary") mat-btn--block">@MatUi.Icon("login")<span>Sign in</span></button>
+            </div>
+        </form>;
 }
 
 <div class="mat-auth__card">
@@ -29,7 +52,7 @@
         }
         <h1 class="@(nameInLogo || (!partnerHasLogo && productName is null) ? "mat-sr-only" : null)">@brandName</h1>
         <p class="mat-muted">
-            @(slogan ?? "Sign in with your e-mail.")
+            @(slogan ?? (Model.LocalSignIn || !Model.CloudSsoAvailable ? "Sign in with your e-mail." : "Sign in with your Matmon Cloud account."))
             @if (!string.IsNullOrWhiteSpace(partnerName))
             {
                 <br />
@@ -43,32 +66,35 @@
         <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
     }
 
-    <form method="post" class="mat-form" novalidate>
-        <input type="hidden" asp-for="ReturnUrl" />
-        <div class="mat-field">
-            <label class="mat-label" for="Email">E-mail</label>
-            <input asp-for="Email" type="email" class="mat-input" autocomplete="email" autofocus required
-                   data-msg-required="Please enter your e-mail address." data-msg-type="Please enter an address like name@example.com." />
-            <span class="mat-error" aria-live="polite"></span>
-        </div>
-        <div class="mat-field">
-            <label class="mat-label" for="Password">Password</label>
-            <div class="mat-input-icon mat-input-icon--end">
-                <input asp-for="Password" type="password" class="mat-input" autocomplete="current-password" required data-msg-required="Please enter your password." />
-                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm mat-input-icon__btn" data-password-toggle="Password" aria-pressed="false" aria-label="Show the password" data-tip="Show or hide">@MatUi.Icon("eye", "mat-toggle-on")@MatUi.Icon("eye-off", "mat-toggle-off")</button>
-            </div>
-            <span class="mat-error" aria-live="polite"></span>
-        </div>
-        <div class="mat-btn-row mat-btn-row--plain">
-            <button type="submit" class="mat-btn mat-btn--primary mat-btn--block">@MatUi.Icon("login")<span>Sign in</span></button>
-        </div>
-    </form>
-
     @if (Model.CloudSsoAvailable && !Model.Embedded)
     {
-        <p class="mm-auth-or">or</p>
         <div class="mat-btn-row mat-btn-row--plain">
-            <a class="mat-btn mat-btn--secondary mat-btn--block" href="/signin-cloud?handler=Start">@MatUi.Icon("cloud")<span>Sign in with Matmon Cloud</span></a>
+            <a class="mat-btn mat-btn--primary mat-btn--block" href="/signin-cloud?handler=Start">@MatUi.Icon("cloud")<span>Sign in with Matmon Cloud</span></a>
         </div>
+    }
+
+    @if (Model.LocalSignIn || !Model.CloudSsoAvailable)
+    {
+        if (Model.LocalFolded)
+        {
+            @* With the cloud link the local form is folded away behind the cloud button - it is the fallback, not the way in. *@
+            <details class="mat-collapse" open="@(Request.Method == "POST" && Model.ErrorMessage is not null)">
+                <summary><span>Sign in with a local account</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+                <div class="mat-accordion__body">@localForm(null)</div>
+            </details>
+        }
+        else
+        {
+            @localForm(null)
+        }
+    }
+
+    @if (!Model.LocalSignIn)
+    {
+        @* No local password on this instance: the way in that never depends on the cloud. *@
+        <p class="mat-hint">
+            Locked out? Put an empty file named <code>recovery-admin</code> into the data folder: Matmon creates a local
+            administrator within seconds and writes its password to <code>recovery-admin.result</code>.
+        </p>
     }
 </div>
