@@ -106,50 +106,9 @@ $@"curl -fsS -X POST {Model.BaseUrl}/api/v1/maintenance-windows/<id>/end \
     }
 </section>
 
-<form method="post" asp-page-handler="Create" class="mat-form" novalidate>
-    <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("plus")<h2 class="mat-card__title">New token</h2></div>
-        <div class="mat-card__body mat-stack">
-            @if (!string.IsNullOrWhiteSpace(Model.FormError))
-            {
-                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
-            }
-            <div class="mat-form__grid">
-                <div class="mat-field">
-                    <label class="mat-label" for="Name">Name <span class="mat-req" aria-hidden="true">*</span></label>
-                    <input asp-for="Name" class="mat-input" placeholder="GitLab deploy" maxlength="80" required data-msg-required="Name the token after what uses it." />
-                    <span class="mat-error" aria-live="polite"></span>
-                </div>
-                <div class="mat-field">
-                    <label class="mat-label" for="Expiry">Expires</label>
-                    <select asp-for="Expiry" class="mat-select">
-                        @foreach (var (key, label) in SystemApiTokensModel.ExpiryOptions)
-                        {
-                            <option value="@key">@label</option>
-                        }
-                    </select>
-                </div>
-                <div class="mat-field" data-show-if="Expiry" data-show-value="date" hidden>
-                    <label class="mat-label" for="ExpiresOn">On</label>
-                    <input asp-for="ExpiresOn" type="date" class="mat-input" min="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")" max="@DateTime.UtcNow.AddDays(730).ToString("yyyy-MM-dd")" />
-                </div>
-            </div>
-            <fieldset class="mat-field mat-fieldset">
-                <legend class="mat-legend">May</legend>
-                @foreach (var (key, title, description) in ApiTokenScopes.All)
-                {
-                    <label class="mat-check">
-                        <input type="checkbox" name="Scopes" value="@key" checked="@Model.Scopes.Contains(key)" />
-                        <span class="mat-check__text"><strong>@title</strong><br /><small class="mat-text-muted">@description</small></span>
-                    </label>
-                }
-            </fieldset>
-        </div>
-    </section>
-    <div class="mat-btn-row">
-        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("key")<span>Create token</span></button>
-    </div>
-</form>
+<div class="mat-actions">
+    <a class="mat-btn mat-btn--primary" asp-page="/SystemApiTokenCreate">@MatUi.Icon("plus")<span>New token</span></a>
+</div>
 
 <section class="mat-card">
     <div class="mat-card__head">@MatUi.Icon("terminal")<h2 class="mat-card__title">Using it in a pipeline</h2></div>

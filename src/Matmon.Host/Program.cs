@@ -341,6 +341,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/SystemUpdates", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemApiTokens", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/PrtgImport", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SystemApiTokenCreate", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options =>
 {
     options.Filters.Add<MatmonPageWriteGuard>();

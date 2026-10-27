@@ -1,0 +1,54 @@
+@page "/system/api-tokens/new"
+@model Matmon.Host.Pages.SystemApiTokenCreateModel
+@using Matmon.Core.Domain
+@{
+    ViewData["Title"] = "New API token";
+    ViewData["Width"] = "narrow";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("API tokens", "/system/api-tokens"), new BreadcrumbItem("New token") };
+}
+
+<form method="post" class="mat-form" novalidate>
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">Token</h2></div>
+        <div class="mat-card__body mat-stack">
+            @if (!string.IsNullOrWhiteSpace(Model.FormError))
+            {
+                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+            }
+            <div class="mat-form__grid">
+                <div class="mat-field mat-field--full">
+                    <label class="mat-label" for="Name">Name <span class="mat-req" aria-hidden="true">*</span></label>
+                    <input asp-for="Name" class="mat-input" placeholder="GitLab deploy" maxlength="80" required autofocus data-msg-required="Name the token after what uses it." />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="Expiry">Expires</label>
+                    <select asp-for="Expiry" class="mat-select">
+                        @foreach (var (key, label) in SystemApiTokenCreateModel.ExpiryOptions)
+                        {
+                            <option value="@key">@label</option>
+                        }
+                    </select>
+                </div>
+                <div class="mat-field" data-show-if="Expiry" data-show-value="date" hidden>
+                    <label class="mat-label" for="ExpiresOn">On</label>
+                    <input asp-for="ExpiresOn" type="date" class="mat-input" min="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")" max="@DateTime.UtcNow.AddDays(730).ToString("yyyy-MM-dd")" />
+                </div>
+            </div>
+            <fieldset class="mat-field mat-fieldset">
+                <legend class="mat-legend">May</legend>
+                @foreach (var (key, title, description) in ApiTokenScopes.All)
+                {
+                    <label class="mat-check">
+                        <input type="checkbox" name="Scopes" value="@key" checked="@Model.Scopes.Contains(key)" />
+                        <span class="mat-check__text"><strong>@title</strong><br /><small class="mat-text-muted">@description</small></span>
+                    </label>
+                }
+            </fieldset>
+        </div>
+    </section>
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("key")<span>Create token</span></button>
+        <a class="mat-btn mat-btn--secondary" asp-page="/SystemApiTokens">@MatUi.Icon("x")<span>Cancel</span></a>
+    </div>
+</form>
