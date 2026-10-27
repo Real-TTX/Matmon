@@ -23,7 +23,8 @@
         ? null
         : stateOptions.FirstOrDefault(option => option.Value == view.MonitoringStateFilter).Label;
     var tagFilter = string.IsNullOrWhiteSpace(view.MonitoringTagFilter) ? null : view.MonitoringTagFilter;
-    var activeFilters = (kindLabel is null ? 0 : 1) + (stateLabel is null ? 0 : 1) + (tagFilter is null ? 0 : 1);
+    var probeName = view.MonitoringProbeName;
+    var activeFilters = (kindLabel is null ? 0 : 1) + (stateLabel is null ? 0 : 1) + (tagFilter is null ? 0 : 1) + (probeName is null ? 0 : 1);
 
     // The address of the page without one filter: the link of a chip's X (everything else stays).
     string UrlWithout(string key)
@@ -87,7 +88,8 @@
                    asp-route-monitoringKind="@view.MonitoringKindFilter"
                    asp-route-monitoringState="@view.MonitoringStateFilter"
                    asp-route-monitoringTag="@view.MonitoringTagFilter"
-                   asp-route-monitoringSearch="@view.MonitoringSearch">@MatUi.Icon("network")<span>Tree</span></a>
+                   asp-route-monitoringSearch="@view.MonitoringSearch"
+                   asp-route-monitoringProbe="@view.MonitoringProbeId">@MatUi.Icon("network")<span>Tree</span></a>
                 <a class="mat-seg__btn@(isListView ? " is-active" : string.Empty)"
                    aria-current="@(isListView ? "page" : null)"
                    asp-page="/Monitoring"
@@ -95,7 +97,8 @@
                    asp-route-monitoringKind="@view.MonitoringKindFilter"
                    asp-route-monitoringState="@view.MonitoringStateFilter"
                    asp-route-monitoringTag="@view.MonitoringTagFilter"
-                   asp-route-monitoringSearch="@view.MonitoringSearch">@MatUi.Icon("list")<span>List</span></a>
+                   asp-route-monitoringSearch="@view.MonitoringSearch"
+                   asp-route-monitoringProbe="@view.MonitoringProbeId">@MatUi.Icon("list")<span>List</span></a>
             </nav>
             @* Size is a live, client-only preference (no reload): monitoring-prepaint.js applies it before the first paint,
                monitoring.js switches it and marks the pressed button. *@
@@ -115,6 +118,10 @@
     @if (activeFilters > 0)
     {
         <div class="mat-chips" role="group" aria-label="Filters in effect">
+            @if (probeName is not null)
+            {
+                <span class="mat-chip">Probe: @probeName<a class="mat-chip__x" href="@UrlWithout("monitoringProbe")" aria-label="Remove the filter Probe">@MatUi.Icon("x")</a></span>
+            }
             @if (kindLabel is not null)
             {
                 <span class="mat-chip">Type: @kindLabel<a class="mat-chip__x" href="@UrlWithout("monitoringKind")" aria-label="Remove the filter Type">@MatUi.Icon("x")</a></span>
@@ -132,6 +139,10 @@
 
     <form id="monitoring-filter-form" method="get" hidden>
         <input type="hidden" name="monitoringView" value="@view.MonitoringViewMode" />
+        @if (view.MonitoringProbeId is Guid scopedProbe)
+        {
+            <input type="hidden" name="monitoringProbe" value="@scopedProbe" />
+        }
     </form>
 
     <dialog class="mat-dialog mat-dialog--sm" id="monitoring-filter" aria-labelledby="monitoring-filter-title">

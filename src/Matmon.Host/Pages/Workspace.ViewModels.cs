@@ -68,6 +68,11 @@ public sealed record WorkspacePageViewModel
 
     public string MonitoringTagFilter { get; init; } = string.Empty;
 
+    /// <summary>The probe the Sensors view is narrowed to (<c>monitoringProbe</c>), and its name for the chip; null = every probe.</summary>
+    public Guid? MonitoringProbeId { get; init; }
+
+    public string? MonitoringProbeName { get; init; }
+
     public string MonitoringSize { get; init; } = "m";
 
     public string MonitoringFilterSummary { get; init; } = string.Empty;

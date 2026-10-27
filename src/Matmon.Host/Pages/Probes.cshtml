@@ -93,7 +93,7 @@
                                 </div>
                             </td>
                             <td data-label="Last seen" class="mat-hide-sm mat-mono">@(probe.LastSeenUtc.HasValue ? probe.LastSeenUtc.Value.ToDisplay().ToString("g") : "-")</td>
-                            <td data-label="Sensors" class="mat-num mat-mono">@probe.SensorCount</td>
+                            <td data-label="Sensors" class="mat-num mat-mono"><a asp-page="/Monitoring" asp-route-monitoringProbe="@probe.ElementId" aria-label="The sensors that run on @probe.Name">@probe.SensorCount</a></td>
                             <td class="mat-table__cell-actions">
                                 <div class="mat-table__actions">
                                     <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="probe-menu-@probe.ElementId" data-menu-place="bottom"
@@ -127,7 +127,7 @@
 {
     var remote = probe.Role != "Primary";
     <div class="mat-menu" id="probe-menu-@probe.ElementId" role="menu" aria-label="Actions for @probe.Name" hidden>
-        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">@MatUi.Icon("activity")<span>Sensors</span></a>
+        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringProbe="@probe.ElementId">@MatUi.Icon("activity")<span>Sensors</span></a>
         <a class="mat-menu__item" role="menuitem" asp-page="/ProbeUsage" asp-route-probeElementId="@probe.ElementId">@MatUi.Icon("bar-chart")<span>Usage</span></a>
         @if (isAdmin)
         {

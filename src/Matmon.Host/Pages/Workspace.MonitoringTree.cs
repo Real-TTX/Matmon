@@ -25,6 +25,63 @@ public sealed partial class WorkspaceModel
         };
     }
 
+    /// <summary>The cookie that remembers Tree or List, so a link that does not say (the Probes page's "Sensors") opens the last one.</summary>
+    private const string MonitoringViewCookie = "matmon.monitoringView";
+
+    /// <summary>Tree or list: what the address asks for (and then remembered), else what was used last.</summary>
+    private string ResolveMonitoringViewMode()
+    {
+        if (!string.IsNullOrWhiteSpace(MonitoringView))
+        {
+            var chosen = NormalizeMonitoringViewMode(MonitoringView);
+            Response.Cookies.Append(MonitoringViewCookie, chosen, new Microsoft.AspNetCore.Http.CookieOptions
+            {
+                HttpOnly = true,
+                IsEssential = true,
+                SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
+                Secure = Request.IsHttps,
+                MaxAge = TimeSpan.FromDays(365)
+            });
+            return chosen;
+        }
+        return NormalizeMonitoringViewMode(Request.Cookies[MonitoringViewCookie]);
+    }
+
+    /// <summary>The rows of what runs under one probe - the probe and its subtree, a nested probe's subtree left out (that one
+    /// runs it) - with the probe as the top level, so the tree starts at it. No probe (or an unknown id) = everything.</summary>
+    private static (IReadOnlyList<WorkspaceNodeRow> Rows, string? ProbeName) ScopeToProbe(IReadOnlyList<WorkspaceNodeRow> nodes, Guid? probeId)
+    {
+        if (probeId is not Guid id || nodes.FirstOrDefault(node => node.Id == id && node.Kind == MonitoringElementKind.Probe) is not { } probe)
+        {
+            return (nodes, null);
+        }
+
+        // the rows are in tree order (a node's subtree follows it), so the probe's subtree is the run after it with a greater depth
+        var rows = new List<WorkspaceNodeRow>();
+        var start = nodes.ToList().IndexOf(probe);
+        var skipBelowDepth = int.MaxValue;
+        for (var index = start; index < nodes.Count; index++)
+        {
+            var node = nodes[index];
+            if (index > start && node.Depth <= probe.Depth)
+            {
+                break;
+            }
+            if (node.Depth > skipBelowDepth)
+            {
+                continue; // inside a nested probe
+            }
+            skipBelowDepth = int.MaxValue;
+            if (index > start && node.Kind == MonitoringElementKind.Probe)
+            {
+                skipBelowDepth = node.Depth;
+                continue;
+            }
+            rows.Add(node with { Depth = node.Depth - probe.Depth });
+        }
+        return (rows, probe.Name);
+    }
+
     private static string NormalizeMonitoringSize(string? value)
     {
         return value?.Trim().ToLowerInvariant() switch

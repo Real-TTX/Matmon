@@ -86,6 +86,10 @@ public sealed partial class WorkspaceModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? MonitoringSize { get; set; }
 
+    /// <summary>Only what runs under this probe (<c>monitoringProbe=</c>): the probe and its own subtree, without nested probes'.</summary>
+    [BindProperty(SupportsGet = true)]
+    public Guid? MonitoringProbe { get; set; }
+
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
 
@@ -173,18 +177,19 @@ public sealed partial class WorkspaceModel : PageModel
         var probeStatuses = _probeRegistry.GetAll().ToDictionary(probe => probe.ProbeId, StringComparer.OrdinalIgnoreCase);
         var latestSensorObservations = _workspaceStore.GetLatestSensorObservations();
         var now = DateTimeOffset.UtcNow;
-        var monitoringViewMode = NormalizeMonitoringViewMode(MonitoringView);
+        var monitoringViewMode = ResolveMonitoringViewMode();
         var monitoringKindFilter = NormalizeMonitoringKindFilter(MonitoringKind);
         var monitoringStateFilter = NormalizeMonitoringStateFilter(MonitoringState);
         var monitoringSearchText = NormalizeMonitoringSearch(MonitoringSearch);
         var monitoringTagFilter = (MonitoringTag ?? string.Empty).Trim();
         var monitoringSize = NormalizeMonitoringSize(MonitoringSize);
         var monitoringFilterPredicate = BuildMonitoringFilterPredicate(monitoringKindFilter, monitoringStateFilter, monitoringTagFilter, monitoringSearchText);
-        var monitoringListNodes = nodes
+        var (monitoringScopeNodes, monitoringProbeName) = ScopeToProbe(nodes, MonitoringProbe);
+        var monitoringListNodes = monitoringScopeNodes
             .Where(monitoringFilterPredicate)
             .OrderBy(node => node.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var monitoringTreeNodes = FilterTreeNodes(nodes, monitoringFilterPredicate).ToArray();
+        var monitoringTreeNodes = FilterTreeNodes(monitoringScopeNodes, monitoringFilterPredicate).ToArray();
         var monitoringTreeRoots = BuildMonitoringTreeNodes(
             monitoringTreeNodes,
             dashboardNodeMap,
@@ -222,6 +227,8 @@ public sealed partial class WorkspaceModel : PageModel
             MonitoringStateFilter = monitoringStateFilter,
             MonitoringSearch = monitoringSearchText,
             MonitoringTagFilter = monitoringTagFilter,
+            MonitoringProbeId = monitoringProbeName is null ? null : MonitoringProbe,
+            MonitoringProbeName = monitoringProbeName,
             MonitoringSize = monitoringSize,
             MonitoringFilterSummary = BuildMonitoringFilterSummary(monitoringKindFilter, monitoringStateFilter, monitoringSearchText, monitoringVisibleNodes.Length, nodes.Length),
             MonitoringTreeNodes = monitoringTreeNodes,
