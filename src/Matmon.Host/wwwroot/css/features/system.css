@@ -39,4 +39,8 @@
 }
 .mm-update-screen__card h2 { margin: var(--mat-space-2) 0 0; }
 .mm-update-screen__card p { margin: 0; }
+/* the two versions, old above new with an arrow pointing down between them: a version label is long */
+.mm-update-versions { display: grid; justify-items: center; gap: var(--mat-space-1); max-width: 100%; overflow-wrap: anywhere; }
+.mm-update-versions__arrow { display: inline-flex; color: var(--mat-text-muted); }
+.mm-update-versions[hidden] { display: none; }
 .mm-update-screen[hidden] { display: none; }

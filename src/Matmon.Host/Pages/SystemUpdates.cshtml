@@ -60,7 +60,7 @@
             else
             {
                 <h2 id="update-screen-title">Updating Matmon</h2>
-                <p class="mat-mono"><span>@screen.FromVersion</span> → <span>@screen.ToVersion</span></p>
+                <div class="mm-update-versions mat-mono"><span>@screen.FromVersion</span><span class="mm-update-versions__arrow">@MatUi.Icon("arrow-down")<span class="mat-sr-only">to</span></span><span>@screen.ToVersion</span></div>
                 <p id="update-screen-state" data-update-state aria-live="polite">Installing the update ...</p>
             }
             <p class="mat-text-muted mat-mono" data-update-elapsed>0:00</p>
@@ -137,7 +137,7 @@
                         <div class="mm-update-screen__card">
                             <span class="mat-spinner mat-spinner--lg" aria-hidden="true"></span>
                             <h2 id="update-prepare-title">Updating Matmon</h2>
-                            <p class="mat-mono"><span>@status.CurrentVersion</span> → <span>@offer.Version</span></p>
+                            <div class="mm-update-versions mat-mono"><span>@status.CurrentVersion</span><span class="mm-update-versions__arrow">@MatUi.Icon("arrow-down")<span class="mat-sr-only">to</span></span><span>@offer.Version</span></div>
                             <p aria-live="polite">Downloading and checking the update ...</p>
                         </div>
                     </div>
