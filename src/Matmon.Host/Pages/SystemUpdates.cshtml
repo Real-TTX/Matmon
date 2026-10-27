@@ -50,6 +50,7 @@
     <div class="mm-update-screen" role="alertdialog" aria-modal="true" aria-labelledby="update-screen-title" aria-describedby="update-screen-state"
          data-update-screen data-update-from="@screen.FromVersion" data-update-to="@screen.ToVersion" data-update-mode="@(screen.Restart ? "restart" : "update")" data-update-run="@InstanceRestarter.ProcessRun">
         <div class="mm-update-screen__card">
+            <div class="mm-update-screen__logo" aria-hidden="true"><img class="mat-brandmark mat-brandmark--light" src="/brand/matmon-logo-horizontal.svg" alt="" width="170" height="32" /><img class="mat-brandmark mat-brandmark--dark" src="/brand/matmon-logo-horizontal-dark.svg" alt="" width="170" height="32" /></div>
             <span class="mat-spinner mat-spinner--lg" aria-hidden="true"></span>
             @if (screen.Restart)
             {
@@ -135,6 +136,7 @@
                        ~200 MB) before it answers with the update screen, and the page looked as if nothing happened. *@
                     <div class="mm-update-screen" role="alertdialog" aria-modal="true" aria-labelledby="update-prepare-title" hidden data-update-prepare>
                         <div class="mm-update-screen__card">
+                            <div class="mm-update-screen__logo" aria-hidden="true"><img class="mat-brandmark mat-brandmark--light" src="/brand/matmon-logo-horizontal.svg" alt="" width="170" height="32" /><img class="mat-brandmark mat-brandmark--dark" src="/brand/matmon-logo-horizontal-dark.svg" alt="" width="170" height="32" /></div>
                             <span class="mat-spinner mat-spinner--lg" aria-hidden="true"></span>
                             <h2 id="update-prepare-title">Updating Matmon</h2>
                             <div class="mm-update-versions mat-mono"><span>@status.CurrentVersion</span><span class="mm-update-versions__arrow">@MatUi.Icon("arrow-down")<span class="mat-sr-only">to</span></span><span>@offer.Version</span></div>

@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <!-- What the service worker (sw.js) shows when a page cannot be loaded and no copy of it is kept. Static on purpose: it
-     has to work with nothing but the cache. No brand on it - a managing partner's white label would have to come from the
-     server. data-offline-reason is filled in by the service worker: "post" = a form could not be sent. -->
+     has to work with nothing but the cache. The Matmon logo (both themes) is kept by the service worker with it. data-offline-reason is filled in by the service worker: "post" = a form could not be sent. -->
 <html lang="en" data-app="matmon">
 <head>
     <meta charset="utf-8" />
@@ -18,10 +17,13 @@
     <main class="mat-auth" id="main">
         <div class="mat-auth__card">
             <div class="mat-auth__brand">
+                <img class="mat-brandmark mat-brandmark--light" src="/brand/matmon-logo-horizontal.svg" alt="Matmon" width="190" height="36" />
+                <img class="mat-brandmark mat-brandmark--dark" src="/brand/matmon-logo-horizontal-dark.svg" alt="Matmon" width="190" height="36" />
+                <span class="mat-empty__icon" aria-hidden="true"><svg class="mat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/><path d="M2 2l20 20"/></svg></span>
                 <h1 data-offline-title>No connection</h1>
                 <p class="mat-muted" data-offline-text>The server cannot be reached right now. This page tries again by itself and carries on as soon as the connection is back.</p>
             </div>
-            <p class="mat-muted" role="status" aria-live="polite" data-offline-status>Trying again shortly…</p>
+            <p class="mat-muted mat-text-center" role="status" aria-live="polite" data-offline-status>Trying again shortly…</p>
             <div class="mat-btn-row">
                 <button type="button" class="mat-btn mat-btn--primary" data-offline-retry>Try again</button>
                 <button type="button" class="mat-btn mat-btn--secondary" data-offline-back>Back</button>

@@ -32,15 +32,20 @@
   backdrop-filter: blur(6px);
 }
 .mm-update-screen__card {
-  display: grid; justify-items: center; gap: var(--mat-space-2); text-align: center;
-  width: min(26rem, 100%); padding: var(--mat-space-6) var(--mat-space-5);
+  display: grid; justify-items: center; gap: var(--mat-space-3); text-align: center;
+  width: min(28rem, 100%); padding: var(--mat-space-6) var(--mat-space-5) var(--mat-space-5);
   background: var(--mat-surface); border: 1px solid var(--mat-border); border-radius: var(--mat-radius-lg);
   box-shadow: var(--mat-shadow-3);
 }
-.mm-update-screen__card h2 { margin: var(--mat-space-2) 0 0; }
+/* the Matmon logo over the card, with a rule under it: this is Matmon updating itself, not some page waiting */
+.mm-update-screen__logo { display: flex; justify-content: center; width: 100%; padding-bottom: var(--mat-space-4); margin-bottom: var(--mat-space-1); border-bottom: 1px solid var(--mat-border); }
+.mm-update-screen__logo img { height: 32px; width: auto; }
+.mm-update-screen__card .mat-spinner { margin-top: var(--mat-space-2); }
+.mm-update-screen__card h2 { margin: 0; font-size: var(--mat-fs-xl); }
 .mm-update-screen__card p { margin: 0; }
 /* the two versions, old above new with an arrow pointing down between them: a version label is long */
-.mm-update-versions { display: grid; justify-items: center; gap: var(--mat-space-1); max-width: 100%; overflow-wrap: anywhere; }
+.mm-update-versions { display: grid; justify-items: center; gap: var(--mat-space-1); width: 100%; max-width: 100%; overflow-wrap: anywhere;
+  padding: var(--mat-space-3); background: var(--mat-surface-2); border-radius: var(--mat-radius-md); }
 .mm-update-versions__arrow { display: inline-flex; color: var(--mat-text-muted); }
 .mm-update-versions[hidden] { display: none; }
 .mm-update-screen[hidden] { display: none; }

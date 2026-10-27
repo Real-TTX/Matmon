@@ -15,7 +15,7 @@
 const VERSION = new URL(self.location.href).searchParams.get("v") || "dev";
 const ASSETS = "matmon-assets-" + VERSION;
 const PAGES = "matmon-pages-" + VERSION;
-const SHELL = ["/offline.html", "/js/offline.js", "/matui/matui.css", "/matui/matui.boot.js", "/favicon.svg", "/brand/app-icon-192.png"];
+const SHELL = ["/offline.html", "/js/offline.js", "/matui/matui.css", "/matui/matui.boot.js", "/favicon.svg", "/brand/app-icon-192.png", "/brand/matmon-logo-horizontal.svg", "/brand/matmon-logo-horizontal-dark.svg"];
 const MAX_PAGES = 30;
 
 // The overview pages an offline copy is kept of (path, case-insensitive; the query is part of the copy's key).
