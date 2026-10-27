@@ -88,6 +88,23 @@ function initializeUpdateScreen() {
     request.send();
   });
 
+  // true / false from the page itself, null when it cannot be asked (restarting, signed out, an older build).
+  const stillInstalling = () => new Promise((resolve) => {
+    const request = new XMLHttpRequest();
+    request.open("GET", location.pathname + "?handler=State&t=" + Date.now());
+    request.timeout = 4000;
+    request.onload = () => {
+      try {
+        const answer = request.status === 200 ? JSON.parse(request.responseText) : null;
+        resolve(answer && typeof answer.installing === "boolean" ? answer.installing : null);
+      } catch {
+        resolve(null);
+      }
+    };
+    request.onerror = request.ontimeout = () => resolve(null);
+    request.send();
+  });
+
   window.setInterval(() => {
     const seconds = Math.floor((Date.now() - started) / 1000);
     if (elapsed) {
@@ -115,6 +132,12 @@ function initializeUpdateScreen() {
       return;
     } else {
       say(Date.now() - started < 15000 ? "Installing the update ..." : "Downloading and preparing " + to + " ...");
+      // Still the old build and nothing being installed any more: the install ended without a restart (the download
+      // broke off, the package was refused) - show how it ended instead of waiting out the eight minutes.
+      if (await stillInstalling() === false) {
+        finish(0);
+        return;
+      }
     }
 
     if (Date.now() - started > giveUpAfter) {

@@ -75,19 +75,31 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostInstallAsync(CancellationToken cancellationToken)
+    /// <summary>How long "Install" waits for the install to fail early (no update, nothing to install, a download that
+    /// breaks off at once) before it hands over to the update screen. Well below the 30 s after which the remote access
+    /// tunnel gives up on a request - the download itself can take minutes.</summary>
+    private static readonly TimeSpan InstallAnswerWait = TimeSpan.FromSeconds(10);
+
+    public async Task<IActionResult> OnPostInstallAsync()
     {
         var target = updates.Status.Offer?.Version;
-        var problem = await updates.InstallNowAsync(cancellationToken);
-        if (problem is not null)
+        // The install runs on in the service whatever happens to this request; the page only waits a moment for an
+        // early refusal. It used to answer only after the download, which over remote access (30 s per request) ended
+        // in a "replay failed" page while the update carried on unseen.
+        var install = updates.InstallNowAsync(CancellationToken.None);
+        if (await Task.WhenAny(install, Task.Delay(InstallAnswerWait)) == install && await install is { } problem)
         {
             ErrorMessage = $"The update did not start: {problem}";
             return RedirectToPage();
         }
 
-        // The update screen watches the restart and comes back with the outcome.
+        // The update screen watches the download and the restart and comes back with the outcome.
         return RedirectToPage(new { installing = MatmonVersion.Current, to = target });
     }
+
+    /// <summary>The update screen asks this while Matmon is still up: once nothing is being installed any more and
+    /// Matmon did not restart, the install failed (e.g. the download broke off) and the screen shows the outcome.</summary>
+    public IActionResult OnGetState() => new JsonResult(new { installing = updates.Status.Installing });
 
     public IActionResult OnPostSettings()
     {
