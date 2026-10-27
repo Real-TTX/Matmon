@@ -43,7 +43,6 @@
     <!-- The online setup reads and verifies the release feed exactly like the self-update does. -->
     <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsUpdateFeed.cs" Link="Shared\WindowsUpdateFeed.cs" />
     <Compile Include="..\Matmon.Probe\AgentPackageSignature.cs" Link="Shared\AgentPackageSignature.cs" />
-    <EmbeddedResource Include="..\Matmon.Host\wwwroot\brand\app-icon-192.png" Link="Assets\app-icon-192.png" LogicalName="Matmon.Setup.app-icon.png" />
   </ItemGroup>
 
   <ItemGroup>

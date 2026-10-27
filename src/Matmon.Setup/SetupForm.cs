@@ -12,9 +12,6 @@ namespace Matmon.Setup;
 /// </summary>
 internal sealed class SetupForm : Form
 {
-    // The brand gradient (the tray icon's tile uses the same two colours).
-    private static readonly Color BrandFrom = Color.FromArgb(0x2B, 0x7B, 0xD6);
-    private static readonly Color BrandTo = Color.FromArgb(0x1F, 0xB5, 0xB0);
 
     private readonly SetupArguments _arguments;
     private readonly WindowsInstallationInfo? _installed;
@@ -74,28 +71,48 @@ internal sealed class SetupForm : Form
         _tray.Checked = !arguments.NoTray;
         _removeData.Text = $"Also delete the data - configuration, history and backups in {_installed?.DataFolder ?? WindowsInstallation.DefaultDataFolder}";
 
-        var footer = new FlowLayoutPanel
+        // The bar: version and channel on the left, the buttons on the right, both centred on the same line.
+        // The online setup does not know the version it installs until it has asked the feed - so it names the channel instead.
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = Padding.Empty,
+            Margin = Padding.Empty
+        };
+        buttons.Controls.AddRange([_cancel, _next, _back]);
+        var version = new Label
+        {
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(0x5B, 0x67, 0x78),
+            Text = arguments.Uninstall
+                ? $"Version {_installed?.Version ?? SetupRunner.Version}"
+                : _source == PackageSource.Online
+                    ? $"Online setup · {SetupRunner.ChannelName} channel"
+                    : $"Version {SetupRunner.Version} · {SetupRunner.ChannelName} channel"
+        };
+        var footer = new Panel
         {
             Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(16, 12, 16, 12),
+            Padding = new Padding(20, 13, 16, 13),
             Height = 58,
             BackColor = Color.FromArgb(0xF4, 0xF6, 0xF9)
         };
-        footer.Controls.AddRange([_cancel, _next, _back]);
+        footer.Controls.Add(version);
+        footer.Controls.Add(buttons);
         _back.Click += (_, _) => Show(Page.Welcome);
         _next.Click += (_, _) => Advance();
         _cancel.Click += (_, _) => Close();
         AcceptButton = _next;
 
-        // The online setup does not know the version it installs until it has asked the feed - so it names the channel instead.
-        var label = arguments.Uninstall ? "Uninstall" : _installed is null ? "Setup" : "Update";
-        var header = new BrandHeader(_source == PackageSource.Online && !arguments.Uninstall
-            ? $"{label} · online · {SetupRunner.ChannelName} channel"
-            : $"{label} · {SetupRunner.Version}")
+        var header = new BrandHeader(arguments.Uninstall ? "Uninstall" : _installed is null ? "Setup" : "Update")
         {
             Dock = DockStyle.Top,
-            Height = 96
+            Height = 84
         };
 
         Controls.Add(_body);
@@ -385,71 +402,116 @@ internal sealed class SetupForm : Form
         return panel;
     }
 
-    /// <summary>The top band: the brand gradient, the app icon and the product name.</summary>
+    /// <summary>The top band, like the header of matmon.eu: the flat M mark beside the name on a light ground.</summary>
     private sealed class BrandHeader : Control
     {
         private readonly string _subtitle;
-        private readonly Image? _logo;
 
         public BrandHeader(string subtitle)
         {
             _subtitle = subtitle;
             DoubleBuffered = true;
-            using var stream = typeof(SetupForm).Assembly.GetManifestResourceStream("Matmon.Setup.app-icon.png");
-            _logo = stream is null ? null : Image.FromStream(stream);
+            BackColor = Color.White;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var graphics = e.Graphics;
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            using (var gradient = new LinearGradientBrush(ClientRectangle, BrandFrom, BrandTo, LinearGradientMode.ForwardDiagonal))
-            {
-                graphics.FillRectangle(gradient, ClientRectangle);
-            }
 
-            var size = Height - 32;
-            if (_logo is not null)
-            {
-                // The icon is a coloured tile; a white plate keeps it from melting into the band.
-                var plate = new Rectangle(24, 16, size, size);
-                using var path = RoundedRectangle(plate, 12);
-                using var white = new SolidBrush(Color.White);
-                graphics.FillPath(white, path);
-                graphics.DrawImage(_logo, Rectangle.Inflate(plate, -4, -4));
-            }
+            var markHeight = 40f;
+            var markWidth = markHeight * BrandMark.Width / BrandMark.Height;
+            var top = (Height - markHeight) / 2f;
+            BrandMark.Draw(graphics, new RectangleF(24, top, markWidth, markHeight));
 
             using var titleFont = new Font("Segoe UI Semibold", 20f);
-            using var subtitleFont = new Font("Segoe UI", 10.5f);
-            using var text = new SolidBrush(Color.White);
-            using var soft = new SolidBrush(Color.FromArgb(225, Color.White));
-            var left = 24 + size + 18;
-            graphics.DrawString("Matmon", titleFont, text, left, 14);
-            graphics.DrawString(_subtitle, subtitleFont, soft, left + 2, 54);
+            using var subtitleFont = new Font("Segoe UI", 12f);
+            using var title = new SolidBrush(Color.FromArgb(0x0F, 0x1B, 0x2D));
+            using var soft = new SolidBrush(Color.FromArgb(0x5B, 0x67, 0x78));
+            var left = 24 + markWidth + 14;
+            var titleSize = graphics.MeasureString("Matmon", titleFont);
+            var subtitleSize = graphics.MeasureString(_subtitle, subtitleFont);
+            graphics.DrawString("Matmon", titleFont, title, left, (Height - titleSize.Height) / 2f);
+            graphics.DrawString(_subtitle, subtitleFont, soft, left + titleSize.Width + 6, (Height - subtitleSize.Height) / 2f + 2);
+
+            using var line = new Pen(Color.FromArgb(0xE3, 0xE8, 0xEF));
+            graphics.DrawLine(line, 0, Height - 1, Width, Height - 1);
+        }
+    }
+
+    /// <summary>The flat Matmon mark (brand/matmon-mark-flat.svg), drawn as a vector so it stays sharp at any DPI.</summary>
+    private static class BrandMark
+    {
+        public const float Width = 444;
+        public const float Height = 352;
+
+        // The SVG's path, unchanged - M, L, Q and Z only.
+        private const string PathData = "M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z";
+
+        public static void Draw(Graphics graphics, RectangleF bounds)
+        {
+            using var path = BuildPath();
+            using var transform = new Matrix();
+            transform.Translate(bounds.X, bounds.Y);
+            transform.Scale(bounds.Width / Width, bounds.Height / Height);
+            path.Transform(transform);
+
+            // The SVG's gradient: user space (0,0) -> (444,200), three stops.
+            var from = new PointF(bounds.X, bounds.Y);
+            var to = new PointF(bounds.X + bounds.Width, bounds.Y + 200 * bounds.Height / Height);
+            using var brush = new LinearGradientBrush(from, to, Color.Black, Color.Black)
+            {
+                InterpolationColors = new ColorBlend
+                {
+                    Colors = [Color.FromArgb(0x1A, 0x6F, 0xD0), Color.FromArgb(0x12, 0xA8, 0xDC), Color.FromArgb(0x17, 0xC2, 0xBC)],
+                    Positions = [0f, 0.55f, 1f]
+                },
+                WrapMode = WrapMode.TileFlipX
+            };
+            graphics.FillPath(brush, path);
         }
 
-        private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+        private static GraphicsPath BuildPath()
         {
             var path = new GraphicsPath();
-            var diameter = radius * 2;
-            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
-            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
-            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
-            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
+            var tokens = System.Text.RegularExpressions.Regex.Matches(PathData, @"[MLQZ]|-?\d*\.?\d+")
+                .Select(match => match.Value).ToArray();
+            var current = PointF.Empty;
+            var index = 0;
+            float Next() => float.Parse(tokens[index++], System.Globalization.CultureInfo.InvariantCulture);
+            while (index < tokens.Length)
             {
-                _logo?.Dispose();
+                switch (tokens[index++])
+                {
+                    case "M":
+                        path.StartFigure();
+                        current = new PointF(Next(), Next());
+                        break;
+                    case "L":
+                        var line = new PointF(Next(), Next());
+                        path.AddLine(current, line);
+                        current = line;
+                        break;
+                    case "Q":
+                        // A quadratic curve is the cubic whose control points lie two thirds of the way to the quadratic one.
+                        var control = new PointF(Next(), Next());
+                        var end = new PointF(Next(), Next());
+                        path.AddBezier(
+                            current,
+                            new PointF(current.X + 2f / 3 * (control.X - current.X), current.Y + 2f / 3 * (control.Y - current.Y)),
+                            new PointF(end.X + 2f / 3 * (control.X - end.X), end.Y + 2f / 3 * (control.Y - end.Y)),
+                            end);
+                        current = end;
+                        break;
+                    case "Z":
+                        path.CloseFigure();
+                        break;
+                }
             }
 
-            base.Dispose(disposing);
+            return path;
         }
     }
 }
