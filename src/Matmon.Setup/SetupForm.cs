@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Net;
 using System.Net.Sockets;
+using Matmon.Agent.Tray;
 using Matmon.Host.Services.SelfUpdate;
 
 namespace Matmon.Setup;
@@ -422,9 +423,9 @@ internal sealed class SetupForm : Form
             graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
             var markHeight = 40f;
-            var markWidth = markHeight * BrandMark.Width / BrandMark.Height;
+            var markWidth = markHeight * TrayIcons.MarkWidth / TrayIcons.MarkHeight;
             var top = (Height - markHeight) / 2f;
-            BrandMark.Draw(graphics, new RectangleF(24, top, markWidth, markHeight));
+            TrayIcons.DrawMark(graphics, new RectangleF(24, top, markWidth, markHeight));
 
             using var titleFont = new Font("Segoe UI Semibold", 20f);
             using var subtitleFont = new Font("Segoe UI", 12f);
@@ -438,80 +439,6 @@ internal sealed class SetupForm : Form
 
             using var line = new Pen(Color.FromArgb(0xE3, 0xE8, 0xEF));
             graphics.DrawLine(line, 0, Height - 1, Width, Height - 1);
-        }
-    }
-
-    /// <summary>The flat Matmon mark (brand/matmon-mark-flat.svg), drawn as a vector so it stays sharp at any DPI.</summary>
-    private static class BrandMark
-    {
-        public const float Width = 444;
-        public const float Height = 352;
-
-        // The SVG's path, unchanged - M, L, Q and Z only.
-        private const string PathData = "M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z";
-
-        public static void Draw(Graphics graphics, RectangleF bounds)
-        {
-            using var path = BuildPath();
-            using var transform = new Matrix();
-            transform.Translate(bounds.X, bounds.Y);
-            transform.Scale(bounds.Width / Width, bounds.Height / Height);
-            path.Transform(transform);
-
-            // The SVG's gradient: user space (0,0) -> (444,200), three stops.
-            var from = new PointF(bounds.X, bounds.Y);
-            var to = new PointF(bounds.X + bounds.Width, bounds.Y + 200 * bounds.Height / Height);
-            using var brush = new LinearGradientBrush(from, to, Color.Black, Color.Black)
-            {
-                InterpolationColors = new ColorBlend
-                {
-                    Colors = [Color.FromArgb(0x1A, 0x6F, 0xD0), Color.FromArgb(0x12, 0xA8, 0xDC), Color.FromArgb(0x17, 0xC2, 0xBC)],
-                    Positions = [0f, 0.55f, 1f]
-                },
-                WrapMode = WrapMode.TileFlipX
-            };
-            graphics.FillPath(brush, path);
-        }
-
-        private static GraphicsPath BuildPath()
-        {
-            var path = new GraphicsPath();
-            var tokens = System.Text.RegularExpressions.Regex.Matches(PathData, @"[MLQZ]|-?\d*\.?\d+")
-                .Select(match => match.Value).ToArray();
-            var current = PointF.Empty;
-            var index = 0;
-            float Next() => float.Parse(tokens[index++], System.Globalization.CultureInfo.InvariantCulture);
-            while (index < tokens.Length)
-            {
-                switch (tokens[index++])
-                {
-                    case "M":
-                        path.StartFigure();
-                        current = new PointF(Next(), Next());
-                        break;
-                    case "L":
-                        var line = new PointF(Next(), Next());
-                        path.AddLine(current, line);
-                        current = line;
-                        break;
-                    case "Q":
-                        // A quadratic curve is the cubic whose control points lie two thirds of the way to the quadratic one.
-                        var control = new PointF(Next(), Next());
-                        var end = new PointF(Next(), Next());
-                        path.AddBezier(
-                            current,
-                            new PointF(current.X + 2f / 3 * (control.X - current.X), current.Y + 2f / 3 * (control.Y - current.Y)),
-                            new PointF(end.X + 2f / 3 * (control.X - end.X), end.Y + 2f / 3 * (control.Y - end.Y)),
-                            end);
-                        current = end;
-                        break;
-                    case "Z":
-                        path.CloseFigure();
-                        break;
-                }
-            }
-
-            return path;
         }
     }
 }
