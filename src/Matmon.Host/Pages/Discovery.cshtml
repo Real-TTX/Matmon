@@ -54,7 +54,7 @@
 
 @if (Model.Mode == "scan")
 {
-    @* ---- Start a discovery (its own screen, reached via the "Discover" button) ---- *@
+    @* ---- Start a discovery (its own screen, reached via the "Start discovery" button) ---- *@
     <form method="post" asp-page-handler="Scan" class="mat-form" novalidate data-discovery-scan-form>
         <section class="mat-card">
             <div class="mat-card__head">
@@ -571,22 +571,14 @@ else if (Model.Mode == "job")
 }
 else
 {
-    @* ---- Home: Running section (with the Discover button) + the Jobs history list ---- *@
+    @* ---- Home: the scans that run right now (only while there are some) + the Jobs history list with "Start discovery" ---- *@
+    @if (runningJobs.Count > 0)
+    {
     <section class="mat-section">
         <div class="mat-section__head">
             <h2>Running <span class="mat-badge mat-badge--soft">@runningJobs.Count</span></h2>
         </div>
         <div class="mat-list">
-            @if (runningJobs.Count == 0)
-            {
-                <div class="mat-empty">
-                    <span class="mat-empty__icon">@MatUi.Icon("network")</span>
-                    <div class="mat-empty__title">Nothing running right now</div>
-                    <p>Start a scan with <strong>Discover</strong>.</p>
-                </div>
-            }
-            else
-            {
                 <div class="mat-table-wrap">
                     <table class="mat-table">
                         <caption class="mat-sr-only">Discovery jobs that are running</caption>
@@ -623,12 +615,9 @@ else
                         </tbody>
                     </table>
                 </div>
-            }
-            <div class="mat-actions">
-                <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Discover</span></a>
-            </div>
         </div>
     </section>
+    }
 
     <section class="mat-section">
         <div class="mat-section__head">
@@ -641,7 +630,7 @@ else
                     <span class="mat-empty__icon">@MatUi.Icon("clock")</span>
                     <div class="mat-empty__title">No discovery history yet</div>
                     <p>A finished scan stays here, with its result, until you create hosts and sensors from it.</p>
-                    <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Discover</span></a>
+                    <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Start discovery</span></a>
                 </div>
             }
             else
@@ -738,6 +727,10 @@ else
                         </div>
                     </div>
                 </dialog>
+
+                <div class="mat-actions">
+                    <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Start discovery</span></a>
+                </div>
             }
         </div>
     </section>
