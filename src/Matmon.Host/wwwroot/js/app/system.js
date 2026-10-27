@@ -31,6 +31,21 @@ function initializeBackupJobEditor() {
    reloads the page with the outcome. Back on the OLD version after having been away = rolled back; still the old
    version and never away after a while = the hand-over did not happen. */
 function initializeUpdateScreen() {
+  // Install confirmed: cover the page at once - the request downloads and checks the package before it answers.
+  // MatUi's confirmation stops the first submit and sends the form again (requestSubmit) once it is answered, so the
+  // screen waits for a submit that nobody stopped.
+  const install = document.querySelector("form[data-update-install]");
+  const prepare = document.querySelector("[data-update-prepare]");
+  if (install && prepare) {
+    install.addEventListener("submit", (event) => {
+      window.setTimeout(() => {
+        if (!event.defaultPrevented) {
+          prepare.hidden = false;
+        }
+      }, 0);
+    });
+  }
+
   const screen = document.querySelector("[data-update-screen]");
   if (!screen) {
     return;

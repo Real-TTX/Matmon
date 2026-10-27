@@ -46,9 +46,16 @@ public static class WindowsUpdateApplier
             files.Log("service stopped");
 
             // "Stopped" and "every file released" are not the same instant on Windows - retry the moves for a while.
-            await RetryAsync(() => Directory.Move(install, backup));
+            // Anything still running from the program folder (a process someone started by hand, a service process that has
+            // not quite exited) would keep it busy, and the move would fail with nothing but "in use".
+            if (OperatingSystem.IsWindows())
+            {
+                WindowsFolderLocks.EndProcessesRunningFrom(install, files.Log);
+            }
+
+            await RetryAsync(() => Directory.Move(install, backup), install);
             swapped = true;
-            await RetryAsync(() => Directory.Move(staged, install));
+            await RetryAsync(() => Directory.Move(staged, install), staged);
             files.Log("program folder swapped, starting the new build");
 
             ServiceControl.Start(service, ServiceTimeout);
@@ -93,10 +100,10 @@ public static class WindowsUpdateApplier
 
             if (Directory.Exists(install))
             {
-                await RetryAsync(() => Directory.Move(install, $"{install}.failed-{DateTime.UtcNow:yyyyMMddHHmmss}"));
+                await RetryAsync(() => Directory.Move(install, $"{install}.failed-{DateTime.UtcNow:yyyyMMddHHmmss}"), install);
             }
 
-            await RetryAsync(() => Directory.Move(backup, install));
+            await RetryAsync(() => Directory.Move(backup, install), backup);
             Finish(files, new SelfUpdateOutcome(SelfUpdateOutcomeKind.RolledBack, from, to, DateTimeOffset.UtcNow, reason, to));
             TryStart(files, service);
             files.Log("rolled back");
@@ -159,7 +166,8 @@ public static class WindowsUpdateApplier
         }
     }
 
-    private static async Task RetryAsync(Action action)
+    /// <summary>Retries a folder move for 30 s; when it still fails, the message says WHO keeps <paramref name="folder"/> busy.</summary>
+    private static async Task RetryAsync(Action action, string folder)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -171,6 +179,13 @@ public static class WindowsUpdateApplier
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 30)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                var holders = OperatingSystem.IsWindows() ? WindowsFolderLocks.Describe(folder) : null;
+                throw new IOException(holders is null
+                    ? $"{ex.Message} ({folder} is in use - close any window or program that has it open)"
+                    : $"{ex.Message} ({folder} is in use by {holders})", ex);
             }
         }
     }

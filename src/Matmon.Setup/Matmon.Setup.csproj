@@ -38,6 +38,7 @@
 
   <ItemGroup>
     <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsInstallation.cs" Link="Shared\WindowsInstallation.cs" />
+    <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsFolderLocks.cs" Link="Shared\WindowsFolderLocks.cs" />
     <Compile Include="..\Matmon.Probe\SetupPayload.cs" Link="Shared\SetupPayload.cs" />
     <Compile Include="..\Matmon.Agent\Tray\TrayIcons.cs" Link="Shared\TrayIcons.cs" />
     <!-- The online setup reads and verifies the release feed exactly like the self-update does. -->

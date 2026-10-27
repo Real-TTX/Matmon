@@ -39,3 +39,4 @@
 }
 .mm-update-screen__card h2 { margin: var(--mat-space-2) 0 0; }
 .mm-update-screen__card p { margin: 0; }
+.mm-update-screen[hidden] { display: none; }

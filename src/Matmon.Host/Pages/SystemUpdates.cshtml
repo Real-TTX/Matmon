@@ -117,11 +117,21 @@
             <div class="mat-btn-row">
                 @if (offer is { Available: true })
                 {
-                    <form method="post" asp-page-handler="Install">
+                    <form method="post" asp-page-handler="Install" data-update-install>
                         <button type="submit" class="mat-btn mat-btn--primary" disabled="@status.Installing"
                                 data-confirm="Install @offer.Version now? Matmon restarts and monitoring pauses for a minute or two. If the new version does not come up, the current one is started again."
                                 data-confirm-ok="Install">@MatUi.Icon("download")<span>Install @offer.Version</span></button>
                     </form>
+                    @* Shown the moment Install is confirmed: the request itself downloads and checks the package (a Windows package is
+                       ~200 MB) before it answers with the update screen, and the page looked as if nothing happened. *@
+                    <div class="mm-update-screen" role="alertdialog" aria-modal="true" aria-labelledby="update-prepare-title" hidden data-update-prepare>
+                        <div class="mm-update-screen__card">
+                            <span class="mat-spinner mat-spinner--lg" aria-hidden="true"></span>
+                            <h2 id="update-prepare-title">Updating Matmon</h2>
+                            <p class="mat-mono"><span>@status.CurrentVersion</span> → <span>@offer.Version</span></p>
+                            <p aria-live="polite">Downloading and checking the update ...</p>
+                        </div>
+                    </div>
                 }
                 <form method="post" asp-page-handler="Check">
                     <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("refresh")<span>Check now</span></button>

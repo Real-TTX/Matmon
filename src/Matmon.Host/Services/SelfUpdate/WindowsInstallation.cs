@@ -112,7 +112,8 @@ public static class WindowsInstallation
         if (!SamePath(sourceFolder, options.ProgramFolder))
         {
             progress($"Copying the program to {options.ProgramFolder} ...");
-            Retry(() => DeleteDirectory(options.ProgramFolder));
+            WindowsFolderLocks.EndProcessesRunningFrom(options.ProgramFolder, progress);
+            RetryFolder(() => DeleteDirectory(options.ProgramFolder), options.ProgramFolder);
             CopyDirectory(sourceFolder, options.ProgramFolder);
         }
 
@@ -197,7 +198,8 @@ public static class WindowsInstallation
         if (installed is not null)
         {
             progress($"Removing the program from {installed.ProgramFolder} ...");
-            Retry(() => DeleteDirectory(installed.ProgramFolder));
+            WindowsFolderLocks.EndProcessesRunningFrom(installed.ProgramFolder, progress);
+            RetryFolder(() => DeleteDirectory(installed.ProgramFolder), installed.ProgramFolder);
             foreach (var leftover in LeftoversOf(installed.ProgramFolder))
             {
                 DeleteDirectoryQuietly(leftover);
@@ -664,6 +666,22 @@ public static class WindowsInstallation
     }
 
     // "Service stopped" and "every file released" are not the same instant on Windows.
+    /// <summary><see cref="Retry"/> for replacing or removing a folder: when it still fails, the message says WHO keeps it busy.</summary>
+    private static void RetryFolder(Action action, string folder)
+    {
+        try
+        {
+            Retry(action);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            var holders = WindowsFolderLocks.Describe(folder);
+            throw new IOException(holders is null
+                ? $"{folder} is in use - close any window or program that has it open, then try again. ({ex.Message})"
+                : $"{folder} is in use by {holders} - close it, then try again. ({ex.Message})", ex);
+        }
+    }
+
     private static void Retry(Action action)
     {
         for (var attempt = 1; ; attempt++)
