@@ -175,7 +175,8 @@ public sealed class InstanceShellBuilder(
             }
         }
 
-        // The menu the Matmon.Cloud console mirrors (role- and mode-aware), so the cloud's menu is exactly this one.
+        // The menu the Matmon.Cloud console mirrors (role- and mode-aware), so the cloud's menu is exactly this one -
+        // with the group headings (`heading` on the first item of a titled group; System has none, as in the layout).
         var embedNav = new List<object>();
         if (embedded)
         {
@@ -190,7 +191,7 @@ public sealed class InstanceShellBuilder(
                 embedNav.Add(new { label = "Sensors", path = "Monitoring" });
                 embedNav.Add(new { label = "Maps", path = "Maps" });
                 embedNav.Add(new { label = "Events", path = "Events" });
-                embedNav.Add(new { label = "Probes", path = "Probes" });
+                embedNav.Add(new { label = "Probes", path = "Probes", heading = "Setup" });
                 embedNav.Add(new { label = "Discovery", path = "Discovery" });
                 embedNav.Add(new { label = "Templates", path = "Templates" });
                 embedNav.Add(new { label = "Notifications", path = "Notifications" });
