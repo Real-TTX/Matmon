@@ -1407,6 +1407,47 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public IReadOnlyList<string> GetAllowedProgramPaths()
+    {
+        lock (_gate)
+        {
+            return [.. _document.AllowedProgramPaths ??= []];
+        }
+    }
+
+    public void SetAllowedProgramPaths(IEnumerable<string> paths)
+    {
+        lock (_gate)
+        {
+            _document.AllowedProgramPaths = LocalProgramSensorExecutor.ParseAllowList(string.Join('\n', paths))
+                .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .ToList();
+            ApplyProgramAllowListLocked();
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    /// <summary>Puts the stored allow-list into effect on this process and into the program choice the sensor editors show.</summary>
+    private void ApplyProgramAllowListLocked()
+    {
+        LocalProgramSensorExecutor.SetConfiguredAllowList(_document.AllowedProgramPaths ?? []);
+        var index = _document.SensorDefinitions.FindIndex(definition =>
+            string.Equals(definition.Key, LocalProgramSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            return;
+        }
+
+        var options = LocalProgramSensorExecutor.BuildBaseOptions();
+        var definition = _document.SensorDefinitions[index];
+        _document.SensorDefinitions[index] = definition with
+        {
+            Parameters = definition.Parameters
+                .Select(parameter => parameter.Key == "program.base" ? parameter with { Options = options } : parameter)
+                .ToList()
+        };
+    }
+
     public Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome? GetSelfUpdateOutcome()
     {
         lock (_gate)
@@ -3443,6 +3484,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             }
 
             _document.SensorDefinitions = merged;
+            ApplyProgramAllowListLocked();
         }
     }
 
@@ -4746,6 +4788,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>Which plugin runs where (System > Plugins) - like the receivers, never carried in a backup.</summary>
         public List<PluginAssignment> Plugins { get; set; } = [];
+
+        /// <summary>The Local Program sensor's allow-list (System > General): what may be executed on this machine and its
+        /// probes. Decided here, like the plugins - never carried in a backup.</summary>
+        public List<string> AllowedProgramPaths { get; set; } = [];
 
         public CloudConnectionState Cloud { get; set; } = new();
 

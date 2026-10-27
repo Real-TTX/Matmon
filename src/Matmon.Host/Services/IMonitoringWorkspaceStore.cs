@@ -344,6 +344,11 @@ public interface IMonitoringWorkspaceStore
 
     /// <summary>The syslog receiver's settings (a detached, normalised copy). Off by default.</summary>
     /// <summary>System > Updates: automatic updates and their window. Instance-bound, never in a backup.</summary>
+    /// <summary>The Local Program allow-list kept on the instance (System > General); the environment variable counts on top.</summary>
+    IReadOnlyList<string> GetAllowedProgramPaths();
+
+    void SetAllowedProgramPaths(IEnumerable<string> paths);
+
     Matmon.Host.Services.SelfUpdate.SelfUpdateSettings GetSelfUpdateSettings();
 
     void UpdateSelfUpdateSettings(Matmon.Host.Services.SelfUpdate.SelfUpdateSettings settings);

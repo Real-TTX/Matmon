@@ -98,21 +98,45 @@
             <div class="mat-card__head">@MatUi.Icon("terminal")<h2 class="mat-card__title">Local program allow-list</h2><span class="mat-text-muted mm-push-end">Local Program sensor</span></div>
             <div class="mat-card__body mat-stack">
                 @{
-                    var allowedPrograms = Matmon.Core.Domain.LocalProgramSensorExecutor.ReadAllowList();
+                    var storedPrograms = Model.AllowedProgramPaths;
+                    var environmentPrograms = Matmon.Core.Domain.LocalProgramSensorExecutor.ReadEnvironmentAllowList();
                 }
-                @if (allowedPrograms.Count == 0)
+                @if (canManageSystem)
                 {
-                    <p class="mat-muted">No program paths allowed. Set <code>Matmon__AllowedProgramPaths</code> (semicolon-separated absolute paths or directories), then restart.</p>
+                    <form method="post" asp-page-handler="AllowedPrograms" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="allowed-programs">Allowed programs</label>
+                            <textarea class="mat-input mat-mono" id="allowed-programs" name="allowedPrograms" rows="4" spellcheck="false"
+                                      placeholder="C:\Tools\check.exe&#10;/opt/checks">@string.Join("\n", storedPrograms)</textarea>
+                            <span class="mat-hint">One absolute path per line - a program, or a folder whose programs may run. Applies on this instance and its probes and agents.</span>
+                        </div>
+                        <div class="mat-btn-row">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
+                        </div>
+                    </form>
+                }
+                else if (storedPrograms.Count == 0)
+                {
+                    <p class="mat-muted">No programs allowed.</p>
                 }
                 else
                 {
                     <dl class="mat-kv">
-                        @foreach (var allowed in allowedPrograms)
+                        @foreach (var allowed in storedPrograms)
                         {
                             <dt>Allowed</dt><dd class="mat-mono">@allowed</dd>
                         }
                     </dl>
-                    <p class="mat-muted">Set via <code>Matmon__AllowedProgramPaths</code>.</p>
+                }
+                @if (environmentPrograms.Count > 0)
+                {
+                    <dl class="mat-kv">
+                        @foreach (var allowed in environmentPrograms)
+                        {
+                            <dt>Environment</dt><dd class="mat-mono">@allowed</dd>
+                        }
+                    </dl>
+                    <p class="mat-muted">Also allowed by <code>Matmon__AllowedProgramPaths</code> on this machine.</p>
                 }
             </div>
         </section>

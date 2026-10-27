@@ -6,7 +6,9 @@ public sealed record ProbeSensorAssignmentsResponse(
     string ProbeId,
     string ProbeName,
     DateTimeOffset GeneratedUtc,
-    IReadOnlyList<ProbeSensorAssignment> Sensors);
+    IReadOnlyList<ProbeSensorAssignment> Sensors,
+    // The Local Program allow-list the instance keeps (System > General); null from an older primary.
+    IReadOnlyList<string>? AllowedProgramPaths = null);
 
 public sealed record ProbeSensorAssignment(
     Guid SensorId,

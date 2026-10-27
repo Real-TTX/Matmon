@@ -705,6 +705,20 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.SelfUpdate = new();
         document.SelfUpdateOutcome = null;
 
+        // What may be executed on this machine is decided on it (the Local Program allow-list).
+        document.AllowedProgramPaths = [];
+        // ...and the catalog's copy of it, the program choice of the Local Program sensor (rebuilt from the live list on load).
+        document.SensorDefinitions = document.SensorDefinitions
+            .Select(definition => string.Equals(definition.Key, LocalProgramSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase)
+                ? definition with
+                {
+                    Parameters = definition.Parameters
+                        .Select(parameter => parameter.Key == "program.base" ? parameter with { Options = [] } : parameter)
+                        .ToList()
+                }
+                : definition)
+            .ToList();
+
         if (!sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {
             document.BackupJobs = [];

@@ -6,20 +6,24 @@ namespace Matmon.Core.Domain;
 /// <summary>
 /// Runs a local executable by path on the Matmon host/probe and extracts numeric channels
 /// from its output (same parsing as the script sensors). For safety the program path must be
-/// on an administrator-controlled allow-list - the <c>Matmon__AllowedProgramPaths</c>
-/// environment variable (semicolon/newline separated, each entry an exact file path or a
-/// directory whose programs are permitted). With no allow-list configured, nothing runs.
+/// on an administrator-controlled allow-list (each entry an exact file path or a directory whose
+/// programs are permitted): the list kept on the instance under System > General
+/// (<see cref="SetConfiguredAllowList"/>) plus the <c>Matmon__AllowedProgramPaths</c> environment
+/// variable of the process that runs the sensor. With neither, nothing runs.
 /// </summary>
 public sealed class LocalProgramSensorExecutor : ISensorExecutor
 {
     /// <summary>Env var holding the allow-list of program paths / directories.</summary>
     public const string AllowListVariable = "Matmon__AllowedProgramPaths";
 
+    // Declared before Definition on purpose: static fields initialise in order, and Definition builds its options from it.
+    private static volatile string[] _configuredAllowList = [];
+
     public static SensorDefinition Definition { get; } = new()
     {
         Key = "local-program",
         DisplayName = "Local Program",
-        Description = "Run an existing local executable by path on the Matmon host/probe and read numeric channels from its output; the path must be allow-listed via Matmon__AllowedProgramPaths. For an inline script you write here, use Local Script.",
+        Description = "Run an existing local executable by path on the Matmon host/probe and read numeric channels from its output; the path must be allowed under System > General. For an inline script you write here, use Local Script.",
         ChannelMode = SensorChannelMode.Dynamic,
         Parameters =
         [
@@ -28,7 +32,7 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
                 Key = "program.base",
                 Label = "Program",
                 Kind = SensorParameterKind.ValueList,
-                Description = "Choose an allowed program or directory (from the Matmon__AllowedProgramPaths setting).",
+                Description = "An allowed program or directory (System > General).",
                 Required = true,
                 Options = BuildBaseOptions()
             },
@@ -113,14 +117,14 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
         {
             return SensorExecutionResult.Critical(
                 TimeSpan.Zero,
-                $"No program paths are allowed. An administrator must set the {AllowListVariable} setting (semicolon-separated paths) before this sensor can run.");
+                "No programs are allowed yet. An administrator adds them under System > General.");
         }
 
         if (!IsAllowed(path, allowList))
         {
             return SensorExecutionResult.Critical(
                 TimeSpan.Zero,
-                $"Program path '{path}' is not in the allow-list ({AllowListVariable}).");
+                $"Program path '{path}' is not allowed (System > General).");
         }
 
         if (!File.Exists(path))
@@ -238,16 +242,14 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
     }
 
     /// <summary>
-    /// Dropdown options for the program base: one per allow-list entry (built once at startup
-    /// from <see cref="AllowListVariable"/>; a restart is required to pick up changes). Empty
-    /// allow-list yields a single disabled-looking hint option.
+    /// Dropdown options for the program base: one per allow-list entry. The instance rebuilds them whenever its list
+    /// changes (the workspace catalog copy), so no restart is needed. An empty list yields a single hint option.
     /// </summary>
-    private static IReadOnlyList<SensorParameterOption> BuildBaseOptions()
+    private static IReadOnlyList<SensorParameterOption> BuildBaseOptions(IReadOnlyList<string> allowList)
     {
-        var allowList = ReadAllowList();
         if (allowList.Count == 0)
         {
-            return [new SensorParameterOption { Value = string.Empty, Label = "(no paths allowed - set Matmon__AllowedProgramPaths)" }];
+            return [new SensorParameterOption { Value = string.Empty, Label = "(no programs allowed - add them under System > General)" }];
         }
 
         return allowList
@@ -280,19 +282,38 @@ public sealed class LocalProgramSensorExecutor : ISensorExecutor
             : string.Empty;
     }
 
-    /// <summary>The configured allow-list (exact files or directories), or empty.</summary>
-    public static IReadOnlyList<string> ReadAllowList()
-    {
-        var raw = Environment.GetEnvironmentVariable(AllowListVariable);
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return [];
-        }
 
-        return raw
-            .Split([';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    /// <summary>
+    /// The allow-list an administrator keeps on the instance (System > General). Set by the instance from its workspace
+    /// and, on a probe or agent, from the assignments the instance hands out - so a change applies at once, everywhere,
+    /// without a restart. The environment variable still counts on top of it.
+    /// </summary>
+    public static void SetConfiguredAllowList(IEnumerable<string>? entries) =>
+        _configuredAllowList = Normalize(entries ?? []);
+
+    /// <summary>The configured allow-list (exact files or directories): the environment's plus the instance's, or empty.</summary>
+    public static IReadOnlyList<string> ReadAllowList() =>
+        Normalize(ReadEnvironmentAllowList().Concat(_configuredAllowList));
+
+    /// <summary>Only what the environment variable of THIS process allows (System > General shows it as fixed).</summary>
+    public static IReadOnlyList<string> ReadEnvironmentAllowList() =>
+        ParseAllowList(Environment.GetEnvironmentVariable(AllowListVariable));
+
+    /// <summary>Splits a list on semicolons and line breaks.</summary>
+    public static string[] ParseAllowList(string? raw) =>
+        string.IsNullOrWhiteSpace(raw)
+            ? []
+            : raw.Split([';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static string[] Normalize(IEnumerable<string> entries) =>
+        entries
+            .Select(entry => entry.Trim())
+            .Where(entry => entry.Length > 0)
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
-    }
+
+    /// <summary>The program choice a sensor editor offers - one per allow-list entry, a hint when there is none.</summary>
+    public static IReadOnlyList<SensorParameterOption> BuildBaseOptions() => BuildBaseOptions(ReadAllowList());
 
     public static bool IsAllowed(string path, IReadOnlyList<string> allowList)
     {

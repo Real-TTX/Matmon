@@ -72,6 +72,9 @@ public class ConfigModel : PageModel
     /// <summary>System-default display timezone (IANA id; empty = server local). Applies to everyone without
     /// their own per-user override (set on /account).</summary>
     [BindProperty] public string? DisplayTimeZoneId { get; set; }
+
+    /// <summary>The Local Program allow-list kept on the instance (System > General).</summary>
+    public IReadOnlyList<string> AllowedProgramPaths { get; private set; } = [];
     public IReadOnlyList<SelectListItem> TimeZoneItems { get; private set; } = [];
 
     /// <summary>The managing service partner (from the cloud), shown on the Service partner tab; null if none.</summary>
@@ -469,6 +472,35 @@ public class ConfigModel : PageModel
         StatusMessage = $"License applied: {verified.DisplayName}. Note: a connected cloud will overwrite this on its next heartbeat.";
         return RedirectToPage(new { tab = "license" });
     }
+
+    /// <summary>The Local Program allow-list, one absolute path (file or directory) per line. Applies at once, here and on
+    /// every probe with its next assignment pull - no restart.</summary>
+    public IActionResult OnPostAllowedPrograms(string? allowedPrograms)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var entries = LocalProgramSensorExecutor.ParseAllowList(allowedPrograms);
+        // A relative entry would resolve against whatever directory the process runs in - on every machine differently.
+        // Judged for any OS, not this one: the list also goes to probes and agents, so a Linux instance may well list C:\...
+        var relative = entries.Where(entry => !IsAbsoluteOnSomeOs(entry)).ToArray();
+        if (relative.Length > 0)
+        {
+            ErrorMessage = $"Not an absolute path: {string.Join(", ", relative)}. Nothing was saved.";
+            return RedirectToPage(new { tab = "general" });
+        }
+
+        _workspaceStore.SetAllowedProgramPaths(entries);
+        StatusMessage = entries.Length == 0 ? "No programs allowed." : $"{entries.Length} allowed program path{(entries.Length == 1 ? "" : "s")} saved.";
+        return RedirectToPage(new { tab = "general" });
+    }
+
+    private static bool IsAbsoluteOnSomeOs(string path) =>
+        path.StartsWith('/')                                                                   // Unix
+        || path.StartsWith(@"\\", StringComparison.Ordinal)                                    // UNC
+        || (path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/'); // C:\
 
     /// <summary>Set the system-default display timezone (admin). Applied live so timestamps switch immediately.</summary>
     public IActionResult OnPostDisplayTimeZone()
@@ -1140,6 +1172,7 @@ public class ConfigModel : PageModel
         CloudEnvLinkActive = !CloudSettings.Configured && _runtimeOptions.HasCloudBootstrapLink;
         CloudLinkActive = CloudSettings.Configured ? CloudSettings.Enabled : CloudEnvLinkActive;
         DisplayTimeZoneId = _workspaceStore.GetDisplayTimeZoneId();
+        AllowedProgramPaths = _workspaceStore.GetAllowedProgramPaths();
         TimeZoneItems = TimeZoneOptions.Build(DisplayTimeZoneId, "Server local");
         ServicePartnerInfo = _workspaceStore.GetServicePartnerInfo();
         TunnelStatus = _tunnelState.Snapshot();

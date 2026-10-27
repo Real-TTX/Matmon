@@ -254,6 +254,12 @@ public sealed class SlaveSensorWorker : BackgroundService
             }
 
             _cachedAssignments = assignments;
+            // The instance's Local Program allow-list applies here too (an older primary sends none: keep what we had).
+            if (assignments.AllowedProgramPaths is { } allowedPrograms)
+            {
+                LocalProgramSensorExecutor.SetConfiguredAllowList(allowedPrograms);
+            }
+
             _runtimeState.RecordAssignmentSync(
                 assignments.Sensors.Count,
                 $"{assignments.Sensors.Count} sensor assignment{(assignments.Sensors.Count == 1 ? string.Empty : "s")} received",

@@ -51,7 +51,8 @@ public sealed class ProbeSensorAssignmentProvider
             probe.ProbeId,
             probe.Name,
             DateTimeOffset.UtcNow,
-            sensors);
+            sensors,
+            _workspaceStore.GetAllowedProgramPaths());
     }
 
     public bool TryBuildRecordingContext(

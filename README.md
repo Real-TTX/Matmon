@@ -301,7 +301,7 @@ of them are optional:
 | `TZ` | – | Time zone for timestamps |
 | `Matmon__Auth__Username` / `Matmon__Auth__Password` | – | Pre-provision an admin and skip the setup wizard |
 | `Matmon__CloudHeartbeatIntervalSeconds` | `30` | How often the primary checks in with Matmon.Cloud (if linked) |
-| `Matmon__AllowedProgramPaths` | – | Allow-list for the *Local Program* sensor (`;`-separated) |
+| `Matmon__AllowedProgramPaths` | – | Extra allow-list entries for the *Local Program* sensor (`;`-separated) - the list itself is kept under System > General |
 | `Matmon__DockerSocketPath` | `/var/run/docker.sock` | Where the mounted Docker socket is inside the container (self-update) |
 | `Matmon__UpdateFeedUrl` | the GitHub release of the channel | Where a Windows installation looks for updates (a mirror) |
 | `Matmon__TrustedProxies` | loopback + private networks | Who may tell Matmon the real client address and scheme (`X-Forwarded-*`) - addresses or CIDR ranges, `;`-separated, or `any`. Set it when your reverse proxy sits on a public address |
