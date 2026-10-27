@@ -107,7 +107,7 @@
                         <div class="mat-field">
                             <label class="mat-label" for="allowed-programs">Allowed programs</label>
                             <textarea class="mat-input mat-mono" id="allowed-programs" name="allowedPrograms" rows="4" spellcheck="false"
-                                      placeholder="C:\Tools\check.exe&#10;/opt/checks">@string.Join("\n", storedPrograms)</textarea>
+                                      placeholder="C:\Tools\check.exe&#10;/opt/checks">@(Model.AllowedProgramsDraft ?? string.Join("\n", storedPrograms))</textarea>
                             <span class="mat-hint">One absolute path per line - a program, or a folder whose programs may run. Applies on this instance and its probes and agents.</span>
                         </div>
                         <div class="mat-btn-row">

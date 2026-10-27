@@ -180,6 +180,10 @@ public class ConfigModel : PageModel
     [TempData]
     public string? ErrorMessage { get; set; }
 
+    /// <summary>What the admin typed into the allow-list when it was refused - shown again instead of the stored list.</summary>
+    [TempData]
+    public string? AllowedProgramsDraft { get; set; }
+
     public string ActiveTab => NormalizeTab(Tab);
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
@@ -489,6 +493,7 @@ public class ConfigModel : PageModel
         if (relative.Length > 0)
         {
             ErrorMessage = $"Not an absolute path: {string.Join(", ", relative)}. Nothing was saved.";
+            AllowedProgramsDraft = allowedPrograms;
             return RedirectToPage(new { tab = "general" });
         }
 
