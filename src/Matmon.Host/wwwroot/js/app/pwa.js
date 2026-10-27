@@ -21,7 +21,9 @@ function initializePwa() {
     keepStatusBarInStep();
   }
 
-  if (!wallboard) {
+  // The update screen (System > Updates) watches the restart itself - the bar, and its reload once the server is
+  // back, would only get in its way.
+  if (!wallboard && !document.querySelector("[data-update-screen]")) {
     watchConnection();
   }
 

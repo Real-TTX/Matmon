@@ -28,7 +28,38 @@
     <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
 }
 
-@if (status.Installing)
+@if (Model.Result is { } result)
+{
+    var alertClass = result.Tone switch { "success" => "mat-alert mat-alert--success", "warning" => "mat-alert mat-alert--warning", _ => "mat-alert mat-alert--danger" };
+    <div class="@alertClass" role="@(result.Tone == "success" ? "status" : "alert")">
+        @MatUi.Icon(result.Tone == "success" ? "check-circle" : result.Tone == "warning" ? "alert" : "x-circle")
+        <div class="mat-alert__body">
+            <strong>@result.Message</strong>
+            @if (!string.IsNullOrWhiteSpace(result.Detail))
+            {
+                <br /><span>@result.Detail</span>
+            }
+        </div>
+    </div>
+}
+
+@if (Model.Screen is { } screen)
+{
+    @* The update screen: covers the page while Matmon restarts, asks /healthz until it is back (js/app/system.js,
+       initializeUpdateScreen), then reloads this page with the outcome. *@
+    <div class="mm-update-screen" role="alertdialog" aria-modal="true" aria-labelledby="update-screen-title" aria-describedby="update-screen-state"
+         data-update-screen data-update-from="@screen.FromVersion" data-update-to="@screen.ToVersion">
+        <div class="mm-update-screen__card">
+            <span class="mat-spinner mat-spinner--lg" aria-hidden="true"></span>
+            <h2 id="update-screen-title">Updating Matmon</h2>
+            <p class="mat-mono"><span>@screen.FromVersion</span> → <span>@screen.ToVersion</span></p>
+            <p id="update-screen-state" data-update-state aria-live="polite">Installing the update ...</p>
+            <p class="mat-text-muted mat-mono" data-update-elapsed>0:00</p>
+        </div>
+    </div>
+}
+
+@if (status.Installing && Model.Screen is null)
 {
     <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("refresh")<div class="mat-alert__body">An update is being installed. Matmon restarts in a moment.</div></div>
 }

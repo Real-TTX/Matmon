@@ -27,8 +27,26 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
 
     public string TimeZoneName => DisplayTimeZone.SystemDefault.Id;
 
-    public void OnGet()
+    /// <summary>The update screen: shown right after "Install", it waits for Matmon to come back and then reloads with
+    /// <see cref="Result"/>.</summary>
+    public UpdateScreen? Screen { get; private set; }
+
+    /// <summary>How the update just watched by the update screen ended - success, rolled back, failed, or not known yet.</summary>
+    public UpdateResult? Result { get; private set; }
+
+    public async Task OnGetAsync(string? installing, string? finished, string? to, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(installing))
+        {
+            Screen = new UpdateScreen(installing, to ?? "the new version");
+        }
+        else if (!string.IsNullOrWhiteSpace(finished))
+        {
+            // Back after a restart: read the outcome now rather than at the first hourly look.
+            await updates.RefreshOutcomeAsync(cancellationToken);
+            Result = DescribeResult(finished, to, updates.Status);
+        }
+
         Load();
         Input = new SelfUpdateSettingsInput
         {
@@ -59,17 +77,16 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
 
     public async Task<IActionResult> OnPostInstallAsync(CancellationToken cancellationToken)
     {
+        var target = updates.Status.Offer?.Version;
         var problem = await updates.InstallNowAsync(cancellationToken);
-        if (problem is null)
-        {
-            StatusMessage = "The update is being installed. Matmon restarts in a moment - reload this page in a minute or two.";
-        }
-        else
+        if (problem is not null)
         {
             ErrorMessage = $"The update did not start: {problem}";
+            return RedirectToPage();
         }
 
-        return RedirectToPage();
+        // The update screen watches the restart and comes back with the outcome.
+        return RedirectToPage(new { installing = MatmonVersion.Current, to = target });
     }
 
     public IActionResult OnPostSettings()
@@ -93,12 +110,44 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
         _ => $"The update to {outcome.ToVersion} failed"
     };
 
+    /// <summary>
+    /// The outcome of the update the screen watched: the installation's own record when it is about this update and
+    /// fresh, else what the running version says (a Docker helper writes its record a moment after the new container
+    /// is up, so the version may be known before the record is).
+    /// </summary>
+    public static UpdateResult DescribeResult(string fromVersion, string? toVersion, SelfUpdateStatus status)
+    {
+        if (status.LastOutcome is { } outcome
+            && DateTimeOffset.UtcNow - outcome.AtUtc < TimeSpan.FromMinutes(30)
+            && string.Equals(outcome.FromVersion, fromVersion, StringComparison.Ordinal))
+        {
+            return outcome.Kind switch
+            {
+                SelfUpdateOutcomeKind.Updated => new UpdateResult("success", $"Matmon was updated to {outcome.ToVersion}.", outcome.Detail),
+                SelfUpdateOutcomeKind.RolledBack => new UpdateResult("danger",
+                    $"The update to {outcome.ToVersion} did not come up and was rolled back - {outcome.FromVersion} runs again.", outcome.Detail),
+                _ => new UpdateResult("danger", $"The update to {outcome.ToVersion} failed - {fromVersion} still runs.", outcome.Detail)
+            };
+        }
+
+        return !string.Equals(status.CurrentVersion, fromVersion, StringComparison.Ordinal)
+            ? new UpdateResult("success", $"Matmon was updated to {status.CurrentVersion}.", null)
+            : new UpdateResult("warning",
+                $"Matmon {status.CurrentVersion} is running; the update{(string.IsNullOrWhiteSpace(toVersion) ? "" : $" to {toVersion}")} did not complete.",
+                "Its outcome appears under Last update as soon as it is known.");
+    }
+
     private void Load()
     {
         Status = updates.Status;
         Settings = store.GetSelfUpdateSettings();
     }
 }
+
+public sealed record UpdateScreen(string FromVersion, string ToVersion);
+
+/// <param name="Tone">success | warning | danger - the MatUi alert it is shown in.</param>
+public sealed record UpdateResult(string Tone, string Message, string? Detail);
 
 public sealed class SelfUpdateSettingsInput
 {

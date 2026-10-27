@@ -34,6 +34,7 @@ const featureStarters = [
   "initializeWebhookPresets",
   "initializeNotificationFilter",
   "initializeBackupJobEditor",
+  "initializeUpdateScreen",
   "initializeDiscoveryJobRefresh",
   "initializeDiscoveryResultTable",
   "initializeDiscoveryJobList",

@@ -73,6 +73,28 @@ public sealed class SelfUpdateService : BackgroundService
     /// <summary>"Check now" - reads the last outcome and asks for an update; never installs.</summary>
     public Task<SelfUpdateStatus> CheckNowAsync(CancellationToken cancellationToken) => RunAsync(automatic: false, cancellationToken);
 
+    /// <summary>Reads how the last update ended right away: the updates page asks for it when it comes back after an update,
+    /// which is well before the first hourly look (2 minutes after start).</summary>
+    public async Task<SelfUpdateStatus> RefreshOutcomeAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var (target, _) = Resolve();
+            if (target is null)
+            {
+                return _status;
+            }
+
+            var outcome = await ReadOutcomeAsync(target, cancellationToken);
+            return _status = _status with { LastOutcome = outcome };
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>"Install now" - null when the hand-over happened (the instance restarts shortly), else why not.</summary>
     public async Task<string?> InstallNowAsync(CancellationToken cancellationToken)
     {

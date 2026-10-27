@@ -22,3 +22,20 @@
 /* The restore form of a row (passphrase + Restore) sits among the row actions, whose cell shrinks to its content:
    without a floor the passphrase field would be squeezed to nothing. */
 .system-restore-form { min-width: 16rem; }
+
+/* ---- System > Updates: the update screen ---- */
+/* Covers the page while Matmon restarts; the page itself would only show stale values and buttons that cannot work. */
+.mm-update-screen {
+  position: fixed; inset: 0; z-index: calc(var(--mat-z-topbar) + 50);
+  display: grid; place-items: center; padding: var(--mat-space-4);
+  background: color-mix(in srgb, var(--mat-bg) 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+.mm-update-screen__card {
+  display: grid; justify-items: center; gap: var(--mat-space-2); text-align: center;
+  width: min(26rem, 100%); padding: var(--mat-space-6) var(--mat-space-5);
+  background: var(--mat-surface); border: 1px solid var(--mat-border); border-radius: var(--mat-radius-lg);
+  box-shadow: var(--mat-shadow-3);
+}
+.mm-update-screen__card h2 { margin: var(--mat-space-2) 0 0; }
+.mm-update-screen__card p { margin: 0; }
