@@ -37,6 +37,7 @@ public sealed class SelfUpdateService : BackgroundService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private volatile SelfUpdateStatus _status;
     private DateTimeOffset? _handedOverUtc;
+    private CancellationToken _stopping;
 
     // A hand-over normally ends this process within seconds. Still running this long after it, the updater gave up
     // before the swap (its outcome says why) - another attempt may go ahead.
@@ -52,10 +53,22 @@ public sealed class SelfUpdateService : BackgroundService
             null, null, null, store.GetSelfUpdateOutcome(), false, null);
     }
 
-    public SelfUpdateStatus Status => _status;
+    /// <summary>The status; "installing" ends by itself once a hand-over is older than <see cref="HandOverTimeout"/> - this
+    /// process should have been replaced by then, and the page must not stay locked behind an update that never happened.</summary>
+    public SelfUpdateStatus Status
+    {
+        get
+        {
+            var status = _status;
+            return status.Installing && _handedOverUtc is { } since && DateTimeOffset.UtcNow - since >= HandOverTimeout
+                ? status with { Installing = false }
+                : status;
+        }
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _stopping = stoppingToken;
         try
         {
             await Task.Delay(FirstCheckDelay, stoppingToken);
@@ -77,7 +90,12 @@ public sealed class SelfUpdateService : BackgroundService
     /// which is well before the first hourly look (2 minutes after start).</summary>
     public async Task<SelfUpdateStatus> RefreshOutcomeAsync(CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken);
+        // The page never waits behind a download that is running: it shows the status as it is.
+        if (!await _gate.WaitAsync(TimeSpan.Zero, cancellationToken))
+        {
+            return Status;
+        }
+
         try
         {
             var (target, _) = Resolve();
@@ -98,7 +116,11 @@ public sealed class SelfUpdateService : BackgroundService
     /// <summary>"Install now" - null when the hand-over happened (the instance restarts shortly), else why not.</summary>
     public async Task<string?> InstallNowAsync(CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken);
+        if (!await _gate.WaitAsync(TimeSpan.Zero, cancellationToken))
+        {
+            return "an update is already being installed";
+        }
+
         try
         {
             var (target, reason) = Resolve();
@@ -112,7 +134,9 @@ public sealed class SelfUpdateService : BackgroundService
                 return "there is no update to install - check for updates first";
             }
 
-            return await InstallLockedAsync(target, offer, cancellationToken);
+            // Not the request's token: a browser that gives up (or a connection that drops) during a long download used to
+            // cancel the install half-way and leave it marked "installing" for good. The download has its own stall limit.
+            return await InstallLockedAsync(target, offer, _stopping);
         }
         finally
         {
@@ -122,7 +146,16 @@ public sealed class SelfUpdateService : BackgroundService
 
     private async Task<SelfUpdateStatus> RunAsync(bool automatic, CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken);
+        if (!automatic && !await _gate.WaitAsync(TimeSpan.Zero, cancellationToken))
+        {
+            return Status; // "Check now" while an update downloads
+        }
+
+        if (automatic)
+        {
+            await _gate.WaitAsync(cancellationToken);
+        }
+
         try
         {
             var (target, reason) = Resolve();
@@ -178,7 +211,7 @@ public sealed class SelfUpdateService : BackgroundService
 
     private async Task<string?> InstallLockedAsync(ISelfUpdateTarget target, SelfUpdateOffer offer, CancellationToken cancellationToken)
     {
-        if (_status.Installing && _handedOverUtc is { } since && DateTimeOffset.UtcNow - since < HandOverTimeout)
+        if (Status.Installing)
         {
             return "an update is already being installed";
         }
@@ -192,19 +225,22 @@ public sealed class SelfUpdateService : BackgroundService
             }
 
             _logger.LogInformation("Installing update {Current} -> {Version} ({Mode})", MatmonVersion.Current, offer.Version, target.Mode);
+            _handedOverUtc = null; // downloading: "installing" for as long as that takes
             _status = _status with { Installing = true, LastError = null };
-            _handedOverUtc = DateTimeOffset.UtcNow;
             await target.ApplyAsync(offer, cancellationToken);
+            _handedOverUtc = DateTimeOffset.UtcNow;
             return null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex)
         {
-            _logger.LogWarning("Update to {Version} could not be started: {Reason}", offer.Version, ex.Message);
-            var failed = new SelfUpdateOutcome(SelfUpdateOutcomeKind.Failed, MatmonVersion.Current, offer.Version, DateTimeOffset.UtcNow, ex.Message, offer.Identity);
+            // Every failure ends "installing" - a cancelled one too, or the page stays locked until a restart.
+            var reason = ex is OperationCanceledException ? "the update was interrupted before it was handed over" : ex.Message;
+            _logger.LogWarning("Update to {Version} could not be started: {Reason}", offer.Version, reason);
+            var failed = new SelfUpdateOutcome(SelfUpdateOutcomeKind.Failed, MatmonVersion.Current, offer.Version, DateTimeOffset.UtcNow, reason, offer.Identity);
             _store.RecordSelfUpdateOutcome(failed);
             // Not LastError: that is the CHECK's (the page shows it as "the check failed"); the outcome says what went wrong.
             _status = _status with { Installing = false, LastOutcome = failed };
-            return ex.Message;
+            return reason;
         }
     }
 

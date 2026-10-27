@@ -49,6 +49,9 @@ public static class WindowsUpdateFeed
         await client.GetFromJsonAsync<WindowsUpdateManifest>($"{feed}/{ManifestFile}", ManifestJson, cancellationToken)
             ?? throw new InvalidOperationException("the update feed returned no manifest");
 
+    /// <summary>How long a download may go without a single byte before it counts as broken.</summary>
+    public static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);
+
     /// <summary>
     /// Downloads the package the manifest describes to <paramref name="target"/> and verifies it - hash, then signature.
     /// <paramref name="requireSignature"/> = this build is signed itself and never runs an unsigned package (known from
@@ -67,6 +70,9 @@ public static class WindowsUpdateFeed
         response.EnsureSuccessStatusCode();
         var total = response.Content.Headers.ContentLength ?? manifest.Size;
 
+        // HttpClient.Timeout ends with the headers: a connection that dies mid-download would otherwise wait for the next
+        // byte forever. Every read must bring something within StallTimeout.
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var sha = SHA256.Create();
         await using (var body = await response.Content.ReadAsStreamAsync(cancellationToken))
         await using (var file = File.Create(target))
@@ -76,8 +82,23 @@ public static class WindowsUpdateFeed
             long done = 0;
             var reported = -1;
             int read;
-            while ((read = await body.ReadAsync(buffer, cancellationToken)) > 0)
+            while (true)
             {
+                stall.CancelAfter(StallTimeout);
+                try
+                {
+                    read = await body.ReadAsync(buffer, stall.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new IOException($"the download stalled - nothing arrived for {StallTimeout.TotalSeconds:0} seconds ({done / 1048576} of {total / 1048576} MB)");
+                }
+
+                if (read <= 0)
+                {
+                    break;
+                }
+
                 await hashing.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                 done += read;
                 var percent = total > 0 ? (int)(done * 100 / total) : 0;
