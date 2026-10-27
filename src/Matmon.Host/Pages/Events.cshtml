@@ -205,7 +205,7 @@
                         <label class="mat-label" for="events-take">Limit</label>
                         <input class="mat-input mat-mono" type="number" id="events-take" name="take" form="events-form" min="50" max="1000" value="@Model.View.Take"
                                data-msg-range="Between 50 and 1000 entries." />
-                        <span class="mat-hint">How many of the newest events are read, 50 to 1000.</span>
+                        <span class="mat-hint">Newest events, 50 to 1000.</span>
                         <span class="mat-error" aria-live="polite"></span>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Model.View.Search))

@@ -24,7 +24,7 @@
     <input type="hidden" asp-for="ReturnUrl" />
 
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">Backup job</h2><span class="mat-text-muted mm-push-end">name, retention and state</span></div>
+        <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">Backup job</h2></div>
         <div class="mat-card__body">
             <div class="mat-form__grid">
                 <div class="mat-field mat-field--full">
@@ -64,7 +64,7 @@
     </section>
 
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("calendar")<h2 class="mat-card__title">Schedule</h2><span class="mat-text-muted mm-push-end">when backups run</span></div>
+        <div class="mat-card__head">@MatUi.Icon("calendar")<h2 class="mat-card__title">Schedule</h2></div>
         <div class="mat-card__body">
             <div class="mat-form__grid">
                 <div class="mat-field">
@@ -95,11 +95,11 @@
 
     <div class="mat-alert mat-alert--info" role="status" data-cloud-note hidden="@(!isCloud)">
         @MatUi.Icon("info")
-        <div class="mat-alert__body">Cloud backups store <strong>configuration only</strong> (no telemetry, no local user accounts, no uploaded files such as map images or MIBs) and Matmon.Cloud keeps the newest 10 automatically - so the sections and retention don't apply. Restore one on any of your instances during setup.</div>
+        <div class="mat-alert__body">Cloud backups store <strong>configuration only</strong> (no telemetry, local users, map images or MIBs); Matmon.Cloud keeps the newest 10.</div>
     </div>
 
     <section class="mat-card" data-local-only hidden="@isCloud">
-        <div class="mat-card__head">@MatUi.Icon("layers")<h2 class="mat-card__title">Sections</h2><span class="mat-text-muted mm-push-end">what gets stored in the backup</span></div>
+        <div class="mat-card__head">@MatUi.Icon("layers")<h2 class="mat-card__title">Sections</h2></div>
         <div class="mat-card__body">
             <fieldset class="mat-field mat-fieldset">
                 <legend class="mat-sr-only">Sections stored in the backup</legend>

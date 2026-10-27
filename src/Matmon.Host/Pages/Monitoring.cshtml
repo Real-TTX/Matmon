@@ -174,12 +174,7 @@
                                 <option value="@tag" selected="@(string.Equals(view.MonitoringTagFilter, tag, StringComparison.OrdinalIgnoreCase))">@tag</option>
                             }
                         </select>
-                        <span class="mat-hint">A sensor under a tagged folder or host has the tag too.</span>
                     </div>
-                }
-                @if (!string.IsNullOrWhiteSpace(view.MonitoringSearch))
-                {
-                    <p class="mat-hint">The search in effect is kept.</p>
                 }
             </div>
             <div class="mat-dialog__foot">
@@ -198,7 +193,6 @@
         <div class="mat-empty">
             <span class="mat-empty__icon">@MatUi.Icon("search")</span>
             <div class="mat-empty__title">Nothing matches</div>
-            <p>Change the search or the filters, or reset them.</p>
             <a class="mat-btn mat-btn--secondary" asp-page="/Monitoring">@MatUi.Icon("refresh")<span>Reset</span></a>
         </div>
     }

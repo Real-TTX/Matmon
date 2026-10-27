@@ -103,7 +103,7 @@
         <section class="mat-card" data-notification-kind-panel="cloud" hidden="@(senderKind != NotificationEndpointKind.Cloud)">
             <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Matmon Cloud</h2></div>
             <div class="mat-card__body">
-                <p class="mat-muted">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+                <p class="mat-muted">Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first.</p>
             </div>
         </section>
 
@@ -204,14 +204,14 @@ else
         <section class="mat-card" data-notification-kind-panel="cloud" hidden="@(senderKind != NotificationEndpointKind.Cloud)">
             <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Matmon Cloud</h2></div>
             <div class="mat-card__body">
-                <p class="mat-muted">Delivered via the Matmon.Cloud notification gateway - no SMTP needed. Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first. Recipients come from the rule's receiver.</p>
+                <p class="mat-muted">Enable the relay in <a asp-page="/Config" asp-route-tab="cloud">System → Cloud</a> first.</p>
             </div>
         </section>
 
         <section class="mat-card" hidden="@(senderKind != NotificationEndpointKind.Push)">
             <div class="mat-card__head">@MatUi.Icon("bell")<h2 class="mat-card__title">Browser notifications</h2></div>
             <div class="mat-card__body">
-                <p class="mat-muted">Built in: a notification on the devices the users turned notifications on in (Account → Notifications) - phones with the installed app, desktop browsers. The rule's receiver names the users: a user group (All users, admins, operators) or a receiver with users' e-mail addresses. Needs Matmon on https.</p>
+                <p class="mat-muted">Reaches the devices where users turned notifications on (Account → Notifications). The rule's receiver must name users: a user group or a receiver with users' e-mail addresses. Needs Matmon on https.</p>
             </div>
         </section>
 

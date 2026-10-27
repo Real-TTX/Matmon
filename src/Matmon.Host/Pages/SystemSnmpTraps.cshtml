@@ -34,14 +34,14 @@
 
 <div class="mat-grid mat-grid--2">
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("plug")<h2 class="mat-card__title">Collectors</h2><span class="mat-text-muted mm-push-end">the SNMP trap collector plugin</span></div>
+        <div class="mat-card__head">@MatUi.Icon("plug")<h2 class="mat-card__title">Collectors</h2></div>
         <div class="mat-card__body mat-stack">
             @if (Model.Collectors.Count == 0)
             {
                 <div class="mat-empty">
                     <span class="mat-empty__icon">@MatUi.Icon("plug")</span>
                     <div class="mat-empty__title">No collector</div>
-                    <p>Nothing receives traps yet. Switch the SNMP trap collector on for this machine (the main probe) or for a probe or agent near the devices - it opens the port there.</p>
+                    <p>Add the SNMP trap collector to this machine or to a probe or agent near the devices - it opens the port there.</p>
                 </div>
             }
             else
@@ -64,12 +64,12 @@
             <div class="mat-btn-row">
                 <a class="mat-btn mat-btn--secondary" asp-page="/SystemPlugins" asp-route-add="snmptrap-collector">@MatUi.Icon("plus")<span>Add a collector</span></a>
             </div>
-            <p class="mat-hint">The port and the allowed sources are the collector's settings. A collector answers a v2c inform itself; one on a probe or agent keeps collecting while this instance is unreachable.</p>
+            <p class="mat-hint">The port and the allowed sources are the collector's settings.</p>
         </div>
     </section>
 
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Processing</h2><span class="mat-text-muted mm-push-end">for every collector's traps</span></div>
+        <div class="mat-card__head">@MatUi.Icon("settings")<h2 class="mat-card__title">Processing</h2></div>
         <div class="mat-card__body">
             <form method="post" asp-page-handler="SaveSettings" class="mat-form" novalidate>
                 @if (!string.IsNullOrWhiteSpace(Model.FormError))
@@ -89,7 +89,7 @@
                         <span class="mat-switch__track"></span>
                         <span><strong>Poll the device's sensors when it sends a trap</strong></span>
                     </label>
-                    <span class="mat-hint" id="traps-poll-hint">A trap says that something happened; the sensors say what. With this on, a UPS that sends "on battery" is red within seconds instead of at its next poll. Each sensor at most once per 10 seconds.</span>
+                    <span class="mat-hint" id="traps-poll-hint">The sending device's sensors poll at once, each at most once per 10 seconds.</span>
                 </div>
 
                 <div class="mat-btn-row">
@@ -113,7 +113,7 @@
                 <dt>Received</dt>
                 <dd><span class="mat-mono">@receiver.Received.ToString("N0")</span>@(receiver.LastTrap is { } lastTrap ? $" · last: {lastTrap}" : string.Empty)</dd>
                 <dt>Refused</dt>
-                <dd><span class="mat-mono">@receiver.Rejected.ToString("N0")</span> <span class="mat-text-muted">another community (a sender not in a collector's Allowed sources is counted there)</span></dd>
+                <dd><span class="mat-mono">@receiver.Rejected.ToString("N0")</span> <span class="mat-text-muted">another community</span></dd>
                 <dt>Unreadable</dt>
                 <dd><span class="mat-mono">@receiver.Unreadable.ToString("N0")</span> <span class="mat-text-muted">not a trap, or an SNMPv3 trap that failed its check (unknown user, wrong password)</span></dd>
                 <dt>Sensors polled</dt>
@@ -140,7 +140,7 @@
                 <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.UsersFormError</div></div>
             }
 
-            <p class="mat-text-muted">An SNMPv3 trap is signed (and optionally encrypted) with a user's passwords - unlike a community, which travels in clear text. Enter the same user, protocols and passwords as on the device; the device's engine ID is taken from each trap, nothing to enter here. Empty a user name to remove it. Without any user, v3 traps are refused.</p>
+            <p class="mat-text-muted">Enter the same user, protocols and passwords as on the device; the engine ID is taken from each trap. Empty a user name to remove it. Without any user, v3 traps are refused.</p>
 
             @for (var i = 0; i < Model.V3Users.Count; i++)
             {
@@ -198,7 +198,7 @@
     <div class="mat-card__head">@MatUi.Icon("help-circle")<h2 class="mat-card__title">Pointing a device at it</h2></div>
     <div class="mat-card__body mat-prose">
         <p>In the device's SNMP settings, add a trap receiver (also called trap destination or trap host): @(Model.LocalCollector is not null ? "this machine," : "the machine its collector runs on (a probe or agent near it, or this machine once the collector runs here), for this machine") <code>@Model.ReceiverHost</code>, UDP port <code>@Model.LocalPort</code>, version v2c (or v1) with the community set above - or v3 with one of the users above (v3 informs are not supported: choose "trap"). A UPS network card usually lists the events it sends a trap for - "on battery" and "battery low" are the ones to tick.</p>
-        <p>Every trap lands in the central log with the names from the MIB library (upload a vendor's MIB under System > MIBs to get readable names for its traps). A <strong>Syslog Match</strong> sensor on the phrase - for example <code>upsTrapOnBattery</code> - turns a trap into an alert of its own; the device's other sensors poll at once when the switch above is on.</p>
-        <p>In Docker the port has to be published: <code>-p @Model.LocalPort:@Model.LocalPort/udp</code> (or the commented line in <code>docker-compose.yml</code>). On Docker Desktop (Windows, macOS) a trap then arrives from the gateway address, not from the device - the sensors of that device cannot be told apart and are not polled; on Linux the device's own address arrives.</p>
+        <p>Traps land in the central log (upload the vendor's MIB under System > MIBs for readable names). A <strong>Syslog Match</strong> sensor on a phrase such as <code>upsTrapOnBattery</code> turns a trap into an alert.</p>
+        <p>In Docker the port has to be published: <code>-p @Model.LocalPort:@Model.LocalPort/udp</code> (or the commented line in <code>docker-compose.yml</code>). On Docker Desktop (Windows, macOS) traps arrive from the gateway address, so the device's sensors are not polled; on Linux the device's own address arrives.</p>
     </div>
 </section>

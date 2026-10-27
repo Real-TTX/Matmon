@@ -62,7 +62,7 @@
                 <select asp-for="SenderId" asp-items="Model.Senders" class="mat-select">
                     <option value="">Default SMTP (workspace / first e-mail sender)</option>
                 </select>
-                <span class="mat-hint">Which SMTP endpoint sends the report. Manage endpoints under <a asp-page="/NotificationSettings">Senders</a>.</span>
+                <span class="mat-hint">Manage under <a asp-page="/NotificationSettings">Senders</a>.</span>
             </div>
 
             <div class="mat-field">
@@ -70,7 +70,7 @@
                 <select asp-for="ReceiverId" asp-items="Model.Receivers" class="mat-select">
                     <option value="">- use the recipient list below -</option>
                 </select>
-                <span class="mat-hint">Pick a saved receiver, or leave empty and enter addresses below. Manage under <a asp-page="/NotificationReceivers">Receivers</a>.</span>
+                <span class="mat-hint">Or leave empty and enter addresses below. Manage under <a asp-page="/NotificationReceivers">Receivers</a>.</span>
             </div>
 
             <div class="mat-field">
@@ -112,7 +112,7 @@
             }
         </div>
         <div class="mat-card__body mat-stack">
-            <p class="mat-muted">Rendered from live data - exactly what the scheduled e-mail contains. Nothing was sent.</p>
+            <p class="mat-muted">Rendered from live data. Nothing was sent.</p>
             <iframe class="notification-report-frame" title="Report preview" sandbox srcdoc="@Model.PreviewHtml"></iframe>
         </div>
     </section>

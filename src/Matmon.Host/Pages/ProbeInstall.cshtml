@@ -71,21 +71,19 @@ else
                         <button type="button" class="mat-tab" role="tab" id="tab-install-curl" aria-controls="panel-install-curl" aria-selected="false" tabindex="-1">Curl installer</button>
                     </div>
                     <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-docker" aria-labelledby="tab-install-docker">
-                        <p class="mat-muted">The fastest way: one command.</p>
                         <div class="mm-snippet">
                             <pre class="mat-code"><code id="probe-install-docker">@Model.BuildDockerRun()</code></pre>
                             <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-docker">@MatUi.Icon("copy")<span>Copy</span></button>
                         </div>
                     </div>
                     <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-compose" aria-labelledby="tab-install-compose" hidden>
-                        <p class="mat-muted">Recommended for servers: save it as <code>docker-compose.yml</code> and run <code>docker compose up -d</code>.</p>
+                        <p class="mat-muted">Save it as <code>docker-compose.yml</code> and run <code>docker compose up -d</code>.</p>
                         <div class="mm-snippet">
                             <pre class="mat-code"><code id="probe-install-compose">@Model.BuildCompose()</code></pre>
                             <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-compose">@MatUi.Icon("copy")<span>Copy</span></button>
                         </div>
                     </div>
                     <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-curl" aria-labelledby="tab-install-curl" hidden>
-                        <p class="mat-muted">A one-liner for a shell on the target host.</p>
                         <div class="mm-snippet">
                             <pre class="mat-code"><code id="probe-install-curl">@Model.BuildCurlInstaller()</code></pre>
                             <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-curl">@MatUi.Icon("copy")<span>Copy</span></button>

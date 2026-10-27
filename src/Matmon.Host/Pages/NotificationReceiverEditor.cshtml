@@ -60,7 +60,7 @@
                     <div class="mat-field mat-field--full">
                         <label class="mat-label" asp-for="NewNotificationReceiver.Target">@targetLabel</label>
                         <input asp-for="NewNotificationReceiver.Target" class="mat-input mat-mono" />
-                        <span class="mat-hint">Email: one address or several, separated by commas. Webhook value: what a webhook sender inserts as <code>{{receiver.target}}</code> - an ntfy topic, a Pushover user key, a Telegram chat id. SMS or phone call: a number in international format (+49 170 1234567), used with the Matmon Cloud sender - for critical problems only, a few per half hour at most (the cloud's limits).</span>
+                        <span class="mat-hint">Email: addresses, comma-separated. Webhook value: inserted as <code>{{receiver.target}}</code> (ntfy topic, Pushover user key, Telegram chat id). SMS or phone call: international format (+49 170 1234567), Matmon Cloud sender only, critical problems only, a few per half hour at most.</span>
                     </div>
                     <div class="mat-field mat-field--full">
                         <label class="mat-switch"><input asp-for="NewNotificationReceiver.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>
@@ -107,7 +107,7 @@ else
                     <div class="mat-field mat-field--full">
                         <label class="mat-label" asp-for="NotificationReceiverEditor.Target">@targetLabel</label>
                         <input asp-for="NotificationReceiverEditor.Target" class="mat-input mat-mono" />
-                        <span class="mat-hint">Email: one address or several, separated by commas. Webhook value: what a webhook sender inserts as <code>{{receiver.target}}</code> - an ntfy topic, a Pushover user key, a Telegram chat id. SMS or phone call: a number in international format (+49 170 1234567), used with the Matmon Cloud sender - for critical problems only, a few per half hour at most (the cloud's limits).</span>
+                        <span class="mat-hint">Email: addresses, comma-separated. Webhook value: inserted as <code>{{receiver.target}}</code> (ntfy topic, Pushover user key, Telegram chat id). SMS or phone call: international format (+49 170 1234567), Matmon Cloud sender only, critical problems only, a few per half hour at most.</span>
                     </div>
                     <div class="mat-field mat-field--full">
                         <label class="mat-switch"><input asp-for="NotificationReceiverEditor.Enabled" /><span class="mat-switch__track"></span><span>Enabled</span></label>

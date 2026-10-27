@@ -29,7 +29,7 @@
         @MatUi.Icon("key")
         <div class="mat-alert__body">
             <span class="mat-alert__title">Enrolment code@(string.IsNullOrWhiteSpace(Model.IssuedName) ? string.Empty : $" for {Model.IssuedName}")</span>
-            <span>Single use@(issuedExpires is { } expires ? $", valid until {expires.ToDisplay():g}" : string.Empty). Shown only now - Matmon keeps just a fingerprint of it. If you lose it, create a new one.</span>
+            <span>Single use@(issuedExpires is { } expires ? $", valid until {expires.ToDisplay():g}" : string.Empty). Shown only now - if you lose it, create a new one.</span>
             <div class="mat-input-group">
                 <input class="mat-input mat-mono agent-code-input" id="agent-issued-code" value="@Model.IssuedCode" readonly aria-label="Enrolment code" />
                 <button type="button" class="mat-btn mat-btn--secondary" data-copy="#agent-issued-code">@MatUi.Icon("copy")<span>Copy</span></button>
@@ -41,7 +41,7 @@
     {
         <div class="mat-alert mat-alert--warning" role="status">
             @MatUi.Icon("alert")
-            <div class="mat-alert__body">This code takes over the existing probe <strong>@Model.IssuedName</strong> - its sensors, history and alerts stay. Whatever runs as that probe today (the old install, or the Docker container it replaces) is locked out the moment the new agent enrols, so remove it afterwards.</div>
+            <div class="mat-alert__body">This code takes over the existing probe <strong>@Model.IssuedName</strong> - sensors, history and alerts stay. Whatever runs as that probe now is locked out once the new agent enrols; remove it afterwards.</div>
         </div>
     }
 
@@ -49,7 +49,7 @@
     {
         <div class="mat-alert mat-alert--warning" role="status">
             @MatUi.Icon("alert")
-            <div class="mat-alert__body">This agent will measure the host <strong>@Model.IssuedHostName</strong>. When it enrols, that host moves under the agent's probe: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply.</div>
+            <div class="mat-alert__body">When the agent enrols, the host <strong>@Model.IssuedHostName</strong> moves under its probe; settings it inherited from its old place (credentials, schedules) no longer apply.</div>
         </div>
     }
 
@@ -57,7 +57,6 @@
         <div class="mat-card__head">
             @MatUi.Icon("terminal")
             <h2 class="mat-card__title">Install the agent</h2>
-            <span class="mat-text-muted mm-push-end">downloads it from this instance and enrols it with the code</span>
         </div>
         <div class="mat-card__body" data-tabs>
             <div class="mat-tabs" role="tablist" aria-label="Platform">
@@ -65,14 +64,14 @@
                 <button type="button" class="mat-tab" role="tab" id="tab-agent-linux" aria-controls="panel-agent-linux" aria-selected="false" tabindex="-1">Linux</button>
             </div>
             <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-windows" aria-labelledby="tab-agent-windows">
-                <p class="mat-muted">A Windows service with a status icon in the tray. Run it in PowerShell as Administrator.</p>
+                <p class="mat-muted">Run in PowerShell as Administrator.</p>
                 <div class="mm-snippet">
                     <pre class="mat-code"><code id="agent-install-windows">@Model.BuildWindowsCommands(Model.IssuedCode)</code></pre>
                     <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-windows">@MatUi.Icon("copy")<span>Copy</span></button>
                 </div>
             </div>
             <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-linux" aria-labelledby="tab-agent-linux" hidden>
-                <p class="mat-muted">A systemd unit. Run it as root.</p>
+                <p class="mat-muted">Run as root.</p>
                 <div class="mm-snippet">
                     <pre class="mat-code"><code id="agent-install-linux">@Model.BuildLinuxCommands(Model.IssuedCode)</code></pre>
                     <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-linux">@MatUi.Icon("copy")<span>Copy</span></button>
@@ -93,7 +92,7 @@
             <div class="mat-empty">
                 <span class="mat-empty__icon">@MatUi.Icon("server")</span>
                 <div class="mat-empty__title">No agents yet</div>
-                <p>An agent is a probe that runs on the machine it monitors, as a Windows service or a systemd unit - create an enrolment code below to add one.</p>
+                <p>Create an enrolment code below to add one.</p>
                 @if (isAdmin)
                 {
                     <a class="mat-btn mat-btn--primary" href="#agent-add">@MatUi.Icon("plus")<span>Add an agent</span></a>
@@ -219,7 +218,7 @@
 <section class="mat-section">
     <div class="mat-section__head">
         <h2>Download</h2>
-        <p class="mat-section__lead">The agent build that matches this instance: <span class="mat-mono">@Matmon.Probe.MatmonVersion.Current</span></p>
+        <p class="mat-section__lead">Build <span class="mat-mono">@Matmon.Probe.MatmonVersion.Current</span></p>
     </div>
 
     @if (Model.Packages.Count == 0)
@@ -227,7 +226,7 @@
         <div class="mat-empty mat-empty--framed">
             <span class="mat-empty__icon">@MatUi.Icon("download")</span>
             <div class="mat-empty__title">No agent packages on this instance</div>
-            <p>A plain local build does not include them, the Docker image does. To add them here, run <code>./scripts/publish-agent.ps1</code>, which publishes the agent into <code>@Model.PackagesPath</code>.</p>
+            <p>To add them, run <code>./scripts/publish-agent.ps1</code>, which publishes the agent into <code>@Model.PackagesPath</code>.</p>
         </div>
     }
     else
@@ -273,7 +272,7 @@
                 </tbody>
             </table>
         </div>
-        <p class="mat-muted">On Windows, downloading the agent and double-clicking it is enough: it opens a setup window that asks for the instance URL and an enrolment code, installs itself as a service and puts a status icon in the tray. The install commands shown with a new code do the same from a terminal.</p>
+        <p class="mat-muted">On Windows, double-click the download: its setup asks for the instance URL and an enrolment code.</p>
     }
 </section>
 
@@ -283,10 +282,9 @@
         <div class="mat-card__head">
             @MatUi.Icon("plus")
             <h2 class="mat-card__title">Add an agent</h2>
-            <span class="mat-text-muted mm-push-end">creates a single-use enrolment code</span>
         </div>
         <div class="mat-card__body mat-stack">
-            <p class="mat-muted">Agents do not count against the plan's probe limit - add as many as you need.</p>
+            <p class="mat-muted">Agents do not count against the plan's probe limit.</p>
             <form method="post" asp-page-handler="Create" class="mat-form" novalidate>
                 <div class="mat-form__grid">
                     <div class="mat-field">
@@ -306,7 +304,7 @@
                     <div class="mat-field mat-field--full">
                         <span class="mat-label">Host</span>
                         <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewHostId", DomId = "picker-agent-host", SelectedId = Model.NewHostId, Placeholder = "A new host, named after the machine", Options = Model.HostOptions })" />
-                        <span class="mat-hint">Optional - an existing host this agent belongs to. An agent always belongs to a host - the machine it runs on. Pick one that is already in your tree and Matmon moves it under the agent: its sensors then run on the agent, from the machine itself, and settings it inherited from its old place (credentials, schedules) no longer apply. Leave it empty and the agent brings a host of its own, named after the machine.</span>
+                        <span class="mat-hint">Optional - the machine the agent runs on. An existing host moves under the agent; settings it inherited from its old place (credentials, schedules) no longer apply.</span>
                     </div>
                 </div>
                 <div class="mat-btn-row">

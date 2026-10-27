@@ -147,8 +147,7 @@
                         <strong data-map-title-preview>@Model.Input.Name</strong>
                         <small>
                             <b data-map-grid-preview>@Model.Input.Columns</b> columns
-                            <span class="map-canvas-sep">|</span> <b>@Model.Input.Rows</b> rows fill a wallboard screen
-                            <span class="map-canvas-sep">|</span> drag a widget to move it
+                            <span class="map-canvas-sep">|</span> <b>@Model.Input.Rows</b> rows per screen
                         </small>
                     </button>
                     @* A switcher, not a list: managing slides lives on the Slides tab, but changing slide must not
@@ -238,8 +237,7 @@
                    browser, never saved on the map) - the board's own geometry stays on the Board tab, so there is
                    exactly one input per stored property. *@
                 <div class="map-property-empty mat-stack" data-map-property-empty>
-                    <p class="mat-muted">Select a widget on the canvas to edit it. The running order, the board's grid and its wallboard
-                        options live on <strong>Slides</strong> and <strong>Board</strong>.</p>
+                    <p class="mat-muted">Select a widget on the canvas to edit it.</p>
                     <div class="map-view-settings mat-stack mat-stack--sm">
                         <span class="mat-label">Canvas view</span>
                         <label class="mat-switch">
@@ -252,8 +250,7 @@
                             <span class="mat-switch__track"></span>
                             <span>Show rulers</span>
                         </label>
-                        <span class="mat-hint">Affects this browser only - it does not change the board.
-                            Widgets always snap: the layout is stored as grid cells, so there is no position between two of them.</span>
+                        <span class="mat-hint">This browser only.</span>
                     </div>
                 </div>
 
@@ -349,7 +346,7 @@
                                 <div class="mat-field" data-map-property-value-only>
                                     <label class="mat-label" for="@(tileId)ChannelKey">Channel</label>
                                     <input asp-for="Input.Tiles[index].ChannelKey" class="mat-input mat-mono" placeholder="Default channel" />
-                                    <span class="mat-hint">Channel keys differ per sensor type (e.g. <code>cpu</code>, <code>memory</code>, <code>latency</code>) - the Channels tab of the sensor lists them. Empty = the sensor's own default channel.</span>
+                                    <span class="mat-hint">A key from the sensor's Channels tab, e.g. <code>cpu</code>. Empty = its default channel.</span>
                                 </div>
                                 <div class="mat-form__grid map-property-pair" data-map-property-value-only>
                                     <div class="mat-field">
@@ -361,11 +358,11 @@
                                         <input asp-for="Input.Tiles[index].GaugeMax" type="number" step="any" class="mat-input" placeholder="100" />
                                     </div>
                                 </div>
-                                <p class="mat-hint" data-map-property-value-only>A gauge or bar needs a scale. Leave both empty for a percentage channel; for anything else set them in the channel's own unit, or the tile shows the plain number instead of inventing a dial position.</p>
+                                <p class="mat-hint" data-map-property-value-only>In the channel's own unit. Leave empty for a percentage channel; without a scale the tile shows the plain number.</p>
                                 <div class="mat-field" data-map-property-list-only>
                                     <label class="mat-label" for="@(tileId)ListChannelKey_rank">Rank by channel</label>
                                     <input asp-for="Input.Tiles[index].ListChannelKey" id="@(tileId)ListChannelKey_rank" class="mat-input mat-mono" placeholder="Default channel" />
-                                    <span class="mat-hint">Channel keys differ per sensor type - leave empty to use each sensor's default channel.</span>
+                                    <span class="mat-hint">Empty = each sensor's default channel.</span>
                                 </div>
                                 <div class="mat-field" data-map-property-rows-only>
                                     <label class="mat-label" for="@(tileId)ListLimit_rows">Rows</label>
@@ -383,17 +380,17 @@
                                     <span class="mat-label">More targets</span>
                                     <input type="hidden" asp-for="Input.Tiles[index].TargetTokensText" data-map-targets-value />
                                     <div class="map-target-rows" data-map-targets-editor></div>
-                                    <span class="mat-hint">Each target contributes every sensor under it, all unioned with the one above and de-duplicated. A folder or a tag counts as many.</span>
+                                    <span class="mat-hint">Adds every sensor under each target.</span>
                                 </div>
                                 <div class="mat-field" data-map-property-series-only>
                                     <label class="mat-label" for="@(tileId)ListLimit_lines">Lines</label>
                                     <input asp-for="Input.Tiles[index].ListLimit" id="@(tileId)ListLimit_lines" type="number" min="1" max="8" class="mat-input" />
-                                    <span class="mat-hint">Capped at 8 - each line costs one history query, and past a handful the chart stops answering "which one moved?".</span>
+                                    <span class="mat-hint">At most 8.</span>
                                 </div>
                                 <div class="mat-field" data-map-property-sla-only>
                                     <label class="mat-label" for="@(tileId)SlaWindowDays">Window (days)</label>
                                     <input asp-for="Input.Tiles[index].SlaWindowDays" type="number" min="1" max="365" class="mat-input" />
-                                    <span class="mat-hint">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
+                                    <span class="mat-hint">A warning counts as up.</span>
                                 </div>
                                 <div class="mat-field" data-map-property-image-only>
                                     <label class="mat-label" for="@(tileId)ImageFile">Picture</label>
@@ -402,7 +399,7 @@
                                         <input type="file" id="@(tileId)ImageFile" accept="image/png,image/jpeg" class="mat-input" data-map-image-file />
                                         <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-image-clear>Remove</button>
                                     </div>
-                                    <span class="mat-hint" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
+                                    <span class="mat-hint" data-map-image-status>PNG or JPEG, up to 4 MB.</span>
                                 </div>
                                 <div class="mat-field" data-map-property-image-only>
                                     <label class="mat-label" for="@(tileId)ImageFit">Fit</label>
@@ -498,11 +495,11 @@
                                         </div>
                                     }
                                 </div>
-                                <p class="mat-hint">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</p>
+                                <p class="mat-hint">#rrggbb. Empty = the theme colour.</p>
                                 <div class="mat-field">
                                     <label class="mat-label" for="@(tileId)RefreshSeconds">Refresh (seconds)</label>
                                     <input asp-for="Input.Tiles[index].RefreshSeconds" type="number" min="0" max="3600" class="mat-input" placeholder="0" />
-                                    <span class="mat-hint">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence. Useful for a widget whose data is expensive or slow-changing.</span>
+                                    <span class="mat-hint">0 = the board's own cadence.</span>
                                 </div>
                             </div>
                         </section>
@@ -583,7 +580,6 @@
                         <span class="mat-switch__track"></span>
                         <span>Show this slide heading</span>
                     </label>
-                    <span class="mat-hint">Duration overrides the board's auto-rotate for this slide only. Drag a widget on the canvas to move it.</span>
                     @* Emptying a slide is its own, named action - not a side effect of clicking a layout card. It
                        says how many widgets it throws away before it does. *@
                     <div class="mat-row">
@@ -622,14 +618,14 @@
                                 <option value="@zone"></option>
                             }
                         </datalist>
-                        <span class="mat-hint">Used by the clock widget. Per map, because the public wallboard has nobody signed in whose preference could apply.</span>
+                        <span class="mat-hint">Used by the clock widget.</span>
                     </div>
                     <label class="mat-switch">
                         <input asp-for="Input.PublicEnabled" data-map-public-enabled />
                         <span class="mat-switch__track"></span>
                         <span>Publish an anonymous link</span>
                     </label>
-                    <span class="mat-hint">The public link needs no sign-in - anyone holding it sees the board. Turning this off makes the link 404 immediately, including its live-data endpoint. Copy or rotate the link on the Maps page.</span>
+                    <span class="mat-hint">Anyone holding the link sees the board without signing in. Turning this off disables the link at once.</span>
                 </div>
             </section>
 
@@ -645,7 +641,7 @@
                         <div class="mat-field">
                             <label class="mat-label" for="Input_Rows">Rows per screen</label>
                             <input asp-for="Input.Rows" type="number" min="2" max="32" class="mat-input" data-map-rows />
-                            <span class="mat-hint">How many row units fill one wallboard screen. A board taller than this scrolls.</span>
+                            <span class="mat-hint">A taller board scrolls.</span>
                         </div>
                         <div class="mat-field">
                             <label class="mat-label" for="Input_TilePadding">Gap (px)</label>
@@ -656,14 +652,13 @@
                             <input asp-for="Input.OuterMargin" type="number" min="0" max="160" class="mat-input" data-map-outer-margin />
                         </div>
                     </div>
-                    <span class="mat-hint">Gap and margin are CSS pixels. Changing the column count reflows every widget - a widget wider than the new grid is clamped into it, and growing the grid back cannot undo that, so the change is committed when you leave the field.</span>
+                    <span class="mat-hint">Fewer columns shrink widgets that no longer fit; adding columns back does not undo that.</span>
                 </div>
             </section>
 
             <section class="mat-card">
                 <div class="mat-card__head">@MatUi.Icon("play")<h2 class="mat-card__title">Slide rotation</h2></div>
                 <div class="mat-card__body mat-stack">
-                    <span class="mat-muted">Autoplay slides on the operation wall. The in-app viewer stays on manual controls.</span>
                     <label class="mat-switch">
                         <input asp-for="Input.AutoRotateEnabled" data-map-autorotate />
                         <span class="mat-switch__track"></span>
@@ -836,7 +831,7 @@
                         <input id="@(TemplateTileId)GaugeMax" name="Input.Tiles[__index__].GaugeMax" type="number" step="any" class="mat-input" placeholder="100" />
                     </div>
                 </div>
-                <p class="mat-hint" data-map-property-value-only>Leave the scale empty for a percentage channel; set it in the channel's own unit for anything else.</p>
+                <p class="mat-hint" data-map-property-value-only>In the channel's own unit. Leave empty for a percentage channel; without a scale the tile shows the plain number.</p>
                 <div class="mat-field" data-map-property-list-only>
                     <label class="mat-label" for="@(TemplateTileId)ListMode">Order</label>
                     <select id="@(TemplateTileId)ListMode" name="Input.Tiles[__index__].ListMode" class="mat-select">
@@ -849,7 +844,7 @@
                 <div class="mat-field" data-map-property-list-only>
                     <label class="mat-label" for="@(TemplateTileId)ListChannelKey_rank">Rank by channel</label>
                     <input id="@(TemplateTileId)ListChannelKey_rank" name="Input.Tiles[__index__].ListChannelKey" class="mat-input mat-mono" placeholder="Default channel" />
-                    <span class="mat-hint">Channel keys differ per sensor type - leave empty to use each sensor's default channel.</span>
+                    <span class="mat-hint">Empty = each sensor's default channel.</span>
                 </div>
                 <div class="mat-field" data-map-property-rows-only>
                     <label class="mat-label" for="@(TemplateTileId)ListLimit_rows">Rows</label>
@@ -860,17 +855,17 @@
                     <span class="mat-label">More targets</span>
                     <input type="hidden" name="Input.Tiles[__index__].TargetTokensText" data-map-targets-value />
                     <div class="map-target-rows" data-map-targets-editor></div>
-                    <span class="mat-hint">Each target contributes every sensor under it, unioned and de-duplicated.</span>
+                    <span class="mat-hint">Adds every sensor under each target.</span>
                 </div>
                 <div class="mat-field" data-map-property-series-only>
                     <label class="mat-label" for="@(TemplateTileId)ListLimit_lines">Lines</label>
                     <input id="@(TemplateTileId)ListLimit_lines" name="Input.Tiles[__index__].ListLimit" type="number" min="1" max="8" value="4" class="mat-input" />
-                    <span class="mat-hint">Capped at 8 - each line costs one history query.</span>
+                    <span class="mat-hint">At most 8.</span>
                 </div>
                 <div class="mat-field" data-map-property-sla-only>
                     <label class="mat-label" for="@(TemplateTileId)SlaWindowDays">Window (days)</label>
                     <input id="@(TemplateTileId)SlaWindowDays" name="Input.Tiles[__index__].SlaWindowDays" type="number" min="1" max="365" value="7" class="mat-input" />
-                    <span class="mat-hint">Uptime counts a warning as up - the sensor answered. Needs statistics buckets in the window.</span>
+                    <span class="mat-hint">A warning counts as up.</span>
                 </div>
                 <div class="mat-field" data-map-property-image-only>
                     <label class="mat-label" for="@(TemplateTileId)ImageFile">Picture</label>
@@ -879,7 +874,7 @@
                         <input type="file" id="@(TemplateTileId)ImageFile" accept="image/png,image/jpeg" class="mat-input" data-map-image-file />
                         <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-image-clear>Remove</button>
                     </div>
-                    <span class="mat-hint" data-map-image-status>PNG or JPEG, up to 4 MB. Stored on disk under data/uploads, not in workspace.json.</span>
+                    <span class="mat-hint" data-map-image-status>PNG or JPEG, up to 4 MB.</span>
                 </div>
                 <div class="mat-field" data-map-property-image-only>
                     <label class="mat-label" for="@(TemplateTileId)ImageFit">Fit</label>
@@ -974,11 +969,11 @@
                         </div>
                     }
                 </div>
-                <p class="mat-hint">Leave empty to use the theme's own state colours. Only #rrggbb is accepted; anything else is ignored at render time.</p>
+                <p class="mat-hint">#rrggbb. Empty = the theme colour.</p>
                 <div class="mat-field">
                     <label class="mat-label" for="@(TemplateTileId)RefreshSeconds">Refresh (seconds)</label>
                     <input id="@(TemplateTileId)RefreshSeconds" name="Input.Tiles[__index__].RefreshSeconds" type="number" min="0" max="3600" class="mat-input" placeholder="0" />
-                    <span class="mat-hint">A server-side cache lifetime, not a per-widget timer: 0 keeps the board's own cadence.</span>
+                    <span class="mat-hint">0 = the board's own cadence.</span>
                 </div>
             </div>
         </section>

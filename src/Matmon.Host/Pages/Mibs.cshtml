@@ -19,17 +19,12 @@
     <div class="mat-card__head">@MatUi.Icon("upload")<h2 class="mat-card__title">Upload</h2></div>
     <div class="mat-card__body">
         <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="mat-form" novalidate>
-            <p class="mat-muted">
-                A MIB turns a walk's numbers into names: <code>1.3.6.1.2.1.2.2.1.10.3</code> becomes <code>ifInOctets.3</code>, status codes get their meaning
-                and values their unit. Names are resolved here on the instance, so a MIB works for walks on every probe and agent at once, and older walk
-                results get the names too.
-            </p>
             <div class="mat-field">
                 <label class="mat-label" for="mib-files">MIB files <span class="mat-req" aria-hidden="true">*</span></label>
                 <div class="mat-upload" data-upload>
                     <input class="mat-upload__input" type="file" id="mib-files" name="files" multiple accept=".mib,.my,.txt,.zip" required data-msg-required="Choose at least one MIB file." aria-describedby="mib-files-hint" />
                 </div>
-                <span class="mat-hint" id="mib-files-hint">The vendor's MIB files (.mib, .my, .txt) or a .zip of them; a newer upload of the same module replaces the old one.</span>
+                <span class="mat-hint" id="mib-files-hint">.mib, .my, .txt or a .zip; a new upload of a module replaces the old one.</span>
                 <span class="mat-error" aria-live="polite"></span>
             </div>
             <div class="mat-btn-row">
@@ -45,7 +40,7 @@
         @MatUi.Icon("alert")
         <div class="mat-alert__body">
             <span class="mat-alert__title">Missing dependencies</span>
-            <span>These modules are imported by a loaded MIB but not loaded themselves - the objects that depend on them may stay unnamed. They usually come in the same download from the vendor:</span>
+            <span>Imported by a loaded MIB but not loaded - dependent objects may stay unnamed. They usually come in the vendor's download:</span>
             <ul class="mat-alert__list">
                 @foreach (var (module, neededBy) in Model.Missing)
                 {
@@ -61,7 +56,7 @@
     @if (uploaded.Count == 0)
     {
         <div class="mat-card__body">
-            <p class="mat-muted">No MIBs uploaded yet - the standard set below covers interfaces, system, storage, IP and Linux (Net-SNMP / UCD) agents.</p>
+            <p class="mat-muted">No MIBs uploaded yet.</p>
         </div>
     }
     else

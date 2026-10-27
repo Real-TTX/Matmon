@@ -77,7 +77,7 @@
         {
             case "welcome":
                 <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("sparkles")<span>Your account is ready</span></h2>
-                <p>A few quick, optional steps to get monitoring going. We'll start with the cloud connection - it decides whether you even need to set up e-mail or a license by hand. Skip anything you don't need; you can change it all later.</p>
+                <p>A few optional steps, starting with the cloud connection.</p>
                 break;
 
             case "cloud":
@@ -88,12 +88,11 @@
                         @MatUi.Icon("alert")
                         <div class="mat-alert__body">
                             This installation is <strong>already linked</strong> to the cloud instance <code>@Model.CloudEnvLinkInstanceId</code> at <strong>@Model.CloudLinkUrl</strong> -
-                            by the <em>environment</em> it was started with (<code>Matmon__CloudInstanceId</code> / <code>Matmon__CloudInstanceToken</code>), not by this setup.
-                            That is why it was connected without you doing anything, and why the license of that instance (currently <strong>@Model.License.DisplayName</strong>) is already here:
-                            a new installation started with this environment always becomes that same instance again.
+                            by its <em>environment</em> (<code>Matmon__CloudInstanceId</code> / <code>Matmon__CloudInstanceToken</code>), license included (<strong>@Model.License.DisplayName</strong>).
+                            A new installation started with this environment always becomes that instance again.
                         </div>
                     </div>
-                    <p>Keep that link, or unlink and register this installation under your account yourself - as a <strong>new</strong> instance, or by taking an old one over.</p>
+                    <p>Keep the link, or unlink and connect this installation yourself - as a <strong>new</strong> instance or by taking an old one over.</p>
                     @* Both actions are handlers of System > Cloud and come back here (returnUrl): one form, the second button
                        posts to its own handler (formaction). *@
                     <form method="post" asp-page="/Config" asp-page-handler="CloudKeepEnvLink" class="mat-form" novalidate>
@@ -122,7 +121,7 @@
                             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("bell")<span>Save</span></button>
                         </div>
                     </form>
-                    <p class="mat-muted">Manage the link anytime in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud @MatUi.Icon("external")</a>.</p>
+                    <p class="mat-muted">Manage the link in <a href="/Config?tab=cloud" target="_blank" rel="noopener">System → Cloud @MatUi.Icon("external")</a>.</p>
                 }
                 else
                 {
@@ -142,13 +141,12 @@
                             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Connect</span></button>
                         </div>
                     </form>
-                    <p class="mat-muted">You'll confirm the link in your Matmon Cloud account, then land back here.</p>
 
                     <details class="mat-collapse">
                         <summary><span>No cloud? Apply a license token manually (offline / air-gapped)</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
                         <div class="mat-accordion__body">
                             <form method="post" asp-page-handler="SetLicenseToken" class="mat-form" novalidate>
-                                <p class="mat-muted">Without the cloud you're on the <strong>@Model.License.DisplayName</strong> tier. For an air-gapped install, paste a signed license token issued by Matmon.Cloud:</p>
+                                <p class="mat-muted">Without the cloud: <strong>@Model.License.DisplayName</strong>. Paste a signed license token issued by Matmon.Cloud:</p>
                                 <div class="mat-field">
                                     <label class="mat-label" for="wizard-license-token">License token</label>
                                     <textarea class="mat-textarea mat-mono" id="wizard-license-token" name="LicenseTokenInput" rows="3" placeholder="Paste the signed token…"></textarea>
@@ -166,19 +164,19 @@
                 <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("restore")<span>Restore from a cloud backup</span></h2>
                 @if (!Model.CloudConnected)
                 {
-                    <p>Restoring a previous configuration needs the cloud link. <a href="@StepUrl("cloud")">Connect to Matmon.Cloud</a> first, or skip this step if you're setting up fresh.</p>
+                    <p>Needs the cloud link. <a href="@StepUrl("cloud")">Connect to Matmon.Cloud</a> first, or skip.</p>
                 }
                 else if (!Model.AccountBackupsAvailable)
                 {
-                    <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Couldn't reach Matmon.Cloud to list your backups right now. Skip this step - you can always restore later from <a href="/Config?tab=backup" target="_blank" rel="noopener">System → Cloud → Backup @MatUi.Icon("external")</a>.</div></div>
+                    <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">Couldn't reach Matmon.Cloud to list your backups. You can restore later from <a href="/Config?tab=backup" target="_blank" rel="noopener">System → Cloud → Backup @MatUi.Icon("external")</a>.</div></div>
                 }
                 else if (Model.AccountBackups.Count == 0)
                 {
-                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>No backups on your cloud account yet. Nothing to restore - carry on setting up. (Once any of your instances stores a cloud backup, it'll appear here for disaster recovery.)</span></p>
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>No backups on your cloud account yet.</span></p>
                 }
                 else
                 {
-                    <p>Bring this fresh instance back from a backup on your cloud account - handy when you're re-installing a dead instance. Only the <strong>configuration</strong> is restored (no telemetry, and your new admin account is kept).</p>
+                    <p>Only the <strong>configuration</strong> is restored - no telemetry; your new admin account is kept.</p>
                     <div class="mat-stack">
                         @foreach (var backup in Model.AccountBackups)
                         {
@@ -220,7 +218,7 @@
                 {
                     @if (Model.CloudRelayEnabled)
                     {
-                        <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Alerts are delivered through <strong>Matmon.Cloud</strong> - no mail server of your own required. Pick recipients per rule under <a href="/notifications" target="_blank" rel="noopener">Notifications @MatUi.Icon("external")</a>.</span></p>
+                        <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Alerts are delivered through <strong>Matmon.Cloud</strong>. Pick recipients per rule under <a href="/notifications" target="_blank" rel="noopener">Notifications @MatUi.Icon("external")</a>.</span></p>
                         <form method="post" asp-page-handler="EnableCloudRelay" class="mat-form" novalidate>
                             <input type="hidden" name="enable" value="false" />
                             <div class="mat-btn-row mat-btn-row--plain">
@@ -230,7 +228,7 @@
                     }
                     else
                     {
-                        <p>You're connected to Matmon.Cloud, so alert e-mail can go out through the cloud gateway - the simplest option, no SMTP server needed.</p>
+                        <p>Alert e-mail can go out through Matmon.Cloud - no SMTP server needed.</p>
                         <form method="post" asp-page-handler="EnableCloudRelay" class="mat-form" novalidate>
                             <input type="hidden" name="enable" value="true" />
                             <div class="mat-btn-row mat-btn-row--plain">
@@ -247,7 +245,7 @@
                 }
                 else
                 {
-                    <p>Set up e-mail alerts on Warning/Critical. (Connect Matmon.Cloud in the previous step to skip this and relay alerts through the cloud instead.)</p>
+                    <p>E-mail alerts on Warning and Critical.</p>
                     @if (Model.EmailConfigured)
                     {
                         <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>E-mail is configured. Manage it in <a href="/notifications" target="_blank" rel="noopener">Notifications @MatUi.Icon("external")</a>.</span></p>
@@ -261,10 +259,8 @@
 
             case "structure":
                 <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("folder")<span>Organize &amp; scope your monitoring</span></h2>
-                <p>Create a starter folder structure, and tell this node which networks it may scan.</p>
-
                 <h3 class="mm-wizard__sub">Folders</h3>
-                <p class="mat-muted">This starter structure - only the missing folders are created, existing ones are left as they are.</p>
+                <p class="mat-muted">Only missing folders are created.</p>
                 <ul class="mm-wizard__folders">
                     @foreach (var folder in Model.StarterFolders)
                     {
@@ -335,8 +331,6 @@
 
             case "discovery":
                 <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("search")<span>Find your devices</span></h2>
-                <p>Scan the networks from the previous step, and (optionally) add remote probes for other sites.</p>
-
                 <h3 class="mm-wizard__sub">Discovery scan</h3>
                 @if (Model.ConfiguredSubnets.Count > 0)
                 {
@@ -355,14 +349,14 @@
                 }
                 else
                 {
-                    <p class="mat-muted">No networks yet - add a subnet in the previous step (Structure &amp; networks) first.</p>
+                    <p class="mat-muted">No networks yet - add one in the previous step.</p>
                     <div class="mat-btn-row mat-btn-row--plain">
                         <a class="mat-btn mat-btn--secondary" href="/setup/wizard?step=structure">@MatUi.Icon("back")<span>Back to networks</span></a>
                     </div>
                 }
 
                 <h3 class="mm-wizard__sub">Remote probes</h3>
-                <p class="mat-muted">Optional - monitor another site or devices behind NAT. The probe connects outbound to this server.</p>
+                <p class="mat-muted">For another site or devices behind NAT; the probe connects outbound to this server.</p>
                 @if (Model.RemoteProbes.Count > 0)
                 {
                     <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>@Model.RemoteProbes.Count remote probe@(Model.RemoteProbes.Count == 1 ? string.Empty : "s") already added. Deploy each with its command (replace <code>@primaryUrl</code> with an address the probe can reach):</span></p>
@@ -388,7 +382,7 @@
                 }
                 else
                 {
-                    <p class="mat-muted">No remote probes yet - add one below to get its deploy command.</p>
+                    <p class="mat-muted">No remote probes yet.</p>
                 }
                 <form method="post" asp-page-handler="CreateProbe" class="mat-form" novalidate>
                     <div class="mat-field mm-wizard__inline">
@@ -436,7 +430,7 @@
                 }
                 else
                 {
-                    <p>Add a second factor (an authenticator app) so a stolen password alone can't sign in. Optional, but recommended for the admin account.</p>
+                    <p>With an authenticator app, a stolen password alone can't sign in.</p>
                     <form method="post" asp-page-handler="StartTotp" class="mat-form" novalidate>
                         <div class="mat-btn-row mat-btn-row--plain">
                             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("lock")<span>Set up two-factor</span></button>
@@ -447,7 +441,7 @@
 
             case "done":
                 <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("check")<span>You're all set</span></h2>
-                <p>@brandName is ready. Revisit any of these from the menu anytime.</p>
+                <p>@brandName is ready.</p>
                 break;
         }
     </section>

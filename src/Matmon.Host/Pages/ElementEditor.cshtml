@@ -52,7 +52,6 @@
     <div class="mat-empty mat-empty--framed">
         <span class="mat-empty__icon">@MatUi.Icon("search")</span>
         <div class="mat-empty__title">Select an element</div>
-        <p>Open a probe, folder, host or sensor from the tree to edit it here.</p>
         <a class="mat-btn mat-btn--primary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
     </div>
 }
@@ -87,7 +86,7 @@ else
             @* ---------- GENERAL (the element's own fields, then where its values came from) ---------- *@
             <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general">
                 <section class="mat-card">
-                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@Model.View.SelectedElementKind</h2><span class="mat-text-muted mm-push-end">name, parent &amp; target</span></div>
+                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@Model.View.SelectedElementKind</h2></div>
                     <div class="mat-card__body">
                         <div class="mat-form__grid">
                             <div class="mat-field mat-field--full">
@@ -127,7 +126,7 @@ else
                                 <div class="mat-field mat-field--full">
                                     <label class="mat-label" asp-for="ElementEditor.ProbeSubnetsText">Scan networks (subnets)</label>
                                     <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="mat-textarea mat-mono" placeholder="10.10.0.0/16&#10;192.168.1.0/24" aria-describedby="element-subnets-hint"></textarea>
-                                    <span class="mat-hint" id="element-subnets-hint">One CIDR per line. Networks this probe should scan - useful for routed networks it can reach but doesn't auto-detect. Shown on the Probes page and offered as Discovery suggestions.</span>
+                                    <span class="mat-hint" id="element-subnets-hint">One CIDR per line. Offered as Discovery suggestions.</span>
                                 </div>
                                 <div class="mat-field mat-field--full">
                                     <span class="mat-label">Snippet</span>
@@ -152,13 +151,13 @@ else
                                     <label class="mat-label" for="element-sensor-type">Type</label>
                                     <select class="mat-select" id="element-sensor-type" asp-items="Model.ElementEditor.SensorTypeOptions" disabled aria-disabled="true" aria-describedby="element-sensor-type-hint"></select>
                                     <input type="hidden" asp-for="ElementEditor.SensorTypeKey" />
-                                    <span class="mat-hint" id="element-sensor-type-hint">Fixed after creation - history, channels &amp; statistics all depend on it. Create a new sensor to use a different type.</span>
+                                    <span class="mat-hint" id="element-sensor-type-hint">Fixed after creation. Create a new sensor for another type.</span>
                                 </div>
                                 @if (string.Equals(Model.ElementEditor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                                 {
                                     <div class="mat-field">
                                         <span class="mat-label">Target</span>
-                                        <span class="mat-text-muted">Target is auto-filled from the parent probe for heartbeat sensors.</span>
+                                        <span class="mat-text-muted">The parent probe.</span>
                                     </div>
                                 }
                                 else
@@ -179,7 +178,7 @@ else
                                 <label class="mat-label" asp-for="ElementEditor.TagsText">Tags</label>
                                 <input asp-for="ElementEditor.TagsText" class="mat-input" placeholder="prod, network, berlin" data-tag-input aria-describedby="element-tags-hint" />
                                 <partial name="_TagSuggestions" model="Model.View.AllTags" />
-                                <span class="mat-hint" id="element-tags-hint">Comma-separated. Tags cascade to children and power tree filtering, maps &amp; the sensor picker.</span>
+                                <span class="mat-hint" id="element-tags-hint">Comma-separated. Children inherit them.</span>
                             </div>
 
                             @if (isSensor)
@@ -210,13 +209,13 @@ else
                             <div class="mat-field">
                                 <label class="mat-label" asp-for="ElementEditor.RetryCount">Retries</label>
                                 <input asp-for="ElementEditor.RetryCount" type="number" min="0" max="@Matmon.Core.Domain.SensorRetry.MaxRetries" class="mat-input" placeholder="@Model.ElementEditor.RetryCountPlaceholder" />
-                                <span class="mat-hint">A check that fails is run again this many times (2 s apart) before it counts.</span>
+                                <span class="mat-hint">Re-runs a failed check, 2 s apart.</span>
                                 <span class="mat-error" aria-live="polite"></span>
                             </div>
                             <div class="mat-field">
                                 <label class="mat-label" asp-for="ElementEditor.AlertDelaySeconds">Alert after (seconds)</label>
                                 <input asp-for="ElementEditor.AlertDelaySeconds" type="number" min="0" class="mat-input" placeholder="@Model.ElementEditor.AlertDelaySecondsPlaceholder" data-msg-range="Zero or more seconds." />
-                                <span class="mat-hint">Raise the alert only once the problem has lasted this long - a blip never alarms. The state shows at once; 0 = alert at once.</span>
+                                <span class="mat-hint">How long a problem must last before it alerts. 0 = at once.</span>
                                 <span class="mat-error" aria-live="polite"></span>
                             </div>
                             <div class="mat-field">
@@ -226,7 +225,7 @@ else
                                     <option value="none">nothing</option>
                                     <option value="sensor">a sensor…</option>
                                 </select>
-                                <span class="mat-hint">While that sensor is down, a sensor here that fails shows Unknown and raises no alert - one outage, one alert. Usually a site's router ping or a host's ping.</span>
+                                <span class="mat-hint">While that sensor is down, failures here show Unknown and raise no alert.</span>
                             </div>
                             <div class="mat-field" data-show-if="#ElementEditor_DependencyMode" data-show-value="sensor" hidden="@(Model.ElementEditor.DependencyMode != "sensor")">
                                 <label class="mat-label" for="picker-element-dependency-trigger">Dependency</label>
@@ -248,7 +247,7 @@ else
                     @if (Model.ElementEditor.TemplateOriginId is not null)
                     {
                         <div class="mat-card__body">
-                            <p>Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "-")</strong>. Its values were copied in - later template edits don't change this element until you restore.</p>
+                            <p>Created from template <strong>@(Model.ElementEditor.TemplateOriginName ?? "-")</strong>. Later template edits apply only when you restore.</p>
                         </div>
                         <div class="mat-card__foot">
                             <div class="mat-actions">
@@ -260,7 +259,7 @@ else
                     else
                     {
                         <div class="mat-card__body">
-                            <p class="mat-muted">Not created from a template. Templates are chosen when you create a sensor - start one from the <strong>Templates</strong> page (“New sensor”) or pick a template on the Sensor Create page.</p>
+                            <p class="mat-muted">Not created from a template.</p>
                         </div>
                     }
                 </section>
@@ -288,7 +287,7 @@ else
                         {
                             <div class="mat-alert mat-alert--info">@MatUi.Icon("info")<div class="mat-alert__body">@Model.ElementEditor.TelemetryProfileSummary</div></div>
                         }
-                        <p class="mat-muted">Empty = inherit; the placeholder shows the active value.</p>
+                        <p class="mat-muted">Empty = inherit.</p>
                         <div class="mat-form__grid">
                             <div class="mat-field">
                                 <label class="mat-label" asp-for="ElementEditor.ObservationRetentionDays">Raw history (days)</label>
@@ -339,9 +338,9 @@ else
             {
                 <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-credentials" aria-labelledby="tab-credentials" hidden>
                     <section class="mat-card">
-                        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">Credentials</h2><span class="mat-text-muted mm-push-end">inherited access</span></div>
+                        <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">Credentials</h2></div>
                         <div class="mat-card__body mat-stack">
-                            <p class="mat-muted">Define reusable credentials here. Child sensors automatically pick the first inherited bundle with the matching credential type, or can explicitly select one.</p>
+                            <p class="mat-muted">Sensors below use the first credential of the matching kind.</p>
 
                             <div class="mat-stack" data-credential-section>
                                 <p class="mat-text-muted" data-credential-empty hidden="@(Model.ElementEditor.CredentialBundleVisibleCount > 0 ? "hidden" : null)">No credentials yet.</p>
@@ -389,7 +388,6 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="windows" hidden="@(credential.Kind == MonitoringCredentialKind.Windows ? null : "hidden")">
-                                                                <p class="mat-text-muted">Windows / WinRM credentials</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].WinrmUsername">Username</label>
@@ -403,7 +401,6 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="ssh" hidden="@((credential.Kind == MonitoringCredentialKind.Linux || credential.Kind == MonitoringCredentialKind.Ssh) ? null : "hidden")">
-                                                                <p class="mat-text-muted">SSH / Linux credentials</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SshUsername">Username</label>
@@ -421,7 +418,7 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="proxmox" hidden="@(credential.Kind == MonitoringCredentialKind.Proxmox ? null : "hidden")">
-                                                                <p class="mat-text-muted">Proxmox API token - exactly as shown in the Proxmox UI (Token ID + secret).</p>
+                                                                <p class="mat-text-muted">Token ID and secret, exactly as shown in Proxmox.</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field mat-field--full">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].PveTokenId">Token ID</label>
@@ -435,7 +432,6 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="sqlserver" hidden="@(credential.Kind == MonitoringCredentialKind.SqlServer ? null : "hidden")">
-                                                                <p class="mat-text-muted">SQL Server credentials</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MssqlUsername">Username</label>
@@ -449,7 +445,6 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="snmp" hidden="@(credential.Kind == MonitoringCredentialKind.Snmp ? null : "hidden")">
-                                                                <p class="mat-text-muted">SNMP credentials</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].SnmpCommunity">Community</label>
@@ -491,7 +486,6 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="unifi" hidden="@(credential.Kind == MonitoringCredentialKind.Unifi ? null : "hidden")">
-                                                                <p class="mat-text-muted">UniFi API key (sent as X-API-KEY)</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field mat-field--full">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].UnifiApiKey">API key</label>
@@ -501,7 +495,7 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="generic" hidden="@(credential.Kind == MonitoringCredentialKind.Generic ? null : "hidden")">
-                                                                <p class="mat-text-muted">Generic credentials - exposed to scripts as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</p>
+                                                                <p class="mat-text-muted">Scripts get them as MATMON_USERNAME / MATMON_PASSWORD / MATMON_TOKEN.</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].GenericUsername">Username</label>
@@ -519,7 +513,7 @@ else
                                                             </div>
 
                                                             <div class="mat-field--full mat-stack mat-stack--sm" data-credential-kind-group="mail" hidden="@(credential.Kind == MonitoringCredentialKind.Mail ? null : "hidden")">
-                                                                <p class="mat-text-muted">Mail Health - the SMTP (send) and IMAP (receive) accounts. Both are stored encrypted at rest.</p>
+                                                                <p class="mat-text-muted">SMTP sends the test mail, IMAP receives it.</p>
                                                                 <div class="mat-form__grid">
                                                                     <div class="mat-field">
                                                                         <label class="mat-label" asp-for="ElementEditor.CredentialBundles[i].MailSmtpUsername">SMTP username</label>

@@ -149,7 +149,7 @@ else
         <div class="mat-card__head">@MatUi.Icon("info")<h2 class="mat-card__title">Updating this installation</h2></div>
         <div class="mat-card__body mat-stack">
             <p>This installation cannot update itself (@status.UnavailableReason). Two ways make it possible:</p>
-            <p><strong>Docker:</strong> mount the Docker socket into the container. Matmon can then pull the new image and replace its own container, and goes back to the current one when the new one does not start. The socket gives the container control over Docker on that machine - mount it only where that is acceptable.</p>
+            <p><strong>Docker:</strong> mount the Docker socket into the container. The socket gives the container control over Docker on that machine - mount it only where that is acceptable.</p>
             <pre class="mat-code"><code>volumes:
   - matmon-data:/app/data
   - /var/run/docker.sock:/var/run/docker.sock</code></pre>

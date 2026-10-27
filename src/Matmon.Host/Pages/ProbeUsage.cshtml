@@ -162,7 +162,7 @@
             </div>
         </div>
     </div>
-    <p class="mat-muted">Estimates = each sensor's poll rate × payload size × retention. Retention &amp; statistics roll-up run <strong>every 5 minutes</strong>, so disk space is reclaimed shortly after data ages out. The probe-size estimate covers all sensors (ignores the filters below).@(view.FiltersActive ? $" Filtered: the other figures cover the {view.SensorCount} of {view.TotalSensorCount} sensors shown below." : string.Empty)</p>
+    <p class="mat-muted">Estimates = poll rate × payload size × retention. The probe-size estimate covers all sensors.@(view.FiltersActive ? $" Filtered: the other figures cover the {view.SensorCount} of {view.TotalSensorCount} sensors shown below." : string.Empty)</p>
 </div>
 
 <section class="mat-card">
@@ -199,7 +199,7 @@
     <section class="mat-section">
         <div class="mat-section__head">
             <h2>Largest logs</h2>
-            <p class="mat-section__lead">Stored entries per sensor, @view.TotalStoredObservationCountText in total. The sensors with the most stored history - an outlier here usually means an over-fast poll interval or too-long retention, a good place to spot misconfigured sensors.</p>
+            <p class="mat-section__lead">Stored entries per sensor, @view.TotalStoredObservationCountText in total. An outlier usually means a too-fast poll interval or too-long retention.</p>
         </div>
         <div class="mat-table-wrap">
             <table class="mat-table mat-table--compact">
@@ -310,7 +310,7 @@
                 <div class="mat-empty">
                     <span class="mat-empty__icon">@MatUi.Icon("search")</span>
                     <div class="mat-empty__title">Nothing matches</div>
-                    <p>No sensors match the current filters. Change the search or the filters, or reset them.</p>
+                    <p>Change the search or the filters, or reset them.</p>
                     <a class="mat-btn mat-btn--secondary" asp-page="/ProbeUsage" asp-route-probeElementId="@Model.ProbeElementId" asp-route-returnUrl="@Model.ReturnUrl" asp-route-viewMode="@view.ViewMode">@MatUi.Icon("refresh")<span>Reset</span></a>
                 </div>
             }
@@ -416,10 +416,6 @@
                 <div class="mat-field">
                     <label class="mat-check"><input type="checkbox" id="usage-f-highlighted" name="highlightedOnly" value="true" form="usage-form" checked="@view.HighlightedOnly" /><span class="mat-check__text">Highlighted only</span></label>
                 </div>
-                @if (!string.IsNullOrWhiteSpace(view.Search))
-                {
-                    <p class="mat-hint">The search in effect is kept.</p>
-                }
             </div>
             <div class="mat-dialog__foot">
                 <div class="mat-btn-row mat-btn-row--plain">

@@ -32,7 +32,7 @@
                     <button type="button" class="mat-btn mat-btn--primary" data-push-enable hidden>@MatUi.Icon("bell")<span>Turn on notifications here</span></button>
                     <button type="button" class="mat-btn mat-btn--secondary" data-push-disable hidden>@MatUi.Icon("x")<span>Turn them off here</span></button>
                 </div>
-                <p class="mat-hint">What arrives is what the notification rules with the <strong>Browser notifications</strong> sender say - out of the box warnings and errors of every sensor (the rule "Browser notifications" on the Notifications page). On iPhone and iPad they work in the installed app: Share → Add to Home Screen, then open Matmon from there and turn them on here.</p>
+                <p class="mat-hint">On iPhone and iPad: Share → Add to Home Screen, open Matmon from there, then turn them on here.</p>
             </div>
         </section>
 
@@ -107,7 +107,7 @@
                     <div class="mat-field">
                         <label class="mat-label" for="TimeZoneId">Display timezone</label>
                         <select asp-for="TimeZoneId" asp-items="Model.TimeZoneItems" class="mat-select"></select>
-                        <span class="mat-hint">Timestamps across the UI are shown in this zone. <strong>System default</strong> uses the server/admin setting. Data is always stored in UTC.</span>
+                        <span class="mat-hint"><strong>System default</strong> uses the admin's setting.</span>
                     </div>
                     <div class="mat-btn-row">
                         <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save timezone</span></button>
@@ -124,7 +124,7 @@
             <div class="mat-card__body mat-stack">
                 @if (!Model.HasPassword)
                 {
-                    <p class="mat-muted">This account signs in via Matmon.Cloud. Set a local password so you can also sign in with e-mail + password when the cloud is unreachable.</p>
+                    <p class="mat-muted">Lets you sign in with e-mail + password when the cloud is unreachable.</p>
                 }
                 <form method="post" class="mat-form" novalidate>
                     @if (Model.HasPassword)
@@ -186,7 +186,7 @@
                 }
                 else if (Model.TwoFactorEnabled)
                 {
-                    <p>Two-factor is <strong>enabled</strong>@(Model.TwoFactorSince is { } since ? $" since {since.ToDisplay():yyyy-MM-dd}" : ""). At sign-in you enter a code from your authenticator (or request a one-time code by e-mail).</p>
+                    <p>Two-factor is <strong>enabled</strong>@(Model.TwoFactorSince is { } since ? $" since {since.ToDisplay():yyyy-MM-dd}" : "").</p>
                     @* "E-mail me a code" posts its own handler: a hidden form of its own, so it sits in the same button row without
                        sending (or validating) the code field of the disable form. *@
                     <form method="post" asp-page-handler="SendDisableCode" id="send-disable-code" hidden></form>
@@ -196,7 +196,6 @@
                             <div class="mat-otp" data-otp data-length="6" data-chars="digits">
                                 <input asp-for="TotpCode" class="mat-otp__input" inputmode="numeric" autocomplete="one-time-code" required pattern="[0-9]{6}" data-msg-required="Please enter the six digits of the code." data-msg-pattern="The code has six digits." />
                             </div>
-                            <span class="mat-hint">To confirm that it is you.</span>
                             <span class="mat-error" aria-live="polite"></span>
                         </div>
                         <div class="mat-btn-row">
@@ -208,7 +207,6 @@
                 }
                 else
                 {
-                    <p class="mat-muted">Add a second step at sign-in with an authenticator app (TOTP). If you lose your device, you can get a one-time code by e-mail.</p>
                     <form method="post" asp-page-handler="StartTotp">
                         <div class="mat-btn-row">
                             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("shield")<span>Set up two-factor</span></button>

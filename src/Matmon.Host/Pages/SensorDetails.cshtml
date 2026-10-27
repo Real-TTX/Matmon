@@ -52,7 +52,7 @@
 
 @if (Model.Maintenance is { } maintenance)
 {
-    <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("wrench")<div class="mat-alert__body">In maintenance: <a asp-page="/Maintenance">@maintenance.Name</a> until @Matmon.Core.Domain.MaintenanceSchedule.Format(maintenance.EndsUtc, Matmon.Core.Domain.DisplayTimeZone.Current). The sensor keeps running; it raises no new alert until then.</div></div>
+    <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("wrench")<div class="mat-alert__body">In maintenance: <a asp-page="/Maintenance">@maintenance.Name</a> until @Matmon.Core.Domain.MaintenanceSchedule.Format(maintenance.EndsUtc, Matmon.Core.Domain.DisplayTimeZone.Current). No new alerts until then.</div></div>
 }
 
 @if (Model.Dependency is { HoldsThisSensor: true } holding)
@@ -73,13 +73,13 @@
 @if (Model.PushUrl is { } pushUrl)
 {
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Push address</h2><span class="mat-text-muted mm-push-end">call it from the job</span></div>
+        <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Push address</h2></div>
         <div class="mat-card__body mat-stack mat-stack--sm">
             <div class="mm-snippet">
                 <pre class="mat-code"><code id="push-url">@pushUrl</code></pre>
                 <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#push-url">@MatUi.Icon("copy")<span>Copy</span></button>
             </div>
-            <p class="mat-hint">GET or POST, at the end of the job. Optional: <code>status=ok|warning|error</code>, <code>value=</code> a number, <code>message=</code> a line of text - in the query, a form or JSON. No call for longer than expected (plus grace) turns the sensor Critical. The address is the password: treat it like one; emptying the token in the sensor's settings gives a new one.</p>
+            <p class="mat-hint">GET or POST. Optional: <code>status=ok|warning|error</code>, <code>value=</code> a number, <code>message=</code> a line of text - in the query, a form or JSON. The address is the password; empty the token in the sensor's settings to get a new one.</p>
             <div class="mm-snippet">
                 <pre class="mat-code"><code id="push-example-sh">curl -fsS "@(pushUrl)?status=ok&amp;message=backup+done" &gt;/dev/null</code></pre>
                 <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#push-example-sh">@MatUi.Icon("copy")<span>Copy</span></button>
@@ -218,7 +218,7 @@
                 <div class="mat-empty mat-empty--framed">
                     <span class="mat-empty__icon">@MatUi.Icon("activity")</span>
                     <div class="mat-empty__title">No channels yet</div>
-                    <p>The channels appear after the sensor's first run - or press Run now.</p>
+                    <p>Press Run now.</p>
                 </div>
             }
             else
@@ -331,7 +331,6 @@
                     <div class="sensor-chart-legend">
                         <span class="sensor-chart-legend-line" aria-hidden="true"></span>
                         <span>Primary: @view.DefaultChannelLabel</span>
-                        <span class="mat-text-muted">used for overview, chart &amp; statistics</span>
                     </div>
                     <div class="sensor-chart-wrap" data-chart="line"
                          data-chart-points="@chartPointsJson"
@@ -603,7 +602,6 @@
             <div class="mat-empty mat-empty--framed">
                 <span class="mat-empty__icon">@MatUi.Icon("bar-chart")</span>
                 <div class="mat-empty__title">No long-term statistics yet</div>
-                <p>Statistics are rolled up from the sensor's history every few minutes.</p>
             </div>
         }
     </div>
@@ -615,7 +613,7 @@
             <div class="mat-empty mat-empty--framed">
                 <span class="mat-empty__icon">@MatUi.Icon("clock")</span>
                 <div class="mat-empty__title">No measurements yet</div>
-                <p>The first result appears after the sensor has run - or press Run now.</p>
+                <p>Press Run now.</p>
             </div>
         }
         else

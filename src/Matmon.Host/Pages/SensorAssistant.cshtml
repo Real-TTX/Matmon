@@ -29,7 +29,6 @@
             <li class="mat-pill mat-pill--accent" aria-current="step">Analyze</li>
             <li class="mat-pill mat-pill--plain">Save</li>
         </ol>
-        <p class="mat-muted">Inherited values stay as placeholders so the form stays clean.</p>
     </div>
 </section>
 
@@ -41,7 +40,6 @@
         <div class="mat-card__head">
             <span class="mat-badge mat-badge--soft" aria-hidden="true">1</span>
             <h2 class="mat-card__title">Sensor type</h2>
-            <span class="mat-text-muted mm-push-end">template optional</span>
         </div>
         <div class="mat-card__body mat-stack">
             <div class="mat-form__grid">
@@ -57,7 +55,7 @@
             <p class="mat-hint">
                 @(matchingTemplateCount == 0
                     ? "No matching sensor template for this type yet."
-                    : $"{matchingTemplateCount} matching template{(matchingTemplateCount == 1 ? string.Empty : "s")} available. Choose one to prefill fields and keep the template link.")
+                    : $"{matchingTemplateCount} matching template{(matchingTemplateCount == 1 ? string.Empty : "s")} available.")
             </p>
         </div>
     </section>
@@ -66,7 +64,6 @@
         <div class="mat-card__head">
             <span class="mat-badge mat-badge--soft" aria-hidden="true">2</span>
             <h2 class="mat-card__title">Details</h2>
-            <span class="mat-text-muted mm-push-end">where it runs</span>
         </div>
         <div class="mat-card__body">
             <div class="mat-form__grid">
@@ -80,7 +77,7 @@
                 </div>
                 @if (string.Equals(Model.NewSensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                 {
-                    <p class="mat-field mat-field--full mat-muted">Target is auto-filled from the parent probe for heartbeat sensors.</p>
+                    <p class="mat-field mat-field--full mat-muted">Target: the parent probe.</p>
                 }
                 else
                 {
@@ -106,7 +103,7 @@
                 <span class="mat-text-muted mm-push-end">SNMP v1 / v2c / v3</span>
             </div>
             <div class="mat-card__body mat-stack">
-                <p class="mat-muted">Discover OIDs on the target, then tick the values you want to monitor. Selected OIDs are copied into <code>snmp.oids</code>. SNMPv3 fields appear in the parameter block above.</p>
+                <p class="mat-muted">Tick the values to monitor; they are copied into <code>snmp.oids</code>.</p>
                 <div class="mat-field sensor-snmp-root">
                     <label class="mat-label" asp-for="NewSensor.SnmpWalkRootOid">Root OID</label>
                     <div class="mat-input-group">

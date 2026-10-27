@@ -106,9 +106,8 @@
                 <div class="mat-field">
                     <label class="mat-check">
                         <input asp-for="Input.PingFirst" />
-                        <span class="mat-check__text"><strong>Quick scan</strong><small class="mat-muted">Only deep-scan hosts that answer ping (faster; skips silent hosts)</small></span>
+                        <span class="mat-check__text"><strong>Quick scan</strong><small class="mat-muted">Only deep-scan hosts that answer ping</small></span>
                     </label>
-                    <span class="mat-hint">Matmon probes ping, common TCP services and SNMP automatically. SNMP lets it recognize the platform (e.g. a Synology NAS) and suggest the matching sensor — no scan tuning needed.</span>
                 </div>
             </div>
         </section>
@@ -146,7 +145,6 @@ else if (Model.Mode == "job")
                     </div>
                     @if (selectedJobIsActive)
                     {
-                        <span class="mat-hint">Updates live while the job runs.</span>
                     }
                 </div>
             </div>
@@ -183,7 +181,7 @@ else if (Model.Mode == "job")
         <section class="mat-section" data-discovery-results-panel data-discovery-import-mode="@showImportAssistant.ToString().ToLowerInvariant()">
             <div class="mat-section__head">
                 <h2>@(showImportAssistant ? (hostScopedImport ? "Create sensors" : "Create hosts and sensors") : "Discovery result")</h2>
-                <p class="mat-section__lead"><span data-discovery-result-count>@Model.Results.Count</span> host@(Model.Results.Count == 1 ? string.Empty : "s") found@(showImportAssistant ? " - pick the hosts to create, then the sensors under each. Unchecking a host greys it out - it won't be imported." : string.Empty)</p>
+                <p class="mat-section__lead"><span data-discovery-result-count>@Model.Results.Count</span> host@(Model.Results.Count == 1 ? string.Empty : "s") found@(showImportAssistant ? " - pick the hosts, then the sensors under each." : string.Empty)</p>
             </div>
 
             @if (showImportAssistant)
@@ -249,7 +247,6 @@ else if (Model.Mode == "job")
                                             <option value="snmp">SNMP</option>
                                             <option value="sensors">Suggestions</option>
                                         </select>
-                                        <span class="mat-hint">The list changes as you choose.</span>
                                     </div>
                                 </div>
                                 <div class="mat-dialog__foot">
@@ -460,7 +457,6 @@ else if (Model.Mode == "job")
                                         <option value="snmp">SNMP</option>
                                         <option value="sensors">Suggestions</option>
                                     </select>
-                                    <span class="mat-hint">The list changes as you choose.</span>
                                 </div>
                             </div>
                             <div class="mat-dialog__foot">
@@ -579,7 +575,6 @@ else
     <section class="mat-section">
         <div class="mat-section__head">
             <h2>Running <span class="mat-badge mat-badge--soft">@runningJobs.Count</span></h2>
-            <p class="mat-section__lead">Active discovery jobs on probes</p>
         </div>
         <div class="mat-list">
             @if (runningJobs.Count == 0)
@@ -638,7 +633,6 @@ else
     <section class="mat-section">
         <div class="mat-section__head">
             <h2>Jobs</h2>
-            <p class="mat-section__lead">Every discovery so far, newest first</p>
         </div>
         <div class="mat-list" data-discovery-jobs-panel>
             @if (historyJobs.Count == 0)
@@ -733,7 +727,6 @@ else
                                     <option value="failed">Failed</option>
                                     <option value="cancelled">Cancelled</option>
                                 </select>
-                                <span class="mat-hint">The list changes as you choose.</span>
                             </div>
                         </div>
                         <div class="mat-dialog__foot">

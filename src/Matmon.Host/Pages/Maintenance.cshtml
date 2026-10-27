@@ -37,7 +37,7 @@
                     <div class="mat-field">
                         <label class="mat-label" for="picker-maintenance-target-trigger">Covers</label>
                         <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.TargetToken", DomId = "picker-maintenance-target", SelectedValue = Model.Input.TargetToken, AllowTags = true, AllowClear = false, Placeholder = "Select an element or a tag…", Options = Model.PickerOptions })" />
-                        <span class="mat-hint">An element with everything below it (a probe, a folder, a host, one sensor) - or every element with a tag.</span>
+                        <span class="mat-hint">An element with everything below it, or every element with a tag.</span>
                     </div>
                     <div class="mat-field">
                         <label class="mat-label" asp-for="Input.Recurrence">When</label>
@@ -51,7 +51,7 @@
                     <div class="mat-field">
                         <label class="mat-label" asp-for="Input.TimeZoneId">Time zone</label>
                         <select asp-for="Input.TimeZoneId" asp-items="Model.TimeZoneItems" class="mat-select"></select>
-                        <span class="mat-hint">The times below are wall-clock times there - 22:00 stays 22:00 across a daylight-saving change.</span>
+                        <span class="mat-hint">Times below are wall-clock times in this zone.</span>
                     </div>
 
                     <div class="mat-field" data-show-if="#Input_Recurrence" data-show-value="Once" hidden="@(recurrence != MaintenanceRecurrence.Once)">
@@ -103,7 +103,7 @@
                         <label class="mat-switch"><input asp-for="Input.Enabled" type="checkbox" /><span class="mat-switch__track"></span><span>Enabled</span></label>
                     </div>
                 </div>
-                <p class="mat-hint">In a window the sensors keep running and show what they see - only new alerts and their notifications wait. A problem still there when it ends alarms at the next check. An alert that was already open stays open, but sends nothing (no re-alarm, no escalation) until the window is over.</p>
+                <p class="mat-hint">Sensors keep running; new alerts and notifications wait until the window ends. A problem still there then alarms at the next check. Open alerts send nothing meanwhile.</p>
             </div>
         </section>
         <div class="mat-btn-row">
@@ -122,7 +122,7 @@ else
                 <div class="mat-empty">
                     <div class="mat-empty__icon">@MatUi.Icon("wrench")</div>
                     <div class="mat-empty__title">No maintenance window yet</div>
-                    <p>Patch Tuesday 22:00 to midnight, a move next Saturday: in a window the elements it covers raise no new alert, so nobody is woken for a server that reboots on purpose. The sensors keep running.</p>
+                    <p>In a window the elements it covers raise no new alert. The sensors keep running.</p>
                 </div>
             </div>
         }

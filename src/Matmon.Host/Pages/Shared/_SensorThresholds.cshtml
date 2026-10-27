@@ -39,7 +39,7 @@
                         }
                         else
                         {
-                            <text>This sensor discovers its channels at runtime - they appear after the first run. Use <strong>Test</strong> to preview them, or add one manually below.</text>
+                            <text>Channels appear after the first run. Use <strong>Test</strong> to preview them, or add one below.</text>
                         }
                     </p>
                 }
@@ -95,7 +95,7 @@
                             @if (field.IsVirtual)
                             {
                                 <input type="hidden" asp-for="SensorChannelThresholdFields[i].ChannelKey" />
-                                <p class="mat-muted sensor-threshold-note">Derived status channel (healthy = 1, problem = 0). It has no thresholds - its value is the sensor's overall state. Pick it as the primary channel to make that state the sensor's main value &amp; graph.</p>
+                                <p class="mat-muted sensor-threshold-note">The sensor's overall state (healthy = 1, problem = 0). No thresholds.</p>
                             }
                             else
                             {

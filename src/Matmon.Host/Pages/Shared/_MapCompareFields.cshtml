@@ -36,7 +36,7 @@
             <option value="@current" selected>@current (not reported right now)</option>
         }
     </select>
-    <span class="mat-hint">All lines share one scale, so they must measure the same thing. <strong>Same measurement</strong> reads each sensor's own channel for it - CPU is <code>cpuLoad</code> on Windows, <code>cpu</code> on Proxmox, <code>cpuUtilization</code> on a Synology - which is how you compare different machines. An exact channel only matches sensors that report that key.</span>
+    <span class="mat-hint">All lines share one scale. To compare different machines, pick a measurement; an exact channel only matches sensors that report that key.</span>
 </div>
 <div class="mat-field" data-map-property-series-only>
     <label class="mat-label" for="@windowId">Time window</label>
@@ -46,5 +46,5 @@
             <option value="@hours" selected="@(hours == Model.WindowHours)">@(hours switch { 1 => "Last hour", 72 => "Last 3 days", 168 => "Last 7 days (averages)", 336 => "Last 14 days (averages)", _ => $"Last {hours} hours" })</option>
         }
     </select>
-    <span class="mat-hint">Up to three days the chart shows raw readings; 7 and 14 days show the statistics averages (hourly or daily, depending on the sensor type), which are kept about two weeks.</span>
+    <span class="mat-hint">7 and 14 days show averages.</span>
 </div>

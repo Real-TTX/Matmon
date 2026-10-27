@@ -23,7 +23,6 @@
         <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("code")<h2 class="mat-card__title">Placeholders</h2></div>
             <div class="mat-card__body notification-placeholders">
-                <p class="mat-muted">The preview uses the latest matching alert or sensor data available in the workspace.</p>
                 @foreach (var group in Model.View.NotificationTemplateGroups)
                 {
                     <div class="notification-placeholders__group">
@@ -107,7 +106,7 @@
                     <div class="mat-field">
                         <label class="mat-label" asp-for="NewNotificationRule.Threshold">Threshold (max per window)</label>
                         <input asp-for="NewNotificationRule.Threshold" type="number" min="1" placeholder="1" class="mat-input mat-mono" data-msg-range="The threshold is 1 or more." />
-                        <span class="mat-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
+                        <span class="mat-hint">At most this many alerts per window. Blank = 1.</span>
                         <span class="mat-error" aria-live="polite"></span>
                     </div>
                     <div class="mat-field">
@@ -132,7 +131,7 @@
         <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("alert")<h2 class="mat-card__title">Escalation</h2><span class="mat-text-muted mm-push-end">optional</span></div>
             <div class="mat-card__body mat-stack">
-                <p class="mat-muted">When nobody acknowledges an alert, notify again - someone else, or another channel. It stops as soon as the alert is acknowledged or the problem has recovered. Leave the minutes empty for no step.</p>
+                <p class="mat-muted">Notifies again while nobody acknowledges the alert; stops on acknowledgement or recovery. Empty minutes = no step.</p>
                 @for (var step = 0; step < Model.NewNotificationRule.Escalations.Count; step++)
                 {
                     <div class="mat-form__grid mat-form__grid--3">
@@ -165,7 +164,7 @@
                 <div class="mat-field">
                     <label class="mat-label" asp-for="NewNotificationRule.ShortTemplate">Short message (push, chat)</label>
                     <input asp-for="NewNotificationRule.ShortTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}} - {{message}}" />
-                    <span class="mat-hint">One line, at most 300 characters - what a webhook sends as <code>{{summary}}</code>.</span>
+                    <span class="mat-hint">One line, max 300 characters; sent as <code>{{summary}}</code>.</span>
                 </div>
                 <div class="mat-field">
                     <label class="mat-label" asp-for="NewNotificationRule.TextTemplate">Text template</label>
@@ -229,7 +228,7 @@ else
                     <div class="mat-field">
                         <label class="mat-label" asp-for="NotificationRuleEditor.Threshold">Threshold (max per window)</label>
                         <input asp-for="NotificationRuleEditor.Threshold" type="number" min="1" placeholder="1" class="mat-input mat-mono" data-msg-range="The threshold is 1 or more." />
-                        <span class="mat-hint">Send at most this many alerts per window (e.g. window 15 / threshold 5). Blank = 1.</span>
+                        <span class="mat-hint">At most this many alerts per window. Blank = 1.</span>
                         <span class="mat-error" aria-live="polite"></span>
                     </div>
                     <div class="mat-field">
@@ -254,7 +253,7 @@ else
         <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("alert")<h2 class="mat-card__title">Escalation</h2><span class="mat-text-muted mm-push-end">optional</span></div>
             <div class="mat-card__body mat-stack">
-                <p class="mat-muted">When nobody acknowledges an alert, notify again - someone else, or another channel. It stops as soon as the alert is acknowledged or the problem has recovered. Leave the minutes empty for no step.</p>
+                <p class="mat-muted">Notifies again while nobody acknowledges the alert; stops on acknowledgement or recovery. Empty minutes = no step.</p>
                 @for (var step = 0; step < Model.NotificationRuleEditor.Escalations.Count; step++)
                 {
                     <div class="mat-form__grid mat-form__grid--3">
@@ -287,7 +286,7 @@ else
                 <div class="mat-field">
                     <label class="mat-label" asp-for="NotificationRuleEditor.ShortTemplate">Short message (push, chat)</label>
                     <input asp-for="NotificationRuleEditor.ShortTemplate" class="mat-input mat-mono" placeholder="{{state.label}}: {{element.path}} - {{message}}" />
-                    <span class="mat-hint">One line, at most 300 characters - what a webhook sends as <code>{{summary}}</code>.</span>
+                    <span class="mat-hint">One line, max 300 characters; sent as <code>{{summary}}</code>.</span>
                 </div>
                 <div class="mat-field">
                     <label class="mat-label" asp-for="NotificationRuleEditor.TextTemplate">Text template</label>

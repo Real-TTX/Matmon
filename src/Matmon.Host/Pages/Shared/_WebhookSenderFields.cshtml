@@ -19,7 +19,7 @@
     <div class="mat-field mat-field--full">
         <label class="mat-label" asp-for="EndpointUrl">Address</label>
         <input asp-for="EndpointUrl" class="mat-input mat-mono" placeholder="https://" data-webhook-url />
-        <span class="mat-hint">Placeholders are allowed here too, e.g. <code>{{receiver.target}}</code>.</span>
+        <span class="mat-hint">Placeholders allowed, e.g. <code>{{receiver.target}}</code>.</span>
     </div>
     <div class="mat-field">
         <label class="mat-label" asp-for="WebhookMethod">Method</label>
@@ -41,17 +41,17 @@
     <div class="mat-field mat-field--full">
         <label class="mat-label" asp-for="WebhookHeaders">Headers</label>
         <textarea asp-for="WebhookHeaders" rows="3" class="mat-textarea mat-mono" placeholder="Authorization: Bearer {{secret}}" data-webhook-headers></textarea>
-        <span class="mat-hint">One <code>Name: value</code> per line. Put a token into Secret and write <code>{{secret}}</code> here - it is stored encrypted, a header is not.</span>
+        <span class="mat-hint">One <code>Name: value</code> per line. Put tokens into Secret and write <code>{{secret}}</code> here - headers are not stored encrypted.</span>
     </div>
     <div class="mat-field mat-field--full">
         <label class="mat-label" asp-for="WebhookBody">Body</label>
         <textarea asp-for="WebhookBody" rows="12" class="mat-textarea mat-mono" data-webhook-body></textarea>
-        <span class="mat-hint">The rule's placeholders, escaped for the body format; <code>{{subject}}</code> and <code>{{summary}}</code> are the rendered subject and short message. <code>{{{name}}}</code> inserts a value without escaping. Ignored for GET.</span>
+        <span class="mat-hint">Placeholders are escaped for the body format; <code>{{{name}}}</code> inserts unescaped. <code>{{subject}}</code> / <code>{{summary}}</code> = rendered subject / short message. Ignored for GET.</span>
     </div>
     <div class="mat-field">
         <label class="mat-label" asp-for="Secret">Secret</label>
         <input asp-for="Secret" type="password" class="mat-input" autocomplete="new-password" />
-        <span class="mat-hint">A token or API key, used as <code>{{secret}}</code>. Leave blank to keep the current one.</span>
+        <span class="mat-hint">Used as <code>{{secret}}</code>. Leave blank to keep the current one.</span>
     </div>
     <div class="mat-field">
         <label class="mat-label" asp-for="TimeoutSeconds">Timeout seconds</label>
@@ -60,6 +60,6 @@
     </div>
     <div class="mat-field mat-field--full">
         <label class="mat-switch"><input asp-for="WebhookSignRequests" /><span class="mat-switch__track"></span><span>Sign requests</span></label>
-        <span class="mat-hint">Adds <code>X-Matmon-Signature: sha256=…</code>, an HMAC-SHA256 of the body with the secret, so the receiving end can check the request came from here.</span>
+        <span class="mat-hint">Adds <code>X-Matmon-Signature: sha256=…</code> (HMAC-SHA256 of the body with the secret).</span>
     </div>
 </div>

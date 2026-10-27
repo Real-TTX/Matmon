@@ -67,7 +67,7 @@
                         </div>
                         @if (string.Equals(Model.NewSensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase))
                         {
-                            <p class="mat-field mat-field--full mat-muted">Target is auto-filled from the parent probe for heartbeat sensors.</p>
+                            <p class="mat-field mat-field--full mat-muted">Target: the parent probe.</p>
                         }
                         else
                         {
@@ -80,14 +80,13 @@
                             <label class="mat-label" asp-for="NewSensor.TagsText">Tags</label>
                             <input asp-for="NewSensor.TagsText" class="mat-input" placeholder="prod, network, berlin" data-tag-input />
                             <partial name="_TagSuggestions" model="Model.View.AllTags" />
-                            <span class="mat-hint">Comma-separated. Tags cascade to children and power tree filtering, maps &amp; the sensor picker.</span>
+                            <span class="mat-hint">Comma-separated.</span>
                         </div>
                     </div>
-                    <p class="mat-hint">
-                        @(matchingTemplateCount == 0
-                            ? "The name is generated from the type - change the type and it updates, unless you edit the name yourself."
-                            : $"{matchingTemplateCount} matching template{(matchingTemplateCount == 1 ? string.Empty : "s")} available; choosing one copies its values in and remembers it as the origin (you can restore from it later).")
-                    </p>
+                    @if (matchingTemplateCount > 0)
+                    {
+                        <p class="mat-hint">@($"{matchingTemplateCount} matching template{(matchingTemplateCount == 1 ? string.Empty : "s")} available.")</p>
+                    }
                 </div>
             </section>
 
@@ -95,7 +94,6 @@
                 <div class="mat-card__head">
                     @MatUi.Icon("settings")
                     <h2 class="mat-card__title">Details</h2>
-                    <span class="mat-text-muted mm-push-end">optional</span>
                 </div>
                 <div class="mat-card__body">
                     <div class="mat-form__grid">
@@ -129,7 +127,7 @@
                         <span class="mat-text-muted mm-push-end">SNMP v1 / v2c / v3</span>
                     </div>
                     <div class="mat-card__body mat-stack">
-                        <p class="mat-muted">Discover OIDs on the target, then tick the values you want to monitor. Selected OIDs are copied into <code>snmp.oids</code>. SNMPv3 fields appear in the parameter block above.</p>
+                        <p class="mat-muted">Tick the values to monitor; they are copied into <code>snmp.oids</code>.</p>
                         <div class="mat-field sensor-snmp-root">
                             <label class="mat-label" asp-for="NewSensor.SnmpWalkRootOid">Root OID</label>
                             <div class="mat-input-group">

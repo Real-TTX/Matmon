@@ -127,7 +127,7 @@ else
                 <div class="mat-empty">
                     <div class="mat-empty__icon">@MatUi.Icon("plug")</div>
                     <div class="mat-empty__title">No plugin runs yet</div>
-                    <p>Pick a plugin below and the place it should run - the primary itself, or a probe or agent where the devices are. Nothing runs until you add it here, and a plugin brings its pages along (System > Syslog, ...) only while it runs.</p>
+                    <p>Pick a plugin below and where it should run - the primary, or a probe or agent near the devices.</p>
                 </div>
             </div>
         }
@@ -217,7 +217,7 @@ else
                     </tbody>
                 </table>
             </div>
-            <p class="mat-hint">More plugins are loaded at start from <code class="mm-break">@Model.PluginsPath</code> on the primary (and from <code>plugins</code> beside the executable on an agent) - one DLL or one folder per plugin. A plugin runs with Matmon's rights: install only code you trust.</p>
+            <p class="mat-hint">More plugins load at start from <code class="mm-break">@Model.PluginsPath</code> on the primary (<code>plugins</code> beside the executable on an agent), one DLL or folder each. A plugin runs with Matmon's rights: install only code you trust.</p>
         </div>
     </section>
 }
