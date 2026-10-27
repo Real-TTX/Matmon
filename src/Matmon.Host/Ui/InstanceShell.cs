@@ -150,33 +150,28 @@ public sealed class InstanceShellBuilder(
             {
                 // What the menu is for: the first group is what an operator looks at every day - the state
                 // (the alert status above it IS the way to Alerts, so there is no Alerts item), the things being watched,
-                // the boards, the history. Setup is what is set up once and touched now and then. System is the
+                // the boards, the history; then what is set up once and touched now and then; System last, the
                 // instance's own administration (users, backup, cloud, licence, plugins, the process log), admins only.
+                // ONE list without group headings (decided 2026-10-27 - a "Setup" heading over five items was noise).
                 // Actions are not places: adding a sensor, a host or an agent are buttons on the page they belong to.
                 menu.Add(new InstanceNavGroup(null,
                 [
                     new("Dashboard", "/Index", "dashboard", dashboardActive),
                     new("Sensors", "/Monitoring", "activity", sensorsActive),
                     new("Maps", "/Maps", "globe", Starts("/maps")),
-                    new("Events", "/Events", "list", Starts("/events"))
-                ]));
-                menu.Add(new InstanceNavGroup("Setup",
-                [
+                    new("Events", "/Events", "list", Starts("/events")),
                     new("Probes", "/Probes", "server", probesActive),
                     new("Discovery", "/Discovery", "compass", Starts("/discovery")),
                     new("Templates", "/Templates", "template", templatesActive),
                     new("Notifications", "/Notifications", "mail", Starts("/notifications")),
-                    new("Maintenance", "/Maintenance", "wrench", Starts("/maintenance"))
+                    new("Maintenance", "/Maintenance", "wrench", Starts("/maintenance")),
+                    .. (isAdmin ? [new InstanceNavItem("System", "/Config", "settings", systemActive)] : Array.Empty<InstanceNavItem>())
                 ]));
-                if (isAdmin)
-                {
-                    menu.Add(new InstanceNavGroup(null, [new("System", "/Config", "settings", systemActive)]));
-                }
             }
         }
 
         // The menu the Matmon.Cloud console mirrors (role- and mode-aware), so the cloud's menu is exactly this one -
-        // with the group headings (`heading` on the first item of a titled group; System has none, as in the layout).
+        // one flat list, as in the layout.
         var embedNav = new List<object>();
         if (embedded)
         {
@@ -191,7 +186,7 @@ public sealed class InstanceShellBuilder(
                 embedNav.Add(new { label = "Sensors", path = "Monitoring" });
                 embedNav.Add(new { label = "Maps", path = "Maps" });
                 embedNav.Add(new { label = "Events", path = "Events" });
-                embedNav.Add(new { label = "Probes", path = "Probes", heading = "Setup" });
+                embedNav.Add(new { label = "Probes", path = "Probes" });
                 embedNav.Add(new { label = "Discovery", path = "Discovery" });
                 embedNav.Add(new { label = "Templates", path = "Templates" });
                 embedNav.Add(new { label = "Notifications", path = "Notifications" });
