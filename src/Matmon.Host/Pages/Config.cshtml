@@ -555,7 +555,7 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
                     }
                 </dd>
                 <dt>Sensors</dt><dd class="mat-mono">@Model.SensorCount / @Model.License.SensorLimitDisplay</dd>
-                <dt>Full Access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>
+                <dt>Remote access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>
                 @if (Model.License.CloudSensorsEnabled)
                 {
                     <dt>Cloud sensors</dt><dd class="mat-mono">@(Model.License.CloudSensorLimit < 0 ? "∞" : Model.License.CloudSensorLimit.ToString())</dd>
@@ -616,7 +616,7 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
                             <span class="mat-text-muted">no recent successful heartbeat</span>
                         }
                     </dd>
-                    <dt>Full Access</dt>
+                    <dt>Remote access</dt>
                     <dd>
                         <span class="@MatUi.PillClass(tunnelTone)">@tunnelWord</span>
                         @if (!string.Equals(Model.TunnelStatusText, tunnelWord, StringComparison.Ordinal))
@@ -651,7 +651,7 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
                     <div class="mat-btn-row">
                         <span class="mat-btn-row__spacer"></span>
                         <button type="submit" class="mat-btn mat-btn--danger"
-                                data-confirm="Disconnect this instance from Matmon.Cloud? The heartbeat stops, and the alert relay and Full Access are switched off - turn them on again after reconnecting." data-confirm-ok="Disconnect">@MatUi.Icon("plug")<span>Disconnect</span></button>
+                                data-confirm="Disconnect this instance from Matmon.Cloud? The heartbeat stops, and the alert relay and remote access are switched off - turn them on again after reconnecting." data-confirm-ok="Disconnect">@MatUi.Icon("plug")<span>Disconnect</span></button>
                     </div>
                 </form>
             </div>
@@ -702,17 +702,16 @@ else if (Model.IsActiveTab("cloud") && canManageSystem)
         </section>
 
         <section class="mat-card">
-            <div class="mat-card__head">@MatUi.Icon("monitor")<h2 class="mat-card__title">Full Access</h2><span class="@MatUi.PillClass(tunnelTone) mm-push-end">@tunnelWord</span></div>
+            <div class="mat-card__head">@MatUi.Icon("monitor")<h2 class="mat-card__title">Remote access</h2><span class="@MatUi.PillClass(tunnelTone) mm-push-end">@tunnelWord</span></div>
             <div class="mat-card__body">
                 <form method="post" asp-page-handler="CloudFullAccess" class="mat-form" novalidate>
-                    <p class="mat-muted">Keep an outbound tunnel open so you can operate this instance's UI directly from Matmon.Cloud (no inbound port). You still sign in on this instance.</p>
                     <label class="mat-switch">
                         <input asp-for="CloudFullAccess" type="checkbox" />
                         <span class="mat-switch__track"></span>
                         <span>Allow operating this instance through Matmon.Cloud</span>
                     </label>
                     <div class="mat-btn-row">
-                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save Full Access</span></button>
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
                     </div>
                 </form>
             </div>
@@ -845,7 +844,7 @@ else if (Model.IsActiveTab("license") && canManageSystem)
                 <dt>Probes</dt><dd><span class="mat-mono">@Model.ProbeCount / @Model.License.ProbeLimitDisplay</span> <span class="mat-text-muted">- agents do not count@(Model.AgentCount > 0 ? $" ({Model.AgentCount} in use)" : "")</span></dd>
                 <dt>Sensors</dt><dd class="mat-mono">@Model.SensorCount / @Model.License.SensorLimitDisplay</dd>
                 <dt>Cloud sensors</dt><dd class="mat-mono">@(Model.License.CloudSensorsEnabled ? (Model.License.CloudSensorLimit < 0 ? "unlimited" : Model.License.CloudSensorLimit.ToString()) : "-")</dd>
-                <dt>Full Access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>
+                <dt>Remote access</dt><dd>@(Model.License.TunnelEnabled ? "included" : "not included")</dd>
                 <dt>Valid until</dt><dd class="mat-mono">@(Model.License.ExpiresUtc is null ? "never" : Model.FormatDateTime(Model.License.ExpiresUtc))</dd>
             </dl>
             <p class="mat-muted">
@@ -947,7 +946,7 @@ else if (Model.IsActiveTab("partner") && canManageSystem && Model.ServicePartner
                 <label class="mat-check">
                     <input type="checkbox" id="partner-can-manage" name="canManage" value="true" checked="@sp.CanManage" />
                     <span class="mat-check__text">
-                        <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (Full Access + reporting).</span>
+                        <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (remote access + reporting).</span>
                         <small class="mat-muted">This is your consent for the partner shown above. It's stored in Matmon.Cloud and re-synced on each heartbeat; revoking it stops their access.</small>
                     </span>
                 </label>

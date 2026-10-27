@@ -69,7 +69,7 @@ public static class TunnelAutoLogin
             {
                 context.RequestServices.GetRequiredService<ILoggerFactory>()
                     .CreateLogger(typeof(TunnelAutoLogin))
-                    .LogWarning(ex, "Full Access auto-login failed for {Email}", email);
+                    .LogWarning(ex, "Remote access auto-login failed for {Email}", email);
             }
         }
 

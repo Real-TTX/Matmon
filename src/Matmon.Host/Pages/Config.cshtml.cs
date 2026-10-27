@@ -84,7 +84,7 @@ public class ConfigModel : PageModel
     public string TunnelStatusText => !TunnelStatus.Enabled
         ? "Off"
         : TunnelStatus.NotIncludedInPlan
-            ? "Switched on, but not included in this plan - it connects as soon as the plan includes Full Access"
+            ? "Switched on, but not included in this plan - it connects as soon as the plan includes remote access"
         : TunnelStatus.Connected
             ? (TunnelStatus.ConnectedSinceUtc is { } since ? $"Connected since {FormatDateTime(since)}" : "Connected")
             : string.IsNullOrWhiteSpace(TunnelStatus.LastError)
@@ -1027,14 +1027,14 @@ public class ConfigModel : PageModel
         // Full Access is a licensed feature - refuse to enable it on a plan that doesn't include it.
         if (CloudFullAccess && !_licenseService.Current.TunnelEnabled)
         {
-            ErrorMessage = "Full Access isn't included in your plan. Upgrade the plan in Matmon.Cloud to enable it.";
+            ErrorMessage = "Remote access isn't included in your plan. Upgrade the plan in Matmon.Cloud to enable it.";
             return RedirectToPage(new { tab = "cloud" });
         }
 
         _workspaceStore.SetCloudFullAccess(CloudFullAccess);
         StatusMessage = CloudFullAccess
-            ? "Full Access enabled - you can now operate this instance from Matmon.Cloud."
-            : "Full Access disabled.";
+            ? "Remote access enabled - you can now operate this instance from Matmon.Cloud."
+            : "Remote access disabled.";
         return RedirectToPage(new { tab = "cloud" });
     }
 

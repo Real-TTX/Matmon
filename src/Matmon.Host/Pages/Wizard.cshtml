@@ -107,9 +107,17 @@
                 }
                 else if (Model.CloudConnected)
                 {
-                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Connected to <strong>@Model.CloudLinkUrl</strong>. Your license is managed automatically (currently <strong>@Model.License.DisplayName</strong>), and you can relay alert e-mail through the cloud in the next step - no SMTP needed.</span></p>
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Connected to <strong>@Model.CloudLinkUrl</strong> · plan <strong>@Model.License.DisplayName</strong></span></p>
                     <form method="post" asp-page-handler="CloudMonitoring" class="mat-form" novalidate>
                         <label class="mat-check"><input type="checkbox" id="wizard-notify-problems" name="notifyOnProblems" value="true" checked /><span class="mat-check__text">E-mail me if this instance goes offline (and when it recovers)</span></label>
+                        @if (Model.License.TunnelEnabled)
+                        {
+                            <label class="mat-check"><input type="checkbox" id="wizard-remote-access" name="remoteAccess" value="true" checked="@Model.RemoteAccessEnabled" /><span class="mat-check__text">Remote access: operate this instance from Matmon.Cloud</span></label>
+                        }
+                        else
+                        {
+                            <label class="mat-check"><input type="checkbox" id="wizard-remote-access" disabled /><span class="mat-check__text">Remote access: operate this instance from Matmon.Cloud <span class="mat-muted">(not in the @Model.License.DisplayName plan)</span></span></label>
+                        }
                         <div class="mat-btn-row mat-btn-row--plain">
                             <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("bell")<span>Save</span></button>
                         </div>
@@ -118,7 +126,6 @@
                 }
                 else
                 {
-                    <p>Optional but recommended: link this instance to Matmon.Cloud for remote status, a dead-man switch, alert relay (send alerts without your own mail server), Full Access, and automatic license management. You stay in control - disconnect anytime.</p>
                     <form method="post" asp-page="/Config" asp-page-handler="CloudClaim" class="mat-form" novalidate>
                         <input type="hidden" name="returnUrl" value="/setup/wizard?step=cloud" />
                         <div class="mat-form__grid">

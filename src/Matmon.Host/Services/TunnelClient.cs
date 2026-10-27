@@ -93,7 +93,7 @@ public sealed class TunnelClient : BackgroundService
                 // arrives with every heartbeat), so say it once and look again when the licence may have changed.
                 if (!wasNotIncluded)
                 {
-                    _logger.LogInformation("Full Access is switched on, but the current plan does not include it - not connecting until it does");
+                    _logger.LogInformation("Remote access is switched on, but the current plan does not include it - not connecting until it does");
                 }
 
                 await DelayAsync(TunnelConnectPolicy.NotIncludedPoll, stoppingToken);
@@ -123,12 +123,12 @@ public sealed class TunnelClient : BackgroundService
                     // the moment the plan, the token or the setting changes (an upgrade connects within ~15 s).
                     if (failures == 1)
                     {
-                        _logger.LogWarning("Full Access tunnel refused by the cloud ({Reason}); trying again in {Minutes} min, or as soon as the plan, the token or the setting changes",
+                        _logger.LogWarning("Remote access tunnel refused by the cloud ({Reason}); trying again in {Minutes} min, or as soon as the plan, the token or the setting changes",
                             reason, (int)TunnelConnectPolicy.RefusedRetry.TotalMinutes);
                     }
                     else
                     {
-                        _logger.LogInformation("Full Access tunnel still refused by the cloud ({Reason})", reason);
+                        _logger.LogInformation("Remote access tunnel still refused by the cloud ({Reason})", reason);
                     }
 
                     await TunnelConnectPolicy.WaitForChangeAsync(
@@ -144,11 +144,11 @@ public sealed class TunnelClient : BackgroundService
                 // that drops WS upgrades) instead of silence at Debug.
                 if (failures >= 3)
                 {
-                    _logger.LogWarning(ex, "Full Access tunnel failing ({Reason}); {Failures} attempts in a row", reason, failures);
+                    _logger.LogWarning(ex, "Remote access tunnel failing ({Reason}); {Failures} attempts in a row", reason, failures);
                 }
                 else
                 {
-                    _logger.LogInformation("Full Access tunnel dropped ({Reason}); reconnecting", reason);
+                    _logger.LogInformation("Remote access tunnel dropped ({Reason}); reconnecting", reason);
                 }
             }
 
@@ -172,7 +172,7 @@ public sealed class TunnelClient : BackgroundService
         {
             // The upgrade's HTTP status (when the cloud refused the handshake) is the most useful signal.
             return wse.Message.Contains("401") ? "cloud refused the tunnel: unauthorized (check the instance token)"
-                : wse.Message.Contains("403") ? "cloud refused the tunnel: Full Access not licensed / instance blocked"
+                : wse.Message.Contains("403") ? "cloud refused the tunnel: remote access not licensed / instance blocked"
                 : $"connection error: {wse.Message}";
         }
         return ex.Message;
@@ -200,7 +200,7 @@ public sealed class TunnelClient : BackgroundService
         _tunnelState.MarkAttempt();
         await socket.ConnectAsync(uri, ct);
         _tunnelState.MarkConnected();
-        _logger.LogInformation("Full Access tunnel connected -> {Uri}", uri);
+        _logger.LogInformation("Remote access tunnel connected -> {Uri}", uri);
 
         // Watchdog: close the tunnel as soon as it should no longer be open (Full Access off, cloud
         // disconnected, or the url/id/token changed). Cancelling the linked token unblocks the receive loop.
@@ -218,7 +218,7 @@ public sealed class TunnelClient : BackgroundService
                         && string.Equals(_workspaceStore.GetCloudConnectionToken(), token, StringComparison.Ordinal);
                     if (!stillReady)
                     {
-                        _logger.LogInformation("Full Access tunnel closing (link disabled or changed)");
+                        _logger.LogInformation("Remote access tunnel closing (link disabled or changed)");
                         link.Cancel();
                         return;
                     }
@@ -289,8 +289,8 @@ public sealed class TunnelClient : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogInformation(ex, "Full Access replay failed for {Path}", request.Path);
-            response = new TunnelResponse(request.Id, 502, new(), Convert.ToBase64String("Full Access replay failed."u8.ToArray()));
+            _logger.LogInformation(ex, "Remote access replay failed for {Path}", request.Path);
+            response = new TunnelResponse(request.Id, 502, new(), Convert.ToBase64String("Remote access replay failed."u8.ToArray()));
         }
 
         try
@@ -308,7 +308,7 @@ public sealed class TunnelClient : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Full Access response send failed");
+            _logger.LogDebug(ex, "Remote access response send failed");
         }
     }
 
@@ -327,7 +327,7 @@ public sealed class TunnelClient : BackgroundService
             || !string.Equals(target.Host, self.Host, StringComparison.OrdinalIgnoreCase)
             || target.Port != self.Port)
         {
-            return new TunnelResponse(request.Id, 400, new(), Convert.ToBase64String("Invalid Full Access path."u8.ToArray()));
+            return new TunnelResponse(request.Id, 400, new(), Convert.ToBase64String("Invalid remote access path."u8.ToArray()));
         }
 
         using var message = new HttpRequestMessage(new HttpMethod(request.Method), target);
@@ -417,7 +417,7 @@ public sealed class TunnelClient : BackgroundService
             ["Content-Type"] = ["text/plain; charset=utf-8"]
         };
         return new TunnelResponse(requestId, 413, headers,
-            Convert.ToBase64String("This response is too large for Full Access. Download it directly on the instance."u8.ToArray()));
+            Convert.ToBase64String("This response is too large for remote access. Download it directly on the instance."u8.ToArray()));
     }
 
     private static string StripSelfBase(string location, string selfBase)

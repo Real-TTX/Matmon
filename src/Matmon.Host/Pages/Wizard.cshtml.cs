@@ -109,6 +109,9 @@ public class WizardModel : PageModel
     /// <summary>Whether alerts are being relayed through Matmon.Cloud (so local SMTP isn't needed).</summary>
     public bool CloudRelayEnabled { get; private set; }
 
+    /// <summary>Remote access (the cloud tunnel, internally "Full Access") is switched on.</summary>
+    public bool RemoteAccessEnabled { get; private set; }
+
     /// <summary>The cloud URL this instance is linked to (when connected).</summary>
     public string CloudLinkUrl { get; private set; } = string.Empty;
 
@@ -324,9 +327,9 @@ public class WizardModel : PageModel
         return RedirectToPage(new { step = "notifications" });
     }
 
-    /// <summary>Cloud step: enable/disable the cloud-side offline notification for this instance (token-authed call
+    /// <summary>Cloud step: remote access (local, licence-gated) and the cloud-side offline notification for this instance (token-authed call
     /// to the just-connected cloud). Default on, so a fresh Free instance is watched out of the box.</summary>
-    public async Task<IActionResult> OnPostCloudMonitoringAsync(bool notifyOnProblems, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCloudMonitoringAsync(bool notifyOnProblems, bool remoteAccess, CancellationToken cancellationToken)
     {
         var settings = _workspaceStore.GetCloudConnectionSettings();
         var url = (settings.Url ?? string.Empty).Trim().TrimEnd('/');
@@ -335,6 +338,13 @@ public class WizardModel : PageModel
         {
             StatusMessage = "Connect to Matmon.Cloud first, then choose notifications.";
             return RedirectToPage(new { step = "cloud" });
+        }
+
+        // Remote access is a plan feature: a switch the plan does not include is left off (the form disables it anyway).
+        var remote = remoteAccess && _licenseService.Current.TunnelEnabled;
+        if (remote != settings.FullAccessEnabled)
+        {
+            _workspaceStore.SetCloudFullAccess(remote);
         }
 
         try
@@ -346,7 +356,7 @@ public class WizardModel : PageModel
             request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
             using var response = await CloudHttp.SendAsync(request, cancellationToken);
             StatusMessage = response.IsSuccessStatusCode
-                ? (notifyOnProblems ? "Matmon.Cloud will e-mail you if this instance goes offline." : "Offline notifications turned off.")
+                ? "Saved."
                 : $"Matmon.Cloud rejected the change ({(int)response.StatusCode}).";
         }
         catch (Exception ex)
@@ -468,6 +478,7 @@ public class WizardModel : PageModel
             SuggestedInstanceName = Matmon.Host.Ui.CloudInstanceNameSuggestion.Suggest(Request.Host.Host, PrimaryNode()?.Name, Environment.MachineName);
             License = _licenseService.Current;
             CloudManagesLicense = CloudConnected;
+            RemoteAccessEnabled = cloud.FullAccessEnabled;
         }
 
         if (string.Equals(Step, "restore", StringComparison.OrdinalIgnoreCase))
