@@ -1,5 +1,5 @@
-MatUi 0.9.2 (899bab0e2d)
-Made by MatDesign local-20261023.
+MatUi 0.9.3 (125a2b4248)
+Made by MatDesign local-20261027.
 The UI toolkit of the Mat apps. Rules, documentation and live examples: the MatDesign site.
 
 Copy these files into the app's static files. An app never loads them from another site (rule CODE-03); update by copying again.

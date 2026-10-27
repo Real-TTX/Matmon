@@ -1,27 +1,27 @@
 {
   "name": "MatUi",
-  "version": "0.9.2",
-  "build": "local-20261023",
-  "hash": "899bab0e2d",
+  "version": "0.9.3",
+  "build": "local-20261027",
+  "hash": "125a2b4248",
   "changelog": "CHANGELOG.md",
   "files": [
     {
       "name": "matui.css",
       "url": "matui.css",
-      "bytes": 306736,
-      "sha256": "a1bf23c3b560ba553fb47e7dde110cc6ad6c30fd50a4455136a722d7762b8280"
+      "bytes": 307201,
+      "sha256": "c4ca4ab2ddb3bd1973e883c89d69cf193d0333cdaa43e933f0f84ae024966976"
     },
     {
       "name": "matui.js",
       "url": "matui.js",
-      "bytes": 475248,
-      "sha256": "2cef04dfdfb7d87e3f01ebf83be65e0d1077f50f952820a9537d630cfd25897d"
+      "bytes": 483471,
+      "sha256": "91c055152b5c64fb0524b5d820f15bd1f4e267529bc001fdf204cca218589628"
     },
     {
       "name": "matui.boot.js",
       "url": "matui.boot.js",
       "bytes": 1098,
-      "sha256": "db0da54df0aac7f16ab4e475424e1706e3bff2b48f74765dd88838a6ffbe80f8"
+      "sha256": "3ffb6c0773568c2ecc4289252c5433b47c62c00b58222d7fcbf9b2f45634473d"
     },
     {
       "name": "matui-icons.svg",
@@ -62,8 +62,8 @@
     {
       "name": "css/matui.pickers.css",
       "url": "css/matui.pickers.css",
-      "bytes": 39634,
-      "sha256": "a18dac9b401ef55904df19f9ce2fd61cd5aa8e42af211f52fccb08f6b8b3f291"
+      "bytes": 40043,
+      "sha256": "737efe59fe2757c8f84395822bdf8bfa9f396a02ca511eb08bb7cf90d148ee50"
     },
     {
       "name": "css/matui.lists.css",
@@ -86,14 +86,14 @@
     {
       "name": "css/matui.apps.css",
       "url": "css/matui.apps.css",
-      "bytes": 3935,
-      "sha256": "84035e0236891903a0e33ab997d8171e1ad68615f06366cd67ef4620d85857bb"
+      "bytes": 3991,
+      "sha256": "b706b040ee77ff49382253e066d298710a55aff2ae3e73f508df2f8e6f08eae5"
     },
     {
       "name": "CHANGELOG.md",
       "url": "CHANGELOG.md",
-      "bytes": 41961,
-      "sha256": "d5d03652415c7d727a47966d695bf14158cc7b272e418ad410a10c8893eef75d"
+      "bytes": 44204,
+      "sha256": "721952085f0fdd82758c18e45096d3fc8c3b1825f03702974f7aefb61b1a5666"
     }
   ]
 }

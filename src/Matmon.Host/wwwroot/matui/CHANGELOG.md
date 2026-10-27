@@ -12,6 +12,15 @@ The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with two 
 A change that an app can see is written down under **Unreleased** in the pull request that makes it. `node tools/bump.js <patch|minor|major>` turns Unreleased into the next version.
 
 ## [Unreleased]
+### Added
+
+- A select whose options come from the server (`FORM-25`): `data-source-url="/x"` on a `data-picker="select"` asks `GET /x?q=<text>&page=<n>` when the panel opens and as the search text changes (after 250 ms), takes `{ "items": [ { "value", "name", "description"? } ], "more": bool, "total"?: n }` and offers "Show more" for the next page; `data-source-with="customer"` sends the values of those fields of the form along (a list that depends on another choice); the panel says how much of how many it shows, that it is loading, and when it failed (Try again). The options written into the wrapper are the chosen values, so the closed field names them without a request. For accounts, customers, instances: every list that can grow without limit. New texts `loading`, `loadFailed`, `retry`, `showMore`, `shownOf` (`data-pk-*`). Nothing to do for an app but copy the files; a field that lists every entry today should move to it.
+- The colour of a new app, Schulio (the school registration platform; only its administration runs on MatUi): `[data-app="schulio"]` sets `--mat-app-accent: #2d5fb8` (white text on it, 6.1:1, passes AA). Nothing to do for the other apps but copy the files.
+
+## [0.9.3] - 2026-10-25
+### Fixed
+
+- The check for all of a table, a gallery or a list of cards (`data-selectable`, `data-select-all`) acts only on the checks that are **shown and can be chosen**: a row that a filter of the app hid (`hidden` on the row or on an element around it) and a check that is `disabled` (an item in use) are left as they are. It ticked every check before, so with a filter on "select all" also chose the rows nobody saw, and a bulk action (a delete) reached them; a disabled check was ticked too and counted, although a form never sends it. Its own state (ticked, in between) now follows the open checks as well, so it is ticked when everything that is shown is chosen, and the count in the bulk bar is what the form sends: the ticked checks that are not disabled. A list of rows (`.mat-itemlist`) already left hidden rows alone and now skips disabled checks too. Nothing to do for an app but copy the files; an app that unticked the hidden rows after a select-all itself can drop that. One browser check more in run.js.
 
 ## [0.9.2] - 2026-10-23
 ### Fixed

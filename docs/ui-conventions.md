@@ -176,4 +176,5 @@ full-screen look - still on tokens.
 - Forms: `novalidate` + `required` / `type` / `pattern` / `min` / `max` and `data-msg-*` for MatUi's messages (FORM-05);
   server errors render into the field's `mat-error` (`<span asp-validation-for="X" class="mat-error"></span>`) or as a
   `mat-alert` at the top. A dependent field shows with `data-show-if="#id"` + `data-show-value` (FORM-04).
+- A choice from a list that can grow without limit (accounts, organizations, customers, instances) is never a `<select>` of every entry and never a list of every entry: it is the MatUi select picker with `data-source-url` (FORM-25), searched and paged on the server (the element picker is the exception: the topology is filtered in the browser, and it is bounded by what one instance monitors), only with what this user may choose; the posted value is checked again.
 - Every page is checked in light and dark and at 390 px (MOBILE-01).

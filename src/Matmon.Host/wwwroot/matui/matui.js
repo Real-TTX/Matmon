@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Version 0.9.2 of the toolkit MatUi (what changed in each version: CHANGELOG.md; how to update an app: docs/VERSIONING.md).
+   Version 0.9.3 of the toolkit MatUi (what changed in each version: CHANGELOG.md; how to update an app: docs/VERSIONING.md).
    `node tools/bump.js` writes the version here, in matui.boot.js and in MatUiVersion (Directory.Build.props); window.MatUi.version has it.
    MatUi · behaviour
    Dependency-free. Everything is wired by delegated listeners and data-attributes, so server-rendered and dynamically added
@@ -39,7 +39,8 @@
      data-password-toggle="id"              the eye button of a password field: shows and hides the password (aria-pressed)
      data-selectable                        a table, a gallery or a list of cards with a data-select-row check per item, maybe a data-select-all check and a [data-bulk-bar] with [data-bulk-count];
                                             the item of a ticked check is marked is-selected: its table row, its .mat-tile, or the nearest element with data-select-item
-                                            (the same around a .mat-itemlist: the rows are marked is-selected and select-all works on the rows that are shown)
+                                            (the same around a .mat-itemlist: the rows are marked is-selected); select-all acts on the checks that are shown and not
+                                            disabled (a row a filter hid, an item that cannot be chosen are left alone), the count is the ticked checks that are not disabled
      data-itemlist                         a list of rows (.mat-itemlist of .mat-item, LIST-15): the script adds sliding actions (a row with .mat-item__options: a swipe, the More
                                             button or the arrow keys; an option sends mat:item-action, data-item-action names it) and, with data-reorder, reordering by a
                                             .mat-item__handle (pointer, or Space + arrow keys; mat:reorder, data-item-key names a row). The texts: data-il-<name> on <html>
@@ -67,6 +68,8 @@
                                             for a text that is not an option; data-create-label is its text) and data-suggest-url="/y" (GET, the answer [ { value } | { name } ] or { items }:
                                             "Suggestions" above "All" while nothing is chosen). MatUi.picker.set(wrapper, value), .addOption(wrapper, { value, name, description, tags })
                                             and .suggest(wrapper, items) do the same from code.
+                                            A list too long for the page (FORM-25): data-source-url="/x" asks GET /x?q=<text>&page=<n> when the panel opens and as the text changes,
+                                            the answer { items: [ { value, name, description? } ], more, total? }; "Show more" fetches the next page. The options in the markup are the chosen ones; data-source-with="name, ..." sends those fields of the form along.
      data-calendar                         a calendar that is always shown (FORM-18); the real input inside is .mat-calendar__input and posts 2026-10-10, a period
                                             2026-10-10..2026-10-14 or several dates 2026-10-10,2026-10-12. data-mode="single|range|multiple", data-min / data-max (a date,
                                             today, tomorrow, +2d, -1w, +3m, +1y), data-disabled ("2026-10-14,2026-10-20..2026-10-24"), data-disabled-weekdays ("0,6", 0 is Sunday),
@@ -849,25 +852,21 @@
   }
   doc.addEventListener('input', function (e) { if (e.target.matches && e.target.matches('[data-item-filter]')) { ilFilter(e.target); } });
 
-  // ---- selection: the checks of the rows are the ones of tables (data-select-row, data-select-all); the select-all check works on the rows that are shown
+  // ---- selection: the checks of the rows are the ones of tables (data-select-row, data-select-all); the select-all check works on the rows that are shown and
+  // can be chosen (selOpen, the rule of tables)
   function ilHolds(box) { return box.classList.contains('mat-itemlist') || !!$('.mat-itemlist', box); }
   function ilSelection(box) {
     updateSelection(box);
-    var checks = $$('input[data-select-row]', box);
-    checks.forEach(function (c) { var r = c.closest('.mat-item'); if (r) { r.classList.toggle('is-selected', c.checked); } });
-    var shown = checks.filter(function (c) { var r = c.closest('.mat-item'); return !(r && r.hidden); });
-    var all = $('input[data-select-all]', box);
-    var n = shown.filter(function (c) { return c.checked; }).length;
-    if (all) { all.checked = shown.length > 0 && n === shown.length; all.indeterminate = n > 0 && n < shown.length; }
+    $$('input[data-select-row]', box).forEach(function (c) { var r = c.closest('.mat-item'); if (r) { r.classList.toggle('is-selected', c.checked); } });
   }
   doc.addEventListener('change', function (e) {
     var t = e.target;
     var box = t.closest && t.closest('[data-selectable]');
     if (!box || !t.matches || !ilHolds(box) || !t.matches('input[data-select-all], input[data-select-row]')) { return; }
-    // the handler of tables would count the rows that are hidden by a filter: this one is for lists
+    // a list marks its .mat-item rows too: this handler is for lists, the one of tables does not run
     e.stopImmediatePropagation();
     if (t.matches('input[data-select-all]')) {
-      $$('input[data-select-row]', box).forEach(function (c) { var r = c.closest('.mat-item'); if (!(r && r.hidden)) { c.checked = t.checked; } });
+      $$('input[data-select-row]', box).forEach(function (c) { if (selOpen(box, c)) { c.checked = t.checked; } });
     }
     ilSelection(box);
   });
@@ -1618,15 +1617,28 @@
   // An element with data-selectable holds a table, a gallery or a list of cards with a checkbox per item (data-select-row), maybe one that selects all of them
   // (data-select-all) and a bulk bar ([data-bulk-bar] with [data-bulk-count]) that is shown only while something is selected. The item of a ticked check is marked
   // is-selected: its table row, its .mat-tile, or the nearest element with data-select-item (a card, the row of a list of the app's own).
+  // The check for all acts on the checks that are open: shown (no element between it and the box is hidden, so a row a filter hid is left alone) and not disabled
+  // (an item that cannot be chosen, one in use); it is ticked when all of them are, in between when some are. The count is what a form sends: the ticked checks
+  // that are not disabled.
+  function selOpen(box, check) {
+    if (check.disabled) { return false; }
+    for (var el = check.parentElement; el && el !== box; el = el.parentElement) { if (el.hidden) { return false; } }
+    return true;
+  }
   function updateSelection(box) {
     var rows = $$('input[data-select-row]', box);
     var all = $('input[data-select-all]', box);
-    var selected = rows.filter(function (r) { return r.checked; }).length;
+    var selected = rows.filter(function (r) { return r.checked && !r.disabled; }).length;
     rows.forEach(function (r) {
       var item = r.closest('tr, .mat-tile, [data-select-item]');
       if (item && box.contains(item)) { item.classList.toggle('is-selected', r.checked); }
     });
-    if (all) { all.checked = rows.length > 0 && selected === rows.length; all.indeterminate = selected > 0 && selected < rows.length; }
+    if (all) {
+      var open = rows.filter(function (r) { return selOpen(box, r); });
+      var ticked = open.filter(function (r) { return r.checked; }).length;
+      all.checked = open.length > 0 && ticked === open.length;
+      all.indeterminate = ticked > 0 && ticked < open.length;
+    }
     var bar = $('[data-bulk-bar]', box);
     if (bar) {
       bar.hidden = selected === 0;
@@ -1639,7 +1651,7 @@
     var box = t.closest && t.closest('[data-selectable]');
     if (!box || !t.matches) { return; }
     if (t.matches('input[data-select-all]')) {
-      $$('input[data-select-row]', box).forEach(function (r) { r.checked = t.checked; });
+      $$('input[data-select-row]', box).forEach(function (r) { if (selOpen(box, r)) { r.checked = t.checked; } });
       updateSelection(box);
     } else if (t.matches('input[data-select-row]')) {
       updateSelection(box);
@@ -1963,7 +1975,8 @@
       from: 'From', to: 'To', hour: 'Hour', minute: 'Minute', ampm: 'AM or PM', typeTime: 'Type a time', nextDay: 'next day', durHM: '{0} h {1} min', durH: '{0} h', durM: '{0} min',
       colours: 'Colours', hue: 'Hue', area: 'Saturation and brightness', areaValue: 'Saturation {0}%, brightness {1}%', hex: 'Hex colour',
       whiteText: 'White text', darkText: 'Dark text', lvAAA: 'AAA', lvAA: 'AA', lvLarge: 'large text only', lvLow: 'too low',
-      phTags: 'Add a tag', removeTag: 'Remove tag {0}', tagRemoved: 'Removed {0}', tagDuplicate: '{0} is already there', tagMax: 'At most {0} tags', tagStrict: 'Choose one of the suggestions', suggestions: 'Suggestions'
+      phTags: 'Add a tag', removeTag: 'Remove tag {0}', tagRemoved: 'Removed {0}', tagDuplicate: '{0} is already there', tagMax: 'At most {0} tags', tagStrict: 'Choose one of the suggestions', suggestions: 'Suggestions',
+      loading: 'Loading …', loadFailed: 'The list could not be loaded.', retry: 'Try again', showMore: 'Show more', shownOf: '{0} of {1} shown', typeToSearch: 'Type to search.'
     },
     de: {
       apply: 'Übernehmen', cancel: 'Abbrechen', clear: 'Löschen', close: 'Schließen', done: 'Fertig', today: 'Heute', now: 'Jetzt',
@@ -1979,7 +1992,8 @@
       from: 'Von', to: 'Bis', hour: 'Stunde', minute: 'Minute', ampm: 'Vor- oder nachmittags', typeTime: 'Uhrzeit eintippen', nextDay: 'am nächsten Tag', durHM: '{0} Std. {1} Min.', durH: '{0} Std.', durM: '{0} Min.',
       colours: 'Farben', hue: 'Farbton', area: 'Sättigung und Helligkeit', areaValue: 'Sättigung {0} %, Helligkeit {1} %', hex: 'Hex-Farbe',
       whiteText: 'Weiße Schrift', darkText: 'Dunkle Schrift', lvAAA: 'AAA', lvAA: 'AA', lvLarge: 'nur große Schrift', lvLow: 'zu niedrig',
-      phTags: 'Tag hinzufügen', removeTag: 'Tag {0} entfernen', tagRemoved: '{0} entfernt', tagDuplicate: '{0} ist schon vorhanden', tagMax: 'Höchstens {0} Tags', tagStrict: 'Bitte einen Vorschlag wählen', suggestions: 'Vorschläge'
+      phTags: 'Tag hinzufügen', removeTag: 'Tag {0} entfernen', tagRemoved: '{0} entfernt', tagDuplicate: '{0} ist schon vorhanden', tagMax: 'Höchstens {0} Tags', tagStrict: 'Bitte einen Vorschlag wählen', suggestions: 'Vorschläge',
+      loading: 'Wird geladen …', loadFailed: 'Die Liste ließ sich nicht laden.', retry: 'Erneut versuchen', showMore: 'Mehr anzeigen', shownOf: '{0} von {1} angezeigt', typeToSearch: 'Zum Suchen tippen.'
     }
   };
   var PK_SWATCHES = ['#dc2626', '#ea580c', '#d97706', '#ca8a04', '#65a30d', '#16a34a', '#0d9488', '#0891b2', '#0284c7', '#2563eb', '#4f46e5', '#7c3aed', '#a21caf', '#db2777', '#e11d48', '#475569', '#1f2937', '#78716c'];
@@ -2637,6 +2651,90 @@
     return wrap._matPicker || null;
   }
 
+  // ---- select: the options come from the server (data-source-url, FORM-25)
+  // For a list that is too long to put into the page (accounts, customers, instances): the panel always has the search field and asks
+  // GET <url>?q=<text>&page=<n> (n from 1) as the text changes (after a short pause) and when it opens; the answer is { "items": [ { "value", "name",
+  // "description"? } ], "more": true|false, "total"?: n } (or a bare array). The first page replaces the list, "Show more" appends the next one. The options that
+  // the page wrote into the wrapper are the chosen values, so the closed field can name them before anything was asked; they stay in the list, hidden while
+  // a search does not find them. An answer that arrives after a newer question is thrown away.
+  function sourceOption(p, item) {
+    var o = doc.createElement('button');
+    o.type = 'button';
+    o.className = 'mat-picker__option';
+    o.setAttribute('data-value', String(item.value));
+    o.setAttribute('role', 'option');
+    o.setAttribute('aria-selected', 'false');
+    o.tabIndex = -1;
+    var text = doc.createElement('span');
+    text.className = 'mat-picker__text';
+    var name = doc.createElement('span');
+    name.className = 'mat-picker__name';
+    name.textContent = typeof item.name === 'string' && item.name ? item.name : String(item.value);
+    text.appendChild(name);
+    if (typeof item.description === 'string' && item.description) {
+      var desc = doc.createElement('span');
+      desc.className = 'mat-picker__desc';
+      desc.textContent = item.description;
+      text.appendChild(desc);
+    }
+    o.appendChild(text);
+    o.insertAdjacentHTML('beforeend', '<span class="mat-picker__check" aria-hidden="true">' + icon('check') + '</span>');
+    return o;
+  }
+  function sourceStatus(p, state) {
+    p.sourceState = state;
+    var shown = shownReal(p).length;
+    p.sourceMoreBtn.hidden = state !== 'done' || !p.sourceMore;
+    p.sourceRetry.hidden = state !== 'failed';
+    p.sourceInfo.textContent = state === 'loading' ? pkTextOf(p, 'loading')
+      : state === 'failed' ? pkTextOf(p, 'loadFailed')
+      : p.sourceMore && typeof p.sourceTotal === 'number' ? pkTextOf(p, 'shownOf', shown, p.sourceTotal) : '';
+    p.sourceInfo.hidden = !p.sourceInfo.textContent;
+    p.empty.hidden = state !== 'done' || shown > 0;
+    p.wrap.classList.toggle('is-loading', state === 'loading');
+    if (pickerOpen === p) { p.relayout(); }
+  }
+  function sourceFetch(p, page) {
+    var q = p.search.value.trim();
+    var seq = p.sourceSeq = (p.sourceSeq || 0) + 1;
+    clearTimeout(p.sourceTimer);
+    sourceStatus(p, 'loading');
+    var url = p.sourceUrl + (p.sourceUrl.indexOf('?') >= 0 ? '&' : '?') + 'q=' + encodeURIComponent(q) + '&page=' + page;
+    // data-source-with="customer, region": the values of those fields of the form go along, so a list can depend on another choice
+    var form = p.wrap.closest('form');
+    (p.wrap.getAttribute('data-source-with') || '').split(',').map(function (n) { return n.trim(); }).filter(Boolean).forEach(function (n) {
+      var field = form && form.elements.namedItem(n);
+      if (field && field.length !== undefined && !field.tagName) { field = Array.prototype.filter.call(field, function (x) { return x.checked; })[0] || field[0]; }
+      url += '&' + encodeURIComponent(n) + '=' + encodeURIComponent(field && !field.disabled ? field.value || '' : '');
+    });
+    fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { if (!res.ok) { throw new Error('source: ' + res.status); } return res.json(); })
+      .then(function (data) { if (seq === p.sourceSeq) { sourceRender(p, data, page, q); } })
+      .catch(function () { if (seq === p.sourceSeq) { p.sourceFailedPage = page; sourceStatus(p, 'failed'); } });
+  }
+  function sourceRender(p, data, page, q) {
+    var items = Array.isArray(data) ? data : data && Array.isArray(data.items) ? data.items : [];
+    var vals = selValues(p);
+    if (page === 1) {
+      // a new question: what is not chosen goes, what is chosen stays (for the closed field) but only shows when this answer has it
+      realOptions(p).forEach(function (o) { if (vals.indexOf(o.getAttribute('data-value') || '') >= 0) { o.hidden = true; } else { o.remove(); } });
+    }
+    items.forEach(function (item) {
+      if (!item || typeof item !== 'object' || item.value === undefined || item.value === null || String(item.value) === '') { return; }
+      var known = optionByValue(p, String(item.value));
+      var o = known || sourceOption(p, item);
+      o.hidden = false;
+      p.list.appendChild(o); // in the order of the answer
+    });
+    p.sourcePage = page;
+    p.sourceQuery = q;
+    p.sourceMore = !!(data && !Array.isArray(data) && data.more);
+    p.sourceTotal = data && !Array.isArray(data) && typeof data.total === 'number' ? data.total : null;
+    p.empty.textContent = q ? pkTextOf(p, 'noResults') : pkTextOf(p, 'noResults');
+    syncPicker(p.wrap);
+    sourceStatus(p, 'done');
+  }
+
   KINDS.select = {
     icon: 'chevron-down',
     init: function (p) {
@@ -2645,6 +2743,7 @@
       p.createUrl = p.wrap.getAttribute('data-create-url') || '';
       p.create = !!p.createUrl;
       p.suggestUrl = p.wrap.getAttribute('data-suggest-url') || '';
+      p.sourceUrl = p.wrap.getAttribute('data-source-url') || '';
       p.list = $('.mat-picker__options', p.wrap) || doc.createElement('div');
       var panel = pkPanel(p);
       panel.classList.add('mat-picker__panel--list');
@@ -2660,7 +2759,7 @@
         if (!$('.mat-picker__check', o)) { o.insertAdjacentHTML('beforeend', '<span class="mat-picker__check" aria-hidden="true">' + icon('check') + '</span>'); }
       });
       // creating needs the text that is typed, so a select that can create always has the search field
-      if (p.wrap.hasAttribute('data-search') || p.create) {
+      if (p.wrap.hasAttribute('data-search') || p.create || p.sourceUrl) {
         var search = doc.createElement('div');
         search.className = 'mat-picker__search';
         search.innerHTML = icon('search') + '<input type="search" class="mat-input" autocomplete="off" aria-label="' + esc(pkText('search')) + '" placeholder="' + esc(pkText('search')) + '">';
@@ -2684,6 +2783,30 @@
       p.empty.hidden = true;
       p.empty.textContent = pkText('noResults');
       p.body.appendChild(p.empty);
+      if (p.sourceUrl) {
+        // under the list: how much of it is shown (or that it is loading, or failed), "Show more" and "Try again"
+        var foot = doc.createElement('div');
+        foot.className = 'mat-picker__source';
+        p.sourceInfo = doc.createElement('p');
+        p.sourceInfo.className = 'mat-picker__status';
+        p.sourceInfo.setAttribute('role', 'status');
+        p.sourceInfo.setAttribute('aria-live', 'polite');
+        p.sourceInfo.hidden = true;
+        p.sourceMoreBtn = doc.createElement('button');
+        p.sourceMoreBtn.type = 'button';
+        p.sourceMoreBtn.className = 'mat-btn mat-btn--ghost mat-btn--sm mat-picker__more';
+        p.sourceMoreBtn.textContent = pkTextOf(p, 'showMore');
+        p.sourceMoreBtn.hidden = true;
+        p.sourceRetry = doc.createElement('button');
+        p.sourceRetry.type = 'button';
+        p.sourceRetry.className = 'mat-btn mat-btn--secondary mat-btn--sm mat-picker__retry';
+        p.sourceRetry.textContent = pkTextOf(p, 'retry');
+        p.sourceRetry.hidden = true;
+        foot.appendChild(p.sourceInfo);
+        foot.appendChild(p.sourceMoreBtn);
+        foot.appendChild(p.sourceRetry);
+        p.body.appendChild(foot);
+      }
       if (p.create) {
         // the row that creates, the message that says why it did not work (read aloud when it changes) and the place where the result is announced
         p.createMsg = doc.createElement('p');
@@ -2731,7 +2854,7 @@
       if (p.multiple) {
         // the names while there are one or two of them, "All selected" when every one of more than two is chosen, else the count
         var names = chosen.map(optionName);
-        out.textContent = chosen.length === all.length && all.length > 2 ? pkText('allSelected') : chosen.length <= 2 ? names.join(', ') : pkText('selectedCount', chosen.length);
+        out.textContent = !p.sourceUrl && chosen.length === all.length && all.length > 2 ? pkText('allSelected') : chosen.length <= 2 ? names.join(', ') : pkText('selectedCount', chosen.length);
         return;
       }
       var img = $('.mat-picker__img', chosen[0]);
@@ -2751,7 +2874,8 @@
     },
     open: function (p) {
       if (p.createMsg) { createError(p, ''); }
-      if (p.search) { p.search.value = ''; filterOptions(p, ''); }
+      if (p.sourceUrl) { p.search.value = ''; sourceFetch(p, 1); }
+      else if (p.search) { p.search.value = ''; filterOptions(p, ''); }
       selAllSync(p);
       // suggestions are fetched when the panel is opened for the first time with nothing chosen (and asked for again if that failed)
       if (p.suggestUrl && !p.suggestLoaded && !p.suggestLoading && !selValues(p).length) { fetchSuggestions(p); }
@@ -2763,6 +2887,8 @@
     },
     click: function (p, t) {
       if (p.all && t.closest('.mat-picker__all')) { selToggleAll(p); return; }
+      if (p.sourceUrl && t.closest('.mat-picker__more')) { sourceFetch(p, (p.sourcePage || 0) + 1); return; }
+      if (p.sourceUrl && t.closest('.mat-picker__retry')) { sourceFetch(p, p.sourceFailedPage || 1); return; }
       var o = t.closest('.mat-picker__option');
       if (!o || o.disabled) { return; }
       if (o === p.createRow) { pkCreate(p, p.createName); return; }
@@ -2775,7 +2901,12 @@
       // a suggested row goes away once something is chosen: the focus stays on the option itself
       focusOption(p, isReal(o) ? o : optionByValue(p, v) || o);
     },
-    input: function (p, t) { if (t === p.search) { if (p.createMsg) { createError(p, ''); } filterOptions(p, t.value); } },
+    input: function (p, t) {
+      if (t !== p.search) { return; }
+      if (p.sourceUrl) { clearTimeout(p.sourceTimer); p.sourceTimer = setTimeout(function () { sourceFetch(p, 1); }, 250); return; }
+      if (p.createMsg) { createError(p, ''); }
+      filterOptions(p, t.value);
+    },
     // Arrow keys, Home and End walk the rows ("Select all" first); Space (or Enter) on a row is the click of its button, so it toggles the option
     keys: function (p, e) {
       var t = e.target, opts = visibleOptions(p), rows = selRows(p), o = t.closest('.mat-picker__option'), onAll = !!p.all && t === p.all;
@@ -8115,7 +8246,7 @@
   if (doc.readyState === 'loading') { doc.addEventListener('DOMContentLoaded', init); } else { init(); }
 
   window.MatUi = {
-    version: '0.9.2',
+    version: '0.9.3',
     dialog: { open: openDialog, close: closeDialog },
     confirm: confirmDialog,
     alert: alertDialog,

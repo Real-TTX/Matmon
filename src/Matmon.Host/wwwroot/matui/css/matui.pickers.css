@@ -114,6 +114,10 @@
 .mat-picker__all[aria-checked="mixed"] .mat-picker__check::after { content: ""; width: 10px; height: 2px; border-radius: 1px; background: currentColor; }
 .mat-picker__empty { padding: var(--mat-space-5) var(--mat-space-4); text-align: center; color: var(--mat-text-muted); }
 .mat-picker__empty[hidden] { display: none; }
+/* a list from the server (data-source-url): how much is shown, Show more, Try again */
+.mat-picker__source { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--mat-space-2); padding: var(--mat-space-2) var(--mat-space-3); }
+.mat-picker__source:not(:has(> :not([hidden]))) { display: none; }
+.mat-picker__source .mat-picker__status { min-height: 0; text-align: center; }
 @media (max-width: 640px) {
   .mat-picker__panel--list { width: 100%; }
   .mat-picker__panel--list .mat-picker__body { padding: 0; }

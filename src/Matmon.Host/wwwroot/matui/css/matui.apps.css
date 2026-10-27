@@ -22,6 +22,7 @@
 [data-app="matplay"]     { --mat-app-accent: #00819b; }
 [data-app="matsplit"]    { --mat-app-accent: #bf5610; }
 [data-app="matmon"]      { --mat-app-accent: #295cff; }
+[data-app="schulio"]     { --mat-app-accent: #2d5fb8; }
 [data-app="matcms"]      { --mat-app-accent: #2563eb; }
 [data-app="matdo"]       { --mat-app-accent: #d03d33; }
 [data-app="matstat"]     { --mat-app-accent: #2563eb; }
