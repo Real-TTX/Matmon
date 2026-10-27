@@ -14,7 +14,9 @@
     var width = ViewData["Width"] as string;
     var pageClass = "mat-page" + (width == "narrow" ? " mat-page--narrow" : width == "wide" ? " mat-page--wide" : string.Empty);
     var crumbs = BreadcrumbBuilder.Build(Context.Request.Path.Value ?? string.Empty, ViewData["Title"]?.ToString(), ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>);
-    var brandClass = shell.PartnerLogoOnly ? "mat-nav__brand-link--logo-only" : shell.BrandStacked ? "mm-brand--stacked" : null;
+    // Matmon's own brand (no partner logo, no product name) is the full logo with the drawn lettering, the tagline under it.
+    var matmonBrand = !shell.PartnerLogo && string.Equals(shell.BrandName, "Matmon", StringComparison.Ordinal);
+    var brandClass = shell.PartnerLogoOnly ? "mat-nav__brand-link--logo-only" : shell.BrandStacked || matmonBrand ? "mm-brand--stacked" : null;
 
     // A crumb names a page ("/Config") and may carry a query or a tab ("/Config?tab=users", "/notifications#senders"):
     // asp-page cannot resolve those, so the page part goes through Url.Page (a plain path if it is no page name) and the
@@ -68,12 +70,19 @@
                         {
                             <img class="mat-brandmark" src="/api/branding/logo" alt="@shell.BrandName" />
                         }
+                        else if (matmonBrand)
+                        {
+                            @* The full logo of matmon.eu - the mark and the drawn "matmon" - one per theme (its lettering is dark on
+                               light, light on dark). *@
+                            <img class="mat-brandmark mat-brandmark--light mm-brandlogo" src="~/brand/matmon-logo-horizontal.svg" alt="" width="159" height="30" />
+                            <img class="mat-brandmark mat-brandmark--dark mm-brandlogo" src="~/brand/matmon-logo-horizontal-dark.svg" alt="" width="159" height="30" />
+                        }
                         else
                         {
                             <img class="mat-brandmark" src="~/brand/matmon-mark-flat.svg" alt="" width="38" height="38" />
                         }
                         <span>
-                            <span class="mat-nav__name">@shell.BrandName</span>
+                            <span class="@(matmonBrand ? "mat-sr-only" : "mat-nav__name")">@shell.BrandName</span>
                             <span class="mat-nav__tagline">@shell.Tagline</span>
                         </span>
                     </a>

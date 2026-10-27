@@ -69,3 +69,6 @@
 }
 .mm-wizard__qr svg { display: block; }
 .mm-wizard__key { flex: 1 1 16rem; min-width: 0; }
+
+/* The full Matmon logo (mark + lettering) on the sign-in, setup and about cards - one per theme (mat-brandmark--light/--dark). */
+.mm-authlogo { height: 44px; width: auto; max-width: 100%; }

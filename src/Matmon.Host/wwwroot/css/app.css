@@ -15,6 +15,8 @@
 
 /* ---- A partner's logo above its name instead of beside it (the white label's "stacked" sidebar style) ---- */
 .mat-nav__brand .mm-brand--stacked { flex-direction: column; align-items: flex-start; gap: var(--mat-space-2); }
+/* Matmon's own brand: the full logo (mark + lettering), sized to the menu's width. */
+.mat-nav__brand .mm-brandlogo { height: 30px; width: auto; }
 
 /* ---- A sensor state as a dot (tree rows, map pins, compact lists). The word is always next to it (COLOR-04). ---- */
 .mm-state-dot {
