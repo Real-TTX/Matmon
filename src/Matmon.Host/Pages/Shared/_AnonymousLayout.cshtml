@@ -11,7 +11,8 @@
     var title = ViewData["Title"]?.ToString() ?? brandName;
 }
 <!DOCTYPE html>
-<html lang="en" data-app="matmon" data-custom-accent="@partnerAccent" data-rendered="@DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()">
+@* data-console-mode="full": a page of its own (the setup assistant, sign-in, an error) - inside the Matmon.Cloud console it fills the whole console instead of sitting under the cloud's menu (cloud.js reads it when the frame loads). *@
+<html lang="en" data-app="matmon" data-console-mode="full" data-custom-accent="@partnerAccent" data-rendered="@DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

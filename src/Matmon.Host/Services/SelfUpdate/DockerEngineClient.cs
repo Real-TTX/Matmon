@@ -114,6 +114,10 @@ public sealed class DockerEngineClient : IDisposable
     public Task StopAsync(string id, int timeoutSeconds, CancellationToken cancellationToken) =>
         PostAsync($"containers/{Uri.EscapeDataString(id)}/stop?t={timeoutSeconds}", $"stopping {id}", cancellationToken, okStatuses: HttpStatusCode.NotModified);
 
+    /// <summary>Restarts a container - the engine does it, so it works for the container this process runs in too.</summary>
+    public Task RestartAsync(string id, int timeoutSeconds, CancellationToken cancellationToken) =>
+        PostAsync($"containers/{Uri.EscapeDataString(id)}/restart?t={timeoutSeconds}", $"restarting {id}", cancellationToken);
+
     public Task RenameAsync(string id, string newName, CancellationToken cancellationToken) =>
         PostAsync($"containers/{Uri.EscapeDataString(id)}/rename?name={Uri.EscapeDataString(newName)}", $"renaming {id}", cancellationToken);
 

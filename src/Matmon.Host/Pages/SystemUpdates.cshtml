@@ -48,12 +48,21 @@
     @* The update screen: covers the page while Matmon restarts, asks /healthz until it is back (js/app/system.js,
        initializeUpdateScreen), then reloads this page with the outcome. *@
     <div class="mm-update-screen" role="alertdialog" aria-modal="true" aria-labelledby="update-screen-title" aria-describedby="update-screen-state"
-         data-update-screen data-update-from="@screen.FromVersion" data-update-to="@screen.ToVersion">
+         data-update-screen data-update-from="@screen.FromVersion" data-update-to="@screen.ToVersion" data-update-mode="@(screen.Restart ? "restart" : "update")" data-update-run="@InstanceRestarter.ProcessRun">
         <div class="mm-update-screen__card">
             <span class="mat-spinner mat-spinner--lg" aria-hidden="true"></span>
-            <h2 id="update-screen-title">Updating Matmon</h2>
-            <p class="mat-mono"><span>@screen.FromVersion</span> → <span>@screen.ToVersion</span></p>
-            <p id="update-screen-state" data-update-state aria-live="polite">Installing the update ...</p>
+            @if (screen.Restart)
+            {
+                <h2 id="update-screen-title">Restarting Matmon</h2>
+                <p class="mat-mono">@screen.FromVersion</p>
+                <p id="update-screen-state" data-update-state aria-live="polite">Stopping ...</p>
+            }
+            else
+            {
+                <h2 id="update-screen-title">Updating Matmon</h2>
+                <p class="mat-mono"><span>@screen.FromVersion</span> → <span>@screen.ToVersion</span></p>
+                <p id="update-screen-state" data-update-state aria-live="polite">Installing the update ...</p>
+            }
             <p class="mat-text-muted mat-mono" data-update-elapsed>0:00</p>
         </div>
     </div>
@@ -112,7 +121,7 @@
             }
         </dl>
 
-        @if (canUpdate)
+        @if (canUpdate || Model.RestartMethod != RestartMethod.None)
         {
             <div class="mat-btn-row">
                 @if (offer is { Available: true })
@@ -133,9 +142,24 @@
                         </div>
                     </div>
                 }
-                <form method="post" asp-page-handler="Check">
-                    <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("refresh")<span>Check now</span></button>
-                </form>
+                @if (canUpdate)
+                {
+                    <form method="post" asp-page-handler="Check">
+                        <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("refresh")<span>Check now</span></button>
+                    </form>
+                }
+                @if (Model.RestartMethod != RestartMethod.None)
+                {
+                    @* Restart the way it runs: the Windows service through a helper, the container through the Docker engine, else
+                       the process ends and its restart policy / service manager starts it again. *@
+                    <form method="post" asp-page-handler="Restart">
+                        <button type="submit" class="mat-btn mat-btn--secondary" disabled="@status.Installing"
+                                data-confirm="@(Model.RestartMethod == RestartMethod.ExitAndRestartPolicy
+                                    ? "Restart Matmon? It stops and comes back only if its restart policy (restart: unless-stopped) or service manager starts it again. Monitoring pauses for a moment."
+                                    : "Restart Matmon? Monitoring pauses for a moment.")"
+                                data-confirm-ok="Restart">@MatUi.Icon("refresh")<span>Restart</span></button>
+                    </form>
+                }
             </div>
         }
     </div>

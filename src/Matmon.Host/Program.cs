@@ -35,6 +35,8 @@ switch (args.FirstOrDefault())
         return await DockerUpdateHelper.RunAsync(args);
     case RecoveryAdmin.Command:
         return await RecoveryAdmin.RunCommandAsync(args);
+    case InstanceRestarter.WindowsCommand:
+        return InstanceRestarter.RunWindowsCommand(args);
 }
 
 // As a Windows service the working directory is System32: the content root (wwwroot, mibs) is the program folder.
@@ -379,6 +381,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
         runtimeOptions.UpdateFeedUrl, workspaceDirectory, provider.GetRequiredService<IHttpClientFactory>()));
     builder.Services.AddSingleton<SelfUpdateService>();
     builder.Services.AddHostedService(provider => provider.GetRequiredService<SelfUpdateService>());
+    builder.Services.AddSingleton<InstanceRestarter>();
 
     // Syslog: the central log of the network's devices. The database is its own file (syslog.db) so a chatty switch
     // can never bloat or lock the sensor history. Receiving is the syslog collector plugin's job (System > Plugins - on
@@ -522,7 +525,8 @@ app.MapGet("/healthz", () => Results.Ok(new
 {
     status = "ok",
     mode = runtimeOptions.Mode.ToString().ToLowerInvariant(),
-    version = Matmon.Probe.MatmonVersion.Current
+    version = Matmon.Probe.MatmonVersion.Current,
+    run = InstanceRestarter.ProcessRun
 })).AllowAnonymous();
 
 app.MapGet("/api/mode", () => Results.Ok(new

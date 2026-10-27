@@ -10,8 +10,10 @@ namespace Matmon.Host.Pages;
 /// install updates on its own inside a nightly window. How it updates depends on what it runs in
 /// (<see cref="SelfUpdateMode"/>); when it cannot update itself the page says why and what would make it possible.
 /// </summary>
-public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWorkspaceStore store) : PageModel
+public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWorkspaceStore store, InstanceRestarter restarter) : PageModel
 {
+    /// <summary>How "Restart" restarts this installation (or that nothing would bring it back).</summary>
+    public RestartMethod RestartMethod => restarter.Method;
     [BindProperty]
     public SelfUpdateSettingsInput Input { get; set; } = new();
 
@@ -34,9 +36,17 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
     /// <summary>How the update just watched by the update screen ended - success, rolled back, failed, or not known yet.</summary>
     public UpdateResult? Result { get; private set; }
 
-    public async Task OnGetAsync(string? installing, string? finished, string? to, CancellationToken cancellationToken)
+    public async Task OnGetAsync(string? installing, string? finished, string? to, string? restarting, bool restarted, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(installing))
+        if (!string.IsNullOrWhiteSpace(restarting))
+        {
+            Screen = new UpdateScreen(restarting, restarting, Restart: true);
+        }
+        else if (restarted)
+        {
+            StatusMessage = "Matmon restarted.";
+        }
+        else if (!string.IsNullOrWhiteSpace(installing))
         {
             Screen = new UpdateScreen(installing, to ?? "the new version");
         }
@@ -107,6 +117,24 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
     /// Matmon did not restart, the install failed (e.g. the download broke off) and the screen shows the outcome.</summary>
     public IActionResult OnGetState() => new JsonResult(new { installing = updates.Status.Installing });
 
+    /// <summary>Restarts this installation; the restart screen watches it go away and come back.</summary>
+    public IActionResult OnPostRestart()
+    {
+        if (updates.Status.Installing)
+        {
+            ErrorMessage = "An update is being installed - it restarts Matmon by itself.";
+            return RedirectToPage();
+        }
+
+        if (restarter.Restart() is { } problem)
+        {
+            ErrorMessage = $"Matmon cannot restart itself: {problem}.";
+            return RedirectToPage();
+        }
+
+        return RedirectToPage(new { restarting = MatmonVersion.Current });
+    }
+
     public IActionResult OnPostSettings()
     {
         store.UpdateSelfUpdateSettings(new SelfUpdateSettings
@@ -162,7 +190,8 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
     }
 }
 
-public sealed record UpdateScreen(string FromVersion, string ToVersion);
+/// <param name="Restart">A restart, not an update: the screen waits for Matmon to go away and come back, whatever version.</param>
+public sealed record UpdateScreen(string FromVersion, string ToVersion, bool Restart = false);
 
 /// <param name="Tone">success | warning | danger - the MatUi alert it is shown in.</param>
 public sealed record UpdateResult(string Tone, string Message, string? Detail);

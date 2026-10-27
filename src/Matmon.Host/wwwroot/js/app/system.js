@@ -53,6 +53,8 @@ function initializeUpdateScreen() {
 
   const from = screen.dataset.updateFrom || "";
   const to = screen.dataset.updateTo || "";
+  // A restart rather than an update: done once Matmon went away and answers again, whatever version.
+  const restart = screen.dataset.updateMode === "restart";
   const state = screen.querySelector("[data-update-state]");
   const elapsed = screen.querySelector("[data-update-elapsed]");
   const started = Date.now();
@@ -72,7 +74,7 @@ function initializeUpdateScreen() {
       // not the cloud console (another origin) - nothing to tell
     }
   };
-  tellConsole("matmon:update");
+  tellConsole(restart ? "matmon:restart" : "matmon:update");
 
   const say = (text) => { if (state) { state.textContent = text; } };
   const finish = (delay) => {
@@ -83,7 +85,7 @@ function initializeUpdateScreen() {
     tellConsole("matmon:update-done");
     // A moment for the installation to write down how it ended (a Docker helper does it right after the new container is up).
     window.setTimeout(() => {
-      const query = new URLSearchParams({ finished: from, to });
+      const query = restart ? new URLSearchParams({ restarted: "true" }) : new URLSearchParams({ finished: from, to });
       location.replace(location.pathname + "?" + query.toString());
     }, delay);
   };
@@ -134,6 +136,25 @@ function initializeUpdateScreen() {
 
     const answer = await health();
     const version = answer && answer.version;
+    if (restart) {
+      if (!version) {
+        wentAway = true;
+        say("Starting again ...");
+      } else if (wentAway || (answer.run && screen.dataset.updateRun && answer.run !== screen.dataset.updateRun)) {
+        say("Matmon is back - loading ...");
+        finish(1500);
+        return;
+      } else {
+        say("Stopping ...");
+      }
+      if (Date.now() - started > giveUpAfter) {
+        finish(0);
+        return;
+      }
+      window.setTimeout(poll, 2000);
+      return;
+    }
+
     if (!version) {
       wentAway = true;
       say("Matmon is restarting ...");

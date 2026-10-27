@@ -54,6 +54,15 @@ public sealed partial class DockerSelfUpdateTarget(
         return true;
     }
 
+    /// <summary>Has the engine restart this container (System > Updates "Restart"). The request does not come back - this
+    /// process is stopped while it waits - so it is sent and left to the engine.</summary>
+    public void RestartOwnContainer()
+    {
+        var id = _containerId ??= FindOwnContainerId() ?? throw new InvalidOperationException("this process does not run in a container it can find");
+        var client = new DockerEngineClient(socketPath, timeout: TimeSpan.FromMinutes(2));
+        _ = client.RestartAsync(id, 15, CancellationToken.None).ContinueWith(_ => client.Dispose(), TaskScheduler.Default);
+    }
+
     public async Task<SelfUpdateOffer> CheckAsync(CancellationToken cancellationToken)
     {
         using var docker = Client();
