@@ -14,6 +14,10 @@ public sealed class CloudBackupClient
     private readonly IMonitoringWorkspaceStore _store;
     private readonly MatmonRuntimeOptions _runtimeOptions;
 
+    /// <summary>How many backups of each kind the cloud keeps for this instance (its plan, or the cloud admin's number for it),
+    /// as the last list said; null for a cloud that does not say.</summary>
+    public int? Keep { get; private set; }
+
     public CloudBackupClient(IMonitoringWorkspaceStore store, MatmonRuntimeOptions runtimeOptions)
     {
         _store = store;
@@ -119,6 +123,13 @@ public sealed class CloudBackupClient
             if (!response.IsSuccessStatusCode)
             {
                 return null;
+            }
+
+            if (path == "/backups" && response.Headers.TryGetValues("X-Matmon-Backup-Keep", out var keepValues)
+                && int.TryParse(keepValues.FirstOrDefault(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var keep)
+                && keep > 0)
+            {
+                Keep = keep;
             }
 
             return await response.Content.ReadFromJsonAsync<List<T>>(cts.Token) ?? [];

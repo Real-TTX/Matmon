@@ -287,6 +287,59 @@ else if (Model.IsActiveTab("storage"))
 }
 else if (Model.IsActiveTab("backup") && canManageSystem)
 {
+    var backupSettings = Model.BackupSettings;
+    @if (!backupSettings.HasPassphrase)
+    {
+        <div class="mat-alert mat-alert--warning" role="status">
+            @MatUi.Icon("alert")
+            <div class="mat-alert__body">
+                <span class="mat-alert__title">No backup passphrase</span>
+                <span>Backups restore 1:1 on this instance only. On a new machine everything comes back except the credentials (passwords, keys, tokens) - they would have to be entered again. Set a passphrase below to carry them in every backup.</span>
+            </div>
+        </div>
+    }
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("lock")<h2 class="mat-card__title">Backup settings</h2>
+            <span class="@MatUi.PillClass(backupSettings.HasPassphrase ? "ok" : "warn") mm-push-end">@(backupSettings.HasPassphrase ? "Encrypted" : "Not encrypted")</span>
+        </div>
+        <div class="mat-card__body">
+            <form method="post" asp-page-handler="SaveBackupSettings" class="mat-form" novalidate>
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" for="backup-passphrase">@(backupSettings.HasPassphrase ? "New passphrase" : "Passphrase")</label>
+                        <input type="password" id="backup-passphrase" name="passphrase" class="mat-input" autocomplete="new-password" minlength="@ConfigModel.MinPassphraseLength"
+                               data-msg-range="Use at least @ConfigModel.MinPassphraseLength characters." placeholder="@(backupSettings.HasPassphrase ? "leave empty to keep the current one" : $"at least {ConfigModel.MinPassphraseLength} characters")" aria-describedby="backup-passphrase-hint" />
+                        <span class="mat-hint" id="backup-passphrase-hint">Seals the credentials in every backup - on this machine, in the cloud and before an update. It cannot be recovered: keep it somewhere safe. This instance restores its own backups without asking for it.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="backup-passphrase-confirm">Repeat the passphrase</label>
+                        <input type="password" id="backup-passphrase-confirm" name="passphraseConfirm" class="mat-input" autocomplete="new-password" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="backup-before-update">Before an update</label>
+                        <select class="mat-select" id="backup-before-update" name="beforeUpdate" aria-describedby="backup-before-update-hint">
+                            <option value="@PreUpdateBackupMode.Local" selected="@(backupSettings.BeforeUpdate == PreUpdateBackupMode.Local)">Back up on this machine</option>
+                            <option value="@PreUpdateBackupMode.LocalAndCloud" selected="@(backupSettings.BeforeUpdate == PreUpdateBackupMode.LocalAndCloud)">Back up on this machine and in Matmon.Cloud</option>
+                            <option value="@PreUpdateBackupMode.Off" selected="@(backupSettings.BeforeUpdate == PreUpdateBackupMode.Off)">No backup</option>
+                        </select>
+                        <span class="mat-hint" id="backup-before-update-hint">The configuration without telemetry, as <code>pre-update-&lt;version&gt;</code>. Schema changes only go forward - this is what an update can be undone with.</span>
+                    </div>
+                </div>
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("check")<span>Save</span></button>
+                    @if (backupSettings.HasPassphrase)
+                    {
+                        <span class="mat-btn-row__spacer"></span>
+                        <button type="submit" class="mat-btn mat-btn--danger" formaction="@Url.Page("/Config", "RemoveBackupPassphrase")" formnovalidate
+                                data-confirm="Remove the backup passphrase? New backups then restore their credentials only on this instance." data-confirm-ok="Remove" data-confirm-danger>@MatUi.Icon("trash")<span>Remove passphrase</span></button>
+                    }
+                </div>
+            </form>
+        </div>
+    </section>
+
     <section class="mat-card">
         <div class="mat-card__head">@MatUi.Icon("clock")<h2 class="mat-card__title">Backup jobs</h2><span class="mat-text-muted mm-push-end">@Model.BackupJobs.Count jobs</span></div>
         @if (Model.BackupJobs.Count == 0)
@@ -379,17 +432,10 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
         @if (Model.CloudSettings?.Configured == true || Model.CloudBackupsAvailable)
         {
             <div class="mat-card__body mat-stack">
-                <p class="mat-muted">Configuration only - no telemetry, no local users; the newest 10 are kept. With a passphrase, credentials restore on any instance; without one, only on this instance.</p>
-                <form method="post" asp-page-handler="CloudBackupNow" class="mat-form mat-form--inline" novalidate>
-                    <div class="mat-field">
-                        <label class="mat-label" for="cloud-backup-passphrase">Passphrase <span class="mat-text-muted">(optional)</span></label>
-                        <input type="password" id="cloud-backup-passphrase" name="passphrase" class="mat-input" placeholder="Optional passphrase (portable secrets)" autocomplete="new-password" />
-                    </div>
-                    <div class="mat-field mat-field--auto">
-                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Back up to cloud now</span></button>
-                    </div>
+                <p class="mat-muted">Configuration only - no telemetry, no local users. @(Model.CloudBackupKeep is { } keep ? $"The cloud keeps the newest {keep} of each kind (by hand / scheduled)." : "The cloud keeps the newest of each kind (by hand / scheduled).") @(backupSettings.HasPassphrase ? "Sealed with the backup passphrase." : "Without a backup passphrase the credentials restore only on this instance.")</p>
+                <form method="post" asp-page-handler="CloudBackupNow" novalidate>
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Back up to cloud now</span></button>
                 </form>
-                <p class="mat-hint">The passphrase cannot be recovered.</p>
                 @if (Model.CloudBackups.Count == 0)
                 {
                     <p class="mat-muted">@(Model.CloudBackupsAvailable ? "No cloud backups yet." : "Cloud backups are currently unavailable (cloud offline?).")</p>
@@ -421,7 +467,7 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                                 @if (cloudBackup.IsEncrypted)
                                                 {
                                                     <div class="mat-input-group mat-input-group--sm">
-                                                        <input type="password" name="passphrase" class="mat-input" placeholder="Passphrase" autocomplete="off" aria-label="Passphrase for @cloudBackup.Label" />
+                                                        <input type="password" name="passphrase" class="mat-input" placeholder="@(backupSettings.HasPassphrase ? "empty = backup passphrase" : "Passphrase")" autocomplete="off" aria-label="Passphrase for @cloudBackup.Label" />
                                                         <button type="submit" class="mat-btn mat-btn--secondary"
                                                                 data-confirm="Restore this cloud backup? It overwrites the current configuration." data-confirm-ok="Restore">@MatUi.Icon("restore")<span>Restore</span></button>
                                                     </div>

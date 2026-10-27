@@ -92,7 +92,7 @@ public sealed class BackupSchedulerService : BackgroundService
         {
             // A passphrase makes the pushed snapshot PORTABLE (recoverable on a different instance). Mark the label
             // "(encrypted)" so the restore/wizard UI knows to ask for the passphrase.
-            var passphrase = string.IsNullOrEmpty(job.Passphrase) ? null : job.Passphrase;
+            var passphrase = string.IsNullOrEmpty(job.Passphrase) ? _workspaceStore.GetBackupPassphrase() : job.Passphrase;
             var bytes = _workspaceStore.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "Scheduled cloud backup.", passphrase);
             var label = $"{job.Name} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(passphrase is null ? "" : " (encrypted)")}";
             await _cloudBackups.PushAsync(bytes, label, stoppingToken, scheduled: true, encrypted: passphrase is not null);

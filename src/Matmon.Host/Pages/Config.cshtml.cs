@@ -156,6 +156,15 @@ public class ConfigModel : PageModel
     /// <summary>True when the cloud backup list was successfully fetched (distinguishes "empty" from "offline").</summary>
     public bool CloudBackupsAvailable { get; private set; }
 
+    /// <summary>System > Backup > Settings (whether a passphrase is set, the backup before an update).</summary>
+    public WorkspaceBackupSettings BackupSettings => _backupSettings ??= _workspaceStore.GetBackupSettings();
+    private WorkspaceBackupSettings? _backupSettings;
+
+    /// <summary>How many backups of each kind the cloud keeps for this instance, when it said so.</summary>
+    public int? CloudBackupKeep => _cloudBackups.Keep;
+
+    public const int MinPassphraseLength = InMemoryMonitoringWorkspaceStore.MinPortablePassphraseLength;
+
     public StorageTelemetryOverview StorageTelemetry { get; private set; } = new(0, 0, 0);
 
     public IReadOnlyList<SelectListItem> StorageCleanupScopeOptions { get; private set; } = [];
@@ -544,6 +553,51 @@ public class ConfigModel : PageModel
         }
     }
 
+    public IActionResult OnPostSaveBackupSettings(string? passphrase, string? passphraseConfirm, PreUpdateBackupMode beforeUpdate)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        // An empty passphrase field keeps the one that is set; a new one has to be typed twice (it cannot be recovered).
+        if (!string.IsNullOrEmpty(passphrase))
+        {
+            if (!string.Equals(passphrase, passphraseConfirm, StringComparison.Ordinal))
+            {
+                ErrorMessage = "The two passphrases differ - nothing was changed.";
+                return RedirectToPage(new { tab = "backup" });
+            }
+            try
+            {
+                _workspaceStore.SetBackupPassphrase(passphrase);
+            }
+            catch (ArgumentException ex)
+            {
+                ErrorMessage = ex.Message.Split(" (Parameter", 2)[0];
+                return RedirectToPage(new { tab = "backup" });
+            }
+        }
+
+        _workspaceStore.SetPreUpdateBackup(beforeUpdate);
+        StatusMessage = string.IsNullOrEmpty(passphrase)
+            ? "Backup settings saved."
+            : "Backup settings saved. New backups are sealed with the passphrase - keep it somewhere safe, it cannot be recovered.";
+        return RedirectToPage(new { tab = "backup" });
+    }
+
+    public IActionResult OnPostRemoveBackupPassphrase()
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        _workspaceStore.SetBackupPassphrase(null);
+        StatusMessage = "Backup passphrase removed. New backups restore their credentials only on this instance; the ones made with the passphrase still need it on another instance.";
+        return RedirectToPage(new { tab = "backup" });
+    }
+
     public async Task<IActionResult> OnPostCloudBackupNowAsync(string? passphrase, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
@@ -561,8 +615,10 @@ public class ConfigModel : PageModel
 
         try
         {
-            var portable = !string.IsNullOrWhiteSpace(passphrase);
-            var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup", portable ? passphrase!.Trim() : null);
+            // Sealed with the passphrase typed here, else with the instance's backup passphrase (CreateBackupBytes falls back to it).
+            var typed = string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim();
+            var portable = typed is not null || BackupSettings.HasPassphrase;
+            var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup", typed);
             var label = $"Config {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(portable ? " (encrypted)" : "")}";
             await _cloudBackups.PushAsync(bytes, label, cancellationToken, scheduled: false, encrypted: portable);
             StatusMessage = "Configuration backed up to Matmon.Cloud.";

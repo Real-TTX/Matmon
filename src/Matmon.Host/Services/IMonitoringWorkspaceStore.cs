@@ -367,6 +367,17 @@ public interface IMonitoringWorkspaceStore
 
     void SetAllowedProgramPaths(IEnumerable<string> paths);
 
+    /// <summary>System > Backup > Settings, WITHOUT the passphrase itself (only whether one is set).</summary>
+    WorkspaceBackupSettings GetBackupSettings();
+
+    /// <summary>The backup passphrase, for whoever builds or reads a package; null when none is set.</summary>
+    string? GetBackupPassphrase();
+
+    /// <summary>Sets the backup passphrase (at least <c>MinPortablePassphraseLength</c> characters); null or empty removes it.</summary>
+    void SetBackupPassphrase(string? passphrase);
+
+    void SetPreUpdateBackup(PreUpdateBackupMode mode);
+
     Matmon.Host.Services.SelfUpdate.SelfUpdateSettings GetSelfUpdateSettings();
 
     void UpdateSelfUpdateSettings(Matmon.Host.Services.SelfUpdate.SelfUpdateSettings settings);

@@ -220,6 +220,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             try
             {
                 var package = CreateBackupPackageLocked(job, _document, reason);
+                // With a backup passphrase a local snapshot is sealed with it like a cloud push: copied off the machine,
+                // its credentials restore on any instance.
+                SealPortableLocked(package, ResolveBackupPassphraseLocked(null));
                 var fileName = BuildBackupFileName(job, package.CreatedUtc, package.Id);
                 var filePath = ResolveBackupFilePath(fileName);
                 var directory = Path.GetDirectoryName(filePath);
@@ -305,6 +308,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
         var path = ResolveBackupFilePath(fileName);
         var package = TryLoadBackupPackage(path) ?? throw new InvalidOperationException("Backup file could not be read.");
+        passphrase = ResolveRestorePassphrase(package, passphrase);
 
         // Honour a portable (passphrase-sealed) package on the FILE restore path too - previously it always used the
         // instance protector, so a portable .matmonbak imported here dropped every credential behind a "success".
@@ -323,6 +327,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// credential, so a trivially short one is brute-forceable offline against the package's verifier.</summary>
     public const int MinPortablePassphraseLength = 12;
 
+    /// <summary>Builds a package in memory. Without an explicit passphrase the instance's backup passphrase seals it (when one is set).</summary>
     public byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null)
     {
         if (!string.IsNullOrEmpty(passphrase) && passphrase.Length < MinPortablePassphraseLength)
@@ -338,25 +343,51 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 Sections = sections == WorkspaceBackupSection.None ? WorkspaceBackupSection.All : sections
             };
             var package = CreateBackupPackageLocked(job, _document, reason);
-
-            // Portable secrets: re-seal the snapshot's secrets with a passphrase-derived key so a restore on a
-            // DIFFERENT instance recovers credentials too (the default DataProtection ciphertext is instance-bound).
-            // The package clone currently holds instance-DP ciphertext - decrypt it with the local key, then
-            // re-protect with the passphrase key. The live document is untouched (only the throwaway clone).
-            if (!string.IsNullOrEmpty(passphrase))
-            {
-                var salt = RandomNumberGenerator.GetBytes(16);
-                var portable = new PassphraseSecretProtector(passphrase, salt, PortableSecretsPbkdf2Iterations);
-                HydrateCredentialBundles(package.Document, _credentialProtector);
-                ProtectCredentialBundles(package.Document, portable);
-                package.SecretsPortable = true;
-                package.SecretsSalt = Convert.ToBase64String(salt);
-                package.SecretsIterations = PortableSecretsPbkdf2Iterations;
-                package.SecretsVerifier = Convert.ToBase64String(portable.Protect(Encoding.UTF8.GetBytes(PortableSecretsVerifierPlaintext)));
-            }
-
+            SealPortableLocked(package, ResolveBackupPassphraseLocked(passphrase));
             return JsonSerializer.SerializeToUtf8Bytes(package, FileSerializerOptions);
         }
+    }
+
+    /// <summary>The passphrase a new package is sealed with: the one asked for, else the instance's backup passphrase.</summary>
+    private string? ResolveBackupPassphraseLocked(string? explicitPassphrase) =>
+        !string.IsNullOrEmpty(explicitPassphrase) ? explicitPassphrase
+        : string.IsNullOrEmpty(_document.BackupSettings?.Passphrase) ? null : _document.BackupSettings.Passphrase;
+
+    /// <summary>A sealed package restores on THIS instance without anyone typing the passphrase when it is the instance's own:
+    /// an empty passphrase falls back to the backup passphrase. (A wrong typed one is still refused.)</summary>
+    private string? ResolveRestorePassphrase(WorkspaceBackupPackage package, string? passphrase)
+    {
+        if (!package.SecretsPortable || !string.IsNullOrEmpty(passphrase))
+        {
+            return passphrase;
+        }
+        lock (_gate)
+        {
+            return ResolveBackupPassphraseLocked(null);
+        }
+    }
+
+    /// <summary>
+    /// Portable secrets: re-seals the package's secrets with a passphrase-derived key so a restore on a DIFFERENT instance
+    /// recovers credentials too (the default DataProtection ciphertext is instance-bound). The package clone holds instance-DP
+    /// ciphertext - decrypt it with the local key, then re-protect with the passphrase key. The live document is untouched.
+    /// No passphrase = nothing to do.
+    /// </summary>
+    private void SealPortableLocked(WorkspaceBackupPackage package, string? passphrase)
+    {
+        if (string.IsNullOrEmpty(passphrase))
+        {
+            return;
+        }
+
+        var salt = RandomNumberGenerator.GetBytes(16);
+        var portable = new PassphraseSecretProtector(passphrase, salt, PortableSecretsPbkdf2Iterations);
+        HydrateCredentialBundles(package.Document, _credentialProtector);
+        ProtectCredentialBundles(package.Document, portable);
+        package.SecretsPortable = true;
+        package.SecretsSalt = Convert.ToBase64String(salt);
+        package.SecretsIterations = PortableSecretsPbkdf2Iterations;
+        package.SecretsVerifier = Convert.ToBase64String(portable.Protect(Encoding.UTF8.GetBytes(PortableSecretsVerifierPlaintext)));
     }
 
     /// <summary>Restores from an in-memory backup blob (e.g. downloaded from the cloud) - same effect as
@@ -375,6 +406,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
         var package = JsonSerializer.Deserialize<WorkspaceBackupPackage>(blob, FileSerializerOptions)
             ?? throw new InvalidOperationException("The backup could not be read.");
+        passphrase = ResolveRestorePassphrase(package, passphrase);
 
         var secretProtector = ResolveSecretProtector(package, passphrase);
 
@@ -706,6 +738,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
         // Whether and when this installation updates itself is decided on this machine, like its listeners.
         document.SelfUpdate = new();
+        // The backup passphrase: a package never carries the key to itself.
+        document.BackupSettings = new();
         document.SelfUpdateOutcome = null;
 
         // What may be executed on this machine is decided on it (the Local Program allow-list).
@@ -928,7 +962,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     {
         if (sections.HasFlag(WorkspaceBackupSection.Topology))
         {
+            var liveTokens = CollectProbeTokens(target.RootProbe);
             target.RootProbe = source.RootProbe;
+            KeepLiveProbeTokens(target.RootProbe, liveTokens);
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.Templates))
@@ -1036,6 +1072,45 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             foreach (var rejection in library.Restore(files).Rejected)
             {
                 _logger.LogWarning("A MIB in the backup was not restored: {Reason}", rejection);
+            }
+        }
+    }
+
+    /// <summary>The token each probe of the live tree uses right now, by probe id.</summary>
+    private static Dictionary<Guid, string> CollectProbeTokens(ProbeElement? root)
+    {
+        var tokens = new Dictionary<Guid, string>();
+        if (root is null)
+        {
+            return tokens;
+        }
+        foreach (var probe in EnumerateElements(root).OfType<ProbeElement>())
+        {
+            if (!string.IsNullOrEmpty(probe.EnrollmentToken))
+            {
+                tokens[probe.Id] = probe.EnrollmentToken;
+            }
+        }
+        return tokens;
+    }
+
+    /// <summary>
+    /// Remote probes and agents reconnect after EVERY restore: a probe that is in the restored tree and still exists here keeps
+    /// the token it uses today. The backup carries the token of the day it was made - a token rotated since (or a re-enrolled
+    /// agent) would otherwise be locked out by restoring an older backup. A probe the live tree no longer has keeps the backup's
+    /// token, which is the one that probe still knows when it was only deleted here.
+    /// </summary>
+    private static void KeepLiveProbeTokens(ProbeElement? root, Dictionary<Guid, string> liveTokens)
+    {
+        if (root is null || liveTokens.Count == 0)
+        {
+            return;
+        }
+        foreach (var probe in EnumerateElements(root).OfType<ProbeElement>())
+        {
+            if (probe.ParentId is not null && liveTokens.TryGetValue(probe.Id, out var token))
+            {
+                probe.EnrollmentToken = token;
             }
         }
     }

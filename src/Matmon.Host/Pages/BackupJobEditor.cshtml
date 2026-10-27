@@ -48,7 +48,7 @@
                     <span class="mat-error" aria-live="polite"></span>
                 </div>
                 <div class="mat-field" data-cloud-only hidden="@(!isCloud)">
-                    <label class="mat-label" for="Input_Passphrase">Passphrase <span class="mat-text-muted">(optional, makes it portable)</span></label>
+                    <label class="mat-label" for="Input_Passphrase">Own passphrase <span class="mat-text-muted">(optional - otherwise the backup passphrase)</span></label>
                     <input asp-for="Input.Passphrase" type="password" class="mat-input" autocomplete="new-password" minlength="12" data-msg-range="Use at least 12 characters." placeholder="@(Model.JobId is null ? "min. 12 chars" : "leave blank to keep the current one")" />
                     <span class="mat-error" aria-live="polite"></span>
                 </div>

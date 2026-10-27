@@ -201,3 +201,43 @@ public sealed class WorkspaceMibFile
     /// survive being carried as JSON text.</summary>
     public string? Data { get; set; }
 }
+
+/// <summary>What happens to the configuration before this installation updates itself.</summary>
+public enum PreUpdateBackupMode
+{
+    /// <summary>Nothing is saved.</summary>
+    Off = 0,
+
+    /// <summary>A snapshot on this machine (<c>pre-update-&lt;version&gt;</c>) - the default.</summary>
+    Local = 1,
+
+    /// <summary>The snapshot on this machine, and the same configuration pushed to Matmon.Cloud.</summary>
+    LocalAndCloud = 2
+}
+
+/// <summary>
+/// System > Backup > Settings: the instance's backup passphrase and what happens before an update. Bound to this
+/// installation and never carried in a backup package (a package must not carry the key to itself).
+/// </summary>
+public sealed class WorkspaceBackupSettings
+{
+    /// <summary>The passphrase every backup is sealed with when set (local snapshots, cloud pushes, the snapshot before an
+    /// update): the credentials in it then restore on ANY instance, not only on this one. Plaintext is transient and
+    /// DataProtection-encrypted at rest into <see cref="ProtectedPassphrase"/>, like the notification secrets.</summary>
+    [JsonIgnore]
+    public string? Passphrase { get; set; }
+
+    /// <summary>DataProtection ciphertext of <see cref="Passphrase"/> (the persisted form).</summary>
+    public string? ProtectedPassphrase { get; set; }
+
+    /// <summary>Set when <see cref="ProtectedPassphrase"/> could not be decrypted on load, so a save keeps the ciphertext.</summary>
+    [JsonIgnore]
+    public bool PassphraseHydrationFailed { get; set; }
+
+    /// <summary>What is saved before an update; a snapshot on this machine unless the admin chose otherwise.</summary>
+    public PreUpdateBackupMode BeforeUpdate { get; set; } = PreUpdateBackupMode.Local;
+
+    /// <summary>Whether a passphrase is set - also when it could not be read on this start (it is still there).</summary>
+    [JsonIgnore]
+    public bool HasPassphrase => !string.IsNullOrEmpty(Passphrase) || (PassphraseHydrationFailed && !string.IsNullOrEmpty(ProtectedPassphrase));
+}

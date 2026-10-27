@@ -1390,6 +1390,55 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public WorkspaceBackupSettings GetBackupSettings()
+    {
+        lock (_gate)
+        {
+            var settings = _document.BackupSettings ??= new();
+            return new WorkspaceBackupSettings
+            {
+                ProtectedPassphrase = settings.HasPassphrase ? "set" : null,
+                PassphraseHydrationFailed = settings.HasPassphrase,
+                BeforeUpdate = settings.BeforeUpdate
+            };
+        }
+    }
+
+    public string? GetBackupPassphrase()
+    {
+        lock (_gate)
+        {
+            return string.IsNullOrEmpty(_document.BackupSettings?.Passphrase) ? null : _document.BackupSettings.Passphrase;
+        }
+    }
+
+    public void SetBackupPassphrase(string? passphrase)
+    {
+        var value = string.IsNullOrEmpty(passphrase) ? null : passphrase;
+        if (value is not null && value.Length < MinPortablePassphraseLength)
+        {
+            throw new ArgumentException($"The backup passphrase must be at least {MinPortablePassphraseLength} characters.", nameof(passphrase));
+        }
+
+        lock (_gate)
+        {
+            var settings = _document.BackupSettings ??= new();
+            settings.Passphrase = value;
+            settings.ProtectedPassphrase = null;
+            settings.PassphraseHydrationFailed = false;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    public void SetPreUpdateBackup(PreUpdateBackupMode mode)
+    {
+        lock (_gate)
+        {
+            (_document.BackupSettings ??= new()).BeforeUpdate = Enum.IsDefined(mode) ? mode : PreUpdateBackupMode.Local;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
     public Matmon.Host.Services.SelfUpdate.SelfUpdateSettings GetSelfUpdateSettings()
     {
         lock (_gate)
@@ -2918,6 +2967,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             yield return new SecretSlot(
                 () => job.Passphrase, v => job.Passphrase = v, () => job.ProtectedPassphrase, v => job.ProtectedPassphrase = v,
                 () => job.PassphraseHydrationFailed, v => job.PassphraseHydrationFailed = v);
+        }
+        // The instance's backup passphrase (System > Backup > Settings).
+        if (document.BackupSettings is { } backup)
+        {
+            yield return new SecretSlot(
+                () => backup.Passphrase, v => backup.Passphrase = v, () => backup.ProtectedPassphrase, v => backup.ProtectedPassphrase = v,
+                () => backup.PassphraseHydrationFailed, v => backup.PassphraseHydrationFailed = v);
         }
         // SNMPv3 trap users: their authentication and privacy passwords.
         foreach (var user in document.SnmpTraps?.V3Users ?? [])
@@ -4782,6 +4838,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>System > Updates (automatic updates, their window) - decided on this machine, never carried in a backup.</summary>
         public Matmon.Host.Services.SelfUpdate.SelfUpdateSettings SelfUpdate { get; set; } = new();
+
+        /// <summary>System > Backup > Settings (the backup passphrase, the backup before an update) - bound to this
+        /// installation, never carried in a backup.</summary>
+        public WorkspaceBackupSettings BackupSettings { get; set; } = new();
 
         /// <summary>How the last self-update of this installation ended.</summary>
         public Matmon.Host.Services.SelfUpdate.SelfUpdateOutcome? SelfUpdateOutcome { get; set; }

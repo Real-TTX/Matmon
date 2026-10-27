@@ -76,6 +76,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.SummaryReport ??= new();
         document.Syslog ??= new();
         document.SelfUpdate ??= new();
+        document.BackupSettings ??= new();
         document.Plugins ??= [];
         document.AllowedProgramPaths ??= [];
         document.Cloud ??= new();

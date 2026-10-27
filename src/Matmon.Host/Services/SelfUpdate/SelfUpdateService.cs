@@ -33,6 +33,7 @@ public sealed class SelfUpdateService : BackgroundService
 
     private readonly IReadOnlyList<ISelfUpdateTarget> _targets;
     private readonly IMonitoringWorkspaceStore _store;
+    private readonly CloudBackupClient? _cloudBackups;
     private readonly ILogger<SelfUpdateService> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private volatile SelfUpdateStatus _status;
@@ -43,10 +44,11 @@ public sealed class SelfUpdateService : BackgroundService
     // before the swap (its outcome says why) - another attempt may go ahead.
     private static readonly TimeSpan HandOverTimeout = TimeSpan.FromMinutes(10);
 
-    public SelfUpdateService(IEnumerable<ISelfUpdateTarget> targets, IMonitoringWorkspaceStore store, ILogger<SelfUpdateService> logger)
+    public SelfUpdateService(IEnumerable<ISelfUpdateTarget> targets, IMonitoringWorkspaceStore store, ILogger<SelfUpdateService> logger, CloudBackupClient? cloudBackups = null)
     {
         _targets = targets.ToList();
         _store = store;
+        _cloudBackups = cloudBackups;
         _logger = logger;
         var (target, reason) = Resolve();
         _status = new SelfUpdateStatus(target?.Mode ?? SelfUpdateMode.Unavailable, reason, MatmonVersion.Current, MatmonVersion.Channel,
@@ -209,6 +211,46 @@ public sealed class SelfUpdateService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// The backup before an install, as System > Backup > Settings says: on this machine (the default), also in Matmon.Cloud,
+    /// or none. Sealed with the backup passphrase when one is set. A failed cloud push does not stop the update - the
+    /// snapshot on this machine is there - but it is logged.
+    /// </summary>
+    private async Task BackUpBeforeUpdateAsync(SelfUpdateOffer offer, CancellationToken cancellationToken)
+    {
+        var mode = _store.GetBackupSettings().BeforeUpdate;
+        if (mode == Matmon.Core.Domain.PreUpdateBackupMode.Off)
+        {
+            _logger.LogInformation("No backup before the update to {Version} (switched off)", offer.Version);
+            return;
+        }
+
+        var snapshot = _store.CreateBackupBytes(SnapshotSections, $"before the update to {offer.Version}");
+        using (var stream = new MemoryStream(snapshot))
+        {
+            _store.ImportBackupSnapshot(stream, $"pre-update-{offer.Version}.json");
+        }
+
+        if (mode == Matmon.Core.Domain.PreUpdateBackupMode.LocalAndCloud)
+        {
+            if (_cloudBackups is not { IsConnected: true })
+            {
+                _logger.LogWarning("Backup before the update to {Version}: not connected to Matmon.Cloud - only the snapshot on this machine was made", offer.Version);
+                return;
+            }
+            try
+            {
+                var encrypted = _store.GetBackupSettings().HasPassphrase;
+                var bytes = _store.CreateBackupBytes(Matmon.Core.Domain.WorkspaceBackupSections.CloudConfig, $"before the update to {offer.Version}");
+                await _cloudBackups.PushAsync(bytes, $"Before update to {offer.Version}{(encrypted ? " (encrypted)" : "")}", cancellationToken, scheduled: true, encrypted: encrypted);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning("Backup before the update to {Version}: the cloud push failed ({Reason}) - the snapshot on this machine was made", offer.Version, ex.Message);
+            }
+        }
+    }
+
     private async Task<string?> InstallLockedAsync(ISelfUpdateTarget target, SelfUpdateOffer offer, CancellationToken cancellationToken)
     {
         if (Status.Installing)
@@ -218,11 +260,7 @@ public sealed class SelfUpdateService : BackgroundService
 
         try
         {
-            var snapshot = _store.CreateBackupBytes(SnapshotSections, $"before the update to {offer.Version}");
-            using (var stream = new MemoryStream(snapshot))
-            {
-                _store.ImportBackupSnapshot(stream, $"pre-update-{offer.Version}.json");
-            }
+            await BackUpBeforeUpdateAsync(offer, cancellationToken);
 
             _logger.LogInformation("Installing update {Current} -> {Version} ({Mode})", MatmonVersion.Current, offer.Version, target.Mode);
             _handedOverUtc = null; // downloading: "installing" for as long as that takes
