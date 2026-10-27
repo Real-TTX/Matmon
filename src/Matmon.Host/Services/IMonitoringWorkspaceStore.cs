@@ -521,6 +521,18 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Unexpired, unused codes - expired ones are pruned on the way.</summary>
     IReadOnlyList<AgentEnrollment> GetPendingAgentEnrollments();
 
+    /// <summary>Creates an API token; throws <see cref="InvalidOperationException"/> with the reason when it cannot be made. The secret is in the answer only.</summary>
+    ApiTokenIssue CreateApiToken(string name, IEnumerable<string> scopes, DateTimeOffset? expiresUtc, string? createdBy);
+
+    IReadOnlyList<ApiToken> GetApiTokens();
+
+    bool RevokeApiToken(Guid id);
+
+    bool DeleteApiToken(Guid id);
+
+    /// <summary>Whether a presented secret is a usable token with this scope (and records its use).</summary>
+    ApiTokenCheck CheckApiToken(string? secret, string scope, string? remoteAddress);
+
     bool RevokeAgentEnrollment(Guid enrollmentId);
 
     /// <summary>Whether a code is currently valid, WITHOUT consuming it - lets the install recipe download

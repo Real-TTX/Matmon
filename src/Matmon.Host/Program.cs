@@ -303,6 +303,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("push", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // The instance's own API (API tokens): a pipeline makes a handful of calls per run; guessing tokens is refused long before it matters.
+    options.AddPolicy("api", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 300, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.AddRazorPages(options =>
 {
@@ -334,6 +338,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/SystemSnmpTraps", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemPlugins", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemUpdates", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/SystemApiTokens", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options =>
 {
     options.Filters.Add<MatmonPageWriteGuard>();
@@ -807,6 +812,75 @@ if (runtimeOptions.Mode == AppMode.Primary)
         logger.LogDebug("Push for sensor {Sensor}: {State}", target.Name, state);
         return Results.Ok(new { ok = true });
     }).AllowAnonymous().RequireRateLimiting("push");
+
+    // The instance's own API, for CI/CD and scripts (System > API tokens): a token in "Authorization: Bearer mmt_..." (or
+    // X-Matmon-Token) with the scope the call needs. Anonymous to the cookie auth - the token is the credential - and
+    // answered in JSON. Today: maintenance windows, so a deploy job can silence the alerts of what it restarts.
+    var api = app.MapGroup("/api/v1").AllowAnonymous().RequireRateLimiting("api");
+    static IResult Answer(Matmon.Host.Services.Api.ApiAnswer answer) => Results.Json(answer.Body, statusCode: answer.Status);
+    static (IResult? Refusal, ApiToken? Token) Authorize(HttpContext http, IMonitoringWorkspaceStore store, string scope)
+    {
+        var secret = ApiTokenSecret.FromHeaders(http.Request.Headers.Authorization, http.Request.Headers["X-Matmon-Token"]);
+        var check = store.CheckApiToken(secret, scope, http.Connection.RemoteIpAddress?.ToString());
+        http.Response.Headers.CacheControl = "no-store";
+        return check.Result switch
+        {
+            ApiTokenCheckResult.Ok => (null, check.Token),
+            ApiTokenCheckResult.Missing => (Results.Json(new { error = "token_required", message = "Send an API token: Authorization: Bearer mmt_... (System > API tokens)." }, statusCode: 401), null),
+            ApiTokenCheckResult.Expired => (Results.Json(new { error = "token_expired", message = $"This token expired {check.Token!.ExpiresUtc:yyyy-MM-dd HH:mm} UTC." }, statusCode: 401), null),
+            ApiTokenCheckResult.ScopeMissing => (Results.Json(new { error = "scope_missing", message = $"This token may not do this (it needs \"{scope}\")." }, statusCode: 403), null),
+            _ => (Results.Json(new { error = "invalid_token", message = "This token is not valid (unknown or revoked)." }, statusCode: 401), null)
+        };
+    }
+
+    api.MapGet("/maintenance-windows", (HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, _) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).List(DateTimeOffset.UtcNow));
+    });
+    api.MapGet("/maintenance-windows/{id:guid}", (Guid id, HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, _) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).Get(id, DateTimeOffset.UtcNow));
+    });
+    api.MapPost("/maintenance-windows", async (HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, token) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+        Matmon.Host.Services.Api.MaintenanceApiRequest? request;
+        try
+        {
+            request = await http.Request.ReadFromJsonAsync<Matmon.Host.Services.Api.MaintenanceApiRequest>(http.RequestAborted);
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException)
+        {
+            return Results.Json(new { error = "bad_request", message = "The body is not JSON this API reads (Content-Type: application/json)." }, statusCode: 400);
+        }
+        return Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).Create(request, $"API token \"{token!.Name}\"", DateTimeOffset.UtcNow));
+    });
+    api.MapPost("/maintenance-windows/{id:guid}/enable", (Guid id, HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, _) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).SetEnabled(id, true, DateTimeOffset.UtcNow));
+    });
+    api.MapPost("/maintenance-windows/{id:guid}/disable", (Guid id, HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, _) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).SetEnabled(id, false, DateTimeOffset.UtcNow));
+    });
+    api.MapPost("/maintenance-windows/{id:guid}/end", (Guid id, HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, _) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).EndNow(id, DateTimeOffset.UtcNow));
+    });
+    api.MapDelete("/maintenance-windows/{id:guid}", (Guid id, HttpContext http, IMonitoringWorkspaceStore store) =>
+    {
+        var (refusal, _) = Authorize(http, store, ApiTokenScopes.Maintenance);
+        return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).Delete(id));
+    });
 
     // An agent trades a one-time enrolment code (issued on the Agents page) for a probe of its own. Wrong,
     // used and expired codes all answer the same 400 - which codes once existed is not the caller's business.

@@ -4825,6 +4825,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         /// <summary>Pending agent enrolment codes (hashed). Instance-bound and short-lived: never in a backup.</summary>
         public List<AgentEnrollment> AgentEnrollments { get; set; } = [];
 
+        /// <summary>Tokens for the instance's own API (hashed). Instance-bound: never in a backup.</summary>
+        public List<ApiToken> ApiTokens { get; set; } = [];
+
         public List<WorkspaceBackupJob> BackupJobs { get; set; } = [];
 
         public List<SensorObservation> SensorHistory { get; set; } = [];

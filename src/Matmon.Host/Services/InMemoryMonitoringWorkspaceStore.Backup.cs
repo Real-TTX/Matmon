@@ -691,6 +691,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // would let an agent enrol against a workspace whose admin never issued it.
         document.AgentEnrollments = [];
 
+        // An API token opens this instance's API; restored elsewhere it would open that one too.
+        document.ApiTokens = [];
+
         // A browser's push subscription belongs to this instance's VAPID key pair and to the browser - it means nothing anywhere
         // else, and a restore must not make another machine notify someone's phone.
         document.PushDevices = [];

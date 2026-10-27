@@ -41,6 +41,7 @@
         {
             <a class="@Css(link.Key)" aria-current="@Current(link.Key)" href="@Url.Content("~" + link.Path)">@link.Title</a>
         }
+        <a class="@Css("api")" aria-current="@Current("api")" asp-page="/SystemApiTokens">API tokens</a>
         <a class="@Css("logs")" aria-current="@Current("logs")" asp-page="/Logs">Logs</a>
     }
 </nav>

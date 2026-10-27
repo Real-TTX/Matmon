@@ -1,0 +1,174 @@
+@page "/system/api-tokens"
+@model Matmon.Host.Pages.SystemApiTokensModel
+@using Matmon.Core.Domain
+@{
+    ViewData["Title"] = "System";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("API tokens") };
+    var now = DateTimeOffset.UtcNow;
+    var secret = Model.NewSecret ?? "mmt_...";
+    var startExample =
+$@"curl -fsS -X POST {Model.BaseUrl}/api/v1/maintenance-windows \
+  -H ""Authorization: Bearer {secret}"" \
+  -H ""Content-Type: application/json"" \
+  -d '{{""target"": ""tag:web"", ""durationMinutes"": 30, ""name"": ""Deploy $CI_PIPELINE_ID""}}'";
+    var endExample =
+$@"curl -fsS -X POST {Model.BaseUrl}/api/v1/maintenance-windows/<id>/end \
+  -H ""Authorization: Bearer {secret}""";
+}
+
+<partial name="_SystemTabs" model="@("api")" />
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.NewSecret))
+{
+    @* The secret of the token just made: shown on exactly this render, then gone for good (only its hash is kept). *@
+    <div class="mat-alert mat-alert--success" role="status">
+        @MatUi.Icon("key")
+        <div class="mat-alert__body">
+            <span class="mat-alert__title">Token "@Model.NewTokenName"</span>
+            <span>Shown only now - put it into your pipeline's secret variables. If you lose it, create a new one.</span>
+            <div class="mat-input-group">
+                <input class="mat-input mat-mono" id="api-token-secret" value="@Model.NewSecret" readonly aria-label="API token" />
+                <button type="button" class="mat-btn mat-btn--secondary" data-copy="#api-token-secret">@MatUi.Icon("copy")<span>Copy</span></button>
+            </div>
+        </div>
+    </div>
+}
+
+<section class="mat-card">
+    <div class="mat-card__head">@MatUi.Icon("key")<h2 class="mat-card__title">Tokens</h2><span class="mat-text-muted mm-push-end">@Model.Tokens.Count(t => t.IsUsable(now)) active</span></div>
+    @if (Model.Tokens.Count == 0)
+    {
+        <div class="mat-card__body">
+            <div class="mat-empty">
+                <span class="mat-empty__icon">@MatUi.Icon("key")</span>
+                <div class="mat-empty__title">No API tokens yet</div>
+                <p>A token lets a CI/CD job or a script use this instance's API - for example to open a maintenance window while it deploys.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">API tokens</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Token</th>
+                        <th scope="col">May</th>
+                        <th scope="col">State</th>
+                        <th scope="col" class="mat-hide-sm">Expires</th>
+                        <th scope="col" class="mat-hide-sm">Last used</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var token in Model.Tokens)
+                    {
+                        <tr>
+                            <td data-label="Name" class="mat-table__primary">@token.Name<br /><small class="mat-text-muted">@token.CreatedUtc.ToDisplay().ToString("yyyy-MM-dd")@(string.IsNullOrWhiteSpace(token.CreatedBy) ? string.Empty : $" · {token.CreatedBy}")</small></td>
+                            <td data-label="Token" class="mat-mono">@token.Prefix…</td>
+                            <td data-label="May">@string.Join(", ", token.Scopes.Select(scope => ApiTokenScopes.All.FirstOrDefault(entry => entry.Key == scope).Title ?? scope))</td>
+                            <td data-label="State"><span class="@MatUi.PillClass(SystemApiTokensModel.Tone(token, now))">@SystemApiTokensModel.State(token, now)</span></td>
+                            <td data-label="Expires" class="mat-mono mat-hide-sm">@(token.ExpiresUtc?.ToDisplay().ToString("yyyy-MM-dd") ?? "never")</td>
+                            <td data-label="Last used" class="mat-mono mat-hide-sm">@(token.LastUsedUtc?.ToDisplay().ToString("g") ?? "-")@(string.IsNullOrWhiteSpace(token.LastUsedFrom) ? string.Empty : $" · {token.LastUsedFrom}")</td>
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    @if (token.RevokedUtc is null)
+                                    {
+                                        <form method="post" asp-page-handler="Revoke" asp-route-id="@token.Id">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Revoke @token.Name" data-tip="Revoke"
+                                                    data-confirm="Revoke this token? Whatever uses it is turned away at once." data-confirm-ok="Revoke" data-confirm-danger>@MatUi.Icon("x-circle")</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" asp-page-handler="Delete" asp-route-id="@token.Id">
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Remove @token.Name from the list" data-tip="Remove">@MatUi.Icon("trash")</button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<form method="post" asp-page-handler="Create" class="mat-form" novalidate>
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("plus")<h2 class="mat-card__title">New token</h2></div>
+        <div class="mat-card__body mat-stack">
+            @if (!string.IsNullOrWhiteSpace(Model.FormError))
+            {
+                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+            }
+            <div class="mat-form__grid">
+                <div class="mat-field">
+                    <label class="mat-label" for="Name">Name <span class="mat-req" aria-hidden="true">*</span></label>
+                    <input asp-for="Name" class="mat-input" placeholder="GitLab deploy" maxlength="80" required data-msg-required="Name the token after what uses it." />
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="Expiry">Expires</label>
+                    <select asp-for="Expiry" class="mat-select">
+                        @foreach (var (key, label) in SystemApiTokensModel.ExpiryOptions)
+                        {
+                            <option value="@key">@label</option>
+                        }
+                    </select>
+                </div>
+                <div class="mat-field" data-show-if="Expiry" data-show-value="date" hidden>
+                    <label class="mat-label" for="ExpiresOn">On</label>
+                    <input asp-for="ExpiresOn" type="date" class="mat-input" min="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")" max="@DateTime.UtcNow.AddDays(730).ToString("yyyy-MM-dd")" />
+                </div>
+            </div>
+            <fieldset class="mat-field mat-fieldset">
+                <legend class="mat-legend">May</legend>
+                @foreach (var (key, title, description) in ApiTokenScopes.All)
+                {
+                    <label class="mat-check">
+                        <input type="checkbox" name="Scopes" value="@key" checked="@Model.Scopes.Contains(key)" />
+                        <span class="mat-check__text"><strong>@title</strong><br /><small class="mat-text-muted">@description</small></span>
+                    </label>
+                }
+            </fieldset>
+        </div>
+    </section>
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("key")<span>Create token</span></button>
+    </div>
+</form>
+
+<section class="mat-card">
+    <div class="mat-card__head">@MatUi.Icon("terminal")<h2 class="mat-card__title">Using it in a pipeline</h2></div>
+    <div class="mat-card__body mat-stack">
+        <p>Open a maintenance window before the deploy - it answers with the window's <code>id</code> - and end it afterwards. The target is an element id, <code>tag:&lt;name&gt;</code> or the exact name of one element.</p>
+        <div class="mm-snippet">
+            <pre class="mat-code"><code id="api-example-start">@startExample</code></pre>
+            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#api-example-start">@MatUi.Icon("copy")<span>Copy</span></button>
+        </div>
+        <div class="mm-snippet">
+            <pre class="mat-code"><code id="api-example-end">@endExample</code></pre>
+            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#api-example-end">@MatUi.Icon("copy")<span>Copy</span></button>
+        </div>
+        <dl class="mat-kv">
+            <dt><code>GET /api/v1/maintenance-windows</code></dt><dd>Every window, with whether it is on now.</dd>
+            <dt><code>POST /api/v1/maintenance-windows</code></dt><dd>A one-time window: <code>target</code>, optional <code>name</code>, <code>start</code>, <code>end</code> or <code>durationMinutes</code> (default 60), <code>note</code>, <code>enabled</code>.</dd>
+            <dt><code>POST …/{id}/enable</code>, <code>…/disable</code></dt><dd>Switch a window (also a recurring one) on or off.</dd>
+            <dt><code>POST …/{id}/end</code></dt><dd>End a one-time window now.</dd>
+            <dt><code>DELETE …/{id}</code></dt><dd>Delete a window.</dd>
+        </dl>
+    </div>
+</section>
