@@ -46,6 +46,10 @@ internal sealed class TrayApp : ApplicationContext
     private bool _refreshing;
     private int _port = 8099;
     private string? _version;
+    private readonly string _startedFrom;
+    private readonly (DateTime Written, long Length)? _startedStamp;
+    private (DateTime Written, long Length)? _pendingStamp;
+    private bool _restart;
 
     private TrayApp()
     {
@@ -83,7 +87,20 @@ internal sealed class TrayApp : ApplicationContext
         _icon.DoubleClick += (_, _) => OpenPage("/");
         _icon.BalloonTipClicked += (_, _) => OpenPage("/");
 
-        _timer.Tick += async (_, _) => await RefreshAsync();
+        _startedFrom = Path.GetFullPath(SetupRunner.SelfPath);
+        _startedStamp = Stamp(_startedFrom);
+
+        _timer.Tick += async (_, _) =>
+        {
+            if (NewBuildInPlace())
+            {
+                _restart = true;
+                ExitThread();
+                return;
+            }
+
+            await RefreshAsync();
+        };
         _timer.Start();
         _ = RefreshAsync();
     }
@@ -97,8 +114,51 @@ internal sealed class TrayApp : ApplicationContext
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApp());
+        var tray = new TrayApp();
+        Application.Run(tray);
+        if (tray._restart)
+        {
+            // Hand over to the new build: the mutex first, or the new tray would see this one and quit.
+            mutex.ReleaseMutex();
+            Process.Start(new ProcessStartInfo(tray._startedFrom, "/tray") { UseShellExecute = false })?.Dispose();
+        }
+
         return 0;
+    }
+
+    /// <summary>
+    /// A self-update puts the new build's setup program where this tray was started from (the running file is renamed aside).
+    /// The file must have changed AND look the same on two ticks in a row, so a copy still being written is never started.
+    /// </summary>
+    private bool NewBuildInPlace()
+    {
+        var stamp = Stamp(_startedFrom);
+        if (stamp is null || stamp == _startedStamp)
+        {
+            _pendingStamp = null;
+            return false;
+        }
+
+        if (stamp != _pendingStamp)
+        {
+            _pendingStamp = stamp;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static (DateTime Written, long Length)? Stamp(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists ? (file.LastWriteTimeUtc, file.Length) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     public InstanceState State { get; private set; } = InstanceState.NotInstalled;

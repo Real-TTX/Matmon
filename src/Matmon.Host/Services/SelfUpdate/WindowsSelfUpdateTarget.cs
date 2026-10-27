@@ -109,6 +109,8 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         if (OperatingSystem.IsWindows())
         {
             WindowsInstallation.RefreshRegisteredVersion(MatmonVersion.Current);
+            // ...and the tray icon and uninstaller should be the ones of this build too.
+            WindowsInstallation.RefreshSetupProgram(InstallDirectory);
         }
 
         var files = new WindowsUpdateFiles(StateDirectory);

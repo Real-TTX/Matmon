@@ -212,6 +212,81 @@ public static class WindowsInstallation
             : $"Matmon has been removed. The data was kept in {installed.DataFolder}.");
     }
 
+    /// <summary>Where the program package carries the bare setup program of its build (the uninstaller and tray icon).</summary>
+    public static string PackagedSetupPath(string programFolder) => Path.Combine(programFolder, "setup", "MatmonSetup.exe");
+
+    private static int _setupRefreshed;
+
+    /// <summary>
+    /// After a self-update, puts the new build's setup program in place of the installed one - the self-update swaps only
+    /// the program folder, and the tray icon and the uninstaller live outside it, so they would otherwise stay on the build
+    /// that was first installed for good. The running copy is renamed aside (Windows allows renaming a running exe, not
+    /// overwriting it); a running tray notices the new file and restarts itself onto it. Once per process; called by the
+    /// running service. Only where the setup installed one - a bare install-service has no tray to keep current.
+    /// </summary>
+    public static void RefreshSetupProgram(string programFolder)
+    {
+        if (Interlocked.Exchange(ref _setupRefreshed, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var source = PackagedSetupPath(programFolder);
+            if (!File.Exists(source) || !File.Exists(SetupProgramPath))
+            {
+                return;
+            }
+
+            foreach (var leftover in Directory.GetFiles(SetupFolder, SetupProgramName + ".old-*"))
+            {
+                try
+                {
+                    File.Delete(leftover);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Still held by a tray that has not restarted yet - next time.
+                }
+            }
+
+            if (SameContent(source, SetupProgramPath))
+            {
+                return;
+            }
+
+            var aside = $"{SetupProgramPath}.old-{DateTime.UtcNow:yyyyMMddHHmmss}";
+            File.Move(SetupProgramPath, aside);
+            try
+            {
+                File.Copy(source, SetupProgramPath);
+            }
+            catch
+            {
+                File.Move(aside, SetupProgramPath);
+                throw;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The tray and the uninstaller keep working on the old build; the next start tries again.
+            Interlocked.Exchange(ref _setupRefreshed, 0);
+        }
+    }
+
+    private static bool SameContent(string first, string second)
+    {
+        if (new FileInfo(first).Length != new FileInfo(second).Length)
+        {
+            return false;
+        }
+
+        using var a = File.OpenRead(first);
+        using var b = File.Open(second, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return System.Security.Cryptography.SHA256.HashData(a).AsSpan().SequenceEqual(System.Security.Cryptography.SHA256.HashData(b));
+    }
+
     /// <summary>After a self-update the "Installed apps" entry should show the new version. Called by the running service.</summary>
     public static void RefreshRegisteredVersion(string version)
     {

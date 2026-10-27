@@ -45,11 +45,15 @@ FROM build AS windows-package
 ARG MATMON_VERSION=""
 WORKDIR /src/src/Matmon.Host
 COPY --from=agent /app/agent /out/package/agent
+# The package carries its build's setup program (setup/MatmonSetup.exe) too: the self-update swaps only the program
+# folder, and the running service puts this file in place of the installed tray icon / uninstaller
+# (WindowsInstallation.RefreshSetupProgram).
 RUN --mount=type=secret,id=agent_signing_key \
     require=false; \
     if [ -s /run/secrets/agent_signing_key ] && [ -n "$MATMON_VERSION" ]; then require=true; fi; \
     dotnet publish Matmon.Host.csproj -c Release -r win-x64 --self-contained true -o /out/package -p:MatmonVersion="$MATMON_VERSION" -p:MatmonAgentRequireSignature="$require" || exit 1; \
     dotnet publish ../Matmon.Setup/Matmon.Setup.csproj -c Release -r win-x64 -o /out/setup -p:MatmonVersion="${MATMON_VERSION:-local}" -p:MatmonAgentRequireSignature="$require" || exit 1; \
+    mkdir -p /out/package/setup && cp /out/setup/MatmonSetup.exe /out/package/setup/MatmonSetup.exe || exit 1; \
     if [ "$require" = true ]; then key="--key /run/secrets/agent_signing_key"; else key=""; fi; \
     dotnet run --file /src/scripts/package-windows.cs -- /out/package "${MATMON_VERSION:-local}" /out/feed $key --setup /out/setup/MatmonSetup.exe
 
