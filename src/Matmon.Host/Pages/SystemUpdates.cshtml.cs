@@ -46,6 +46,12 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
             await updates.RefreshOutcomeAsync(cancellationToken);
             Result = DescribeResult(finished, to, updates.Status);
         }
+        else if (updates.Status is { Installing: true } running)
+        {
+            // Back on the page while an update is still running (from another page, another tab, the cloud console):
+            // the same screen as right after "Install", not a page that looks idle.
+            Screen = new UpdateScreen(running.CurrentVersion, running.Offer?.Version ?? "the new version");
+        }
 
         Load();
         Input = new SelfUpdateSettingsInput

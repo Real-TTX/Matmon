@@ -60,12 +60,27 @@ function initializeUpdateScreen() {
   let wentAway = false;
   let finishing = false;
 
+  // Inside the Matmon.Cloud console this page is a frame: the cloud lays its own screen over the WHOLE console (and
+  // shows it again to whoever comes back while the instance restarts), so tell it - and tell it when it is over.
+  const tellConsole = (type) => {
+    if (window.parent === window) {
+      return;
+    }
+    try {
+      window.parent.postMessage({ type, from, to }, location.origin);
+    } catch {
+      // not the cloud console (another origin) - nothing to tell
+    }
+  };
+  tellConsole("matmon:update");
+
   const say = (text) => { if (state) { state.textContent = text; } };
   const finish = (delay) => {
     if (finishing) {
       return;
     }
     finishing = true;
+    tellConsole("matmon:update-done");
     // A moment for the installation to write down how it ended (a Docker helper does it right after the new container is up).
     window.setTimeout(() => {
       const query = new URLSearchParams({ finished: from, to });

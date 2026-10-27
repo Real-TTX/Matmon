@@ -13,6 +13,12 @@
     var ownHead = ViewData["OwnHead"] is true;
     var width = ViewData["Width"] as string;
     var pageClass = "mat-page" + (width == "narrow" ? " mat-page--narrow" : width == "wide" ? " mat-page--wide" : string.Empty);
+    // An update being installed is said on every page (it restarts Matmon in a moment) - System > Updates shows its own screen.
+    var updatingTo = shell.Authed
+        && !string.Equals(Context.Request.Path.Value?.TrimEnd('/'), "/system/updates", StringComparison.OrdinalIgnoreCase)
+        && Context.RequestServices.GetService(typeof(Matmon.Host.Services.SelfUpdate.SelfUpdateService)) is Matmon.Host.Services.SelfUpdate.SelfUpdateService { Status.Installing: true } selfUpdate
+            ? selfUpdate.Status.Offer?.Version ?? "a new version"
+            : null;
     var crumbs = BreadcrumbBuilder.Build(Context.Request.Path.Value ?? string.Empty, ViewData["Title"]?.ToString(), ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>);
     // Matmon's own brand (no partner logo, no product name) is the full logo with the drawn lettering, the tagline under it.
     var matmonBrand = !shell.PartnerLogo && string.Equals(shell.BrandName, "Matmon", StringComparison.Ordinal);
@@ -213,6 +219,13 @@
                                 <p class="mat-page__sub">@sub</p>
                             }
                         </div>
+                    </div>
+                }
+                @if (updatingTo is not null)
+                {
+                    <div class="mat-alert mat-alert--info" role="status">
+                        @MatUi.Icon("refresh")
+                        <div class="mat-alert__body"><span>The update to <strong>@updatingTo</strong> is being installed - Matmon restarts in a moment.</span> <a href="/system/updates">Show progress</a></div>
                     </div>
                 }
                 @RenderBody()

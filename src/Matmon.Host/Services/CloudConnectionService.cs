@@ -20,6 +20,7 @@ public sealed class CloudConnectionService : BackgroundService
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly CloudUpdateState _updateState;
+    private readonly SelfUpdate.SelfUpdateService _selfUpdate;
     private readonly ILogger<CloudConnectionService> _logger;
 
     private string? _lastStatus;
@@ -28,11 +29,13 @@ public sealed class CloudConnectionService : BackgroundService
         IMonitoringWorkspaceStore workspaceStore,
         MatmonRuntimeOptions runtimeOptions,
         CloudUpdateState updateState,
+        SelfUpdate.SelfUpdateService selfUpdate,
         ILogger<CloudConnectionService> logger)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
         _updateState = updateState;
+        _selfUpdate = selfUpdate;
         _logger = logger;
     }
 
@@ -65,6 +68,7 @@ public sealed class CloudConnectionService : BackgroundService
         string? clientBaseUrl = null;
         var lastHeartbeat = DateTimeOffset.MinValue;
         var lastIntervalSeconds = 0;
+        string? lastUpdatingTo = null;
 
         using var timer = new PeriodicTimer(PollInterval);
         do
@@ -115,6 +119,15 @@ public sealed class CloudConnectionService : BackgroundService
                 if (link.IntervalSeconds != lastIntervalSeconds)
                 {
                     lastIntervalSeconds = link.IntervalSeconds;
+                    lastHeartbeat = DateTimeOffset.MinValue;
+                }
+
+                // An update that starts (or ends without a restart) is told at once: the cloud console shows it over the
+                // whole page, also to whoever opens the console while the instance is away restarting.
+                var updatingTo = UpdatingTo();
+                if (updatingTo != lastUpdatingTo)
+                {
+                    lastUpdatingTo = updatingTo;
                     lastHeartbeat = DateTimeOffset.MinValue;
                 }
 
@@ -240,7 +253,8 @@ public sealed class CloudConnectionService : BackgroundService
                 probeCount,
                 mapCount,
                 ProtocolVersion,
-                intervalSeconds))
+                intervalSeconds,
+                UpdatingTo()))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
@@ -467,5 +481,13 @@ public sealed class CloudConnectionService : BackgroundService
     private sealed record CloudHeartbeatRequest(
         string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts,
         int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount, int? ProtocolVersion,
-        int? HeartbeatIntervalSeconds);
+        int? HeartbeatIntervalSeconds,
+        string? UpdatingTo);
+
+    /// <summary>The version an update is being installed to right now ("installing" on System > Updates), else null.</summary>
+    private string? UpdatingTo()
+    {
+        var status = _selfUpdate.Status;
+        return status.Installing ? status.Offer?.Version ?? "a new version" : null;
+    }
 }
