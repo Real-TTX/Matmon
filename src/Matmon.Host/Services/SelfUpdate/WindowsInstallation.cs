@@ -33,7 +33,7 @@ public static class WindowsInstallation
     public const string ServiceName = "Matmon";
     public const string FirewallRuleName = "Matmon";
     public const string ExecutableName = "Matmon.Host.exe";
-    public const string SetupProgramName = "Matmon Setup.exe";
+    public const string SetupProgramName = "Matmon.exe";
     private const string UninstallKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Matmon";
     private const string RunKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "Matmon";
@@ -44,9 +44,17 @@ public static class WindowsInstallation
 
     public static string DefaultDataFolder => Path.Combine(MatmonDataRoot, "data");
 
-    public static string SetupFolder => Path.Combine(MatmonDataRoot, "setup");
+    /// <summary>Where the installed program lives that is the tray icon, the uninstaller and the elevated service helper in
+    /// one: outside the program folder, because a self-update swaps that whole folder and a running tray would block it.
+    /// It is called <c>Matmon.exe</c> (it used to be "Matmon Setup.exe" in <c>setup\</c>, which read as if an installer
+    /// ran at every sign-in - <see cref="LegacySetupProgramPath"/>, moved by <see cref="RefreshSetupProgram"/>).</summary>
+    public static string SetupFolder => Path.Combine(MatmonDataRoot, "app");
 
     public static string SetupProgramPath => Path.Combine(SetupFolder, SetupProgramName);
+
+    public static string LegacySetupFolder => Path.Combine(MatmonDataRoot, "setup");
+
+    public static string LegacySetupProgramPath => Path.Combine(LegacySetupFolder, "Matmon Setup.exe");
 
     /// <summary>Whether the tray icon is set to start at sign-in.</summary>
     public static bool TrayIconRegistered()
@@ -151,6 +159,8 @@ public static class WindowsInstallation
             SecureFolder(SetupFolder, usersMayRun: true);
             StopTrayIcons();
             Retry(() => File.WriteAllBytes(SetupProgramPath, uninstaller));
+            // An installation from before the rename had it as "setup\Matmon Setup.exe" (its tray was ended above).
+            DeleteDirectoryQuietly(LegacySetupFolder);
             uninstallCommand = $"\"{SetupProgramPath}\" /uninstall";
         }
         else
@@ -201,6 +211,7 @@ public static class WindowsInstallation
         }
 
         DeleteDirectoryQuietly(SetupFolder);
+        DeleteDirectoryQuietly(LegacySetupFolder);
         if (Directory.Exists(MatmonDataRoot) && !Directory.EnumerateFileSystemEntries(MatmonDataRoot).Any())
         {
             DeleteDirectoryQuietly(MatmonDataRoot);
@@ -234,22 +245,22 @@ public static class WindowsInstallation
         try
         {
             var source = PackagedSetupPath(programFolder);
-            if (!File.Exists(source) || !File.Exists(SetupProgramPath))
+            if (!File.Exists(source))
             {
                 return;
             }
 
-            foreach (var leftover in Directory.GetFiles(SetupFolder, SetupProgramName + ".old-*"))
+            if (File.Exists(LegacySetupProgramPath))
             {
-                try
-                {
-                    File.Delete(leftover);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // Still held by a tray that has not restarted yet - next time.
-                }
+                MoveFromLegacyLocation(source);
             }
+
+            if (!File.Exists(SetupProgramPath))
+            {
+                return; // a bare install-service: no tray to keep current
+            }
+
+            DeleteLeftovers(SetupFolder, SetupProgramName);
 
             // An installation from before the Start menu entry existed gets it here.
             if (TrayIconRegistered())
@@ -257,27 +268,116 @@ public static class WindowsInstallation
                 EnsureStartMenuShortcut();
             }
 
-            if (SameContent(source, SetupProgramPath))
-            {
-                return;
-            }
-
-            var aside = $"{SetupProgramPath}.old-{DateTime.UtcNow:yyyyMMddHHmmss}";
-            File.Move(SetupProgramPath, aside);
-            try
-            {
-                File.Copy(source, SetupProgramPath);
-            }
-            catch
-            {
-                File.Move(aside, SetupProgramPath);
-                throw;
-            }
+            ReplaceRunning(source, SetupProgramPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // The tray and the uninstaller keep working on the old build; the next start tries again.
             Interlocked.Exchange(ref _setupRefreshed, 0);
+        }
+    }
+
+    /// <summary>
+    /// Moves an installation from "setup\Matmon Setup.exe" to "app\Matmon.exe": the new file, the sign-in entry, the
+    /// Start menu entry and the uninstall command point at the new place. The OLD file is replaced by the new build too,
+    /// so a tray still running from there restarts onto it (it watches its own file) and that new build hands over to
+    /// app\Matmon.exe at once; the old folder goes once nothing runs from it any more.
+    /// </summary>
+    private static void MoveFromLegacyLocation(string source)
+    {
+        Directory.CreateDirectory(SetupFolder);
+        SecureFolder(SetupFolder, usersMayRun: true);
+        if (!File.Exists(SetupProgramPath))
+        {
+            File.Copy(source, SetupProgramPath);
+        }
+
+        if (TrayIconRegistered())
+        {
+            SetTrayIcon(true); // rewrites the Run value and replaces the Start menu entry
+        }
+
+        using (var entry = Registry.LocalMachine.OpenSubKey(UninstallKeyPath, writable: true))
+        {
+            if (entry?.GetValue("UninstallString") is string uninstall && uninstall.Contains(LegacySetupProgramPath, StringComparison.OrdinalIgnoreCase))
+            {
+                entry.SetValue("UninstallString", $"\"{SetupProgramPath}\" /uninstall");
+                entry.SetValue("QuietUninstallString", $"\"{SetupProgramPath}\" /uninstall /silent");
+            }
+        }
+
+        DeleteLeftovers(LegacySetupFolder, Path.GetFileName(LegacySetupProgramPath));
+        if (TrayRunsFrom(LegacySetupProgramPath))
+        {
+            ReplaceRunning(source, LegacySetupProgramPath);
+        }
+        else
+        {
+            DeleteDirectoryQuietly(LegacySetupFolder);
+        }
+    }
+
+    private static bool TrayRunsFrom(string path)
+    {
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(path)))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (SamePath(process.MainModule?.FileName ?? "", path))
+                    {
+                        return true;
+                    }
+                }
+                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Puts <paramref name="source"/> in place of <paramref name="target"/>, which may be running: the running copy is
+    /// renamed aside (Windows allows renaming a running exe, not overwriting it) and deleted on a later start.</summary>
+    private static void ReplaceRunning(string source, string target)
+    {
+        if (SameContent(source, target))
+        {
+            return;
+        }
+
+        var aside = $"{target}.old-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        File.Move(target, aside);
+        try
+        {
+            File.Copy(source, target);
+        }
+        catch
+        {
+            File.Move(aside, target);
+            throw;
+        }
+    }
+
+    private static void DeleteLeftovers(string folder, string fileName)
+    {
+        if (!Directory.Exists(folder))
+        {
+            return;
+        }
+
+        foreach (var leftover in Directory.GetFiles(folder, fileName + ".old-*"))
+        {
+            try
+            {
+                File.Delete(leftover);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Still held by a tray that has not restarted yet - next time.
+            }
         }
     }
 
@@ -370,7 +470,7 @@ public static class WindowsInstallation
 
         if (enabled)
         {
-            EnsureStartMenuShortcut();
+            EnsureStartMenuShortcut(replace: true);
         }
         else
         {
@@ -385,9 +485,9 @@ public static class WindowsInstallation
 
     /// <summary>Creates the Start menu entry when it is missing (an installation from before it existed gets it from the
     /// running service after its next update). Cosmetic: a failure is swallowed.</summary>
-    public static void EnsureStartMenuShortcut()
+    public static void EnsureStartMenuShortcut(bool replace = false)
     {
-        if (File.Exists(StartMenuShortcutPath) || !File.Exists(SetupProgramPath))
+        if ((File.Exists(StartMenuShortcutPath) && !replace) || !File.Exists(SetupProgramPath))
         {
             return;
         }
@@ -442,13 +542,17 @@ public static class WindowsInstallation
     /// <summary>Ends every running tray icon (any user): it holds the setup program open, which is about to be replaced or removed.</summary>
     private static void StopTrayIcons()
     {
-        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(SetupProgramName)))
+        // The tray under its current name and under the one it had before (a moved installation may still run the old one).
+        var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(SetupProgramName))
+            .Concat(Process.GetProcessesByName(Path.GetFileNameWithoutExtension(LegacySetupProgramPath)));
+        foreach (var process in processes)
         {
             using (process)
             {
                 try
                 {
-                    if (process.Id != Environment.ProcessId && SamePath(process.MainModule?.FileName ?? "", SetupProgramPath))
+                    var file = process.MainModule?.FileName ?? "";
+                    if (process.Id != Environment.ProcessId && (SamePath(file, SetupProgramPath) || SamePath(file, LegacySetupProgramPath)))
                     {
                         process.Kill();
                         process.WaitForExit(5000);

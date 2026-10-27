@@ -281,7 +281,7 @@ How it updates depends on how Matmon runs:
   ```powershell
   .\MatmonSetup-x64.exe /silent /port=8099 /firewall          # install or update
   .\MatmonSetup-x64.exe /silent /dir="D:\Matmon" /notray      # other program folder, no tray icon
-  & "$env:ProgramData\Matmon\setup\Matmon Setup.exe" /uninstall /silent [/removedata]
+  & "$env:ProgramData\Matmon\app\Matmon.exe" /uninstall /silent [/removedata]
   ```
 
   The exit code is 0 on success, and the log is `%TEMP%\matmon-setup.log`. You can also skip the setup: unpack

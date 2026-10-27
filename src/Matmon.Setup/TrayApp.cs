@@ -18,7 +18,7 @@ internal enum InstanceState
 }
 
 /// <summary>
-/// The tray icon of the Windows instance: <c>Matmon Setup.exe /tray</c>, started at every sign-in (HKLM Run) in the user's
+/// The tray icon of the Windows instance: <c>%ProgramData%\Matmon\app\Matmon.exe /tray</c>, started at every sign-in (HKLM Run) in the user's
 /// own session - the service runs in session 0 and can show nothing. It looks at the service (status, which any user may
 /// read) and at <c>/healthz</c>, opens the web interface, and starts / stops / restarts the service through an ELEVATED
 /// copy of itself (<c>/service=start|stop|restart</c>, one UAC prompt each) - it never holds administrator rights itself.

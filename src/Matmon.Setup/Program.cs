@@ -8,8 +8,19 @@ internal static class Program
     private static int Main(string[] args)
     {
         var arguments = SetupArguments.Parse(args);
-        if (arguments.Tray)
+
+        // The installed copy (app\Matmon.exe) started without arguments - a double-click, the Start menu - is the tray icon,
+        // not the installer: updates come through System > Updates, the installer is the downloaded MatmonSetup-x64.exe.
+        var installedCopy = SamePath(SetupRunner.SelfPath, WindowsInstallation.SetupProgramPath);
+        if (arguments.Tray || (installedCopy && args.Length == 0))
         {
+            // A tray still started from before the rename (setup\Matmon Setup.exe) hands over to app\Matmon.exe.
+            if (SamePath(SetupRunner.SelfPath, WindowsInstallation.LegacySetupProgramPath) && File.Exists(WindowsInstallation.SetupProgramPath))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(WindowsInstallation.SetupProgramPath, "/tray") { UseShellExecute = false })?.Dispose();
+                return 0;
+            }
+
             return TrayApp.Run();
         }
 
@@ -46,6 +57,18 @@ internal static class Program
             {
                 SetupRunner.DeleteSelfLater();
             }
+        }
+    }
+
+    private static bool SamePath(string first, string second)
+    {
+        try
+        {
+            return string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
         }
     }
 

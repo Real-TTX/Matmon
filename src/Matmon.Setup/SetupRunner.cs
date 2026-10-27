@@ -288,7 +288,8 @@ internal static class SetupRunner
     public static bool RelaunchOutsideSetupFolder(string[] args)
     {
         var self = Path.GetFullPath(SelfPath);
-        if (!self.StartsWith(Path.GetFullPath(WindowsInstallation.SetupFolder), StringComparison.OrdinalIgnoreCase))
+        if (!self.StartsWith(Path.GetFullPath(WindowsInstallation.SetupFolder), StringComparison.OrdinalIgnoreCase)
+            && !self.StartsWith(Path.GetFullPath(WindowsInstallation.LegacySetupFolder), StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
