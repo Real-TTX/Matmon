@@ -227,6 +227,7 @@ builder.Services.AddSingleton<SlaveProbeRuntimeState>();
 builder.Services.AddSingleton<ProbeSensorAssignmentProvider>();
 builder.Services.AddSingleton<NetworkDiscoveryService>();
 builder.Services.AddSingleton<DiscoveryJobStore>();
+builder.Services.AddSingleton<Matmon.Host.Services.Import.PrtgImportSessions>();
 builder.Services.AddSingleton<IOnDemandRunStore, OnDemandRunStore>();
 builder.Services.AddSingleton<MapDisplayProvider>();
 // Uploaded map pictures live on disk under data/uploads, NOT in workspace.json - that file is fully
@@ -339,6 +340,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/SystemPlugins", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemUpdates", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/SystemApiTokens", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/PrtgImport", MatmonSecurity.AdminPolicy);
 }).AddMvcOptions(options =>
 {
     options.Filters.Add<MatmonPageWriteGuard>();

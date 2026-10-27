@@ -149,3 +149,8 @@ a, button, label, summary, select, [role="button"], [role="tab"], [role="menuite
 @media (max-width: 600px) {
   .mm-connection { top: calc(var(--mat-topbar-h) + var(--mat-space-2) + var(--mat-safe-top)); bottom: auto; }
 }
+
+/* Import from PRTG: the tree as a table, each row indented by its depth (--depth, set per row) */
+.mat-table td.mm-prtg-tree__name { padding-inline-start: calc(var(--mat-space-3) + var(--depth, 0) * 1.25rem); }
+.mm-prtg-tree__name > .mat-icon { margin-inline-end: var(--mat-space-2); vertical-align: -0.15em; color: var(--mat-text-muted); }
+.mm-prtg-tree__container td { background: var(--mat-surface-2); }

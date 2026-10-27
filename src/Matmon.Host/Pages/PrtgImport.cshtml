@@ -1,0 +1,199 @@
+@page "/discovery/prtg"
+@model Matmon.Host.Pages.PrtgImportModel
+@using Matmon.Core.Import
+@{
+    ViewData["Title"] = "Import from PRTG";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Discovery", "/Discovery"), new BreadcrumbItem("Import from PRTG") };
+    var rows = Model.Rows().ToList();
+    var sensors = rows.Where(row => row.Node.Kind == PrtgNodeKind.Sensor).Select(row => row.Node).ToList();
+    var counts = sensors.GroupBy(sensor => PrtgImportModel.Mapping(sensor).Level).ToDictionary(group => group.Key, group => group.Count());
+    int Count(PrtgMappingLevel level) => counts.TryGetValue(level, out var n) ? n : 0;
+    var chosen = Model.Sensors.ToHashSet();
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.Error))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.Error</div></div>
+}
+
+@if (Model.Report is { } report)
+{
+    @* ---- What the import did ---- *@
+    <div class="mat-alert mat-alert--success" role="status">
+        @MatUi.Icon("check-circle")
+        <div class="mat-alert__body">
+            Imported <strong>@report.SensorsCreated</strong> sensors on <strong>@report.HostsCreated</strong> new hosts in <strong>@report.FoldersCreated</strong> new folders.
+            @if (report.SensorsSkippedExisting > 0)
+            {
+                <span>@report.SensorsSkippedExisting were there already and stayed as they were.</span>
+            }
+        </div>
+    </div>
+    @if (report.LimitReason is not null)
+    {
+        <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">The import stopped at the licence limit: @report.LimitReason</div></div>
+    }
+    @if (report.ToComplete.Count > 0)
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("wrench")<h2 class="mat-card__title">To complete</h2><span class="mat-text-muted mm-push-end">@report.ToComplete.Count</span></div>
+            <div class="mat-card__body"><p class="mat-muted">PRTG's API hands out no passwords - add the credentials on the hosts (or a folder above them, they are inherited).</p></div>
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Imported sensors that need something added</caption>
+                    <thead><tr><th scope="col">Sensor</th><th scope="col">What is missing</th></tr></thead>
+                    <tbody>
+                        @foreach (var (path, note) in report.ToComplete)
+                        {
+                            <tr><td data-label="Sensor" class="mat-table__primary">@path</td><td data-label="What is missing">@note</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+    @if (report.NotImported.Count > 0)
+    {
+        <details class="mat-collapse">
+            <summary><span>Not imported (@report.NotImported.Count)</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+            <div class="mat-accordion__body">
+                <ul class="mat-stack mat-stack--sm">
+                    @foreach (var (path, note) in report.NotImported)
+                    {
+                        <li><strong>@path</strong> - <span class="mat-muted">@note</span></li>
+                    }
+                </ul>
+            </div>
+        </details>
+    }
+    <div class="mat-btn-row">
+        <a class="mat-btn mat-btn--primary" asp-page="/Monitoring">@MatUi.Icon("activity")<span>Open the sensors</span></a>
+        <a class="mat-btn mat-btn--secondary" asp-page="/PrtgImport">@MatUi.Icon("refresh")<span>Import more</span></a>
+    </div>
+}
+else if (Model.Session is null)
+{
+    @* ---- Step 1: connect ---- *@
+    <form method="post" asp-page-handler="Connect" class="mat-form" novalidate>
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("link")<h2 class="mat-card__title">Connect to PRTG</h2></div>
+            <div class="mat-card__body mat-stack">
+                <div class="mat-form__grid">
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-label" for="BaseUrl">PRTG address <span class="mat-req" aria-hidden="true">*</span></label>
+                        <input asp-for="BaseUrl" class="mat-input" type="url" placeholder="https://prtg.example.local" required
+                               data-msg-required="Enter the address of the PRTG web interface." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="AuthMode">Sign in with</label>
+                        <select asp-for="AuthMode" class="mat-select">
+                            <option value="token">API token (PRTG 22.1 and newer)</option>
+                            <option value="user">User name and passhash / password</option>
+                        </select>
+                    </div>
+                    <div class="mat-field" data-show-if="AuthMode" data-show-value="token">
+                        <label class="mat-label" for="ApiToken">API token</label>
+                        <input asp-for="ApiToken" class="mat-input mat-mono" type="password" autocomplete="off" />
+                        <span class="mat-hint">Setup &gt; Account settings &gt; API keys - read access is enough.</span>
+                    </div>
+                    <div class="mat-field" data-show-if="AuthMode" data-show-value="user" hidden>
+                        <label class="mat-label" for="Username">User name</label>
+                        <input asp-for="Username" class="mat-input" autocomplete="off" />
+                    </div>
+                    <div class="mat-field" data-show-if="AuthMode" data-show-value="user" hidden>
+                        <label class="mat-label" for="Passhash">Passhash</label>
+                        <input asp-for="Passhash" class="mat-input mat-mono" type="password" autocomplete="off" />
+                        <span class="mat-hint">Setup &gt; Account settings &gt; Show passhash. Or use the password below.</span>
+                    </div>
+                    <div class="mat-field" data-show-if="AuthMode" data-show-value="user" hidden>
+                        <label class="mat-label" for="Password">Password</label>
+                        <input asp-for="Password" class="mat-input" type="password" autocomplete="off" />
+                    </div>
+                </div>
+                <label class="mat-check"><input type="checkbox" asp-for="IgnoreCertificateErrors" /><span class="mat-check__text">Accept the server's certificate even if it is self-signed</span></label>
+                <p class="mat-hint">Nothing is changed in PRTG. The token is used for this import only and is not stored.</p>
+            </div>
+        </section>
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("download")<span>Read the PRTG tree</span></button>
+            <a class="mat-btn mat-btn--secondary" asp-page="/Discovery">@MatUi.Icon("x")<span>Cancel</span></a>
+        </div>
+    </form>
+}
+else
+{
+    @* ---- Step 2: choose ---- *@
+    <form method="post" asp-page-handler="Import" class="mat-form" novalidate>
+        <input type="hidden" name="session" value="@Model.Session" />
+        <div class="mat-grid mat-grid--4">
+            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Taken over</span><span class="mat-stat__value mat-text-success">@Count(PrtgMappingLevel.Supported)</span></div></div>
+            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Needs completing</span><span class="mat-stat__value mat-text-warning">@Count(PrtgMappingLevel.Partial)</span></div></div>
+            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Built into Matmon</span><span class="mat-stat__value">@Count(PrtgMappingLevel.Covered)</span></div></div>
+            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Not imported</span><span class="mat-stat__value mat-text-muted">@Count(PrtgMappingLevel.Unsupported)</span></div></div>
+        </div>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("folder")<h2 class="mat-card__title">Where to</h2></div>
+            <div class="mat-card__body mat-stack">
+                <div class="mat-field">
+                    <label class="mat-label" for="picker-prtg-target-trigger">Import into</label>
+                    <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "TargetId", DomId = "picker-prtg-target", SelectedId = Model.TargetId, Placeholder = "Choose a probe or folder", Options = Model.TargetOptions, AllowClear = false })" />
+                    <span class="mat-hint">PRTG's groups become folders and its devices hosts below it; the sensors run on the probe that owns it.</span>
+                </div>
+                <label class="mat-check"><input type="checkbox" asp-for="ProbesAsFolders" /><span class="mat-check__text">Keep PRTG's probes as folders</span></label>
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("list-checks")<h2 class="mat-card__title">What to import</h2><span class="mat-text-muted mm-push-end">@sensors.Count sensors</span></div>
+            <div class="mat-table-wrap" data-selectable>
+                <table class="mat-table mm-prtg-tree">
+                    <caption class="mat-sr-only">The PRTG tree and what each sensor becomes</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col" class="mat-table__select"><input type="checkbox" data-select-all aria-label="Choose every sensor that can be imported" /></th>
+                            <th scope="col">PRTG</th>
+                            <th scope="col">Becomes</th>
+                            <th scope="col" class="mat-hide-sm">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (node, depth) in rows)
+                        {
+                            if (node.Kind == PrtgNodeKind.Sensor)
+                            {
+                                var mapping = PrtgImportModel.Mapping(node);
+                                var importable = mapping.SensorTypeKey is not null;
+                                <tr>
+                                    <td data-label="Import" class="mat-table__select">
+                                        @if (importable)
+                                        {
+                                            <input type="checkbox" name="Sensors" value="@node.Id" checked="@chosen.Contains(node.Id)" data-select-row aria-label="Import @node.Name" />
+                                        }
+                                    </td>
+                                    <td data-label="PRTG" class="mm-prtg-tree__name" style="--depth: @depth">@MatUi.Icon("activity")<span>@node.Name</span> <small class="mat-text-muted">@(node.SensorType ?? node.SensorKind)@(node.Paused ? " · paused" : string.Empty)</small></td>
+                                    <td data-label="Becomes"><span class="@MatUi.PillClass(PrtgImportModel.Tone(mapping.Level))">@PrtgImportModel.Label(mapping.Level)</span> @if (mapping.SensorTypeKey is { } key) { <span class="mat-mono">@key</span> }</td>
+                                    <td data-label="Note" class="mat-hide-sm mat-text-muted">@mapping.Note</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                var icon = node.Kind switch { PrtgNodeKind.Probe => "server", PrtgNodeKind.Device => "monitor", _ => "folder" };
+                                <tr class="mm-prtg-tree__container">
+                                    <td data-label="" class="mat-table__select"></td>
+                                    <td data-label="PRTG" class="mm-prtg-tree__name" style="--depth: @depth" colspan="3">@MatUi.Icon(icon)<strong>@node.Name</strong>@if (node.Host is { } host) { <span class="mat-mono mat-text-muted"> @host</span> }</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("download")<span>Import</span></button>
+            <a class="mat-btn mat-btn--secondary" asp-page="/PrtgImport">@MatUi.Icon("x")<span>Start over</span></a>
+        </div>
+    </form>
+}

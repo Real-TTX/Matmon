@@ -630,7 +630,13 @@ else
                     <span class="mat-empty__icon">@MatUi.Icon("clock")</span>
                     <div class="mat-empty__title">No discovery history yet</div>
                     <p>A finished scan stays here, with its result, until you create hosts and sensors from it.</p>
-                    <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Start discovery</span></a>
+                    <div class="mat-btn-row">
+                        <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Start discovery</span></a>
+                        @if (User.IsInRole(MatmonUserRole.Admin.ToString()))
+                        {
+                            <a class="mat-btn mat-btn--secondary" asp-page="/PrtgImport">@MatUi.Icon("download")<span>Import from PRTG</span></a>
+                        }
+                    </div>
                 </div>
             }
             else
@@ -729,7 +735,13 @@ else
                 </dialog>
 
                 <div class="mat-actions">
-                    <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Start discovery</span></a>
+                    <div class="mat-btn-row">
+                        <a class="mat-btn mat-btn--primary" asp-page="/Discovery" asp-route-tab="scan">@MatUi.Icon("search")<span>Start discovery</span></a>
+                        @if (User.IsInRole(MatmonUserRole.Admin.ToString()))
+                        {
+                            <a class="mat-btn mat-btn--secondary" asp-page="/PrtgImport">@MatUi.Icon("download")<span>Import from PRTG</span></a>
+                        }
+                    </div>
                 </div>
             }
         </div>
