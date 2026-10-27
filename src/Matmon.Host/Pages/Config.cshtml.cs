@@ -521,8 +521,6 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "general" });
     }
 
-    /// <summary>Set the customer's consent for the managing service partner to access this instance. Posts the
-    /// change to Matmon.Cloud (the authority); the next heartbeat re-syncs it. Admin-only.</summary>
     // Cloud config backup = everything except the bulky telemetry sections AND Users (shared mask, so the
     // scheduler + wizard restore use the exact same set). Users are excluded so a cross-instance / DR restore
     // can never overwrite the local accounts and lock out the admin doing the restore.
@@ -635,56 +633,6 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "backup" });
     }
 
-    public async Task<IActionResult> OnPostServicePartnerConsentAsync(bool canManage, CancellationToken cancellationToken)
-    {
-        if (!MatmonSecurity.IsAdmin(User))
-        {
-            return Forbid();
-        }
-
-        AdoptEnvironmentLink();
-
-        var settings = _workspaceStore.GetCloudConnectionSettings();
-        var token = _workspaceStore.GetCloudConnectionToken();
-        var url = (settings.Configured ? settings.Url : _runtimeOptions.CloudUrl)?.Trim().TrimEnd('/');
-        var instanceId = settings.Configured ? settings.InstanceId : _runtimeOptions.CloudInstanceId;
-        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(instanceId) || string.IsNullOrWhiteSpace(token))
-        {
-            ErrorMessage = "Not connected to Matmon.Cloud.";
-            return RedirectToPage(new { tab = "partner" });
-        }
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/instances/{instanceId}/service-partner/consent")
-            {
-                Content = JsonContent.Create(new { canManage })
-            };
-            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
-            using var response = await CloudHttp.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                ErrorMessage = $"Matmon.Cloud rejected the change ({(int)response.StatusCode}).";
-                return RedirectToPage(new { tab = "partner" });
-            }
-
-            // Reflect immediately; the next heartbeat re-syncs the authoritative value from the cloud.
-            var current = _workspaceStore.GetServicePartnerInfo();
-            if (current is not null)
-            {
-                current.CanManage = canManage;
-                _workspaceStore.SetServicePartnerInfo(current);
-            }
-            StatusMessage = canManage ? "Service partner access granted." : "Service partner access revoked.";
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Could not reach Matmon.Cloud: {ex.Message}";
-        }
-
-        return RedirectToPage(new { tab = "partner" });
-    }
-
     /// <summary>Clear the cached license token - the instance falls back to the free Personal plan (until the cloud re-issues one).</summary>
     public IActionResult OnPostClearLicenseToken()
     {
@@ -791,7 +739,7 @@ public class ConfigModel : PageModel
     /// UI from now on (and no longer depends on the environment carrying the instance id and token).</summary>
     /// <summary>A cloud feature changed while the link still comes from environment variables adopts that link first,
     /// as "Keep this link" does. Every feature but the heartbeat reads the STORED link, so relay, Full Access, the
-    /// interval, rename, consent and the cloud backups used to report success and then do nothing.</summary>
+    /// interval, rename and the cloud backups used to report success and then do nothing.</summary>
     private void AdoptEnvironmentLink()
     {
         if (!_workspaceStore.GetCloudConnectionSettings().Configured && _runtimeOptions.HasCloudBootstrapLink)

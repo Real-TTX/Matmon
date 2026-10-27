@@ -24,7 +24,6 @@ internal static class DemoServicePartnerSeed
             Name = name,
             ContactEmail = "support@acme-msp.example",
             ContactPhone = "+49 30 1234567",
-            CanManage = true,
             BrandingSuppressed = false,
             ProductName = productName,
             LogoIsOem = options.DemoServicePartnerOemLogo,

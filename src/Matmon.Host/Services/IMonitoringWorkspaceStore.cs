@@ -415,7 +415,7 @@ public interface IMonitoringWorkspaceStore
     /// <summary>Caches the cloud-issued license token.</summary>
     void SetLicenseToken(string? token, bool persistImmediately = false);
 
-    /// <summary>The managing service partner (name/contact + consent) cached from the cloud; null if none fetched.</summary>
+    /// <summary>The managing service partner (name/contact + branding) cached from the cloud; null if none fetched.</summary>
     ServicePartnerInfo? GetServicePartnerInfo();
 
     /// <summary>Just the partner brand accent colour (no logo clone), for the per-render layout accent override.</summary>
@@ -451,7 +451,7 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The partner logo bytes + MIME for the branding-logo endpoint, or null when suppressed / none.</summary>
     (byte[] Bytes, string ContentType)? GetServicePartnerLogo();
 
-    /// <summary>Caches the cloud-reported service partner + consent.</summary>
+    /// <summary>Caches the cloud-reported service partner.</summary>
     void SetServicePartnerInfo(ServicePartnerInfo? info);
 
     /// <summary>The admin-configured system display timezone (IANA id); null = server local.</summary>

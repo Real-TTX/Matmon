@@ -948,21 +948,8 @@ else if (Model.IsActiveTab("partner") && canManageSystem && Model.ServicePartner
                 {
                     <dt>Phone</dt><dd class="mat-mono">@sp.ContactPhone</dd>
                 }
-                <dt>Access</dt><dd><span class="@MatUi.PillClass(sp.CanManage ? "ok" : "warn")">@(sp.CanManage ? "Allowed" : "Not allowed")</span></dd>
+                <dt>Access</dt><dd>Administers this instance through Matmon.Cloud, remote access included</dd>
             </dl>
-
-            <form method="post" asp-page-handler="ServicePartnerConsent" class="mat-form" novalidate>
-                <label class="mat-check">
-                    <input type="checkbox" id="partner-can-manage" name="canManage" value="true" checked="@sp.CanManage" />
-                    <span class="mat-check__text">
-                        <span>Allow <strong>@sp.Name</strong> to access and operate this instance via Matmon.Cloud (remote access + reporting).</span>
-                        <small class="mat-muted">This is your consent for the partner shown above. It's stored in Matmon.Cloud and re-synced on each heartbeat; revoking it stops their access.</small>
-                    </span>
-                </label>
-                <div class="mat-btn-row">
-                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save consent</span></button>
-                </div>
-            </form>
         </div>
     </section>
 }

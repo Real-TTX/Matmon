@@ -87,7 +87,13 @@ public class CloudClaimModel : PageModel
             }
 
             _workspaceStore.SetCloudConnectionSettings(pending.Url, result.InstanceId, result.Token, enabled: true);
-            TempData["StatusMessage"] = "Connected to Matmon.Cloud - the first heartbeat is sent within a few seconds.";
+            if (result.RemoteAccess)
+            {
+                _workspaceStore.SetCloudFullAccess(true);
+            }
+            TempData["StatusMessage"] = result.RemoteAccess
+                ? "Connected to Matmon.Cloud for your customer - remote access is on, so you can open this instance from the cloud."
+                : "Connected to Matmon.Cloud - the first heartbeat is sent within a few seconds.";
         }
         catch (Exception ex)
         {
@@ -109,7 +115,9 @@ public class CloudClaimModel : PageModel
         return Done(returnUrl);
     }
 
-    private sealed record ClaimExchangeResult(string? InstanceId, string? Token);
+    /// <param name="RemoteAccess">Set when a partner connected this instance for a customer it manages: the partner
+    /// administers it through the cloud, so remote access is switched on right away.</param>
+    private sealed record ClaimExchangeResult(string? InstanceId, string? Token, bool RemoteAccess = false);
 }
 
 /// <summary>Shared constants + PKCE helpers for the cloud claim flow (start handler + callback).</summary>

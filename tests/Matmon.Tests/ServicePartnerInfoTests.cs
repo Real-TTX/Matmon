@@ -10,7 +10,6 @@ public class ServicePartnerInfoTests
         Name = "ACME MSP",
         ContactEmail = "help@acme.example",
         ContactPhone = "+49 111",
-        CanManage = true,
         ContactUrl = "https://acme.example/support",
         BrandColor = "#AABBCC",
         LogoPng = [1, 2, 3, 4],
@@ -77,7 +76,6 @@ public class ServicePartnerInfoTests
     [InlineData("brand")]
     [InlineData("url")]
     [InlineData("name")]
-    [InlineData("consent")]
     [InlineData("suppressed")]
     [InlineData("slogan")]
     [InlineData("secondary")]
@@ -92,7 +90,6 @@ public class ServicePartnerInfoTests
             case "brand": b.BrandColor = "#000000"; break;
             case "url": b.ContactUrl = "https://other.example"; break;
             case "name": b.Name = "Other"; break;
-            case "consent": b.CanManage = false; break;
             case "suppressed": b.BrandingSuppressed = true; break;
             case "slogan": b.Slogan = "Other tagline"; break;
             case "secondary": b.BrandColorSecondary = "#000000"; break;

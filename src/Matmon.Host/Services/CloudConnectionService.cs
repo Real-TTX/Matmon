@@ -280,8 +280,8 @@ public sealed class CloudConnectionService : BackgroundService
 
         await FetchLicenseAsync(client, instanceId, token, cancellationToken);
 
-        // Service-partner (branding + consent) is fetched EVERY heartbeat: the ETag below turns an unchanged
-        // response into a ~zero-byte 304, so partner branding/consent changes propagate within one beat (~60s)
+        // Service-partner (branding) is fetched EVERY heartbeat: the ETag below turns an unchanged
+        // response into a ~zero-byte 304, so partner branding changes propagate within one beat (~60s)
         // instead of the old 1-in-10 sampling (~10 min) that made the cloud toggles look broken.
         await FetchServicePartnerAsync(client, instanceId, token, cancellationToken);
     }
@@ -338,7 +338,7 @@ public sealed class CloudConnectionService : BackgroundService
 
     private sealed record LicenseResponse(string? Token);
 
-    /// <summary>Pulls the managing service partner + consent from the cloud and caches it for the System tab.</summary>
+    /// <summary>Pulls the managing service partner from the cloud and caches it for the System tab.</summary>
     private async Task FetchServicePartnerAsync(HttpClient client, Guid instanceId, string token, CancellationToken cancellationToken)
     {
         try
@@ -381,7 +381,6 @@ public sealed class CloudConnectionService : BackgroundService
                     Name = payload.Name,
                     ContactEmail = payload.ContactEmail,
                     ContactPhone = payload.ContactPhone,
-                    CanManage = payload.CanManage,
                     BrandingSuppressed = payload.BrandingSuppressed,
                     ProductName = payload.ProductName,
                     LogoIsOem = payload.LogoIsOem,
@@ -425,7 +424,6 @@ public sealed class CloudConnectionService : BackgroundService
         string? Name,
         string? ContactEmail,
         string? ContactPhone,
-        bool CanManage,
         string? ContactUrl = null,
         string? BrandColorHex = null,
         string? LogoContentType = null,

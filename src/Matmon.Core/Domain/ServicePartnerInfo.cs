@@ -1,8 +1,7 @@
 namespace Matmon.Core.Domain;
 
 /// <summary>The instance's managing service partner, fetched from Matmon.Cloud on heartbeat and cached.
-/// <see cref="HasPartner"/> is false when no partner manages the instance's organization.
-/// <see cref="CanManage"/> is the customer's consent for that partner to access this instance.</summary>
+/// <see cref="HasPartner"/> is false when no partner manages the instance's organization.</summary>
 public sealed class ServicePartnerInfo
 {
     public bool HasPartner { get; set; }
@@ -13,11 +12,8 @@ public sealed class ServicePartnerInfo
 
     public string? ContactPhone { get; set; }
 
-    /// <summary>Customer consent: whether the managing partner may access/operate this instance.</summary>
-    public bool CanManage { get; set; }
-
     /// <summary>Customer opt-out of visual co-branding: when true the logo/accent/"Managed by" are suppressed on
-    /// the UI + reports, but the relationship (<see cref="HasPartner"/>) + consent tab stay so consent is revocable.</summary>
+    /// the UI + reports, but the relationship (<see cref="HasPartner"/>) stays.</summary>
     public bool BrandingSuppressed { get; set; }
 
     /// <summary>White-label product name: when set (and branding not suppressed), the partner's logo + this name
@@ -63,7 +59,6 @@ public sealed class ServicePartnerInfo
         Name = Name,
         ContactEmail = ContactEmail,
         ContactPhone = ContactPhone,
-        CanManage = CanManage,
         BrandingSuppressed = BrandingSuppressed,
         ProductName = ProductName,
         LogoIsOem = LogoIsOem,
@@ -81,7 +76,6 @@ public sealed class ServicePartnerInfo
     public bool ValueEquals(ServicePartnerInfo? other) =>
         other is not null
         && HasPartner == other.HasPartner
-        && CanManage == other.CanManage
         && BrandingSuppressed == other.BrandingSuppressed
         && LogoIsOem == other.LogoIsOem
         && SidebarStyle == other.SidebarStyle

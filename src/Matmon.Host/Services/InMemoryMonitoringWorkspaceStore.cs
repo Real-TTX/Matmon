@@ -1802,7 +1802,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    /// <summary>The managing service partner (name/contact + consent), cached from the cloud on heartbeat.</summary>
+    /// <summary>The managing service partner (name/contact + branding), cached from the cloud on heartbeat.</summary>
     public ServicePartnerInfo? GetServicePartnerInfo()
     {
         lock (_gate)
@@ -1925,7 +1925,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    /// <summary>Caches the cloud-reported service partner + consent. Only saves on change.</summary>
+    /// <summary>Caches the cloud-reported service partner. Only saves on change.</summary>
     public void SetServicePartnerInfo(ServicePartnerInfo? info)
     {
         lock (_gate)
@@ -4800,7 +4800,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         /// <summary>Last license token fetched from the cloud (verified offline against the baked public key).</summary>
         public string? LicenseToken { get; set; }
 
-        /// <summary>Managing service partner (name/contact + consent), cached from the cloud on heartbeat.</summary>
+        /// <summary>Managing service partner (name/contact + branding), cached from the cloud on heartbeat.</summary>
         public ServicePartnerInfo? ServicePartner { get; set; }
 
         /// <summary>System-wide display timezone (IANA id); null = server local.</summary>
