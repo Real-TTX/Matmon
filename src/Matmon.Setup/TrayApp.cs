@@ -110,6 +110,15 @@ internal sealed class TrayApp : ApplicationContext
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out var first);
         if (!first)
         {
+            // The Start menu entry when the icon runs already: open Matmon instead of doing nothing.
+            try
+            {
+                Process.Start(new ProcessStartInfo($"http://localhost:{WindowsInstallation.Find()?.Port ?? 8099}/") { UseShellExecute = true })?.Dispose();
+            }
+            catch (Win32Exception)
+            {
+            }
+
             return 0;
         }
 

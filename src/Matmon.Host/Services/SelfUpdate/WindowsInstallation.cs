@@ -251,6 +251,12 @@ public static class WindowsInstallation
                 }
             }
 
+            // An installation from before the Start menu entry existed gets it here.
+            if (TrayIconRegistered())
+            {
+                EnsureStartMenuShortcut();
+            }
+
             if (SameContent(source, SetupProgramPath))
             {
                 return;
@@ -350,14 +356,86 @@ public static class WindowsInstallation
 
     private static void SetTrayIcon(bool enabled)
     {
-        using var run = Registry.LocalMachine.CreateSubKey(RunKeyPath, writable: true);
+        using (var run = Registry.LocalMachine.CreateSubKey(RunKeyPath, writable: true))
+        {
+            if (enabled)
+            {
+                run.SetValue(RunValueName, $"\"{SetupProgramPath}\" /tray");
+            }
+            else if (run.GetValue(RunValueName) is not null)
+            {
+                run.DeleteValue(RunValueName, throwOnMissingValue: false);
+            }
+        }
+
         if (enabled)
         {
-            run.SetValue(RunValueName, $"\"{SetupProgramPath}\" /tray");
+            EnsureStartMenuShortcut();
         }
-        else if (run.GetValue(RunValueName) is not null)
+        else
         {
-            run.DeleteValue(RunValueName, throwOnMissingValue: false);
+            TryDelete(StartMenuShortcutPath);
+        }
+    }
+
+    /// <summary>The Start menu entry "Matmon" (all users): starts the tray icon again after it was closed - or, when one runs
+    /// already, opens Matmon in the browser.</summary>
+    public static string StartMenuShortcutPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Matmon.lnk");
+
+    /// <summary>Creates the Start menu entry when it is missing (an installation from before it existed gets it from the
+    /// running service after its next update). Cosmetic: a failure is swallowed.</summary>
+    public static void EnsureStartMenuShortcut()
+    {
+        if (File.Exists(StartMenuShortcutPath) || !File.Exists(SetupProgramPath))
+        {
+            return;
+        }
+
+        try
+        {
+            // WScript.Shell is on every Windows; IShellLink by hand would be a page of COM interop for one file.
+            var shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType is null)
+            {
+                return;
+            }
+
+            dynamic shell = Activator.CreateInstance(shellType)!;
+            try
+            {
+                dynamic link = shell.CreateShortcut(StartMenuShortcutPath);
+                link.TargetPath = SetupProgramPath;
+                link.Arguments = "/tray";
+                link.WorkingDirectory = SetupFolder;
+                link.IconLocation = $"{SetupProgramPath},0";
+                link.Description = "Matmon";
+                link.Save();
+                System.Runtime.InteropServices.Marshal.FinalReleaseComObject(link);
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
+            }
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or IOException or InvalidCastException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
+        {
+            // No Start menu entry - the tray still starts at sign-in.
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left behind - harmless.
         }
     }
 
