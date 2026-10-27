@@ -389,6 +389,160 @@ function initializeMonitoringTree() {
     updateMoveState();
   };
 
+  // Drag and drop: the same three moves the menu offers, posted through the same handlers (the server checks again).
+  // A container's own row and a sensor's chip can be picked up; the main probe stays where it is. Dropped on the
+  // middle of a row the element goes INTO it (where that kind may go), on the top or bottom quarter of a row - or the
+  // left / right half of a sensor chip - it is placed BEFORE / AFTER that element, in that element's parent.
+  const dragSourceState = (node) => ({
+    id: node.dataset.treeNodeId || "",
+    kind: (node.dataset.treeKind || "").toLowerCase(),
+    name: node.querySelector(".tree-name")?.textContent?.trim() || "",
+    path: node.dataset.treePath || ""
+  });
+
+  // The element a node sits in (a single sensor's chip and its article carry the same id - skip that one).
+  const parentNodeOf = (node) => {
+    let parent = node.parentElement?.closest("[data-tree-node]");
+    while (parent && parent.dataset.treeNodeId === node.dataset.treeNodeId) {
+      parent = parent.parentElement?.closest("[data-tree-node]");
+    }
+    return parent || null;
+  };
+
+  const dropSurfaceOf = (node) =>
+    node.classList.contains("monitoring-sensor-chip") ? node : getOwnTreeControl(node, ".monitoring-tree-row") || node;
+
+  let dragged = null;
+  let dropHint = null;
+
+  const clearDropHint = () => {
+    if (dropHint) {
+      dropHint.surface.classList.remove("is-drop-into", "is-drop-before", "is-drop-after");
+    }
+    dropHint = null;
+  };
+
+  const dropModeFor = (node, event) => {
+    if (!dragged || node.dataset.treeNodeId === dragged.id) {
+      return null;
+    }
+
+    const surface = dropSurfaceOf(node);
+    const rect = surface.getBoundingClientRect();
+    const isChip = node.classList.contains("monitoring-sensor-chip");
+    const share = isChip
+      ? (event.clientX - rect.left) / Math.max(rect.width, 1)
+      : (event.clientY - rect.top) / Math.max(rect.height, 1);
+    const parent = parentNodeOf(node);
+    // Beside an element = into its parent, so the same rule decides (and never into the dragged element itself).
+    const besideAllowed = parent !== null && isValidMoveTarget(dragged, parent) &&
+      !(node.dataset.treePath || "").startsWith(`${dragged.path} /`);
+    const intoAllowed = !isChip && isValidMoveTarget(dragged, node);
+
+    if (isChip) {
+      return besideAllowed ? { surface, mode: share < 0.5 ? "before" : "after" } : null;
+    }
+    if (intoAllowed && (share >= 0.25 && share <= 0.75 || !besideAllowed)) {
+      return { surface, mode: "into" };
+    }
+    if (besideAllowed) {
+      return { surface, mode: share < 0.5 ? "before" : "after" };
+    }
+    return null;
+  };
+
+  const submitDrop = (node, mode) => {
+    if (!moveForm || !moveElementInput || !dragged) {
+      return;
+    }
+
+    const handler = mode === "into" ? "MoveElement" : mode === "before" ? "MoveElementBefore" : "MoveElementAfter";
+    const action = new URL(moveForm.action, window.location.href);
+    action.searchParams.set("handler", handler);
+    moveForm.action = action.pathname + action.search;
+    moveElementInput.value = dragged.id;
+    if (moveParentInput) {
+      moveParentInput.value = mode === "into" ? node.dataset.treeNodeId : "";
+    }
+    let siblingInput = moveForm.querySelector("input[name='siblingId']");
+    if (!siblingInput) {
+      siblingInput = document.createElement("input");
+      siblingInput.type = "hidden";
+      siblingInput.name = "siblingId";
+      moveForm.appendChild(siblingInput);
+    }
+    siblingInput.value = mode === "into" ? "" : node.dataset.treeNodeId;
+    clearMoveState();
+    moveForm.submit();
+  };
+
+  trees.forEach((tree) => {
+    tree.querySelectorAll("[data-tree-node]").forEach((node) => {
+      if (node.classList.contains("is-master-probe") || node.closest(".is-master-probe") === node) {
+        return;
+      }
+      // A single sensor's article carries the same id as its chip: the chip is what is picked up.
+      if (node.querySelector(":scope > .monitoring-sensor-strip.is-single-sensor")) {
+        return;
+      }
+      const surface = dropSurfaceOf(node);
+      if (!surface || surface.dataset.treeDraggable === "1") {
+        return;
+      }
+      surface.dataset.treeDraggable = "1";
+      surface.setAttribute("draggable", "true");
+      surface.addEventListener("dragstart", (event) => {
+        // Only the element under the pointer, not every ancestor whose row the event bubbles through.
+        event.stopPropagation();
+        dragged = dragSourceState(node);
+        surface.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", dragged.name || dragged.id);
+      });
+      surface.addEventListener("dragend", () => {
+        surface.classList.remove("is-dragging");
+        clearDropHint();
+        dragged = null;
+      });
+    });
+
+    tree.addEventListener("dragover", (event) => {
+      const node = event.target.closest?.("[data-tree-node]");
+      if (!dragged || !node) {
+        return;
+      }
+      const hint = dropModeFor(node, event);
+      if (!hint) {
+        clearDropHint();
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      if (!dropHint || dropHint.surface !== hint.surface || dropHint.mode !== hint.mode) {
+        clearDropHint();
+        hint.surface.classList.add(`is-drop-${hint.mode}`);
+        dropHint = { ...hint, node };
+      }
+    });
+
+    tree.addEventListener("dragleave", (event) => {
+      if (dropHint && !dropHint.surface.contains(event.relatedTarget)) {
+        clearDropHint();
+      }
+    });
+
+    tree.addEventListener("drop", (event) => {
+      const node = event.target.closest?.("[data-tree-node]");
+      const hint = node ? dropModeFor(node, event) : null;
+      clearDropHint();
+      if (!hint) {
+        return;
+      }
+      event.preventDefault();
+      submitDrop(node, hint.mode);
+    });
+  });
+
   trees.forEach((tree) => {
     tree.querySelectorAll("[data-tree-node]").forEach((node) => {
       const nodeId = node.dataset.treeNodeId;

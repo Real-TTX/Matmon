@@ -287,3 +287,12 @@ html[data-monitoring-size="s"] .monitoring-list-info small { display: none; }
   .monitoring-tree-toggle,
   .monitoring-sensor-chip::after { transition: none; }
 }
+
+/* ---- Drag and drop in the tree: what a drop would do, shown on the row / chip under the pointer ---- */
+.monitoring-tree-row[draggable="true"], .monitoring-sensor-chip[draggable="true"] { cursor: grab; }
+.monitoring-tree-row.is-dragging, .monitoring-sensor-chip.is-dragging { opacity: 0.5; }
+.monitoring-tree-row.is-drop-into, .monitoring-sensor-chip.is-drop-into { background: var(--mat-accent-soft); box-shadow: inset 0 0 0 2px var(--mat-accent); }
+.monitoring-tree-row.is-drop-before { box-shadow: inset 0 3px 0 0 var(--mat-accent); }
+.monitoring-tree-row.is-drop-after { box-shadow: inset 0 -3px 0 0 var(--mat-accent); }
+.monitoring-sensor-chip.is-drop-before { box-shadow: inset 3px 0 0 0 var(--mat-accent); }
+.monitoring-sensor-chip.is-drop-after { box-shadow: inset -3px 0 0 0 var(--mat-accent); }
