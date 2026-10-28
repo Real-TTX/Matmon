@@ -65,6 +65,8 @@ public static class MapWidgetCatalog
             MonitoringMapTileKind.Image, SearchTerms: "plan rack room office markers dots layout"),
         new("geomap", "World map", "Offline world map with pins by latitude/longitude", "network", MapWidgetCategory.Places,
             MonitoringMapTileKind.GeoMap, SearchTerms: "geo globe sites locations countries world"),
+        new("rack", "Rack", "A server rack to scale - each device in its units, coloured by its sensors", "probe", MapWidgetCategory.Places,
+            MonitoringMapTileKind.Rack, SearchTerms: "rack cabinet server room units u devices elevation"),
         new("topology", "Topology", "Devices joined by links that show traffic and turn red when a port goes down", "network", MapWidgetCategory.Places,
             MonitoringMapTileKind.Topology, SearchTerms: "network diagram links cables switch router uplink weathermap traffic")
     ];
@@ -94,6 +96,7 @@ public static class MapWidgetCatalog
         { Kind: MonitoringMapTileKind.Bars } => "bars",
         { Kind: MonitoringMapTileKind.Donut } => "donut",
         { Kind: MonitoringMapTileKind.Embed } => "embed",
+        { Kind: MonitoringMapTileKind.Rack } => "rack",
         // Both are Image tiles; "floorplan" is the one that exists for its pins, so it previews them.
         { Kind: MonitoringMapTileKind.Image } => widget.Key == "floorplan" ? "pins" : "image",
         { Kind: MonitoringMapTileKind.Status } => "group",

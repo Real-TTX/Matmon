@@ -399,6 +399,20 @@
                                     <input asp-for="Input.Tiles[index].SlaWindowDays" type="number" min="1" max="365" class="mat-input" />
                                     <span class="mat-hint">A warning counts as up.</span>
                                 </div>
+                                <div class="mat-field" data-map-property-rack-only>
+                                    <label class="mat-label" for="@(tileId)RackUnits">Height (U)</label>
+                                    <input asp-for="Input.Tiles[index].RackUnits" id="@(tileId)RackUnits" type="number" min="4" max="52" class="mat-input" data-map-property-rack-units />
+                                    <span class="mat-hint">42 is a full rack, 12 or 24 a wall cabinet.</span>
+                                </div>
+                                <div class="mat-field" data-map-property-rack-only>
+                                    <span class="mat-label">Devices</span>
+                                    <input type="hidden" asp-for="Input.Tiles[index].RackJson" data-map-property-rack />
+                                    <div class="map-pin-editor" data-map-rack-editor></div>
+                                    <div class="mat-row">
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-rack-add>@MatUi.Icon("plus")<span>Add device</span></button>
+                                    </div>
+                                    <span class="mat-hint">U = the lowest unit the device sits in, counted from the bottom. A device without a target is drawn neutral.</span>
+                                </div>
                                 <div class="mat-field" data-map-property-embed-only>
                                     <label class="mat-label" for="@(tileId)EmbedUrl">Address</label>
                                     <input asp-for="Input.Tiles[index].EmbedUrl" id="@(tileId)EmbedUrl" type="url" class="mat-input mat-mono" placeholder="https://camera.local/snapshot.jpg" />
@@ -755,6 +769,26 @@
        DOM id rewritten per row - a duplicated id would make one row's picker drive another row's value. *@
     @* One link row, cloned per link by the designer and serialised into the tile's LinksJson. The two pin selects
        are filled from the tile's current pins. *@
+    @* One rack device row, cloned per device and serialised into the tile's RackJson. *@
+    <template data-map-rack-template>
+        <div class="map-pin-row" data-map-rack-row>
+            <div class="map-pin-row-main">
+                <input type="text" class="mat-input mat-input--sm" data-rack-field="name" placeholder="Name" aria-label="Device name" />
+                <select class="mat-select mat-select--sm" data-rack-field="icon" aria-label="Device">
+                    @foreach (var device in MonitoringMapDevices.All)
+                    {
+                        <option value="@device.Key">@device.Label</option>
+                    }
+                </select>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-rack-remove aria-label="Remove device">@MatUi.Icon("trash")</button>
+            </div>
+            <div class="map-pin-row-main map-pin-row-main--pair">
+                <label class="mat-field"><span class="mat-label">U</span><input type="number" min="1" max="52" class="mat-input mat-input--sm" data-rack-field="position" /></label>
+                <label class="mat-field"><span class="mat-label">Height (U)</span><input type="number" min="1" max="52" class="mat-input mat-input--sm" data-rack-field="height" /></label>
+            </div>
+            <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-rack-__rackId__", AllowTags = true, Placeholder = "No target (neutral)", Options = Model.TilePickerOptions, ValueAttribute = "data-rack-field-target" })" />
+        </div>
+    </template>
     <template data-map-link-template>
         <div class="map-pin-row" data-map-link-row>
             <div class="map-pin-row-main map-pin-row-main--pair">
@@ -937,6 +971,20 @@
                     <label class="mat-label" for="@(TemplateTileId)SlaWindowDays">Window (days)</label>
                     <input id="@(TemplateTileId)SlaWindowDays" name="Input.Tiles[__index__].SlaWindowDays" type="number" min="1" max="365" value="7" class="mat-input" />
                     <span class="mat-hint">A warning counts as up.</span>
+                </div>
+                <div class="mat-field" data-map-property-rack-only>
+                    <label class="mat-label" for="@(TemplateTileId)RackUnits">Height (U)</label>
+                    <input id="@(TemplateTileId)RackUnits" name="Input.Tiles[__index__].RackUnits" type="number" min="4" max="52" value="42" class="mat-input" data-map-property-rack-units />
+                    <span class="mat-hint">42 is a full rack, 12 or 24 a wall cabinet.</span>
+                </div>
+                <div class="mat-field" data-map-property-rack-only>
+                    <span class="mat-label">Devices</span>
+                    <input type="hidden" name="Input.Tiles[__index__].RackJson" data-map-property-rack />
+                    <div class="map-pin-editor" data-map-rack-editor></div>
+                    <div class="mat-row">
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-rack-add>@MatUi.Icon("plus")<span>Add device</span></button>
+                    </div>
+                    <span class="mat-hint">U = the lowest unit the device sits in, counted from the bottom. A device without a target is drawn neutral.</span>
                 </div>
                 <div class="mat-field" data-map-property-embed-only>
                     <label class="mat-label" for="@(TemplateTileId)EmbedUrl">Address</label>

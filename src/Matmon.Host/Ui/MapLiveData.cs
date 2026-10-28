@@ -43,7 +43,8 @@ public static class MapLiveData
         tile.Sla is { } sla ? new MapLiveSla(sla.Percent, sla.Label) : null,
         tile.Pins?.Select(pin => new MapLivePin(pin.Label, pin.Tone, pin.Value)).ToArray(),
         tile.Axis is { } axis ? new MapLiveAxis(axis.Top, axis.Middle, axis.Bottom, axis.StartMs, axis.EndMs) : null,
-        tile.Links?.Select(link => new MapLiveLink(link.Id, link.Tone, link.Traffic, link.Width)).ToArray());
+        tile.Links?.Select(link => new MapLiveLink(link.Id, link.Tone, link.Traffic, link.Width)).ToArray(),
+        tile.Rack?.Select(device => new MapLiveRackDevice(device.Id, device.Tone, device.Detail)).ToArray());
 
     /// <summary>
     /// A short hash over everything the markup bakes in: which tiles exist, on which slide, of what kind, and
@@ -76,7 +77,9 @@ public static class MapLiveData
                     // Links, and which of them carry a label: the label box is markup that appears with a
                     // reading, so an interface sensor that starts or stops reporting traffic reloads once.
                     .Append(tile.Links?.Count ?? 0).Append('/')
-                    .Append(tile.Links?.Count(link => link.Label is not null || link.Traffic is not null) ?? 0);
+                    .Append(tile.Links?.Count(link => link.Label is not null || link.Traffic is not null) ?? 0).Append(':')
+                    // A rack's devices and where they sit are markup; their colour is a value.
+                    .Append(string.Join('/', (tile.Rack ?? []).Select(device => $"{device.Row}.{device.Height}")));
             }
         }
 
@@ -114,7 +117,9 @@ public sealed record MapLiveTile(
     /// <summary>A multi-graph's Y labels and window: the scale follows the data, so it moves with the lines.</summary>
     MapLiveAxis? Axis = null,
     /// <summary>A topology's links: colour, traffic and width move with the interface sensor behind each.</summary>
-    IReadOnlyList<MapLiveLink>? Links = null);
+    IReadOnlyList<MapLiveLink>? Links = null,
+    /// <summary>A rack's devices: colour and detail move with their sensors.</summary>
+    IReadOnlyList<MapLiveRackDevice>? Rack = null);
 
 /// <summary>Label and Color travel too: the legend is ordered by the LAST reading, so when another sensor
 /// becomes the highest the positions swap - patched by position alone, a name ended up next to someone
@@ -133,3 +138,5 @@ public sealed record MapLiveSla(double? Percent, string Label);
 public sealed record MapLivePin(string Label, string Tone, string? Value);
 
 public sealed record MapLiveLink(Guid Id, string Tone, string? Traffic, double Width);
+
+public sealed record MapLiveRackDevice(Guid Id, string Tone, string? Detail);

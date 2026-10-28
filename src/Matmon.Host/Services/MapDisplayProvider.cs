@@ -120,7 +120,13 @@ public sealed class MapDisplayProvider
                 ? row with { Href = ElementHref(rowElement) }
                 : row).ToArray();
 
-        return vm with { Href = href, Pins = pins ?? vm.Pins, Rows = rows ?? vm.Rows };
+        var rack = vm.Rack?.Select(device =>
+        {
+            var source = tile.RackDevices.FirstOrDefault(candidate => candidate.Id == device.Id);
+            return device with { Href = publicView ? null : TokenHref(source?.TargetToken, elements) };
+        }).ToArray();
+
+        return vm with { Href = href, Pins = pins ?? vm.Pins, Rows = rows ?? vm.Rows, Rack = rack ?? vm.Rack };
     }
 
     private static string? MapHref(Guid? mapId, IReadOnlyDictionary<Guid, MonitoringMap> maps, bool publicView)
@@ -440,6 +446,7 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Bars
              or MonitoringMapTileKind.Donut
              or MonitoringMapTileKind.Embed
+             or MonitoringMapTileKind.Rack
              or MonitoringMapTileKind.MultiGraph;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
@@ -469,6 +476,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element, latest),
             MonitoringMapTileKind.Honeycomb => BuildHoneycombTile(tile, element, latest),
             MonitoringMapTileKind.Donut => BuildDonutTile(tile, element, latest),
+            MonitoringMapTileKind.Rack => BuildRackTile(tile, element, latest),
             MonitoringMapTileKind.Embed => CreateTile(tile, element, "ok", "Embed",
                 BrandingSafety.SafeContactUrl(tile.EmbedUrl) is null ? "No address (http or https)" : string.Empty, string.Empty, KindLabel(tile.Kind), "external"),
             MonitoringMapTileKind.Timeline => BuildTimelineTile(tile, element, latest),
@@ -842,6 +850,57 @@ public sealed class MapDisplayProvider
         };
         return CreateTile(tile, element, worst, worstLabel,
             total == 0 ? "No sensors under this target" : $"{total} sensors", healthy, KindLabel(tile.Kind), "chart", rows: rows);
+    }
+
+    /// <summary>
+    /// A rack drawn to scale: every device in the units it occupies (row 1 = the TOP unit, as the grid counts), coloured
+    /// by the sensors of its own target - a device without one is neutral (a patch panel). Devices that share a unit are
+    /// marked so the designer sees the mistake; the tile is as bad as its worst device.
+    /// </summary>
+    private MapDisplayTileViewModel BuildRackTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var (units, devices) = MonitoringMapRack.Normalize(tile.RackUnits, tile.RackDevices);
+        var collisions = MonitoringMapRack.Collisions(devices);
+        var severity = MonitoringSeverity.Ok;
+        var used = 0;
+        var placed = new List<MapRackDeviceDto>(devices.Count);
+        foreach (var device in devices)
+        {
+            var sensors = string.IsNullOrWhiteSpace(device.TargetToken) ? [] : _workspaceStore.ResolveTargetSensors(device.TargetToken);
+            var states = sensors
+                .Select(sensor => latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown)
+                .ToArray();
+            var deviceSeverity = states.Select(MonitoringStatePresentation.FromSensorState).Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+            var tone = sensors.Count == 0 ? "neutral" : MonitoringStatePresentation.Key(deviceSeverity);
+            if (sensors.Count > 0)
+            {
+                severity = MonitoringStatePresentation.Max(severity, deviceSeverity);
+            }
+
+            used += device.Height;
+            var problems = states.Count(state => state is SensorState.Warning or SensorState.Critical);
+            placed.Add(new MapRackDeviceDto(
+                device.Id,
+                string.IsNullOrWhiteSpace(device.Name) ? sensors.FirstOrDefault()?.Name ?? "Device" : device.Name,
+                units - device.Top + 1,
+                device.Height,
+                tone,
+                sensors.Count == 0 ? null : problems == 0 ? (sensors.Count == 1 ? "1 sensor fine" : $"{sensors.Count} sensors fine") : $"{problems} of {sensors.Count} with a problem",
+                MonitoringMapDevices.IconFor(device.Icon ?? "server"),
+                $"U{device.Position}{(device.Height > 1 ? $"-{device.Top}" : string.Empty)}")
+            {
+                Collides = collisions.Contains(device.Id)
+            });
+        }
+
+        var subtitle = devices.Count == 0
+            ? "No devices yet"
+            : $"{devices.Count} device{(devices.Count == 1 ? "" : "s")}, {Math.Max(0, units - used)} of {units} U free";
+        return CreateTile(tile, element, MonitoringStatePresentation.Key(severity), MonitoringStatePresentation.Label(severity),
+            subtitle, string.Empty, KindLabel(tile.Kind), "probe") with { Rack = placed, RackUnits = units };
     }
 
     /// <summary>A honeycomb shows at most this many cells - past that a cell is too small to see on a wall.</summary>
@@ -1547,6 +1606,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Bars => "Bars",
             MonitoringMapTileKind.Donut => "Donut",
             MonitoringMapTileKind.Embed => "Embed",
+            MonitoringMapTileKind.Rack => "Rack",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
@@ -1659,6 +1719,22 @@ public sealed record MapDisplayTileViewModel(
 
     /// <summary>The lines between the pins of a topology / picture tile.</summary>
     public IReadOnlyList<MapLinkDto>? Links { get; init; }
+
+    /// <summary>A rack tile's devices, already placed; null elsewhere.</summary>
+    public IReadOnlyList<MapRackDeviceDto>? Rack { get; init; }
+
+    public int RackUnits { get; init; }
+}
+
+/// <param name="Row">The grid row the device starts in, counted from the TOP of the rack (1-based).</param>
+/// <param name="Tone">A state key, or "neutral" for a device without a target.</param>
+/// <param name="Units">How the device's place reads on a label: "U12" or "U12-13".</param>
+public sealed record MapRackDeviceDto(Guid Id, string Name, int Row, int Height, string Tone, string? Detail, string Icon, string Units)
+{
+    public string? Href { get; init; }
+
+    /// <summary>It shares a unit with another device - a mistake in the rack's layout.</summary>
+    public bool Collides { get; init; }
 }
 
 /// <param name="X1">Start and end as a PERCENT of the tile, like the pins they join.</param>

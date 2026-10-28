@@ -81,6 +81,8 @@ public sealed class MapSaveRoundTripTests : IDisposable
         LinkMapId = Guid.NewGuid(),
         EmbedUrl = "https://camera.example/snapshot.jpg",
         EmbedImage = true,
+        RackUnits = 24,
+        RackDevices = [new MonitoringMapRackDevice { Name = "Core switch", Position = 20, Height = 1, TargetToken = "tag:core", Icon = "switch" }],
         Pins =
         [
             new MonitoringMapPin
@@ -125,7 +127,7 @@ public sealed class MapSaveRoundTripTests : IDisposable
 
         // Reflection, not a hand-written assertion list - a hand-written list is the same failure mode as the
         // hand-written normalizer that caused this.
-        var skipped = new HashSet<string> { nameof(MonitoringMapTile.Pins), nameof(MonitoringMapTile.Links) };
+        var skipped = new HashSet<string> { nameof(MonitoringMapTile.Pins), nameof(MonitoringMapTile.Links), nameof(MonitoringMapTile.RackDevices) };
         var mismatches = new List<string>();
         foreach (var property in typeof(MonitoringMapTile).GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
@@ -176,6 +178,22 @@ public sealed class MapSaveRoundTripTests : IDisposable
         Assert.Equal(expected.Longitude, pin.Longitude);
         Assert.Equal(expected.Icon, pin.Icon);
         Assert.Equal(expected.LinkMapId, pin.LinkMapId);
+    }
+
+    [Fact]
+    public void Rack_devices_survive_a_save()
+    {
+        var original = FullyPopulatedTile();
+
+        var device = Assert.Single(SaveAndReload(original).Slides[0].Tiles.Single().RackDevices);
+
+        var expected = original.RackDevices[0];
+        Assert.Equal(expected.Id, device.Id);
+        Assert.Equal(expected.Name, device.Name);
+        Assert.Equal(expected.Position, device.Position);
+        Assert.Equal(expected.Height, device.Height);
+        Assert.Equal(expected.TargetToken, device.TargetToken);
+        Assert.Equal(expected.Icon, device.Icon);
     }
 
     [Fact]

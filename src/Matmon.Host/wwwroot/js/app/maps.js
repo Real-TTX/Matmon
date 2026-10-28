@@ -358,6 +358,17 @@ function initializeMapLiveData() {
     });
   };
 
+  // A rack device keeps its place (that is markup); its colour and detail follow its sensors.
+  const patchRack = (tile, devices) => {
+    (devices || []).forEach((device) => {
+      const element = tile.querySelector(`[data-rack-id="${device.id}"]`);
+      if (element) {
+        element.dataset.state = device.tone || "neutral";
+        setText(element, "[data-rack-detail]", device.detail || "");
+      }
+    });
+  };
+
   // A donut's ring follows its legend rows: each slice starts where the previous one ended.
   const patchDonut = (tile, rows, value) => {
     const slices = tile.querySelectorAll(".map-donut-seg");
@@ -459,6 +470,7 @@ function initializeMapLiveData() {
     patchPins(tile, data.pins);
     patchLinks(tile, data.links);
     patchDonut(tile, data.rows, data.value);
+    patchRack(tile, data.rack);
   };
 
   const refresh = async () => {
@@ -861,7 +873,8 @@ function initializeMapDesigner() {
     "16": "Table",
     "17": "Bars",
     "18": "Donut",
-    "19": "Embed"
+    "19": "Embed",
+    "20": "Rack"
   };
   const kindLabels = {
     "0": "Text",
@@ -884,6 +897,7 @@ function initializeMapDesigner() {
     "17": "Bars",
     "18": "Donut",
     "19": "Embed",
+    "20": "Rack",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -903,7 +917,8 @@ function initializeMapDesigner() {
     Table: "Table",
     Bars: "Bars",
     Donut: "Donut",
-    Embed: "Embed"
+    Embed: "Embed",
+    Rack: "Rack"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -916,6 +931,7 @@ function initializeMapDesigner() {
     Honeycomb: "Every sensor under the target as one cell in its state colour - hundreds at a glance.",
     Bars: "One reading across the sensors under the target as bars. Pick the channel (Rank by channel) and how many rows.",
     Donut: "How the sensors under the target split by state.",
+    Rack: "A rack to scale: add its devices with the unit they sit in and their height; each takes its colour from its own target.",
     Embed: "Another page in a frame, or a picture (a camera snapshot) reloaded on a timer.",
     Table: "The sensors under the target with their machine, reading and last check. Ordered like a sensor list.",
     Timeline: "A state band per sensor over the time window (up to 72 h): when it went red and for how long.",
@@ -1422,6 +1438,100 @@ function initializeMapDesigner() {
     initializeElementPickers();
   };
 
+  // The rack's devices: one row each, serialised into the tile's RackJson like the pins.
+  const rackTemplate = form?.querySelector("template[data-map-rack-template]");
+
+  const readRack = (panel) => {
+    const field = panel?.querySelector("[data-map-property-rack]");
+    if (!field?.value) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(field.value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeRack = (panel, devices) => {
+    const field = panel?.querySelector("[data-map-property-rack]");
+    if (field) {
+      field.value = devices.length === 0 ? "" : JSON.stringify(devices);
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      queueCanvasRefresh(panel);
+    }
+  };
+
+  const rackUnitsOf = (panel) => Math.min(52, Math.max(4, Number(panel?.querySelector("[data-map-property-rack-units]")?.value) || 42));
+
+  const renderRackRows = (panel) => {
+    const host = panel?.querySelector("[data-map-rack-editor]");
+    if (!host || !rackTemplate) {
+      return;
+    }
+    const devices = readRack(panel);
+    host.replaceChildren();
+    devices.forEach((device, index) => {
+      const html = rackTemplate.innerHTML.replaceAll("__rackId__", device.id || `r${index}`);
+      const row = document.createRange().createContextualFragment(html).querySelector("[data-map-rack-row]");
+      if (!row) {
+        return;
+      }
+      const field = (key) => row.querySelector(`[data-rack-field="${key}"]`);
+      field("name").value = device.name || "";
+      field("icon").value = device.icon || "server";
+      field("position").value = device.position || 1;
+      field("height").value = device.height || 1;
+      const target = row.querySelector("[data-rack-field-target]");
+      if (target) {
+        target.value = device.targetToken || "";
+      }
+      const collect = () => {
+        const current = readRack(panel);
+        const entry = current.find((candidate) => candidate.id === device.id);
+        if (!entry) {
+          return;
+        }
+        entry.name = field("name").value;
+        entry.icon = field("icon").value || null;
+        entry.position = Math.max(1, Number(field("position").value) || 1);
+        entry.height = Math.max(1, Number(field("height").value) || 1);
+        entry.targetToken = row.querySelector("[data-rack-field-target]")?.value || null;
+        writeRack(panel, current);
+      };
+      row.querySelectorAll("[data-rack-field], [data-rack-field-target]").forEach((input) => {
+        input.addEventListener("change", collect);
+        input.addEventListener("input", collect);
+      });
+      row.querySelector("[data-map-rack-remove]")?.addEventListener("click", () => {
+        writeRack(panel, readRack(panel).filter((candidate) => candidate.id !== device.id));
+        renderRackRows(panel);
+      });
+      host.appendChild(row);
+    });
+    initializeElementPickers();
+  };
+
+  // A new device goes into the lowest free unit, 1U high - stacking from the bottom like a real rack.
+  const addRackDevice = (panel) => {
+    const devices = readRack(panel);
+    const units = rackUnitsOf(panel);
+    const taken = new Set();
+    devices.forEach((device) => {
+      for (let unit = device.position || 1; unit < (device.position || 1) + (device.height || 1); unit += 1) {
+        taken.add(unit);
+      }
+    });
+    let position = 1;
+    while (taken.has(position) && position < units) {
+      position += 1;
+    }
+    devices.push({ id: createId(), name: "", icon: "server", position, height: 1, targetToken: null });
+    writeRack(panel, devices);
+    renderRackRows(panel);
+  };
+
   const addLink = (panel) => {
     const pins = readPins(panel);
     if (pins.length < 2) {
@@ -1716,6 +1826,13 @@ function initializeMapDesigner() {
     };
   };
 
+  propertyHost?.addEventListener("change", (event) => {
+    const units = event.target.closest?.("[data-map-property-rack-units]");
+    if (units) {
+      queueCanvasRefresh(units.closest("[data-map-property-panel]"));
+    }
+  });
+
   propertyHost?.addEventListener("click", (event) => {
     const panel = event.target.closest("[data-map-property-panel]");
     if (!panel) {
@@ -1725,6 +1842,8 @@ function initializeMapDesigner() {
       addPin(panel, 0.5, 0.5);
     } else if (event.target.closest("[data-map-link-add]")) {
       addLink(panel);
+    } else if (event.target.closest("[data-map-rack-add]")) {
+      addRackDevice(panel);
     } else if (event.target.closest("[data-map-pin-place]")) {
       armPinPlacement(panel);
     } else if (event.target.closest("[data-map-image-clear]")) {
@@ -1792,6 +1911,11 @@ function initializeMapDesigner() {
     const isList = kind === "SensorList" || kind === "Table" || kind === "Bars";
     const isEmbed = kind === "Embed";
     panel.querySelectorAll("[data-map-property-embed-only]").forEach((field) => { field.hidden = !isEmbed; });
+    const isRack = kind === "Rack";
+    panel.querySelectorAll("[data-map-property-rack-only]").forEach((field) => { field.hidden = !isRack; });
+    if (isRack) {
+      renderRackRows(panel);
+    }
     const isRows = isList || kind === "AlertFeed";
     const isSla = kind === "Sla";
     const isSeries = kind === "MultiGraph";
@@ -1801,7 +1925,7 @@ function initializeMapDesigner() {
     // A clock has no target at all; a heading and a text tile carry their own copy instead of one.
     // An image / world map has no single target of its own - each PIN carries one.
     const isTargetless = kind === "Clock" || kind === "Text" || kind === "Heading"
-      || kind === "Image" || kind === "GeoMap" || kind === "Topology" || kind === "Embed";
+      || kind === "Image" || kind === "GeoMap" || kind === "Topology" || kind === "Embed" || kind === "Rack";
     const targetField = panel.querySelector("[data-map-property-target]");
     const visualField = panel.querySelector("[data-map-property-visual]");
     const textField = panel.querySelector("[data-map-property-text-only]");
@@ -1830,7 +1954,7 @@ function initializeMapDesigner() {
     }
     if (visualField) {
       visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock"
-        || kind === "Honeycomb" || kind === "Timeline" || kind === "Donut" || kind === "Embed";
+        || kind === "Honeycomb" || kind === "Timeline" || kind === "Donut" || kind === "Embed" || kind === "Rack";
     }
     if (textField) {
       textField.hidden = !isText;
@@ -1912,7 +2036,7 @@ function initializeMapDesigner() {
   };
 
   // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
-  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table", "Bars", "Donut", "Embed"]);
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table", "Bars", "Donut", "Embed", "Rack"]);
 
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {
@@ -1961,6 +2085,8 @@ function initializeMapDesigner() {
     panel.querySelector("[data-map-property-pins]")?.value || "",
     panel.querySelector("[data-map-property-links]")?.value || "",
     panel.querySelector('[name$=".LinkMapId"]')?.value || "",
+    panel.querySelector("[data-map-property-rack]")?.value || "",
+    panel.querySelector("[data-map-property-rack-units]")?.value || "",
     // The series inputs change WHAT the tile is made of, not just a value, so they belong in the key that
     // decides whether the body has to be re-fetched.
     panel.querySelector("[data-map-targets-value]")?.value || "",
@@ -2018,7 +2144,9 @@ function initializeMapDesigner() {
       targets: panel.querySelector("[data-map-targets-value]")?.value || "",
       pins: panel.querySelector("[data-map-property-pins]")?.value || "",
       links: panel.querySelector("[data-map-property-links]")?.value || "",
-      linkMapId: panel.querySelector('[name$=".LinkMapId"]')?.value || ""
+      linkMapId: panel.querySelector('[name$=".LinkMapId"]')?.value || "",
+      rack: panel.querySelector("[data-map-property-rack]")?.value || "",
+      rackUnits: panel.querySelector("[data-map-property-rack-units]")?.value || "42"
     });
     // A POST: a topology's pins and links would outgrow a query string.
     params.delete("handler");

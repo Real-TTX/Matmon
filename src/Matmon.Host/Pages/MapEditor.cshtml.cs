@@ -132,7 +132,9 @@ public sealed class MapEditorModel : PageModel
         int graphWindowHours = 24,
         string? pins = null,
         string? links = null,
-        Guid? linkMapId = null)
+        Guid? linkMapId = null,
+        string? rack = null,
+        int rackUnits = 42)
     {
         var tile = new MonitoringMapTile
         {
@@ -163,7 +165,9 @@ public sealed class MapEditorModel : PageModel
             // could only be judged after saving.
             Pins = ParsePins(pins),
             Links = ParseLinks(links),
-            LinkMapId = linkMapId is { } linkMap && linkMap != Guid.Empty ? linkMap : null
+            LinkMapId = linkMapId is { } linkMap && linkMap != Guid.Empty ? linkMap : null,
+            RackUnits = rackUnits,
+            RackDevices = ParseRack(rack)
         };
         MonitoringMapTileConstraints.Clamp(tile, Math.Max(1, Input.Columns), Math.Max(1, Input.Rows));
 
@@ -313,6 +317,8 @@ public sealed class MapEditorModel : PageModel
         GaugeMin = tile.GaugeMin,
         GaugeMax = tile.GaugeMax,
         ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim(),
+        RackUnits = MonitoringMapRack.Normalize(tile.RackUnits, []).Units,
+        RackDevices = MonitoringMapRack.Normalize(tile.RackUnits, ParseRack(tile.RackJson)).Devices,
         EmbedUrl = BrandingSafety.SafeContactUrl(tile.EmbedUrl?.Trim()),
         EmbedImage = tile.EmbedImage,
         SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365),
@@ -341,6 +347,25 @@ public sealed class MapEditorModel : PageModel
             : text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+    /// <summary>The rack's devices as JSON, defensively like the pins: a malformed blob costs the tile its devices, never the save.</summary>
+    private List<MonitoringMapRackDevice> ParseRack(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<MonitoringMapRackDevice>>(json, PinJsonOptions) ?? [];
+        }
+        catch (System.Text.Json.JsonException exception)
+        {
+            _logger.LogWarning(exception, "Could not parse the rack JSON for a map tile; its devices were dropped.");
+            return [];
+        }
+    }
 
     /// <summary>The links JSON, defensively like the pins: a malformed blob costs the tile its links, never the save.</summary>
     private List<MonitoringMapLink> ParseLinks(string? json)
@@ -470,6 +495,8 @@ public sealed class MapEditorModel : PageModel
                     LinkMapId = tile.LinkMapId,
                     ColorRules = new Dictionary<string, string>(tile.ColorRules),
                     RefreshSeconds = tile.RefreshSeconds,
+                    RackUnits = tile.RackUnits,
+                    RackJson = tile.RackDevices.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.RackDevices, PinJsonOptions),
                     EmbedUrl = tile.EmbedUrl,
                     EmbedImage = tile.EmbedImage
                 })).ToList()
@@ -809,6 +836,11 @@ public sealed class MapTileInput
     public string? EmbedUrl { get; set; }
 
     public bool EmbedImage { get; set; }
+
+    public int RackUnits { get; set; } = 42;
+
+    /// <summary>The rack's devices as JSON - one field per tile, for the pins' reason.</summary>
+    public string? RackJson { get; set; }
 
     public bool IsDeleted { get; set; }
 }

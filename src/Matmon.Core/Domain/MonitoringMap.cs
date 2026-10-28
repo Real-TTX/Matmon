@@ -371,6 +371,12 @@ public sealed class MonitoringMapTile
     /// rather than as a page in a frame - what a camera's snapshot URL wants.</summary>
     public bool EmbedImage { get; set; }
 
+    /// <summary>A Rack tile's height in units (U) - 42 is the usual full rack, 12 / 24 for a wall cabinet.</summary>
+    public int RackUnits { get; set; } = 42;
+
+    /// <summary>The devices in a Rack tile, each with the units it occupies and its own target.</summary>
+    public List<MonitoringMapRackDevice> RackDevices { get; set; } = [];
+
     /// <summary>Status markers on an image or geo tile - and the NODES of a topology tile.</summary>
     public List<MonitoringMapPin> Pins { get; set; } = [];
 
@@ -423,7 +429,9 @@ public sealed class MonitoringMapTile
         ColorRules = new Dictionary<string, string>(ColorRules),
         RefreshSeconds = RefreshSeconds,
         EmbedUrl = EmbedUrl,
-        EmbedImage = EmbedImage
+        EmbedImage = EmbedImage,
+        RackUnits = RackUnits,
+        RackDevices = RackDevices.Select(device => device.Clone()).ToList()
     };
 }
 
@@ -486,7 +494,12 @@ public enum MonitoringMapTileKind
     Donut = 18,
 
     /// <summary>Another web page in a frame, or a picture refreshed on a timer (a camera snapshot, a Grafana panel).</summary>
-    Embed = 19
+    Embed = 19,
+
+    /// <summary>A server rack drawn to scale: its height units (U) top to bottom, each device in the slots it really
+    /// occupies, coloured by the sensors of its own target. Empty slots stay visible - a rack's free space is
+    /// information too.</summary>
+    Rack = 20
 }
 
 public enum MonitoringMapListMode
@@ -590,6 +603,8 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Bars => (3, 2, 4, 3),
             MonitoringMapTileKind.Donut => (2, 2, 3, 3),
             MonitoringMapTileKind.Embed => (3, 2, 6, 4),
+            // Tall and narrow, like the thing itself.
+            MonitoringMapTileKind.Rack => (2, 4, 3, 7),
             _ => (2, 2, 2, 2)
         };
     }
@@ -753,6 +768,92 @@ public sealed class MonitoringMapLink
         Label = Label,
         ShowTraffic = ShowTraffic
     };
+}
+
+/// <summary>One device in a rack: the lowest unit it sits in (1 = the bottom, as racks are numbered) and how many
+/// units it is high. Its colour comes from its own target, like a pin's.</summary>
+public sealed class MonitoringMapRackDevice
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The lowest unit the device occupies, counted from the bottom (1-based).</summary>
+    public int Position { get; set; } = 1;
+
+    /// <summary>Height in units (1U switch, 2U server ...).</summary>
+    public int Height { get; set; } = 1;
+
+    /// <summary>Element id or "tag:name"; empty = drawn neutral (a patch panel, a shelf).</summary>
+    public string? TargetToken { get; set; }
+
+    /// <summary>The device symbol (see <see cref="MonitoringMapDevices"/>), "server" when empty.</summary>
+    public string? Icon { get; set; }
+
+    public int Top => Position + Height - 1;
+
+    public MonitoringMapRackDevice Clone() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Position = Position,
+        Height = Height,
+        TargetToken = TargetToken,
+        Icon = Icon
+    };
+}
+
+/// <summary>The rules of a rack, pure so they are tested without a store.</summary>
+public static class MonitoringMapRack
+{
+    public const int MinUnits = 4;
+
+    public const int MaxUnits = 52;
+
+    public const int MaxDevices = 60;
+
+    /// <summary>
+    /// Brings a rack into shape: the unit count into 4..52, every device into the rack (height at least 1, its top at
+    /// most the rack's top), names trimmed, at most 60 devices. Devices that overlap are KEPT - the designer says which
+    /// ones collide (<see cref="Collisions"/>), because silently dropping one would lose what someone typed.
+    /// </summary>
+    public static (int Units, List<MonitoringMapRackDevice> Devices) Normalize(int units, IEnumerable<MonitoringMapRackDevice> devices)
+    {
+        var rackUnits = Math.Clamp(units <= 0 ? 42 : units, MinUnits, MaxUnits);
+        var result = new List<MonitoringMapRackDevice>();
+        foreach (var source in devices.Take(MaxDevices))
+        {
+            var device = source.Clone();
+            device.Id = device.Id == Guid.Empty ? Guid.NewGuid() : device.Id;
+            device.Name = (device.Name ?? string.Empty).Trim();
+            device.TargetToken = string.IsNullOrWhiteSpace(device.TargetToken) ? null : device.TargetToken.Trim();
+            device.Icon = string.IsNullOrWhiteSpace(device.Icon) ? null : device.Icon.Trim();
+            device.Height = Math.Clamp(device.Height, 1, rackUnits);
+            device.Position = Math.Clamp(device.Position, 1, rackUnits - device.Height + 1);
+            result.Add(device);
+        }
+
+        return (rackUnits, result.OrderByDescending(device => device.Top).ToList());
+    }
+
+    /// <summary>The ids of devices that share a unit with another one.</summary>
+    public static IReadOnlySet<Guid> Collisions(IReadOnlyList<MonitoringMapRackDevice> devices)
+    {
+        var colliding = new HashSet<Guid>();
+        for (var first = 0; first < devices.Count; first++)
+        {
+            for (var second = first + 1; second < devices.Count; second++)
+            {
+                if (devices[first].Position <= devices[second].Top && devices[second].Position <= devices[first].Top)
+                {
+                    colliding.Add(devices[first].Id);
+                    colliding.Add(devices[second].Id);
+                }
+            }
+        }
+
+        return colliding;
+    }
 }
 
 /// <summary>The device symbols a topology node can carry, each drawn with an icon of the toolkit's sprite.</summary>

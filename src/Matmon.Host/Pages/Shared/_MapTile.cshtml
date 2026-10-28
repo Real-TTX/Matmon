@@ -14,7 +14,7 @@
         or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
         or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology
         or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline or MonitoringMapTileKind.Table
-        or MonitoringMapTileKind.Bars or MonitoringMapTileKind.Donut or MonitoringMapTileKind.Embed;
+        or MonitoringMapTileKind.Bars or MonitoringMapTileKind.Donut or MonitoringMapTileKind.Embed or MonitoringMapTileKind.Rack;
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading or MonitoringMapTileKind.Embed;
     string Pct(double? value) => (value ?? 0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
@@ -216,6 +216,36 @@
                 }
             </ul>
         }
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Rack)
+    {
+        @* The rack to scale: one grid row per unit, the numbers on the left counted from the bottom as racks are, each
+           device spanning the rows it occupies - placed by custom properties that carry data. *@
+        var units = Math.Max(1, Model.RackUnits);
+        <div class="map-rack" style="--rack-units: @units">
+            @for (var unit = units; unit >= 1; unit--)
+            {
+                <span class="map-rack-unit" aria-hidden="true">@unit</span>
+            }
+            <div class="map-rack-bay" aria-hidden="true"></div>
+            @foreach (var device in Model.Rack ?? [])
+            {
+                var hint = $"{device.Name} ({device.Units}){(device.Detail is null ? "" : " - " + device.Detail)}{(device.Collides ? " - overlaps another device" : "")}";
+                var css = "map-rack-device" + (device.Collides ? " is-colliding" : "") + (device.Height == 1 ? " is-1u" : "");
+                if (device.Href is not null && !Model.Editable)
+                {
+                    <a class="@css" data-state="@device.Tone" data-rack-id="@device.Id" href="@device.Href" title="@hint" style="--rack-row: @device.Row; --rack-h: @device.Height">
+                        <span class="map-rack-device-icon">@MatUi.Icon(device.Icon)</span><strong>@device.Name</strong><small data-rack-detail>@device.Detail</small>
+                    </a>
+                }
+                else
+                {
+                    <div class="@css" data-state="@device.Tone" data-rack-id="@device.Id" title="@hint" style="--rack-row: @device.Row; --rack-h: @device.Height">
+                        <span class="map-rack-device-icon">@MatUi.Icon(device.Icon)</span><strong>@device.Name</strong><small data-rack-detail>@device.Detail</small>
+                    </div>
+                }
+            }
+        </div>
     }
     else if (tile.Kind == MonitoringMapTileKind.Embed)
     {

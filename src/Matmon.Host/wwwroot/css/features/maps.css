@@ -639,6 +639,98 @@ a.map-hex:focus-visible {
   filter: brightness(1.25);
 }
 
+/* ---- Rack: one grid row per unit, numbered from the bottom; devices span their units (--rack-row / --rack-h) ---- */
+.map-rack {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1.8em minmax(0, 1fr);
+  grid-template-rows: repeat(var(--rack-units, 42), minmax(0, 1fr));
+  column-gap: 0.3em;
+  min-height: 0;
+  padding: 0.3em;
+  border: 2px solid color-mix(in srgb, var(--mat-text-faint) 55%, transparent);
+  border-radius: var(--mat-radius-sm);
+  background: color-mix(in srgb, var(--mat-surface-2) 80%, transparent);
+  font-size: clamp(0.6rem, 2.4cqi, 0.9rem);
+  line-height: 1;
+}
+.map-rack-unit {
+  grid-column: 1;
+  align-self: center;
+  color: var(--mat-text-faint);
+  font-size: 0.75em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: end;
+}
+/* The empty slots: a faint line between every two units, behind the devices. */
+.map-rack-bay {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  background: repeating-linear-gradient(to bottom,
+    transparent 0 calc(100% / var(--rack-units, 42) - 1px),
+    color-mix(in srgb, var(--mat-text-faint) 22%, transparent) calc(100% / var(--rack-units, 42) - 1px) calc(100% / var(--rack-units, 42)));
+}
+.map-rack-device {
+  --map-rack-tone: var(--mat-text-faint);
+  position: relative;
+  z-index: 2;
+  display: flex;
+  grid-column: 2;
+  grid-row: var(--rack-row, 1) / span var(--rack-h, 1);
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  min-height: 0;
+  margin: 1px 0;
+  padding: 0 0.4em;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--map-rack-tone) 55%, transparent);
+  border-inline-start: 4px solid var(--map-rack-tone);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--map-rack-tone) 14%, var(--mat-surface));
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.map-rack-device[data-state="neutral"] { --map-rack-tone: var(--mat-border); }
+.map-rack-device[data-state="ok"] { --map-rack-tone: var(--mat-success); }
+.map-rack-device[data-state="warning"] { --map-rack-tone: var(--mat-warning); }
+.map-rack-device[data-state="error"] { --map-rack-tone: var(--mat-danger); }
+.map-rack-device strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.map-rack-device small {
+  overflow: hidden;
+  font-size: 0.85em;
+  color: var(--mat-text-muted);
+  text-overflow: ellipsis;
+}
+.map-rack-device.is-1u {
+  font-size: 0.8em;
+  border-width: 0 0 0 3px;
+}
+.map-rack-device.is-1u small { display: none; }
+.map-rack-device-icon {
+  display: inline-grid;
+  flex: none;
+  color: var(--map-rack-tone);
+}
+.map-rack-device-icon svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+.map-rack-device.is-colliding {
+  outline: 2px dashed var(--mat-danger);
+  outline-offset: -2px;
+}
+a.map-rack-device:hover,
+a.map-rack-device:focus-visible {
+  border-color: var(--map-rack-tone);
+}
+
 /* ---- Bars: one reading across sensors; the length is data (--bar-w) ---- */
 .map-bars {
   display: grid;
