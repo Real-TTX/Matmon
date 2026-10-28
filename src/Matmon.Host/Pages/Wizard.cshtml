@@ -126,6 +126,7 @@
                     }
                     <form method="post" asp-page-handler="CloudMonitoring" class="mat-form" novalidate>
                         <label class="mat-check"><input type="checkbox" id="wizard-notify-problems" name="notifyOnProblems" value="true" checked /><span class="mat-check__text">E-mail me if this instance goes offline (and when it recovers)</span></label>
+                        <label class="mat-check"><input type="checkbox" id="wizard-cloud-backup" name="cloudBackup" value="true" checked="@Model.NightlyCloudBackup" /><span class="mat-check__text">Back up the configuration to Matmon.Cloud every night</span></label>
                         @if (Model.License.TunnelEnabled)
                         {
                             <label class="mat-check"><input type="checkbox" id="wizard-remote-access" name="remoteAccess" value="true" checked="@Model.RemoteAccessEnabled" /><span class="mat-check__text">Remote access: operate this instance from Matmon.Cloud</span></label>

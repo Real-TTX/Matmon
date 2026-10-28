@@ -234,6 +234,12 @@ public sealed class WorkspaceBackupSettings
     [JsonIgnore]
     public bool PassphraseHydrationFailed { get; set; }
 
+    /// <summary>The nightly backup on this machine has been set up once (it is not set up again after an admin removed it).</summary>
+    public bool DefaultLocalJobCreated { get; set; }
+
+    /// <summary>The nightly cloud backup has been set up once - on the first good heartbeat of a cloud link.</summary>
+    public bool DefaultCloudJobCreated { get; set; }
+
     /// <summary>What is saved before an update; a snapshot on this machine unless the admin chose otherwise.</summary>
     public PreUpdateBackupMode BeforeUpdate { get; set; } = PreUpdateBackupMode.Local;
 

@@ -192,3 +192,81 @@ file sealed class BackupSettingsTestHostEnvironment : IHostEnvironment
     public string ContentRootPath { get; set; }
     public IFileProvider ContentRootFileProvider { get; set; }
 }
+
+/// <summary>Every instance backs itself up without anyone thinking of it: a nightly job here, and a nightly cloud job once linked.</summary>
+public sealed class DefaultBackupJobTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "matmon-defaultjobs-" + Guid.NewGuid().ToString("N"));
+
+    private InMemoryMonitoringWorkspaceStore Open(SqliteTelemetryRepository telemetry) => new(
+        new BackupSettingsTestHostEnvironment(_dir),
+        new MatmonRuntimeOptions { WorkspacePath = Path.Combine(_dir, "workspace.json") },
+        new MatmonAuthOptions(),
+        new EphemeralDataProtectionProvider(),
+        telemetry,
+        NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+
+    private static void Heartbeat(InMemoryMonitoringWorkspaceStore store, string status = "ok") =>
+        store.UpdateCloudConnection(new CloudConnectionState { InstanceId = Guid.NewGuid(), CloudUrl = "https://cloud.example.test", LastStatus = status });
+
+    [Fact]
+    public void A_new_instance_has_a_nightly_local_backup_and_gets_a_cloud_one_on_its_first_good_heartbeat()
+    {
+        Directory.CreateDirectory(_dir);
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using var store = Open(telemetry);
+
+        var local = Assert.Single(store.GetBackupJobs());
+        Assert.Equal(BackupDestination.Local, local.Destination);
+        Assert.Equal(MonitoringScheduleMode.Daily, local.Schedule.Mode);
+        Assert.NotNull(local.NextRunUtc);
+
+        Heartbeat(store, "unauthorized");
+        Assert.DoesNotContain(store.GetBackupJobs(), job => job.Destination == BackupDestination.Cloud);
+
+        Heartbeat(store);
+        var cloud = Assert.Single(store.GetBackupJobs(), job => job.Destination == BackupDestination.Cloud);
+        Assert.True(cloud.Enabled);
+        Assert.True(store.HasNightlyCloudBackup());
+    }
+
+    [Fact]
+    public void A_removed_default_job_does_not_come_back()
+    {
+        Directory.CreateDirectory(_dir);
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using (var store = Open(telemetry))
+        {
+            Heartbeat(store);
+            foreach (var job in store.GetBackupJobs())
+            {
+                store.DeleteBackupJob(job.Id);
+            }
+            Heartbeat(store);
+            Assert.Empty(store.GetBackupJobs());
+        }
+        using (var reopened = Open(telemetry))
+        {
+            Assert.Empty(reopened.GetBackupJobs());
+        }
+    }
+
+    [Fact]
+    public void The_assistant_switches_the_nightly_cloud_backup_off_and_on()
+    {
+        Directory.CreateDirectory(_dir);
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "t.db"));
+        using var store = Open(telemetry);
+        Heartbeat(store);
+        store.SetNightlyCloudBackup(false);
+        Assert.False(store.HasNightlyCloudBackup());
+        store.SetNightlyCloudBackup(true);
+        Assert.True(store.HasNightlyCloudBackup());
+        Assert.Single(store.GetBackupJobs(), job => job.Destination == BackupDestination.Cloud);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }
+    }
+}

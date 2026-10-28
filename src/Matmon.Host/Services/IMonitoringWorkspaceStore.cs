@@ -378,6 +378,11 @@ public interface IMonitoringWorkspaceStore
 
     void SetPreUpdateBackup(PreUpdateBackupMode mode);
 
+    /// <summary>The nightly cloud backup (a cloud job) switched on or off; creates it when there is none.</summary>
+    void SetNightlyCloudBackup(bool enabled);
+
+    bool HasNightlyCloudBackup();
+
     Matmon.Host.Services.SelfUpdate.SelfUpdateSettings GetSelfUpdateSettings();
 
     void UpdateSelfUpdateSettings(Matmon.Host.Services.SelfUpdate.SelfUpdateSettings settings);

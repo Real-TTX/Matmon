@@ -564,6 +564,105 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
+    /// <summary>Name of the nightly backup on this machine every instance gets once.</summary>
+    public const string DefaultLocalJobName = "Nightly backup";
+
+    /// <summary>Name of the nightly cloud backup an instance gets once, when it is first linked to Matmon.Cloud.</summary>
+    public const string DefaultCloudJobName = "Nightly cloud backup";
+
+    /// <summary>
+    /// Every instance backs itself up without anyone having to think of it: once, a nightly job on this machine (02:30, the
+    /// configuration with users, maps and MIBs - no telemetry -, the last 7 kept), and once the instance is linked to
+    /// Matmon.Cloud, a nightly cloud job (03:30, the cloud's own retention). Each is set up ONE time (a flag in the backup
+    /// settings) - an admin who removed or changed one keeps it that way - and not at all when a job of that destination
+    /// exists already. Returns whether it added something. Must hold <c>_gate</c>.
+    /// </summary>
+    private bool EnsureDefaultBackupJobsLocked(bool cloudConnected)
+    {
+        EnsureBackupJobsCollection();
+        var settings = _document.BackupSettings ??= new();
+        var added = false;
+
+        if (!settings.DefaultLocalJobCreated)
+        {
+            settings.DefaultLocalJobCreated = true;
+            if (!_document.BackupJobs.Any(job => job.Destination == BackupDestination.Local))
+            {
+                _document.BackupJobs.Add(DefaultJob(DefaultLocalJobName, BackupDestination.Local, new TimeSpan(2, 30, 0),
+                    WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics),
+                    "Set up with the instance: the configuration every night, without telemetry."));
+            }
+            added = true;
+        }
+
+        if (cloudConnected && !settings.DefaultCloudJobCreated)
+        {
+            settings.DefaultCloudJobCreated = true;
+            if (!_document.BackupJobs.Any(job => job.Destination == BackupDestination.Cloud))
+            {
+                _document.BackupJobs.Add(DefaultJob(DefaultCloudJobName, BackupDestination.Cloud, new TimeSpan(3, 30, 0),
+                    WorkspaceBackupSections.CloudConfig,
+                    "Set up when the instance was linked to Matmon.Cloud: the configuration every night, off-site."));
+            }
+            added = true;
+        }
+
+        if (added)
+        {
+            QueueSave(SavePriority.Configuration);
+        }
+        return added;
+    }
+
+    private static WorkspaceBackupJob DefaultJob(string name, BackupDestination destination, TimeSpan at, WorkspaceBackupSection sections, string description)
+    {
+        var job = new WorkspaceBackupJob
+        {
+            Name = name,
+            Description = description,
+            Enabled = true,
+            Destination = destination,
+            Sections = sections,
+            RetentionCount = 7,
+            Schedule = new MonitoringSchedule { Mode = MonitoringScheduleMode.Daily, TimeOfDay = at }
+        };
+        NormalizeBackupJob(job);
+        return job;
+    }
+
+    /// <summary>The nightly cloud backup switched on or off (the setup assistant's cloud step).</summary>
+    public void SetNightlyCloudBackup(bool enabled)
+    {
+        lock (_gate)
+        {
+            EnsureBackupJobsCollection();
+            var job = _document.BackupJobs.FirstOrDefault(candidate => candidate.Destination == BackupDestination.Cloud);
+            if (job is null)
+            {
+                if (!enabled)
+                {
+                    return;
+                }
+                (_document.BackupSettings ??= new()).DefaultCloudJobCreated = true;
+                job = DefaultJob(DefaultCloudJobName, BackupDestination.Cloud, new TimeSpan(3, 30, 0), WorkspaceBackupSections.CloudConfig,
+                    "Set up in the setup assistant: the configuration every night, off-site.");
+                _document.BackupJobs.Add(job);
+            }
+            job.Enabled = enabled;
+            job.NextRunUtc = enabled ? CalculateNextRunUtc(job, DateTimeOffset.UtcNow) : job.NextRunUtc;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    /// <summary>Whether a cloud backup job exists and is switched on.</summary>
+    public bool HasNightlyCloudBackup()
+    {
+        lock (_gate)
+        {
+            return (_document.BackupJobs ?? []).Any(job => job.Destination == BackupDestination.Cloud && job.Enabled);
+        }
+    }
+
     private void EnsureBackupJobsCollection()
     {
         _document.BackupJobs ??= [];

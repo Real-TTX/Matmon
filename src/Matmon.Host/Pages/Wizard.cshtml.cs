@@ -116,6 +116,9 @@ public class WizardModel : PageModel
     /// <summary>Remote access (the cloud tunnel, internally "Full Access") is switched on.</summary>
     public bool RemoteAccessEnabled { get; private set; }
 
+    /// <summary>The cloud step's "back up every night" switch.</summary>
+    public bool NightlyCloudBackup { get; private set; }
+
     /// <summary>The cloud URL this instance is linked to (when connected).</summary>
     public string CloudLinkUrl { get; private set; } = string.Empty;
 
@@ -333,7 +336,7 @@ public class WizardModel : PageModel
 
     /// <summary>Cloud step: remote access (local, licence-gated) and the cloud-side offline notification for this instance (token-authed call
     /// to the just-connected cloud). Default on, so a fresh Free instance is watched out of the box.</summary>
-    public async Task<IActionResult> OnPostCloudMonitoringAsync(bool notifyOnProblems, bool remoteAccess, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCloudMonitoringAsync(bool notifyOnProblems, bool remoteAccess, bool cloudBackup, CancellationToken cancellationToken)
     {
         var settings = _workspaceStore.GetCloudConnectionSettings();
         var url = (settings.Url ?? string.Empty).Trim().TrimEnd('/');
@@ -350,6 +353,7 @@ public class WizardModel : PageModel
         {
             _workspaceStore.SetCloudFullAccess(remote);
         }
+        _workspaceStore.SetNightlyCloudBackup(cloudBackup);
 
         try
         {
@@ -483,6 +487,8 @@ public class WizardModel : PageModel
             License = _licenseService.Current;
             CloudManagesLicense = CloudConnected;
             RemoteAccessEnabled = cloud.FullAccessEnabled;
+            // Set up by the first heartbeat of the link; ticked as well when that has not come yet (Save then creates it).
+            NightlyCloudBackup = _workspaceStore.HasNightlyCloudBackup() || !_workspaceStore.GetBackupSettings().DefaultCloudJobCreated;
         }
 
         if (string.Equals(Step, "restore", StringComparison.OrdinalIgnoreCase))

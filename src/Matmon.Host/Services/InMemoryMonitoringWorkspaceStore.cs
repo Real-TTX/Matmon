@@ -119,6 +119,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureDefaultAlertCollection();
         EnsurePushTokens();
         EnsureBrowserPushSender();
+        EnsureDefaultBackupJobsLocked(cloudConnected: false);
         SaveNow();
     }
 
@@ -1399,7 +1400,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             {
                 ProtectedPassphrase = settings.HasPassphrase ? "set" : null,
                 PassphraseHydrationFailed = settings.HasPassphrase,
-                BeforeUpdate = settings.BeforeUpdate
+                BeforeUpdate = settings.BeforeUpdate,
+                DefaultLocalJobCreated = settings.DefaultLocalJobCreated,
+                DefaultCloudJobCreated = settings.DefaultCloudJobCreated
             };
         }
     }
@@ -1664,6 +1667,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 previous is null
                 || previous.InstanceId != state.InstanceId
                 || !string.Equals(previous.CloudUrl, state.CloudUrl, StringComparison.Ordinal);
+            // The first good heartbeat of a link (wizard, System > Cloud, an environment link - all end here) sets up the
+            // nightly cloud backup.
+            if (string.Equals(state.LastStatus, "ok", StringComparison.Ordinal) && state.InstanceId is not null
+                && EnsureDefaultBackupJobsLocked(cloudConnected: true))
+            {
+                identityChanged = true;
+            }
             if (identityChanged)
             {
                 QueueSave(SavePriority.Configuration);
