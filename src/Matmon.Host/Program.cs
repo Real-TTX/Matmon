@@ -218,7 +218,8 @@ builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemor
     provider.GetService<INotificationSink>(),
     provider.GetRequiredService<MapAssetStore>(),
     provider.GetRequiredService<MibLibrary>(),
-    provider.GetService<SensorWakeQueue>()));
+    provider.GetService<SensorWakeQueue>(),
+    provider.GetService<ISyslogStore>()));
 builder.Services.AddSingleton<StorageOverviewProvider>();
 builder.Services.AddSingleton<AgentPackageStore>();
 builder.Services.AddSingleton<IProbeStorageSource>(provider => provider.GetRequiredService<StorageOverviewProvider>());

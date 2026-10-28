@@ -26,10 +26,7 @@ public sealed class SelfUpdateService : BackgroundService
 
     // Telemetry stays out of the snapshot: it is large, lives in its own database and is not what an update changes.
     private const Matmon.Core.Domain.WorkspaceBackupSection SnapshotSections =
-        Matmon.Core.Domain.WorkspaceBackupSection.All
-        & ~Matmon.Core.Domain.WorkspaceBackupSection.SensorHistory
-        & ~Matmon.Core.Domain.WorkspaceBackupSection.Events
-        & ~Matmon.Core.Domain.WorkspaceBackupSection.Statistics;
+        Matmon.Core.Domain.WorkspaceBackupSection.All & ~Matmon.Core.Domain.WorkspaceBackupSections.History;
 
     private readonly IReadOnlyList<ISelfUpdateTarget> _targets;
     private readonly IMonitoringWorkspaceStore _store;

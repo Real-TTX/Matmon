@@ -302,8 +302,9 @@ public sealed class PluginSystemTests : IDisposable
         Assert.Empty(store.GetPluginAssignmentsForProbe("unknown"));
         Assert.Throws<InvalidOperationException>(() => store.SavePluginAssignment(new PluginAssignment { PluginId = "x", ProbeElementId = Guid.NewGuid() }));
 
-        var package = Encoding.UTF8.GetString(store.CreateBackupBytes(WorkspaceBackupSection.All));
-        Assert.DoesNotContain("syslog-collector", package);
+        // The collectors ride their own section (decided 2026-10-28: a backup must bring them back) - and only that one.
+        Assert.Contains("syslog-collector", Encoding.UTF8.GetString(store.CreateBackupBytes(WorkspaceBackupSection.All)));
+        Assert.DoesNotContain("syslog-collector", Encoding.UTF8.GetString(store.CreateBackupBytes(WorkspaceBackupSection.All & ~WorkspaceBackupSection.Collectors)));
     }
 
     // --- what the UI gets from the plugins ------------------------------------------------------------------------

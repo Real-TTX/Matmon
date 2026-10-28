@@ -62,6 +62,12 @@ public sealed class BackupJobSectionMigrationTests : IDisposable
 
     private static WorkspaceBackupJob Named(IReadOnlyList<WorkspaceBackupJob> jobs, string name) => jobs.Single(job => job.Name == name);
 
+    /// <summary>The eleven sections, spelled out (today's "All" has more).</summary>
+    private const WorkspaceBackupSection ElevenSections = WorkspaceBackupSection.Topology | WorkspaceBackupSection.Templates
+        | WorkspaceBackupSection.SensorDefinitions | WorkspaceBackupSection.Notifications | WorkspaceBackupSection.Maps
+        | WorkspaceBackupSection.Users | WorkspaceBackupSection.Alerts | WorkspaceBackupSection.SensorHistory
+        | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.BackupJobs;
+
     [Fact]
     public void A_job_that_selected_all_eleven_sections_now_means_everything()
     {
@@ -92,7 +98,7 @@ public sealed class BackupJobSectionMigrationTests : IDisposable
         var withoutUsers = Eleven.Replace("Users, ", string.Empty);
         var jobs = BootWith(4, Job("aaaaaaaa-0000-0000-0000-000000000004", "no users", withoutUsers));
 
-        Assert.Equal(WorkspaceBackupSection.All & ~(WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs), Named(jobs, "no users").Sections);
+        Assert.Equal(ElevenSections & ~WorkspaceBackupSection.Users, Named(jobs, "no users").Sections);
     }
 
     [Fact]
@@ -100,7 +106,20 @@ public sealed class BackupJobSectionMigrationTests : IDisposable
     {
         var jobs = BootWith(4, Job("aaaaaaaa-0000-0000-0000-000000000005", "cloud", Eleven, "Cloud"));
 
-        Assert.Equal(WorkspaceBackupSection.All & ~(WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs), Named(jobs, "cloud").Sections);
+        Assert.Equal(ElevenSections, Named(jobs, "cloud").Sections);
+    }
+
+    [Fact]
+    public void Migration_11_gives_a_full_job_the_new_sections_and_the_nightly_kind_all_but_the_syslog_log()
+    {
+        var thirteen = Eleven + ", MapAssets, Mibs";
+        var withoutHistory = thirteen.Replace("SensorHistory, Events, Statistics, ", string.Empty);
+        var jobs = BootWith(10,
+            Job("aaaaaaaa-0000-0000-0000-000000000008", "everything", thirteen),
+            Job("aaaaaaaa-0000-0000-0000-000000000009", "config only", withoutHistory));
+
+        Assert.Equal(WorkspaceBackupSection.All, Named(jobs, "everything").Sections);
+        Assert.Equal(WorkspaceBackupSection.All & ~WorkspaceBackupSections.History, Named(jobs, "config only").Sections);
     }
 
     [Fact]
@@ -118,7 +137,7 @@ public sealed class BackupJobSectionMigrationTests : IDisposable
         // leftover of the old list.
         var jobs = BootWith(5, Job("aaaaaaaa-0000-0000-0000-000000000007", "no mibs", Eleven + ", MapAssets"));
 
-        Assert.Equal(WorkspaceBackupSection.All & ~WorkspaceBackupSection.Mibs, Named(jobs, "no mibs").Sections);
+        Assert.Equal(ElevenSections | WorkspaceBackupSection.MapAssets, Named(jobs, "no mibs").Sections);
     }
 }
 

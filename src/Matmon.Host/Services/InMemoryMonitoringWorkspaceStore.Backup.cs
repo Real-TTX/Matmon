@@ -476,7 +476,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// a restart, then report counts + any credentials that could not be decrypted (dropped).</summary>
     private WorkspaceBackupRestoreResult ApplyRestoreLocked(WorkspaceBackupPackage package, WorkspaceBackupSection sections, IDataProtector? secretProtector, string fileName)
     {
+        // A backup made by a NEWER Matmon may carry shapes this build does not know - restoring it would drop them
+        // without a word. Said before anything is touched.
+        if (package.Document.SchemaVersion > CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"This backup was made by a newer Matmon (data version {package.Document.SchemaVersion}, this one reads up to {CurrentSchemaVersion}). Update this installation first, then restore it.");
+        }
+
         HydrateCredentialBundles(package.Document, secretProtector);
+        var migratedFrom = MigratePackageLocked(package.Document);
         ApplyBackupSections(_document, package.Document, sections);
         NormalizeAfterRestoreLocked();
         QueueSave(SavePriority.Configuration);
@@ -493,6 +502,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         var dropped = CollectDroppedSecretNames(_document);
 
         var message = $"Restored {restoredCount} section(s): {probes} probe(s), {sensors} sensor(s), {templates} template(s), {rules} rule(s).";
+        if (migratedFrom is { } version)
+        {
+            message += $" The backup was made by an older Matmon (data version {version}) and was brought up to date ({CurrentSchemaVersion}).";
+        }
         if (dropped.Count > 0)
         {
             message += $" {dropped.Count} credential(s) could not be decrypted and were dropped - re-enter them.";
@@ -531,10 +544,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// boot. Must hold <c>_gate</c>. Deliberately skips one-time + demo/provision seeders.</summary>
     private void NormalizeAfterRestoreLocked()
     {
-        // A restored package carries ITS OWN schema version, which may be older than this build - so the
-        // same pipeline the boot path runs brings it forward, rather than a hand-picked subset that has to
-        // be remembered whenever a migration is added.
-        RunSchemaMigrations();
+        // The package was already brought to this build's schema on its own (MigratePackageLocked) - the live
+        // document is current, so there is nothing to migrate here, only the invariants to re-establish.
         EnsureSensorDefinitionCatalog();
         EnsureDefaultTemplates();
         EnsureDefaultNotificationConfiguration();
@@ -548,6 +559,38 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     }
 
     /// <summary>
+    /// Brings an OLDER backup up to this build's schema before any of it is applied: the package document is migrated
+    /// on its own, by the same numbered pipeline a boot runs, from the version the package records (0 for a backup made
+    /// before versions existed). It used to be the live document's turn after the sections were swapped in - whose
+    /// version is always current, so no migration ever ran and an old backup came back in its old shape (agents without
+    /// a host, UPS sensors without the power-cut channels, ...). Migration 1 is left out: it moves telemetry from the
+    /// document into the database, and a restore puts the telemetry sections there itself. Returns the version the
+    /// package came from when it had to be migrated, else null. Must hold <c>_gate</c>.
+    /// </summary>
+    private int? MigratePackageLocked(WorkspaceDocument package)
+    {
+        var from = package.SchemaVersion;
+        if (from >= CurrentSchemaVersion)
+        {
+            return null;
+        }
+
+        NormalizeLoadedDocument(package);
+        var live = _document;
+        _document = package;
+        try
+        {
+            RunSchemaMigrations(skipVersions: [1]);
+        }
+        finally
+        {
+            _document = live;
+        }
+
+        return from;
+    }
+
+    /// <summary>
     /// Migration 5. The job editor used to offer eleven sections, so a job with all eleven ticked meant "everything"
     /// - but it was stored as exactly those eleven, and "everything" has grown since (map images, MIBs). A job
     /// stored as the word "All" picks the new ones up by itself; one stored as the list does not, so it is brought
@@ -555,12 +598,45 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// </summary>
     private void MigrateBackupJobsToAllSections()
     {
-        const WorkspaceBackupSection original = WorkspaceBackupSection.All & ~(WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs);
+        // The eleven sections the editor offered then - spelled out: derived from today's "All" this stopped matching the
+        // day "All" grew again (collectors, syslog messages, general settings).
+        const WorkspaceBackupSection original = WorkspaceBackupSection.Topology | WorkspaceBackupSection.Templates
+            | WorkspaceBackupSection.SensorDefinitions | WorkspaceBackupSection.Notifications | WorkspaceBackupSection.Maps
+            | WorkspaceBackupSection.Users | WorkspaceBackupSection.Alerts | WorkspaceBackupSection.SensorHistory
+            | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.BackupJobs;
         foreach (var job in _document.BackupJobs ?? [])
         {
             if (job.Destination == BackupDestination.Local && (job.Sections & original) == original)
             {
                 job.Sections |= WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Migration 11. Three sections joined (collectors, syslog messages, general settings). A local job that held every
+    /// configuration section of before gets the two new configuration ones; one that held the history too also gets the
+    /// syslog messages - so "everything" and "everything but the history" keep meaning what they meant. A job stored as
+    /// the word "All" picks them up by itself, and a narrowed one is left alone.
+    /// </summary>
+    private void MigrateBackupJobsToCollectorSections()
+    {
+        const WorkspaceBackupSection oldConfig = WorkspaceBackupSection.Topology | WorkspaceBackupSection.Templates
+            | WorkspaceBackupSection.SensorDefinitions | WorkspaceBackupSection.Notifications | WorkspaceBackupSection.Maps
+            | WorkspaceBackupSection.Users | WorkspaceBackupSection.Alerts | WorkspaceBackupSection.BackupJobs
+            | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs;
+        const WorkspaceBackupSection oldHistory = WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics;
+        foreach (var job in _document.BackupJobs ?? [])
+        {
+            if (job.Destination != BackupDestination.Local || (job.Sections & oldConfig) != oldConfig)
+            {
+                continue;
+            }
+
+            job.Sections |= WorkspaceBackupSection.Collectors | WorkspaceBackupSection.GeneralSettings;
+            if ((job.Sections & oldHistory) == oldHistory)
+            {
+                job.Sections |= WorkspaceBackupSection.SyslogMessages;
             }
         }
     }
@@ -590,7 +666,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             if (!_document.BackupJobs.Any(job => job.Destination == BackupDestination.Local))
             {
                 _document.BackupJobs.Add(DefaultJob(DefaultLocalJobName, BackupDestination.Local, new TimeSpan(2, 30, 0),
-                    WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics),
+                    WorkspaceBackupSection.All & ~WorkspaceBackupSections.History,
                     "Set up with the instance: the configuration every night, without telemetry."));
             }
             added = true;
@@ -736,6 +812,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
             // The MIB files an admin uploaded are files too. The standard set is not carried: it ships with the
             // image, so a restore onto any build already has it.
+            // The central log lives in its own database; at most this many of its newest messages travel.
+            if (job.Sections.HasFlag(WorkspaceBackupSection.SyslogMessages) && _syslog is { } syslog)
+            {
+                documentClone.SyslogMessages = syslog.ExportNewest(MaxSyslogMessagesInBackup).ToList();
+            }
+
             if (job.Sections.HasFlag(WorkspaceBackupSection.Mibs) && _mibLibrary is { } mibs)
             {
                 documentClone.Mibs = mibs.ReadUploadedFiles()
@@ -831,11 +913,23 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // else, and a restore must not make another machine notify someone's phone.
         document.PushDevices = [];
 
-        // The receiver's settings say which ports THIS machine opens and who may write to its log. No section restores
-        // them - switching a network listener on is a decision made on the machine it runs on - so they are not carried.
-        document.Syslog = new();
-        document.SnmpTraps = new();
-        document.Plugins = [];
+        // The collectors (where they run, ports, allow-lists), the log's retention, the trap communities and v3 users.
+        if (!sections.HasFlag(WorkspaceBackupSection.Collectors))
+        {
+            document.Syslog = new();
+            document.SnmpTraps = new();
+            document.Plugins = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.SyslogMessages))
+        {
+            document.SyslogMessages = [];
+        }
+
+        if (!sections.HasFlag(WorkspaceBackupSection.GeneralSettings))
+        {
+            document.DisplayTimeZoneId = null;
+        }
 
         // Whether and when this installation updates itself is decided on this machine, like its listeners.
         document.SelfUpdate = new();
@@ -1062,6 +1156,60 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return sanitized.Length > 32 ? sanitized[..32] : sanitized;
     }
 
+    /// <summary>
+    /// Where every part of the workspace goes in a backup: the section that carries it, or null with the reason it never
+    /// travels (it belongs to this machine). BackupCoverageTests fails the day a property is added to the document without
+    /// a line here - a backup that silently leaves something behind is found when it is needed, which is too late.
+    /// </summary>
+    public static IReadOnlyDictionary<string, (WorkspaceBackupSection? Section, string Why)> BackupCoverage { get; } =
+        new Dictionary<string, (WorkspaceBackupSection?, string)>
+        {
+            ["SchemaVersion"] = (null, "the data version of the package itself - drives the migrations on restore"),
+            ["RootProbe"] = (WorkspaceBackupSection.Topology, ""),
+            ["Templates"] = (WorkspaceBackupSection.Templates, ""),
+            ["SensorDefinitions"] = (WorkspaceBackupSection.SensorDefinitions, ""),
+            ["Users"] = (WorkspaceBackupSection.Users, ""),
+            ["SetupCompletedUtc"] = (null, "this installation's own setup - a restore never re-runs or skips it"),
+            ["Maps"] = (WorkspaceBackupSection.Maps, ""),
+            ["StatusPages"] = (WorkspaceBackupSection.Maps, ""),
+            ["NotificationConfiguration"] = (WorkspaceBackupSection.Notifications, ""),
+            ["SummaryReport"] = (WorkspaceBackupSection.Notifications, ""),
+            ["Syslog"] = (WorkspaceBackupSection.Collectors, ""),
+            ["SnmpTraps"] = (WorkspaceBackupSection.Collectors, ""),
+            ["Plugins"] = (WorkspaceBackupSection.Collectors, ""),
+            ["SelfUpdate"] = (null, "whether and when THIS installation updates itself"),
+            ["BackupSettings"] = (null, "the backup passphrase - a package never carries the key to itself"),
+            ["SelfUpdateOutcome"] = (null, "how this installation's last update ended"),
+            ["AllowedProgramPaths"] = (null, "what may be executed is decided on the machine that executes it"),
+            ["PublicBaseUrl"] = (null, "where this machine is reached"),
+            ["LastDirectOrigin"] = (null, "where this machine was last reached"),
+            ["Cloud"] = (null, "this installation's cloud link status"),
+            ["CloudSettings"] = (null, "this installation's cloud identity and token"),
+            ["LicenseToken"] = (null, "signed for this installation's cloud instance"),
+            ["ServicePartner"] = (null, "cached from this installation's cloud link"),
+            ["DisplayTimeZoneId"] = (WorkspaceBackupSection.GeneralSettings, ""),
+            ["NotificationSenders"] = (WorkspaceBackupSection.Notifications, ""),
+            ["NotificationReceivers"] = (WorkspaceBackupSection.Notifications, ""),
+            ["NotificationRules"] = (WorkspaceBackupSection.Notifications, ""),
+            ["Alerts"] = (WorkspaceBackupSection.Alerts, ""),
+            ["AlertMutes"] = (WorkspaceBackupSection.Alerts, ""),
+            ["MaintenanceWindows"] = (WorkspaceBackupSection.Notifications, ""),
+            ["PushDevices"] = (null, "a browser subscription belongs to this instance's key pair and to that browser"),
+            ["AgentEnrollments"] = (null, "short-lived install codes issued here"),
+            ["ApiTokens"] = (null, "they open this instance's API"),
+            ["BackupJobs"] = (WorkspaceBackupSection.BackupJobs, ""),
+            ["SensorHistory"] = (WorkspaceBackupSection.SensorHistory, ""),
+            ["Events"] = (WorkspaceBackupSection.Events, ""),
+            ["SensorStatistics"] = (WorkspaceBackupSection.Statistics, ""),
+            ["MapAssets"] = (WorkspaceBackupSection.MapAssets, ""),
+            ["Mibs"] = (WorkspaceBackupSection.Mibs, ""),
+            ["SyslogMessages"] = (WorkspaceBackupSection.SyslogMessages, "")
+        };
+
+    /// <summary>The syslog messages a backup carries at most (the newest) - the log keeps up to 2 M by default, and a
+    /// package of that size would not even load on a small box.</summary>
+    public const int MaxSyslogMessagesInBackup = 500_000;
+
     private void ApplyBackupSections(WorkspaceDocument target, WorkspaceDocument source, WorkspaceBackupSection sections)
     {
         if (sections.HasFlag(WorkspaceBackupSection.Topology))
@@ -1088,6 +1236,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             target.NotificationReceivers = source.NotificationReceivers;
             target.NotificationRules = source.NotificationRules;
             target.MaintenanceWindows = source.MaintenanceWindows ?? [];
+            // The scheduled summary report rides the same section - it was packed but never put back.
+            target.SummaryReport = source.SummaryReport ?? new();
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.Maps))
@@ -1104,6 +1254,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (sections.HasFlag(WorkspaceBackupSection.Alerts))
         {
             target.Alerts = source.Alerts;
+            // ...and so do the mutes: packed with the alerts, they used to stay behind on a restore.
+            target.AlertMutes = source.AlertMutes ?? [];
         }
 
         // Telemetry lives in the repository, not the document: restore straight into it.
@@ -1125,6 +1277,26 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (sections.HasFlag(WorkspaceBackupSection.BackupJobs))
         {
             target.BackupJobs = source.BackupJobs;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.Collectors))
+        {
+            target.Syslog = source.Syslog ?? new();
+            target.SnmpTraps = source.SnmpTraps ?? new();
+            // A collector placed on a probe this workspace does not have (Topology not restored with it) has nowhere to run.
+            var probes = EnumerateElements(target.RootProbe).OfType<ProbeElement>().Select(probe => probe.Id).ToHashSet();
+            target.Plugins = (source.Plugins ?? []).Where(assignment => probes.Contains(assignment.ProbeElementId)).ToList();
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.GeneralSettings))
+        {
+            target.DisplayTimeZoneId = source.DisplayTimeZoneId;
+            Matmon.Core.Domain.DisplayTimeZone.SystemDefault = Matmon.Core.Domain.DisplayTimeZone.Resolve(source.DisplayTimeZoneId) ?? TimeZoneInfo.Local;
+        }
+
+        if (sections.HasFlag(WorkspaceBackupSection.SyslogMessages) && _syslog is { } syslog)
+        {
+            syslog.ReplaceAll(source.SyslogMessages ?? []);
         }
 
         // Written back under their ORIGINAL ids: the tiles restored from the Maps section reference those

@@ -30,6 +30,12 @@ public sealed class BackupSectionSelectionModel
 
     public bool Mibs { get; set; } = true;
 
+    public bool Collectors { get; set; } = true;
+
+    public bool SyslogMessages { get; set; } = true;
+
+    public bool GeneralSettings { get; set; } = true;
+
     public bool HasAnySelected() => ToSections(defaultToAll: false) != WorkspaceBackupSection.None;
 
     /// <summary>A selection with nothing ticked. The job editor starts from "everything" (the property defaults), but
@@ -57,6 +63,9 @@ public sealed class BackupSectionSelectionModel
         BackupJobs = sections.HasFlag(WorkspaceBackupSection.BackupJobs);
         MapAssets = sections.HasFlag(WorkspaceBackupSection.MapAssets);
         Mibs = sections.HasFlag(WorkspaceBackupSection.Mibs);
+        Collectors = sections.HasFlag(WorkspaceBackupSection.Collectors);
+        SyslogMessages = sections.HasFlag(WorkspaceBackupSection.SyslogMessages);
+        GeneralSettings = sections.HasFlag(WorkspaceBackupSection.GeneralSettings);
     }
 
     public WorkspaceBackupSection ToSections(bool defaultToAll = true)
@@ -75,6 +84,9 @@ public sealed class BackupSectionSelectionModel
         if (BackupJobs) sections |= WorkspaceBackupSection.BackupJobs;
         if (MapAssets) sections |= WorkspaceBackupSection.MapAssets;
         if (Mibs) sections |= WorkspaceBackupSection.Mibs;
+        if (Collectors) sections |= WorkspaceBackupSection.Collectors;
+        if (SyslogMessages) sections |= WorkspaceBackupSection.SyslogMessages;
+        if (GeneralSettings) sections |= WorkspaceBackupSection.GeneralSettings;
 
         if (sections == WorkspaceBackupSection.None && defaultToAll)
         {
@@ -103,6 +115,9 @@ public static class BackupSectionCatalog
         new(WorkspaceBackupSection.Statistics, "Statistics", "Aggregated sensor statistics buckets"),
         new(WorkspaceBackupSection.MapAssets, "Map images", "Pictures uploaded onto maps (floorplans, photos)"),
         new(WorkspaceBackupSection.Mibs, "MIBs", "SNMP MIB files you uploaded (the standard set ships with Matmon)"),
+        new(WorkspaceBackupSection.Collectors, "Collectors", "Syslog / SNMP trap collectors (ports, allow-lists), log retention, trap communities and SNMPv3 users - restored, their ports open again where they run"),
+        new(WorkspaceBackupSection.SyslogMessages, "Syslog messages", "The central log itself (the newest 500 000 messages)"),
+        new(WorkspaceBackupSection.GeneralSettings, "General settings", "The display time zone"),
         new(WorkspaceBackupSection.BackupJobs, "Backup jobs", "Scheduled backup definitions")
     ];
 

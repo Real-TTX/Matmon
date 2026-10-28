@@ -103,6 +103,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // hand-edited or legacy workspace.json can never leave image bytes in the saved document.
         document.MapAssets = [];
         document.Mibs = [];
+        document.SyslogMessages = [];
         return document;
     }
 

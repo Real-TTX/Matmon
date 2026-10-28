@@ -372,7 +372,7 @@ public sealed class SyslogSensorTests : IDisposable
     // ---- the receiver's settings and backups --------------------------------------------------------------------------
 
     [Fact]
-    public void ABackupNeverCarriesACollectorAndRestoringOneNeverSwitchesOneOn()
+    public void ACollectorTravelsOnlyWithItsSectionAndARestoreWithoutItLeavesTheCollectorsAlone()
     {
         var root = _workspace.GetAllElements().OfType<ProbeElement>().Single(probe => probe.ParentId is null);
         var collector = _workspace.SavePluginAssignment(new PluginAssignment
@@ -382,15 +382,23 @@ public sealed class SyslogSensorTests : IDisposable
             Settings = { ["udpPort"] = "5514", ["allowedSources"] = "203.0.113.0/24" }
         });
 
-        var backup = _workspace.CreateBackupBytes(WorkspaceBackupSection.All);
+        var withoutCollectors = WorkspaceBackupSection.All & ~WorkspaceBackupSection.Collectors;
+        var backup = _workspace.CreateBackupBytes(withoutCollectors);
 
         Assert.DoesNotContain("203.0.113.0/24", System.Text.Encoding.UTF8.GetString(backup));
         Assert.Single(_workspace.GetPluginAssignments()); // taking the backup changed nothing here
 
-        // ...and a restore - onto this machine or any other - leaves the collectors as their admin set them
+        // ...and a restore without the Collectors section leaves the collectors as their admin set them
         _workspace.DeletePluginAssignment(collector.Id);
-        _workspace.RestoreBackupBytes(backup, WorkspaceBackupSection.All);
+        _workspace.RestoreBackupBytes(backup, withoutCollectors);
         Assert.Empty(_workspace.GetPluginAssignments());
+
+        // With the section, it comes back.
+        _workspace.SavePluginAssignment(new PluginAssignment { PluginId = Matmon.Probe.Plugins.SyslogCollectorPlugin.Id, ProbeElementId = root.Id, Settings = { ["udpPort"] = "5514" } });
+        var withCollector = _workspace.CreateBackupBytes(WorkspaceBackupSection.All);
+        _workspace.DeletePluginAssignment(_workspace.GetPluginAssignments().Single().Id);
+        _workspace.RestoreBackupBytes(withCollector, WorkspaceBackupSection.All);
+        Assert.Equal("5514", Assert.Single(_workspace.GetPluginAssignments()).Settings["udpPort"]);
     }
 
     // ---- what the catalog and the defaults say ------------------------------------------------------------------------

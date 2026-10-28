@@ -46,6 +46,12 @@ public interface ISyslogStore : ISyslogSink
 
     void Clear();
 
+    /// <summary>The newest <paramref name="max"/> messages, oldest first - what a backup carries.</summary>
+    IReadOnlyList<SyslogMessage> ExportNewest(int max);
+
+    /// <summary>Replaces every stored message with these (a restore), in one transaction. Returns how many were written.</summary>
+    int ReplaceAll(IReadOnlyList<SyslogMessage> messages);
+
     /// <summary>Waits until everything queued so far has been written.</summary>
     Task FlushAsync(CancellationToken cancellationToken = default);
 }
@@ -426,6 +432,96 @@ public sealed class SyslogStore : ISyslogStore, IDisposable
                 return deleted;
             }
             catch (SqliteException exception)
+            {
+                Fail(exception);
+                return 0;
+            }
+        }
+    }
+
+    public IReadOnlyList<SyslogMessage> ExportNewest(int max)
+    {
+        max = Math.Max(1, max);
+        var newestFirst = Read(
+            connection =>
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    SELECT id, received_ms, source, facility, severity, device_time, hostname, app, procid, msgid, format, message
+                    FROM syslog_message ORDER BY id DESC LIMIT $limit
+                    """;
+                command.Parameters.AddWithValue("$limit", max);
+                var result = new List<SyslogMessage>();
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    result.Add(ReadMessage(reader));
+                }
+
+                return (IReadOnlyList<SyslogMessage>)result;
+            },
+            []);
+        return newestFirst.Reverse().ToList();
+    }
+
+    public int ReplaceAll(IReadOnlyList<SyslogMessage> messages)
+    {
+        lock (_dbLock)
+        {
+            if (!EnsureInitializedLocked())
+            {
+                return 0;
+            }
+
+            try
+            {
+                using var transaction = _writer!.BeginTransaction();
+                using (var delete = _writer.CreateCommand())
+                {
+                    delete.Transaction = transaction;
+                    delete.CommandText = "DELETE FROM syslog_message";
+                    delete.ExecuteNonQuery();
+                }
+
+                using var command = _writer.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText =
+                    """
+                    INSERT INTO syslog_message (received_ms, source, facility, severity, device_time, hostname, app, procid, msgid, format, message)
+                    VALUES ($ts, $source, $facility, $severity, $deviceTime, $host, $app, $procid, $msgid, $format, $message)
+                    """;
+                var ts = command.Parameters.Add("$ts", SqliteType.Integer);
+                var source = command.Parameters.Add("$source", SqliteType.Text);
+                var facility = command.Parameters.Add("$facility", SqliteType.Integer);
+                var severity = command.Parameters.Add("$severity", SqliteType.Integer);
+                var deviceTime = command.Parameters.Add("$deviceTime", SqliteType.Text);
+                var host = command.Parameters.Add("$host", SqliteType.Text);
+                var app = command.Parameters.Add("$app", SqliteType.Text);
+                var procId = command.Parameters.Add("$procid", SqliteType.Text);
+                var msgId = command.Parameters.Add("$msgid", SqliteType.Text);
+                var format = command.Parameters.Add("$format", SqliteType.Integer);
+                var text = command.Parameters.Add("$message", SqliteType.Text);
+                foreach (var message in messages.OrderBy(message => message.ReceivedUtc))
+                {
+                    ts.Value = message.ReceivedUtc.ToUnixTimeMilliseconds();
+                    source.Value = message.SourceAddress ?? string.Empty;
+                    facility.Value = message.Facility;
+                    severity.Value = message.Severity;
+                    deviceTime.Value = (object?)message.DeviceTime ?? DBNull.Value;
+                    host.Value = (object?)message.Hostname ?? DBNull.Value;
+                    app.Value = (object?)message.AppName ?? DBNull.Value;
+                    procId.Value = (object?)message.ProcId ?? DBNull.Value;
+                    msgId.Value = (object?)message.MsgId ?? DBNull.Value;
+                    format.Value = (int)message.Format;
+                    text.Value = message.Message ?? string.Empty;
+                    command.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+                return messages.Count;
+            }
+            catch (Exception exception)
             {
                 Fail(exception);
                 return 0;

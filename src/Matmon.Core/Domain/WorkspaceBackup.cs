@@ -27,7 +27,20 @@ public enum WorkspaceBackupSection
     /// build rather than to the data. Files on disk like <see cref="MapAssets"/>, and a library of vendor MIBs
     /// can be large.</summary>
     Mibs = 1 << 12,
+
+    /// <summary>The syslog and SNMP trap collectors: where they run with their ports and allow-lists, the log's retention,
+    /// the trap communities and SNMPv3 users. A restore switches the listeners back on where they ran - on another
+    /// machine their ports open there.</summary>
+    Collectors = 1 << 13,
+
+    /// <summary>The syslog MESSAGES (the central log itself). Bulky like the telemetry, and kept out of the cloud backup.</summary>
+    SyslogMessages = 1 << 14,
+
+    /// <summary>Instance-wide preferences that are not a decision of the machine: the display time zone.</summary>
+    GeneralSettings = 1 << 15,
+
     All = Topology | Templates | SensorDefinitions | Notifications | Maps | Users | Alerts | SensorHistory | Events | Statistics | BackupJobs | MapAssets | Mibs
+        | Collectors | SyslogMessages | GeneralSettings
 }
 
 /// <summary>Where a scheduled backup job writes its snapshot: a local disk file (default) or a push to the
@@ -48,7 +61,11 @@ public static class WorkspaceBackupSections
     /// library can run to tens of megabytes - and a nightly cloud job would re-upload them on every run. A local
     /// backup carries them.</para>
     public const WorkspaceBackupSection CloudConfig =
-        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs);
+        WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs | WorkspaceBackupSection.SyslogMessages);
+
+    /// <summary>The bulky history sections - what "everything but the history" leaves out (the default nightly job).</summary>
+    public const WorkspaceBackupSection History =
+        WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.SyslogMessages;
 }
 
 public sealed class WorkspaceBackupJob

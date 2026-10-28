@@ -41,6 +41,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     private readonly ITelemetryRepository _telemetry;
     private readonly MapAssetStore? _mapAssets;
     private readonly MibLibrary? _mibLibrary;
+
+    /// <summary>The central log - optional like the pictures; a store built without one carries no syslog messages.</summary>
+    private readonly ISyslogStore? _syslog;
     private readonly INotificationSink? _notificationSink;
     private WorkspaceDocument _document;
     private DateTimeOffset? _firstDirtyUtc;
@@ -60,9 +63,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         INotificationSink? notificationSink = null,
         MapAssetStore? mapAssets = null,
         MibLibrary? mibLibrary = null,
-        SensorWakeQueue? wakeQueue = null)
+        SensorWakeQueue? wakeQueue = null,
+        ISyslogStore? syslog = null)
     {
         _wakeQueue = wakeQueue;
+        _syslog = syslog;
         // Optional: a store built without them simply does not carry uploaded map pictures or MIB files in its
         // backups, which is the honest behaviour for the unit tests that construct it directly.
         _mapAssets = mapAssets;
@@ -4985,6 +4990,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         /// <summary>Backup transport only - the live MIB files are in data/mibs (MibLibrary). Cleared on load like
         /// the map pictures, so workspace.json never carries them.</summary>
         public List<WorkspaceMibFile> Mibs { get; set; } = [];
+
+        /// <summary>The central log's messages - backup TRANSPORT only (the log lives in syslog.db), always empty in workspace.json.</summary>
+        public List<Matmon.Core.Syslog.SyslogMessage> SyslogMessages { get; set; } = [];
     }
 
 

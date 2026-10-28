@@ -36,7 +36,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -80,7 +80,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             store => store.MigrateReceiversToPlugins()),
 
         new(10, "The built-in browser notification sender and its rule (to the registered devices of all users)",
-            store => store.MigrateAddBrowserPushRule())
+            store => store.MigrateAddBrowserPushRule()),
+
+        new(11, "Local backup jobs that held every section also get the collectors, the general settings and (with the history) the syslog messages",
+            store => store.MigrateBackupJobsToCollectorSections())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step
@@ -94,10 +97,18 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// A workspace written before this pipeline existed has no version, i.e. 0, so it runs the whole list -
     /// which is exactly what it got on every single boot until now, and every step is still idempotent. The
     /// difference is that from here on it runs ONCE.</summary>
-    private void RunSchemaMigrations()
+    private void RunSchemaMigrations(IReadOnlyCollection<int>? skipVersions = null)
     {
         var from = _document.SchemaVersion;
-        var pending = Migrations.Where(migration => migration.Version > from).OrderBy(migration => migration.Version).ToArray();
+        var pending = Migrations
+            .Where(migration => migration.Version > from && skipVersions?.Contains(migration.Version) != true)
+            .OrderBy(migration => migration.Version)
+            .ToArray();
+        if (pending.Length == 0 && from < CurrentSchemaVersion)
+        {
+            _document.SchemaVersion = CurrentSchemaVersion;
+            return;
+        }
         if (pending.Length == 0)
         {
             return;
