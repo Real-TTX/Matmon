@@ -254,7 +254,13 @@ public sealed class CloudConnectionService : BackgroundService
                 mapCount,
                 ProtocolVersion,
                 intervalSeconds,
-                UpdatingTo()))
+                UpdatingTo(),
+                _selfUpdate.CanSelfUpdate,
+                OfferedVersion(),
+                _workspaceStore.GetSelfUpdateSettings().AllowCloudInstall,
+                _commandAnswer?.Id,
+                _commandAnswer?.Accepted,
+                _commandAnswer?.Message))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
@@ -288,6 +294,12 @@ public sealed class CloudConnectionService : BackgroundService
         {
             var body = await response.Content.ReadFromJsonAsync<HeartbeatResponse>(cancellationToken);
             _updateState.Set(body?.UpdateAvailable ?? false, body?.LatestVersion);
+            // The answer to the last command was carried by this beat - say it once.
+            _commandAnswer = null;
+            if (body?.InstallUpdate is { } command)
+            {
+                StartCloudInstall(command);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch { /* older cloud without the fields, or a non-JSON body - ignore */ }
@@ -304,7 +316,50 @@ public sealed class CloudConnectionService : BackgroundService
     // re-downloading the ~256KB logo. In-memory only (a restart just costs one full re-fetch).
     private string? _servicePartnerETag;
 
-    private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable);
+    private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable, InstallCommand? InstallUpdate = null);
+
+    /// <summary>"Install the update", sent by the cloud with a heartbeat answer (owner, partner or platform admin).</summary>
+    private sealed record InstallCommand(Guid Id, string? RequestedBy, string? Via);
+
+    private sealed record CommandAnswer(Guid Id, bool Accepted, string? Message);
+
+    /// <summary>The answer to the last install command, carried by the next heartbeat.</summary>
+    private volatile CommandAnswer? _commandAnswer;
+
+    private readonly HashSet<Guid> _handledCommands = [];
+
+    /// <summary>Runs the install in the background (the heartbeat must not wait for a download) and keeps the answer for the
+    /// next beat; a command already handled is ignored (an answer lost on the way could otherwise start it twice).</summary>
+    private void StartCloudInstall(InstallCommand command)
+    {
+        lock (_handledCommands)
+        {
+            if (!_handledCommands.Add(command.Id))
+            {
+                return;
+            }
+        }
+
+        var by = $"{command.RequestedBy ?? "someone"} ({command.Via ?? "Matmon Cloud"})";
+        _ = Task.Run(async () =>
+        {
+            string? problem;
+            try
+            {
+                problem = await _selfUpdate.InstallFromCloudAsync(by, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Update requested from Matmon Cloud failed to start");
+                problem = exception.Message;
+            }
+
+            _commandAnswer = new CommandAnswer(command.Id, problem is null, problem ?? "started");
+        });
+    }
+
+    /// <summary>The version this installation found and would install, else null.</summary>
+    private string? OfferedVersion() => _selfUpdate.Status.Offer is { Available: true } offer ? offer.Version ?? "a new version" : null;
 
     private sealed record ForbiddenBody(string? Error);
 
@@ -482,7 +537,13 @@ public sealed class CloudConnectionService : BackgroundService
         string? Version, string? Host, string? OperatingSystem, int? SensorCount, int? ActiveAlerts,
         int? ErrorCount, int? WarningCount, int? AckCount, int? ProbeCount, int? MapCount, int? ProtocolVersion,
         int? HeartbeatIntervalSeconds,
-        string? UpdatingTo);
+        string? UpdatingTo,
+        bool? CanSelfUpdate,
+        string? UpdateOffer,
+        bool? CloudInstallAllowed,
+        Guid? UpdateCommandId,
+        bool? UpdateCommandAccepted,
+        string? UpdateCommandMessage);
 
     /// <summary>The version an update is being installed to right now ("installing" on System > Updates), else null.</summary>
     private string? UpdatingTo()

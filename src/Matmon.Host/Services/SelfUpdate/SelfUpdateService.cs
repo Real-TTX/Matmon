@@ -115,6 +115,31 @@ public sealed class SelfUpdateService : BackgroundService
         }
     }
 
+    /// <summary>Whether this installation can update itself at all (a container with the Docker socket, the Windows service).</summary>
+    public bool CanSelfUpdate => Resolve().Target is not null;
+
+    /// <summary>
+    /// An install asked for in Matmon Cloud (<paramref name="requestedBy"/> says who and in which role). The same path as
+    /// "Install now" - backup first, rollback when the new build does not come up - after a fresh check when none ran yet,
+    /// and only while this instance's admin lets the cloud do it. Null = handed over, else why not.
+    /// </summary>
+    public async Task<string?> InstallFromCloudAsync(string requestedBy, CancellationToken cancellationToken)
+    {
+        if (!_store.GetSelfUpdateSettings().AllowCloudInstall)
+        {
+            _logger.LogWarning("Update requested from Matmon Cloud by {RequestedBy} - refused: updates from the cloud are switched off", requestedBy);
+            return "updates from Matmon Cloud are switched off on this instance (System > Updates)";
+        }
+
+        _logger.LogWarning("Update requested from Matmon Cloud by {RequestedBy}", requestedBy);
+        if (_status.Offer is not { Available: true })
+        {
+            await CheckNowAsync(cancellationToken);
+        }
+
+        return await InstallNowAsync(cancellationToken);
+    }
+
     /// <summary>"Install now" - null when the hand-over happened (the instance restarts shortly), else why not.</summary>
     public async Task<string?> InstallNowAsync(CancellationToken cancellationToken)
     {

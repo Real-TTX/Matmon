@@ -29,6 +29,11 @@ public sealed record SelfUpdateSettings
     /// <summary>The hour it closes (exclusive). Equal to the start = the whole day.</summary>
     public int WindowEndHour { get; init; } = 5;
 
+    /// <summary>Matmon Cloud may start an install - the instance's owner or admins, its managing partner, a platform admin.
+    /// On by default (the cloud can operate the instance through remote access anyway); an admin who wants every update
+    /// started on the machine itself switches it off.</summary>
+    public bool AllowCloudInstall { get; init; } = true;
+
     public SelfUpdateSettings Normalized() => this with
     {
         WindowStartHour = Math.Clamp(WindowStartHour, 0, 23),

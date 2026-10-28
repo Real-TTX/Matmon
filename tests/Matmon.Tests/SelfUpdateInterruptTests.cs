@@ -73,7 +73,40 @@ public sealed class SelfUpdateInterruptTests : IDisposable
         });
     }
 
-    private async Task Run(Func<SelfUpdateService, FakeTarget, Task> body)
+    [Fact]
+    public async Task An_install_from_the_cloud_checks_first_and_hands_over()
+    {
+        await Run(async (service, target) =>
+        {
+            var applied = false;
+            target.Apply = _ => { applied = true; return Task.CompletedTask; };
+
+            // No check ran yet - the cloud command checks itself first.
+            Assert.Null(await service.InstallFromCloudAsync("owner@example.com (owner)", CancellationToken.None));
+            Assert.True(applied);
+            Assert.True(service.CanSelfUpdate);
+        });
+    }
+
+    [Fact]
+    public async Task An_install_from_the_cloud_is_refused_when_the_admin_switched_it_off()
+    {
+        await Run(async (service, target, store) =>
+        {
+            store.UpdateSelfUpdateSettings(new SelfUpdateSettings { AllowCloudInstall = false });
+            var applied = false;
+            target.Apply = _ => { applied = true; return Task.CompletedTask; };
+
+            var problem = await service.InstallFromCloudAsync("admin@cloud (platform admin)", CancellationToken.None);
+
+            Assert.Contains("switched off", problem);
+            Assert.False(applied);
+        });
+    }
+
+    private Task Run(Func<SelfUpdateService, FakeTarget, Task> body) => Run((service, target, _) => body(service, target));
+
+    private async Task Run(Func<SelfUpdateService, FakeTarget, InMemoryMonitoringWorkspaceStore, Task> body)
     {
         using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "telemetry.db"));
         using var store = new InMemoryMonitoringWorkspaceStore(
@@ -85,7 +118,7 @@ public sealed class SelfUpdateInterruptTests : IDisposable
             NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
         var target = new FakeTarget();
         using var service = new SelfUpdateService([target], store, NullLogger<SelfUpdateService>.Instance);
-        await body(service, target);
+        await body(service, target, store);
     }
 
     private sealed class FakeTarget : ISelfUpdateTarget

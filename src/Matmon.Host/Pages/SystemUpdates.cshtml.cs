@@ -68,7 +68,8 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
         {
             AutoUpdate = Settings.AutoUpdate,
             WindowStartHour = Settings.WindowStartHour,
-            WindowEndHour = Settings.WindowEndHour
+            WindowEndHour = Settings.WindowEndHour,
+            AllowCloudInstall = Settings.AllowCloudInstall
         };
     }
 
@@ -141,7 +142,8 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
         {
             AutoUpdate = Input.AutoUpdate,
             WindowStartHour = Input.WindowStartHour,
-            WindowEndHour = Input.WindowEndHour
+            WindowEndHour = Input.WindowEndHour,
+            AllowCloudInstall = Input.AllowCloudInstall
         });
         StatusMessage = Input.AutoUpdate
             ? $"Automatic updates are on - installed between {Input.WindowStartHour:00}:00 and {Input.WindowEndHour:00}:00."
@@ -203,4 +205,6 @@ public sealed class SelfUpdateSettingsInput
     public int WindowStartHour { get; set; } = 3;
 
     public int WindowEndHour { get; set; } = 5;
+
+    public bool AllowCloudInstall { get; set; } = true;
 }

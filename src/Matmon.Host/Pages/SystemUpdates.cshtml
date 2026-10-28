@@ -200,6 +200,14 @@
                         </select>
                         <span class="mat-hint">Time zone @Model.TimeZoneName. The same hour twice = any time of day.</span>
                     </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch">
+                            <input asp-for="Input.AllowCloudInstall" type="checkbox" />
+                            <span class="mat-switch__track"></span>
+                            <span>Matmon Cloud may start an update</span>
+                        </label>
+                        <span class="mat-hint">The owner and admins of this instance in the cloud, its managing partner and the platform administrator - at any time, outside the window too. Every start is written to its history with a name.</span>
+                    </div>
                 </div>
             </div>
             <div class="mat-card__foot">
