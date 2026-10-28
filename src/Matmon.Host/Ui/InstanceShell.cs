@@ -76,6 +76,9 @@ public sealed class InstanceShell
 
     public bool UpdateAvailable { get; init; }
 
+    /// <summary>The update can be installed from System > Updates (this installation updates itself).</summary>
+    public bool CanInstallUpdate { get; init; }
+
     public string? LatestVersion { get; init; }
 
     /// <summary>The menu the cloud console mirrors (label + path), published into the embedded page.</summary>
@@ -96,6 +99,8 @@ public sealed class InstanceShellBuilder(
         var embedded = string.Equals(http.Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
         var secondary = runtimeOptions.Mode == AppMode.Secondary;
         var isAdmin = user.IsInRole(MatmonUserRole.Admin.ToString());
+        var selfStatus = (http.RequestServices.GetService(typeof(Services.SelfUpdate.SelfUpdateService)) as Services.SelfUpdate.SelfUpdateService)?.Status;
+        var selfOffer = selfStatus is { Installing: false, Offer: { Available: true } offer } ? offer : null;
 
         // The menu stays lit on every sub-page of its section (editors, tabs): matched by path prefix, most specific
         // first - /monitoring is shared by Sensors, the template editor and the probe-usage page.
@@ -229,8 +234,12 @@ public sealed class InstanceShellBuilder(
             Info = info,
             UserName = user.Identity?.Name ?? "Account",
             UserRole = role,
-            UpdateAvailable = cloudUpdate.UpdateAvailable,
-            LatestVersion = cloudUpdate.LatestVersion,
+            // What System > Updates found itself (Docker image / Windows feed) counts first; the cloud's signal is the fallback
+            // for an installation that cannot update itself. It used to be the cloud's signal alone, so an instance without a
+            // cloud link - or a cloud whose version lookup failed - never said an update was there.
+            UpdateAvailable = selfOffer is not null || cloudUpdate.UpdateAvailable,
+            LatestVersion = selfOffer?.Version ?? cloudUpdate.LatestVersion,
+            CanInstallUpdate = selfOffer is not null,
             EmbedNav = embedNav
         };
     }

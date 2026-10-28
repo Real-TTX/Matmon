@@ -154,3 +154,8 @@ a, button, label, summary, select, [role="button"], [role="tab"], [role="menuite
 .mat-table td.mm-prtg-tree__name { padding-inline-start: calc(var(--mat-space-3) + var(--depth, 0) * 1.25rem); }
 .mm-prtg-tree__name > .mat-icon { margin-inline-end: var(--mat-space-2); vertical-align: -0.15em; color: var(--mat-text-muted); }
 .mm-prtg-tree__container td { background: var(--mat-surface-2); }
+
+/* "A newer build is available" above every page (admins): the two buttons on the line of the text, beside it on a wide screen. */
+.mm-update-notice { align-items: center; flex-wrap: wrap; }
+.mm-update-notice .mat-alert__body { flex: 1 1 18rem; }
+.mm-update-notice .mat-btn-row { flex-wrap: nowrap; margin: 0; }

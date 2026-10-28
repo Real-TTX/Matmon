@@ -19,6 +19,9 @@
         && Context.RequestServices.GetService(typeof(Matmon.Host.Services.SelfUpdate.SelfUpdateService)) is Matmon.Host.Services.SelfUpdate.SelfUpdateService { Status.Installing: true } selfUpdate
             ? selfUpdate.Status.Offer?.Version ?? "a new version"
             : null;
+    // A newer build is said to admins on every page (System > Updates says it itself); "Later" hides it until the next version.
+    var updateNotice = shell.IsAdmin && shell.UpdateAvailable && updatingTo is null
+        && !string.Equals(Context.Request.Path.Value?.TrimEnd('/'), "/system/updates", StringComparison.OrdinalIgnoreCase);
     var crumbs = BreadcrumbBuilder.Build(Context.Request.Path.Value ?? string.Empty, ViewData["Title"]?.ToString(), ViewData["Breadcrumbs"] as IEnumerable<BreadcrumbItem>);
     // Matmon's own brand (no partner logo, no product name) is the full logo with the drawn lettering, the tagline under it.
     var matmonBrand = !shell.PartnerLogo && string.Equals(shell.BrandName, "Matmon", StringComparison.Ordinal);
@@ -155,7 +158,7 @@
                         <a asp-page="/About" title="@(shell.UpdateAvailable ? $"A newer build is available{(shell.LatestVersion is { } lv ? $": {lv}" : "")} - see About" : $"About {shell.BrandName}")">@shell.BrandName @shell.Version</a>
                         @if (shell.UpdateAvailable)
                         {
-                            <a class="mat-pill mat-pill--accent" asp-page="/About">Update</a>
+                            <a class="mat-pill mat-pill--accent" href="@(shell.IsAdmin ? "/system/updates" : "/About")">Update</a>
                         }
                         @if (shell.ManagedBy is not null)
                         {
@@ -226,6 +229,19 @@
                     <div class="mat-alert mat-alert--info" role="status">
                         @MatUi.Icon("refresh")
                         <div class="mat-alert__body"><span>The update to <strong>@updatingTo</strong> is being installed - Matmon restarts in a moment.</span> <a href="/system/updates">Show progress</a></div>
+                    </div>
+                }
+                @if (updateNotice)
+                {
+                    <div class="mat-alert mat-alert--info mm-update-notice" role="status" data-update-notice="@(shell.LatestVersion ?? "newer")" hidden>
+                        @MatUi.Icon("download")
+                        <div class="mat-alert__body">
+                            <span>@shell.BrandName <strong>@(shell.LatestVersion ?? "(a newer build)")</strong> is available - this is @shell.Version.</span>
+                        </div>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <a class="mat-btn mat-btn--primary mat-btn--sm" href="/system/updates">@MatUi.Icon("download")<span>@(shell.CanInstallUpdate ? "Install" : "Show how")</span></a>
+                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-update-notice-later>Later</button>
+                        </div>
                     </div>
                 }
                 @RenderBody()

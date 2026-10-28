@@ -30,6 +30,24 @@ function initializeBackupJobEditor() {
    connection bar wraps fetch and would cover the screen with "No connection") until the server answers again, then
    reloads the page with the outcome. Back on the OLD version after having been away = rolled back; still the old
    version and never away after a while = the hand-over did not happen. */
+// "A newer build is available" above every page for admins. Shown unless "Later" was pressed for THIS version (kept in the
+// browser), so the next version is announced again; rendered hidden, so a dismissed one never flashes.
+function initializeUpdateNotice() {
+  const notice = document.querySelector("[data-update-notice]");
+  if (!notice) {
+    return;
+  }
+  const key = "matmon.updateNoticeLater";
+  const version = notice.getAttribute("data-update-notice") || "";
+  let dismissed = null;
+  try { dismissed = localStorage.getItem(key); } catch { /* private mode: always shown */ }
+  notice.hidden = dismissed === version;
+  notice.querySelector("[data-update-notice-later]")?.addEventListener("click", () => {
+    try { localStorage.setItem(key, version); } catch { /* nothing to keep */ }
+    notice.hidden = true;
+  });
+}
+
 function initializeUpdateScreen() {
   // Install confirmed: cover the page at once - the request downloads and checks the package before it answers.
   // MatUi's confirmation stops the first submit and sends the form again (requestSubmit) once it is answered, so the

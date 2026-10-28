@@ -35,6 +35,7 @@ const featureStarters = [
   "initializeNotificationFilter",
   "initializeBackupJobEditor",
   "initializeUpdateScreen",
+  "initializeUpdateNotice",
   "initializeDiscoveryJobRefresh",
   "initializeDiscoveryResultTable",
   "initializeDiscoveryJobList",
