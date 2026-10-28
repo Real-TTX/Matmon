@@ -13,7 +13,14 @@ namespace Matmon.Host.Pages;
 /// <summary>How the primary processes traps, as the form posts it (the collectors' ports and allow-lists are plugin settings).</summary>
 public sealed class SnmpTrapSettingsInput
 {
+    /// <summary>Never prefilled (they are passwords); blank on save = keep the stored ones.</summary>
     public string? Communities { get; set; }
+
+    /// <summary>Remove the stored communities - accept traps of any community.</summary>
+    public bool ClearCommunities { get; set; }
+
+    /// <summary>Communities are stored (the field then says "leave blank to keep").</summary>
+    public bool HasCommunities { get; set; }
 
     public bool PollOnTrap { get; set; } = true;
 }
@@ -129,7 +136,7 @@ public sealed class SystemSnmpTrapsModel : PageModel
             return NotFound();
         }
 
-        if (!TryBuildSettings(Input, out var settings, out var error))
+        if (!TryBuildSettings(Input, out var settings, out var error, _workspace.GetSnmpTrapSettings().Communities))
         {
             FormError = error;
             ModelState.Clear();
@@ -197,12 +204,15 @@ public sealed class SystemSnmpTrapsModel : PageModel
 
     /// <summary>The processing settings from the form. The collectors' ports and allow-lists are not here: they are each
     /// collector's own settings (System > Plugins).</summary>
-    public static bool TryBuildSettings(SnmpTrapSettingsInput input, out SnmpTrapSettings settings, out string? error)
+    public static bool TryBuildSettings(SnmpTrapSettingsInput input, out SnmpTrapSettings settings, out string? error, string? storedCommunities = null)
     {
         error = null;
+        var communities = input.ClearCommunities
+            ? null
+            : string.IsNullOrWhiteSpace(input.Communities) ? storedCommunities : input.Communities.Trim();
         settings = new SnmpTrapSettings
         {
-            Communities = input.Communities?.Trim(),
+            Communities = communities,
             PollOnTrap = input.PollOnTrap
         }.Normalized();
         return true;
@@ -325,7 +335,7 @@ public sealed class SystemSnmpTrapsModel : PageModel
         {
             Input = new SnmpTrapSettingsInput
             {
-                Communities = Settings.Communities,
+                HasCommunities = !string.IsNullOrWhiteSpace(Settings.Communities),
                 PollOnTrap = Settings.PollOnTrap
             };
         }

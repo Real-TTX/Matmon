@@ -2933,7 +2933,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
     // assignment path and the editors read it unchanged) and only the serialized form is sealed.
     public const string ProtectedParameterPrefix = "enc:dp1:";
 
-    private static readonly string[] SecretParameterSuffixes = ["password", "secret", "apikey", "token", "passphrase", "privatekey"];
+    private static readonly string[] SecretParameterSuffixes = ["password", "secret", "apikey", "token", "passphrase", "privatekey", "community"];
 
     /// <summary>
     /// A parameter is secret when a sensor type DECLARES it so (<see cref="SensorParameterKind.Secret"/>) - or
@@ -3054,6 +3054,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             yield return new SecretSlot(
                 () => backup.Passphrase, v => backup.Passphrase = v, () => backup.ProtectedPassphrase, v => backup.ProtectedPassphrase = v,
                 () => backup.PassphraseHydrationFailed, v => backup.PassphraseHydrationFailed = v);
+        }
+        // The trap communities: the passwords of SNMPv1/v2c traps.
+        if (document.SnmpTraps is { } trapSettings)
+        {
+            yield return new SecretSlot(
+                () => trapSettings.Communities, v => trapSettings.Communities = v, () => trapSettings.ProtectedCommunities, v => trapSettings.ProtectedCommunities = v,
+                () => trapSettings.CommunitiesHydrationFailed, v => trapSettings.CommunitiesHydrationFailed = v);
         }
         // SNMPv3 trap users: their authentication and privacy passwords.
         foreach (var user in document.SnmpTraps?.V3Users ?? [])

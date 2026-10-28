@@ -30,6 +30,13 @@ public sealed class SnmpTrapSettings
     /// is no real secret (it travels in clear text), but it keeps a stray trap from another network out.</summary>
     public string? Communities { get; set; }
 
+    /// <summary>DataProtection ciphertext of <see cref="Communities"/> - what persists (the communities are the passwords of
+    /// v1/v2c traps; the plaintext is cleared before the workspace is written).</summary>
+    public string? ProtectedCommunities { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool CommunitiesHydrationFailed { get; set; }
+
     /// <summary>A trap from a device makes its sensors poll at once (they would otherwise only notice at their next poll).
     /// On by default: a UPS that sends "on battery" should be red within seconds, not 30 s later.</summary>
     public bool PollOnTrap { get; set; } = true;
@@ -46,6 +53,8 @@ public sealed class SnmpTrapSettings
         Port = Port,
         AllowedSources = AllowedSources,
         Communities = Communities,
+        ProtectedCommunities = ProtectedCommunities,
+        CommunitiesHydrationFailed = CommunitiesHydrationFailed,
         PollOnTrap = PollOnTrap,
         V3Users = V3Users.Select(user => user.Clone()).ToList()
     };

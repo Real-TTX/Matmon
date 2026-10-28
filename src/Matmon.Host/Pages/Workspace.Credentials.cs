@@ -162,7 +162,7 @@ public sealed partial class WorkspaceModel
                     ApplyCredentialSecretField(values, "mssql.password", bundle.MssqlPassword, existing);
                     break;
                 case MonitoringCredentialKind.Snmp:
-                    ApplyCredentialBundleField(values, "snmp.community", bundle.SnmpCommunity);
+                    ApplyCredentialSecretField(values, "snmp.community", bundle.SnmpCommunity, existing);
                     ApplyCredentialBundleField(values, "snmp.v3.username", bundle.SnmpV3Username);
                     ApplyCredentialBundleField(values, "snmp.v3.authProtocol", bundle.SnmpV3AuthProtocol);
                     ApplyCredentialSecretField(values, "snmp.v3.authPassword", bundle.SnmpV3AuthPassword, existing);

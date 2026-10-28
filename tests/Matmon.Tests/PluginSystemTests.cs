@@ -276,11 +276,14 @@ public sealed class PluginSystemTests : IDisposable
 
     // --- assignments in the store ---------------------------------------------------------------------------------
 
+    // one key ring for every store of a test, like one machine: the trap communities are sealed at rest
+    private readonly EphemeralDataProtectionProvider _protection = new();
+
     private InMemoryMonitoringWorkspaceStore NewStore(SqliteTelemetryRepository telemetry)
     {
         var store = new InMemoryMonitoringWorkspaceStore(
             new PluginTestHostEnvironment(_dir), new MatmonRuntimeOptions { WorkspacePath = Path.Combine(_dir, "ws.json") },
-            new MatmonAuthOptions(), new EphemeralDataProtectionProvider(), telemetry, NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+            new MatmonAuthOptions(), _protection, telemetry, NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
         store.CompleteInitialSetup("admin@example.com", "password123");
         return store;
     }
@@ -411,7 +414,7 @@ public sealed class PluginSystemTests : IDisposable
 
         using var after = new InMemoryMonitoringWorkspaceStore(
             new PluginTestHostEnvironment(_dir), new MatmonRuntimeOptions { WorkspacePath = workspacePath },
-            new MatmonAuthOptions(), new EphemeralDataProtectionProvider(), telemetry, NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+            new MatmonAuthOptions(), _protection, telemetry, NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
 
         var collector = Assert.Single(after.GetPluginAssignments());
         Assert.Equal(SyslogCollectorPlugin.Id, collector.PluginId);

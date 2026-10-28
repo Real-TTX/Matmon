@@ -79,8 +79,13 @@
 
                 <div class="mat-field">
                     <label class="mat-label" for="Input_Communities">Communities <span class="mat-text-muted">optional</span></label>
-                    <input asp-for="Input.Communities" class="mat-input mat-mono" placeholder="public" />
-                    <span class="mat-hint">SNMPv1/v2c traps with another community are refused. Empty = any community.</span>
+                    <input asp-for="Input.Communities" type="password" autocomplete="off" class="mat-input mat-mono" placeholder="@(Model.Input.HasCommunities ? "set - leave blank to keep" : "public, ups-ro")" />
+                    <input type="hidden" asp-for="Input.HasCommunities" />
+                    <span class="mat-hint">SNMPv1/v2c traps with another community are refused. A community is a password: it is stored encrypted and never shown again.</span>
+                    @if (Model.Input.HasCommunities)
+                    {
+                        <label class="mat-check"><input asp-for="Input.ClearCommunities" /><span class="mat-check__text">Remove them - accept traps of any community</span></label>
+                    }
                 </div>
 
                 <div class="mat-field">

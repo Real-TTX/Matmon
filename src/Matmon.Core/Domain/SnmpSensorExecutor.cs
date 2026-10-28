@@ -30,8 +30,11 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
             {
                 Key = "snmp.community",
                 Label = "Community",
-                Kind = SensorParameterKind.Text,
-                Description = "SNMP community string for v1/v2c",
+                // The community IS the password of SNMPv1/v2c - whoever knows it reads (or with a write community: changes)
+                // the device. It crosses the network in the clear (a protocol limit; SNMPv3 encrypts), but on disk and on
+                // the page it is a secret like any other.
+                Kind = SensorParameterKind.Secret,
+                Description = "The SNMP v1/v2c community - effectively its password. Better kept in an SNMP credential.",
                 DefaultValue = "public",
                 CredentialKind = MonitoringCredentialKind.Snmp
             },

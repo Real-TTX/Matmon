@@ -122,7 +122,8 @@ public sealed class SecretParameterProtectionTests : IDisposable
     [InlineData("webhook.secret", true)]
     [InlineData("winrm.port", false)]
     [InlineData("script", false)]
-    [InlineData("snmp.community", false)]
+    [InlineData("snmp.community", true)] // the v1/v2c password
+    [InlineData("snmp.version", false)]
     public void SecretByName(string key, bool expected)
     {
         Assert.Equal(expected, InMemoryMonitoringWorkspaceStore.IsSecretParameter(key, new HashSet<string>()));
