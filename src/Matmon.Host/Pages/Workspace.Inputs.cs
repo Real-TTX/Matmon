@@ -154,7 +154,16 @@ public sealed class CreateSensorInput : ISensorThresholdEditor, ISensorScheduleE
 
     public string SnmpWalkRootOid { get; set; } = "1.3.6.1.2.1";
 
+    /// <summary>The walk on screen, rebuilt from <see cref="Services.SnmpWalkCache"/> - never posted (a firewall walk of a few
+    /// thousand rows used to go back with every save, six fields a row).</summary>
+    [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
     public List<WorkspaceSnmpWalkItemInput> SnmpWalkItems { get; set; } = [];
+
+    /// <summary>Which walk the editor shows (the id in <see cref="Services.SnmpWalkCache"/>).</summary>
+    public Guid? SnmpWalkId { get; set; }
+
+    /// <summary>The OIDs ticked in the walk - one form value per ticked row, nothing for the others.</summary>
+    public List<string> SnmpWalkSelected { get; set; } = [];
 
     public List<WorkspaceSensorChannelThresholdFieldInput> SensorChannelThresholdFields { get; set; } = [];
 

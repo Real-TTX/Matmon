@@ -85,6 +85,7 @@ public sealed partial class WorkspaceModel
 
             NormalizeHeartbeatSensorTarget(NewSensor);
 
+            RestoreSnmpWalk();
             ApplySnmpWalkSelectionsToParameters(NewSensor);
             var selectedTemplate = ResolveSelectedSensorTemplate();
             var inheritedSettings = BuildSensorInheritedSettings(NewSensor, selectedTemplate);
@@ -161,6 +162,7 @@ public sealed partial class WorkspaceModel
             var rootOid = string.IsNullOrWhiteSpace(NewSensor.SnmpWalkRootOid)
                 ? "1.3.6.1.2.1"
                 : NewSensor.SnmpWalkRootOid.Trim();
+            RestoreSnmpWalk();
             var previousSelections = GetSelectedSnmpWalkOids(NewSensor.SnmpWalkItems);
             var discoverySettings = BuildTransientSensorExecutionSettings(NewSensor);
             var discoveryTarget = ResolveEffectiveSensorTarget(NewSensor);
@@ -202,7 +204,9 @@ public sealed partial class WorkspaceModel
             NewSensor.SnmpWalkItems = discovered
                 .Select(item => new WorkspaceSnmpWalkItemInput
                 {
-                    Selected = item.SelectedByDefault || previousSelections.Contains(item.Oid.Trim().TrimStart('.')),
+                    // Nothing is ticked for the admin: a walk is a list to pick from, and ticking every number made people
+                    // untick 200 rows to keep 10. What was ticked before a new walk stays ticked.
+                    Selected = previousSelections.Contains(item.Oid.Trim().TrimStart('.')),
                     Oid = item.Oid,
                     Name = mibs?.Translate(item.Oid) is { IsObject: true } known ? known.Name : null,
                     Syntax = item.Syntax,
@@ -210,12 +214,16 @@ public sealed partial class WorkspaceModel
                     IsNumeric = item.IsNumeric
                 })
                 .ToList();
+            NewSensor.SnmpWalkId = HttpContext.RequestServices.GetService<SnmpWalkCache>()?.Store(
+                NewSensor.SnmpWalkItems.Select(item => new SnmpWalkEntry(item.Oid, item.Syntax, item.Value, item.IsNumeric)).ToList());
 
             ApplySnmpWalkSelectionsToParameters(NewSensor);
 
             StatusMessage = discovered.Count == 0
                 ? "No OIDs discovered."
-                : $"Discovered {discovered.Count} OIDs.";
+                : discovered.Count >= SnmpSensorExecutor.WalkLimit
+                    ? $"The walk stopped after {SnmpSensorExecutor.WalkLimit} OIDs - there is more. Start it further down the tree (Root OID) to see the rest."
+                    : $"Discovered {discovered.Count} OIDs - tick the ones to monitor.";
 
             LoadViewState(populateEditorValues: false);
             // Render the rebuilt walk items / applied parameters from the model, not the

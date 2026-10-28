@@ -28,13 +28,22 @@
 
     @if (items.Count > 0)
     {
-        @if (items.Count > 12)
-        {
+        @* Picking from a long walk: narrow it (text, numbers only), then tick or untick what is shown in one go. *@
+        <div class="mat-row snmp-walk-tools" data-snmp-walk-tools>
             <div class="mat-input-icon snmp-walk-filter">
                 @MatUi.Icon("filter")
                 <input type="search" class="mat-input" placeholder="Filter by name, OID or value…" aria-label="Filter the walk by name, OID or value" autocomplete="off" data-snmp-walk-filter />
             </div>
-        }
+            <label class="mat-switch">
+                <input type="checkbox" data-snmp-walk-numeric />
+                <span class="mat-switch__track"></span>
+                <span>Numbers only</span>
+            </label>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-snmp-walk-tick="on">@MatUi.Icon("check")<span>Tick shown</span></button>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-snmp-walk-tick="off">@MatUi.Icon("x")<span>Untick all</span></button>
+            <span class="mat-text-muted snmp-walk-count" data-snmp-walk-count role="status" aria-live="polite">@items.Count(item => item.Selected) of @items.Count ticked</span>
+        </div>
+        <input type="hidden" name="NewSensor.SnmpWalkId" value="@Model.NewSensor.SnmpWalkId" />
         <div class="mat-table-wrap">
             <table class="mat-table mat-table--compact" data-snmp-walk-list>
                 <caption class="mat-sr-only">The OIDs the walk found - tick the ones to monitor</caption>
@@ -52,17 +61,12 @@
                         var item = items[i];
                         var translation = Mibs.Translate(item.Oid) is { IsObject: true } known ? known : null;
                         var units = translation?.Node.Units;
-                        <tr class="@(item.IsNumeric ? "is-numeric" : "is-text")" data-snmp-walk-row data-oid="@item.Oid" data-raw-value="@item.Value" title="@translation?.Node.Description">
+                        <tr class="@(item.IsNumeric ? "is-numeric" : "is-text")" data-snmp-walk-row data-numeric="@(item.IsNumeric ? "true" : "false")" data-oid="@item.Oid" data-raw-value="@item.Value" title="@translation?.Node.Description">
                             <td data-label="Monitor" class="mat-table__select">
-                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Oid" />
-                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Syntax" />
-                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].Value" />
-                                <input type="hidden" asp-for="NewSensor.SnmpWalkItems[i].IsNumeric" />
-                                <input type="hidden" name="NewSensor.SnmpWalkItems[@i].Name" value="@translation?.Name" data-snmp-walk-name-input />
-                                <input asp-for="NewSensor.SnmpWalkItems[i].Selected" type="checkbox" aria-label="Monitor @(translation?.Name ?? item.Oid)" />
+                                <input type="checkbox" id="snmp-walk-@i" name="NewSensor.SnmpWalkSelected" value="@item.Oid" checked="@item.Selected" aria-label="Monitor @(translation?.Name ?? item.Oid)" />
                             </td>
                             <td data-label="Name">
-                                <label class="snmp-walk-main" asp-for="NewSensor.SnmpWalkItems[i].Selected">
+                                <label class="snmp-walk-main" for="snmp-walk-@i">
                                     <strong class="snmp-walk-name" data-snmp-walk-name hidden="@(translation is null)">@translation?.Name</strong>
                                     <span class="mat-mono snmp-walk-oid @(translation is null ? null : "is-secondary")" data-snmp-walk-oid>@item.Oid</span>
                                 </label>

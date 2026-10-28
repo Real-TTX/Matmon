@@ -241,6 +241,8 @@ builder.Services.AddSingleton(provider => new MibLibrary(
     workspaceDirectory,
     Path.Combine(AppContext.BaseDirectory, "mibs"),
     provider.GetRequiredService<ILogger<MibLibrary>>()));
+// An SNMP walk stays here while its rows are picked - the editor posts only the walk id and the ticked OIDs.
+builder.Services.AddSingleton<SnmpWalkCache>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {

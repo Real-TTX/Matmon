@@ -13,7 +13,10 @@ public sealed class SnmpSensorExecutor : ISensorExecutor
 {
     private const string DefaultVersion = "v2c";
     private const int DefaultPort = 161;
-    private const int DefaultWalkLimit = 250;
+    private const int DefaultWalkLimit = WalkLimit;
+
+    /// <summary>How many OIDs one walk reads at most; the editor says so when a walk stopped there.</summary>
+    public const int WalkLimit = 2000;
 
     public static SensorDefinition Definition { get; } = new SensorDefinition
     {

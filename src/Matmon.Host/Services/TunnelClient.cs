@@ -40,7 +40,8 @@ public sealed class TunnelClient : BackgroundService
         AutomaticDecompression = DecompressionMethods.All
     })
     {
-        Timeout = TimeSpan.FromSeconds(30)
+        // Longer than the cloud waits (30 s for a page, 90 s for a form): the cloud decides, and says so in words.
+        Timeout = TimeSpan.FromSeconds(120)
     };
 
     public TunnelClient(

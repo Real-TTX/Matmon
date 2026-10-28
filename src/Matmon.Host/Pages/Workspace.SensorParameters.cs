@@ -323,6 +323,46 @@ public sealed partial class WorkspaceModel
             : null;
     }
 
+    /// <summary>
+    /// Puts the walk the editor showed back on the model: the rows from <see cref="SnmpWalkCache"/>, ticked as posted. When
+    /// the walk is gone (two hours, a restart) the ticked OIDs alone come back, so a save still takes what was chosen.
+    /// Names come from the instance's MIBs here - an upload from the walk counts at once.
+    /// </summary>
+    private void RestoreSnmpWalk()
+    {
+        var editor = NewSensor;
+        if (editor.SnmpWalkItems.Count > 0)
+        {
+            return;
+        }
+
+        var selected = editor.SnmpWalkSelected
+            .Select(oid => oid?.Trim().TrimStart('.') ?? string.Empty)
+            .Where(oid => oid.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rows = editor.SnmpWalkId is Guid id
+            ? HttpContext?.RequestServices.GetService<SnmpWalkCache>()?.Find(id)
+            : null;
+        var mibs = HttpContext?.RequestServices.GetService<MibLibrary>();
+        string? NameOf(string oid) => mibs?.Translate(oid) is { IsObject: true } known ? known.Name : null;
+
+        editor.SnmpWalkItems = rows is not null
+            ? rows.Select(row => new WorkspaceSnmpWalkItemInput
+            {
+                Oid = row.Oid,
+                Syntax = row.Syntax,
+                Value = row.Value,
+                IsNumeric = row.IsNumeric,
+                Name = NameOf(row.Oid),
+                Selected = selected.Contains(row.Oid.Trim().TrimStart('.'))
+            }).ToList()
+            : selected.Select(oid => new WorkspaceSnmpWalkItemInput { Oid = oid, Name = NameOf(oid), Selected = true }).ToList();
+        if (rows is null)
+        {
+            editor.SnmpWalkId = null; // nothing left to show again
+        }
+    }
+
     private static void ApplySnmpWalkSelectionsToParameters(CreateSensorInput editor)
     {
         if (!IsSnmpWalkSensorType(editor.SensorTypeKey) ||

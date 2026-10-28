@@ -337,7 +337,17 @@
   font-size: var(--mat-fs-sm);
 }
 .snmp-mib-status:empty { display: none; }
-.snmp-walk-filter { max-width: 28rem; }
+.snmp-walk-filter { flex: 1 1 18rem; max-width: 28rem; }
+/* Filter, numbers-only and the bulk ticks on one line above a long walk; the count says what will be saved. */
+.snmp-walk-tools {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mat-space-2) var(--mat-space-3);
+}
+.snmp-walk-count {
+  margin-left: auto;
+  font-size: var(--mat-fs-sm);
+}
 /* The name and the OID are the label of the row's checkbox: a click on them ticks it. */
 .snmp-walk-main {
   display: flex;

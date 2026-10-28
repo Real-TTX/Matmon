@@ -126,18 +126,59 @@ function renderRemoteRunResult(container, kind, job) {
 
 // ---- SNMP walk + MIBs -------------------------------------------------------------------------------------
 // The walk table (_SnmpWalkList, inside [data-snmp-walk]) is rendered with names from the instance's MIBs. Uploading a
-// MIB from the walk relabels the rows in place through /api/mibs/translate, so nobody has to walk again; the filter
-// narrows long walks by name, OID or value.
+// MIB from the walk relabels the rows in place through /api/mibs/translate, so nobody has to walk again. The tools above
+// the list narrow a long walk (text, numbers only) and tick or untick what is shown in one go; nothing is ticked at first.
 function initializeSnmpWalkMibs() {
-  document.querySelectorAll("[data-snmp-walk-filter]").forEach((input) => {
-    const scope = input.closest("[data-snmp-walk]") || input.parentElement;
+  document.querySelectorAll("[data-snmp-walk-tools]").forEach((tools) => {
+    const scope = tools.closest("[data-snmp-walk]");
     const list = scope?.querySelector("[data-snmp-walk-list]");
-    input.addEventListener("input", () => {
-      const needle = input.value.trim().toLowerCase();
-      list?.querySelectorAll("[data-snmp-walk-row]").forEach((row) => {
-        row.hidden = needle.length > 0 && !row.textContent.toLowerCase().includes(needle);
+    if (!list) {
+      return;
+    }
+    const filter = tools.querySelector("[data-snmp-walk-filter]");
+    const numeric = tools.querySelector("[data-snmp-walk-numeric]");
+    const count = tools.querySelector("[data-snmp-walk-count]");
+    const rows = () => [...list.querySelectorAll("[data-snmp-walk-row]")];
+    const boxOf = (row) => row.querySelector("input[type=checkbox]");
+
+    const updateCount = () => {
+      const all = rows();
+      const ticked = all.filter((row) => boxOf(row)?.checked).length;
+      if (count) {
+        count.textContent = `${ticked} of ${all.length} ticked`;
+      }
+    };
+    const applyFilter = () => {
+      const needle = (filter?.value || "").trim().toLowerCase();
+      const onlyNumbers = numeric?.checked === true;
+      rows().forEach((row) => {
+        const matches = needle.length === 0 || row.textContent.toLowerCase().includes(needle);
+        // a ticked row stays visible, so nothing that will be saved is ever hidden
+        row.hidden = !boxOf(row)?.checked && (!matches || (onlyNumbers && row.dataset.numeric !== "true"));
+      });
+    };
+
+    filter?.addEventListener("input", applyFilter);
+    numeric?.addEventListener("change", applyFilter);
+    tools.querySelectorAll("[data-snmp-walk-tick]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const on = button.dataset.snmpWalkTick === "on";
+        rows().forEach((row) => {
+          const box = boxOf(row);
+          if (box && (!on || !row.hidden)) {
+            box.checked = on;
+          }
+        });
+        applyFilter();
+        updateCount();
       });
     });
+    list.addEventListener("change", (event) => {
+      if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+        updateCount();
+      }
+    });
+    updateCount();
   });
 
   document.querySelectorAll("[data-snmp-mib-upload]").forEach((input) => {
@@ -232,10 +273,6 @@ async function labelSnmpWalkRows(rows) {
     if (module) {
       module.textContent = item.module || "";
       module.hidden = !item.module;
-    }
-    const hidden = row.querySelector("[data-snmp-walk-name-input]");
-    if (hidden) {
-      hidden.value = item.name;
     }
     if (item.description) {
       row.title = item.description;

@@ -159,6 +159,7 @@ public sealed partial class WorkspaceModel : PageModel
 
     private void LoadViewState(bool populateEditorValues)
     {
+        RestoreSnmpWalk();
         var dashboardSnapshot = _dashboardSnapshotProvider.CreateSnapshot();
         var dashboardNodeMap = dashboardSnapshot.Nodes.ToDictionary(node => node.Id);
         var telemetrySeriesMap = dashboardSnapshot.TelemetrySeries.ToDictionary(series => series.SensorId);
