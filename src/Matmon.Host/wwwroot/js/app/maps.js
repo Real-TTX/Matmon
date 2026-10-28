@@ -307,6 +307,10 @@ function initializeMapLiveData() {
         const hint = row.detail ? `${row.label} - ${row.detail}` : row.label;
         item.title = hint;
       }
+      const barLength = item.querySelector("[data-row-percent]");
+      if (barLength && typeof row.percent === "number") {
+        barLength.style.setProperty("--bar-w", `${row.percent}%`);
+      }
       const bar = item.querySelector("[data-row-segments]");
       if (bar && typeof row.segments === "string") {
         bar.replaceChildren(...row.segments.split(";").filter(Boolean).map((part) => {
@@ -352,6 +356,22 @@ function initializeMapLiveData() {
         setText(label, "[data-link-traffic]", link.traffic || "");
       }
     });
+  };
+
+  // A donut's ring follows its legend rows: each slice starts where the previous one ended.
+  const patchDonut = (tile, rows, value) => {
+    const slices = tile.querySelectorAll(".map-donut-seg");
+    if (!rows || slices.length !== rows.length) {
+      return;
+    }
+    let offset = 0;
+    slices.forEach((slice, index) => {
+      const share = Number(rows[index].percent) || 0;
+      slice.style.setProperty("--seg", String(share));
+      slice.style.setProperty("--offset", String(offset));
+      offset += share;
+    });
+    setText(tile, ".map-donut-figure", value || "");
   };
 
   const patchTile = (tile, data) => {
@@ -438,6 +458,7 @@ function initializeMapLiveData() {
     patchRows(tile, data.rows);
     patchPins(tile, data.pins);
     patchLinks(tile, data.links);
+    patchDonut(tile, data.rows, data.value);
   };
 
   const refresh = async () => {
@@ -559,6 +580,26 @@ function initializeMapNoc() {
     tile.classList.add("is-newly-failed");
     window.setTimeout(() => tile.classList.remove("is-newly-failed"), 15000);
     beep();
+  });
+}
+
+// An Embed tile showing a picture reloads it on its own timer (a camera snapshot); a failed load keeps the last picture.
+function initializeMapEmbeds() {
+  document.querySelectorAll("img[data-embed-refresh]").forEach((image) => {
+    if (image.closest("[data-map-designer]")) {
+      return;
+    }
+    const seconds = Math.max(5, Number(image.getAttribute("data-embed-refresh")) || 30);
+    const base = image.getAttribute("src") || "";
+    window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      const next = new Image();
+      const url = `${base}${base.includes("?") ? "&" : "?"}_=${Date.now()}`;
+      next.onload = () => { image.src = url; };
+      next.src = url;
+    }, seconds * 1000);
   });
 }
 
@@ -817,7 +858,10 @@ function initializeMapDesigner() {
     "13": "Topology",
     "14": "Honeycomb",
     "15": "Timeline",
-    "16": "Table"
+    "16": "Table",
+    "17": "Bars",
+    "18": "Donut",
+    "19": "Embed"
   };
   const kindLabels = {
     "0": "Text",
@@ -837,6 +881,9 @@ function initializeMapDesigner() {
     "14": "Honeycomb",
     "15": "Timeline",
     "16": "Table",
+    "17": "Bars",
+    "18": "Donut",
+    "19": "Embed",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -853,7 +900,10 @@ function initializeMapDesigner() {
     Topology: "Topology",
     Honeycomb: "Honeycomb",
     Timeline: "Timeline",
-    Table: "Table"
+    Table: "Table",
+    Bars: "Bars",
+    Donut: "Donut",
+    Embed: "Embed"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -864,6 +914,9 @@ function initializeMapDesigner() {
     Image: "Upload a picture, then place status pins on it.",
     GeoMap: "The shipped offline world map - pins are placed by latitude/longitude.",
     Honeycomb: "Every sensor under the target as one cell in its state colour - hundreds at a glance.",
+    Bars: "One reading across the sensors under the target as bars. Pick the channel (Rank by channel) and how many rows.",
+    Donut: "How the sensors under the target split by state.",
+    Embed: "Another page in a frame, or a picture (a camera snapshot) reloaded on a timer.",
     Table: "The sensors under the target with their machine, reading and last check. Ordered like a sensor list.",
     Timeline: "A state band per sensor over the time window (up to 72 h): when it went red and for how long.",
     Topology: "Place devices, then join them with links - give a link the port's interface sensor and it shows the traffic and turns red when the port goes down.",
@@ -1736,7 +1789,9 @@ function initializeMapDesigner() {
     const isText = kind === "Text" || kind === "Heading";
     const isGraph = kind === "Graph";
     // A table orders and limits its rows exactly like a sensor list.
-    const isList = kind === "SensorList" || kind === "Table";
+    const isList = kind === "SensorList" || kind === "Table" || kind === "Bars";
+    const isEmbed = kind === "Embed";
+    panel.querySelectorAll("[data-map-property-embed-only]").forEach((field) => { field.hidden = !isEmbed; });
     const isRows = isList || kind === "AlertFeed";
     const isSla = kind === "Sla";
     const isSeries = kind === "MultiGraph";
@@ -1746,7 +1801,7 @@ function initializeMapDesigner() {
     // A clock has no target at all; a heading and a text tile carry their own copy instead of one.
     // An image / world map has no single target of its own - each PIN carries one.
     const isTargetless = kind === "Clock" || kind === "Text" || kind === "Heading"
-      || kind === "Image" || kind === "GeoMap" || kind === "Topology";
+      || kind === "Image" || kind === "GeoMap" || kind === "Topology" || kind === "Embed";
     const targetField = panel.querySelector("[data-map-property-target]");
     const visualField = panel.querySelector("[data-map-property-visual]");
     const textField = panel.querySelector("[data-map-property-text-only]");
@@ -1775,7 +1830,7 @@ function initializeMapDesigner() {
     }
     if (visualField) {
       visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock"
-        || kind === "Honeycomb" || kind === "Timeline";
+        || kind === "Honeycomb" || kind === "Timeline" || kind === "Donut" || kind === "Embed";
     }
     if (textField) {
       textField.hidden = !isText;
@@ -1857,7 +1912,7 @@ function initializeMapDesigner() {
   };
 
   // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
-  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table"]);
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table", "Bars", "Donut", "Embed"]);
 
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {

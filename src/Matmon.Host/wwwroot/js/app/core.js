@@ -17,6 +17,7 @@ const featureStarters = [
   "initializeTabHash",
   "initializeStatusRefresh",
   "initializeMapNoc",
+  "initializeMapEmbeds",
   "initializeMonitoringTree",
   "initializeTreeContextMenu",
   "initializeMonitoringSizeToggle",

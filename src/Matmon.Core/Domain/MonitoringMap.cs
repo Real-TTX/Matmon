@@ -364,6 +364,13 @@ public sealed class MonitoringMapTile
     /// or slow-changing simply reuses its last answer for this long. 0 = the board's own cadence.</summary>
     public int RefreshSeconds { get; set; }
 
+    /// <summary>An Embed tile's address (absolute http/https only - anything else is dropped on save and at render).</summary>
+    public string? EmbedUrl { get; set; }
+
+    /// <summary>An Embed tile shows the address as a PICTURE reloaded every <see cref="RefreshSeconds"/> (default 30)
+    /// rather than as a page in a frame - what a camera's snapshot URL wants.</summary>
+    public bool EmbedImage { get; set; }
+
     /// <summary>Status markers on an image or geo tile - and the NODES of a topology tile.</summary>
     public List<MonitoringMapPin> Pins { get; set; } = [];
 
@@ -414,7 +421,9 @@ public sealed class MonitoringMapTile
         Links = Links.Select(link => link.Clone()).ToList(),
         LinkMapId = LinkMapId,
         ColorRules = new Dictionary<string, string>(ColorRules),
-        RefreshSeconds = RefreshSeconds
+        RefreshSeconds = RefreshSeconds,
+        EmbedUrl = EmbedUrl,
+        EmbedImage = EmbedImage
     };
 }
 
@@ -467,7 +476,17 @@ public enum MonitoringMapTileKind
 
     /// <summary>The sensors under the target as a table: state, sensor, machine, reading, last check. The Sensor list's
     /// ordering options apply.</summary>
-    Table = 16
+    Table = 16,
+
+    /// <summary>A ranking of one channel across the sensors under the target, as horizontal bars (the busiest disks,
+    /// the slowest pings). The sensor list's channel, order and row count apply.</summary>
+    Bars = 17,
+
+    /// <summary>How the sensors under the target split by state, as a ring with a legend.</summary>
+    Donut = 18,
+
+    /// <summary>Another web page in a frame, or a picture refreshed on a timer (a camera snapshot, a Grafana panel).</summary>
+    Embed = 19
 }
 
 public enum MonitoringMapListMode
@@ -568,6 +587,9 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Honeycomb => (2, 2, 4, 3),
             MonitoringMapTileKind.Timeline => (4, 2, 8, 3),
             MonitoringMapTileKind.Table => (4, 2, 6, 4),
+            MonitoringMapTileKind.Bars => (3, 2, 4, 3),
+            MonitoringMapTileKind.Donut => (2, 2, 3, 3),
+            MonitoringMapTileKind.Embed => (3, 2, 6, 4),
             _ => (2, 2, 2, 2)
         };
     }

@@ -13,8 +13,10 @@
     var isCollection = tile.Kind is MonitoringMapTileKind.SensorList or MonitoringMapTileKind.AlertFeed
         or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
         or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology
-        or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline or MonitoringMapTileKind.Table;
-    var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
+        or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline or MonitoringMapTileKind.Table
+        or MonitoringMapTileKind.Bars or MonitoringMapTileKind.Donut or MonitoringMapTileKind.Embed;
+    var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading or MonitoringMapTileKind.Embed;
+    string Pct(double? value) => (value ?? 0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
     // screenshot/print is correct; initializeMapClocks then ticks it.
     // The one place the head's title is decided, so the footer below can ask "am I about to repeat this?"
@@ -214,6 +216,78 @@
                 }
             </ul>
         }
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Embed)
+    {
+        @* Another page in a sandboxed frame, or a picture the script reloads every RefreshSeconds. The address is checked
+           again here (absolute http/https only), never trusted from the stored value. *@
+        var embedUrl = Matmon.Core.Domain.BrandingSafety.SafeContactUrl(tile.EmbedUrl);
+        <div class="map-embed">
+            @if (embedUrl is null)
+            {
+                <p class="map-tile-rows-empty">No address yet</p>
+            }
+            else if (tile.EmbedImage)
+            {
+                <img class="map-embed-image" src="@embedUrl" alt="@tile.Title" data-embed-refresh="@(tile.RefreshSeconds > 0 ? tile.RefreshSeconds : 30)" referrerpolicy="no-referrer" />
+            }
+            else
+            {
+                <iframe class="map-embed-frame" src="@embedUrl" title="@tile.Title" sandbox="allow-scripts allow-same-origin allow-forms" referrerpolicy="no-referrer" loading="lazy"></iframe>
+            }
+        </div>
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Bars && Model.Rows is { } barRows)
+    {
+        @if (barRows.Count == 0)
+        {
+            <p class="map-tile-rows-empty">No sensors</p>
+        }
+        else
+        {
+            <ul class="map-bars">
+                @foreach (var row in barRows)
+                {
+                    <li class="map-tile-row map-bar-row" data-state="@row.Tone" title="@row.Detail">
+                        <span class="map-tile-row-label">
+                            @if (row.Href is not null && !Model.Editable)
+                            {
+                                <a class="map-tile-row-link" href="@row.Href"><strong>@row.Label</strong></a>
+                            }
+                            else
+                            {
+                                <strong>@row.Label</strong>
+                            }
+                        </span>
+                        <span class="map-bar" data-row-percent style="--bar-w: @(Pct(row.Percent))%"></span>
+                        <span class="map-tile-row-value">@row.Value</span>
+                    </li>
+                }
+            </ul>
+        }
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Donut && Model.Rows is { } slices)
+    {
+        @* The ring: one circle per slice, each drawn from where the previous ended (pathLength 100 = percent). *@
+        var offset = 0d;
+        <div class="map-donut">
+            <svg class="map-donut-ring" viewBox="0 0 42 42" aria-hidden="true">
+                <circle class="map-donut-track" cx="21" cy="21" r="15.9155" pathLength="100" />
+                @foreach (var slice in slices)
+                {
+                    <circle class="map-donut-seg" data-tone="@slice.Tone" cx="21" cy="21" r="15.9155" pathLength="100"
+                            style="--seg: @(Pct(slice.Percent)); --offset: @(Pct(offset))" />
+                    offset += slice.Percent ?? 0;
+                }
+                <text class="map-donut-figure" x="21" y="23.5" text-anchor="middle">@Model.Value</text>
+            </svg>
+            <ul class="map-donut-legend">
+                @foreach (var slice in slices)
+                {
+                    <li class="map-tile-row" data-state="@slice.Tone"><span class="map-tile-row-label"><strong>@slice.Label</strong></span><span class="map-tile-row-value">@slice.Value</span></li>
+                }
+            </ul>
+        </div>
     }
     else if (tile.Kind == MonitoringMapTileKind.Table && Model.Rows is { } tableRows)
     {

@@ -79,6 +79,8 @@ public sealed class MapSaveRoundTripTests : IDisposable
         ColorRules = new Dictionary<string, string> { ["up"] = "#11aa22", ["down"] = "#cc2233" },
         RefreshSeconds = 120,
         LinkMapId = Guid.NewGuid(),
+        EmbedUrl = "https://camera.example/snapshot.jpg",
+        EmbedImage = true,
         Pins =
         [
             new MonitoringMapPin

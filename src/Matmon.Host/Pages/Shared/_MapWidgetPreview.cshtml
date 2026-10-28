@@ -131,6 +131,29 @@
             </g>
             break;
 
+        case "bars":
+            <g class="mtp-fill">
+                <rect x="6" y="5" width="30" height="4" rx="1" />
+                <rect x="6" y="11.5" width="22" height="4" rx="1" opacity="0.7" />
+                <rect x="6" y="18" width="13" height="4" rx="1" opacity="0.45" />
+            </g>
+            break;
+
+        case "donut":
+            <circle class="mtp-track" cx="24" cy="13.5" r="8" fill="none" stroke-width="4" />
+            <circle class="mtp-stroke" cx="24" cy="13.5" r="8" fill="none" stroke-width="4" pathLength="100" stroke-dasharray="62 100" transform="rotate(-90 24 13.5)" />
+            break;
+
+        case "embed":
+            <rect class="mtp-track" x="6" y="4" width="36" height="19" rx="2" fill="none" stroke-width="1.6" />
+            <g class="mtp-fill">
+                <rect x="6" y="4" width="36" height="4" opacity="0.4" />
+                <circle cx="9" cy="6" r="0.9" />
+                <circle cx="12" cy="6" r="0.9" />
+                <path d="M21 12.5l7 3.5-7 3.5Z" />
+            </g>
+            break;
+
         case "table":
             <rect class="mtp-track" x="6" y="4" width="36" height="19" rx="2" fill="none" stroke-width="1.6" />
             <g class="mtp-fill">

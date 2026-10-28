@@ -437,6 +437,9 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Honeycomb
              or MonitoringMapTileKind.Timeline
              or MonitoringMapTileKind.Table
+             or MonitoringMapTileKind.Bars
+             or MonitoringMapTileKind.Donut
+             or MonitoringMapTileKind.Embed
              or MonitoringMapTileKind.MultiGraph;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
@@ -465,6 +468,9 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
             MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element, latest),
             MonitoringMapTileKind.Honeycomb => BuildHoneycombTile(tile, element, latest),
+            MonitoringMapTileKind.Donut => BuildDonutTile(tile, element, latest),
+            MonitoringMapTileKind.Embed => CreateTile(tile, element, "ok", "Embed",
+                BrandingSafety.SafeContactUrl(tile.EmbedUrl) is null ? "No address (http or https)" : string.Empty, string.Empty, KindLabel(tile.Kind), "external"),
             MonitoringMapTileKind.Timeline => BuildTimelineTile(tile, element, latest),
             _ => BuildSensorListTile(tile, element, latest)
         };
@@ -801,6 +807,43 @@ public sealed class MapDisplayProvider
         return observations;
     }
 
+    /// <summary>
+    /// How the sensors under the target split by state: four rows (Error / Warning / OK / Unknown - paused sensors count as
+    /// neither) whose shares draw the ring. Always the same four rows, so the live patch goes by position.
+    /// </summary>
+    private MapDisplayTileViewModel BuildDonutTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile)).Where(sensor => !sensor.IsPaused).ToList();
+        var keys = sensors
+            .Select(sensor => MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(
+                latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown)))
+            .ToList();
+        var total = keys.Count;
+        MapTileRowDto Row(string label, string tone) {
+            var count = keys.Count(key => key == tone);
+            return new MapTileRowDto(label, null, count.ToString(CultureInfo.InvariantCulture), tone, null)
+            {
+                Percent = total == 0 ? 0 : (double)count / total * 100
+            };
+        }
+
+        var rows = new[] { Row("Error", "error"), Row("Warning", "warning"), Row("OK", "ok"), Row("Unknown", "unknown") };
+        var worst = rows[0].Percent > 0 ? "error" : rows[1].Percent > 0 ? "warning" : total == 0 ? "unknown" : "ok";
+        var healthy = total == 0 ? "-" : $"{Math.Round(rows[2].Percent ?? 0):0} %";
+        var worstLabel = worst switch
+        {
+            "error" => MonitoringStatePresentation.Label(MonitoringSeverity.Error),
+            "warning" => MonitoringStatePresentation.Label(MonitoringSeverity.Warning),
+            "ok" => MonitoringStatePresentation.Label(MonitoringSeverity.Ok),
+            _ => "No data"
+        };
+        return CreateTile(tile, element, worst, worstLabel,
+            total == 0 ? "No sensors under this target" : $"{total} sensors", healthy, KindLabel(tile.Kind), "chart", rows: rows);
+    }
+
     /// <summary>A honeycomb shows at most this many cells - past that a cell is too small to see on a wall.</summary>
     private const int HoneycombMaxCells = 400;
 
@@ -922,6 +965,7 @@ public sealed class MapDisplayProvider
         }
 
         var limit = Math.Clamp(tile.ListLimit, 1, 50);
+        var bars = tile.Kind == MonitoringMapTileKind.Bars;
         var entries = sensors
             .Select(sensor =>
             {
@@ -940,7 +984,11 @@ public sealed class MapDisplayProvider
 
         // A value-ranked list must not let "no reading" win the top spot, so a missing number sorts to the
         // far end in BOTH directions rather than being treated as zero.
-        var ordered = tile.ListMode switch
+        // A bar chart is a ranking: "by state" means nothing for it, so it ranks by value unless asked for the bottom.
+        var mode = bars && tile.ListMode is not (MonitoringMapListMode.BottomValue or MonitoringMapListMode.Alphabetical)
+            ? MonitoringMapListMode.TopValue
+            : tile.ListMode;
+        var ordered = mode switch
         {
             MonitoringMapListMode.TopValue => entries
                 .OrderByDescending(entry => entry.Numeric ?? double.MinValue)
@@ -958,14 +1006,23 @@ public sealed class MapDisplayProvider
 
         // A table says which MACHINE a sensor is on and when it was last checked; a list names the channel it ranks by.
         var table = tile.Kind == MonitoringMapTileKind.Table;
-        var rows = ordered
-            .Take(limit)
+        var shown = ordered.Take(limit).ToArray();
+        // A bar's length: a percentage reading on a 0..100 scale, anything else against the largest bar shown.
+        var percentScale = shown.All(entry => entry.Channel?.Unit is "%" || entry.Numeric is null);
+        var largest = shown.Select(entry => entry.Numeric ?? 0).DefaultIfEmpty(0).Max(value => Math.Abs(value));
+        var rows = shown
             .Select(entry => new MapTileRowDto(
-                entry.Sensor.Name,
-                table ? MachineName(entry.Sensor) : entry.Channel?.Label ?? entry.Sensor.SensorTypeKey,
+                bars ? MachineName(entry.Sensor) : entry.Sensor.Name,
+                table ? MachineName(entry.Sensor) : bars ? entry.Sensor.Name : entry.Channel?.Label ?? entry.Sensor.SensorTypeKey,
                 entry.Observation is null ? string.Empty : FormatObservationValue(entry.Observation, entry.Channel),
                 MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(entry.State)),
-                table && entry.Observation is { } checkedAt ? FormatRelative(checkedAt.TimestampUtc) : null) { ElementId = entry.Sensor.Id })
+                table && entry.Observation is { } checkedAt ? FormatRelative(checkedAt.TimestampUtc) : null)
+            {
+                ElementId = entry.Sensor.Id,
+                Percent = !bars || entry.Numeric is not { } value
+                    ? null
+                    : percentScale ? Math.Clamp(value, 0, 100) : largest > 0 ? Math.Abs(value) / largest * 100 : 0
+            })
             .ToArray();
 
         var severity = entries
@@ -1487,6 +1544,9 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Honeycomb => "Honeycomb",
             MonitoringMapTileKind.Timeline => "Timeline",
             MonitoringMapTileKind.Table => "Table",
+            MonitoringMapTileKind.Bars => "Bars",
+            MonitoringMapTileKind.Donut => "Donut",
+            MonitoringMapTileKind.Embed => "Embed",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
@@ -1642,6 +1702,9 @@ public sealed record MapTileRowDto(string Label, string? Detail, string? Value, 
 
     /// <summary>A timeline row's state bands, "start,width,tone;..." in percent of the window (see StateTimeline).</summary>
     public string? Segments { get; init; }
+
+    /// <summary>A bar's length, or a donut slice's share, in percent.</summary>
+    public double? Percent { get; init; }
 }
 
 /// <param name="Percent">Null when the window holds no state samples - "unknown", which must NOT render as 0.</param>

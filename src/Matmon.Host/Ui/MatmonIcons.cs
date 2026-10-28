@@ -57,7 +57,8 @@ public static class MatmonIcons
         ["square"] = "box",
         ["grid"] = "grid",
         ["activity"] = "activity",
-        ["layers"] = "layers"
+        ["layers"] = "layers",
+        ["external"] = "external"
     };
 
     /// <summary>The icon of an old Matmon name, from the sprite (an unknown name falls back to a box).</summary>

@@ -639,6 +639,101 @@ a.map-hex:focus-visible {
   filter: brightness(1.25);
 }
 
+/* ---- Bars: one reading across sensors; the length is data (--bar-w) ---- */
+.map-bars {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: calc(var(--map-type, 0.95rem) * 0.35);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+.map-bars .map-bar-row {
+  display: grid;
+  grid-template-columns: minmax(5em, 32%) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.map-bar {
+  --map-bar-tone: var(--map-tile-accent, var(--mat-accent));
+  height: calc(var(--map-type, 0.95rem) * 0.9);
+  border-radius: var(--mat-radius-sm);
+  background: linear-gradient(90deg, var(--map-bar-tone) var(--bar-w, 0%), color-mix(in srgb, var(--mat-text-faint) 18%, transparent) var(--bar-w, 0%));
+}
+.map-bar-row[data-state="warning"] .map-bar { --map-bar-tone: var(--mat-warning); }
+.map-bar-row[data-state="error"] .map-bar { --map-bar-tone: var(--mat-danger); }
+
+/* ---- Donut: slices of one ring, each a circle drawn from --offset for --seg (pathLength 100) ---- */
+.map-donut {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mat-space-3);
+  min-height: 0;
+}
+.map-donut-ring {
+  width: 100%;
+  max-height: 100%;
+  transform: rotate(-90deg);
+}
+.map-donut-track,
+.map-donut-seg {
+  fill: none;
+  stroke-width: 5;
+}
+.map-donut-track { stroke: color-mix(in srgb, var(--mat-text-faint) 20%, transparent); }
+.map-donut-seg {
+  stroke: var(--mat-text-faint);
+  stroke-dasharray: var(--seg, 0) 100;
+  stroke-dashoffset: calc(-1 * var(--offset, 0));
+}
+.map-donut-seg[data-tone="ok"] { stroke: var(--mat-success); }
+.map-donut-seg[data-tone="warning"] { stroke: var(--mat-warning); }
+.map-donut-seg[data-tone="error"] { stroke: var(--mat-danger); }
+.map-donut-figure {
+  fill: currentColor;
+  font-size: 7px;
+  font-weight: 700;
+  transform: rotate(90deg);
+  transform-origin: 21px 21px;
+}
+.map-donut-legend {
+  display: grid;
+  gap: 0.2em;
+  margin: 0;
+  padding: 0;
+  font-size: calc(var(--map-type, 0.95rem) * 0.75);
+  list-style: none;
+}
+.map-donut-legend .map-tile-row {
+  display: flex;
+  gap: 0.6em;
+  justify-content: space-between;
+}
+
+/* ---- Embed: a framed page or a picture, filling the tile ---- */
+.map-embed {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--mat-radius);
+}
+.map-embed-frame,
+.map-embed-image {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+  background: var(--mat-surface-2);
+}
+/* In the designer a click places and selects - the framed page must not take it. */
+.map-tile-editor .map-embed-frame { pointer-events: none; }
+
 /* ---- Table: the sensors under a target, read across ---- */
 .map-table-wrap {
   flex: 1;

@@ -313,6 +313,8 @@ public sealed class MapEditorModel : PageModel
         GaugeMin = tile.GaugeMin,
         GaugeMax = tile.GaugeMax,
         ListChannelKey = string.IsNullOrWhiteSpace(tile.ListChannelKey) ? null : tile.ListChannelKey.Trim(),
+        EmbedUrl = BrandingSafety.SafeContactUrl(tile.EmbedUrl?.Trim()),
+        EmbedImage = tile.EmbedImage,
         SlaWindowDays = Math.Clamp(tile.SlaWindowDays, 1, 365),
         GraphWindowHours = MonitoringMapTile.NormalizeGraphWindowHours(tile.GraphWindowHours),
         ImageAssetId = tile.ImageAssetId,
@@ -467,7 +469,9 @@ public sealed class MapEditorModel : PageModel
                     LinksJson = tile.Links.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Links, PinJsonOptions),
                     LinkMapId = tile.LinkMapId,
                     ColorRules = new Dictionary<string, string>(tile.ColorRules),
-                    RefreshSeconds = tile.RefreshSeconds
+                    RefreshSeconds = tile.RefreshSeconds,
+                    EmbedUrl = tile.EmbedUrl,
+                    EmbedImage = tile.EmbedImage
                 })).ToList()
             };
 
@@ -801,6 +805,10 @@ public sealed class MapTileInput
     public Dictionary<string, string> ColorRules { get; set; } = [];
 
     public int RefreshSeconds { get; set; }
+
+    public string? EmbedUrl { get; set; }
+
+    public bool EmbedImage { get; set; }
 
     public bool IsDeleted { get; set; }
 }

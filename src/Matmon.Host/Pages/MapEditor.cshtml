@@ -399,6 +399,12 @@
                                     <input asp-for="Input.Tiles[index].SlaWindowDays" type="number" min="1" max="365" class="mat-input" />
                                     <span class="mat-hint">A warning counts as up.</span>
                                 </div>
+                                <div class="mat-field" data-map-property-embed-only>
+                                    <label class="mat-label" for="@(tileId)EmbedUrl">Address</label>
+                                    <input asp-for="Input.Tiles[index].EmbedUrl" id="@(tileId)EmbedUrl" type="url" class="mat-input mat-mono" placeholder="https://camera.local/snapshot.jpg" />
+                                    <label class="mat-check"><input asp-for="Input.Tiles[index].EmbedImage" /><span class="mat-check__text">A picture - reload it every "Refresh" seconds (Advanced, default 30)</span></label>
+                                    <span class="mat-hint">A page whose server forbids framing stays empty; on the public wallboard every viewer's browser loads the address itself.</span>
+                                </div>
                                 <div class="mat-field" data-map-property-image-only>
                                     <label class="mat-label" for="@(tileId)ImageFile">Picture</label>
                                     <input type="hidden" asp-for="Input.Tiles[index].ImageAssetId" data-map-property-image-id />
@@ -931,6 +937,14 @@
                     <label class="mat-label" for="@(TemplateTileId)SlaWindowDays">Window (days)</label>
                     <input id="@(TemplateTileId)SlaWindowDays" name="Input.Tiles[__index__].SlaWindowDays" type="number" min="1" max="365" value="7" class="mat-input" />
                     <span class="mat-hint">A warning counts as up.</span>
+                </div>
+                <div class="mat-field" data-map-property-embed-only>
+                    <label class="mat-label" for="@(TemplateTileId)EmbedUrl">Address</label>
+                    <input id="@(TemplateTileId)EmbedUrl" name="Input.Tiles[__index__].EmbedUrl" type="url" class="mat-input mat-mono" placeholder="https://camera.local/snapshot.jpg" />
+                    @* Checkbox BEFORE its hidden false partner: with both posted the binder takes the first value. *@
+                    <label class="mat-check"><input type="checkbox" name="Input.Tiles[__index__].EmbedImage" value="true" /><span class="mat-check__text">A picture - reload it every "Refresh" seconds (Advanced, default 30)</span></label>
+                    <input type="hidden" name="Input.Tiles[__index__].EmbedImage" value="false" />
+                    <span class="mat-hint">A page whose server forbids framing stays empty; on the public wallboard every viewer's browser loads the address itself.</span>
                 </div>
                 <div class="mat-field" data-map-property-image-only>
                     <label class="mat-label" for="@(TemplateTileId)ImageFile">Picture</label>

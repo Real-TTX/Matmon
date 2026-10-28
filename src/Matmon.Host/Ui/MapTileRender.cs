@@ -50,6 +50,9 @@ public static class MapTileRender
             MonitoringMapTileKind.Honeycomb => "Honeycomb",
             MonitoringMapTileKind.Timeline => "Timeline",
             MonitoringMapTileKind.Table => "Table",
+            MonitoringMapTileKind.Bars => "Bars",
+            MonitoringMapTileKind.Donut => "Donut",
+            MonitoringMapTileKind.Embed => "Embed",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
@@ -74,6 +77,9 @@ public static class MapTileRender
             MonitoringMapTileKind.Honeycomb => "grid",
             MonitoringMapTileKind.Timeline => "activity",
             MonitoringMapTileKind.Table => "list",
+            MonitoringMapTileKind.Bars => "chart",
+            MonitoringMapTileKind.Donut => "chart",
+            MonitoringMapTileKind.Embed => "external",
             _ => "sensor"
         };
     }
