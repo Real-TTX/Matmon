@@ -240,15 +240,11 @@ public sealed class StatusPagesModel(IMonitoringWorkspaceStore store, StatusPage
         return RedirectToPage(new { view = id, edit = (string?)null });
     }
 
-    /// <summary>The public address - root-relative when the page is reached through the cloud console (the request host is
-    /// then the instance's internal one).</summary>
+    /// <summary>The full public address (see PublicLinks) - the path alone only when the instance's address cannot be known here.</summary>
     public string PublicUrl(StatusPage page)
     {
-        var embedded = string.Equals(Request.Headers["X-Matmon-Embed"].ToString(), "1", StringComparison.Ordinal);
-        return (embedded
-                ? Url.Page("/StatusPublic", null, new { token = page.PublicToken })
-                : Url.Page("/StatusPublic", null, new { token = page.PublicToken }, Request.Scheme))
-            ?? $"/status/{page.PublicToken}";
+        var path = Url.Page("/StatusPublic", null, new { token = page.PublicToken }) ?? $"/status/{page.PublicToken}";
+        return PublicLinks.Absolute(HttpContext, store, path) ?? path;
     }
 
     private bool LoadView(Guid id)

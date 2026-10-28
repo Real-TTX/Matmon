@@ -75,6 +75,8 @@ public class ConfigModel : PageModel
 
     /// <summary>The Local Program allow-list kept on the instance (System > General).</summary>
     public IReadOnlyList<string> AllowedProgramPaths { get; private set; } = [];
+
+    public (string? Configured, string? Remembered) PublicAddress => _workspaceStore.GetPublicAddress();
     public IReadOnlyList<SelectListItem> TimeZoneItems { get; private set; } = [];
 
     /// <summary>The managing service partner (from the cloud), shown on the Service partner tab; null if none.</summary>
@@ -508,6 +510,28 @@ public class ConfigModel : PageModel
 
         _workspaceStore.SetAllowedProgramPaths(entries);
         StatusMessage = entries.Length == 0 ? "No programs allowed." : $"{entries.Length} allowed program path{(entries.Length == 1 ? "" : "s")} saved.";
+        return RedirectToPage(new { tab = "general" });
+    }
+
+    /// <summary>This instance's address as people outside reach it - public links (wallboards, status pages) are built
+    /// from it, which matters most inside the cloud console, where the request only knows the internal host.</summary>
+    public IActionResult OnPostPublicAddress(string? publicAddress)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        var problem = _workspaceStore.SetPublicBaseUrl(publicAddress);
+        if (problem is not null)
+        {
+            ErrorMessage = problem;
+        }
+        else
+        {
+            StatusMessage = string.IsNullOrWhiteSpace(publicAddress) ? "Public address cleared." : "Public address saved.";
+        }
+
         return RedirectToPage(new { tab = "general" });
     }
 

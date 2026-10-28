@@ -387,6 +387,15 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The syslog receiver's settings (a detached, normalised copy). Off by default.</summary>
     /// <summary>System > Updates: automatic updates and their window. Instance-bound, never in a backup.</summary>
     /// <summary>The Local Program allow-list kept on the instance (System > General); the environment variable counts on top.</summary>
+    /// <summary>The address public links are built from: the one an admin set, and the one last seen directly.</summary>
+    (string? Configured, string? Remembered) GetPublicAddress();
+
+    /// <summary>Sets (or with null/empty clears) the instance's public address; returns why it was refused, else null.</summary>
+    string? SetPublicBaseUrl(string? url);
+
+    /// <summary>Remembers the address the instance was just opened at directly (saved only when it changes).</summary>
+    void RememberDirectOrigin(string origin);
+
     IReadOnlyList<string> GetAllowedProgramPaths();
 
     void SetAllowedProgramPaths(IEnumerable<string> paths);

@@ -845,6 +845,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
         // What may be executed on this machine is decided on it (the Local Program allow-list).
         document.AllowedProgramPaths = [];
+        // Where this instance is reached belongs to this machine, never to a restore elsewhere.
+        document.PublicBaseUrl = null;
+        document.LastDirectOrigin = null;
         // ...and the catalog's copy of it, the program choice of the Local Program sensor (rebuilt from the live list on load).
         document.SensorDefinitions = document.SensorDefinitions
             .Select(definition => string.Equals(definition.Key, LocalProgramSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase)

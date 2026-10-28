@@ -95,6 +95,32 @@
         </section>
 
         <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("globe")<h2 class="mat-card__title">Public address</h2><span class="mat-text-muted mm-push-end">Wallboards and status pages</span></div>
+            <div class="mat-card__body mat-stack">
+                @{
+                    var publicAddress = Model.PublicAddress;
+                }
+                @if (canManageSystem)
+                {
+                    <form method="post" asp-page-handler="PublicAddress" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="public-address">Address of this instance</label>
+                            <input class="mat-input mat-mono" id="public-address" name="publicAddress" type="url" value="@publicAddress.Configured" placeholder="@(publicAddress.Remembered ?? "https://monitor.example.com")" />
+                            <span class="mat-hint">How others reach it - public links are built from it. Empty = the address it was last opened at directly@(publicAddress.Remembered is null ? "" : $" ({publicAddress.Remembered})").</span>
+                        </div>
+                        <div class="mat-btn-row">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("save")<span>Save</span></button>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <dl class="mat-kv"><dt>Address</dt><dd class="mat-mono">@(publicAddress.Configured ?? publicAddress.Remembered ?? "-")</dd></dl>
+                }
+            </div>
+        </section>
+
+        <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("terminal")<h2 class="mat-card__title">Local program allow-list</h2><span class="mat-text-muted mm-push-end">Local Program sensor</span></div>
             <div class="mat-card__body mat-stack">
                 @{

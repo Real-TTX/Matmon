@@ -1460,6 +1460,66 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public (string? Configured, string? Remembered) GetPublicAddress()
+    {
+        lock (_gate)
+        {
+            return (_document.PublicBaseUrl, _document.LastDirectOrigin);
+        }
+    }
+
+    public string? SetPublicBaseUrl(string? url)
+    {
+        var trimmed = url?.Trim();
+        string? normalized = null;
+        if (!string.IsNullOrEmpty(trimmed))
+        {
+            normalized = BrandingSafety.SafeContactUrl(trimmed)?.TrimEnd('/');
+            if (normalized is null || new Uri(normalized).PathAndQuery.Length > 1 && !string.IsNullOrEmpty(new Uri(normalized).Query))
+            {
+                return "Enter the full address, starting with https:// or http:// (for example https://monitor.example.com).";
+            }
+        }
+
+        lock (_gate)
+        {
+            _document.PublicBaseUrl = normalized;
+            QueueSave(SavePriority.Configuration);
+        }
+
+        return null;
+    }
+
+    public void RememberDirectOrigin(string origin)
+    {
+        if (BrandingSafety.SafeContactUrl(origin) is not { } safe)
+        {
+            return;
+        }
+
+        safe = safe.TrimEnd('/');
+        lock (_gate)
+        {
+            if (string.Equals(_document.LastDirectOrigin, safe, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // A visit on localhost says nothing about where others reach the instance - it never replaces a real address.
+            if (_document.LastDirectOrigin is not null && IsLoopbackOrigin(safe) && !IsLoopbackOrigin(_document.LastDirectOrigin))
+            {
+                return;
+            }
+
+            _document.LastDirectOrigin = safe;
+            QueueSave(SavePriority.Configuration);
+        }
+    }
+
+    private static bool IsLoopbackOrigin(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+        && (uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase));
+
     public IReadOnlyList<string> GetAllowedProgramPaths()
     {
         lock (_gate)
@@ -4867,6 +4927,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         /// <summary>The Local Program sensor's allow-list (System > General): what may be executed on this machine and its
         /// probes. Decided here, like the plugins - never carried in a backup.</summary>
         public List<string> AllowedProgramPaths { get; set; } = [];
+
+        /// <summary>This instance's address as people outside reach it (System > General); null = not set.</summary>
+        public string? PublicBaseUrl { get; set; }
+
+        /// <summary>The address an admin last opened the instance at directly - the fallback for public links shown
+        /// inside the cloud console, where the request only carries the internal host.</summary>
+        public string? LastDirectOrigin { get; set; }
 
         public CloudConnectionState Cloud { get; set; } = new();
 
