@@ -14,11 +14,14 @@ function initializeBackupJobEditor() {
     const localOnly = form.querySelectorAll("[data-local-only]");
     const cloudOnly = form.querySelectorAll("[data-cloud-only]");
     const cloudNote = form.querySelectorAll("[data-cloud-note]");
+    const smbOnly = form.querySelectorAll("[data-smb-only]");
     const sync = () => {
       const isCloud = destination.value === "Cloud";
+      // "Local only" = everything a file-based job has (sections, retention) - an SMB job has them too.
       localOnly.forEach((element) => { element.hidden = isCloud; });
       cloudOnly.forEach((element) => { element.hidden = !isCloud; });
       cloudNote.forEach((element) => { element.hidden = !isCloud; });
+      smbOnly.forEach((element) => { element.hidden = destination.value !== "Smb"; });
     };
 
     destination.addEventListener("change", sync);

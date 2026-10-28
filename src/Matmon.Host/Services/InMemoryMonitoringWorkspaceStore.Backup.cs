@@ -93,6 +93,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 existing.ProtectedPassphrase = null;
                 existing.PassphraseHydrationFailed = false;
             }
+
+            existing.SmbPath = string.IsNullOrWhiteSpace(job.SmbPath) ? null : job.SmbPath.Trim();
+            existing.SmbUsername = string.IsNullOrWhiteSpace(job.SmbUsername) ? null : job.SmbUsername.Trim();
+            existing.SmbDomain = string.IsNullOrWhiteSpace(job.SmbDomain) ? null : job.SmbDomain.Trim();
+            // Blank password field = keep the stored one, like the passphrase.
+            if (!string.IsNullOrEmpty(job.SmbPassword))
+            {
+                existing.SmbPassword = job.SmbPassword;
+                existing.ProtectedSmbPassword = null;
+                existing.SmbPasswordHydrationFailed = false;
+            }
             existing.LastRunUtc = job.LastRunUtc;
             existing.NextRunUtc = CalculateNextRunUtc(existing, DateTimeOffset.UtcNow);
             existing.LastStatus = job.LastStatus?.Trim();
@@ -272,6 +283,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// <summary>Records the outcome of a Cloud-destination backup job run (the HTTP push itself is done by the
     /// scheduler via <c>CloudBackupClient</c>, since the store does no networking). Advances the schedule the same
     /// way <see cref="RunBackupJob"/> does and stamps Last* status - no disk snapshot is written for a cloud job.</summary>
+    /// <summary>A run of a job whose snapshot went somewhere else (Matmon.Cloud, an SMB share): advances its schedule and
+    /// says how it went; no local artifact.</summary>
+    public void RecordRemoteBackupJobRun(Guid jobId, bool success, string message, long? bytes) => RecordCloudBackupJobRun(jobId, success, message, bytes);
+
     public void RecordCloudBackupJobRun(Guid jobId, bool success, string message, long? bytes)
     {
         lock (_gate)

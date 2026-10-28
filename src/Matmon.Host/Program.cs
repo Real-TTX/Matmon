@@ -233,6 +233,11 @@ builder.Services.AddSingleton<IOnDemandRunStore, OnDemandRunStore>();
 builder.Services.AddSingleton<MapDisplayProvider>();
 builder.Services.AddSingleton<StatusPageProvider>();
 builder.Services.AddSingleton<MapGenerator>();
+// Backups to an SMB share (a NAS): the OS share connection on Windows, Samba's smbclient everywhere else.
+builder.Services.AddSingleton<Matmon.Host.Services.Backup.ISmbBackupClient>(_ => OperatingSystem.IsWindows()
+    ? new Matmon.Host.Services.Backup.WindowsSmbBackupClient()
+    : new Matmon.Host.Services.Backup.SmbclientBackupClient());
+builder.Services.AddSingleton<Matmon.Host.Services.Backup.SmbBackupRunner>();
 // Uploaded map pictures live on disk under data/uploads, NOT in workspace.json - that file is fully
 // re-serialised on a 750ms debounce, so a 1 MB floorplan in it would be rewritten every time a pin moves.
 builder.Services.AddSingleton(provider => new MapAssetStore(
@@ -338,6 +343,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/NotificationReceiverEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/BackupJobEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/BackupRestore", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/BackupSmbFiles", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/Logs", MatmonSecurity.AdminPolicy);
     // The receiver is a system setting. (Reading the log is a tab of Events; its handlers refuse a viewer themselves -
     // device logs can name users and addresses.)

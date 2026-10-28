@@ -300,7 +300,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "storage" });
     }
 
-    public IActionResult OnPostRunBackupJob(Guid backupJobId)
+    public async Task<IActionResult> OnPostRunBackupJobAsync(Guid backupJobId, [FromServices] Services.Backup.SmbBackupRunner smb, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -309,6 +309,22 @@ public class ConfigModel : PageModel
 
         try
         {
+            // An SMB job writes to its share - "Run now" used to make a local snapshot for every job, whatever its destination.
+            if (_workspaceStore.FindBackupJob(backupJobId) is { Destination: BackupDestination.Smb } smbJob)
+            {
+                var (success, message) = await smb.RunAsync(smbJob, cancellationToken);
+                if (success)
+                {
+                    StatusMessage = message;
+                }
+                else
+                {
+                    ErrorMessage = message;
+                }
+
+                return RedirectToPage(new { tab = "backup" });
+            }
+
             var snapshot = _workspaceStore.RunBackupJob(backupJobId, "Manual backup triggered from System > Backup.");
             StatusMessage = $"Backup '{snapshot.DisplayName}' created.";
         }

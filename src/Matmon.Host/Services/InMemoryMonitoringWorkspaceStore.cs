@@ -3043,6 +3043,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             yield return new SecretSlot(
                 () => job.Passphrase, v => job.Passphrase = v, () => job.ProtectedPassphrase, v => job.ProtectedPassphrase = v,
                 () => job.PassphraseHydrationFailed, v => job.PassphraseHydrationFailed = v);
+            // ...and an SMB destination's password.
+            yield return new SecretSlot(
+                () => job.SmbPassword, v => job.SmbPassword = v, () => job.ProtectedSmbPassword, v => job.ProtectedSmbPassword = v,
+                () => job.SmbPasswordHydrationFailed, v => job.SmbPasswordHydrationFailed = v);
         }
         // The instance's backup passphrase (System > Backup > Settings).
         if (document.BackupSettings is { } backup)

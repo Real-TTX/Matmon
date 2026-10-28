@@ -399,6 +399,7 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                         ? "warning"
                                         : "error";
                             var isCloud = job.Destination == BackupDestination.Cloud;
+                            var isSmb = job.Destination == BackupDestination.Smb;
                             <tr>
                                 <td data-label="Job" class="mat-table__primary">
                                     <div class="mat-table__name">
@@ -413,8 +414,8 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                     <small class="mat-d-block mat-text-muted">@job.Schedule.Summary()</small>
                                 </td>
                                 <td data-label="Destination">
-                                    @(isCloud ? "Matmon.Cloud (off-site)" : "Local disk")
-                                    <small class="mat-d-block mat-text-muted">@(isCloud ? "Config only (off-site)" : ConfigModel.FormatBackupSections(job.Sections))</small>
+                                    @(isCloud ? "Matmon.Cloud (off-site)" : isSmb ? "SMB share" : "Local disk")
+                                    <small class="mat-d-block mat-text-muted">@(isCloud ? "Config only (off-site)" : isSmb ? $"{job.SmbPath} - {ConfigModel.FormatBackupSections(job.Sections)}" : ConfigModel.FormatBackupSections(job.Sections))</small>
                                 </td>
                                 <td data-label="Next run" class="mat-hide-sm mat-mono">@Model.FormatDateTime(job.NextRunUtc)</td>
                                 <td data-label="Last run" class="mat-hide-sm mat-mono">@Model.FormatDateTime(job.LastRunUtc)</td>
@@ -425,6 +426,10 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                         <form method="post" asp-page-handler="RunBackupJob" asp-route-backupJobId="@job.Id">
                                             <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="Run @job.Name now" data-tip="Run now">@MatUi.Icon("play")</button>
                                         </form>
+                                        @if (isSmb)
+                                        {
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupSmbFiles" asp-route-jobId="@job.Id" aria-label="Backups of @job.Name on the share" data-tip="On the share">@MatUi.Icon("folder-open")</a>
+                                        }
                                         @if (!string.IsNullOrWhiteSpace(job.LastSnapshotFileName))
                                         {
                                             <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupRestore" asp-route-fileName="@job.LastSnapshotFileName" aria-label="Restore the last backup of @job.Name" data-tip="Restore">@MatUi.Icon("restore")</a>

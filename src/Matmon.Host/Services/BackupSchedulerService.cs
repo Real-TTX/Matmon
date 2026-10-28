@@ -16,13 +16,17 @@ public sealed class BackupSchedulerService : BackgroundService
         IMonitoringWorkspaceStore workspaceStore,
         MatmonRuntimeOptions runtimeOptions,
         CloudBackupClient cloudBackups,
-        ILogger<BackupSchedulerService> logger)
+        ILogger<BackupSchedulerService> logger,
+        Backup.SmbBackupRunner? smbBackups = null)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
         _cloudBackups = cloudBackups;
         _logger = logger;
+        _smbBackups = smbBackups;
     }
+
+    private readonly Backup.SmbBackupRunner? _smbBackups;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -58,6 +62,16 @@ public sealed class BackupSchedulerService : BackgroundService
             if (job.Destination == BackupDestination.Cloud)
             {
                 await RunCloudJobAsync(job, stoppingToken);
+                continue;
+            }
+
+            if (job.Destination == BackupDestination.Smb)
+            {
+                if (_smbBackups is { } smb)
+                {
+                    await smb.RunAsync(job, stoppingToken);
+                }
+
                 continue;
             }
 

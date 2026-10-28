@@ -12,11 +12,45 @@ public class BackupJobEditorModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly CloudBackupClient _cloudBackups;
+    private readonly Services.Backup.SmbBackupRunner _smb;
 
-    public BackupJobEditorModel(IMonitoringWorkspaceStore workspaceStore, CloudBackupClient cloudBackups)
+    public BackupJobEditorModel(IMonitoringWorkspaceStore workspaceStore, CloudBackupClient cloudBackups, Services.Backup.SmbBackupRunner smb)
     {
         _workspaceStore = workspaceStore;
         _cloudBackups = cloudBackups;
+        _smb = smb;
+    }
+
+    /// <summary>"Test the share": writes, lists, reads and deletes a small file there with what is in the form (a blank
+    /// password = the stored one) - the form stays as it was typed.</summary>
+    public async Task<IActionResult> OnPostTestSmbAsync(CancellationToken cancellationToken)
+    {
+        if (!MatmonSecurity.IsAdmin(User))
+        {
+            return Forbid();
+        }
+
+        CloudConnected = _cloudBackups.IsConnected;
+        var stored = JobId is Guid id ? _workspaceStore.FindBackupJob(id) : null;
+        var password = string.IsNullOrEmpty(Input.SmbPassword) ? stored?.SmbPassword : Input.SmbPassword;
+        var location = Services.Backup.SmbLocation.Parse(Input.SmbPath, Input.SmbUsername, password, Input.SmbDomain, out var problem);
+        if (location is null)
+        {
+            ErrorMessage = problem;
+            return Page();
+        }
+
+        var failure = await _smb.TestAsync(location, cancellationToken);
+        if (failure is null)
+        {
+            StatusMessage = $"{location.Display} works: Matmon wrote, listed, read back and deleted a test file there.";
+        }
+        else
+        {
+            ErrorMessage = $"{location.Display}: {failure}";
+        }
+
+        return Page();
     }
 
     /// <summary>True when this instance is linked to Matmon.Cloud - only then is the Cloud destination usable.</summary>
@@ -106,6 +140,12 @@ public class BackupJobEditorModel : PageModel
         {
             var sections = Input.Sections.ToSections();
             var schedule = BuildSchedule(Input);
+            if (Input.Destination == BackupDestination.Smb
+                && Services.Backup.SmbLocation.Parse(Input.SmbPath, Input.SmbUsername, null, Input.SmbDomain, out var smbProblem) is null)
+            {
+                ErrorMessage = smbProblem;
+                return Page();
+            }
             if (JobId is Guid jobId)
             {
                 var existing = _workspaceStore.FindBackupJob(jobId) ?? throw new InvalidOperationException("Backup job not found.");
@@ -117,6 +157,10 @@ public class BackupJobEditorModel : PageModel
                 existing.Destination = Input.Destination;
                 existing.RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100);
                 existing.Passphrase = Input.Destination == BackupDestination.Cloud ? Input.Passphrase : null; // blank = keep stored (UpdateBackupJob)
+                existing.SmbPath = Input.SmbPath;
+                existing.SmbUsername = Input.SmbUsername;
+                existing.SmbDomain = Input.SmbDomain;
+                existing.SmbPassword = Input.SmbPassword; // blank = keep stored (UpdateBackupJob)
                 _workspaceStore.UpdateBackupJob(existing);
                 StatusMessage = $"Backup job '{existing.Name}' updated.";
             }
@@ -131,6 +175,10 @@ public class BackupJobEditorModel : PageModel
                     Sections = sections,
                     Destination = Input.Destination,
                     Passphrase = Input.Destination == BackupDestination.Cloud ? Input.Passphrase : null,
+                    SmbPath = Input.SmbPath?.Trim(),
+                    SmbUsername = Input.SmbUsername?.Trim(),
+                    SmbDomain = Input.SmbDomain?.Trim(),
+                    SmbPassword = Input.SmbPassword,
                     RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100)
                 });
                 StatusMessage = $"Backup job '{created.Name}' created.";
@@ -182,6 +230,10 @@ public class BackupJobEditorModel : PageModel
             Enabled = job.Enabled,
             Destination = job.Destination,
             RetentionCount = job.RetentionCount,
+            SmbPath = job.SmbPath,
+            SmbUsername = job.SmbUsername,
+            SmbDomain = job.SmbDomain,
+            HasSmbPassword = !string.IsNullOrEmpty(job.SmbPassword) || !string.IsNullOrEmpty(job.ProtectedSmbPassword),
             ScheduleMode = mode,
             EveryHours = Math.Max(1, (int)Math.Ceiling((job.Schedule.EverySeconds ?? 3600) / 3600.0)),
             WeekDay = job.Schedule.DayOfWeek ?? DayOfWeek.Sunday,
@@ -262,6 +314,19 @@ public sealed class BackupJobEditorInput
     public string? Passphrase { get; set; }
 
     public int RetentionCount { get; set; } = 10;
+
+    /// <summary>SMB destination: <c>\\nas\share\folder</c>.</summary>
+    public string? SmbPath { get; set; }
+
+    public string? SmbUsername { get; set; }
+
+    /// <summary>Never prefilled; blank on save = keep the stored one.</summary>
+    public string? SmbPassword { get; set; }
+
+    public string? SmbDomain { get; set; }
+
+    /// <summary>A password is stored (the field then says "leave blank to keep").</summary>
+    public bool HasSmbPassword { get; set; }
 
     public BackupScheduleMode ScheduleMode { get; set; } = BackupScheduleMode.Hourly;
 

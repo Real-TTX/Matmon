@@ -5,6 +5,7 @@
     ViewData["Width"] = "narrow";
     var mode = Model.Input.ScheduleMode;
     var isCloud = Model.Input.Destination == BackupDestination.Cloud;
+    var isSmb = Model.Input.Destination == BackupDestination.Smb;
 }
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -39,6 +40,7 @@
                     <label class="mat-label" for="Input_Destination">Destination</label>
                     <select asp-for="Input.Destination" class="mat-select" data-backup-destination>
                         <option value="Local">Local disk</option>
+                        <option value="Smb">SMB share (NAS, file server)</option>
                         <option value="Cloud" disabled="@(!Model.CloudConnected)">Matmon.Cloud (off-site)@(Model.CloudConnected ? "" : " – connect first")</option>
                     </select>
                 </div>
@@ -51,6 +53,27 @@
                     <label class="mat-label" for="Input_Passphrase">Own passphrase <span class="mat-text-muted">(optional - otherwise the backup passphrase)</span></label>
                     <input asp-for="Input.Passphrase" type="password" class="mat-input" autocomplete="new-password" minlength="12" data-msg-range="Use at least 12 characters." placeholder="@(Model.JobId is null ? "min. 12 chars" : "leave blank to keep the current one")" />
                     <span class="mat-error" aria-live="polite"></span>
+                </div>
+                <div class="mat-field mat-field--full" data-smb-only hidden="@(!isSmb)">
+                    <label class="mat-label" for="Input_SmbPath">Share and folder</label>
+                    <input asp-for="Input.SmbPath" class="mat-input mat-mono" placeholder="\\nas\backup\matmon" autocomplete="off" />
+                    <span class="mat-hint">The folder is created when it is missing. Each run writes one file; the oldest beyond the retention count are removed - only this job's files.</span>
+                </div>
+                <div class="mat-field" data-smb-only hidden="@(!isSmb)">
+                    <label class="mat-label" for="Input_SmbUsername">User <span class="mat-text-muted">(empty = guest)</span></label>
+                    <input asp-for="Input.SmbUsername" class="mat-input" autocomplete="off" />
+                </div>
+                <div class="mat-field" data-smb-only hidden="@(!isSmb)">
+                    <label class="mat-label" for="Input_SmbPassword">Password</label>
+                    <input asp-for="Input.SmbPassword" type="password" class="mat-input" autocomplete="new-password" placeholder="@(Model.Input.HasSmbPassword ? "leave blank to keep the current one" : "")" />
+                    <input type="hidden" asp-for="Input.HasSmbPassword" />
+                </div>
+                <div class="mat-field" data-smb-only hidden="@(!isSmb)">
+                    <label class="mat-label" for="Input_SmbDomain">Domain / workgroup <span class="mat-text-muted">optional</span></label>
+                    <input asp-for="Input.SmbDomain" class="mat-input" autocomplete="off" />
+                </div>
+                <div class="mat-field mat-self-end" data-smb-only hidden="@(!isSmb)">
+                    <button type="submit" class="mat-btn mat-btn--secondary" asp-page-handler="TestSmb" formnovalidate>@MatUi.Icon("activity")<span>Test the share</span></button>
                 </div>
                 <div class="mat-field mat-field--full">
                     <label class="mat-switch">
@@ -95,7 +118,7 @@
 
     <div class="mat-alert mat-alert--info" role="status" data-cloud-note hidden="@(!isCloud)">
         @MatUi.Icon("info")
-        <div class="mat-alert__body">Cloud backups store <strong>configuration only</strong> (no telemetry, local users, map images or MIBs); Matmon.Cloud keeps the newest 10.</div>
+        <div class="mat-alert__body">Cloud backups store <strong>configuration only</strong> (no history, local users, map images, MIBs or syslog messages); Matmon.Cloud keeps the newest few of each kind - your plan decides how many.</div>
     </div>
 
     <section class="mat-card" data-local-only hidden="@isCloud">
@@ -103,20 +126,20 @@
         <div class="mat-card__body">
             <fieldset class="mat-field mat-fieldset">
                 <legend class="mat-sr-only">Sections stored in the backup</legend>
+                @* Generated from the catalog, so a new section can never be missing here - a job saved from a hand-written
+                   list silently lost every section the list did not have (map images and MIBs once did). Checkbox before its
+                   hidden "false" partner: with both posted the binder takes the first value. *@
                 <div class="mat-checks mat-checks--inline">
-                    <label class="mat-check"><input asp-for="Input.Sections.Topology" /><span class="mat-check__text">Topology</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Templates" /><span class="mat-check__text">Templates</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.SensorDefinitions" /><span class="mat-check__text">Sensor defs</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Notifications" /><span class="mat-check__text">Notifications</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Maps" /><span class="mat-check__text">Maps</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Users" /><span class="mat-check__text">Users</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Alerts" /><span class="mat-check__text">Alerts</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.SensorHistory" /><span class="mat-check__text">History</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Events" /><span class="mat-check__text">Events</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Statistics" /><span class="mat-check__text">Statistics</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.BackupJobs" /><span class="mat-check__text">Backup jobs</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.MapAssets" /><span class="mat-check__text">Map images</span></label>
-                    <label class="mat-check"><input asp-for="Input.Sections.Mibs" /><span class="mat-check__text">MIBs</span></label>
+                    @foreach (var choice in Model.SectionChoices)
+                    {
+                        var key = choice.Section.ToString();
+                        var ticked = (bool)(typeof(Matmon.Host.Ui.BackupSectionSelectionModel).GetProperty(key)?.GetValue(Model.Input.Sections) ?? false);
+                        <label class="mat-check" title="@choice.Description">
+                            <input type="checkbox" name="Input.Sections.@key" value="true" checked="@ticked" />
+                            <span class="mat-check__text">@choice.Label</span>
+                        </label>
+                        <input type="hidden" name="Input.Sections.@key" value="false" />
+                    }
                 </div>
             </fieldset>
         </div>

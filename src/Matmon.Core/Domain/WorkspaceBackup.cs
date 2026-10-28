@@ -48,7 +48,10 @@ public enum WorkspaceBackupSection
 public enum BackupDestination
 {
     Local = 0,
-    Cloud = 1
+    Cloud = 1,
+
+    /// <summary>A Windows / SMB share - a NAS, a file server: off the machine, in the house.</summary>
+    Smb = 2
 }
 
 /// <summary>Well-known section masks shared across the cloud-backup paths (Config tab, scheduler, wizard restore).</summary>
@@ -107,6 +110,24 @@ public sealed class WorkspaceBackupJob
 
     public DateTimeOffset? NextRunUtc { get; set; }
 
+    /// <summary>SMB destination: the share and folder, <c>\\nas\backup\matmon</c> (or <c>//nas/backup/matmon</c>).</summary>
+    public string? SmbPath { get; set; }
+
+    /// <summary>SMB user (empty = a guest share).</summary>
+    public string? SmbUsername { get; set; }
+
+    /// <summary>SMB domain / workgroup (optional).</summary>
+    public string? SmbDomain { get; set; }
+
+    /// <summary>SMB password - plaintext only in memory, DataProtection-sealed at rest in <see cref="ProtectedSmbPassword"/>.</summary>
+    [JsonIgnore]
+    public string? SmbPassword { get; set; }
+
+    public string? ProtectedSmbPassword { get; set; }
+
+    [JsonIgnore]
+    public bool SmbPasswordHydrationFailed { get; set; }
+
     public string? LastStatus { get; set; }
 
     public string? LastMessage { get; set; }
@@ -130,6 +151,12 @@ public sealed class WorkspaceBackupJob
             Passphrase = Passphrase,
             ProtectedPassphrase = ProtectedPassphrase,
             PassphraseHydrationFailed = PassphraseHydrationFailed,
+            SmbPath = SmbPath,
+            SmbUsername = SmbUsername,
+            SmbDomain = SmbDomain,
+            SmbPassword = SmbPassword,
+            ProtectedSmbPassword = ProtectedSmbPassword,
+            SmbPasswordHydrationFailed = SmbPasswordHydrationFailed,
             LastRunUtc = LastRunUtc,
             NextRunUtc = NextRunUtc,
             LastStatus = LastStatus,

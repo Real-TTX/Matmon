@@ -1,0 +1,66 @@
+@page "/system/backup/smb/{jobId:guid}"
+@model Matmon.Host.Pages.BackupSmbFilesModel
+@{
+    var job = Model.Job!;
+    ViewData["Title"] = job.Name;
+    ViewData["PageSub"] = job.SmbPath;
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Backup", "/Config?tab=backup"), new BreadcrumbItem(job.Name) };
+}
+
+<partial name="_SystemTabs" model="@("backup")" />
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+<section class="mat-card">
+    <div class="mat-card__head">@MatUi.Icon("folder-open")<h2 class="mat-card__title">On the share</h2><span class="mat-text-muted mm-push-end">@Model.Files.Count</span></div>
+    @if (Model.Problem is not null)
+    {
+        <div class="mat-card__body">
+            <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">The share cannot be read: @Model.Problem</div></div>
+        </div>
+    }
+    else if (Model.Files.Count == 0)
+    {
+        <div class="mat-card__body"><p class="mat-muted">No backup of this job on the share yet.</p></div>
+    }
+    else
+    {
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Backups on the share</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">File</th>
+                        <th scope="col">Size</th>
+                        <th scope="col">Written</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var file in Model.Files)
+                    {
+                        <tr>
+                            <td data-label="File" class="mat-table__primary mat-mono">@file.Name</td>
+                            <td data-label="Size" class="mat-mono">@($"{file.Size / 1024.0:0.#} KB")</td>
+                            <td data-label="Written" class="mat-mono">@(file.ModifiedUtc?.ToDisplay().ToString("g") ?? "-")</td>
+                            <td class="mat-table__cell-actions">
+                                <form method="post" asp-page-handler="Copy" asp-route-jobId="@Model.JobId">
+                                    <input type="hidden" name="fileName" value="@file.Name" />
+                                    <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm">@MatUi.Icon("restore")<span>Restore from it</span></button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="mat-card__body"><p class="mat-hint">"Restore from it" copies the file to this machine and opens the restore, where you choose the sections.</p></div>
+    }
+</section>
+
+<div class="mat-btn-row">
+    <a class="mat-btn mat-btn--secondary" asp-page="/Config" asp-route-tab="backup">@MatUi.Icon("back")<span>Back</span></a>
+</div>

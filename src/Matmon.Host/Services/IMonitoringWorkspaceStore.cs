@@ -323,6 +323,9 @@ public interface IMonitoringWorkspaceStore
 
     bool UpdateBackupJob(WorkspaceBackupJob job);
 
+    /// <summary>Records a run of a job whose snapshot went to Matmon.Cloud or an SMB share (schedule + status, no local file).</summary>
+    void RecordRemoteBackupJobRun(Guid jobId, bool success, string message, long? bytes);
+
     bool DeleteBackupJob(Guid jobId);
 
     IReadOnlyList<WorkspaceBackupSnapshotInfo> GetBackupSnapshots(int take = 50);

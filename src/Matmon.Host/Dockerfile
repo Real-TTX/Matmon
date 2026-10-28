@@ -73,7 +73,7 @@ RUN apt-get update \
     && dpkg -i packages-microsoft-prod.deb \
     && rm packages-microsoft-prod.deb \
     && apt-get update \
-    && apt-get install -y --no-install-recommends openssh-client sshpass powershell gss-ntlmssp \
+    && apt-get install -y --no-install-recommends openssh-client sshpass smbclient powershell gss-ntlmssp \
     && pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module PSWSMan -RequiredVersion 2.3.1 -Scope AllUsers -Force -AllowClobber; Install-WSMan" \
     && rm -rf /var/lib/apt/lists/*
 ENV ASPNETCORE_URLS=http://+:8099
