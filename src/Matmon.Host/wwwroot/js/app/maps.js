@@ -816,7 +816,8 @@ function initializeMapDesigner() {
     "12": "MultiGraph",
     "13": "Topology",
     "14": "Honeycomb",
-    "15": "Timeline"
+    "15": "Timeline",
+    "16": "Table"
   };
   const kindLabels = {
     "0": "Text",
@@ -835,6 +836,7 @@ function initializeMapDesigner() {
     "13": "Topology",
     "14": "Honeycomb",
     "15": "Timeline",
+    "16": "Table",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -850,7 +852,8 @@ function initializeMapDesigner() {
     MultiGraph: "Multi-graph",
     Topology: "Topology",
     Honeycomb: "Honeycomb",
-    Timeline: "Timeline"
+    Timeline: "Timeline",
+    Table: "Table"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -861,6 +864,7 @@ function initializeMapDesigner() {
     Image: "Upload a picture, then place status pins on it.",
     GeoMap: "The shipped offline world map - pins are placed by latitude/longitude.",
     Honeycomb: "Every sensor under the target as one cell in its state colour - hundreds at a glance.",
+    Table: "The sensors under the target with their machine, reading and last check. Ordered like a sensor list.",
     Timeline: "A state band per sensor over the time window (up to 72 h): when it went red and for how long.",
     Topology: "Place devices, then join them with links - give a link the port's interface sensor and it shows the traffic and turns red when the port goes down.",
     "0": "Text tiles do not need a target.",
@@ -1731,7 +1735,8 @@ function initializeMapDesigner() {
     const kind = normalizeKind(panel.querySelector("[data-map-property-kind]")?.value || "Element");
     const isText = kind === "Text" || kind === "Heading";
     const isGraph = kind === "Graph";
-    const isList = kind === "SensorList";
+    // A table orders and limits its rows exactly like a sensor list.
+    const isList = kind === "SensorList" || kind === "Table";
     const isRows = isList || kind === "AlertFeed";
     const isSla = kind === "Sla";
     const isSeries = kind === "MultiGraph";
@@ -1852,7 +1857,7 @@ function initializeMapDesigner() {
   };
 
   // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
-  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline"]);
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table"]);
 
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {

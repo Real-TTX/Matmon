@@ -13,7 +13,7 @@
     var isCollection = tile.Kind is MonitoringMapTileKind.SensorList or MonitoringMapTileKind.AlertFeed
         or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
         or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology
-        or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline;
+        or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline or MonitoringMapTileKind.Table;
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
     // screenshot/print is correct; initializeMapClocks then ticks it.
@@ -213,6 +213,50 @@
                     </li>
                 }
             </ul>
+        }
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Table && Model.Rows is { } tableRows)
+    {
+        @* The rows carry the same hooks as a list's (label / small / value / time), so the live patch needs nothing new. *@
+        @if (tableRows.Count == 0)
+        {
+            <p class="map-tile-rows-empty">No sensors</p>
+        }
+        else
+        {
+            <div class="map-table-wrap">
+                <table class="mm-map-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Sensor</th>
+                            <th scope="col">Reading</th>
+                            <th scope="col">Checked</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in tableRows)
+                        {
+                            <tr class="map-tile-row" data-state="@row.Tone">
+                                <td data-label="Sensor">
+                                    <span class="map-tile-row-label">
+                                        @if (row.Href is not null && !Model.Editable)
+                                        {
+                                            <a class="map-tile-row-link" href="@row.Href"><strong>@row.Label</strong></a>
+                                        }
+                                        else
+                                        {
+                                            <strong>@row.Label</strong>
+                                        }
+                                        <small>@row.Detail</small>
+                                    </span>
+                                </td>
+                                <td data-label="Reading"><span class="map-tile-row-value">@row.Value</span></td>
+                                <td data-label="Checked"><span class="map-tile-row-time">@row.TimeText</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         }
     }
     else if (Model.Rows is { } rows)

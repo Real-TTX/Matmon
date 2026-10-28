@@ -639,6 +639,49 @@ a.map-hex:focus-visible {
   filter: brightness(1.25);
 }
 
+/* ---- Table: the sensors under a target, read across ---- */
+.map-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.mm-map-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(var(--map-type, 0.95rem) * 0.8);
+  font-variant-numeric: tabular-nums;
+}
+.mm-map-table th {
+  padding: 0.2em 0.5em;
+  color: var(--mat-text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  text-align: start;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mm-map-table td {
+  padding: 0.3em 0.5em;
+  border-top: 1px solid color-mix(in srgb, var(--mat-border) 70%, transparent);
+  vertical-align: middle;
+}
+.mm-map-table .map-tile-row {
+  display: table-row;
+}
+.mm-map-table .map-tile-row > td:first-child {
+  border-inline-start: 3px solid var(--mat-text-faint);
+}
+.mm-map-table .map-tile-row[data-state="ok"] > td:first-child { border-inline-start-color: var(--mat-success); }
+.mm-map-table .map-tile-row[data-state="warning"] > td:first-child { border-inline-start-color: var(--mat-warning); }
+.mm-map-table .map-tile-row[data-state="error"] > td:first-child { border-inline-start-color: var(--mat-danger); }
+.mm-map-table .map-tile-row-label {
+  display: grid;
+}
+.mm-map-table .map-tile-row-label small,
+.mm-map-table .map-tile-row-time {
+  color: var(--mat-text-muted);
+}
+
 /* ---- State timeline: a band per sensor, its stretches placed by --seg-x / --seg-w (data) ---- */
 .map-timeline {
   display: grid;

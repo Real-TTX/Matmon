@@ -49,6 +49,7 @@ public static class MapTileRender
             MonitoringMapTileKind.Topology => "Topology",
             MonitoringMapTileKind.Honeycomb => "Honeycomb",
             MonitoringMapTileKind.Timeline => "Timeline",
+            MonitoringMapTileKind.Table => "Table",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
@@ -72,6 +73,7 @@ public static class MapTileRender
             MonitoringMapTileKind.Topology => "network",
             MonitoringMapTileKind.Honeycomb => "grid",
             MonitoringMapTileKind.Timeline => "activity",
+            MonitoringMapTileKind.Table => "list",
             _ => "sensor"
         };
     }

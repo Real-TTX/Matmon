@@ -42,6 +42,7 @@ public static class BreadcrumbBuilder
             "/monitoring/host/new" => [new("Sensors", "/Monitoring"), new("New host")],
             "/monitoring/element" => [new("Sensors", "/Monitoring"), new(GetLeafTitle(title, "Edit"))],
             "/paused" => [new("Alerts", "/Alerts"), new("Paused sensors")],
+            "/maps/generate" => [new("Maps", "/Maps"), new("Generate a map")],
             "/maps/status" => [new("Maps", "/Maps"), new("Status pages")],
             "/maps/edit" => [new("Maps", "/Maps"), new(GetLeafTitle(title, "Map"))],
 

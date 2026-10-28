@@ -463,7 +463,11 @@ public enum MonitoringMapTileKind
     Honeycomb = 14,
 
     /// <summary>A state band per sensor over the graph window: when did it go red, for how long, how often.</summary>
-    Timeline = 15
+    Timeline = 15,
+
+    /// <summary>The sensors under the target as a table: state, sensor, machine, reading, last check. The Sensor list's
+    /// ordering options apply.</summary>
+    Table = 16
 }
 
 public enum MonitoringMapListMode
@@ -563,6 +567,7 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Topology => (4, 3, 8, 5),
             MonitoringMapTileKind.Honeycomb => (2, 2, 4, 3),
             MonitoringMapTileKind.Timeline => (4, 2, 8, 3),
+            MonitoringMapTileKind.Table => (4, 2, 6, 4),
             _ => (2, 2, 2, 2)
         };
     }

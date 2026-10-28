@@ -436,6 +436,7 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Topology
              or MonitoringMapTileKind.Honeycomb
              or MonitoringMapTileKind.Timeline
+             or MonitoringMapTileKind.Table
              or MonitoringMapTileKind.MultiGraph;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
@@ -955,14 +956,16 @@ public sealed class MapDisplayProvider
                 .ThenBy(entry => entry.Sensor.Name, StringComparer.OrdinalIgnoreCase)
         };
 
+        // A table says which MACHINE a sensor is on and when it was last checked; a list names the channel it ranks by.
+        var table = tile.Kind == MonitoringMapTileKind.Table;
         var rows = ordered
             .Take(limit)
             .Select(entry => new MapTileRowDto(
                 entry.Sensor.Name,
-                entry.Channel?.Label ?? entry.Sensor.SensorTypeKey,
+                table ? MachineName(entry.Sensor) : entry.Channel?.Label ?? entry.Sensor.SensorTypeKey,
                 entry.Observation is null ? string.Empty : FormatObservationValue(entry.Observation, entry.Channel),
                 MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(entry.State)),
-                null) { ElementId = entry.Sensor.Id })
+                table && entry.Observation is { } checkedAt ? FormatRelative(checkedAt.TimestampUtc) : null) { ElementId = entry.Sensor.Id })
             .ToArray();
 
         var severity = entries
@@ -1483,6 +1486,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Topology => "Topology",
             MonitoringMapTileKind.Honeycomb => "Honeycomb",
             MonitoringMapTileKind.Timeline => "Timeline",
+            MonitoringMapTileKind.Table => "Table",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };

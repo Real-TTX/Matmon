@@ -1,0 +1,40 @@
+@page "/maps/generate"
+@model Matmon.Host.Pages.MapGenerateModel
+@{
+    ViewData["Title"] = "Generate a map";
+    ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Maps", "/Maps"), new BreadcrumbItem("Generate a map") };
+}
+
+<form method="post" class="mat-form" novalidate>
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("sparkles")<h2 class="mat-card__title">From the tree</h2></div>
+        <div class="mat-card__body">
+            @if (!string.IsNullOrWhiteSpace(Model.FormError))
+            {
+                <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+            }
+            <div class="mat-form__grid">
+                <div class="mat-field">
+                    <label class="mat-label" asp-for="Name">Name</label>
+                    <input asp-for="Name" class="mat-input" maxlength="120" placeholder="Office network" />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="picker-map-generate-trigger">About</label>
+                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "TargetToken", DomId = "picker-map-generate", SelectedValue = Model.TargetToken, AllowTags = true, AllowClear = false, Placeholder = "Select an element or a tag…", Options = Model.PickerOptions })" />
+                    <span class="mat-hint">A probe, folder or host with everything below it, or every element with a tag.</span>
+                </div>
+                <div class="mat-field mat-field--full">
+                    <label class="mat-switch"><input asp-for="Overview" type="checkbox" /><span class="mat-switch__track"></span><span>An overview row: a heading, every sensor as a honeycomb, the open alerts</span></label>
+                </div>
+                <div class="mat-field mat-field--full">
+                    <label class="mat-switch"><input asp-for="TilePerMachine" type="checkbox" /><span class="mat-switch__track"></span><span>A summary tile per machine (at most @Matmon.Host.Services.MapGenerator.MaxMachineTiles)</span></label>
+                </div>
+            </div>
+            <p class="mat-hint">The designer opens on the new map - move, remove or add whatever you like.</p>
+        </div>
+    </section>
+    <div class="mat-btn-row">
+        <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("sparkles")<span>Generate</span></button>
+        <a class="mat-btn mat-btn--secondary" asp-page="/Maps">@MatUi.Icon("back")<span>Back</span></a>
+    </div>
+</form>
