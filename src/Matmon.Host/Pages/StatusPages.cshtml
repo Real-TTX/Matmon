@@ -1,0 +1,310 @@
+@page "/maps/status"
+@model Matmon.Host.Pages.StatusPagesModel
+@using Matmon.Core.Domain
+@{
+    var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
+    var current = Model.Current;
+    if (Model.Preview is not null && current is not null)
+    {
+        ViewData["Title"] = current.Name;
+        ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Maps", "/Maps"), new BreadcrumbItem("Status pages", "/maps/status"), new BreadcrumbItem(current.Name) };
+    }
+    else if (Model.Editing)
+    {
+        ViewData["Title"] = Model.IsNew ? "New status page" : current?.Name ?? "Status page";
+        ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("Maps", "/Maps"), new BreadcrumbItem("Status pages", "/maps/status"), new BreadcrumbItem((string)ViewData["Title"]!) };
+    }
+    else
+    {
+        ViewData["Title"] = "Status pages";
+    }
+}
+
+@section TopbarActions {
+    @if (Model.Preview is not null && current is not null)
+    {
+    <div class="mat-topbar__actions">
+        @if (current.PublicEnabled)
+        {
+            <a class="mat-btn mat-btn--ghost mat-btn--icon" href="@Model.PublicUrl(current)" target="_blank" rel="noopener" aria-label="Open the public page" data-tip="Public page">@MatUi.Icon("external")</a>
+        }
+        @if (canManage)
+        {
+            <a class="mat-btn mat-btn--ghost mat-btn--icon" asp-page="/StatusPages" asp-route-edit="@current.Id" asp-route-view="" aria-label="Edit @current.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
+        }
+    </div>
+    }
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.Preview is not null && current is not null)
+{
+
+    @if (!current.PublicEnabled)
+    {
+        <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("info")<div class="mat-alert__body">The public link is off - only signed-in users see this page.</div></div>
+    }
+
+    <partial name="_StatusPageBody" model="Model.Preview" />
+
+    @if (canManage)
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("message-square")<h2 class="mat-card__title">Incident messages</h2></div>
+            <div class="mat-card__body">
+                @if (!string.IsNullOrWhiteSpace(Model.FormError))
+                {
+                    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+                }
+                @foreach (var incident in current.Incidents.Where(incident => incident.IsOpen).OrderByDescending(incident => incident.CreatedUtc))
+                {
+                    <form method="post" asp-page-handler="Update" asp-route-id="@current.Id" asp-route-incidentId="@incident.Id" class="mat-form mm-status-update-form" novalidate>
+                        <h3 class="mm-status-form-title">@incident.Title <span class="@MatUi.PillClass("warning")">@StatusPageRules.PhaseLabel(incident.Phase)</span></h3>
+                        <div class="mat-form__grid">
+                            <div class="mat-field">
+                                <label class="mat-label" for="phase-@incident.Id">Phase</label>
+                                <select id="phase-@incident.Id" name="phase" class="mat-select">
+                                    @foreach (var (value, label) in Matmon.Host.Pages.StatusPagesModel.Phases)
+                                    {
+                                        <option value="@value" selected="@(value == (incident.Phase == StatusIncidentPhase.Investigating ? StatusIncidentPhase.Identified : incident.Phase))">@label</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mat-field mat-field--full">
+                                <label class="mat-label" for="message-@incident.Id">Update</label>
+                                <textarea id="message-@incident.Id" name="message" class="mat-textarea" rows="2" maxlength="2000" required data-msg-required="Say what is happening."></textarea>
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                        </div>
+                        <div class="mat-btn-row">
+                            <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("upload")<span>Post update</span></button>
+                            <button type="submit" class="mat-btn mat-btn--danger" formaction="@Url.Page("/StatusPages", "DeleteIncident", new { id = current.Id, incidentId = incident.Id })" formnovalidate data-confirm="Delete this incident and its updates?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
+                        </div>
+                    </form>
+                }
+
+                <form method="post" asp-page-handler="Incident" asp-route-id="@current.Id" class="mat-form" novalidate>
+                    <h3 class="mm-status-form-title">New incident</h3>
+                    <div class="mat-form__grid">
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="Incident.Title">Title</label>
+                            <input asp-for="Incident.Title" class="mat-input" maxlength="160" required placeholder="E-mail delivery delayed" data-msg-required="Give the incident a title." />
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="Incident.Impact">Impact</label>
+                            <select asp-for="Incident.Impact" class="mat-select">
+                                @foreach (var (value, label) in Matmon.Host.Pages.StatusPagesModel.Impacts)
+                                {
+                                    <option value="@value">@label</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mat-field">
+                            <label class="mat-label" asp-for="Incident.Phase">Phase</label>
+                            <select asp-for="Incident.Phase" class="mat-select">
+                                @foreach (var (value, label) in Matmon.Host.Pages.StatusPagesModel.Phases)
+                                {
+                                    <option value="@value">@label</option>
+                                }
+                            </select>
+                        </div>
+                        @if (current.Components.Count > 0)
+                        {
+                            <fieldset class="mat-field mat-field--full mat-fieldset">
+                                <legend class="mat-legend">Affects</legend>
+                                <div class="mat-checks mat-checks--inline">
+                                    @foreach (var component in current.Components)
+                                    {
+                                        <label class="mat-check">
+                                            <input type="checkbox" name="Incident.ComponentIds" value="@component.Id" checked="@Model.Incident.ComponentIds.Contains(component.Id)" />
+                                            <span class="mat-check__text">@component.Name</span>
+                                        </label>
+                                    }
+                                </div>
+                            </fieldset>
+                        }
+                        <div class="mat-field mat-field--full">
+                            <label class="mat-label" asp-for="Incident.Message">Message</label>
+                            <textarea asp-for="Incident.Message" class="mat-textarea" rows="3" maxlength="2000" required placeholder="We are looking into delays in outgoing e-mail." data-msg-required="Say what is happening."></textarea>
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                    </div>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("plus")<span>Post incident</span></button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    }
+}
+else if (Model.Editing)
+{
+    <form method="post" asp-page-handler="Save" asp-route-edit="@Model.Edit" class="mat-form" novalidate>
+        <input type="hidden" asp-for="Input.Id" />
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Status page</h2></div>
+            <div class="mat-card__body">
+                @if (!string.IsNullOrWhiteSpace(Model.FormError))
+                {
+                    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+                }
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Name">Name</label>
+                        <input asp-for="Input.Name" class="mat-input" required maxlength="120" placeholder="Example GmbH status" data-msg-required="Give the status page a name." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.UptimeDays">Daily bars</label>
+                        <select asp-for="Input.UptimeDays" class="mat-select">
+                            @foreach (var days in StatusPageRules.UptimeDayChoices)
+                            {
+                                <option value="@days">Last @days days</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-label" asp-for="Input.Description">Description <span class="mat-text-muted">optional</span></label>
+                        <input asp-for="Input.Description" class="mat-input" maxlength="200" placeholder="Services for our customers" />
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="Input.ShowMaintenance" type="checkbox" /><span class="mat-switch__track"></span><span>Announce maintenance windows that cover a component</span></label>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-switch"><input asp-for="Input.PublicEnabled" type="checkbox" /><span class="mat-switch__track"></span><span>Public link - anyone with the address can open it, without signing in</span></label>
+                    </div>
+                </div>
+                @if (current is not null)
+                {
+                    <div class="mat-field">
+                        <span class="mat-label">Public address</span>
+                        <div class="mat-row">
+                            <code class="mat-mono" id="status-public-url">@Model.PublicUrl(current)</code>
+                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-copy="#status-public-url">@MatUi.Icon("copy")<span>Copy</span></button>
+                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm" formaction="@Url.Page("/StatusPages", "Rotate", new { id = current.Id })" formnovalidate data-confirm="Make a new address? The old one stops working at once." data-confirm-ok="New address">@MatUi.Icon("refresh")<span>New address</span></button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("layers")<h2 class="mat-card__title">Components</h2></div>
+            <div class="mat-table-wrap">
+                <table class="mat-table mm-status-editor">
+                    <caption class="mat-sr-only">Components</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Group</th>
+                            <th scope="col">Measured by</th>
+                            <th scope="col">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var index = 0; index < Model.Input.Components.Count; index++)
+                        {
+                            var row = Model.Input.Components[index];
+                            <tr>
+                                <td data-label="Name">
+                                    <input type="hidden" name="Input.Components[@index].Id" value="@row.Id" />
+                                    <input name="Input.Components[@index].Name" value="@row.Name" class="mat-input" maxlength="80" placeholder="@(index < Model.Input.Components.Count - Matmon.Host.Pages.StatusPagesModel.BlankComponentRows ? "" : "New component")" aria-label="Component name" />
+                                </td>
+                                <td data-label="Group">
+                                    <input name="Input.Components[@index].Group" value="@row.Group" class="mat-input" maxlength="60" placeholder="optional" aria-label="Group" />
+                                </td>
+                                <td data-label="Measured by">
+                                    <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Components[{index}].TargetToken", DomId = $"picker-status-component-{index}", SelectedValue = row.TargetToken, AllowTags = true, Placeholder = "Element or tag", Options = Model.PickerOptions })" />
+                                </td>
+                                <td data-label="Description">
+                                    <input name="Input.Components[@index].Description" value="@row.Description" class="mat-input" maxlength="160" placeholder="optional" aria-label="Description" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="mat-card__body">
+                <p class="mat-hint">Every sensor under the element (or with the tag) counts for the component. Readers see only the component's name - never a sensor, a host or an address. Save to get more empty rows.</p>
+            </div>
+        </section>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
+            <a class="mat-btn mat-btn--secondary" asp-page="/StatusPages" asp-route-edit="" asp-route-view="@current?.Id">@MatUi.Icon("back")<span>Back</span></a>
+            @if (current is not null)
+            {
+                <span class="mat-btn-row__spacer"></span>
+                <button type="submit" class="mat-btn mat-btn--danger" formaction="@Url.Page("/StatusPages", "Delete", new { id = current.Id })" formnovalidate data-confirm="Delete this status page? Its public address stops working." data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
+            }
+        </div>
+    </form>
+}
+else
+{
+    <partial name="_MapsTabs" model="@("status")" />
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("activity")<h2 class="mat-card__title">Status pages</h2><span class="mat-text-muted mm-push-end">@Model.Rows.Count</span></div>
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="mat-card__body">
+                <div class="mat-empty">
+                    <div class="mat-empty__icon">@MatUi.Icon("activity")</div>
+                    <div class="mat-empty__title">No status page yet</div>
+                    <p>A public page that tells the people using your services what works, with incident messages and maintenance.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Status pages</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Components</th>
+                            <th scope="col">Now</th>
+                            <th scope="col">Public link</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Rows)
+                        {
+                            <tr>
+                                <td data-label="Name" class="mat-table__primary"><a asp-page="/StatusPages" asp-route-view="@row.Page.Id">@row.Page.Name</a></td>
+                                <td data-label="Components">@row.Page.Components.Count</td>
+                                <td data-label="Now"><span class="@MatUi.PillClass(StatusPageRules.Tone(row.Overall))">@row.OverallText</span></td>
+                                <td data-label="Public link">
+                                    @if (row.Page.PublicEnabled)
+                                    {
+                                        <a href="@Model.PublicUrl(row.Page)" target="_blank" rel="noopener">Open</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="mat-text-muted">Off</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+    @if (canManage)
+    {
+        <div class="mat-btn-row">
+            <a class="mat-btn mat-btn--primary" asp-page="/StatusPages" asp-route-edit="new">@MatUi.Icon("plus")<span>Add a status page</span></a>
+        </div>
+    }
+}

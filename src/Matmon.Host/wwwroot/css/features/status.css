@@ -1,0 +1,175 @@
+/* Status pages (Maps > Status pages, and the anonymous /status/{token}): the headline, the components with their
+   daily bars, maintenance and incidents. Colours only from the toolkit's tokens, tones by data-state / data-tone. */
+
+.mm-status {
+  display: grid;
+  gap: var(--mat-space-4);
+}
+
+.mm-status-banner {
+  --mm-status-tone: var(--mat-text-faint);
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-3);
+  padding: var(--mat-space-4) var(--mat-space-5);
+  border: 1px solid color-mix(in srgb, var(--mm-status-tone) 45%, transparent);
+  border-radius: var(--mat-radius-lg, var(--mat-radius));
+  background: color-mix(in srgb, var(--mm-status-tone) 12%, var(--mat-surface));
+}
+.mm-status-banner > .mat-icon {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--mm-status-tone);
+}
+.mm-status-banner__text {
+  display: grid;
+  gap: 0.15rem;
+}
+.mm-status-banner__text strong {
+  font-size: var(--mat-fs-lg, 1.2rem);
+  line-height: var(--mat-lh-tight);
+}
+.mm-status-banner__text small {
+  color: var(--mat-text-muted);
+}
+.mm-status-banner[data-state="ok"] { --mm-status-tone: var(--mat-success); }
+.mm-status-banner[data-state="info"] { --mm-status-tone: var(--mat-info, var(--mat-accent)); }
+.mm-status-banner[data-state="warning"] { --mm-status-tone: var(--mat-warning); }
+.mm-status-banner[data-state="error"] { --mm-status-tone: var(--mat-danger); }
+
+.mm-status-components {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mm-status-component {
+  display: grid;
+  gap: var(--mat-space-2);
+  padding: var(--mat-space-4) var(--mat-space-5);
+}
+.mm-status-component + .mm-status-component {
+  border-top: 1px solid var(--mat-border);
+}
+.mm-status-component__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mat-space-3);
+}
+.mm-status-component__name {
+  display: grid;
+  min-width: 0;
+}
+.mm-status-component__name small {
+  color: var(--mat-text-muted);
+}
+
+/* One bar per day. Thin and close together, so 90 days fit a phone; each says its date and figure on hover. */
+.mm-status-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 2rem;
+}
+.mm-status-bars > span {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 2px;
+  background: var(--mat-border);
+}
+.mm-status-bars > span[data-tone="ok"] { background: var(--mat-success); }
+.mm-status-bars > span[data-tone="warning"] { background: var(--mat-warning); }
+.mm-status-bars > span[data-tone="error"] { background: var(--mat-danger); }
+.mm-status-bars > span:hover { opacity: 0.7; }
+.mm-status-bars__legend {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--mat-space-2);
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm, 0.85rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-status-updates,
+.mm-status-maintenance,
+.mm-status-past {
+  display: grid;
+  gap: var(--mat-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mm-status-maintenance,
+.mm-status-past {
+  padding: var(--mat-space-4) var(--mat-space-5);
+}
+.mm-status-updates li,
+.mm-status-past li {
+  display: grid;
+  gap: 0.15rem;
+}
+.mm-status-updates time,
+.mm-status-past small,
+.mm-status-maintenance small {
+  color: var(--mat-text-muted);
+  font-size: var(--mat-fs-sm, 0.85rem);
+}
+.mm-status-maintenance li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mat-space-3);
+}
+.mm-status-maintenance li > div {
+  display: grid;
+}
+
+/* The admin side: incident forms one under the other, each headed by what it is about. */
+.mm-status-form-title {
+  display: flex;
+  align-items: center;
+  gap: var(--mat-space-2);
+  margin: 0 0 var(--mat-space-3);
+  font-size: var(--mat-fs-md, 1rem);
+}
+.mm-status-update-form {
+  padding-bottom: var(--mat-space-4);
+  margin-bottom: var(--mat-space-4);
+  border-bottom: 1px solid var(--mat-border);
+}
+
+/* The anonymous page: a centred column with the page's own name above it. */
+.mm-status-public {
+  min-height: 100vh;
+  padding: var(--mat-space-6) var(--mat-space-4) var(--mat-space-8);
+  background: var(--mat-bg);
+  color: var(--mat-text);
+}
+.mm-status-public__column {
+  display: grid;
+  gap: var(--mat-space-5);
+  max-width: 52rem;
+  margin: 0 auto;
+}
+.mm-status-public__head h1 {
+  margin: 0;
+  font-size: var(--mat-fs-xl, 1.6rem);
+  text-wrap: balance;
+}
+.mm-status-public__head p {
+  margin: var(--mat-space-1) 0 0;
+  color: var(--mat-text-muted);
+}
+.mm-status-public__foot {
+  color: var(--mat-text-faint);
+  font-size: var(--mat-fs-sm, 0.85rem);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .mm-status-bars { gap: 1px; height: 1.6rem; }
+  .mm-status-component,
+  .mm-status-maintenance,
+  .mm-status-past { padding: var(--mat-space-3) var(--mat-space-4); }
+}

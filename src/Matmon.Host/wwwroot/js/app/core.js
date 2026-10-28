@@ -15,6 +15,7 @@ const monitoringSizeStorageKey = "matmon-monitoring-size";
 const featureStarters = [
   "initializePwa", // first: it watches the connection, and the live refreshes below start fetching at once
   "initializeTabHash",
+  "initializeStatusRefresh",
   "initializeMonitoringTree",
   "initializeTreeContextMenu",
   "initializeMonitoringSizeToggle",

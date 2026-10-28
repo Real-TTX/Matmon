@@ -77,6 +77,16 @@ public interface ITelemetryRepository
 
     int PruneStatistics(Guid sensorId, DateTimeOffset cutoffUtc);
 
+    // --- Daily state counts (status pages) -------------------------------------
+
+    /// <summary>Writes (or replaces) one sensor's state counts for one UTC day. Kept far longer than the statistics
+    /// (a status page shows 90 days, the statistics default to 14), and tiny: one row per sensor and day.</summary>
+    void UpsertDailyState(SensorDailyState state);
+
+    IReadOnlyList<SensorDailyState> GetDailyStates(IReadOnlyCollection<Guid> sensorIds, DateOnly fromDay);
+
+    int PruneDailyStates(DateOnly cutoffDay);
+
     /// <summary>Removes all telemetry (observations, statistics and events) for a deleted sensor/element. Returns rows removed.</summary>
     int PurgeSensor(Guid sensorId);
 

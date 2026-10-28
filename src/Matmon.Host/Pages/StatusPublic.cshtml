@@ -1,0 +1,39 @@
+@page "/status/{token}"
+@model StatusPublicModel
+@inject Matmon.Host.Ui.MatUiToolkit Toolkit
+@{
+    // A page of its own for the people who USE the services: no menu, no sign-in, the theme of their system. Nothing
+    // on it leads into the instance.
+    Layout = null;
+    var view = Model.View!;
+}
+<!DOCTYPE html>
+<html lang="en" data-app="matmon">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <title>@view.Page.Name - @view.OverallText</title>
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    <script src="~/js/matmon.boot.js" asp-append-version="true"></script>
+    <script src="/matui/matui.boot.js?v=@Toolkit.Hash"></script>
+    <link rel="stylesheet" href="/matui/matui.css?v=@Toolkit.Hash" />
+    <partial name="_AppStyles" />
+</head>
+<body class="mm-status-public" data-status-refresh="60">
+    @Html.Raw(Toolkit.Sprite)
+    <main class="mm-status-public__column">
+        <header class="mm-status-public__head">
+            <h1>@view.Page.Name</h1>
+            @if (!string.IsNullOrWhiteSpace(view.Page.Description))
+            {
+                <p>@view.Page.Description</p>
+            }
+        </header>
+        <partial name="_StatusPageBody" model="view" />
+        <p class="mm-status-public__foot">Refreshes every minute.</p>
+    </main>
+    <script src="/matui/matui.js?v=@Toolkit.Hash"></script>
+    <partial name="_AppScripts" />
+</body>
+</html>

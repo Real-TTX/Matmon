@@ -544,6 +544,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // was never opened since v1 shipped - so re-run the same migration a normal load would apply.
         _document.Maps ??= [];
         MigrateMapLayouts();
+        EnsureStatusPageTokens();
     }
 
     /// <summary>
@@ -795,6 +796,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (!sections.HasFlag(WorkspaceBackupSection.Maps))
         {
             document.Maps = [];
+            document.StatusPages = [];
         }
 
         if (!sections.HasFlag(WorkspaceBackupSection.Users))
@@ -1088,6 +1090,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         if (sections.HasFlag(WorkspaceBackupSection.Maps))
         {
             target.Maps = source.Maps;
+            target.StatusPages = source.StatusPages ?? [];
         }
 
         if (sections.HasFlag(WorkspaceBackupSection.Users))

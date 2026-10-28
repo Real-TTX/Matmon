@@ -1,0 +1,143 @@
+@model Matmon.Host.Services.StatusPageView
+@using Matmon.Core.Domain
+@* The status page itself, shared by the anonymous page and the in-app preview so the two cannot differ. It names
+   components the way the admin named them and never shows a sensor, a host or an address - the people reading it
+   use a service, they do not run it. *@
+@{
+    var view = Model;
+    var zone = view.Zone;
+    string Local(DateTimeOffset utc, string format) => TimeZoneInfo.ConvertTime(utc, zone).ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+    string When(DateTimeOffset utc) => Local(utc, "d MMM yyyy, HH:mm");
+    var bannerIcon = view.Overall switch
+    {
+        StatusComponentState.Operational => "check-circle",
+        StatusComponentState.Maintenance => "wrench",
+        StatusComponentState.MajorOutage => "x-circle",
+        StatusComponentState.Unknown => "help-circle",
+        _ => "alert"
+    };
+    var days = view.Page.UptimeDays;
+}
+
+<div class="mm-status">
+    <section class="mm-status-banner" data-state="@StatusPageRules.Tone(view.Overall)" role="status">
+        @MatUi.Icon(bannerIcon)
+        <div class="mm-status-banner__text">
+            <strong>@view.OverallText</strong>
+            <small>Updated @Local(view.GeneratedUtc, "HH:mm") (@(zone.Id == "UTC" ? "UTC" : zone.StandardName))</small>
+        </div>
+    </section>
+
+    @foreach (var item in view.OpenIncidents)
+    {
+        <article class="mat-card mm-status-incident" data-impact="@item.Incident.Impact">
+            <div class="mat-card__head">
+                @MatUi.Icon("alert")
+                <h2 class="mat-card__title">@item.Incident.Title</h2>
+                <span class="@MatUi.PillClass(item.Incident.Impact == StatusIncidentImpact.MajorOutage ? "error" : "warning") mm-push-end">@StatusPageRules.PhaseLabel(item.Incident.Phase)</span>
+            </div>
+            <div class="mat-card__body">
+                @if (item.ComponentNames.Count > 0)
+                {
+                    <p class="mat-text-muted">Affects @string.Join(", ", item.ComponentNames)</p>
+                }
+                <ol class="mm-status-updates">
+                    @foreach (var update in Enumerable.Reverse(item.Incident.Updates))
+                    {
+                        <li>
+                            <strong>@StatusPageRules.PhaseLabel(update.Phase)</strong>
+                            <span>@update.Message</span>
+                            <time datetime="@update.AtUtc.ToString("O")">@When(update.AtUtc)</time>
+                        </li>
+                    }
+                </ol>
+            </div>
+        </article>
+    }
+
+    @if (view.Maintenance.Count > 0)
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("wrench")<h2 class="mat-card__title">Maintenance</h2></div>
+            <ul class="mm-status-maintenance">
+                @foreach (var item in view.Maintenance)
+                {
+                    <li>
+                        <span class="@MatUi.PillClass(item.Active ? "info" : "plain")">@(item.Active ? "In progress" : "Planned")</span>
+                        <div>
+                            <strong>@item.Name</strong>
+                            <small>@When(item.StartUtc) - @Local(item.EndUtc, item.EndUtc - item.StartUtc < TimeSpan.FromDays(1) ? "HH:mm" : "d MMM yyyy, HH:mm") · @string.Join(", ", item.ComponentNames)</small>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+
+    @if (view.Groups.Count == 0)
+    {
+        <div class="mat-empty">
+            <div class="mat-empty__icon">@MatUi.Icon("layers")</div>
+            <div class="mat-empty__title">No components yet</div>
+        </div>
+    }
+
+    @foreach (var group in view.Groups)
+    {
+        <section class="mat-card mm-status-group">
+            @if (group.Name is not null)
+            {
+                <div class="mat-card__head"><h2 class="mat-card__title">@group.Name</h2></div>
+            }
+            <ul class="mm-status-components">
+                @foreach (var component in group.Components)
+                {
+                    <li class="mm-status-component" data-state="@component.Tone">
+                        <div class="mm-status-component__head">
+                            <div class="mm-status-component__name">
+                                <strong>@component.Component.Name</strong>
+                                @if (!string.IsNullOrWhiteSpace(component.Component.Description))
+                                {
+                                    <small>@component.Component.Description</small>
+                                }
+                            </div>
+                            <span class="@MatUi.PillClass(component.Tone)">@component.Label</span>
+                        </div>
+                        <div class="mm-status-bars" role="img" aria-label="@component.Component.Name: @StatusPageRules.FormatPercent(component.Uptime) available over the last @days days">
+                            @foreach (var bar in component.Bars)
+                            {
+                                <span data-tone="@bar.Tone" title="@bar.Day.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture): @(bar.Percent is null ? "no data" : StatusPageRules.FormatPercent(bar.Percent))"></span>
+                            }
+                        </div>
+                        <div class="mm-status-bars__legend">
+                            <span>@days days ago</span>
+                            <span>@StatusPageRules.FormatPercent(component.Uptime) available</span>
+                            <span>Today</span>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+
+    @if (view.PastIncidents.Count > 0)
+    {
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("clock")<h2 class="mat-card__title">Past incidents</h2></div>
+            <ul class="mm-status-past">
+                @foreach (var item in view.PastIncidents)
+                {
+                    var last = item.Incident.Updates.LastOrDefault();
+                    <li>
+                        <strong>@item.Incident.Title</strong>
+                        <small>@When(item.Incident.CreatedUtc) - @When(item.Incident.ResolvedUtc!.Value)@(item.ComponentNames.Count > 0 ? " · " + string.Join(", ", item.ComponentNames) : "")</small>
+                        @if (last is not null)
+                        {
+                            <span>@last.Message</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</div>

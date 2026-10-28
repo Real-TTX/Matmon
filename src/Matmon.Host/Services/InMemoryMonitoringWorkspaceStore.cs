@@ -3291,6 +3291,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         EnsureMapPublicTokens();
         MigrateMapLayouts();
+        EnsureStatusPageTokens();
     }
 
 
@@ -4835,6 +4836,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         public DateTimeOffset? SetupCompletedUtc { get; set; }
 
         public List<MonitoringMap> Maps { get; set; } = [];
+
+        /// <summary>The public status pages (Maps > Status pages). Rides the Maps backup section.</summary>
+        public List<StatusPage> StatusPages { get; set; } = [];
 
         public NotificationWorkspaceConfiguration NotificationConfiguration { get; set; } = new();
 

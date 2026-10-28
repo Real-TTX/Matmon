@@ -280,6 +280,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 var bucketMinutes = ResolveRetentionDays(settings.StatisticsBucketMinutes, profile.StatisticsBucketMinutes);
                 var channelLogOverrides = MonitoringSettings.GetChannelLogOverrides(settings);
                 bucketsWritten += RecomputeRecentBuckets(sensor.Id, nowUtc, bucketMinutes, channelLogOverrides);
+                RecomputeDailyStates(sensor.Id, nowUtc);
 
                 var rawDays = ResolveRetentionDays(settings.ObservationRetentionDays, profile.RawObservationDays);
                 if (rawDays > 0)
@@ -293,6 +294,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                     statisticsPruned += _telemetry.PruneStatistics(sensor.Id, nowUtc - TimeSpan.FromDays(statsDays));
                 }
             }
+
+            _telemetry.PruneDailyStates(DateOnly.FromDateTime(nowUtc.UtcDateTime).AddDays(-DailyStateRetentionDays));
 
             var eventDays = SensorTelemetryProfiles.General.EventRetentionDays;
             var eventsPruned = eventDays > 0
@@ -354,6 +357,44 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
 
         return written;
+    }
+
+    /// <summary>How long the daily state counts are kept - a little over a year, for the status pages' bars.</summary>
+    private const int DailyStateRetentionDays = 400;
+
+    /// <summary>
+    /// Today's and yesterday's state counts per sensor, summed from the statistics buckets that START on that UTC day
+    /// (buckets are per channel, so they are deduped by start - see SensorUptime). Yesterday is redone so the last bucket
+    /// of the day, closed after midnight, still lands in it. A bucket longer than a day (none of the profiles has one)
+    /// would be counted on the day it starts.
+    /// </summary>
+    private void RecomputeDailyStates(Guid sensorId, DateTimeOffset nowUtc)
+    {
+        var today = DateOnly.FromDateTime(nowUtc.UtcDateTime);
+        var yesterday = today.AddDays(-1);
+        var from = new DateTimeOffset(yesterday.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var buckets = _telemetry.GetStatistics(sensorId, from);
+        foreach (var day in new[] { yesterday, today })
+        {
+            var seen = new HashSet<DateTimeOffset>();
+            long healthy = 0, warning = 0, critical = 0;
+            foreach (var bucket in buckets)
+            {
+                if (DateOnly.FromDateTime(bucket.BucketStartUtc.UtcDateTime) != day || !seen.Add(bucket.BucketStartUtc))
+                {
+                    continue;
+                }
+
+                healthy += bucket.HealthyCount;
+                warning += bucket.WarningCount;
+                critical += bucket.CriticalCount;
+            }
+
+            if (healthy + warning + critical > 0)
+            {
+                _telemetry.UpsertDailyState(new SensorDailyState(sensorId, day, healthy, warning, critical));
+            }
+        }
     }
 
     private static int ResolveRetentionDays(int? configuredValue, int fallback)

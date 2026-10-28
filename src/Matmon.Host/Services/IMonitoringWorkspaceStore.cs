@@ -98,6 +98,30 @@ public interface IMonitoringWorkspaceStore
 
     string RotateMapPublicToken(Guid mapId);
 
+    IReadOnlyList<StatusPage> GetStatusPages();
+
+    StatusPage? FindStatusPage(Guid id);
+
+    /// <summary>Only a page whose public link is switched on.</summary>
+    StatusPage? FindStatusPageByPublicToken(string? token);
+
+    /// <summary>Creates or updates a page's settings and components (the token and the incidents are kept). Throws
+    /// <see cref="InvalidOperationException"/> with a reason in words when the page is refused.</summary>
+    StatusPage SaveStatusPage(StatusPage page);
+
+    bool DeleteStatusPage(Guid id);
+
+    string? RotateStatusPageToken(Guid id);
+
+    StatusIncident PostStatusIncident(Guid pageId, string title, StatusIncidentImpact impact, IEnumerable<Guid> componentIds, StatusIncidentPhase phase, string message, string? by);
+
+    bool AddStatusIncidentUpdate(Guid pageId, Guid incidentId, StatusIncidentPhase phase, string message, string? by);
+
+    bool DeleteStatusIncident(Guid pageId, Guid incidentId);
+
+    /// <summary>The daily state counts of these sensors from <paramref name="fromDay"/> on (status page bars).</summary>
+    IReadOnlyList<SensorDailyState> GetDailyStates(IReadOnlyCollection<Guid> sensorIds, DateOnly fromDay);
+
     bool DeleteMap(Guid mapId);
 
     ProbeElement? FindProbeByProbeId(string probeId);

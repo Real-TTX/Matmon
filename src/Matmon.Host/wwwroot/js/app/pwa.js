@@ -13,7 +13,8 @@
 
 function initializePwa() {
   const root = document.documentElement;
-  const wallboard = document.querySelector(".public-map-shell") !== null;
+  // The public wallboard and the public status page are for people who are not users of the instance.
+  const wallboard = document.querySelector(".public-map-shell, .mm-status-public") !== null;
   const embedded = root.dataset.embedded === "1" || window.top !== window || location.pathname.toLowerCase().startsWith("/instances/");
 
   if (!embedded && !wallboard) {

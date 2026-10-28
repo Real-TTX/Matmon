@@ -44,6 +44,11 @@
     }
 }
 
+@if (map is null)
+{
+    <partial name="_MapsTabs" model="@("maps")" />
+}
+
 @if (Model.Maps.Count == 0)
 {
     <div class="mat-list">

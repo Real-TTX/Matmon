@@ -230,6 +230,7 @@ builder.Services.AddSingleton<DiscoveryJobStore>();
 builder.Services.AddSingleton<Matmon.Host.Services.Import.PrtgImportSessions>();
 builder.Services.AddSingleton<IOnDemandRunStore, OnDemandRunStore>();
 builder.Services.AddSingleton<MapDisplayProvider>();
+builder.Services.AddSingleton<StatusPageProvider>();
 // Uploaded map pictures live on disk under data/uploads, NOT in workspace.json - that file is fully
 // re-serialised on a 750ms debounce, so a 1 MB floorplan in it would be rewritten every time a pin moves.
 builder.Services.AddSingleton(provider => new MapAssetStore(

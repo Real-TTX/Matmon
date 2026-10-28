@@ -114,6 +114,16 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 critical_count      INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (sensor_id, bucket_minutes, bucket_start, default_channel_key)
             );
+
+            CREATE TABLE IF NOT EXISTS sensor_daily_state (
+                sensor_id TEXT    NOT NULL,
+                day       INTEGER NOT NULL,
+                healthy   INTEGER NOT NULL,
+                warning   INTEGER NOT NULL,
+                critical  INTEGER NOT NULL,
+                PRIMARY KEY (sensor_id, day)
+            );
+            CREATE INDEX IF NOT EXISTS ix_daily_day ON sensor_daily_state (day);
             """);
 
         EnsureStatisticsColumns();
@@ -723,6 +733,79 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    // A day is stored as its day number (DateOnly.DayNumber) - an integer that sorts and compares like the day itself.
+    public void UpsertDailyState(SensorDailyState state)
+    {
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText =
+                """
+                INSERT INTO sensor_daily_state (sensor_id, day, healthy, warning, critical)
+                VALUES ($sensor, $day, $healthy, $warning, $critical)
+                ON CONFLICT (sensor_id, day) DO UPDATE SET healthy = excluded.healthy, warning = excluded.warning, critical = excluded.critical;
+                """;
+            cmd.Parameters.AddWithValue("$sensor", state.SensorId.ToString());
+            cmd.Parameters.AddWithValue("$day", state.Day.DayNumber);
+            cmd.Parameters.AddWithValue("$healthy", state.Healthy);
+            cmd.Parameters.AddWithValue("$warning", state.Warning);
+            cmd.Parameters.AddWithValue("$critical", state.Critical);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public IReadOnlyList<SensorDailyState> GetDailyStates(IReadOnlyCollection<Guid> sensorIds, DateOnly fromDay)
+    {
+        if (sensorIds.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<SensorDailyState>();
+        lock (_sync)
+        {
+            // In chunks: SQLite caps the number of bound parameters per statement.
+            foreach (var chunk in sensorIds.Distinct().Chunk(400))
+            {
+                using var cmd = _connection.CreateCommand();
+                var names = new List<string>(chunk.Length);
+                for (var index = 0; index < chunk.Length; index++)
+                {
+                    var name = "$s" + index;
+                    names.Add(name);
+                    cmd.Parameters.AddWithValue(name, chunk[index].ToString());
+                }
+
+                cmd.CommandText =
+                    $"SELECT sensor_id, day, healthy, warning, critical FROM sensor_daily_state WHERE day >= $from AND sensor_id IN ({string.Join(", ", names)});";
+                cmd.Parameters.AddWithValue("$from", fromDay.DayNumber);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    result.Add(new SensorDailyState(
+                        Guid.Parse(reader.GetString(0)),
+                        DateOnly.FromDayNumber(reader.GetInt32(1)),
+                        reader.GetInt64(2),
+                        reader.GetInt64(3),
+                        reader.GetInt64(4)));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public int PruneDailyStates(DateOnly cutoffDay)
+    {
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "DELETE FROM sensor_daily_state WHERE day < $cutoff;";
+            cmd.Parameters.AddWithValue("$cutoff", cutoffDay.DayNumber);
+            return cmd.ExecuteNonQuery();
+        }
+    }
+
     public int PurgeSensor(Guid sensorId)
     {
         var id = sensorId.ToString();
@@ -734,6 +817,7 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             {
                 "DELETE FROM observation WHERE sensor_id = $sensor;",
                 "DELETE FROM sensor_statistics WHERE sensor_id = $sensor;",
+                "DELETE FROM sensor_daily_state WHERE sensor_id = $sensor;",
                 "DELETE FROM event WHERE element_id = $sensor;"
             })
             {

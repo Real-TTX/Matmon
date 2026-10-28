@@ -1,0 +1,13 @@
+@model string
+@* The tab strip of the Maps section: the maps and wallboards, and the public status pages - both are pages that SHOW
+   the monitoring to someone, so they are one section with one menu item. Link tabs, like Probes'. Model = the active tab. *@
+@{
+    var active = Model ?? "maps";
+    string Css(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase) ? "mat-tab is-active" : "mat-tab";
+    string? Current(string tab) => string.Equals(active, tab, StringComparison.OrdinalIgnoreCase) ? "page" : null;
+}
+
+<nav class="mat-tabs" aria-label="Map sections">
+    <a class="@Css("maps")" aria-current="@Current("maps")" asp-page="/Maps">Maps</a>
+    <a class="@Css("status")" aria-current="@Current("status")" asp-page="/StatusPages">Status pages</a>
+</nav>
