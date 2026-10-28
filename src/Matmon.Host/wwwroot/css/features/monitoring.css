@@ -195,6 +195,29 @@ html[data-monitoring-size="s"] .monitoring-sensor-name,
 html[data-monitoring-size="s"] .monitoring-sensor-value { font-size: var(--mat-fs-xs); }
 html[data-monitoring-size="s"] .monitoring-sensor-status { font-size: 0.85rem; }
 html[data-monitoring-size="s"] .monitoring-sensor-meta { display: none; }
+/* ...and the tree itself shrinks with them: probes, folders and hosts on low rows with small type, a smaller chevron and
+   indent, the detail line and the tags gone, so a big tree fits on one screen. (Touch keeps its targets: MOBILE-04.) */
+html[data-monitoring-size="s"] .monitoring-tree { --tree-gap: 2px; }
+html[data-monitoring-size="s"] .monitoring-tree-row {
+  grid-template-columns: var(--mat-space-5) auto minmax(0, 1fr) auto;
+  gap: var(--mat-space-1);
+  min-height: 26px;
+  padding-block: 0;
+  font-size: var(--mat-fs-sm);
+}
+html[data-monitoring-size="s"] .monitoring-tree-toggle { width: var(--mat-space-5); height: var(--mat-space-5); }
+html[data-monitoring-size="s"] .monitoring-tree-row .tree-kind { font-size: 0.95rem; }
+html[data-monitoring-size="s"] .monitoring-tree-main { gap: var(--mat-space-1); }
+html[data-monitoring-size="s"] .monitoring-tree-details,
+html[data-monitoring-size="s"] .monitoring-tree-tags { display: none; }
+html[data-monitoring-size="s"] .monitoring-tree-side { gap: var(--mat-space-1); }
+html[data-monitoring-size="s"] .monitoring-tree-side .mat-pill { --mat-pill-fs: var(--mat-fs-xs); font-size: var(--mat-fs-xs); padding-block: 0; }
+html[data-monitoring-size="s"] .monitoring-tree-side .mat-btn { --mat-btn-h: 24px; min-height: 24px; }
+html[data-monitoring-size="s"] .monitoring-tree-children { margin-left: calc(var(--mat-space-3) + 3px); padding-left: var(--mat-space-2); }
+html[data-monitoring-size="s"] .monitoring-sensor-strip { gap: var(--mat-space-1); padding-block: 2px; }
+@media (hover: none) {
+  html[data-monitoring-size="s"] .monitoring-tree-row { min-height: 36px; }
+}
 
 /* Tile size L: the meta line and the sparkline. */
 html[data-monitoring-size="l"] .monitoring-sensor-chip { min-width: 14rem; max-width: 18.5rem; }
