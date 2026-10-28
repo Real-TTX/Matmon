@@ -38,7 +38,8 @@ public sealed class SnmpTrapCollectorPlugin : IMatmonPlugin
         [
             new(PluginUiArea.System, "traps", "SNMP traps", "/system/snmp-traps"),
             new(PluginUiArea.Events, "syslog", "Syslog", "/Events#syslog")
-        ]
+        ],
+        Listeners = settings => PluginListeners.Of(settings, (null, "port", "udp", 162))
     };
 
     public Task<IPluginInstance> StartAsync(PluginContext context, CancellationToken cancellationToken)

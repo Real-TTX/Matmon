@@ -59,7 +59,14 @@ public sealed record PluginDefinition(
     /// <summary>The menu entries that come with the plugin (shown while it runs somewhere). An init property rather than
     /// a constructor parameter, so a plugin built against the constructor without it still loads.</summary>
     public IReadOnlyList<PluginUiLink> Links { get; init; } = [];
+
+    /// <summary>The network ports the plugin opens for the given settings - what a firewall (or a container's port
+    /// mapping) must let in before any device reaches it. Null = it opens none.</summary>
+    public Func<IReadOnlyDictionary<string, string>, IReadOnlyList<PluginListener>>? Listeners { get; init; }
 }
+
+/// <summary>A port a plugin listens on: "udp" or "tcp" and the number.</summary>
+public sealed record PluginListener(string Protocol, int Port);
 
 /// <summary>
 /// Something a plugin saw and the instance has to know: a log line, a trap, a status change. Created where the plugin

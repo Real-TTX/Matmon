@@ -54,6 +54,33 @@ public sealed class SystemPluginsModel : PageModel
     [TempData]
     public string? ErrorMessage { get; set; }
 
+    /// <summary>After saving a listening plugin: which ports to let in (firewall, container) - a warning, not a success.</summary>
+    [TempData]
+    public string? FirewallMessage { get; set; }
+
+    /// <summary>The ports the plugin in the form opens, for the location chosen in it (null when it opens none).</summary>
+    public Ui.PluginFirewallNotice? FirewallNotice
+    {
+        get
+        {
+            var definition = EditingDefinition;
+            if (definition is null)
+            {
+                return null;
+            }
+
+            var settings = definition.Settings.ToDictionary(setting => setting.Key, setting => setting.DefaultValue ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+            foreach (var (key, value) in Input.Settings)
+            {
+                settings[key] = value;
+            }
+
+            var location = Locations.FirstOrDefault(candidate => candidate.Id == Input.ProbeElementId)
+                ?? LocationsFor(definition).FirstOrDefault();
+            return Ui.PluginFirewallNotice.For(definition, settings, location?.Name ?? "the machine it runs on", location?.IsPrimary ?? true);
+        }
+    }
+
     public string? FormError { get; private set; }
 
     public IReadOnlyList<IMatmonPlugin> Plugins => _catalog.Plugins;
@@ -142,6 +169,10 @@ public sealed class SystemPluginsModel : PageModel
         var page = PageOf(_catalog.Find(assignment.PluginId)?.Definition);
         StatusMessage = $"Saved. {(location?.IsPrimary == true ? "The primary" : $"The probe '{location?.Name}'")} applies it within a few seconds." +
             (assignment.Enabled && page is not null ? $" Its page is under System > {page.Title}." : string.Empty);
+        // A collector that is on but unreachable looks exactly like a quiet network - say what has to be let in.
+        FirewallMessage = assignment.Enabled
+            ? Ui.PluginFirewallNotice.For(_catalog.Find(assignment.PluginId)?.Definition, assignment.Settings, location?.Name ?? "the machine it runs on", location?.IsPrimary ?? true)?.Sentence
+            : null;
         return RedirectToPage();
     }
 

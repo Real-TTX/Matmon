@@ -302,6 +302,7 @@ MikroTik      /system logging action add name=matmon target=remote remote=@Model
 Synology      Log Center > Log Sending > Create (server @Model.ReceiverHost, port @udpPort, UDP)</code></pre>
             </div>
         </details>
+        <p class="mat-muted"><strong>Firewall:</strong> the machine the collector runs on must let UDP @udpPort / TCP @(localTcp ?? SyslogSettings.DefaultPort) in (Windows Defender Firewall, ufw, firewalld, the router between the networks) - otherwise nothing arrives and the log simply stays empty.</p>
         <p class="mat-muted"><strong>Running Matmon in Docker?</strong> Publish the port: add <code>-p @udpPort:@udpPort/udp -p @(localTcp ?? SyslogSettings.DefaultPort):@(localTcp ?? SyslogSettings.DefaultPort)/tcp</code> to <code>docker run</code>, or the same two lines under <code>ports:</code> in the compose file. On Docker Desktop (Windows, macOS) messages arrive from Docker's gateway address - give the sensors the device's <em>host name</em> as their Sender.</p>
     </div>
 </section>

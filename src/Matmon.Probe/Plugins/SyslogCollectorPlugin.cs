@@ -35,7 +35,8 @@ public sealed class SyslogCollectorPlugin : IMatmonPlugin
         [
             new(PluginUiArea.System, "syslog", "Syslog", "/system/syslog"),
             new(PluginUiArea.Events, "syslog", "Syslog", "/Events#syslog")
-        ]
+        ],
+        Listeners = settings => PluginListeners.Of(settings, ("udpEnabled", "udpPort", "udp", 514), ("tcpEnabled", "tcpPort", "tcp", 514))
     };
 
     public Task<IPluginInstance> StartAsync(PluginContext context, CancellationToken cancellationToken)

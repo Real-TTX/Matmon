@@ -20,6 +20,11 @@
     <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
 }
 
+@if (!string.IsNullOrWhiteSpace(Model.FirewallMessage))
+{
+    <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("shield")<div class="mat-alert__body"><strong>Firewall:</strong> @Model.FirewallMessage</div></div>
+}
+
 @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
 {
     <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
@@ -39,6 +44,22 @@
                 }
 
                 <p class="mat-text-muted">@definition.Description</p>
+                @if (Model.FirewallNotice is { } firewall)
+                {
+                    <div class="mat-alert mat-alert--warning" role="note">
+                        @MatUi.Icon("shield")
+                        <div class="mat-alert__body">
+                            <strong>Open the ports, or nothing arrives.</strong>
+                            <span>It listens on @firewall.Ports. Devices only reach it when the firewall of @firewall.Location lets these in@(firewall.InContainer ? " - and Matmon runs in a container here, so the container has to publish them first" : firewall.ContainerUnknown ? ", and a Docker probe has to publish them from its container" : "").</span>
+                            @if (firewall.InContainer || firewall.ContainerUnknown)
+                            {
+                                <span>docker run: <code>@firewall.DockerRun</code> - Compose, under <code>ports:</code>:</span>
+                                <pre class="mat-code">@firewall.Compose</pre>
+                                <span>Then recreate the container (<code>docker compose up -d</code>). Changing a port here means changing it there too.</span>
+                            }
+                        </div>
+                    </div>
+                }
                 <div class="mat-form__grid">
                     <div class="mat-field">
                         <label class="mat-label" for="Input_ProbeElementId">Runs on</label>

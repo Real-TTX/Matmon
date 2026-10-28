@@ -199,6 +199,7 @@
     <div class="mat-card__body mat-prose">
         <p>In the device's SNMP settings, add a trap receiver (also called trap destination or trap host): @(Model.LocalCollector is not null ? "this machine," : "the machine its collector runs on (a probe or agent near it, or this machine once the collector runs here), for this machine") <code>@Model.ReceiverHost</code>, UDP port <code>@Model.LocalPort</code>, version v2c (or v1) with the community set above - or v3 with one of the users above (v3 informs are not supported: choose "trap"). A UPS network card usually lists the events it sends a trap for - "on battery" and "battery low" are the ones to tick.</p>
         <p>Traps land in the central log (upload the vendor's MIB under System > MIBs for readable names). A <strong>Syslog Match</strong> sensor on a phrase such as <code>upsTrapOnBattery</code> turns a trap into an alert.</p>
+        <p><strong>Firewall:</strong> the machine the collector runs on must let UDP @Model.LocalPort in (Windows Defender Firewall, ufw, firewalld, the router between the networks) - otherwise no trap arrives.</p>
         <p>In Docker the port has to be published: <code>-p @Model.LocalPort:@Model.LocalPort/udp</code> (or the commented line in <code>docker-compose.yml</code>). On Docker Desktop (Windows, macOS) traps arrive from the gateway address, so the device's sensors are not polled; on Linux the device's own address arrives.</p>
     </div>
 </section>
