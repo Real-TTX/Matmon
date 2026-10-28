@@ -12,7 +12,7 @@
     // the height the rows need. Heading and Clock drop the footer entirely - they are chrome, not readings.
     var isCollection = tile.Kind is MonitoringMapTileKind.SensorList or MonitoringMapTileKind.AlertFeed
         or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
-        or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap;
+        or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology;
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
     // screenshot/print is correct; initializeMapClocks then ticks it.
@@ -40,8 +40,31 @@
     var customAccent = BrandingSafety.SafeHexColor(tile.AccentColor) ?? "initial";
     var customText = BrandingSafety.SafeHexColor(tile.TextColor) ?? "initial";
     var invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+    // What sits inside a pin, whether the pin is a link or not: a device symbol (topology) or a dot, and its label.
+    void PinInner(Matmon.Host.Services.MapPinDto pin)
+    {
+        if (pin.Style == "device")
+        {
+            <span class="map-pin-device" aria-hidden="true">@MatUi.Icon(pin.Icon)</span>
+        }
+        else
+        {
+            <span class="map-pin-dot" aria-hidden="true"></span>
+        }
+        if (pin.ShowLabel || pin.Style is "tile" or "device")
+        {
+            <span class="map-pin-label">
+                <strong>@pin.Label</strong>
+                @if (!string.IsNullOrWhiteSpace(pin.Value))
+                {
+                    <small>@pin.Value</small>
+                }
+            </span>
+        }
+    }
 }
-<article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")"
+<article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")@(Model.Href is null ? "" : " is-linked")"
          data-tile-id="@tile.Id"
          data-state="@Model.StateKey"
          data-kind="@tile.Kind.ToString().ToLowerInvariant()"
@@ -140,7 +163,14 @@
                 {
                     <li class="map-tile-row" data-state="@row.Tone">
                         <span class="map-tile-row-label">
-                            <strong>@row.Label</strong>
+                            @if (row.Href is not null && !Model.Editable)
+                            {
+                                <a class="map-tile-row-link" href="@row.Href"><strong>@row.Label</strong></a>
+                            }
+                            else
+                            {
+                                <strong>@row.Label</strong>
+                            }
                             @if (!string.IsNullOrWhiteSpace(row.Detail))
                             {
                                 <small>@row.Detail</small>
@@ -159,11 +189,13 @@
             </ul>
         }
     }
-    else if (tile.Kind == MonitoringMapTileKind.Image || tile.Kind == MonitoringMapTileKind.GeoMap)
+    else if (tile.Kind is MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology)
     {
-        @* One frame for both: the world map is just a different picture behind the same pin layer, and pins
-           are positioned in percent so they hold at any rendered size and under any object-fit. *@
-        <div class="map-tile-canvas" data-map-pin-canvas>
+        @* One frame for all three: the world map is just a different picture behind the same pin layer, a topology a
+           plain (or pictured) canvas with its devices as pins and the cables between them. Pins are positioned in
+           percent so they hold at any rendered size and under any object-fit. *@
+        var topology = tile.Kind == MonitoringMapTileKind.Topology;
+        <div class="map-tile-canvas@(topology ? " is-topology" : "")" data-map-pin-canvas>
             @if (tile.Kind == MonitoringMapTileKind.GeoMap)
             {
                 @* Not an <img>: an SVG loaded through one is its OWN document, so the file's
@@ -178,31 +210,51 @@
                 <img class="map-tile-image" src="/api/map-assets/@assetId" alt="@(tile.Title ?? "Map image")"
                      data-fit="@MapTileRender.ImageFitCss(tile.ImageFit)" />
             }
-            else
+            else if (!topology)
             {
                 <span class="map-tile-canvas-empty">No image uploaded</span>
             }
 
+            @if (Model.Links is { Count: > 0 } links)
+            {
+                @* The cables, under the devices. A 0..100 box stretched over the frame, so a line meets its pins at any
+                   size; non-scaling strokes keep the width in px. The width is data (an interface's utilisation). *@
+                <svg class="map-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                    @foreach (var link in links)
+                    {
+                        <line class="map-link" data-state="@link.Tone" data-link-id="@link.Id"
+                              x1="@link.X1.ToString(invariant)" y1="@link.Y1.ToString(invariant)" x2="@link.X2.ToString(invariant)" y2="@link.Y2.ToString(invariant)"
+                              vector-effect="non-scaling-stroke" style="--link-width: @(link.Width.ToString(invariant))px" />
+                    }
+                </svg>
+                @foreach (var link in links.Where(candidate => candidate.Label is not null || candidate.Traffic is not null))
+                {
+                    var midX = ((link.X1 + link.X2) / 2).ToString(invariant);
+                    var midY = ((link.Y1 + link.Y2) / 2).ToString(invariant);
+                    <span class="map-link-label" data-state="@link.Tone" data-link-label="@link.Id" style="--pin-x: @(midX)%; --pin-y: @(midY)%">
+                        @if (link.Label is not null)
+                        {
+                            <strong>@link.Label</strong>
+                        }
+                        <small data-link-traffic>@link.Traffic</small>
+                    </span>
+                }
+            }
+
             @foreach (var pin in Model.Pins ?? [])
             {
-                @* The pin's point, as a percentage of the frame - geometry that is data, so a custom property. *@
+                @* The pin's point, as a percentage of the frame - geometry that is data, so a custom property. A pin
+                   that leads somewhere is a link (never in the designer, where a click places and selects). *@
                 var pinX = pin.X.ToString(invariant);
                 var pinY = pin.Y.ToString(invariant);
-                <span class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style"
-                      style="--pin-x: @(pinX)%; --pin-y: @(pinY)%"
-                      title="@pin.Label">
-                    <span class="map-pin-dot" aria-hidden="true"></span>
-                    @if (pin.ShowLabel || pin.Style == "tile")
-                    {
-                        <span class="map-pin-label">
-                            <strong>@pin.Label</strong>
-                            @if (!string.IsNullOrWhiteSpace(pin.Value))
-                            {
-                                <small>@pin.Value</small>
-                            }
-                        </span>
-                    }
-                </span>
+                if (pin.Href is not null && !Model.Editable)
+                {
+                    <a class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style" style="--pin-x: @(pinX)%; --pin-y: @(pinY)%" title="@pin.Label" href="@pin.Href">@{ PinInner(pin); }</a>
+                }
+                else
+                {
+                    <span class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style" style="--pin-x: @(pinX)%; --pin-y: @(pinY)%" title="@pin.Label">@{ PinInner(pin); }</span>
+                }
             }
         </div>
     }
@@ -379,5 +431,11 @@
     {
         <span class="map-tile-size-badge" data-map-tile-size-badge aria-hidden="true">@tile.ColumnSpan &times; @tile.RowSpan</span>
         <span class="map-tile-resize-handle" data-map-resize-handle aria-hidden="true"></span>
+    }
+    @* The whole card opens what it shows (its sensor, its part of the tree, the map one level down) - a stretched link
+       under the pins and rows, which carry links of their own. *@
+    @if (Model.Href is not null)
+    {
+        <a class="map-tile-link" href="@Model.Href" aria-label="Open @(shownTitle ?? Model.KindLabel)"></a>
     }
 </article>

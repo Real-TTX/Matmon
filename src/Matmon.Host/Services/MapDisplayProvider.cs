@@ -24,29 +24,18 @@ public sealed class MapDisplayProvider
         _workspaceStore = workspaceStore;
     }
 
-    public MapDisplayViewModel Build(MonitoringMap map)
+    /// <param name="publicView">The anonymous wallboard: nothing links into the instance (nobody is signed in there),
+    /// only a map that is public itself can be opened from it.</param>
+    public MapDisplayViewModel Build(MonitoringMap map, bool publicView = false)
     {
         var elements = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
         var latest = _workspaceStore.GetLatestSensorObservations();
+        var maps = _workspaceStore.GetMaps().ToDictionary(candidate => candidate.Id);
 
         MapDisplayTileViewModel[] BuildTiles(IEnumerable<MonitoringMapTile> source) => source
             .OrderBy(tile => tile.Row)
             .ThenBy(tile => tile.Column)
-            .Select(tile =>
-            {
-                if (IsCollectionKind(tile.Kind))
-                {
-                    return BuildCollectionTile(tile, elements, latest);
-                }
-
-                if (!string.IsNullOrWhiteSpace(tile.TargetTag))
-                {
-                    return BuildTagAggregateTile(tile, latest);
-                }
-
-                elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
-                return ResolveTileState(tile, element, latest);
-            })
+            .Select(tile => WithLinks(BuildOne(tile, elements, latest, maps), elements, maps, publicView))
             .ToArray();
 
         var slides = map.EffectiveSlides()
@@ -63,10 +52,20 @@ public sealed class MapDisplayProvider
     public MapDisplayTileViewModel ResolveTilePreview(MonitoringMapTile tile)
     {
         var latest = _workspaceStore.GetLatestSensorObservations();
+        var elements = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
+        var maps = _workspaceStore.GetMaps().ToDictionary(candidate => candidate.Id);
+        return BuildOne(tile, elements, latest, maps);
+    }
 
+    private MapDisplayTileViewModel BuildOne(
+        MonitoringMapTile tile,
+        IReadOnlyDictionary<Guid, MonitoringElement> elements,
+        IReadOnlyDictionary<Guid, SensorObservation> latest,
+        IReadOnlyDictionary<Guid, MonitoringMap> maps)
+    {
         if (IsCollectionKind(tile.Kind))
         {
-            return BuildCollectionTile(tile, _workspaceStore.GetAllElements().ToDictionary(element => element.Id), latest);
+            return BuildCollectionTile(tile, elements, latest, maps);
         }
 
         if (!string.IsNullOrWhiteSpace(tile.TargetTag))
@@ -74,9 +73,135 @@ public sealed class MapDisplayProvider
             return BuildTagAggregateTile(tile, latest);
         }
 
-        var elements = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
+        // A tile that only opens another map shows that map's worst state - the problem one level down.
+        if (tile.ElementId is null && tile.LinkMapId is { } linked && tile.Kind != MonitoringMapTileKind.Text)
+        {
+            var severity = MapSeverity(linked, maps, latest, []);
+            var name = maps.TryGetValue(linked, out var target) ? target.Name : "Map";
+            return CreateTile(tile, null,
+                severity is null ? "unknown" : MonitoringStatePresentation.Key(severity.Value),
+                severity is null ? "No data" : MonitoringStatePresentation.Label(severity.Value),
+                name, string.Empty, KindLabel(tile.Kind), "layers");
+        }
+
         elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
         return ResolveTileState(tile, element, latest);
+    }
+
+    // --- Clicking through ----------------------------------------------------------------------------------
+    // Every tile, pin and list row that shows something says where it comes from: a click opens the sensor, the
+    // part of the tree, or the map one level down. Decided here, after the tile was built, because the same
+    // tile links differently on the anonymous wallboard (only to maps that are public themselves).
+
+    private MapDisplayTileViewModel WithLinks(
+        MapDisplayTileViewModel vm,
+        IReadOnlyDictionary<Guid, MonitoringElement> elements,
+        IReadOnlyDictionary<Guid, MonitoringMap> maps,
+        bool publicView)
+    {
+        var tile = vm.Tile;
+        string? href = MapHref(tile.LinkMapId, maps, publicView);
+        if (href is null && !publicView && !IsCollectionKind(tile.Kind) && tile.Kind is not MonitoringMapTileKind.Text)
+        {
+            href = !string.IsNullOrWhiteSpace(tile.TargetTag)
+                ? TagHref(tile.TargetTag)
+                : tile.ElementId is { } id && elements.TryGetValue(id, out var element) ? ElementHref(element) : null;
+        }
+
+        var pins = vm.Pins?.Select(pin =>
+        {
+            var source = tile.Pins.FirstOrDefault(candidate => candidate.Id == pin.Id);
+            var pinHref = MapHref(source?.LinkMapId, maps, publicView) ?? (publicView ? null : TokenHref(source?.TargetToken, elements));
+            return pin with { Href = pinHref };
+        }).ToArray();
+
+        var rows = vm.Rows?.Select(row =>
+            row.ElementId is { } rowId && !publicView && elements.TryGetValue(rowId, out var rowElement)
+                ? row with { Href = ElementHref(rowElement) }
+                : row).ToArray();
+
+        return vm with { Href = href, Pins = pins ?? vm.Pins, Rows = rows ?? vm.Rows };
+    }
+
+    private static string? MapHref(Guid? mapId, IReadOnlyDictionary<Guid, MonitoringMap> maps, bool publicView)
+    {
+        if (mapId is not { } id || !maps.TryGetValue(id, out var map))
+        {
+            return null;
+        }
+        if (!publicView)
+        {
+            return $"/Maps?mapId={id}";
+        }
+        return map.PublicEnabled && !string.IsNullOrWhiteSpace(map.PublicToken) ? $"/Maps/Public/{Uri.EscapeDataString(map.PublicToken)}" : null;
+    }
+
+    private static string? TokenHref(string? token, IReadOnlyDictionary<Guid, MonitoringElement> elements)
+    {
+        if (MonitoringTargetResolver.TagName(token) is { } tag)
+        {
+            return TagHref(tag);
+        }
+        return MonitoringTargetResolver.ElementId(token) is { } id && elements.TryGetValue(id, out var element) ? ElementHref(element) : null;
+    }
+
+    private static string TagHref(string tag) => $"/monitoring?monitoringTag={Uri.EscapeDataString(tag)}";
+
+    /// <summary>A sensor opens its own page, a probe the tree narrowed to it, a host or folder the tree searched for it.</summary>
+    private static string ElementHref(MonitoringElement element) => element switch
+    {
+        SensorElement => $"/monitoring/sensor/{element.Id}",
+        ProbeElement => $"/monitoring?monitoringProbe={element.Id}",
+        _ => $"/monitoring?monitoringSearch={Uri.EscapeDataString(element.Name)}"
+    };
+
+    /// <summary>
+    /// The worst state of everything a map shows - its tiles' targets, its pins and links, and the maps it opens in
+    /// turn (each map once, so two maps opening each other cannot loop). Null when nothing on it has a target.
+    /// </summary>
+    private MonitoringSeverity? MapSeverity(
+        Guid mapId,
+        IReadOnlyDictionary<Guid, MonitoringMap> maps,
+        IReadOnlyDictionary<Guid, SensorObservation> latest,
+        HashSet<Guid> visited)
+    {
+        if (!visited.Add(mapId) || !maps.TryGetValue(mapId, out var map))
+        {
+            return null;
+        }
+
+        MonitoringSeverity? worst = null;
+        void Take(MonitoringSeverity? severity)
+        {
+            if (severity is { } value)
+            {
+                worst = worst is null ? value : MonitoringStatePresentation.Max(worst.Value, value);
+            }
+        }
+        void TakeToken(string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+            foreach (var sensor in _workspaceStore.ResolveTargetSensors(token))
+            {
+                Take(MonitoringStatePresentation.FromSensorState(latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown));
+            }
+        }
+
+        foreach (var tile in map.EffectiveSlides().SelectMany(slide => slide.Tiles))
+        {
+            TakeToken(TargetToken(tile));
+            tile.TargetTokens.ForEach(TakeToken);
+            tile.Pins.ForEach(pin => { TakeToken(pin.TargetToken); if (pin.LinkMapId is { } nested) { Take(MapSeverity(nested, maps, latest, visited)); } });
+            tile.Links.ForEach(link => TakeToken(link.TargetToken));
+            if (tile.LinkMapId is { } linked)
+            {
+                Take(MapSeverity(linked, maps, latest, visited));
+            }
+        }
+        return worst;
     }
 
     private MapDisplayTileViewModel ResolveTileState(
@@ -308,6 +433,7 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Heading
              or MonitoringMapTileKind.Image
              or MonitoringMapTileKind.GeoMap
+             or MonitoringMapTileKind.Topology
              or MonitoringMapTileKind.MultiGraph;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
@@ -321,7 +447,8 @@ public sealed class MapDisplayProvider
     private MapDisplayTileViewModel BuildCollectionTile(
         MonitoringMapTile tile,
         IReadOnlyDictionary<Guid, MonitoringElement> elements,
-        IReadOnlyDictionary<Guid, SensorObservation> latest)
+        IReadOnlyDictionary<Guid, SensorObservation> latest,
+        IReadOnlyDictionary<Guid, MonitoringMap> maps)
     {
         elements.TryGetValue(tile.ElementId ?? Guid.Empty, out var element);
         return tile.Kind switch
@@ -329,8 +456,9 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Heading => CreateTile(tile, element, "ok", "Heading", tile.Text ?? string.Empty, string.Empty, "Heading", "list"),
             MonitoringMapTileKind.Clock => CreateTile(tile, element, "ok", "Clock", string.Empty, string.Empty, "Clock", "clock"),
             MonitoringMapTileKind.AlertFeed => BuildAlertFeedTile(tile, element),
-            MonitoringMapTileKind.Image => BuildImageTile(tile, element, latest, geo: false),
-            MonitoringMapTileKind.GeoMap => BuildImageTile(tile, element, latest, geo: true),
+            MonitoringMapTileKind.Image => BuildImageTile(tile, element, latest, maps, geo: false),
+            MonitoringMapTileKind.GeoMap => BuildImageTile(tile, element, latest, maps, geo: true),
+            MonitoringMapTileKind.Topology => BuildImageTile(tile, element, latest, maps, geo: false),
             MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
             MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element, latest),
             _ => BuildSensorListTile(tile, element, latest)
@@ -721,7 +849,7 @@ public sealed class MapDisplayProvider
                 entry.Channel?.Label ?? entry.Sensor.SensorTypeKey,
                 entry.Observation is null ? string.Empty : FormatObservationValue(entry.Observation, entry.Channel),
                 MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(entry.State)),
-                null))
+                null) { ElementId = entry.Sensor.Id })
             .ToArray();
 
         var severity = entries
@@ -765,7 +893,7 @@ public sealed class MapDisplayProvider
                 alert.Message,
                 alert.IsAcknowledged ? "ack" : null,
                 MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(alert.State)),
-                FormatRelative(alert.LastSeenUtc)))
+                FormatRelative(alert.LastSeenUtc)) { ElementId = alert.ElementId })
             .ToArray();
 
         if (rows.Length == 0)
@@ -915,28 +1043,107 @@ public sealed class MapDisplayProvider
         MonitoringMapTile tile,
         MonitoringElement? element,
         IReadOnlyDictionary<Guid, SensorObservation> latest,
+        IReadOnlyDictionary<Guid, MonitoringMap> maps,
         bool geo)
     {
-        var pins = BuildPins(tile, latest, geo);
+        var pins = BuildPins(tile, latest, maps, geo);
+        var links = BuildLinks(tile, pins, latest);
         var severity = pins
             .Select(pin => pin.Severity)
+            .Concat(links.Where(link => link.Tone != "neutral").Select(link => link.Severity))
             .DefaultIfEmpty(MonitoringSeverity.Ok)
             .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
 
-        var subtitle = pins.Count switch
-        {
-            0 when geo => "No locations placed",
-            0 => tile.ImageAssetId is null ? "No image uploaded" : "No pins placed",
-            1 => "1 pin",
-            _ => $"{pins.Count} pins"
-        };
+        var topology = tile.Kind == MonitoringMapTileKind.Topology;
+        var subtitle = topology
+            ? (pins.Count == 0 ? "No devices placed" : $"{pins.Count} device{(pins.Count == 1 ? "" : "s")}, {links.Count} link{(links.Count == 1 ? "" : "s")}")
+            : pins.Count switch
+            {
+                0 when geo => "No locations placed",
+                0 => tile.ImageAssetId is null ? "No image uploaded" : "No pins placed",
+                1 => "1 pin",
+                _ => $"{pins.Count} pins"
+            };
 
         return CreateTile(tile, element,
             MonitoringStatePresentation.Key(severity),
             MonitoringStatePresentation.Label(severity),
-            subtitle, string.Empty, KindLabel(tile.Kind), geo ? "network" : "square",
-            pins: pins);
+            subtitle, string.Empty, KindLabel(tile.Kind), topology ? "network" : geo ? "globe" : "image",
+            pins: pins) with { Links = links };
     }
+
+    /// <summary>
+    /// The lines between two pins: positioned from the pins already placed (a link to a pin that is gone is dropped),
+    /// coloured by the link's own target. An interface sensor's traffic is written on it and its utilisation makes it
+    /// thicker; a link without a target is drawn neutral.
+    /// </summary>
+    private IReadOnlyList<MapLinkDto> BuildLinks(
+        MonitoringMapTile tile,
+        IReadOnlyList<MapPinDto> pins,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        if (tile.Links.Count == 0)
+        {
+            return [];
+        }
+
+        var byId = pins.Where(pin => pin.Id is not null).ToDictionary(pin => pin.Id!.Value);
+        var links = new List<MapLinkDto>(tile.Links.Count);
+        foreach (var link in tile.Links)
+        {
+            if (!byId.TryGetValue(link.FromPinId, out var from) || !byId.TryGetValue(link.ToPinId, out var to) || link.FromPinId == link.ToPinId)
+            {
+                continue;
+            }
+
+            var sensors = string.IsNullOrWhiteSpace(link.TargetToken) ? [] : _workspaceStore.ResolveTargetSensors(link.TargetToken);
+            var observations = sensors
+                .Select(sensor => latest.TryGetValue(sensor.Id, out var observation) ? observation : null)
+                .ToArray();
+            var severity = observations.Length == 0
+                ? MonitoringSeverity.Ok
+                : observations.Select(observation => MonitoringStatePresentation.FromSensorState(observation?.State ?? SensorState.Unknown))
+                    .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+            var tone = sensors.Count == 0 ? "neutral" : MonitoringStatePresentation.Key(severity);
+
+            string? traffic = null;
+            double? utilization = null;
+            if (link.ShowTraffic && observations.Length == 1 && observations[0] is { } single)
+            {
+                double? Channel(string key) => single.Channels.FirstOrDefault(channel =>
+                    string.Equals(channel.Key, key, StringComparison.OrdinalIgnoreCase))?.Value is { } value && double.IsFinite(value) ? value : null;
+                var trafficIn = Channel("traffic_in");
+                var trafficOut = Channel("traffic_out");
+                if (trafficIn is not null || trafficOut is not null)
+                {
+                    traffic = $"↓ {FormatMbit(trafficIn)}  ↑ {FormatMbit(trafficOut)}";
+                }
+                var util = new[] { Channel("utilization_in"), Channel("utilization_out") }.Where(value => value is not null).Select(value => value!.Value).ToArray();
+                if (util.Length > 0)
+                {
+                    utilization = Math.Clamp(util.Max(), 0, 100);
+                    traffic = traffic is null ? $"{utilization:0} %" : $"{traffic} ({utilization:0} %)";
+                }
+            }
+
+            links.Add(new MapLinkDto(
+                link.Id, from.X, from.Y, to.X, to.Y, tone,
+                sensors.Count == 0 ? MonitoringSeverity.Ok : severity,
+                string.IsNullOrWhiteSpace(link.Label) ? null : link.Label.Trim(),
+                traffic,
+                // 2 px idle, up to 7 px at full utilisation: how busy a link is reads from across the room.
+                Math.Round(2 + (utilization ?? 0) / 20, 1)));
+        }
+        return links;
+    }
+
+    private static string FormatMbit(double? value) => value switch
+    {
+        null => "-",
+        >= 1000 => $"{value / 1000:0.##} Gbit/s",
+        >= 10 => $"{value:0} Mbit/s",
+        _ => $"{value:0.##} Mbit/s"
+    };
 
     /// <summary>
     /// Resolves every pin's target to a state, and its position to a FRACTION of the tile. An image pin is
@@ -947,6 +1154,7 @@ public sealed class MapDisplayProvider
     private IReadOnlyList<MapPinDto> BuildPins(
         MonitoringMapTile tile,
         IReadOnlyDictionary<Guid, SensorObservation> latest,
+        IReadOnlyDictionary<Guid, MonitoringMap> maps,
         bool geo)
     {
         if (tile.Pins.Count == 0)
@@ -985,9 +1193,16 @@ public sealed class MapDisplayProvider
                 ? MonitoringSeverity.Ok
                 : states.Select(MonitoringStatePresentation.FromSensorState).Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
 
+            // A pin that only opens another map shows that map's worst state.
+            MonitoringSeverity? submap = sensors.Count == 0 && pin.LinkMapId is { } linked ? MapSeverity(linked, maps, latest, []) : null;
+            if (submap is { } fromMap)
+            {
+                severity = fromMap;
+            }
+
             // An unplaced/untargeted pin reads as "unknown" rather than as a healthy green dot, which would
             // be a lie on a wallboard.
-            var tone = sensors.Count == 0 ? "unknown" : MonitoringStatePresentation.Key(severity);
+            var tone = sensors.Count == 0 && submap is null ? "unknown" : MonitoringStatePresentation.Key(severity);
 
             string? value = null;
             if (pin.Style == MonitoringMapPinStyle.Tile && sensors.Count > 0)
@@ -998,14 +1213,25 @@ public sealed class MapDisplayProvider
             }
 
             pins.Add(new MapPinDto(
-                string.IsNullOrWhiteSpace(pin.Label) ? sensors.FirstOrDefault()?.Name ?? "Pin" : pin.Label!,
+                string.IsNullOrWhiteSpace(pin.Label) ? sensors.FirstOrDefault()?.Name ?? (pin.LinkMapId is { } map && maps.TryGetValue(map, out var linkedMap) ? linkedMap.Name : "Pin") : pin.Label!,
                 pin.ShowLabel,
                 tone,
-                sensors.Count == 0 ? MonitoringSeverity.Ok : severity,
+                sensors.Count == 0 && submap is null ? MonitoringSeverity.Ok : severity,
                 Math.Round(x * 100, 3),
                 Math.Round(y * 100, 3),
-                pin.Style == MonitoringMapPinStyle.Tile ? "tile" : "dot",
-                value));
+                pin.Style switch
+                {
+                    MonitoringMapPinStyle.Tile => "tile",
+                    MonitoringMapPinStyle.Device => "device",
+                    // A topology's nodes are devices unless someone chose otherwise.
+                    _ when tile.Kind == MonitoringMapTileKind.Topology => "device",
+                    _ => "dot"
+                },
+                value)
+            {
+                Id = pin.Id,
+                Icon = MonitoringMapDevices.IconFor(pin.Icon)
+            });
         }
 
         return pins;
@@ -1141,6 +1367,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Heading => "Heading",
             MonitoringMapTileKind.Image => "Image",
             MonitoringMapTileKind.GeoMap => "World map",
+            MonitoringMapTileKind.Topology => "Topology",
             _ => "Tile"
         };
     }
@@ -1245,7 +1472,19 @@ public sealed record MapDisplayTileViewModel(
     /// last reading. Null for every other kind.</summary>
     IReadOnlyList<MapGraphSeriesDto>? Series = null,
     /// <summary>The multi-graph's shared Y scale (rounded, labelled) and its time window. Null elsewhere.</summary>
-    MapGraphAxisDto? Axis = null);
+    MapGraphAxisDto? Axis = null)
+{
+    /// <summary>Where a click on the tile leads (its sensor, its part of the tree, the map one level down); null = nowhere.</summary>
+    public string? Href { get; init; }
+
+    /// <summary>The lines between the pins of a topology / picture tile.</summary>
+    public IReadOnlyList<MapLinkDto>? Links { get; init; }
+}
+
+/// <param name="X1">Start and end as a PERCENT of the tile, like the pins they join.</param>
+/// <param name="Tone">A state key, or "neutral" for a link without a target of its own.</param>
+/// <param name="Width">Stroke width in px: 2 idle, thicker with the utilisation of an interface sensor.</param>
+public sealed record MapLinkDto(Guid Id, double X1, double Y1, double X2, double Y2, string Tone, MonitoringSeverity Severity, string? Label, string? Traffic, double Width);
 
 /// <param name="Color">Fixed per series index so a line keeps its colour between renders - a legend whose
 /// colours reshuffle every poll is worse than no legend at all.</param>
@@ -1261,12 +1500,26 @@ public sealed record MapGraphAxisDto(string Top, string Middle, string Bottom, s
 
 /// <param name="X">Position as a PERCENT of the tile (0..100) - an image pin is stored that way and a geo pin
 /// is projected into it, so the renderer has one case and the pin holds at any rendered size.</param>
-public sealed record MapPinDto(string Label, bool ShowLabel, string Tone, MonitoringSeverity Severity, double X, double Y, string Style, string? Value);
+public sealed record MapPinDto(string Label, bool ShowLabel, string Tone, MonitoringSeverity Severity, double X, double Y, string Style, string? Value)
+{
+    public Guid? Id { get; init; }
+
+    /// <summary>The sprite icon of a device pin.</summary>
+    public string Icon { get; init; } = "box";
+
+    public string? Href { get; init; }
+}
 
 /// <param name="Tone">A state key ("ok"/"warning"/"error"/"unknown") for the row pill.</param>
 /// <param name="TimeText">Pre-formatted relative age, e.g. "12m" - formatted server-side so the public
 /// wallboard needs no locale handling in the browser.</param>
-public sealed record MapTileRowDto(string Label, string? Detail, string? Value, string Tone, string? TimeText);
+public sealed record MapTileRowDto(string Label, string? Detail, string? Value, string Tone, string? TimeText)
+{
+    /// <summary>The sensor or element the row is about - what a click on it opens.</summary>
+    public Guid? ElementId { get; init; }
+
+    public string? Href { get; init; }
+}
 
 /// <param name="Percent">Null when the window holds no state samples - "unknown", which must NOT render as 0.</param>
 public sealed record MapSlaDto(double? Percent, int WindowDays, long StateSamples, string Label);

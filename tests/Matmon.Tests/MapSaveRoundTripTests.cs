@@ -78,6 +78,7 @@ public sealed class MapSaveRoundTripTests : IDisposable
         ImageFit = MonitoringMapImageFit.Cover,
         ColorRules = new Dictionary<string, string> { ["up"] = "#11aa22", ["down"] = "#cc2233" },
         RefreshSeconds = 120,
+        LinkMapId = Guid.NewGuid(),
         Pins =
         [
             new MonitoringMapPin
@@ -89,7 +90,9 @@ public sealed class MapSaveRoundTripTests : IDisposable
                 X = 0.25,
                 Y = 0.75,
                 Latitude = 52.52,
-                Longitude = 13.405
+                Longitude = 13.405,
+                Icon = "switch",
+                LinkMapId = Guid.NewGuid()
             }
         ]
     };
@@ -120,7 +123,7 @@ public sealed class MapSaveRoundTripTests : IDisposable
 
         // Reflection, not a hand-written assertion list - a hand-written list is the same failure mode as the
         // hand-written normalizer that caused this.
-        var skipped = new HashSet<string> { nameof(MonitoringMapTile.Pins) };
+        var skipped = new HashSet<string> { nameof(MonitoringMapTile.Pins), nameof(MonitoringMapTile.Links) };
         var mismatches = new List<string>();
         foreach (var property in typeof(MonitoringMapTile).GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
@@ -169,6 +172,36 @@ public sealed class MapSaveRoundTripTests : IDisposable
         Assert.Equal(expected.Y, pin.Y);
         Assert.Equal(expected.Latitude, pin.Latitude);
         Assert.Equal(expected.Longitude, pin.Longitude);
+        Assert.Equal(expected.Icon, pin.Icon);
+        Assert.Equal(expected.LinkMapId, pin.LinkMapId);
+    }
+
+    [Fact]
+    public void Topology_links_survive_a_save()
+    {
+        var tile = FullyPopulatedTile();
+        tile.Kind = MonitoringMapTileKind.Topology;
+        var second = new MonitoringMapPin { Label = "Core", Style = MonitoringMapPinStyle.Device, Icon = "router", X = 0.5, Y = 0.2 };
+        tile.Pins.Add(second);
+        var link = new MonitoringMapLink
+        {
+            FromPinId = tile.Pins[0].Id,
+            ToPinId = second.Id,
+            TargetToken = "tag:uplink",
+            Label = "Gi0/1",
+            ShowTraffic = false
+        };
+        tile.Links.Add(link);
+
+        var saved = SaveAndReload(tile).Slides[0].Tiles.Single();
+
+        var stored = Assert.Single(saved.Links);
+        Assert.Equal(link.Id, stored.Id);
+        Assert.Equal(link.FromPinId, stored.FromPinId);
+        Assert.Equal(link.ToPinId, stored.ToPinId);
+        Assert.Equal(link.TargetToken, stored.TargetToken);
+        Assert.Equal(link.Label, stored.Label);
+        Assert.False(stored.ShowTraffic);
     }
 
     [Fact]

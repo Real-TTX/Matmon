@@ -359,8 +359,17 @@ public sealed class MonitoringMapTile
     /// or slow-changing simply reuses its last answer for this long. 0 = the board's own cadence.</summary>
     public int RefreshSeconds { get; set; }
 
-    /// <summary>Status markers on an image or geo tile.</summary>
+    /// <summary>Status markers on an image or geo tile - and the NODES of a topology tile.</summary>
     public List<MonitoringMapPin> Pins { get; set; } = [];
+
+    /// <summary>Connections between two pins of this tile (a topology's cables, a floorplan's uplinks): a line
+    /// whose colour follows its own target - typically the interface sensor of the port - and whose label says
+    /// what flows through it.</summary>
+    public List<MonitoringMapLink> Links { get; set; } = [];
+
+    /// <summary>Another map this tile opens when clicked, a level deeper (site -> floor -> rack). With no target
+    /// of its own the tile then shows the worst state on that map, so the problem is visible a level up.</summary>
+    public Guid? LinkMapId { get; set; }
 
     public MonitoringMapTile Clone() => new()
     {
@@ -397,6 +406,8 @@ public sealed class MonitoringMapTile
         ImageAssetId = ImageAssetId,
         ImageFit = ImageFit,
         Pins = Pins.Select(pin => pin.Clone()).ToList(),
+        Links = Links.Select(link => link.Clone()).ToList(),
+        LinkMapId = LinkMapId,
         ColorRules = new Dictionary<string, string>(ColorRules),
         RefreshSeconds = RefreshSeconds
     };
@@ -435,7 +446,12 @@ public enum MonitoringMapTileKind
     /// <summary>Several sensors as lines in ONE chart, on one shared scale, with a legend. A
     /// <see cref="Graph"/> shows a trend; this one answers "which of these is the one moving?", which needs
     /// the lines to be comparable - see <c>SparklineGeometry.Scale</c>.</summary>
-    MultiGraph = 12
+    MultiGraph = 12,
+
+    /// <summary>A network topology: devices as nodes (pins with a device symbol) placed freely on a plain or
+    /// pictured canvas, joined by links whose colour and label come from their own sensor - the interface
+    /// of the port. An outage shows as the cable that went red and everything behind it.</summary>
+    Topology = 13
 }
 
 public enum MonitoringMapListMode
@@ -531,6 +547,8 @@ public static class MonitoringMapTileConstraints
             // A picture with pins on it is useless small - you cannot hit a pin, let alone read its label.
             MonitoringMapTileKind.Image => (3, 3, 6, 4),
             MonitoringMapTileKind.GeoMap => (4, 3, 6, 4),
+            // Nodes need room around them for the cables and their labels.
+            MonitoringMapTileKind.Topology => (4, 3, 8, 5),
             _ => (2, 2, 2, 2)
         };
     }
@@ -629,9 +647,19 @@ public sealed class MonitoringMapPin
 
     public double? Longitude { get; set; }
 
+    /// <summary>The device symbol of a <see cref="MonitoringMapPinStyle.Device"/> pin - one of
+    /// <see cref="MonitoringMapDevices.All"/> (router, switch, firewall, server ...).</summary>
+    public string? Icon { get; set; }
+
+    /// <summary>A map this pin opens when clicked (a site pin opening the site's own map). Without a target
+    /// the pin shows that map's worst state.</summary>
+    public Guid? LinkMapId { get; set; }
+
     public MonitoringMapPin Clone() => new()
     {
         Id = Id,
+        Icon = Icon,
+        LinkMapId = LinkMapId,
         TargetToken = TargetToken,
         Label = Label,
         ShowLabel = ShowLabel,
@@ -649,7 +677,68 @@ public enum MonitoringMapPinStyle
     Dot = 0,
 
     /// <summary>A miniature value card - the "mini tile" on a floorplan.</summary>
-    Tile = 1
+    Tile = 1,
+
+    /// <summary>A device symbol in a ring of its state colour, the name under it - a node of a topology.</summary>
+    Device = 2
+}
+
+/// <summary>A connection between two pins of one tile. Its state comes from <see cref="TargetToken"/> (the
+/// port's interface sensor, a ping across the link ...); without one it is drawn neutral, joining what it
+/// joins. An interface sensor's traffic (traffic_in/out, utilization_in/out) is written on the line and its
+/// utilisation makes the line thicker.</summary>
+public sealed class MonitoringMapLink
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+
+    public Guid FromPinId { get; set; }
+
+    public Guid ToPinId { get; set; }
+
+    /// <summary>Element id or "tag:name", like a pin's.</summary>
+    public string? TargetToken { get; set; }
+
+    public string? Label { get; set; }
+
+    /// <summary>Write the traffic of an interface sensor on the line.</summary>
+    public bool ShowTraffic { get; set; } = true;
+
+    public MonitoringMapLink Clone() => new()
+    {
+        Id = Id,
+        FromPinId = FromPinId,
+        ToPinId = ToPinId,
+        TargetToken = TargetToken,
+        Label = Label,
+        ShowTraffic = ShowTraffic
+    };
+}
+
+/// <summary>The device symbols a topology node can carry, each drawn with an icon of the toolkit's sprite.</summary>
+public static class MonitoringMapDevices
+{
+    public static IReadOnlyList<(string Key, string Label, string Icon)> All { get; } =
+    [
+        ("router", "Router", "route"),
+        ("switch", "Switch", "grid"),
+        ("firewall", "Firewall", "shield"),
+        ("server", "Server", "server"),
+        ("storage", "Storage / NAS", "hard-drive"),
+        ("database", "Database", "database"),
+        ("wifi", "Access point", "network"),
+        ("internet", "Internet", "globe"),
+        ("cloud", "Cloud", "cloud"),
+        ("pc", "Computer", "monitor"),
+        ("phone", "Phone", "smartphone"),
+        ("ups", "UPS / power", "plug"),
+        ("display", "Display", "tv"),
+        ("site", "Site", "home"),
+        ("other", "Other", "box")
+    ];
+
+    /// <summary>The sprite icon of a device key, "box" for an unknown one.</summary>
+    public static string IconFor(string? key) =>
+        All.FirstOrDefault(device => string.Equals(device.Key, key, StringComparison.OrdinalIgnoreCase)).Icon ?? "box";
 }
 
 /// <summary>How an uploaded image fills its tile.</summary>

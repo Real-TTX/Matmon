@@ -46,6 +46,8 @@ public static class MapTileRender
             MonitoringMapTileKind.Heading => "Heading",
             MonitoringMapTileKind.Image => "Image",
             MonitoringMapTileKind.GeoMap => "World map",
+            MonitoringMapTileKind.Topology => "Topology",
+            MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
     }
@@ -65,6 +67,7 @@ public static class MapTileRender
             MonitoringMapTileKind.Heading => "list",
             MonitoringMapTileKind.Image => "square",
             MonitoringMapTileKind.GeoMap => "network",
+            MonitoringMapTileKind.Topology => "network",
             _ => "sensor"
         };
     }
@@ -159,6 +162,12 @@ public sealed class MapTileRenderModel
 
     public MapGraphAxisDto? Axis { get; init; }
 
+    /// <summary>Where a click on the tile leads; null = nowhere (always null in the designer).</summary>
+    public string? Href { get; init; }
+
+    /// <summary>The lines between the pins of a topology / picture tile.</summary>
+    public IReadOnlyList<MapLinkDto>? Links { get; init; }
+
     /// <summary>IANA timezone the board renders times in - carried down to the clock widget, which ticks
     /// client-side and therefore needs the MAP timezone rather than the browser one.</summary>
     public string? TimeZoneId { get; init; }
@@ -201,6 +210,8 @@ public sealed class MapTileRenderModel
             Pins = vm.Pins,
             Series = vm.Series,
             Axis = vm.Axis,
+            Href = editable ? null : vm.Href,
+            Links = vm.Links,
             TimeZoneId = map.DisplayTimeZoneId
         };
     }

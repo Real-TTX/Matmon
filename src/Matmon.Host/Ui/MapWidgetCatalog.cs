@@ -52,7 +52,9 @@ public static class MapWidgetCatalog
         new("floorplan", "Floorplan + pins", "A picture with status pins placed on it", "probe", MapWidgetCategory.Places,
             MonitoringMapTileKind.Image, SearchTerms: "plan rack room office markers dots layout"),
         new("geomap", "World map", "Offline world map with pins by latitude/longitude", "network", MapWidgetCategory.Places,
-            MonitoringMapTileKind.GeoMap, SearchTerms: "geo globe sites locations countries world")
+            MonitoringMapTileKind.GeoMap, SearchTerms: "geo globe sites locations countries world"),
+        new("topology", "Topology", "Devices joined by links that show traffic and turn red when a port goes down", "network", MapWidgetCategory.Places,
+            MonitoringMapTileKind.Topology, SearchTerms: "network diagram links cables switch router uplink weathermap traffic")
     ];
 
     /// <summary>Which schematic the palette draws for an entry. Derived from what the widget actually
@@ -73,6 +75,7 @@ public static class MapWidgetCatalog
         { Kind: MonitoringMapTileKind.Heading } => "heading",
         { Kind: MonitoringMapTileKind.Text } => "text",
         { Kind: MonitoringMapTileKind.GeoMap } => "geo",
+        { Kind: MonitoringMapTileKind.Topology } => "topology",
         // Both are Image tiles; "floorplan" is the one that exists for its pins, so it previews them.
         { Kind: MonitoringMapTileKind.Image } => widget.Key == "floorplan" ? "pins" : "image",
         { Kind: MonitoringMapTileKind.Status } => "group",

@@ -311,6 +311,13 @@
                                     <span class="mat-label">Target</span>
                                     <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = $"Input.Tiles[{index}].TargetToken", DomId = $"picker-map-tile-{index}", SelectedValue = Model.Input.Tiles[index].TargetToken, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
                                 </div>
+                                <div class="mat-field">
+                                    <label class="mat-label" for="@(tileId)LinkMapId">Opens map</label>
+                                    <select asp-for="Input.Tiles[index].LinkMapId" asp-items="Model.MapLinkOptions" class="mat-select">
+                                        <option value="">Nothing</option>
+                                    </select>
+                                    <span class="mat-hint">Without a target the tile shows the worst state on that map.</span>
+                                </div>
                                 <div class="mat-field" data-map-property-text-only>
                                     <label class="mat-label" for="@(tileId)Text">Text</label>
                                     <textarea asp-for="Input.Tiles[index].Text" class="mat-textarea" rows="4" data-map-property-text></textarea>
@@ -418,6 +425,15 @@
                                         <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-pin-add>@MatUi.Icon("plus")<span>Add pin</span></button>
                                     </div>
                                     <span class="mat-hint" data-map-pin-hint></span>
+                                </div>
+                                <div class="mat-field" data-map-property-pins-only>
+                                    <span class="mat-label">Links</span>
+                                    <input type="hidden" asp-for="Input.Tiles[index].LinksJson" data-map-property-links />
+                                    <div class="map-pin-editor" data-map-link-editor></div>
+                                    <div class="mat-row">
+                                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-link-add>@MatUi.Icon("link")<span>Add link</span></button>
+                                    </div>
+                                    <span class="mat-hint">A line between two pins, coloured by its own target - an interface sensor writes its traffic on it.</span>
                                 </div>
                             </div>
 
@@ -697,10 +713,26 @@
                 <select class="mat-select mat-select--sm" data-pin-field="style" aria-label="Pin style">
                     <option value="Dot">Dot</option>
                     <option value="Tile">Mini tile</option>
+                    <option value="Device">Device</option>
                 </select>
                 <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-pin-remove aria-label="Remove pin">@MatUi.Icon("trash")</button>
             </div>
             <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-pin-__pinId__", AllowTags = true, Placeholder = "No target", Options = Model.TilePickerOptions, ValueAttribute = "data-pin-field-target" })" />
+            <div class="map-pin-row-main map-pin-row-main--pair" data-map-pin-device-row>
+                <select class="mat-select mat-select--sm" data-pin-field="icon" aria-label="Device">
+                    @foreach (var device in MonitoringMapDevices.All)
+                    {
+                        <option value="@device.Key">@device.Label</option>
+                    }
+                </select>
+                <select class="mat-select mat-select--sm" data-pin-field="linkMapId" aria-label="Opens map">
+                    <option value="">Opens no map</option>
+                    @foreach (var option in Model.MapLinkOptions)
+                    {
+                        <option value="@option.Value">Opens: @option.Text</option>
+                    }
+                </select>
+            </div>
             <div class="map-pin-row-geo" data-map-pin-geo hidden>
                 <input type="number" step="0.0001" min="-90" max="90" class="mat-input mat-input--sm" data-pin-field="latitude" placeholder="Latitude" aria-label="Latitude" />
                 <input type="number" step="0.0001" min="-180" max="180" class="mat-input mat-input--sm" data-pin-field="longitude" placeholder="Longitude" aria-label="Longitude" />
@@ -709,6 +741,22 @@
     </template>
     @* One extra-target row, cloned per token by the designer. Same element picker as everywhere else, with its
        DOM id rewritten per row - a duplicated id would make one row's picker drive another row's value. *@
+    @* One link row, cloned per link by the designer and serialised into the tile's LinksJson. The two pin selects
+       are filled from the tile's current pins. *@
+    <template data-map-link-template>
+        <div class="map-pin-row" data-map-link-row>
+            <div class="map-pin-row-main map-pin-row-main--pair">
+                <select class="mat-select mat-select--sm" data-link-field="fromPinId" aria-label="From"></select>
+                <select class="mat-select mat-select--sm" data-link-field="toPinId" aria-label="To"></select>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-map-link-remove aria-label="Remove link">@MatUi.Icon("trash")</button>
+            </div>
+            <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-link-__linkId__", AllowTags = true, Placeholder = "No sensor (neutral line)", Options = Model.TilePickerOptions, ValueAttribute = "data-link-field-target" })" />
+            <div class="map-pin-row-main">
+                <input type="text" class="mat-input mat-input--sm" data-link-field="label" placeholder="Label (port, cable)" aria-label="Link label" />
+                <label class="mat-check"><input type="checkbox" data-link-field="showTraffic" /><span class="mat-check__text">Traffic</span></label>
+            </div>
+        </div>
+    </template>
     <template data-map-target-template>
         <div class="map-target-row" data-map-target-row>
             <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = string.Empty, DomId = "picker-map-target-__rowId__", AllowTags = true, Placeholder = "Pick an element or tag", Options = Model.TilePickerOptions, ValueAttribute = "data-map-target-value" })" />
@@ -794,6 +842,17 @@
                 <div class="mat-field" data-map-property-target>
                     <span class="mat-label">Target</span>
                     <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.Tiles[__index__].TargetToken", DomId = "picker-map-tile-__index__", SelectedValue = null, AllowTags = true, Placeholder = "No element", Options = Model.TilePickerOptions, ValueAttribute = "data-map-property-element" })" />
+                </div>
+                <div class="mat-field">
+                    <label class="mat-label" for="@(TemplateTileId)LinkMapId">Opens map</label>
+                    <select id="@(TemplateTileId)LinkMapId" name="Input.Tiles[__index__].LinkMapId" class="mat-select">
+                        <option value="">Nothing</option>
+                        @foreach (var option in Model.MapLinkOptions)
+                        {
+                            <option value="@option.Value">@option.Text</option>
+                        }
+                    </select>
+                    <span class="mat-hint">Without a target the tile shows the worst state on that map.</span>
                 </div>
                 <div class="mat-field" data-map-property-text-only>
                     <label class="mat-label" for="@(TemplateTileId)Text">Text</label>
@@ -893,6 +952,15 @@
                         <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-pin-add>@MatUi.Icon("plus")<span>Add pin</span></button>
                     </div>
                     <span class="mat-hint" data-map-pin-hint></span>
+                </div>
+                <div class="mat-field" data-map-property-pins-only>
+                    <span class="mat-label">Links</span>
+                    <input type="hidden" name="Input.Tiles[__index__].LinksJson" data-map-property-links />
+                    <div class="map-pin-editor" data-map-link-editor></div>
+                    <div class="mat-row">
+                        <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-map-link-add>@MatUi.Icon("link")<span>Add link</span></button>
+                    </div>
+                    <span class="mat-hint">A line between two pins, coloured by its own target - an interface sensor writes its traffic on it.</span>
                 </div>
             </div>
 

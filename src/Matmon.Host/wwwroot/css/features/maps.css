@@ -584,6 +584,124 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A topology node: the device symbol in a ring of its state colour, the name under it. */
+.map-pin[data-pin-style="device"] {
+  flex-direction: column;
+  gap: 0.2em;
+}
+.map-pin-device {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.6em;
+  height: 2.6em;
+  border: 0.18em solid var(--map-pin-tone);
+  border-radius: var(--mat-radius-pill);
+  background: var(--mat-surface);
+  color: var(--map-pin-tone);
+  box-shadow: 0 0 0 0.16em color-mix(in srgb, var(--map-pin-tone) 18%, transparent);
+}
+.map-pin-device svg {
+  width: 1.35em;
+  height: 1.35em;
+}
+.map-pin[data-pin-style="device"] .map-pin-label {
+  align-items: center;
+  text-align: center;
+}
+.map-pin[data-state="error"] .map-pin-device {
+  animation: map-node-alarm 1.6s ease-in-out infinite;
+}
+@keyframes map-node-alarm {
+  50% { box-shadow: 0 0 0 0.45em color-mix(in srgb, var(--map-pin-tone) 30%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-pin[data-state="error"] .map-pin-device { animation: none; }
+}
+
+/* A topology's plain canvas: a faint dot grid, so free space reads as a drawing surface. */
+.map-tile-canvas.is-topology {
+  background-image: radial-gradient(color-mix(in srgb, var(--mat-text-faint) 35%, transparent) 1px, transparent 1.2px);
+  background-size: 1.4rem 1.4rem;
+}
+
+/* The cables: one 0..100 box stretched over the frame, under the pins. */
+.map-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.map-link {
+  --map-link-tone: var(--mat-text-faint);
+  stroke: var(--map-link-tone);
+  stroke-width: var(--link-width, 2px);
+  stroke-linecap: round;
+}
+.map-link[data-state="neutral"] { stroke-dasharray: 4 3; opacity: 0.7; }
+.map-link[data-state="ok"] { --map-link-tone: var(--mat-success); }
+.map-link[data-state="warning"] { --map-link-tone: var(--mat-warning); }
+.map-link[data-state="error"] { --map-link-tone: var(--mat-danger); }
+.map-link-label {
+  --map-pin-tone: var(--mat-text-faint);
+  position: absolute;
+  left: var(--pin-x, 50%);
+  top: var(--pin-y, 50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.05em 0.35em;
+  border: 1px solid color-mix(in srgb, var(--map-pin-tone) 45%, transparent);
+  border-radius: var(--mat-radius-sm);
+  background: color-mix(in srgb, var(--mat-surface) 88%, transparent);
+  font-size: calc(var(--map-type, 0.95rem) * 0.66);
+  line-height: var(--mat-lh-tight);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.map-link-label[data-state="ok"] { --map-pin-tone: var(--mat-success); }
+.map-link-label[data-state="warning"] { --map-pin-tone: var(--mat-warning); }
+.map-link-label[data-state="error"] { --map-pin-tone: var(--mat-danger); }
+.map-link-label small { font-variant-numeric: tabular-nums; }
+.map-link-label small:empty { display: none; }
+
+/* Click-through: a tile that leads somewhere is covered by one stretched link; what has a link of its own
+   (pins, rows) sits above it. */
+.map-tile-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+}
+.map-tile-link:focus-visible {
+  outline: 2px solid var(--mat-accent);
+  outline-offset: 2px;
+}
+.map-tile.is-linked { cursor: pointer; }
+.map-tile.is-linked:hover {
+  border-color: color-mix(in srgb, var(--map-tile-accent) 60%, transparent);
+}
+a.map-pin {
+  z-index: 2;
+  color: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+}
+a.map-pin:hover .map-pin-label,
+a.map-pin:focus-visible .map-pin-label {
+  border-color: var(--map-pin-tone);
+}
+.map-tile-row-link {
+  position: relative;
+  z-index: 2;
+  color: inherit;
+  text-decoration: none;
+}
+.map-tile-row-link:hover { text-decoration: underline; }
+
 /* ---- Graph ---- */
 .map-tile-graph-frame {
   /* A shrink floor as well as a grow factor: the trend is the widget, it must not get the leftovers. */
@@ -1616,6 +1734,9 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--mat-space-2);
+}
+.map-pin-row-main--pair {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
 }
 .map-pin-row-geo {
   display: grid;

@@ -36,6 +36,9 @@ public sealed class MapEditorModel : PageModel
     /// </summary>
     public IReadOnlyList<SelectListItem> CompareChannelOptions { get; private set; } = [];
 
+    /// <summary>The other maps a tile or a pin can open (click-through to a deeper level). Never the map itself.</summary>
+    public IReadOnlyList<SelectListItem> MapLinkOptions { get; private set; } = [];
+
     /// <summary>Designer render models for the CURRENT tiles, index-aligned with <see cref="MapEditorInput.Tiles"/>
     /// - combines each bound tile's own position/appearance with its live display data (state/value/graph) when
     /// one is already resolvable, so the designer shows the real tile instead of a hand-built mock.</summary>
@@ -99,8 +102,9 @@ public sealed class MapEditorModel : PageModel
     /// header until the map was saved - on an editor whose whole promise is that it renders the real tile,
     /// every new widget broke that promise. This hands back the SAME _MapTile partial the viewer uses, so the
     /// two cannot drift; the designer swaps it in whenever a tile's STRUCTURE changes (its kind, visual,
-    /// graph type or picture), never for a value, which the cheaper TilePreview JSON above still carries.</summary>
-    public IActionResult OnGetTileMarkup(
+    /// graph type or picture), never for a value, which the cheaper TilePreview JSON above still carries.
+    /// A POST, because a topology's pins and links travel with it and a query string has a length limit.</summary>
+    public IActionResult OnPostTileMarkup(
         int index,
         Guid id,
         Guid slideId,
@@ -125,7 +129,10 @@ public sealed class MapEditorModel : PageModel
         int listLimit = 0,
         string? listChannelKey = null,
         string? targets = null,
-        int graphWindowHours = 24)
+        int graphWindowHours = 24,
+        string? pins = null,
+        string? links = null,
+        Guid? linkMapId = null)
     {
         var tile = new MonitoringMapTile
         {
@@ -151,7 +158,12 @@ public sealed class MapEditorModel : PageModel
             ListLimit = listLimit <= 0 ? 4 : listLimit,
             ListChannelKey = string.IsNullOrWhiteSpace(listChannelKey) ? null : listChannelKey.Trim(),
             GraphWindowHours = MonitoringMapTile.NormalizeGraphWindowHours(graphWindowHours),
-            TargetTokens = SplitTargetTokens(targets)
+            TargetTokens = SplitTargetTokens(targets),
+            // The designer draws pins and links from the same render as the viewer - placed blind, a topology
+            // could only be judged after saving.
+            Pins = ParsePins(pins),
+            Links = ParseLinks(links),
+            LinkMapId = linkMapId is { } linkMap && linkMap != Guid.Empty ? linkMap : null
         };
         MonitoringMapTileConstraints.Clamp(tile, Math.Max(1, Input.Columns), Math.Max(1, Input.Rows));
 
@@ -305,6 +317,8 @@ public sealed class MapEditorModel : PageModel
         ImageAssetId = tile.ImageAssetId,
         ImageFit = tile.ImageFit,
         Pins = ParsePins(tile.PinsJson),
+        Links = ParseLinks(tile.LinksJson),
+        LinkMapId = tile.LinkMapId is { } linkMap && linkMap != Guid.Empty && linkMap != Input.Id ? linkMap : null,
         TargetTokens = SplitTargetTokens(tile.TargetTokensText),
         // Only real #rrggbb values are stored - an unparseable one would just be ignored at render time, so
         // keeping it would leave the user staring at a value that does nothing.
@@ -324,6 +338,27 @@ public sealed class MapEditorModel : PageModel
             : text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+    /// <summary>The links JSON, defensively like the pins: a malformed blob costs the tile its links, never the save.</summary>
+    private List<MonitoringMapLink> ParseLinks(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return (System.Text.Json.JsonSerializer.Deserialize<List<MonitoringMapLink>>(json, PinJsonOptions) ?? [])
+                .Where(link => link.FromPinId != Guid.Empty && link.ToPinId != Guid.Empty && link.FromPinId != link.ToPinId)
+                .ToList();
+        }
+        catch (System.Text.Json.JsonException exception)
+        {
+            _logger.LogWarning(exception, "Could not parse the link JSON for a map tile; its links were dropped.");
+            return [];
+        }
+    }
 
     private List<MonitoringMapPin> ParsePins(string? json)
     {
@@ -427,6 +462,8 @@ public sealed class MapEditorModel : PageModel
                     ImageFit = tile.ImageFit,
                     PinsJson = tile.Pins.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Pins, PinJsonOptions),
                     TargetTokensText = tile.TargetTokens.Count == 0 ? null : string.Join("\n", tile.TargetTokens),
+                    LinksJson = tile.Links.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(tile.Links, PinJsonOptions),
+                    LinkMapId = tile.LinkMapId,
                     ColorRules = new Dictionary<string, string>(tile.ColorRules),
                     RefreshSeconds = tile.RefreshSeconds
                 })).ToList()
@@ -504,6 +541,11 @@ public sealed class MapEditorModel : PageModel
         var root = _workspaceStore.GetAllElements().FirstOrDefault(element => element.ParentId is null);
         TilePickerOptions = Matmon.Host.Ui.ElementPickerOptions.Build(root);
         CompareChannelOptions = BuildCompareChannelOptions();
+        MapLinkOptions = _workspaceStore.GetMaps()
+            .Where(map => map.Id != Input.Id)
+            .OrderBy(map => map.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(map => new SelectListItem(map.Name, map.Id.ToString()))
+            .ToList();
     }
 
     private IReadOnlyList<SelectListItem> BuildCompareChannelOptions()
@@ -735,6 +777,12 @@ public sealed class MapTileInput
     /// designer clones whole tiles by rewriting their field names - index-based binding would mean
     /// re-indexing a nested collection on every clone and delete. One opaque string moves with the tile.</summary>
     public string? PinsJson { get; set; }
+
+    /// <summary>The connections between the tile's pins, as JSON - for the pins' reason.</summary>
+    public string? LinksJson { get; set; }
+
+    /// <summary>The map a click on the tile opens (null = none).</summary>
+    public Guid? LinkMapId { get; set; }
 
     /// <summary>Extra targets for a multi-series widget, one token per line. A plain joined string rather
     /// than indexed <c>TargetTokens[i]</c> fields for the same reason the pins are one JSON blob: the

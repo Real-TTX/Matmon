@@ -322,6 +322,22 @@ function initializeMapLiveData() {
     });
   };
 
+  // A link is found by its id (the markup carries it), so its colour, width and traffic follow the sensor.
+  const patchLinks = (tile, links) => {
+    (links || []).forEach((link) => {
+      const line = tile.querySelector(`.map-link[data-link-id="${link.id}"]`);
+      if (line) {
+        line.dataset.state = link.tone || "neutral";
+        line.style.setProperty("--link-width", `${Number(link.width) || 2}px`);
+      }
+      const label = tile.querySelector(`[data-link-label="${link.id}"]`);
+      if (label) {
+        label.dataset.state = link.tone || "neutral";
+        setText(label, "[data-link-traffic]", link.traffic || "");
+      }
+    });
+  };
+
   const patchTile = (tile, data) => {
     tile.dataset.state = data.stateKey || "unknown";
     const badge = tile.querySelector("[data-tile-state-label]");
@@ -401,6 +417,7 @@ function initializeMapLiveData() {
 
     patchRows(tile, data.rows);
     patchPins(tile, data.pins);
+    patchLinks(tile, data.links);
   };
 
   const refresh = async () => {
@@ -690,7 +707,9 @@ function initializeMapDesigner() {
     "8": "Clock",
     "9": "Heading",
     "10": "Image",
-    "11": "GeoMap"
+    "11": "GeoMap",
+    "12": "MultiGraph",
+    "13": "Topology"
   };
   const kindLabels = {
     "0": "Text",
@@ -705,6 +724,8 @@ function initializeMapDesigner() {
     "9": "Heading",
     "10": "Image",
     "11": "World map",
+    "12": "Multi-graph",
+    "13": "Topology",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -716,7 +737,9 @@ function initializeMapDesigner() {
     Clock: "Clock",
     Heading: "Heading",
     Image: "Image",
-    GeoMap: "World map"
+    GeoMap: "World map",
+    MultiGraph: "Multi-graph",
+    Topology: "Topology"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -726,6 +749,7 @@ function initializeMapDesigner() {
     Heading: "A section title. Use Text for the sub-line.",
     Image: "Upload a picture, then place status pins on it.",
     GeoMap: "The shipped offline world map - pins are placed by latitude/longitude.",
+    Topology: "Place devices, then join them with links - give a link the port's interface sensor and it shows the traffic and turns red when the port goes down.",
     "0": "Text tiles do not need a target.",
     "1": "Shows one target state or value. Progress and gauge use the default channel when possible.",
     "2": "Aggregates all child sensors below the selected target. Progress and gauge show healthy percentage.",
@@ -1023,6 +1047,7 @@ function initializeMapDesigner() {
     if (kind === "GeoMap") {
       return;
     }
+    const topology = kind === "Topology";
 
     const assetId = (panel?.querySelector("[data-map-property-image-id]")?.value || "").trim();
     let image = pinCanvas.querySelector("img.map-tile-image");
@@ -1030,6 +1055,11 @@ function initializeMapDesigner() {
 
     if (!assetId) {
       image?.remove();
+      // A topology without a picture is a plain drawing surface, not a missing upload.
+      if (topology) {
+        empty?.remove();
+        return;
+      }
       if (!empty) {
         empty = document.createElement("span");
         empty.className = "map-tile-canvas-empty";
@@ -1097,12 +1127,159 @@ function initializeMapDesigner() {
     }
   };
 
+  // Pins and links are part of the tile's server render (the designer shows the real topology), so a change
+  // re-renders it - debounced, because a label is typed a key at a time.
+  const canvasRefreshTimers = new WeakMap();
+  const queueCanvasRefresh = (panel) => {
+    clearTimeout(canvasRefreshTimers.get(panel));
+    canvasRefreshTimers.set(panel, setTimeout(() => syncTileFromPanel(panel), 350));
+  };
+
   const writePins = (panel, pins) => {
     const field = panel?.querySelector("[data-map-property-pins]");
     if (field) {
       field.value = pins.length === 0 ? "" : JSON.stringify(pins);
       field.dispatchEvent(new Event("change", { bubbles: true }));
+      queueCanvasRefresh(panel);
     }
+  };
+
+  const linkTemplate = form?.querySelector("template[data-map-link-template]");
+
+  const readLinks = (panel) => {
+    const field = panel?.querySelector("[data-map-property-links]");
+    if (!field?.value) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(field.value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeLinks = (panel, links) => {
+    const field = panel?.querySelector("[data-map-property-links]");
+    if (field) {
+      field.value = links.length === 0 ? "" : JSON.stringify(links);
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      queueCanvasRefresh(panel);
+    }
+  };
+
+  const pinName = (pin, index) => (pin.label || "").trim() || `Pin ${index + 1}`;
+
+  // Fills a link's two pin selects from the tile's CURRENT pins, keeping the chosen one.
+  const fillPinSelect = (select, pins, value) => {
+    select.replaceChildren(...pins.map((pin, index) => {
+      const option = document.createElement("option");
+      option.value = pin.id;
+      option.textContent = pinName(pin, index);
+      return option;
+    }));
+    select.value = value || "";
+  };
+
+  const refreshLinkPinOptions = (panel) => {
+    const pins = readPins(panel);
+    panel?.querySelectorAll("[data-map-link-row]").forEach((row) => {
+      row.querySelectorAll('[data-link-field="fromPinId"], [data-link-field="toPinId"]').forEach((select) => {
+        fillPinSelect(select, pins, select.value);
+      });
+    });
+  };
+
+  const renderLinkRows = (panel) => {
+    const host = panel?.querySelector("[data-map-link-editor]");
+    if (!host || !linkTemplate) {
+      return;
+    }
+    const pins = readPins(panel);
+    const pinIds = new Set(pins.map((pin) => pin.id));
+    // A link to a pin that was removed goes with it.
+    const all = readLinks(panel);
+    const links = all.filter((link) => pinIds.has(link.fromPinId) && pinIds.has(link.toPinId));
+    if (links.length !== all.length) {
+      writeLinks(panel, links);
+    }
+    host.replaceChildren();
+
+    links.forEach((link, index) => {
+      const html = linkTemplate.innerHTML.replaceAll("__linkId__", link.id || `l${index}`);
+      const row = document.createRange().createContextualFragment(html).querySelector("[data-map-link-row]");
+      if (!row) {
+        return;
+      }
+      fillPinSelect(row.querySelector('[data-link-field="fromPinId"]'), pins, link.fromPinId);
+      fillPinSelect(row.querySelector('[data-link-field="toPinId"]'), pins, link.toPinId);
+      row.querySelector('[data-link-field="label"]').value = link.label || "";
+      row.querySelector('[data-link-field="showTraffic"]').checked = link.showTraffic !== false;
+      const target = row.querySelector("[data-link-field-target]");
+      if (target) {
+        target.value = link.targetToken || "";
+      }
+
+      const collect = () => {
+        const current = readLinks(panel);
+        const entry = current.find((candidate) => candidate.id === link.id);
+        if (!entry) {
+          return;
+        }
+        entry.fromPinId = row.querySelector('[data-link-field="fromPinId"]').value;
+        entry.toPinId = row.querySelector('[data-link-field="toPinId"]').value;
+        entry.label = row.querySelector('[data-link-field="label"]').value || null;
+        entry.showTraffic = row.querySelector('[data-link-field="showTraffic"]').checked;
+        entry.targetToken = row.querySelector("[data-link-field-target]")?.value || null;
+        writeLinks(panel, current);
+      };
+      row.querySelectorAll("[data-link-field], [data-link-field-target]").forEach((field) => {
+        field.addEventListener("change", collect);
+        field.addEventListener("input", collect);
+      });
+      row.querySelector("[data-map-link-remove]")?.addEventListener("click", () => {
+        writeLinks(panel, readLinks(panel).filter((candidate) => candidate.id !== link.id));
+        renderLinkRows(panel);
+      });
+      host.appendChild(row);
+    });
+
+    const add = panel.querySelector("[data-map-link-add]");
+    if (add) {
+      add.disabled = pins.length < 2;
+      add.title = pins.length < 2 ? "Place two pins first." : "";
+    }
+    initializeElementPickers();
+  };
+
+  const addLink = (panel) => {
+    const pins = readPins(panel);
+    if (pins.length < 2) {
+      return;
+    }
+    const links = readLinks(panel);
+    // Start from a pair that is not joined yet, newest pins first - usually the device just placed.
+    const joined = new Set(links.flatMap((link) => [`${link.fromPinId}|${link.toPinId}`, `${link.toPinId}|${link.fromPinId}`]));
+    let pair = [pins[pins.length - 2], pins[pins.length - 1]];
+    search:
+    for (let to = pins.length - 1; to > 0; to -= 1) {
+      for (let from = to - 1; from >= 0; from -= 1) {
+        if (!joined.has(`${pins[from].id}|${pins[to].id}`)) {
+          pair = [pins[from], pins[to]];
+          break search;
+        }
+      }
+    }
+    links.push({
+      id: createId(),
+      fromPinId: pair[0].id,
+      toPinId: pair[1].id,
+      targetToken: null,
+      label: null,
+      showTraffic: true
+    });
+    writeLinks(panel, links);
+    renderLinkRows(panel);
   };
 
   const isGeoPanel = (panel) =>
@@ -1204,6 +1381,11 @@ function initializeMapDesigner() {
 
     const pins = readPins(panel);
     const geo = isGeoPanel(panel);
+    // Every pin needs an id to be the end of a link (an older pin may predate that).
+    if (pins.some((pin) => !pin.id)) {
+      pins.forEach((pin) => { pin.id = pin.id || createId(); });
+      writePins(panel, pins);
+    }
     host.replaceChildren();
 
     pins.forEach((pin, index) => {
@@ -1217,6 +1399,20 @@ function initializeMapDesigner() {
 
       row.querySelector('[data-pin-field="label"]').value = pin.label || "";
       row.querySelector('[data-pin-field="style"]').value = pin.style || "Dot";
+      const iconField = row.querySelector('[data-pin-field="icon"]');
+      const syncDevice = () => {
+        if (iconField) {
+          iconField.hidden = row.querySelector('[data-pin-field="style"]').value !== "Device";
+        }
+      };
+      if (iconField) {
+        iconField.value = pin.icon || "server";
+      }
+      syncDevice();
+      const mapField = row.querySelector('[data-pin-field="linkMapId"]');
+      if (mapField) {
+        mapField.value = pin.linkMapId || "";
+      }
       const target = row.querySelector("[data-pin-field-target]");
       if (target) {
         target.value = pin.targetToken || "";
@@ -1236,6 +1432,9 @@ function initializeMapDesigner() {
         }
         entry.label = row.querySelector('[data-pin-field="label"]').value;
         entry.style = row.querySelector('[data-pin-field="style"]').value;
+        entry.icon = iconField?.value || null;
+        entry.linkMapId = mapField?.value || null;
+        syncDevice();
         entry.targetToken = row.querySelector("[data-pin-field-target]")?.value || null;
         if (geo) {
           const lat = Number(row.querySelector('[data-pin-field="latitude"]').value);
@@ -1244,6 +1443,7 @@ function initializeMapDesigner() {
           entry.longitude = Number.isFinite(lon) ? lon : null;
         }
         writePins(panel, current);
+        refreshLinkPinOptions(panel);
       };
 
       row.querySelectorAll("[data-pin-field], [data-pin-field-target]").forEach((field) => {
@@ -1255,6 +1455,7 @@ function initializeMapDesigner() {
         current.splice(index, 1);
         writePins(panel, current);
         renderPinRows(panel);
+        renderLinkRows(panel);
       });
 
       host.appendChild(row);
@@ -1269,17 +1470,36 @@ function initializeMapDesigner() {
     const placeButton = panel.querySelector("[data-map-pin-place]");
     if (placeButton) {
       placeButton.hidden = geo;
+      setButtonLabel(placeButton, isTopologyPanel(panel) ? "Place on canvas" : "Place on picture");
+    }
+    const addButton = panel.querySelector("[data-map-pin-add]");
+    if (addButton) {
+      setButtonLabel(addButton, isTopologyPanel(panel) ? "Add device" : "Add pin");
     }
     initializeElementPickers();
   };
 
+  const setButtonLabel = (button, text) => {
+    const label = button.querySelector("span");
+    if (label) {
+      label.textContent = text;
+    }
+  };
+
+  const isTopologyPanel = (panel) =>
+    normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value) === "Topology";
+
   const addPin = (panel, x, y) => {
     const pins = readPins(panel);
+    const topology = isTopologyPanel(panel);
     pins.push({
       id: createId(),
       label: "",
       showLabel: true,
-      style: "Dot",
+      // A topology's nodes are devices; a picture's pins start as dots.
+      style: topology ? "Device" : "Dot",
+      icon: topology ? "server" : null,
+      linkMapId: null,
       targetToken: null,
       x: x ?? 0.5,
       y: y ?? 0.5,
@@ -1288,6 +1508,7 @@ function initializeMapDesigner() {
     });
     writePins(panel, pins);
     renderPinRows(panel);
+    renderLinkRows(panel);
   };
 
   // "Place on picture" arms the tile's canvas for ONE click. The canvas is inside the tile, whose whole
@@ -1332,6 +1553,8 @@ function initializeMapDesigner() {
     }
     if (event.target.closest("[data-map-pin-add]")) {
       addPin(panel, 0.5, 0.5);
+    } else if (event.target.closest("[data-map-link-add]")) {
+      addLink(panel);
     } else if (event.target.closest("[data-map-pin-place]")) {
       armPinPlacement(panel);
     } else if (event.target.closest("[data-map-image-clear]")) {
@@ -1399,12 +1622,13 @@ function initializeMapDesigner() {
     const isRows = isList || kind === "AlertFeed";
     const isSla = kind === "Sla";
     const isSeries = kind === "MultiGraph";
-    const isImage = kind === "Image";
+    // A topology may have a picture behind it (a floorplan, a rack photo) - optional, unlike an Image tile.
+    const isImage = kind === "Image" || kind === "Topology";
     const isPinned = isImage || kind === "GeoMap";
     // A clock has no target at all; a heading and a text tile carry their own copy instead of one.
     // An image / world map has no single target of its own - each PIN carries one.
     const isTargetless = kind === "Clock" || kind === "Text" || kind === "Heading"
-      || kind === "Image" || kind === "GeoMap";
+      || kind === "Image" || kind === "GeoMap" || kind === "Topology";
     const targetField = panel.querySelector("[data-map-property-target]");
     const visualField = panel.querySelector("[data-map-property-visual]");
     const textField = panel.querySelector("[data-map-property-text-only]");
@@ -1427,6 +1651,7 @@ function initializeMapDesigner() {
     panel.querySelectorAll("[data-map-property-pins-only]").forEach((field) => { field.hidden = !isPinned; });
     if (isPinned) {
       renderPinRows(panel);
+      renderLinkRows(panel);
     }
     if (visualField) {
       visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock";
@@ -1509,7 +1734,7 @@ function initializeMapDesigner() {
   };
 
   // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
-  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph"]);
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology"]);
 
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {
@@ -1554,6 +1779,10 @@ function initializeMapDesigner() {
   // preview; a structure change means the markup itself is different (a gauge has an arc, a list has rows),
   // and the only honest source for that is the same partial the viewer renders.
   const structureKeyFor = (panel) => [
+    // Pins, links and the map a tile opens are drawn by the server render too.
+    panel.querySelector("[data-map-property-pins]")?.value || "",
+    panel.querySelector("[data-map-property-links]")?.value || "",
+    panel.querySelector('[name$=".LinkMapId"]')?.value || "",
     // The series inputs change WHAT the tile is made of, not just a value, so they belong in the key that
     // decides whether the body has to be re-fetched.
     panel.querySelector("[data-map-targets-value]")?.value || "",
@@ -1608,10 +1837,20 @@ function initializeMapDesigner() {
       listLimit: panel.querySelector('[name$=".ListLimit"]:not(:disabled)')?.value || "",
       listChannelKey: panel.querySelector('[name$=".ListChannelKey"]:not(:disabled)')?.value || "",
       graphWindowHours: panel.querySelector('[name$=".GraphWindowHours"]:not(:disabled)')?.value || "24",
-      targets: panel.querySelector("[data-map-targets-value]")?.value || ""
+      targets: panel.querySelector("[data-map-targets-value]")?.value || "",
+      pins: panel.querySelector("[data-map-property-pins]")?.value || "",
+      links: panel.querySelector("[data-map-property-links]")?.value || "",
+      linkMapId: panel.querySelector('[name$=".LinkMapId"]')?.value || ""
     });
+    // A POST: a topology's pins and links would outgrow a query string.
+    params.delete("handler");
+    const antiforgery = form?.querySelector('input[name="__RequestVerificationToken"]')?.value;
 
-    fetch(`${window.location.pathname}?${params}`, { headers: { Accept: "text/html" } })
+    fetch(`${window.location.pathname}?handler=TileMarkup`, {
+      method: "POST",
+      headers: antiforgery ? { Accept: "text/html", RequestVerificationToken: antiforgery } : { Accept: "text/html" },
+      body: params
+    })
       .then((response) => (response.ok ? response.text() : null))
       .then((html) => {
         // Only apply if the tile still wants this structure - a fast kind change must not be overwritten by

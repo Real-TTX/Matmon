@@ -33,7 +33,7 @@ public sealed class MapPublicModel : PageModel
             return NotFound();
         }
 
-        Display = _displayProvider.Build(map);
+        Display = _displayProvider.Build(map, publicView: true);
         return Page();
     }
 
@@ -44,6 +44,6 @@ public sealed class MapPublicModel : PageModel
         var map = _workspaceStore.FindMapByPublicToken(Token);
         return map is null
             ? NotFound()
-            : new JsonResult(MapLiveData.Build(_displayProvider.Build(map)));
+            : new JsonResult(MapLiveData.Build(_displayProvider.Build(map, publicView: true)));
     }
 }
