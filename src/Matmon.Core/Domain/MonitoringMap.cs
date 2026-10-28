@@ -66,6 +66,10 @@ public sealed class MonitoringMap
     /// slide out even when this is on).</summary>
     public bool ShowSlideHeaders { get; set; } = true;
 
+    /// <summary>The public wallboard beeps when a tile turns red (a NOC wall nobody watches all the time). The in-app
+    /// viewer has its own per-browser switch; a browser may still hold the sound back until the page was clicked once.</summary>
+    public bool AlertSound { get; set; }
+
     /// <summary>How the public wallboard fills a screen whose ratio differs from the map's. Defaults to Fit
     /// (keep the aspect ratio, letterboxed) - the ratio is the point; Stretch (fill, distort) is opt-in.</summary>
     public MonitoringMapWallboardFit WallboardFit { get; set; } = MonitoringMapWallboardFit.Fit;
@@ -157,6 +161,7 @@ public sealed class MonitoringMap
         LogicalHeight = LogicalHeight,
         PublicEnabled = PublicEnabled,
         ShowSlideHeaders = ShowSlideHeaders,
+        AlertSound = AlertSound,
         WallboardFit = WallboardFit,
         AutoRotateSeconds = AutoRotateSeconds,
         PaginationMode = PaginationMode,
@@ -451,7 +456,14 @@ public enum MonitoringMapTileKind
     /// <summary>A network topology: devices as nodes (pins with a device symbol) placed freely on a plain or
     /// pictured canvas, joined by links whose colour and label come from their own sensor - the interface
     /// of the port. An outage shows as the cable that went red and everything behind it.</summary>
-    Topology = 13
+    Topology = 13,
+
+    /// <summary>Every sensor under the target as one hexagon in its state colour - hundreds at a glance, the red
+    /// one stands out. Stable order (by name), so a cell keeps its place.</summary>
+    Honeycomb = 14,
+
+    /// <summary>A state band per sensor over the graph window: when did it go red, for how long, how often.</summary>
+    Timeline = 15
 }
 
 public enum MonitoringMapListMode
@@ -549,6 +561,8 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.GeoMap => (4, 3, 6, 4),
             // Nodes need room around them for the cables and their labels.
             MonitoringMapTileKind.Topology => (4, 3, 8, 5),
+            MonitoringMapTileKind.Honeycomb => (2, 2, 4, 3),
+            MonitoringMapTileKind.Timeline => (4, 2, 8, 3),
             _ => (2, 2, 2, 2)
         };
     }

@@ -47,6 +47,8 @@ public static class MapTileRender
             MonitoringMapTileKind.Image => "Image",
             MonitoringMapTileKind.GeoMap => "World map",
             MonitoringMapTileKind.Topology => "Topology",
+            MonitoringMapTileKind.Honeycomb => "Honeycomb",
+            MonitoringMapTileKind.Timeline => "Timeline",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
@@ -68,6 +70,8 @@ public static class MapTileRender
             MonitoringMapTileKind.Image => "square",
             MonitoringMapTileKind.GeoMap => "network",
             MonitoringMapTileKind.Topology => "network",
+            MonitoringMapTileKind.Honeycomb => "grid",
+            MonitoringMapTileKind.Timeline => "activity",
             _ => "sensor"
         };
     }

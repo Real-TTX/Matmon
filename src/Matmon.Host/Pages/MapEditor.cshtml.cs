@@ -206,6 +206,7 @@ public sealed class MapEditorModel : PageModel
                 PaginationMode = Input.PaginationMode,
                 PublicEnabled = Input.PublicEnabled,
                 ShowSlideHeaders = Input.ShowSlideHeaders,
+                AlertSound = Input.AlertSound,
                 Columns = Input.Columns,
                 Rows = Input.Rows,
                 TilePadding = Input.TilePadding,
@@ -410,6 +411,7 @@ public sealed class MapEditorModel : PageModel
                 PaginationMode = map.PaginationMode,
                 PublicEnabled = map.PublicEnabled,
                 ShowSlideHeaders = map.ShowSlideHeaders,
+                AlertSound = map.AlertSound,
                 Columns = map.Columns,
                 Rows = map.Rows,
                 TilePadding = map.TilePadding,
@@ -652,6 +654,8 @@ public sealed class MapEditorInput
     public bool PublicEnabled { get; set; }
 
     public bool ShowSlideHeaders { get; set; } = true;
+
+    public bool AlertSound { get; set; }
 
     /// <summary>Grid column/row count and cell gap/margin - authoritative geometry under v2, but there is no
     /// dedicated "grid size" UI yet (that is the mockup editor rebuild); hidden fields round-trip the map's

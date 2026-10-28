@@ -27,6 +27,8 @@
     <partial name="_AppStyles" />
 </head>
 <body class="public-map-body"
+      data-map-noc
+      data-map-alert-sound="@(map.AlertSound ? "true" : "false")"
       data-map-live="/Maps/Public/@map.PublicToken?handler=Data"
       data-map-live-interval="@Math.Clamp(map.AutoRotateSeconds, 10, 120)"
       data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(display).Revision">

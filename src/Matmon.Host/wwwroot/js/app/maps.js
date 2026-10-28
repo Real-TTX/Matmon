@@ -289,7 +289,8 @@ function initializeMapLiveData() {
     if (!rows) {
       return;
     }
-    const items = tile.querySelectorAll(".map-tile-row");
+    // A honeycomb's cells are rows too (one per sensor, by position); a timeline row also carries its bands.
+    const items = tile.querySelectorAll(".map-tile-row, .map-hex");
     // Row COUNT is part of the revision, so a mismatch here means the payload and the markup are already out
     // of step and a reload is on its way - patching half a list would just look broken in the meantime.
     if (items.length !== rows.length) {
@@ -302,6 +303,21 @@ function initializeMapLiveData() {
       setText(item, ".map-tile-row-label small", row.detail || "");
       setText(item, ".map-tile-row-value", row.value || "");
       setText(item, ".map-tile-row-time", row.timeText || "");
+      if (item.classList.contains("map-hex")) {
+        const hint = row.detail ? `${row.label} - ${row.detail}` : row.label;
+        item.title = hint;
+      }
+      const bar = item.querySelector("[data-row-segments]");
+      if (bar && typeof row.segments === "string") {
+        bar.replaceChildren(...row.segments.split(";").filter(Boolean).map((part) => {
+          const [x, w, tone] = part.split(",");
+          const segment = document.createElement("span");
+          segment.dataset.tone = tone;
+          segment.style.setProperty("--seg-x", `${x}%`);
+          segment.style.setProperty("--seg-w", `${w}%`);
+          return segment;
+        }));
+      }
     });
   };
 
@@ -339,7 +355,11 @@ function initializeMapLiveData() {
   };
 
   const patchTile = (tile, data) => {
+    const before = tile.dataset.state;
     tile.dataset.state = data.stateKey || "unknown";
+    if (data.stateKey === "error" && before !== "error") {
+      window.dispatchEvent(new CustomEvent("matmon:map-tile-failed", { detail: { tile } }));
+    }
     const badge = tile.querySelector("[data-tile-state-label]");
     if (badge) {
       setMapTilePillTone(badge, data.stateKey);
@@ -457,6 +477,91 @@ function initializeMapLiveData() {
   refresh();
   window.setInterval(refresh, seconds * 1000);
 }
+// The NOC switches of a viewed map: "only problems" dims every tile that is fine (the board keeps its layout, so the
+// eye still finds a tile where it always is), and a tile that turns red flashes for a while and - when the sound is on -
+// beeps. In the app both are per-browser switches; on the public wallboard ?focus=problems and the map's own
+// "beep" setting decide, since a TV has no buttons.
+function initializeMapNoc() {
+  const host = document.querySelector("[data-map-noc]");
+  if (!host) {
+    return;
+  }
+  const stage = host.querySelector("[data-map-stage]") || host;
+  const focusButton = document.querySelector("[data-map-focus-toggle]");
+  const soundButton = document.querySelector("[data-map-sound-toggle]");
+  const read = (key) => { try { return localStorage.getItem(key) === "1"; } catch { return false; } };
+  const write = (key, on) => { try { localStorage.setItem(key, on ? "1" : "0"); } catch { /* nothing to keep */ } };
+
+  const params = new URLSearchParams(window.location.search);
+  let focus = focusButton ? read("matmon.mapFocus") : params.get("focus") === "problems";
+  let sound = soundButton ? read("matmon.mapSound") : host.getAttribute("data-map-alert-sound") === "true";
+
+  const applyFocus = () => {
+    stage.classList.toggle("is-focus-problems", focus);
+    focusButton?.setAttribute("aria-pressed", focus ? "true" : "false");
+  };
+  const applySound = () => soundButton?.setAttribute("aria-pressed", sound ? "true" : "false");
+  applyFocus();
+  applySound();
+
+  focusButton?.addEventListener("click", () => { focus = !focus; write("matmon.mapFocus", focus); applyFocus(); });
+
+  let audio = null;
+  const unlock = () => {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === "suspended") {
+        audio.resume();
+      }
+    } catch { audio = null; }
+  };
+  soundButton?.addEventListener("click", () => {
+    sound = !sound;
+    write("matmon.mapSound", sound);
+    applySound();
+    if (sound) {
+      unlock(); // a click is the gesture a browser wants before it plays anything
+    }
+  });
+  if (sound) {
+    // Without a click a browser may keep the sound back; the first click anywhere on the page lets it through.
+    document.addEventListener("pointerdown", unlock, { once: true });
+    unlock();
+  }
+
+  let lastBeep = 0;
+  const beep = () => {
+    if (!sound || !audio || audio.state !== "running" || Date.now() - lastBeep < 5000) {
+      return;
+    }
+    lastBeep = Date.now();
+    [0, 0.22].forEach((offset) => {
+      const tone = audio.createOscillator();
+      const gain = audio.createGain();
+      tone.type = "sine";
+      tone.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, audio.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.25, audio.currentTime + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + offset + 0.18);
+      tone.connect(gain).connect(audio.destination);
+      tone.start(audio.currentTime + offset);
+      tone.stop(audio.currentTime + offset + 0.2);
+    });
+  };
+
+  window.addEventListener("matmon:map-tile-failed", (event) => {
+    const tile = event.detail?.tile;
+    if (!tile) {
+      return;
+    }
+    tile.classList.remove("is-newly-failed");
+    void tile.offsetWidth; // restart the animation when it fails again
+    tile.classList.add("is-newly-failed");
+    window.setTimeout(() => tile.classList.remove("is-newly-failed"), 15000);
+    beep();
+  });
+}
+
 function initializeMapCarousel() {
   document.querySelectorAll("[data-map-carousel]").forEach((carousel) => {
     const slides = Array.from(carousel.querySelectorAll("[data-map-slide]"));
@@ -709,7 +814,9 @@ function initializeMapDesigner() {
     "10": "Image",
     "11": "GeoMap",
     "12": "MultiGraph",
-    "13": "Topology"
+    "13": "Topology",
+    "14": "Honeycomb",
+    "15": "Timeline"
   };
   const kindLabels = {
     "0": "Text",
@@ -726,6 +833,8 @@ function initializeMapDesigner() {
     "11": "World map",
     "12": "Multi-graph",
     "13": "Topology",
+    "14": "Honeycomb",
+    "15": "Timeline",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -739,7 +848,9 @@ function initializeMapDesigner() {
     Image: "Image",
     GeoMap: "World map",
     MultiGraph: "Multi-graph",
-    Topology: "Topology"
+    Topology: "Topology",
+    Honeycomb: "Honeycomb",
+    Timeline: "Timeline"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -749,6 +860,8 @@ function initializeMapDesigner() {
     Heading: "A section title. Use Text for the sub-line.",
     Image: "Upload a picture, then place status pins on it.",
     GeoMap: "The shipped offline world map - pins are placed by latitude/longitude.",
+    Honeycomb: "Every sensor under the target as one cell in its state colour - hundreds at a glance.",
+    Timeline: "A state band per sensor over the time window (up to 72 h): when it went red and for how long.",
     Topology: "Place devices, then join them with links - give a link the port's interface sensor and it shows the traffic and turns red when the port goes down.",
     "0": "Text tiles do not need a target.",
     "1": "Shows one target state or value. Progress and gauge use the default channel when possible.",
@@ -1641,7 +1754,9 @@ function initializeMapDesigner() {
     const isValue = kind === "Value";
     panel.querySelectorAll("[data-map-property-value-only]").forEach((field) => { field.hidden = !isValue; });
     panel.querySelectorAll("[data-map-property-list-only]").forEach((field) => { field.hidden = !isList; });
-    panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !isRows; });
+    const isTimeline = kind === "Timeline";
+    // A timeline has rows (how many sensors) and a time window; a honeycomb only its target.
+    panel.querySelectorAll("[data-map-property-rows-only]").forEach((field) => { field.hidden = !(isRows || isTimeline); });
     panel.querySelectorAll("[data-map-property-sla-only]").forEach((field) => { field.hidden = !isSla; });
     panel.querySelectorAll("[data-map-property-series-only]").forEach((field) => { field.hidden = !isSeries; });
     if (isSeries) {
@@ -1654,13 +1769,16 @@ function initializeMapDesigner() {
       renderLinkRows(panel);
     }
     if (visualField) {
-      visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock";
+      visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock"
+        || kind === "Honeycomb" || kind === "Timeline";
     }
     if (textField) {
       textField.hidden = !isText;
     }
     // ALL graph-only fields (type and window) - a single querySelector toggled only the first.
-    graphFields.forEach((field) => { field.hidden = !isGraph; });
+    graphFields.forEach((field) => {
+      field.hidden = !(isGraph || (isTimeline && field.querySelector('[name$=".GraphWindowHours"]')));
+    });
     syncDuplicateFields(panel);
     if (hint) {
       const limits = getLimits(kind);
@@ -1734,7 +1852,7 @@ function initializeMapDesigner() {
   };
 
   // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
-  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology"]);
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline"]);
 
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {

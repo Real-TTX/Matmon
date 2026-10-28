@@ -16,6 +16,7 @@ const featureStarters = [
   "initializePwa", // first: it watches the connection, and the live refreshes below start fetching at once
   "initializeTabHash",
   "initializeStatusRefresh",
+  "initializeMapNoc",
   "initializeMonitoringTree",
   "initializeTreeContextMenu",
   "initializeMonitoringSizeToggle",

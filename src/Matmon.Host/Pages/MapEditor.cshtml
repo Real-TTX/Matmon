@@ -642,6 +642,12 @@
                         <span>Publish an anonymous link</span>
                     </label>
                     <span class="mat-hint">Anyone holding the link sees the board without signing in. Turning this off disables the link at once.</span>
+                    <label class="mat-switch">
+                        <input asp-for="Input.AlertSound" />
+                        <span class="mat-switch__track"></span>
+                        <span>Beep on the wallboard when a tile turns red</span>
+                    </label>
+                    <span class="mat-hint">Add <code>?focus=problems</code> to the address to dim every tile that is fine.</span>
                 </div>
             </section>
 

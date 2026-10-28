@@ -631,6 +631,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         target.PaginationMode = draft.PaginationMode;
         target.PublicEnabled = draft.PublicEnabled;
         target.ShowSlideHeaders = draft.ShowSlideHeaders;
+        target.AlertSound = draft.AlertSound;
         target.Columns = Math.Clamp(draft.Columns, 4, 24);
         target.Rows = Math.Clamp(draft.Rows, 2, 16);
         target.TilePadding = Math.Clamp(draft.TilePadding, 0, 64);

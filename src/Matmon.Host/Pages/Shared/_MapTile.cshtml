@@ -12,7 +12,8 @@
     // the height the rows need. Heading and Clock drop the footer entirely - they are chrome, not readings.
     var isCollection = tile.Kind is MonitoringMapTileKind.SensorList or MonitoringMapTileKind.AlertFeed
         or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
-        or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology;
+        or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology
+        or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline;
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading;
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
     // screenshot/print is correct; initializeMapClocks then ticks it.
@@ -64,7 +65,7 @@
         }
     }
 }
-<article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")@(Model.Href is null ? "" : " is-linked")"
+<article class="map-tile@(Model.Editable ? " map-tile-editor" : " map-tile-display")@(tile.ShowCard ? "" : " is-plain")@(Model.Href is null ? "" : " is-linked")@(isChrome || tile.Kind == MonitoringMapTileKind.Text ? " is-chrome" : "")"
          data-tile-id="@tile.Id"
          data-state="@Model.StateKey"
          data-kind="@tile.Kind.ToString().ToLowerInvariant()"
@@ -149,6 +150,70 @@
             <strong>@(sla.Percent is { } pct ? pct.ToString("0.##") + " %" : "-")</strong>
             <small>@sla.Label</small>
         </div>
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Honeycomb && Model.Rows is { } cells)
+    {
+        @* One cell per sensor in its state colour; the name (and its message) on hover, a click opens it. *@
+        @if (cells.Count == 0)
+        {
+            <p class="map-tile-rows-empty">No sensors</p>
+        }
+        else
+        {
+            <div class="map-honeycomb">
+                @foreach (var cell in cells)
+                {
+                    var hint = string.IsNullOrWhiteSpace(cell.Detail) ? cell.Label : $"{cell.Label} - {cell.Detail}";
+                    if (cell.Href is not null && !Model.Editable)
+                    {
+                        <a class="map-hex" data-state="@cell.Tone" href="@cell.Href" title="@hint" aria-label="@hint"></a>
+                    }
+                    else
+                    {
+                        <span class="map-hex" data-state="@cell.Tone" title="@hint"></span>
+                    }
+                }
+            </div>
+        }
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Timeline && Model.Rows is { } bands)
+    {
+        @* A state band per sensor over the window; each stretch is placed by custom properties that carry data. *@
+        @if (bands.Count == 0)
+        {
+            <p class="map-tile-rows-empty">No sensors</p>
+        }
+        else
+        {
+            <ul class="map-timeline">
+                @foreach (var band in bands)
+                {
+                    <li class="map-tile-row map-timeline-row" data-state="@band.Tone">
+                        <span class="map-tile-row-label">
+                            @if (band.Href is not null && !Model.Editable)
+                            {
+                                <a class="map-tile-row-link" href="@band.Href"><strong>@band.Label</strong></a>
+                            }
+                            else
+                            {
+                                <strong>@band.Label</strong>
+                            }
+                            <small>@band.Detail</small>
+                        </span>
+                        <span class="map-timeline-bar" data-row-segments>
+                            @foreach (var part in (band.Segments ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                var bits = part.Split(',');
+                                if (bits.Length == 3)
+                                {
+                                    <span data-tone="@bits[2]" style="--seg-x: @(bits[0])%; --seg-w: @(bits[1])%"></span>
+                                }
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
     }
     else if (Model.Rows is { } rows)
     {

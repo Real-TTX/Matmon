@@ -584,6 +584,99 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- NOC: only problems, and a tile that has just turned red ---- */
+.map-stage.is-focus-problems .map-tile:not(.is-chrome):is([data-state="ok"], [data-state="paused"], [data-state="disabled"]) {
+  opacity: 0.18;
+  filter: grayscale(1);
+  transition: opacity 0.3s, filter 0.3s;
+}
+.map-tile.is-newly-failed {
+  animation: map-tile-failed 1.2s ease-in-out 6;
+}
+@keyframes map-tile-failed {
+  50% {
+    box-shadow: 0 0 0 0.35rem color-mix(in srgb, var(--mat-danger) 55%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-tile.is-newly-failed {
+    animation: none;
+    outline: 3px solid var(--mat-danger);
+    outline-offset: 2px;
+  }
+}
+
+/* ---- Honeycomb: one cell per sensor, packed in offset rows ---- */
+.map-honeycomb {
+  --map-hex: clamp(0.9rem, 6cqi, 2.4rem);
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: calc(var(--map-hex) * 0.08);
+  min-height: 0;
+  padding-inline-start: calc(var(--map-hex) * 0.25);
+  overflow: hidden;
+}
+.map-hex {
+  --map-hex-tone: var(--mat-text-faint);
+  flex: none;
+  width: var(--map-hex);
+  aspect-ratio: 0.866;
+  background: var(--map-hex-tone);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+.map-hex[data-state="ok"] { --map-hex-tone: var(--mat-success); }
+.map-hex[data-state="warning"] { --map-hex-tone: var(--mat-warning); }
+.map-hex[data-state="error"] { --map-hex-tone: var(--mat-danger); }
+.map-hex[data-state="paused"] { --map-hex-tone: var(--mat-border); }
+a.map-hex {
+  position: relative;
+  z-index: 2;
+}
+a.map-hex:hover,
+a.map-hex:focus-visible {
+  filter: brightness(1.25);
+}
+
+/* ---- State timeline: a band per sensor, its stretches placed by --seg-x / --seg-w (data) ---- */
+.map-timeline {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: calc(var(--map-type, 0.95rem) * 0.35);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+/* The list rows are flex; a band row is a grid of label and bar. */
+.map-timeline .map-timeline-row {
+  display: grid;
+  grid-template-columns: minmax(6em, 30%) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--mat-space-2);
+}
+.map-timeline-bar {
+  position: relative;
+  height: calc(var(--map-type, 0.95rem) * 1.1);
+  overflow: hidden;
+  border-radius: var(--mat-radius-sm);
+  background: color-mix(in srgb, var(--mat-text-faint) 18%, transparent);
+}
+.map-timeline-bar > span {
+  position: absolute;
+  inset-block: 0;
+  left: var(--seg-x, 0%);
+  width: var(--seg-w, 0%);
+  min-width: 1px;
+  background: var(--mat-text-faint);
+}
+.map-timeline-bar > span[data-tone="ok"] { background: var(--mat-success); }
+.map-timeline-bar > span[data-tone="warning"] { background: var(--mat-warning); }
+.map-timeline-bar > span[data-tone="error"] { background: var(--mat-danger); }
+
 /* A topology node: the device symbol in a ring of its state colour, the name under it. */
 .map-pin[data-pin-style="device"] {
   flex-direction: column;

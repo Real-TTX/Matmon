@@ -434,6 +434,8 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Image
              or MonitoringMapTileKind.GeoMap
              or MonitoringMapTileKind.Topology
+             or MonitoringMapTileKind.Honeycomb
+             or MonitoringMapTileKind.Timeline
              or MonitoringMapTileKind.MultiGraph;
 
     /// <summary>The tile's target as the single token <see cref="IMonitoringWorkspaceStore.ResolveTargetSensors"/>
@@ -461,6 +463,8 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Topology => BuildImageTile(tile, element, latest, maps, geo: false),
             MonitoringMapTileKind.Sla => BuildSlaTile(tile, element),
             MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element, latest),
+            MonitoringMapTileKind.Honeycomb => BuildHoneycombTile(tile, element, latest),
+            MonitoringMapTileKind.Timeline => BuildTimelineTile(tile, element, latest),
             _ => BuildSensorListTile(tile, element, latest)
         };
     }
@@ -795,6 +799,115 @@ public sealed class MapDisplayProvider
         _historyCache[key] = (now, observations);
         return observations;
     }
+
+    /// <summary>A honeycomb shows at most this many cells - past that a cell is too small to see on a wall.</summary>
+    private const int HoneycombMaxCells = 400;
+
+    /// <summary>
+    /// Every sensor under the target as a cell in its state colour. Ordered by NAME, not by state: a cell that keeps its
+    /// place is what lets the eye catch the one that changed colour (and lets the live patch go by position).
+    /// </summary>
+    private MapDisplayTileViewModel BuildHoneycombTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile));
+        if (sensors.Count == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", string.Empty, KindLabel(tile.Kind), "grid", rows: []);
+        }
+
+        var entries = sensors
+            .OrderBy(sensor => sensor.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(sensor => sensor.Id)
+            .Take(HoneycombMaxCells)
+            .Select(sensor =>
+            {
+                latest.TryGetValue(sensor.Id, out var observation);
+                var severity = sensor.IsPaused ? MonitoringSeverity.Ok : MonitoringStatePresentation.FromSensorState(observation?.State ?? SensorState.Unknown);
+                var key = sensor.IsPaused ? "paused" : MonitoringStatePresentation.Key(severity);
+                return (Sensor: sensor, Observation: observation, Severity: severity, Key: key);
+            })
+            .ToList();
+        var rows = entries
+            .Select(entry => new MapTileRowDto(
+                entry.Sensor.Name,
+                entry.Observation?.Message,
+                entry.Observation is null ? string.Empty : FormatObservationValue(entry.Observation, null),
+                entry.Key,
+                null) { ElementId = entry.Sensor.Id })
+            .ToArray();
+        var severity = entries.Select(entry => entry.Severity).Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+        var problems = entries.Count(entry => entry.Key is "error" or "warning");
+        var subtitle = problems == 0
+            ? $"{entries.Count} sensors, all fine"
+            : $"{problems} of {entries.Count} sensors with a problem";
+        return CreateTile(tile, element, MonitoringStatePresentation.Key(severity), MonitoringStatePresentation.Label(severity),
+            subtitle, string.Empty, KindLabel(tile.Kind), "grid", rows: rows);
+    }
+
+    /// <summary>
+    /// One band per sensor over the tile's window, coloured by state - when it went red, for how long, how often. The
+    /// sensors shown are the worst first (then by name), up to the tile's row count. Raw observations only, so the window
+    /// is at most 72 h (raw retention is about three days).
+    /// </summary>
+    private MapDisplayTileViewModel BuildTimelineTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile));
+        if (sensors.Count == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", string.Empty, KindLabel(tile.Kind), "activity", rows: []);
+        }
+
+        var hours = Math.Min(MonitoringMapTile.NormalizeGraphWindowHours(tile.GraphWindowHours), 72);
+        var window = TimeSpan.FromHours(hours);
+        var end = DateTimeOffset.UtcNow;
+        var start = end - window;
+        var limit = Math.Clamp(tile.ListLimit, 1, 20);
+        var chosen = sensors
+            .Select(sensor => (Sensor: sensor, State: latest.TryGetValue(sensor.Id, out var observation) ? observation.State : SensorState.Unknown))
+            .OrderByDescending(entry => (int)MonitoringStatePresentation.FromSensorState(entry.State))
+            .ThenBy(entry => entry.Sensor.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToList();
+
+        var rows = chosen.Select(entry =>
+        {
+            var observations = ReadWindow(entry.Sensor.Id, window);
+            var segments = StateTimeline.Segments(
+                observations.Select(observation => (observation.TimestampUtc, MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(observation.State)))),
+                start,
+                end);
+            var down = segments.Where(segment => segment.Tone == "error").Sum(segment => segment.Width);
+            // The "down" figure is the row DETAIL - the live patch writes a row's detail into the label's small text.
+            return new MapTileRowDto(
+                entry.Sensor.Name,
+                down <= 0 ? string.Empty : $"{FormatDuration(TimeSpan.FromHours(hours * down / 100))} down",
+                null,
+                MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(entry.State)),
+                null)
+            {
+                ElementId = entry.Sensor.Id,
+                Segments = StateTimeline.Format(segments)
+            };
+        }).ToArray();
+
+        var severity = chosen
+            .Select(entry => MonitoringStatePresentation.FromSensorState(entry.State))
+            .Aggregate(MonitoringSeverity.Ok, MonitoringStatePresentation.Max);
+        var subtitle = $"{(sensors.Count > rows.Length ? $"{rows.Length} of {sensors.Count}" : rows.Length.ToString(CultureInfo.InvariantCulture))} sensors - last {(hours < 24 ? $"{hours} h" : $"{hours / 24} d")}";
+        return CreateTile(tile, element, MonitoringStatePresentation.Key(severity), MonitoringStatePresentation.Label(severity),
+            subtitle, string.Empty, KindLabel(tile.Kind), "activity", rows: rows);
+    }
+
+    private static string FormatDuration(TimeSpan span) =>
+        span.TotalHours >= 1
+            ? $"{(int)span.TotalHours} h {span.Minutes} min"
+            : $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))} min";
 
     private MapDisplayTileViewModel BuildSensorListTile(
         MonitoringMapTile tile,
@@ -1368,6 +1481,9 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Image => "Image",
             MonitoringMapTileKind.GeoMap => "World map",
             MonitoringMapTileKind.Topology => "Topology",
+            MonitoringMapTileKind.Honeycomb => "Honeycomb",
+            MonitoringMapTileKind.Timeline => "Timeline",
+            MonitoringMapTileKind.MultiGraph => "Multi-graph",
             _ => "Tile"
         };
     }
@@ -1519,6 +1635,9 @@ public sealed record MapTileRowDto(string Label, string? Detail, string? Value, 
     public Guid? ElementId { get; init; }
 
     public string? Href { get; init; }
+
+    /// <summary>A timeline row's state bands, "start,width,tone;..." in percent of the window (see StateTimeline).</summary>
+    public string? Segments { get; init; }
 }
 
 /// <param name="Percent">Null when the window holds no state samples - "unknown", which must NOT render as 0.</param>

@@ -37,6 +37,10 @@ public static class MapWidgetCatalog
         new("sla", "SLA / uptime", "Availability over a window, from the statistics buckets", "chart", MapWidgetCategory.Metrics,
             MonitoringMapTileKind.Sla, SearchTerms: "uptime availability percent history slo"),
 
+        new("honeycomb", "Honeycomb", "Every sensor under a target as one cell in its state colour", "grid", MapWidgetCategory.Status,
+            MonitoringMapTileKind.Honeycomb, SearchTerms: "hexagon cells overview heatmap noc all sensors"),
+        new("timeline", "State timeline", "When each sensor was red over the last hours", "activity", MapWidgetCategory.Status,
+            MonitoringMapTileKind.Timeline, SearchTerms: "history outage bands availability when down"),
         new("alerts", "Alert feed", "Newest open alerts, optionally scoped to a target", "bell", MapWidgetCategory.Status,
             MonitoringMapTileKind.AlertFeed, SearchTerms: "incidents problems events open acknowledged"),
 
@@ -76,6 +80,8 @@ public static class MapWidgetCatalog
         { Kind: MonitoringMapTileKind.Text } => "text",
         { Kind: MonitoringMapTileKind.GeoMap } => "geo",
         { Kind: MonitoringMapTileKind.Topology } => "topology",
+        { Kind: MonitoringMapTileKind.Honeycomb } => "honeycomb",
+        { Kind: MonitoringMapTileKind.Timeline } => "timeline",
         // Both are Image tiles; "floorplan" is the one that exists for its pins, so it previews them.
         { Kind: MonitoringMapTileKind.Image } => widget.Key == "floorplan" ? "pins" : "image",
         { Kind: MonitoringMapTileKind.Status } => "group",

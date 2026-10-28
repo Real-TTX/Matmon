@@ -39,7 +39,7 @@ public static class MapLiveData
         tile.GraphAreaPath,
         tile.GraphBarPath,
         tile.Series?.Select(line => new MapLiveSeries(line.Label, line.Color, line.LinePath, line.Value, line.Points)).ToArray(),
-        tile.Rows?.Select(row => new MapLiveRow(row.Label, row.Detail, row.Value, row.Tone, row.TimeText)).ToArray(),
+        tile.Rows?.Select(row => new MapLiveRow(row.Label, row.Detail, row.Value, row.Tone, row.TimeText, row.Segments)).ToArray(),
         tile.Sla is { } sla ? new MapLiveSla(sla.Percent, sla.Label) : null,
         tile.Pins?.Select(pin => new MapLivePin(pin.Label, pin.Tone, pin.Value)).ToArray(),
         tile.Axis is { } axis ? new MapLiveAxis(axis.Top, axis.Middle, axis.Bottom, axis.StartMs, axis.EndMs) : null,
@@ -123,7 +123,8 @@ public sealed record MapLiveSeries(string Label, string Color, string? LinePath,
 
 public sealed record MapLiveAxis(string Top, string Middle, string Bottom, long StartMs, long EndMs);
 
-public sealed record MapLiveRow(string Label, string? Detail, string? Value, string Tone, string? TimeText);
+/// <param name="Segments">A timeline row's state bands (they move with time, so they travel with every update).</param>
+public sealed record MapLiveRow(string Label, string? Detail, string? Value, string Tone, string? TimeText, string? Segments = null);
 
 public sealed record MapLiveSla(double? Percent, string Label);
 

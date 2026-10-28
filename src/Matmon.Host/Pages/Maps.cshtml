@@ -28,6 +28,14 @@
 }
 
 @section TopbarActions {
+    @if (map is not null && Model.Display is not null)
+    {
+        <div class="mat-topbar__actions">
+            @* A NOC's two switches, kept per browser: dim what is fine, and beep when something turns red. *@
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon" data-map-focus-toggle aria-pressed="false" aria-label="Show only problems" data-tip="Only problems">@MatUi.Icon("filter")</button>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon" data-map-sound-toggle aria-pressed="false" aria-label="Beep when a tile turns red" data-tip="Alert sound">@MatUi.Icon("volume")</button>
+        </div>
+    }
     @if (map is not null && Model.Display is not null && Model.CanEditMaps)
     {
         <div class="mat-topbar__actions">
@@ -165,6 +173,7 @@ else if (Model.Display is not null)
         @* The in-app viewer patches itself from the same JSON the public board polls, so a map on a second
            monitor stays current without a reload throwing the carousel back to slide 1. *@
         <div class="map-view"
+             data-map-noc
              data-map-live="/Maps?mapId=@map.Id&amp;handler=Data"
              data-map-live-interval="30"
              data-map-live-revision="@Matmon.Host.Ui.MapLiveData.Build(Model.Display).Revision">
