@@ -138,6 +138,8 @@ function initializeSnmpWalkMibs() {
     const filter = tools.querySelector("[data-snmp-walk-filter]");
     const numeric = tools.querySelector("[data-snmp-walk-numeric]");
     const count = tools.querySelector("[data-snmp-walk-count]");
+    // The checkbox in the table head ticks or unticks every row SHOWN - with the filter that is "everything about X".
+    const allBox = list.querySelector("[data-snmp-walk-all]");
     const rows = () => [...list.querySelectorAll("[data-snmp-walk-row]")];
     const boxOf = (row) => row.querySelector("input[type=checkbox]");
 
@@ -146,6 +148,12 @@ function initializeSnmpWalkMibs() {
       const ticked = all.filter((row) => boxOf(row)?.checked).length;
       if (count) {
         count.textContent = `${ticked} of ${all.length} ticked`;
+      }
+      if (allBox) {
+        const shown = all.filter((row) => !row.hidden);
+        const shownTicked = shown.filter((row) => boxOf(row)?.checked).length;
+        allBox.checked = shown.length > 0 && shownTicked === shown.length;
+        allBox.indeterminate = shownTicked > 0 && shownTicked < shown.length;
       }
     };
     const applyFilter = () => {
@@ -158,8 +166,19 @@ function initializeSnmpWalkMibs() {
       });
     };
 
-    filter?.addEventListener("input", applyFilter);
-    numeric?.addEventListener("change", applyFilter);
+    filter?.addEventListener("input", () => { applyFilter(); updateCount(); });
+    numeric?.addEventListener("change", () => { applyFilter(); updateCount(); });
+    allBox?.addEventListener("change", () => {
+      const on = allBox.checked;
+      rows().forEach((row) => {
+        const box = boxOf(row);
+        if (box && !row.hidden) {
+          box.checked = on;
+        }
+      });
+      applyFilter();
+      updateCount();
+    });
     tools.querySelectorAll("[data-snmp-walk-tick]").forEach((button) => {
       button.addEventListener("click", () => {
         const on = button.dataset.snmpWalkTick === "on";
@@ -174,7 +193,7 @@ function initializeSnmpWalkMibs() {
       });
     });
     list.addEventListener("change", (event) => {
-      if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+      if (event.target instanceof HTMLInputElement && event.target.type === "checkbox" && event.target !== allBox) {
         updateCount();
       }
     });
