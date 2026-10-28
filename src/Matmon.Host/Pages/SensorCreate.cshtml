@@ -128,6 +128,14 @@
                     </div>
                     <div class="mat-card__body mat-stack">
                         <p class="mat-muted">Tick the values to monitor; they are copied into <code>snmp.oids</code>.</p>
+                        <div class="mat-field sensor-snmp-mib-root">
+                            <label class="mat-label" for="snmp-walk-mib-root">From a MIB <span class="mat-text-muted">(optional)</span></label>
+                            <div class="mat-picker" data-picker="select" data-source-url="@Url.Page(null, "MibRoots")" data-placeholder="Pick a MIB or one of its groups" data-snmp-mib-root>
+                                <input class="mat-picker__input" id="snmp-walk-mib-root" />
+                                <div class="mat-picker__options" hidden></div>
+                            </div>
+                            <span class="mat-hint">Sets the Root OID, so the walk reads only what that MIB describes.</span>
+                        </div>
                         <div class="mat-field sensor-snmp-root">
                             <label class="mat-label" asp-for="NewSensor.SnmpWalkRootOid">Root OID</label>
                             <div class="mat-input-group">

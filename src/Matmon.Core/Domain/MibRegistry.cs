@@ -38,6 +38,10 @@ public sealed record MibTranslation(MibNode Node, string Instance)
     }
 }
 
+/// <summary>Where a walk can start to read what one MIB describes: the module's own branch (<paramref name="Group"/> null) or
+/// one group inside it - the arc its scalars and tables hang under (<c>interfaces</c>, <c>ifMIBObjects</c>).</summary>
+public sealed record MibWalkRoot(string Module, string? Group, string Oid, int Objects);
+
 /// <summary>Per-module load result for the MIB page.</summary>
 public sealed record MibModuleStatus(
     string Name,
@@ -145,6 +149,96 @@ public sealed class MibRegistry
                 return null;
             }
             candidate = candidate[..dot];
+        }
+    }
+
+    /// <summary>
+    /// Where to start a walk for each loaded MIB: the module's branch (the longest OID prefix all its objects share), followed
+    /// by its groups when it has more than one. A group is the arc the module's TOP objects hang under - a scalar or a table,
+    /// not a table's columns - so IF-MIB offers <c>interfaces</c> (ifNumber, ifTable) and <c>ifMIBObjects</c> (ifXTable)
+    /// instead of one root at mib-2. Modules that define no OBJECT-TYPE (SNMPv2-SMI, textual conventions) offer nothing.
+    /// Built once per registry.
+    /// </summary>
+    public IReadOnlyList<MibWalkRoot> WalkRoots => _walkRoots ??= BuildWalkRoots();
+    private IReadOnlyList<MibWalkRoot>? _walkRoots;
+
+    private IReadOnlyList<MibWalkRoot> BuildWalkRoots()
+    {
+        var roots = new List<MibWalkRoot>();
+        foreach (var module in _byOid.Values.Where(node => node.Kind == "OBJECT-TYPE").GroupBy(node => node.Module).OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var objects = module.Select(node => node.Oid).ToHashSet(StringComparer.Ordinal);
+            var groups = objects
+                .Select(oid => (Oid: oid, Parent: ParentOid(oid)))
+                .Where(entry => entry.Parent is not null && !objects.Contains(entry.Parent))
+                .GroupBy(entry => entry.Parent!, StringComparer.Ordinal)
+                .Select(group => new MibWalkRoot(module.Key, NameAt(group.Key), group.Key, objects.Count(oid => IsUnder(oid, group.Key))))
+                .OrderBy(group => group.Oid, OidComparer.Instance)
+                .ToList();
+            if (groups.Count == 0)
+            {
+                continue;
+            }
+            var common = groups.Select(group => group.Oid).Aggregate(CommonPrefix);
+            if (common.Count(c => c == '.') < 3)
+            {
+                common = groups[0].Oid; // never offer "walk all of iso" for a module spread across the tree
+            }
+            // The module's own branch - unless its groups only meet at mib-2 or above (IF-MIB: interfaces + ifMIB): walking
+            // that would read every standard MIB at once, which is what the choice is meant to avoid. Then only the groups.
+            if (groups.Count == 1 || common.Split('.').Length > 6)
+            {
+                roots.Add(new MibWalkRoot(module.Key, null, common, objects.Count));
+            }
+            if (groups.Count > 1 || groups[0].Oid != common)
+            {
+                roots.AddRange(groups);
+            }
+        }
+        // One entry per OID: two modules often describe the same branch (RFC1213-MIB and IF-MIB both cover interfaces), and
+        // the picker can show a value only once.
+        return roots.DistinctBy(root => root.Oid, StringComparer.Ordinal).ToList();
+    }
+
+    private string NameAt(string oid) => _byOid.TryGetValue(oid, out var node) ? node.Name : oid;
+
+    private static string? ParentOid(string oid)
+    {
+        var dot = oid.LastIndexOf('.');
+        return dot < 0 ? null : oid[..dot];
+    }
+
+    private static bool IsUnder(string oid, string root) => oid == root || oid.StartsWith(root + ".", StringComparison.Ordinal);
+
+    private static string CommonPrefix(string left, string right)
+    {
+        var a = left.Split('.');
+        var b = right.Split('.');
+        var length = 0;
+        while (length < a.Length && length < b.Length && a[length] == b[length])
+        {
+            length++;
+        }
+        return string.Join('.', a.Take(length));
+    }
+
+    private sealed class OidComparer : IComparer<string>
+    {
+        public static readonly OidComparer Instance = new();
+
+        public int Compare(string? x, string? y)
+        {
+            var a = (x ?? string.Empty).Split('.');
+            var b = (y ?? string.Empty).Split('.');
+            for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+            {
+                var order = long.TryParse(a[i], out var l) && long.TryParse(b[i], out var r) ? l.CompareTo(r) : string.CompareOrdinal(a[i], b[i]);
+                if (order != 0)
+                {
+                    return order;
+                }
+            }
+            return a.Length.CompareTo(b.Length);
         }
     }
 

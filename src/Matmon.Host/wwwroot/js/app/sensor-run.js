@@ -129,6 +129,19 @@ function renderRemoteRunResult(container, kind, job) {
 // MIB from the walk relabels the rows in place through /api/mibs/translate, so nobody has to walk again. The tools above
 // the list narrow a long walk (text, numbers only) and tick or untick what is shown in one go; nothing is ticked at first.
 function initializeSnmpWalkMibs() {
+  document.querySelectorAll("[data-snmp-mib-root]").forEach((picker) => {
+    const input = picker.querySelector(".mat-picker__input");
+    const root = picker.closest("form")?.querySelector('[name="NewSensor.SnmpWalkRootOid"]');
+    const take = () => {
+      if (root && input?.value) {
+        root.value = input.value;
+        root.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    input?.addEventListener("change", take);
+    input?.addEventListener("input", take);
+  });
+
   document.querySelectorAll("[data-snmp-walk-tools]").forEach((tools) => {
     const scope = tools.closest("[data-snmp-walk]");
     const list = scope?.querySelector("[data-snmp-walk-list]");

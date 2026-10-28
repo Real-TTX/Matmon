@@ -363,6 +363,32 @@ public sealed partial class WorkspaceModel
         }
     }
 
+    /// <summary>
+    /// "From a MIB" beside the walk's Root OID: the loaded MIBs and their groups as a server-searched list (MatUi select picker,
+    /// FORM-25 - a vendor library brings hundreds of modules). Choosing one writes its OID into the Root OID field, so a walk
+    /// reads what that MIB describes instead of the whole tree from mib-2.
+    /// </summary>
+    public IActionResult OnGetMibRoots(string? q, int page = 1)
+    {
+        const int size = 20;
+        var term = (q ?? string.Empty).Trim();
+        var roots = HttpContext.RequestServices.GetService<MibLibrary>()?.Registry.WalkRoots ?? [];
+        var matches = roots
+            .Where(root => term.Length == 0
+                || root.Module.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || (root.Group?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                || root.Oid.StartsWith(term.TrimStart('.'), StringComparison.Ordinal))
+            .ToList();
+        var at = Math.Max(1, page);
+        var items = matches.Skip((at - 1) * size).Take(size).Select(root => new
+        {
+            value = root.Oid,
+            name = root.Group is null ? root.Module : $"{root.Module} › {root.Group}",
+            description = $"{root.Oid} · {root.Objects} object{(root.Objects == 1 ? "" : "s")}"
+        });
+        return new JsonResult(new { items, more = matches.Count > at * size, total = matches.Count });
+    }
+
     private static void ApplySnmpWalkSelectionsToParameters(CreateSensorInput editor)
     {
         if (!IsSnmpWalkSensorType(editor.SensorTypeKey) ||
