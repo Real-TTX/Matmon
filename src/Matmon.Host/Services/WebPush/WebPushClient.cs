@@ -100,66 +100,11 @@ public sealed class WebPushClient(HttpClient http, WebPushKeys keys, IMonitoring
     private static string Trim(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
 
     /// <summary>Opens the connection only to a public address (see the class remarks).</summary>
-    internal static async ValueTask<Stream> ConnectToPublicAddressAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
-    {
-        var candidates = (await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken)).Where(IsPublic).ToArray();
-        if (candidates.Length == 0)
-        {
-            throw new HttpRequestException("The push address does not lead to a public server.");
-        }
+    internal static ValueTask<Stream> ConnectToPublicAddressAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken) =>
+        PublicNetwork.ConnectAsync(context, "The push address does not lead to a public server.", cancellationToken);
 
-        SocketException? last = null;
-        foreach (var target in candidates)
-        {
-            var socket = new Socket(target.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-            try
-            {
-                await socket.ConnectAsync(new IPEndPoint(target, context.DnsEndPoint.Port), cancellationToken);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch (SocketException exception)
-            {
-                socket.Dispose();
-                last = exception;
-            }
-            catch
-            {
-                socket.Dispose();
-                throw;
-            }
-        }
-
-        throw new HttpRequestException("The push service could not be reached.", last);
-    }
-
-    /// <summary>An address of the internet: not this machine, not a private network, not link-local, not multicast.</summary>
-    public static bool IsPublic(IPAddress address)
-    {
-        if (address.IsIPv4MappedToIPv6)
-        {
-            address = address.MapToIPv4();
-        }
-
-        if (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any) || address.Equals(IPAddress.Broadcast))
-        {
-            return false;
-        }
-
-        var b = address.GetAddressBytes();
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            return !(b[0] == 0 || b[0] == 10 || b[0] >= 224
-                || (b[0] == 100 && b[1] >= 64 && b[1] <= 127)
-                || (b[0] == 169 && b[1] == 254)
-                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
-                || (b[0] == 192 && b[1] == 168)
-                || (b[0] == 192 && b[1] == 0 && b[2] == 0)
-                || (b[0] == 198 && (b[1] == 18 || b[1] == 19)));
-        }
-
-        return address.AddressFamily == AddressFamily.InterNetworkV6
-            && !(address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast || (b[0] & 0xFE) == 0xFC);
-    }
+    /// <summary>An address of the internet (see <see cref="PublicNetwork.IsPublic"/>).</summary>
+    public static bool IsPublic(IPAddress address) => PublicNetwork.IsPublic(address);
 }
 
 /// <summary>Sends one notification to a set of devices: forgets the ones that are gone, notes when one was reached.</summary>

@@ -70,6 +70,13 @@ if (runtimeOptions.Mode == AppMode.Executor)
     builder.Services.ConfigureHttpJsonOptions(options =>
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
     RegisterSensorExecutors(builder.Services, includeProbeSensors: false);
+    // A cloud sensor's URL is typed by a customer: the HTTP sensors may only reach the INTERNET from here, never the
+    // network the cloud runs in (its database, the cloud itself, a metadata endpoint) - checked on every connection.
+    const string NotPublic = "The address does not lead to a public server - cloud sensors only check what is reachable from the internet.";
+    builder.Services.AddHttpClient<HttpSensorExecutor>()
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { ConnectCallback = PublicNetwork.ConnectCallback(NotPublic) });
+    builder.Services.AddHttpClient<HttpAdvancedSensorExecutor>()
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { ConnectCallback = PublicNetwork.ConnectCallback(NotPublic) });
     builder.Services.AddSingleton<StatelessSensorRunner>();
 
     var executorApp = builder.Build();
