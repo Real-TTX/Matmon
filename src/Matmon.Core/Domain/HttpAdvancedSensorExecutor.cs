@@ -35,12 +35,10 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             {
                 Key = "expectedStatus",
                 Label = "Expected status",
-                Kind = SensorParameterKind.Integer,
-                Description = "Treat this HTTP status code as healthy",
+                Kind = SensorParameterKind.Text,
+                Description = "Treat this HTTP status code as healthy. 2xx accepts any success code.",
                 DefaultValue = "200",
-                Min = 100,
-                Max = 599,
-                Step = "1"
+                Placeholder = "200 or 2xx"
             },
             new SensorParameterDefinition
             {
@@ -48,6 +46,21 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
                 Label = "Expected text",
                 Kind = SensorParameterKind.Text,
                 Description = "Optional text that must be present in the response body."
+            },
+            new SensorParameterDefinition
+            {
+                Key = "unexpectedText",
+                Label = "Text that must not appear",
+                Kind = SensorParameterKind.Text,
+                Description = "Optional text that must NOT be in the response body (an error page, \"maintenance\")."
+            },
+            new SensorParameterDefinition
+            {
+                Key = "expectedPattern",
+                Label = "Pattern that must match",
+                Kind = SensorParameterKind.Text,
+                Description = "Optional regular expression that must match the response body (case-insensitive).",
+                Placeholder = "Version \\d+\\.\\d+"
             },
             new SensorParameterDefinition
             {
@@ -98,10 +111,19 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
     };
 
     private readonly HttpClient _httpClient;
+    private readonly int _maxBodyBytes = DefaultMaxBodyBytes;
 
+    // ONE public constructor: the typed HttpClient registration (AddHttpClient<T>) needs exactly one it can use.
     public HttpAdvancedSensorExecutor(HttpClient httpClient)
     {
         _httpClient = httpClient;
+    }
+
+    /// <summary>A smaller cap on the body read (the cloud Executor reads at most 2 MB of a customer's page).</summary>
+    public int MaxBodyBytes
+    {
+        get => _maxBodyBytes;
+        init => _maxBodyBytes = Math.Max(1024, value);
     }
 
     public string SensorTypeKey => Definition.Key;
@@ -162,7 +184,7 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
 
             using var request = new HttpRequestMessage(method, targetUri);
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
-            var body = await ReadBodyWithLimitAsync(response.Content, MaxBodyBytes, timeoutCts.Token);
+            var body = await ReadBodyWithLimitAsync(response.Content, _maxBodyBytes, timeoutCts.Token);
             watch.Stop();
 
             var channels = new List<SensorChannelValue>
@@ -193,18 +215,15 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             var defaultChannelKey = ResolveDefaultChannelKey(context.Settings, channels);
             channels = MarkDefault(channels, defaultChannelKey).ToList();
 
-            var expectedStatus = MonitoringSettings.TryReadParameterInt(context.Settings, "expectedStatus", out var configuredExpectedStatus)
-                ? configuredExpectedStatus
-                : 200;
-            var expectedTextOk = !MonitoringSettings.TryReadParameter(context.Settings, "expectedText", out var expectedText) ||
-                string.IsNullOrWhiteSpace(expectedText) ||
-                body.Contains(expectedText, StringComparison.OrdinalIgnoreCase);
-            var statusOk = (int)response.StatusCode == expectedStatus;
+            var statusCode = (int)response.StatusCode;
+            var statusOk = IsExpectedStatus(context.Settings, statusCode, out var expectedLabel);
+            // A HEAD answer has no body, so the content checks would fail on every run - they only apply to a body.
+            var contentProblem = method == HttpMethod.Head ? null : CheckContent(context.Settings, body);
 
-            var state = statusOk && expectedTextOk ? SensorState.Healthy : SensorState.Critical;
-            var message = statusOk
-                ? expectedTextOk ? $"http {(int)response.StatusCode} ok" : "expected text missing"
-                : $"http {(int)response.StatusCode} expected {expectedStatus}";
+            var state = statusOk && contentProblem is null ? SensorState.Healthy : SensorState.Critical;
+            var message = !statusOk
+                ? $"http {statusCode} expected {expectedLabel}"
+                : contentProblem ?? $"http {statusCode} ok";
 
             var defaultValue = channels.FirstOrDefault(channel => channel.IsDefault)?.Value;
             var result = new SensorExecutionResult(state, watch.Elapsed, defaultValue, message)
@@ -228,7 +247,75 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
     }
 
     // Cap on the response body buffered for content checks, so a huge/misbehaving endpoint can't OOM.
-    private const int MaxBodyBytes = 8 * 1024 * 1024;
+    public const int DefaultMaxBodyBytes = 8 * 1024 * 1024;
+
+    private static readonly TimeSpan PatternTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>Whether the status is the one asked for: an exact code or a class - "2xx" = any success, "3xx" ... A missing
+    /// or unreadable value means 200, as it always did.</summary>
+    public static bool IsExpectedStatus(MonitoringSettings settings, int statusCode, out string expectedLabel)
+    {
+        var configured = MonitoringSettings.TryReadParameter(settings, "expectedStatus", out var raw) ? raw.Trim() : string.Empty;
+        if (configured.Length == 3 && configured[0] is >= '1' and <= '5'
+            && configured.EndsWith("xx", StringComparison.OrdinalIgnoreCase))
+        {
+            expectedLabel = configured.ToLowerInvariant();
+            return statusCode / 100 == configured[0] - '0';
+        }
+
+        var expected = int.TryParse(configured, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code) ? code : 200;
+        expectedLabel = expected.ToString(CultureInfo.InvariantCulture);
+        return statusCode == expected;
+    }
+
+    /// <summary>The content checks on the body: a text that must be there, one that must not, a pattern that must match.
+    /// Null when all pass, else what failed (that becomes the message).</summary>
+    public static string? CheckContent(MonitoringSettings settings, string body)
+    {
+        if (MonitoringSettings.TryReadParameter(settings, "expectedText", out var expectedText) &&
+            !string.IsNullOrWhiteSpace(expectedText) &&
+            !body.Contains(expectedText, StringComparison.OrdinalIgnoreCase))
+        {
+            return "expected text missing";
+        }
+
+        if (MonitoringSettings.TryReadParameter(settings, "unexpectedText", out var unexpectedText) &&
+            !string.IsNullOrWhiteSpace(unexpectedText) &&
+            body.Contains(unexpectedText, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"unexpected text found: \"{Shorten(unexpectedText)}\"";
+        }
+
+        if (MonitoringSettings.TryReadParameter(settings, "expectedPattern", out var pattern) &&
+            !string.IsNullOrWhiteSpace(pattern))
+        {
+            try
+            {
+                // The pattern is someone's input and the body a stranger's page: the time limit keeps a catastrophic
+                // pattern from holding the executor.
+                if (!Regex.IsMatch(body, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, PatternTimeout))
+                {
+                    return "pattern did not match";
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return "pattern took too long to match";
+            }
+            catch (ArgumentException exception)
+            {
+                return $"invalid pattern: {exception.Message}";
+            }
+        }
+
+        return null;
+    }
+
+    private static string Shorten(string text)
+    {
+        var trimmed = text.Trim();
+        return trimmed.Length <= 60 ? trimmed : trimmed[..60] + "...";
+    }
 
     private static async Task<string> ReadBodyWithLimitAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
     {
@@ -286,7 +373,7 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             return [];
         }
 
-        var regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(2));
+        var regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline, PatternTimeout);
         var match = regex.Match(body);
         if (!match.Success)
         {

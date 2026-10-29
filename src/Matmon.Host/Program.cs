@@ -75,8 +75,12 @@ if (runtimeOptions.Mode == AppMode.Executor)
     const string NotPublic = "The address does not lead to a public server - cloud sensors only check what is reachable from the internet.";
     builder.Services.AddHttpClient<HttpSensorExecutor>()
         .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { ConnectCallback = PublicNetwork.ConnectCallback(NotPublic) });
+    // ... and read at most 2 MB of a page for the content checks (an instance reads 8 MB; the executor serves everyone).
     builder.Services.AddHttpClient<HttpAdvancedSensorExecutor>()
-        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { ConnectCallback = PublicNetwork.ConnectCallback(NotPublic) });
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { ConnectCallback = PublicNetwork.ConnectCallback(NotPublic) })
+        .AddTypedClient((http, _) => new HttpAdvancedSensorExecutor(http) { MaxBodyBytes = 2 * 1024 * 1024 });
+    // Every other sensor's target (ping, TCP, certificate, DNS ...) is checked before it runs: StatelessSensorRunner
+    // refuses one that does not resolve to public addresses only (ExecutorTargetGuard).
     builder.Services.AddSingleton<StatelessSensorRunner>();
 
     var executorApp = builder.Build();

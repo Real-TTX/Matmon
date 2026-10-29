@@ -156,7 +156,8 @@ public sealed class TcpPortSensorExecutor : ISensorExecutor
     private static (string Host, int? Port) ParseTarget(string target)
     {
         var trimmed = target.Trim();
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        // only "scheme://..." is a URL - "example.com:443" would otherwise parse as scheme "example.com" with no host
+        if (trimmed.Contains("://", StringComparison.Ordinal) && Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
         {
             return (uri.Host, uri.IsDefaultPort ? null : uri.Port);
         }

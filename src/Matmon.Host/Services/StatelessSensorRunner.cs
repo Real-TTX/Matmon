@@ -12,8 +12,17 @@ public sealed class StatelessSensorRunner
 
     private readonly IReadOnlyList<SensorDefinition> _catalog;
 
+    private readonly ExecutorTargetGuard.Resolver _resolver;
+
     public StatelessSensorRunner(IEnumerable<ISensorExecutor> executors)
+        : this(executors, ExecutorTargetGuard.SystemResolver)
     {
+    }
+
+    /// <summary>With a name resolver of its own (tests).</summary>
+    internal StatelessSensorRunner(IEnumerable<ISensorExecutor> executors, ExecutorTargetGuard.Resolver resolver)
+    {
+        _resolver = resolver;
         _executors = executors.ToDictionary(executor => executor.SensorTypeKey, StringComparer.OrdinalIgnoreCase);
         // Only advertise types this process can actually run (e.g. probe sensors aren't registered here).
         _catalog = SensorDefinitionCatalog.BuiltIns
@@ -37,6 +46,12 @@ public sealed class StatelessSensorRunner
             Parameters = new Dictionary<string, string>(
                 request.Parameters ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase)
         };
+
+        // The target is a customer's: it must lead to the internet, never into the network the executor runs in.
+        if (await ExecutorTargetGuard.CheckAsync(request.SensorTypeKey, request.Target, settings.Parameters, _resolver, cancellationToken) is { } refusal)
+        {
+            return SensorExecutionResult.Critical(TimeSpan.Zero, refusal);
+        }
         if (request.TimeoutSeconds is int seconds && seconds > 0)
         {
             settings.Timeout = TimeSpan.FromSeconds(seconds);
