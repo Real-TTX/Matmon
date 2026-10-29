@@ -47,6 +47,10 @@ public sealed record SelfUpdateOffer(bool Available, string? Version, string Det
     /// <summary>What identifies the offered build for "this one failed before": an image id, or the package version.</summary>
     public string? Identity { get; init; } = Identity;
 
+    /// <summary>Docker: the image to install when it is not the tag the container runs (a remote probe follows its
+    /// primary's exact version tag). Null = the container's own tag.</summary>
+    public string? ImageReference { get; init; }
+
     public static SelfUpdateOffer None(string detail) => new(false, null, detail);
 }
 

@@ -30,6 +30,11 @@
         <dd>@(Model.Buffered == 0 ? "nothing" : $"{Model.Buffered} result(s) - sent once the primary answers")</dd>
         <dt>Version</dt>
         <dd class="mat-mono">@Model.Version</dd>
+        @if (Model.UpdateText is { } updateText)
+        {
+            <dt>Update</dt>
+            <dd>@updateText</dd>
+        }
     </dl>
 
     @if (!s.IsConnected && !string.IsNullOrWhiteSpace(s.StatusMessage))

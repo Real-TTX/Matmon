@@ -122,12 +122,53 @@ public sealed partial class DockerSelfUpdateTarget(
             local?["Id"]?.GetValue<string>());
     }
 
+    /// <summary>
+    /// A remote Docker probe follows its primary's build: CI publishes every build under its own version tag, so the
+    /// image to install is <c>&lt;this container's repository&gt;:&lt;version&gt;</c>, pulled now (with the running image
+    /// tagged for the rollback first, as in <see cref="CheckAsync"/>). Throws when the registry has no such tag - the
+    /// caller then falls back to <see cref="CheckAsync"/> (the newest image of the tag the container runs).
+    /// </summary>
+    public async Task<SelfUpdateOffer> CheckVersionAsync(string version, CancellationToken cancellationToken)
+    {
+        using var docker = Client();
+        var self = await SelfAsync(docker, cancellationToken);
+        var reference = ImageReference.Parse(self["Config"]?["Image"]?.GetValue<string>() ?? string.Empty);
+        if (reference.PinnedByDigest)
+        {
+            return SelfUpdateOffer.None($"the container is pinned to an image digest ({reference}) - there is no tag to follow");
+        }
+
+        var wanted = reference with { Tag = version };
+        var runningId = self["Image"]!.GetValue<string>();
+        var local = await docker.InspectImageAsync(wanted.ToString(), cancellationToken);
+        if (local is null)
+        {
+            if (await docker.InspectImageAsync(runningId, cancellationToken) is not null)
+            {
+                await docker.TagAsync(runningId, reference.Repository, RollbackTag, cancellationToken);
+            }
+
+            await docker.PullAsync(wanted, cancellationToken);
+            local = await docker.InspectImageAsync(wanted.ToString(), cancellationToken)
+                ?? throw new InvalidOperationException($"{wanted} is not there after the pull");
+        }
+
+        var id = local["Id"]?.GetValue<string>();
+        if (string.Equals(id, runningId, StringComparison.OrdinalIgnoreCase))
+        {
+            return SelfUpdateOffer.None($"already runs {wanted}");
+        }
+
+        return new SelfUpdateOffer(true, version, $"{wanted}", id) { ImageReference = wanted.ToString() };
+    }
+
     public async Task ApplyAsync(SelfUpdateOffer offer, CancellationToken cancellationToken)
     {
         using var docker = Client();
         var self = await SelfAsync(docker, cancellationToken);
         var name = self["Name"]!.GetValue<string>().TrimStart('/');
-        var reference = self["Config"]!["Image"]!.GetValue<string>();
+        var running = self["Config"]!["Image"]!.GetValue<string>();
+        var reference = offer.ImageReference ?? running;
 
         // The helper needs the same socket - as mounted into THIS container (the host side of the bind).
         var socketMount = (self["Mounts"] as JsonArray)?

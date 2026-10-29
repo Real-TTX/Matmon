@@ -60,6 +60,25 @@ public sealed class SlaveProbeRuntimeState
         set { lock (_gate) { _agentUpdateStatus = value; } }
     }
 
+    private readonly SemaphoreSlim _heartbeatWake = new(0, 1);
+
+    /// <summary>Asks for the next heartbeat now rather than after the interval (the answer to an update command should
+    /// reach the primary before the probe's container is replaced).</summary>
+    public void RequestHeartbeat()
+    {
+        try
+        {
+            _heartbeatWake.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+        }
+    }
+
+    /// <summary>Waits for the interval, or until <see cref="RequestHeartbeat"/> is called.</summary>
+    public async Task WaitForNextHeartbeatAsync(TimeSpan interval, CancellationToken cancellationToken) =>
+        await _heartbeatWake.WaitAsync(interval, cancellationToken);
+
     public void RecordHeartbeat(bool success, string message)
     {
         lock (_gate)

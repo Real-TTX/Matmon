@@ -26,7 +26,8 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             request.AgentVersion,
             duplicateWarning,
             request.UpdateStatus,
-            request.HeartbeatIntervalSeconds is > 0 ? Math.Clamp(request.HeartbeatIntervalSeconds.Value, 5, 300) : null);
+            request.HeartbeatIntervalSeconds is > 0 ? Math.Clamp(request.HeartbeatIntervalSeconds.Value, 5, 300) : null,
+            request.SelfUpdate);
 
         _probes[request.ProbeId] = snapshot;
         return snapshot;

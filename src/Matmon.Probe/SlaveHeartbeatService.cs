@@ -11,17 +11,20 @@ public sealed class SlaveHeartbeatService : BackgroundService
     private readonly ILogger<SlaveHeartbeatService> _logger;
     private readonly ProbeRuntimeOptions _runtimeOptions;
     private readonly SlaveProbeRuntimeState _runtimeState;
+    private readonly IProbeSelfUpdate? _selfUpdate;
 
     public SlaveHeartbeatService(
         IHttpClientFactory httpClientFactory,
         ILogger<SlaveHeartbeatService> logger,
         ProbeRuntimeOptions runtimeOptions,
-        SlaveProbeRuntimeState runtimeState)
+        SlaveProbeRuntimeState runtimeState,
+        IProbeSelfUpdate? selfUpdate = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _runtimeOptions = runtimeOptions;
         _runtimeState = runtimeState;
+        _selfUpdate = selfUpdate;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -70,7 +73,7 @@ public sealed class SlaveHeartbeatService : BackgroundService
 
             try
             {
-                await Task.Delay(interval, stoppingToken);
+                await _runtimeState.WaitForNextHeartbeatAsync(interval, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -92,7 +95,8 @@ public sealed class SlaveHeartbeatService : BackgroundService
             system.Host,
             system.Networks,
             _runtimeState.AgentUpdateStatus,
-            Math.Clamp(_runtimeOptions.HeartbeatIntervalSeconds, 5, 300));
+            Math.Clamp(_runtimeOptions.HeartbeatIntervalSeconds, 5, 300),
+            _selfUpdate?.Report());
 
         try
         {
@@ -106,6 +110,7 @@ public sealed class SlaveHeartbeatService : BackgroundService
             }
 
             _runtimeState.RecordHeartbeat(success: true, "heartbeat accepted by primary");
+            await HandleAnswerAsync(response, stoppingToken);
         }
         // A real shutdown propagates (it ends the service cleanly). An HttpClient timeout also throws an
         // OperationCanceledException (TaskCanceledException) but with a different token - that must NOT escape
@@ -119,6 +124,33 @@ public sealed class SlaveHeartbeatService : BackgroundService
         {
             _runtimeState.RecordHeartbeat(success: false, ex.Message);
             _logger.LogWarning(ex, "Heartbeat from {ProbeId} failed", probeId);
+        }
+    }
+
+    /// <summary>An update command from the primary rides the heartbeat answer (Probes page > Update). Only a Docker probe has
+    /// someone to hand it to; an older primary's answer has no such field, and a body that is not JSON is ignored.</summary>
+    private async Task HandleAnswerAsync(HttpResponseMessage response, CancellationToken stoppingToken)
+    {
+        if (_selfUpdate is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var answer = await response.Content.ReadFromJsonAsync<ProbeHeartbeatResponse>(stoppingToken);
+            if (answer?.InstallUpdate is { } command && !string.IsNullOrWhiteSpace(command.Id))
+            {
+                _selfUpdate.Handle(command);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read the primary's heartbeat answer");
         }
     }
 

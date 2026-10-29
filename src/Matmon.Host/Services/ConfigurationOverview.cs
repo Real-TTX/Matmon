@@ -35,4 +35,6 @@ public sealed record SystemProbeOverview(
     bool IsAgent = false,
     string? UpdateStatus = null,
     Guid? BoundHostId = null,
-    string? BoundHostName = null);
+    string? BoundHostName = null,
+    // A Docker probe's self-update report from its heartbeat (null for the primary, an agent and an older probe).
+    Matmon.Probe.ProbeSelfUpdateReport? SelfUpdate = null);

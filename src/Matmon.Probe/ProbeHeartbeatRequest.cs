@@ -14,4 +14,7 @@ public sealed record ProbeHeartbeatRequest(
     string? UpdateStatus = null,
     // How often THIS probe beats. An agent beats every 30 s whatever the primary is set to, so the primary judges a
     // probe's heartbeat age and its duplicate check by this value (its own interval only for an older probe).
-    int? HeartbeatIntervalSeconds = null);
+    int? HeartbeatIntervalSeconds = null,
+    // A Docker probe's self-update: can it, is it installing, how the last one ended, the answer to an update command.
+    // Null from an agent and from an older probe.
+    ProbeSelfUpdateReport? SelfUpdate = null);

@@ -14,4 +14,6 @@ public sealed record ProbeStatusSnapshot(
     string? DuplicateWarning = null,
     string? UpdateStatus = null,
     /// <summary>The interval the probe reported it beats at (null for an older probe - then the primary's own).</summary>
-    int? HeartbeatIntervalSeconds = null);
+    int? HeartbeatIntervalSeconds = null,
+    /// <summary>A Docker probe's self-update report (null for an agent and an older probe).</summary>
+    Matmon.Probe.ProbeSelfUpdateReport? SelfUpdate = null);

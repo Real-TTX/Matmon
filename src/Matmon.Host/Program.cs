@@ -419,6 +419,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddSingleton<SelfUpdateService>();
     builder.Services.AddHostedService(provider => provider.GetRequiredService<SelfUpdateService>());
     builder.Services.AddSingleton<InstanceRestarter>();
+    // Update commands for remote Docker probes (Probes page > Update), handed out with their heartbeat answers.
+    builder.Services.AddSingleton<ProbeUpdateCommands>();
 
     // Syslog: the central log of the network's devices. The database is its own file (syslog.db) so a chatty switch
     // can never bloat or lock the sensor history. Receiving is the syslog collector plugin's job (System > Plugins - on
@@ -449,6 +451,18 @@ else
 {
     // The same probe wiring Matmon.Agent uses - see ProbeServiceRegistration.
     builder.Services.AddMatmonProbe();
+
+    // A Docker probe can be updated from its primary (Probes page > Update): the instance's own Docker self-update - the
+    // helper container, the health wait, the rollback - with the outcome kept beside the offline buffer.
+    builder.Services.AddSingleton(new DockerSelfUpdateTarget(
+        string.IsNullOrWhiteSpace(runtimeOptions.DockerSocketPath) ? DockerEngineClient.DefaultSocketPath : runtimeOptions.DockerSocketPath,
+        Matmon.Probe.MatmonVersion.Current, Matmon.Probe.MatmonVersion.EnvironmentVariable));
+    builder.Services.AddSingleton(new ProbeUpdateOutcomeFile(Path.Combine(
+        Path.GetDirectoryName(runtimeOptions.OfflineBufferPath) is { Length: > 0 } bufferDirectory ? bufferDirectory : workspaceDirectory,
+        "probe-last-update.json")));
+    builder.Services.AddSingleton<ProbeSelfUpdateService>();
+    builder.Services.AddSingleton<Matmon.Probe.IProbeSelfUpdate>(provider => provider.GetRequiredService<ProbeSelfUpdateService>());
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<ProbeSelfUpdateService>());
 }
 
 builder.Services.AddMatmonPlugins(runtimeOptions.PluginsPath);
@@ -975,7 +989,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
     // the ready-to-install download with the instance address and a code appended, and the one-liner install scripts.
     app.MapAgentDownloadEndpoints();
 
-    app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore) =>
+    app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore, ProbeUpdateCommands updateCommands) =>
     {
         if (string.IsNullOrWhiteSpace(request.ProbeId) || string.IsNullOrWhiteSpace(request.ProbeName))
         {
@@ -987,8 +1001,11 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.Unauthorized();
         }
 
-        var snapshot = registry.Record(request, DateTimeOffset.UtcNow);
-        return Results.Ok(snapshot);
+        registry.Record(request, DateTimeOffset.UtcNow);
+        // The answer carries the primary's version and an update command for a Docker probe (Probes page > Update); an
+        // older probe ignores the body, so this is backward compatible both ways.
+        var command = updateCommands.OnHeartbeat(request.ProbeId, request.AgentVersion, request.SelfUpdate);
+        return Results.Ok(new ProbeHeartbeatResponse(Matmon.Probe.MatmonVersion.Current, command));
     }).AllowAnonymous();
 
     app.MapGet("/api/probes/{probeId}/assignments", (

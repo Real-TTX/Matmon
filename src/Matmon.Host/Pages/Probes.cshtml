@@ -66,6 +66,36 @@
                                     {
                                         <span class="probe-cell__warn" title="Two processes share this probe id, so every other sensor result comes from the other one.">@MatUi.Icon("alert")<span>Duplicate probe: @probe.DuplicateWarning</span></span>
                                     }
+                                    @if (Model.UpdateFor(probe) is { } update)
+                                    {
+                                        @if (update.Updating)
+                                        {
+                                            <span class="@MatUi.PillClass("busy")">Updating to @(update.UpdatingTo ?? Model.PrimaryVersion)…</span>
+                                        }
+                                        else if (update.Waiting)
+                                        {
+                                            <span class="@MatUi.PillClass("info")">Update queued - waiting for the next heartbeat</span>
+                                        }
+                                        else if (update.Available)
+                                        {
+                                            <span class="@MatUi.PillClass("warning")" title="This probe runs another build than the primary (@Model.PrimaryVersion)">Update available: @Model.PrimaryVersion</span>
+                                            @if (!update.CanUpdate)
+                                            {
+                                                <span class="probe-cell__meta">
+                                                    @(update.Reported ? $"Cannot update itself: {update.UnavailableReason ?? "no Docker socket"}." : "Too old to be updated from here.")
+                                                    Pull the new image and recreate the container by hand@(update.Reported ? ", or mount the Docker socket so it can update itself: -v /var/run/docker.sock:/var/run/docker.sock (it gives the container control over Docker on that machine)" : string.Empty).
+                                                </span>
+                                            }
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(update.Refusal))
+                                        {
+                                            <span class="probe-cell__meta probe-cell__meta--problem">Update not started: @update.Refusal</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(update.Outcome))
+                                        {
+                                            <span class="probe-cell__meta@(update.OutcomeProblem ? " probe-cell__meta--problem" : string.Empty)">@update.Outcome</span>
+                                        }
+                                    }
                                     @if (probe.Networks is { Count: > 0 })
                                     {
                                         <span class="mat-chips">
@@ -113,6 +143,11 @@
             <div class="mat-btn-row">
                 <a class="mat-btn mat-btn--primary" asp-page="/Agents">@MatUi.Icon("plus")<span>Add an agent</span></a>
                 <a class="mat-btn mat-btn--secondary" asp-page="/ProbeCreate" asp-route-returnUrl="/Probes">@MatUi.Icon("server")<span>New Docker probe</span></a>
+                @if (Model.UpdatableProbes is { Count: > 1 } updatable)
+                {
+                    <button type="submit" form="probe-row-actions" class="mat-btn mat-btn--secondary" asp-page-handler="UpdateAll"
+                            data-confirm="Update @updatable.Count Docker probes to @Model.PrimaryVersion? Each replaces its container and is away for a moment; one that does not come up goes back to its old build." data-confirm-ok="Update all">@MatUi.Icon("download")<span>Update all probes</span></button>
+                }
             </div>
         </div>
     }
@@ -136,6 +171,12 @@
         @if (isAdmin && remote)
         {
             <div class="mat-menu__sep" role="separator"></div>
+            @if (Model.UpdateFor(probe) is { CanStart: true })
+            {
+                <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
+                        asp-page-handler="Update" name="probeElementId" value="@probe.ElementId"
+                        data-confirm="Update @probe.Name from @probe.Version to @Model.PrimaryVersion? It replaces its container and is away for a moment; if the new one does not come up within 3 minutes it goes back to the old build." data-confirm-ok="Update">@MatUi.Icon("download")<span>Update to @Model.PrimaryVersion</span></button>
+            }
             @if (!probe.IsAgent && Matmon.Host.Ui.ProbeInstallCommandBuilder.CanInstallProbe(probe))
             {
                 <a class="mat-menu__item" role="menuitem" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Probes">@MatUi.Icon("download")<span>Install (Docker)</span></a>

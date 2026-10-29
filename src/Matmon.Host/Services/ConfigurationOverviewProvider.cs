@@ -110,7 +110,8 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             probe.AgentEnrolledUtc is not null,
             isRoot ? null : liveProbe?.UpdateStatus,
             boundHost?.Id,
-            boundHost?.Name);
+            boundHost?.Name,
+            isRoot || probe.AgentEnrolledUtc is not null ? null : liveProbe?.SelfUpdate);
     }
 
     /// <summary>System "full sync": the local primary reports itself; a secondary reports OS / host /
