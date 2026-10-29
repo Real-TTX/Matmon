@@ -123,6 +123,7 @@ function renderDashboard(snapshot) {
     if (messageElement) {
       const message = state === "error" || state === "warning" ? messages.get(series.sensorId) : null;
       messageElement.textContent = message ?? "";
+      messageElement.title = message ?? "";
       messageElement.hidden = !message;
     }
 

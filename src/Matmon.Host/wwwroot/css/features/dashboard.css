@@ -40,9 +40,10 @@
 
 /* ---- Live sensors: a tile per sensor - name and state, the latest value, its graph, and while it has a problem what
    it said. A tile keeps its place while the page is open; the values and graphs refresh in it. ---- */
-.mm-dash-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: var(--mat-gap); }
+/* Live sensors: compact tiles - many fit on a screen; name, value and trend, nothing that repeats itself */
+.mm-dash-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 12.5rem), 1fr)); gap: var(--mat-space-3); }
 .mm-dash-tile { min-width: 0; }
-.mm-dash-tile__body { display: flex; flex-direction: column; gap: var(--mat-space-2); height: 100%; min-width: 0; }
+.mm-dash-tile__body { display: flex; flex-direction: column; gap: var(--mat-space-1); height: 100%; min-width: 0; padding: var(--mat-space-3); }
 .mm-dash-tile__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--mat-space-2); min-width: 0; }
 .mm-dash-tile__name { display: flex; flex-direction: column; min-width: 0; }
 .mm-dash-tile__name strong,
@@ -50,10 +51,10 @@
 .mm-dash-tile__name strong { font-size: var(--mat-fs-sm); }
 .mm-dash-tile__name small { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
 .mm-dash-tile__value { display: flex; align-items: baseline; gap: var(--mat-space-1); min-width: 0; }
-.mm-dash-tile__value strong { font-size: var(--mat-fs-xl); line-height: 1.1; }
+.mm-dash-tile__value strong { font-size: var(--mat-fs-lg); line-height: 1.1; }
 .mm-dash-tile__value span { color: var(--mat-text-muted); font-size: var(--mat-fs-xs); }
 .mm-dash-tile__star { margin-inline-start: auto; color: var(--mat-accent); }
-.mm-dash-tile__message { display: -webkit-box; margin: 0; overflow: hidden; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.mm-dash-tile__message { display: -webkit-box; margin: 0; overflow: hidden; color: var(--mat-text-muted); font-size: var(--mat-fs-xs); -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow-wrap: anywhere; }
 .mm-dash-tile[data-state="error"] { border-color: color-mix(in srgb, var(--mat-danger) 45%, var(--mat-border)); }
 .mm-dash-tile[data-state="warning"] { border-color: color-mix(in srgb, var(--mat-warning) 45%, var(--mat-border)); }
 
@@ -68,6 +69,7 @@
 [data-state="disabled"] .mm-trend,
 [data-state="unknown"] .mm-trend { --mm-trend: var(--mat-text-faint); }
 .mm-trend__plot { display: block; width: 100%; height: var(--mat-space-10); overflow: visible; }
+.mm-dash-tile .mm-trend__plot { height: var(--mat-space-8); }
 .mm-trend--lg .mm-trend__plot { height: 5.5rem; }
 .mm-trend__plot path { vector-effect: non-scaling-stroke; }
 .mm-trend__plot [data-role="line"] { fill: none; stroke: var(--mm-trend); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

@@ -461,7 +461,7 @@ else
                                 }
                             </div>
                             <partial name="_DashboardTrend" model="@("sm")" />
-                            <p class="mm-dash-tile__message" data-role="message" hidden="@(ProblemMessage(series) is null ? "hidden" : null)">@ProblemMessage(series)</p>
+                            <p class="mm-dash-tile__message" data-role="message" title="@ProblemMessage(series)" hidden="@(ProblemMessage(series) is null ? "hidden" : null)">@ProblemMessage(series)</p>
                         </div>
                     </a>
                 }

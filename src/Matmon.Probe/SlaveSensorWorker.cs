@@ -51,6 +51,7 @@ public sealed class SlaveSensorWorker : BackgroundService
         _buffer = new OfflineObservationBuffer(
             runtimeOptions.Mode == AppMode.Secondary ? runtimeOptions.OfflineBufferPath : null,
             message => logger.LogWarning("{Message}", message));
+        _runtimeState.BufferedObservations = _buffer.Count;
         if (_buffer.Count > 0)
         {
             _logger.LogInformation("Loaded {Count} buffered observation(s) from {Path}; they are sent once the primary answers", _buffer.Count, _buffer.FilePath);
@@ -222,6 +223,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             now,
             TimeSpan.FromDays(_runtimeOptions.OfflineBufferRetentionDays),
             _runtimeOptions.OfflineBufferMaxObservations);
+        _runtimeState.BufferedObservations = _buffer.Count;
         if (dropped > 0)
         {
             _logger.LogWarning(
@@ -315,6 +317,7 @@ public sealed class SlaveSensorWorker : BackgroundService
             }
 
             _buffer.RemoveOldest(chunk.Count);
+            _runtimeState.BufferedObservations = _buffer.Count;
             flushed += chunk.Count;
         }
 

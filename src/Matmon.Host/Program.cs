@@ -532,6 +532,39 @@ if (runtimeOptions.Mode == AppMode.Primary)
     });
 }
 
+if (runtimeOptions.Mode == AppMode.Secondary)
+{
+    // A probe has no users and no setup (it is operated on its primary), so every page leads to its status page instead
+    // of a sign-in nobody could pass. Static assets, health and the APIs stay as they are.
+    app.Use(async (context, next) =>
+    {
+        var path = context.Request.Path.Value ?? "/";
+        var isOwn =
+            path.Equals("/probe", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/healthz", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/_", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/matui/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/brand/", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains('.');
+        if (isOwn)
+        {
+            await next();
+            return;
+        }
+
+        if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+        {
+            context.Response.Redirect("/probe");
+            return;
+        }
+
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+    });
+}
+
 if (!app.Environment.IsDevelopment() && runtimeOptions.Mode == AppMode.Primary)
 {
     app.UseExceptionHandler("/Error");

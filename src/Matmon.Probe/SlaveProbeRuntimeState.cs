@@ -23,6 +23,7 @@ public sealed class SlaveProbeRuntimeState
     private bool? _lastResultTransferSucceeded;
     private int _assignedSensorCount;
     private int _lastExecutedSensorCount;
+    private int _bufferedObservations;
 
     public SlaveProbeRuntimeSnapshot Snapshot()
     {
@@ -43,6 +44,13 @@ public sealed class SlaveProbeRuntimeState
                 _resultTransfers.OrderByDescending(entry => entry.ExecutedUtc).ToArray(),
                 _events.OrderByDescending(entry => entry.TimestampUtc).ToArray());
         }
+    }
+
+    /// <summary>How many results wait in the offline buffer for the primary (the probe status page shows it).</summary>
+    public int BufferedObservations
+    {
+        get { lock (_gate) { return _bufferedObservations; } }
+        set { lock (_gate) { _bufferedObservations = value; } }
     }
 
     /// <summary>Set by the agent's auto-update; carried to the primary on every heartbeat.</summary>

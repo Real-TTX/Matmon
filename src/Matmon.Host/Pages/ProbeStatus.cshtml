@@ -1,0 +1,55 @@
+@page "/probe"
+@model ProbeStatusModel
+@{
+    Layout = "_AnonymousLayout";
+    ViewData["Title"] = Model.ProbeName;
+    var s = Model.State;
+}
+
+<div class="mat-auth__card mat-stack">
+    <div class="mat-auth__brand">
+        <img class="mat-brandmark--light mm-authlogo" src="/brand/matmon-logo-horizontal.svg" alt="" width="233" height="44" /><img class="mat-brandmark--dark mm-authlogo" src="/brand/matmon-logo-horizontal-dark.svg" alt="" width="233" height="44" />
+        <h1>@Model.ProbeName</h1>
+        <p class="mat-text-muted">Matmon probe</p>
+    </div>
+
+    <div class="mat-row">
+        <span class="@MatUi.PillClass(Model.Tone)">@Model.StateText</span>
+    </div>
+
+    <dl class="mat-kv">
+        <dt>Primary</dt>
+        <dd>@(Model.PrimaryUrl is { } primary ? primary : "not configured")</dd>
+        <dt>Last heartbeat</dt>
+        <dd>@ProbeStatusModel.Ago(s.LastHeartbeatUtc)</dd>
+        <dt>Assigned sensors</dt>
+        <dd>@s.AssignedSensorCount</dd>
+        <dt>Last results sent</dt>
+        <dd>@ProbeStatusModel.Ago(s.LastResultPostUtc)</dd>
+        <dt>Waiting to be sent</dt>
+        <dd>@(Model.Buffered == 0 ? "nothing" : $"{Model.Buffered} result(s) - sent once the primary answers")</dd>
+        <dt>Version</dt>
+        <dd class="mat-mono">@Model.Version</dd>
+    </dl>
+
+    @if (!s.IsConnected && !string.IsNullOrWhiteSpace(s.StatusMessage))
+    {
+        <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">
+            @s.StatusMessage
+            @if (s.StatusMessage.Contains("401", StringComparison.Ordinal) || s.StatusMessage.Contains("403", StringComparison.Ordinal))
+            {
+                <br /><span class="mat-small">The primary does not accept this probe's id or token - copy them again from the probe's install command on the primary (Probes &gt; Install).</span>
+            }
+        </div></div>
+    }
+
+    <p class="mat-hint">This probe has no sign-in of its own: it is set up and operated on its primary.</p>
+
+    <div class="mat-btn-row">
+        @if (Model.PrimaryUrl is { } link)
+        {
+            <a class="mat-btn mat-btn--primary" href="@link" rel="noopener">@MatUi.Icon("external")<span>Open the primary</span></a>
+        }
+        <a class="mat-btn mat-btn--secondary" href="/probe">@MatUi.Icon("refresh")<span>Refresh</span></a>
+    </div>
+</div>
