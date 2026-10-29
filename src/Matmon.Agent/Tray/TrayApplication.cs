@@ -47,7 +47,7 @@ public sealed class TrayApplication : ApplicationContext
             TrayState.Unreachable => TrayIcons.Warning,
             TrayState.Stopped => TrayIcons.Error,
             _ => TrayIcons.Neutral
-        }));
+        }, MarkPalette.Agent));
         _installedWriteTimeAtStart = WriteTime(SetupCommand.InstalledPath);
 
         _openInstanceItem = new ToolStripMenuItem("Open instance", null, (_, _) => OpenInstance());
@@ -90,7 +90,7 @@ public sealed class TrayApplication : ApplicationContext
     private async Task StartAsync()
     {
         await RefreshAsync();
-        if (State == TrayState.NotSetUp)
+        if (State == TrayState.NotSetUp || SetupForm.Embedded is not null)
         {
             // Nothing to watch yet - the one thing to do is set it up, so say so instead of sitting silently.
             ShowSetup();

@@ -13,6 +13,8 @@
 
 /* ---- The enrolment code just issued: it gets read out over the phone, so it is big and spaced ---- */
 .agent-code-input { font-size: var(--mat-fs-lg); font-weight: 600; letter-spacing: 0.08em; }
+/* A one-line install command is read as a whole before it is pasted into an administrator shell - wrapped, not scrolled. */
+.agent-oneliner { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---- Probe usage: the sensor rows ---- */
 .probe-usage-sensor { display: grid; gap: var(--mat-space-1); min-width: 0; }

@@ -23,13 +23,14 @@
 
 @if (!string.IsNullOrWhiteSpace(Model.IssuedCode))
 {
-    @* The code just issued: shown on exactly this render, then gone for good (only its hash is kept). It gets read out over
-       the phone, so it is big and monospaced. *@
+    @* The code just issued: shown on exactly this render, then gone for good (only its hash is stored; the plain code stays
+       in this process's memory so the download buttons keep working for its lifetime). It gets read out over the phone,
+       so it is big and monospaced. *@
     <div class="mat-alert mat-alert--success" role="status">
         @MatUi.Icon("key")
         <div class="mat-alert__body">
             <span class="mat-alert__title">Enrolment code@(string.IsNullOrWhiteSpace(Model.IssuedName) ? string.Empty : $" for {Model.IssuedName}")</span>
-            <span>Single use@(issuedExpires is { } expires ? $", valid until {expires.ToDisplay():g}" : string.Empty). Shown only now - if you lose it, create a new one.</span>
+            <span>Single use@(issuedExpires is { } expires ? $", valid until {expires.ToDisplay():g}" : string.Empty). Shown only now - the downloads below keep working until it is used or expires.</span>
             <div class="mat-input-group">
                 <input class="mat-input mat-mono agent-code-input" id="agent-issued-code" value="@Model.IssuedCode" readonly aria-label="Enrolment code" />
                 <button type="button" class="mat-btn mat-btn--secondary" data-copy="#agent-issued-code">@MatUi.Icon("copy")<span>Copy</span></button>
@@ -53,30 +54,63 @@
         </div>
     }
 
-    <section class="mat-card">
+    <section class="mat-card" id="agent-install">
         <div class="mat-card__head">
-            @MatUi.Icon("terminal")
+            @MatUi.Icon("download")
             <h2 class="mat-card__title">Install the agent</h2>
         </div>
-        <div class="mat-card__body" data-tabs>
-            <div class="mat-tabs" role="tablist" aria-label="Platform">
-                <button type="button" class="mat-tab" role="tab" id="tab-agent-windows" aria-controls="panel-agent-windows" aria-selected="true">Windows</button>
-                <button type="button" class="mat-tab" role="tab" id="tab-agent-linux" aria-controls="panel-agent-linux" aria-selected="false" tabindex="-1">Linux</button>
-            </div>
-            <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-windows" aria-labelledby="tab-agent-windows">
-                <p class="mat-muted">Run in PowerShell as Administrator.</p>
-                <div class="mm-snippet">
-                    <pre class="mat-code"><code id="agent-install-windows">@Model.BuildWindowsCommands(Model.IssuedCode)</code></pre>
-                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-windows">@MatUi.Icon("copy")<span>Copy</span></button>
+        <div class="mat-card__body mat-stack">
+            @if (Model.InstanceUrl is null)
+            {
+                <div class="mat-alert mat-alert--warning" role="status">
+                    @MatUi.Icon("alert")
+                    <div class="mat-alert__body">This instance does not know the address agents should connect to. Set the public address under <a asp-page="/Config" asp-route-tab="general">System &gt; General</a> (or open Matmon directly once), then create a new code.</div>
                 </div>
-            </div>
-            <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-linux" aria-labelledby="tab-agent-linux" hidden>
-                <p class="mat-muted">Run as root.</p>
-                <div class="mm-snippet">
-                    <pre class="mat-code"><code id="agent-install-linux">@Model.BuildLinuxCommands(Model.IssuedCode)</code></pre>
-                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-linux">@MatUi.Icon("copy")<span>Copy</span></button>
+            }
+            else
+            {
+                @if (Model.Packages.Count == 0)
+                {
+                    <div class="mat-alert mat-alert--warning" role="status">
+                        @MatUi.Icon("alert")
+                        <div class="mat-alert__body">@(Model.Catalog.Problem ?? "This instance has no agent packages to hand out right now.")</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="mat-stack mat-stack--sm">
+                        <span class="mat-label">Download - the code is inside, so the agent sets itself up</span>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            @foreach (var package in Model.Packages)
+                            {
+                                <a class="mat-btn @(package.Platform.IsWindows ? "mat-btn--primary" : "mat-btn--secondary")" href="@Model.InstallerUrl(package, Model.IssuedEnrollmentId!.Value)">@MatUi.Icon("download")<span>@AgentsModel.InstallerLabel(package.Platform)</span></a>
+                            }
+                        </div>
+                        <span class="mat-hint">Windows: double-click and press Install. Linux / macOS: <code>chmod +x</code> the file, then <code>sudo ./&lt;file&gt; install</code>.</span>
+                    </div>
+                }
+
+                <div data-tabs>
+                    <div class="mat-tabs" role="tablist" aria-label="Install command">
+                        <button type="button" class="mat-tab" role="tab" id="tab-agent-windows" aria-controls="panel-agent-windows" aria-selected="true">PowerShell</button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-agent-unix" aria-controls="panel-agent-unix" aria-selected="false" tabindex="-1">Linux / macOS</button>
+                    </div>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-windows" aria-labelledby="tab-agent-windows">
+                        <p class="mat-muted">Or run this in PowerShell as Administrator.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code agent-oneliner"><code id="agent-install-windows">@Model.BuildWindowsCommand(Model.IssuedCode)</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-windows">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                    </div>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-agent-unix" aria-labelledby="tab-agent-unix" hidden>
+                        <p class="mat-muted">Or run this in a terminal - it asks for the password for sudo. Linux with systemd, macOS 12 or later.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code agent-oneliner"><code id="agent-install-unix">@Model.BuildUnixCommand(Model.IssuedCode)</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-install-unix">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            }
         </div>
     </section>
 }
@@ -162,9 +196,9 @@
                                         @if (!string.IsNullOrWhiteSpace(agent.Version))
                                         {
                                             <span class="probe-cell__meta mat-mono">@agent.Version</span>
-                                            @if (Model.IsUpdatePending(agent))
+                                            @if (Model.IsUpdatePending(agent, out var offeredVersion))
                                             {
-                                                <span class="mat-pill mat-pill--info" title="The agent updates itself to this instance's build within about an hour">Update pending → @Model.InstanceVersion</span>
+                                                <span class="mat-pill mat-pill--info" title="The agent updates itself to the build this instance serves within about an hour">Update pending → @offeredVersion</span>
                                             }
                                         }
                                         @if (!string.IsNullOrWhiteSpace(agent.UpdateStatus))
@@ -217,23 +251,37 @@
 
 <section class="mat-section">
     <div class="mat-section__head">
-        <h2>Download</h2>
-        <p class="mat-section__lead">Build <span class="mat-mono">@Matmon.Probe.MatmonVersion.Current</span></p>
+        <h2>Agent packages</h2>
+        <p class="mat-section__lead">
+            @if (Model.ServedVersion is { } served)
+            {
+                <span>Agents get <span class="mat-mono">@served</span> - the newest of this channel; this instance is <span class="mat-mono">@Model.InstanceVersion</span></span>
+            }
+            else
+            {
+                <span>Build <span class="mat-mono">@Model.InstanceVersion</span></span>
+            }
+        </p>
     </div>
 
     @if (Model.Packages.Count == 0)
     {
         <div class="mat-empty mat-empty--framed">
             <span class="mat-empty__icon">@MatUi.Icon("download")</span>
-            <div class="mat-empty__title">No agent packages on this instance</div>
-            <p>To add them, run <code>./scripts/publish-agent.ps1</code>, which publishes the agent into <code>@Model.PackagesPath</code>.</p>
+            <div class="mat-empty__title">No agent packages available</div>
+            <p>@(Model.Catalog.Problem ?? $"Put the packages into {Model.PackagesPath}.")</p>
         </div>
     }
     else
     {
+        @if (Model.Catalog.Problem is { } problem)
+        {
+            <div class="mat-alert mat-alert--warning" role="status">@MatUi.Icon("alert")<div class="mat-alert__body">@problem</div></div>
+        }
+
         <div class="mat-table-wrap">
             <table class="mat-table">
-                <caption class="mat-sr-only">Agent downloads</caption>
+                <caption class="mat-sr-only">Agent packages without an enrolment code</caption>
                 <thead>
                     <tr>
                         <th scope="col">Platform</th>
@@ -249,10 +297,10 @@
                             <td data-label="Platform">
                                 <div class="probe-cell">
                                     <strong>@package.Platform.DisplayName</strong>
-                                    <span class="probe-cell__meta mat-mono">@package.Platform.FileName</span>
+                                    <span class="probe-cell__meta">@AgentsModel.SourceLabel(package)@(package.Version is null ? string.Empty : $" · {package.Version}")</span>
                                     @if (package.Signature is not null)
                                     {
-                                        <span class="@MatUi.PillClass("ok")" data-tip="Signed by the build - an agent checks the signature before it runs an update">Signed</span>
+                                        <span class="@MatUi.PillClass("ok")" data-tip="Signed by the build - checked before an agent runs an update">Signed</span>
                                     }
                                     else
                                     {
@@ -264,7 +312,7 @@
                             <td data-label="SHA-256" class="mat-hide-sm mat-mono" title="@package.Sha256">@package.Sha256[..16]…</td>
                             <td class="mat-table__cell-actions">
                                 <div class="mat-table__actions">
-                                    <a class="mat-btn mat-btn--secondary mat-btn--sm" href="/api/agent/packages/@package.Platform.RuntimeId" download="@package.Platform.FileName">@MatUi.Icon("download")<span>Download</span></a>
+                                    <a class="mat-btn mat-btn--ghost mat-btn--sm" href="/api/agent/packages/@package.Platform.RuntimeId" download="@package.Platform.FileName">@MatUi.Icon("download")<span>Plain</span></a>
                                 </div>
                             </td>
                         </tr>
@@ -272,7 +320,6 @@
                 </tbody>
             </table>
         </div>
-        <p class="mat-muted">On Windows, double-click the download: its setup asks for the instance URL and an enrolment code.</p>
     }
 </section>
 
@@ -360,6 +407,11 @@
                                 <td data-label="Expires" class="mat-mono">@pending.ExpiresUtc.ToDisplay().ToString("g")</td>
                                 <td class="mat-table__cell-actions">
                                     <div class="mat-table__actions">
+                                        @if (Model.Packages.Count > 0 && Model.CanDownload(pending.Id))
+                                        {
+                                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-menu-toggle="agent-download-@pending.Id" data-menu-place="bottom"
+                                                    aria-haspopup="menu" aria-expanded="false">@MatUi.Icon("download")<span>Download</span></button>
+                                        }
                                         <button type="submit" form="agent-revoke" name="enrollmentId" value="@pending.Id" class="mat-btn mat-btn--secondary mat-btn--sm">@MatUi.Icon("x")<span>Revoke</span></button>
                                     </div>
                                 </td>
@@ -368,6 +420,17 @@
                     </tbody>
                 </table>
             </div>
+            @* The ready-to-install downloads of each code that was created since this instance started (the plain code is
+               only kept in memory - after a restart a code can still be typed in, but not downloaded with). *@
+            @foreach (var pending in Model.PendingEnrollments.Where(pending => Model.Packages.Count > 0 && Model.CanDownload(pending.Id)))
+            {
+                <div class="mat-menu" id="agent-download-@pending.Id" role="menu" aria-label="Downloads for this code" hidden>
+                    @foreach (var package in Model.Packages)
+                    {
+                        <a class="mat-menu__item" role="menuitem" href="@Model.InstallerUrl(package, pending.Id)">@MatUi.Icon("download")<span>@AgentsModel.InstallerLabel(package.Platform)</span></a>
+                    }
+                </div>
+            }
         </section>
     }
 }

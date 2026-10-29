@@ -28,7 +28,7 @@ internal static partial class TrayIcons
     private const string MarkPath = "M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z";
 
     /// <summary>The mark with a state dot; without <paramref name="state"/> the mark alone (a window's icon).</summary>
-    public static Icon Create(Color? state)
+    public static Icon Create(Color? state, MarkPalette? palette = null)
     {
         const int size = 32;
         using var bitmap = new Bitmap(size, size);
@@ -40,7 +40,7 @@ internal static partial class TrayIcons
 
             // The mark across the full width, kept clear of the bottom-right corner the dot sits in.
             var height = size * MarkHeight / MarkWidth;
-            DrawMark(graphics, new RectangleF(0, state is null ? (size - height) / 2 : 2, size, height));
+            DrawMark(graphics, new RectangleF(0, state is null ? (size - height) / 2 : 2, size, height), palette);
             if (state is { } color)
             {
                 // State: a dot in the corner, outlined so it reads on light and dark taskbars alike.
@@ -65,7 +65,7 @@ internal static partial class TrayIcons
     }
 
     /// <summary>Draws the mark with its gradient into <paramref name="bounds"/> - a vector, so it is sharp at any size.</summary>
-    public static void DrawMark(Graphics graphics, RectangleF bounds)
+    public static void DrawMark(Graphics graphics, RectangleF bounds, MarkPalette? palette = null)
     {
         using var path = BuildMarkPath();
         using var transform = new Matrix();
@@ -80,7 +80,7 @@ internal static partial class TrayIcons
         {
             InterpolationColors = new ColorBlend
             {
-                Colors = [Color.FromArgb(0x1A, 0x6F, 0xD0), Color.FromArgb(0x12, 0xA8, 0xDC), Color.FromArgb(0x17, 0xC2, 0xBC)],
+                Colors = (palette ?? MarkPalette.Brand).Colors,
                 Positions = [0f, 0.55f, 1f]
             },
             WrapMode = WrapMode.TileFlipX
@@ -133,5 +133,17 @@ internal static partial class TrayIcons
 
     [DllImport("user32.dll")]
     private static extern bool DestroyIcon(IntPtr handle);
+}
+
+/// <summary>
+/// The colours of the mark's gradient (three stops along the SVG's diagonal). <see cref="Brand"/> is Matmon's own - the instance's tray and
+/// setup and every window header; <see cref="Agent"/> tells the agent's tray icon apart from the instance's on a machine that
+/// runs both: violet to blue instead of blue to teal, bright enough to read on a dark taskbar and saturated enough on a light one.
+/// </summary>
+internal sealed record MarkPalette(Color[] Colors)
+{
+    public static readonly MarkPalette Brand = new([Color.FromArgb(0x1A, 0x6F, 0xD0), Color.FromArgb(0x12, 0xA8, 0xDC), Color.FromArgb(0x17, 0xC2, 0xBC)]);
+
+    public static readonly MarkPalette Agent = new([Color.FromArgb(0x8B, 0x4D, 0xF0), Color.FromArgb(0x63, 0x5B, 0xF2), Color.FromArgb(0x2F, 0x86, 0xF0)]);
 }
 #endif

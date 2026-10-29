@@ -14,11 +14,12 @@ COPY . .
 WORKDIR /src/src/Matmon.Host
 RUN dotnet publish Matmon.Host.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-# The agent binaries the instance hands out on its Agents page (and, later, to the auto-update) - built
-# here so an image always carries exactly the agent that matches it, versioned with the same build number.
-# Packaging (self-contained single file) is set in Matmon.Agent.csproj; this only picks the platforms.
-# With the signing key - a BuildKit secret, never a layer (CI: secrets.MATMON_AGENT_SIGNING_KEY) - every package is
-# signed and the agents are built to accept only signed updates from then on; without it (a local build) neither.
+# The agent packages for every platform, versioned with the same build number - NOT part of the image or the Windows
+# package any more (five platforms are ~230 MB): CI builds this stage on its own (--target agent-feed) and attaches the
+# files to the rolling release of its channel (agent-latest / agent-nightly), from which an instance fetches the one it
+# needs on demand (AgentPackageStore). Packaging (self-contained single file) is set in Matmon.Agent.csproj; this only
+# picks the platforms. With the signing key - a BuildKit secret, never a layer (CI: secrets.MATMON_AGENT_SIGNING_KEY) -
+# every package is signed and the agents are built to accept only signed updates from then on; without it neither.
 FROM build AS agent
 ARG MATMON_VERSION=""
 WORKDIR /src/src/Matmon.Agent
@@ -26,7 +27,7 @@ WORKDIR /src/src/Matmon.Agent
 RUN --mount=type=secret,id=agent_signing_key \
     require=false; \
     if [ -s /run/secrets/agent_signing_key ] && [ -n "$MATMON_VERSION" ]; then require=true; fi; \
-    for rid in win-x64 linux-x64 linux-arm64; do \
+    for rid in win-x64 linux-x64 linux-arm64 osx-arm64 osx-x64; do \
         case "$rid" in win-*) tfm=net10.0-windows ;; *) tfm=net10.0 ;; esac; \
         dotnet publish Matmon.Agent.csproj -c Release -f "$tfm" -r "$rid" -o "/app/agent/$rid" -p:MatmonVersion="$MATMON_VERSION" -p:MatmonAgentRequireSignature="$require" || exit 1; \
     done; \
@@ -34,17 +35,19 @@ RUN --mount=type=secret,id=agent_signing_key \
         dotnet run --file /src/scripts/sign-agent-packages.cs -- /app/agent "$MATMON_VERSION" /run/secrets/agent_signing_key || exit 1; \
     else \
         echo "agent packages are NOT signed (no signing key or no version)"; \
-    fi
+    fi; \
+    dotnet run --file /src/scripts/package-agents.cs -- /app/agent "${MATMON_VERSION:-local}" /out/agent-feed
 
+FROM scratch AS agent-feed
+COPY --from=agent /out/agent-feed/ /
 # The Windows instance (a Windows service that updates itself from the release feed - WindowsUpdateFeed): the same
-# Host published self-contained for win-x64 with the agent packages beside it, zipped with its manifest and - with the
+# Host published self-contained for win-x64 (no agent packages - those come from the agent feed), zipped with its manifest and - with the
 # signing key - signed, plus the setup program (Matmon.Setup) with that zip appended: MatmonSetup-x64.exe. Not part of
 # the image: CI builds this stage on its own (--target windows-feed) and attaches the files to the rolling release of
 # its channel. Placed BEFORE "final" on purpose - the last stage is the default target of a plain "docker build".
 FROM build AS windows-package
 ARG MATMON_VERSION=""
 WORKDIR /src/src/Matmon.Host
-COPY --from=agent /app/agent /out/package/agent
 # The package carries its build's setup program (setup/MatmonSetup.exe) too: the self-update swaps only the program
 # folder, and the running service puts this file in place of the installed tray icon / uninstaller
 # (WindowsInstallation.RefreshSetupProgram).
@@ -83,6 +86,5 @@ ARG MATMON_VERSION=""
 ENV MATMON_VERSION=${MATMON_VERSION}
 EXPOSE 8099
 COPY --from=build /app/publish .
-COPY --from=agent /app/agent ./agent
 USER root
 ENTRYPOINT ["dotnet", "Matmon.Host.dll"]

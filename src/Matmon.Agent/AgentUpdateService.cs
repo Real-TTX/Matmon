@@ -167,7 +167,9 @@ public sealed class AgentUpdateService : BackgroundService
             string.Equals(candidate.RuntimeId, runtimeId, StringComparison.OrdinalIgnoreCase));
 
         var decision = AgentUpdatePolicy.Decide(
-            MatmonVersion.Current, manifest?.Version, package is not null, _files.ReadLastUpdate(), DateTimeOffset.UtcNow);
+            // The PACKAGE's version when the instance names one: since agents come from a release feed rather than the image,
+            // the agent build an instance serves can differ from the instance's own (an older instance names only the top-level one).
+            MatmonVersion.Current, package?.Version ?? manifest?.Version, package is not null, _files.ReadLastUpdate(), DateTimeOffset.UtcNow);
         if (!decision.ShouldUpdate)
         {
             _logger.LogDebug("No agent update: {Reason}", decision.Reason);
@@ -299,7 +301,7 @@ public sealed class AgentUpdateService : BackgroundService
 
     private sealed record AgentManifest(string? Version, IReadOnlyList<AgentManifestPackage>? Packages);
 
-    private sealed record AgentManifestPackage(string RuntimeId, string Url, string Sha256, long Size, string? Signature = null);
+    private sealed record AgentManifestPackage(string RuntimeId, string Url, string Sha256, long Size, string? Signature = null, string? Version = null);
 }
 
 /// <summary>The agent's update settings, read once at startup.</summary>

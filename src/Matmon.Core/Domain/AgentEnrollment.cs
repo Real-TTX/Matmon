@@ -85,6 +85,22 @@ public static class AgentEnrollmentCode
             ? string.Empty
             : new string(code.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
+    /// <summary>
+    /// The code in its printed form (<c>XXXX-XXXX-XXXX-XXXX-XXXX</c>), or null when it is not one: 20 symbols of the
+    /// code alphabet, nothing else. What goes into a generated install script - so a value that came from a request can
+    /// only ever be letters, digits and dashes there.
+    /// </summary>
+    public static string? Canonical(string? code)
+    {
+        var normalized = Normalize(code);
+        if (normalized.Length != GroupCount * GroupLength || normalized.Any(symbol => !Alphabet.Contains(symbol)))
+        {
+            return null;
+        }
+
+        return string.Join('-', Enumerable.Range(0, GroupCount).Select(group => normalized.Substring(group * GroupLength, GroupLength)));
+    }
+
     public static string Hash(string? code)
     {
         var normalized = Normalize(code);

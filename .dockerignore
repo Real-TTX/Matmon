@@ -11,16 +11,17 @@
 # already set: first-run setup never ran and nobody could sign in.
 **/data/
 tmp/
-# Locally published agent packages - the image's own build stage produces them.
+# Locally published agent packages (scripts/publish-agent.ps1) - never part of an image: an instance fetches them from the agent feed.
 src/Matmon.Host/agent/
 
 # Not needed to build the runtime image - excluding them keeps the COPY layer
 # stable so only real source changes trigger an image rebuild.
 tests/
 scripts/
-# ... except the scripts the image build runs: signing the agent packages, packing the Windows package.
+# ... except the scripts the image build runs: signing and packing the agent packages, packing the Windows package.
 !scripts/sign-agent-packages.cs
 !scripts/package-windows.cs
+!scripts/package-agents.cs
 .github/
 *.md
 LICENSE

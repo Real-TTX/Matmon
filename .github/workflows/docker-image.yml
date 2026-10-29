@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  # write: the Windows package is attached to the rolling release of its channel (windows-latest / windows-nightly).
+  # write: the Windows package and the agent packages are attached to the rolling releases of their channel
+  # (windows-latest / windows-nightly, agent-latest / agent-nightly).
   contents: write
   packages: write
 
@@ -110,15 +111,15 @@ jobs:
           tags: ${{ steps.version.outputs.tags }}
           build-args: |
             MATMON_VERSION=${{ steps.version.outputs.version }}
-          # Signs the agent packages (and makes the agents refuse unsigned updates) when the secret is set;
-          # empty = unsigned packages, exactly as before. See AgentPackageSignature.
+          # The image itself carries no agent packages any more (see "Build the agent packages" below); the secret only
+          # matters to the stages that sign. See AgentPackageSignature.
           secrets: |
             agent_signing_key=${{ secrets.MATMON_AGENT_SIGNING_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       # The Windows instance: the same build as a win-x64 package + manifest (the Dockerfile's windows-feed stage, which
-      # reuses the cached build and agent stages), for the Windows service's self-update (WindowsUpdateFeed).
+      # reuses the cached build stage), for the Windows service's self-update (WindowsUpdateFeed).
       - name: Build the Windows package
         if: github.event_name == 'push'
         uses: docker/build-push-action@v6
@@ -157,3 +158,45 @@ jobs:
           gh release upload "$tag" windows-feed/matmon-windows-x64.zip --clobber
           gh release upload "$tag" windows-feed/matmon-windows-x64.json --clobber
           echo "Published $(jq -r .version windows-feed/matmon-windows-x64.json) to $tag"
+
+      # The agent packages (five platforms) are not in the image or the Windows package: an instance fetches the one it
+      # needs from the rolling release of its channel (AgentPackageStore). The Dockerfile's agent-feed stage builds and
+      # signs them and writes the manifest.
+      - name: Build the agent packages
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./src/Matmon.Host/Dockerfile
+          target: agent-feed
+          push: false
+          outputs: type=local,dest=agent-feed
+          build-args: |
+            MATMON_VERSION=${{ steps.version.outputs.version }}
+          secrets: |
+            agent_signing_key=${{ secrets.MATMON_AGENT_SIGNING_KEY }}
+          cache-from: type=gha
+
+      # One rolling release per channel, like the Windows package; the packages go up BEFORE the manifest, so an instance
+      # never reads a manifest whose files are not there yet.
+      - name: Publish the agent packages
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            tag="agent-latest"; title="Matmon Agent (release channel)"; prerelease=""
+          else
+            tag="agent-nightly"; title="Matmon Agent (nightly channel)"; prerelease="--prerelease"
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$title" --target "$GITHUB_SHA" $prerelease \
+              --notes "Matmon Agent, newest ${tag#agent-} build, for every platform. You do not need to download these by hand: a Matmon instance fetches the package it needs from here (Probes > Agents) - except an instance without internet access, which takes them in its agent folder."
+          fi
+          for file in agent-feed/matmon-agent-*; do
+            gh release upload "$tag" "$file" --clobber
+          done
+          gh release upload "$tag" agent-feed/matmon-agent.json --clobber
+          echo "Published $(jq -r .version agent-feed/matmon-agent.json) to $tag"

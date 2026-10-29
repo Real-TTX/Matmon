@@ -49,7 +49,7 @@ internal abstract class AgentWindow : Form
         ClientSize = new Size(ClientWidth, 360);
         SetWindowIcon(null);
 
-        _header = new BrandHeader("Matmon Agent", subtitle) { Dock = DockStyle.Top, Height = 84 };
+        _header = new BrandHeader("Matmon Agent", subtitle, MarkPalette.Agent) { Dock = DockStyle.Top, Height = 84 };
         _body.Controls.Add(Content);
     }
 
@@ -81,7 +81,7 @@ internal abstract class AgentWindow : Form
     protected void SetWindowIcon(Color? state)
     {
         var previous = _windowIcon;
-        _windowIcon = TrayIcons.Create(state);
+        _windowIcon = TrayIcons.Create(state, MarkPalette.Agent);
         Icon = _windowIcon;
         previous?.Dispose();
     }
@@ -320,10 +320,23 @@ internal sealed class SetupForm : AgentWindow
     private readonly BrandNotice _result = new(ContentWidth) { Visible = false };
     private readonly Button _setUp = BrandChrome.FooterButton("Set up");
     private readonly Button _cancel = BrandChrome.FooterButton("Cancel", gap: 16);
+    private readonly LinkLabel _change = new() { Text = "Change", AutoSize = true, Margin = new Padding(0, 0, 0, 10), LinkColor = Color.FromArgb(0x1A, 0x6F, 0xD0) };
 
-    public SetupForm(TrayApplication tray) : base("Set up Matmon Agent", "Set up")
+    /// <summary>The values came from the download and "Change" was not pressed.</summary>
+    private bool IsLocked => _locked;
+
+    private bool _locked;
+
+    /// <summary>What a "ready to install" download carries (instance URL + code), or null for a plain package.</summary>
+    public static AgentInstallerSettings? Embedded { get; } = AgentInstallerPayload.ReadFile(Environment.ProcessPath);
+
+    public SetupForm(TrayApplication tray) : this(tray, Embedded)
     {
-        _tray = tray;
+    }
+
+    internal SetupForm(TrayApplication? tray, AgentInstallerSettings? embedded) : base("Set up Matmon Agent", embedded is null ? "Set up" : "Install")
+    {
+        _tray = tray!;
 
         _busy.Controls.Add(new Label
         {
@@ -339,27 +352,67 @@ internal sealed class SetupForm : AgentWindow
         AcceptButton = _setUp;
         CancelButton = _cancel;
 
-        Content.Controls.AddRange(
-        [
-            BrandChrome.Heading("Connect this machine"),
-            BrandChrome.Paragraph(
-                "Create an enrolment code under Probes > Agents on your Matmon instance, then enter it here. " +
-                "Setting up needs administrator rights once.", width: ContentWidth),
-            FieldLabel("Instance URL"), _url,
-            Hint("The address you open Matmon at in the browser."),
-            FieldLabel("Enrolment code"), _code,
-            Hint("A code works once and only for the time chosen when it was created."),
-            _replaceWarning,
-            _busy,
-            _result
-        ]);
+        if (embedded is null)
+        {
+            Content.Controls.AddRange(
+            [
+                BrandChrome.Heading("Connect this machine"),
+                BrandChrome.Paragraph(
+                    "Create an enrolment code under Probes > Agents on your Matmon instance, then enter it here. " +
+                    "Setting up needs administrator rights once.", width: ContentWidth),
+                FieldLabel("Instance URL"), _url,
+                Hint("The address you open Matmon at in the browser."),
+                FieldLabel("Enrolment code"), _code,
+                Hint("A code works once and only for the time chosen when it was created."),
+                _replaceWarning,
+                _busy,
+                _result
+            ]);
+        }
+        else
+        {
+            // A download from the Agents page carries both values: one click. They stay editable behind "Change" - a
+            // code that was used meanwhile is replaced by typing a new one rather than downloading again.
+            _url.Text = embedded.Url;
+            _code.Text = embedded.Code;
+            _url.ReadOnly = true;
+            _code.ReadOnly = true;
+            _setUp.Text = "Install";
+            _locked = true;
+            _change.LinkClicked += (_, _) =>
+            {
+                _url.ReadOnly = false;
+                _code.ReadOnly = false;
+                _locked = false;
+                _change.Visible = false;
+                FitHeight();
+                _code.Focus();
+                _code.SelectAll();
+            };
+            Content.Controls.AddRange(
+            [
+                BrandChrome.Heading("Ready to install"),
+                BrandChrome.Paragraph(
+                    "This download connects the machine to the Matmon instance below. Installing creates the \"Matmon Agent\" " +
+                    "service and needs administrator rights once.", width: ContentWidth),
+                FieldLabel("Instance URL"), _url,
+                Hint("Taken from the download."),
+                FieldLabel("Enrolment code"), _code,
+                Hint("Single use. If it was used or has expired, create a new one under Probes > Agents and download again."),
+                _change,
+                _replaceWarning,
+                _busy,
+                _result
+            ]);
+        }
+
         Complete(_cancel, _setUp);
     }
 
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        var status = _tray.Status;
+        var status = _tray?.Status;
         if (string.IsNullOrWhiteSpace(_url.Text) && !string.IsNullOrWhiteSpace(status?.PrimaryUrl))
         {
             _url.Text = status.PrimaryUrl;
@@ -370,7 +423,7 @@ internal sealed class SetupForm : AgentWindow
             ? string.Empty
             : $"This machine is already set up as '{status.ProbeName}'. Setting it up again replaces that identity with a new probe.";
         FitHeight();
-        (string.IsNullOrWhiteSpace(_url.Text) ? _url : _code).Focus();
+        (_locked ? (Control)_setUp : string.IsNullOrWhiteSpace(_url.Text) ? _url : _code).Focus();
     }
 
     private async Task SetUpAsync()
@@ -416,7 +469,9 @@ internal sealed class SetupForm : AgentWindow
                 return;
             }
 
-            ShowResult(result.Success, result.Message);
+            ShowResult(result.Success, !result.Success && IsLocked && result.ExitCode == 5
+                ? $"{result.Message} This download's code was already used or has expired - create a new one under Probes > Agents and download again, or press Change and enter a new code."
+                : result.Message);
             if (result.Success)
             {
                 _code.Clear();
@@ -460,8 +515,8 @@ internal sealed class SetupForm : AgentWindow
 
         _setUp.Enabled = !busy;
         _cancel.Enabled = !busy;
-        _url.ReadOnly = busy;
-        _code.ReadOnly = busy;
+        _url.ReadOnly = busy || IsLocked;
+        _code.ReadOnly = busy || IsLocked;
         FitHeight();
     }
 

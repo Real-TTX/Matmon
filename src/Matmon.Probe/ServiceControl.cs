@@ -19,7 +19,22 @@ public static class ServiceControl
     /// </summary>
     public static bool IsRunningAsService() =>
         (OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService()) ||
-        (OperatingSystem.IsLinux() && SystemdHelpers.IsSystemdService());
+        (OperatingSystem.IsLinux() && SystemdHelpers.IsSystemdService()) ||
+        (OperatingSystem.IsMacOS() && LaunchdLabel() is not null);
+
+    /// <summary>The variable the agent's launchd plist sets to its job label (see the agent's AgentServiceFiles).</summary>
+    public const string LaunchdLabelVariable = "MATMON_LAUNCHD_LABEL";
+
+    /// <summary>The launchd job this process runs as, or null outside launchd. From our own variable in the plist - a
+    /// shell can inherit XPC_SERVICE_NAME from the terminal app's job, which says nothing about this process.</summary>
+    public static string? LaunchdLabel()
+    {
+        var label = Environment.GetEnvironmentVariable(LaunchdLabelVariable)?.Trim();
+        return string.IsNullOrEmpty(label) || label.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_')) ? null : label;
+    }
+
+    /// <summary>Where a LaunchDaemon's plist lives - needed to load the job again after it was stopped.</summary>
+    public static string LaunchdPlistPath(string label) => $"/Library/LaunchDaemons/{label}.plist";
 
     /// <summary>
     /// The name the service was INSTALLED under - not a constant, because an admin may have registered it by
@@ -31,6 +46,11 @@ public static class ServiceControl
         if (OperatingSystem.IsWindows())
         {
             return ResolveWindowsServiceName(Environment.ProcessPath);
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return LaunchdLabel();
         }
 
         if (OperatingSystem.IsLinux())
@@ -69,6 +89,14 @@ public static class ServiceControl
             return;
         }
 
+        if (OperatingSystem.IsMacOS())
+        {
+            // bootout = stop AND unload: with KeepAlive, a plain kill would only make launchd start the old build again.
+            // Not loaded (already stopped) is fine.
+            Launchctl(timeout, allowFailure: true, "bootout", $"system/{serviceName}");
+            return;
+        }
+
         Systemctl("stop", serviceName, timeout);
     }
 
@@ -85,6 +113,17 @@ public static class ServiceControl
                 }
 
                 controller.WaitForStatus(ServiceControllerStatus.Running, timeout);
+            }
+
+            return;
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            // Loaded already ("service already loaded") -> kickstart starts it if it is not running.
+            if (!Launchctl(timeout, allowFailure: true, "bootstrap", "system", LaunchdPlistPath(serviceName)))
+            {
+                Launchctl(timeout, allowFailure: false, "kickstart", $"system/{serviceName}");
             }
 
             return;
@@ -167,6 +206,25 @@ public static class ServiceControl
         }
 
         return null;
+    }
+
+    /// <summary>Runs launchctl; true when it exited with 0. Throws on failure unless <paramref name="allowFailure"/>.</summary>
+    public static bool Launchctl(TimeSpan timeout, bool allowFailure, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("launchctl") { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("launchctl did not start");
+        var ok = process.WaitForExit(timeout) && process.ExitCode == 0;
+        if (!ok && !allowFailure)
+        {
+            throw new InvalidOperationException($"launchctl {string.Join(' ', arguments)} failed: {process.StandardError.ReadToEnd().Trim()}");
+        }
+
+        return ok;
     }
 
     private static void Systemctl(string verb, string unit, TimeSpan timeout)

@@ -9,7 +9,9 @@ namespace Matmon.Host.Pages;
 /// <summary>
 /// Agents: the probes that were installed ON a machine and enrolled with a one-time code. A view over the
 /// probe elements (<see cref="ProbeElement.AgentEnrolledUtc"/>), not a second model - an agent is managed,
-/// assigned and alarmed exactly like any other probe. What this page adds is the enrolment itself.
+/// assigned and alarmed exactly like any other probe. What this page adds is the enrolment itself: create a code
+/// (optionally for an existing host), then either download the agent with the code inside (one click / one command on
+/// the machine) or copy a one-line install command.
 /// </summary>
 public sealed class AgentsModel : PageModel
 {
@@ -18,23 +20,28 @@ public sealed class AgentsModel : PageModel
     private readonly IConfigurationOverviewProvider _configurationOverviewProvider;
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly AgentPackageStore _packageStore;
+    private readonly AgentInstallerCodes _installerCodes;
 
     public AgentsModel(
         IConfigurationOverviewProvider configurationOverviewProvider,
         IMonitoringWorkspaceStore workspaceStore,
-        AgentPackageStore packageStore)
+        AgentPackageStore packageStore,
+        AgentInstallerCodes installerCodes)
     {
         _configurationOverviewProvider = configurationOverviewProvider;
         _workspaceStore = workspaceStore;
         _packageStore = packageStore;
+        _installerCodes = installerCodes;
     }
 
     public IReadOnlyList<SystemProbeOverview> Agents { get; private set; } = [];
 
     public IReadOnlyList<AgentEnrollment> PendingEnrollments { get; private set; } = [];
 
-    /// <summary>The agent binaries this instance carries (none on a plain local dev run).</summary>
-    public IReadOnlyList<AgentPackage> Packages { get; private set; } = [];
+    /// <summary>What this instance can hand out: hand-placed packages and what the agent feed offers.</summary>
+    public AgentCatalog Catalog { get; private set; } = new([], null, null, null);
+
+    public IReadOnlyList<AgentPackage> Packages => Catalog.Packages;
 
     public string PackagesPath => _packageStore.RootPath;
 
@@ -55,6 +62,12 @@ public sealed class AgentsModel : PageModel
     /// <summary>The code just issued - shown on exactly one render, then gone for good (only its hash is kept).</summary>
     [TempData]
     public string? IssuedCode { get; set; }
+
+    /// <summary>The issued code's enrolment id - what the download buttons name (the server keeps the plain code in memory
+    /// for its lifetime, <see cref="AgentInstallerCodes"/>). A Guid, not a string: like a date, the TempData serializer
+    /// turns a Guid-shaped string back into a Guid on read, and a string property then fails to take it.</summary>
+    [TempData]
+    public Guid? IssuedEnrollmentId { get; set; }
 
     [TempData]
     public string? IssuedName { get; set; }
@@ -80,23 +93,36 @@ public sealed class AgentsModel : PageModel
 
     public IReadOnlyList<int> ValidityChoices => ValidityHours;
 
-    /// <summary>The URL an agent should enrol against: the one this page was opened on.</summary>
-    public string InstanceUrl => $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+    /// <summary>
+    /// The address an agent enrols against: the public address set under System > General, else the one this page was
+    /// opened on - or, inside the cloud console (where the request only knows the instance's internal host), the one
+    /// remembered from a direct visit. Null when none is known.
+    /// </summary>
+    public string? InstanceUrl { get; private set; }
 
-    public string InstanceVersion => Matmon.Probe.MatmonVersion.Current;
+    public string InstanceVersion => _packageStore.InstanceVersion;
+
+    /// <summary>The agent build this instance hands out, when it is not its own (a rolling feed holds only the newest).</summary>
+    public string? ServedVersion =>
+        Packages.Select(package => package.Version).FirstOrDefault(version => version is not null && !string.Equals(version, InstanceVersion, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// The agent will update itself: it runs a different build than the instance offers. Mirrors the agent's
-    /// own rule (AgentUpdatePolicy) closely enough for a hint - an unversioned local instance build offers
-    /// nothing, and without a package for the agent's platform there is nothing to update to.
+    /// The agent will update itself: it runs a different build than this instance serves for it. Mirrors the agent's
+    /// own rule (AgentUpdatePolicy) closely enough for a hint - an unversioned local build offers nothing.
     /// </summary>
-    public bool IsUpdatePending(SystemProbeOverview agent) =>
-        Packages.Count > 0 &&
-        !string.IsNullOrWhiteSpace(agent.Version) &&
-        !InstanceVersion.StartsWith("local-", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(agent.Version, InstanceVersion, StringComparison.OrdinalIgnoreCase);
+    public bool IsUpdatePending(SystemProbeOverview agent, out string offered)
+    {
+        offered = Packages.FirstOrDefault()?.Version ?? InstanceVersion;
+        return Packages.Count > 0 &&
+            !string.IsNullOrWhiteSpace(agent.Version) &&
+            !offered.StartsWith("local-", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(agent.Version, offered, StringComparison.OrdinalIgnoreCase);
+    }
 
-    public void OnGet() => Load();
+    /// <summary>Whether the ready-to-install downloads still work for this pending code (created in this process).</summary>
+    public bool CanDownload(Guid enrollmentId) => _installerCodes.Find(enrollmentId) is not null;
+
+    public async Task OnGetAsync() => await LoadAsync();
 
     public IActionResult OnPostCreate()
     {
@@ -104,11 +130,8 @@ public sealed class AgentsModel : PageModel
         try
         {
             var issue = _workspaceStore.CreateAgentEnrollment(NewName, TimeSpan.FromHours(hours), User.Identity?.Name, hostElementId: NewHostId);
-
-            IssuedCode = issue.Code;
-            IssuedName = issue.Enrollment.Name;
+            Issue(issue);
             IssuedHostName = issue.Enrollment.HostElementId is Guid hostId ? _workspaceStore.FindElement(hostId)?.Name : null;
-            IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
         }
         catch (InvalidOperationException ex)
         {
@@ -129,10 +152,8 @@ public sealed class AgentsModel : PageModel
         try
         {
             var issue = _workspaceStore.CreateAgentEnrollment(null, TimeSpan.FromHours(24), User.Identity?.Name, probeElementId);
-            IssuedCode = issue.Code;
-            IssuedName = issue.Enrollment.Name;
+            Issue(issue);
             IssuedReplaces = true;
-            IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
         }
         catch (InvalidOperationException ex)
         {
@@ -144,6 +165,7 @@ public sealed class AgentsModel : PageModel
 
     public IActionResult OnPostRevoke(Guid enrollmentId)
     {
+        _installerCodes.Forget(enrollmentId);
         if (_workspaceStore.RevokeAgentEnrollment(enrollmentId))
         {
             StatusMessage = "Enrolment code revoked.";
@@ -156,70 +178,47 @@ public sealed class AgentsModel : PageModel
         return RedirectToPage();
     }
 
-    // Each recipe downloads the binary FROM this instance with the same code it then enrols with - the code
-    // is checked but not consumed by the download. Without bundled packages (a local dev run) the recipe says
-    // where the binary has to come from instead of pointing at a URL that 404s.
-    // Windows: "setup" does the rest - it installs itself to Program Files, creates (or restarts) the service
-    // and registers the tray. The same thing a double-click on the downloaded file walks the user through.
-    public string BuildWindowsCommands(string code)
+    private void Issue(AgentEnrollmentIssue issue)
     {
-        var fetch = HasPackage("win-x64")
-            ? $$"""
-              $ProgressPreference = 'SilentlyContinue'
-              Invoke-WebRequest -UseBasicParsing -Uri "{{InstanceUrl}}/api/agent/packages/win-x64" -Headers @{ "X-Matmon-Enrollment-Code" = "{{code}}" } -OutFile "$env:TEMP\matmon-agent.exe"
-              """
-            : """
-              # This instance ships no agent packages - copy matmon-agent.exe to $env:TEMP first.
-              """;
-
-        return $$"""
-            # PowerShell as Administrator - or download the agent and double-click it
-            {{fetch}}
-            & "$env:TEMP\matmon-agent.exe" setup --url {{InstanceUrl}} --code {{code}}
-            """;
+        IssuedCode = issue.Code;
+        IssuedEnrollmentId = issue.Enrollment.Id;
+        IssuedName = issue.Enrollment.Name;
+        IssuedExpiresUtc = issue.Enrollment.ExpiresUtc.UtcDateTime;
+        _installerCodes.Remember(issue.Enrollment.Id, issue.Code, issue.Enrollment.ExpiresUtc);
     }
 
-    public string BuildLinuxCommands(string code)
+    /// <summary>Windows: an administrator PowerShell fetches the install script with the code as a header and runs it.</summary>
+    public string BuildWindowsCommand(string code) =>
+        $"irm '{InstanceUrl}/api/agent/install.ps1' -UseBasicParsing -Headers @{{'{AgentDownloadEndpoints.CodeHeader}'='{code}'}} | iex";
+
+    /// <summary>Linux and macOS: the shell script, run as root.</summary>
+    public string BuildUnixCommand(string code) =>
+        $"curl -fsSL -H '{AgentDownloadEndpoints.CodeHeader}: {code}' '{InstanceUrl}/api/agent/install.sh' | sudo sh";
+
+    /// <summary>The ready-to-install download of one platform for a pending code.</summary>
+    public string InstallerUrl(AgentPackage package, Guid enrollmentId) =>
+        $"/api/agent/installer/{package.Platform.RuntimeId}?enrollment={enrollmentId}";
+
+    public static string InstallerLabel(AgentPlatform platform) => platform.RuntimeId switch
     {
-        var fetch = HasPackage("linux-x64") || HasPackage("linux-arm64")
-            ? $"""
-              case "$(uname -m)" in aarch64|arm64) rid=linux-arm64 ;; *) rid=linux-x64 ;; esac
-              curl -fsSL -H "X-Matmon-Enrollment-Code: {code}" "{InstanceUrl}/api/agent/packages/$rid" -o /usr/local/bin/matmon-agent
-              chmod 0755 /usr/local/bin/matmon-agent
-              """
-            : """
-              # This instance ships no agent packages - copy matmon-agent to /usr/local/bin first.
-              install -m 0755 matmon-agent /usr/local/bin/matmon-agent
-              """;
+        "win-x64" => "Windows (setup with tray icon)",
+        "linux-x64" => "Linux x64",
+        "linux-arm64" => "Linux ARM64",
+        "osx-arm64" => "macOS Apple Silicon",
+        "osx-x64" => "macOS Intel",
+        _ => platform.DisplayName
+    };
 
-        return $"""
-            # as root
-            {fetch}
-            matmon-agent enroll --url {InstanceUrl} --code {code}
-            cat > /etc/systemd/system/matmon-agent.service <<'UNIT'
-            [Unit]
-            Description=Matmon Agent
-            After=network-online.target
-            Wants=network-online.target
-
-            [Service]
-            Type=notify
-            ExecStart=/usr/local/bin/matmon-agent
-            Restart=always
-            RestartSec=10
-
-            [Install]
-            WantedBy=multi-user.target
-            UNIT
-            systemctl daemon-reload && systemctl enable --now matmon-agent
-            """;
-    }
-
-    private bool HasPackage(string runtimeId) =>
-        Packages.Any(package => string.Equals(package.Platform.RuntimeId, runtimeId, StringComparison.OrdinalIgnoreCase));
-
-    private void Load()
+    public static string SourceLabel(AgentPackage package) => package.Source switch
     {
+        AgentPackageSource.Folder => "placed on this instance",
+        AgentPackageSource.Cache => "from the agent feed, kept here",
+        _ => "from the agent feed, fetched on first download"
+    };
+
+    private async Task LoadAsync()
+    {
+        InstanceUrl = AgentInstallScripts.SafeUrl(PublicLinks.Absolute(HttpContext, _workspaceStore, string.Empty));
         Agents = _configurationOverviewProvider.GetOverview().Probes
             .Where(probe => probe.IsAgent)
             .OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
@@ -236,6 +235,6 @@ public sealed class AgentsModel : PageModel
             .ToArray();
 
         PendingEnrollments = _workspaceStore.GetPendingAgentEnrollments();
-        Packages = _packageStore.GetPackages();
+        Catalog = await _packageStore.GetCatalogAsync(HttpContext.RequestAborted);
     }
 }

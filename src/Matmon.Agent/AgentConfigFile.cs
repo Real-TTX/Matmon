@@ -32,10 +32,17 @@ public static class AgentConfigFile
             return Path.GetFullPath(configured);
         }
 
-        return OperatingSystem.IsWindows()
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Matmon Agent", "agent.json")
-            : "/etc/matmon-agent/agent.json";
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Matmon Agent", "agent.json");
+        }
+
+        // macOS has no /etc convention for third-party daemons; machine-wide application state lives here (root-owned,
+        // like the LaunchDaemon that reads it). The update records go beside it (ResolveStateDirectory).
+        return OperatingSystem.IsMacOS() ? MacConfigPath : "/etc/matmon-agent/agent.json";
     }
+
+    public const string MacConfigPath = "/Library/Application Support/Matmon Agent/agent.json";
 
     /// <summary>
     /// Where the agent keeps state that is not configuration - the auto-update's hand-shake files and its log.

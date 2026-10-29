@@ -12,7 +12,7 @@
 #   ./scripts/publish-agent.ps1 -Version 0.1.42      # bake an explicit version (default: none -> local-<date>)
 
 param(
-    [string[]] $RuntimeIds = @('win-x64', 'linux-x64', 'linux-arm64'),
+    [string[]] $RuntimeIds = @('win-x64', 'linux-x64', 'linux-arm64', 'osx-arm64', 'osx-x64'),
     [string] $Version = ''
 )
 

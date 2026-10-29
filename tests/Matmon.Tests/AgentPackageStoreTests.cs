@@ -28,7 +28,7 @@ public sealed class AgentPackageStoreTests : IDisposable
     {
         WritePackage("linux-x64", "matmon-agent", [1, 2, 3]);
         WritePackage("win-x64", "matmon-agent.exe", [4, 5]);
-        WritePackage("osx-arm64", "matmon-agent", [6]);
+        WritePackage("freebsd-x64", "matmon-agent", [6]);
 
         var packages = NewStore().GetPackages();
 
@@ -39,7 +39,7 @@ public sealed class AgentPackageStoreTests : IDisposable
     [Theory]
     [InlineData("../agent/win-x64")]
     [InlineData("..")]
-    [InlineData("osx-arm64")]
+    [InlineData("freebsd-x64")]
     [InlineData("")]
     [InlineData(null)]
     public void AnythingOutsideThePlatformListResolvesToNothing(string? runtimeId)

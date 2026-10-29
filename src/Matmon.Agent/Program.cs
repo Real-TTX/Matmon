@@ -30,12 +30,27 @@ if (args.FirstOrDefault() == "setup")
     return await SetupCommand.RunAsync(args, configPath);
 }
 
+if (args.FirstOrDefault() == "install")
+{
+    return await InstallCommand.RunAsync(args, configPath);
+}
+
+// A "ready to install" download started from a terminal on Linux / macOS without arguments: it is not a service yet,
+// so say the one thing to do instead of failing with "not enrolled".
+if (!OperatingSystem.IsWindows() && args.Length == 0 && !ServiceControl.IsRunningAsService() &&
+    AgentConfigFile.ReadEnrolledProbeName(configPath) is null &&
+    AgentInstallerPayload.ReadFile(Environment.ProcessPath) is { } embedded)
+{
+    Console.WriteLine($"This agent is ready to install for {embedded.Url}. Run: sudo \"{Environment.ProcessPath}\" install");
+    return 0;
+}
+
 // The tray: "matmon-agent.exe tray" (how sign-in starts it) - and a plain double-click on a machine that is
 // not set up yet, because a downloaded agent opened from Explorer has nothing to run as a service; the
 // useful thing to show is the setup dialog, not a console window that exits with "not enrolled".
 if (args.FirstOrDefault() == "tray" ||
     (OperatingSystem.IsWindows() && args.Length == 0 && !ServiceControl.IsRunningAsService() &&
-     AgentConfigFile.ReadEnrolledProbeName(configPath) is null))
+     (AgentConfigFile.ReadEnrolledProbeName(configPath) is null || AgentInstallerPayload.ReadFile(Environment.ProcessPath) is not null)))
 {
     return RunTray();
 }

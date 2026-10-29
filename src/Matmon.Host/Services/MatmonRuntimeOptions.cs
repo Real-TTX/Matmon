@@ -41,9 +41,13 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
 
     public string? BackupPath { get; set; }
 
-    /// <summary>Where the bundled agent binaries live (<c>&lt;rid&gt;/matmon-agent[.exe]</c>); default
-    /// <c>agent</c> under the content root, which is where the Docker image puts them.</summary>
+    /// <summary>A folder of hand-placed agent packages (<c>&lt;rid&gt;/matmon-agent[.exe]</c>) that win over the feed - for
+    /// a dev run (scripts/publish-agent.ps1) or an offline instance; default <c>agent</c> under the content root.</summary>
     public string? AgentPackagesPath { get; set; }
+
+    /// <summary>Where the agent packages are fetched from on demand (<c>Matmon__AgentFeedUrl</c>) - empty = the GitHub
+    /// release of the instance's channel (agent-latest / agent-nightly); a local build follows none unless this is set.</summary>
+    public string? AgentFeedUrl { get; set; }
 
     public string? DataProtectionPath { get; set; }
 

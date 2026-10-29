@@ -90,9 +90,11 @@ internal sealed class BrandHeader : Control
 {
     private readonly string _title;
     private readonly string _subtitle;
+    private readonly MarkPalette? _palette;
 
-    public BrandHeader(string title, string subtitle)
+    public BrandHeader(string title, string subtitle, MarkPalette? palette = null)
     {
+        _palette = palette;
         _title = title;
         _subtitle = subtitle;
         DoubleBuffered = true;
@@ -112,7 +114,7 @@ internal sealed class BrandHeader : Control
         var markHeight = 40f * scale;
         var markWidth = markHeight * TrayIcons.MarkWidth / TrayIcons.MarkHeight;
         var top = (Height - markHeight) / 2f;
-        TrayIcons.DrawMark(graphics, new RectangleF(inset, top, markWidth, markHeight));
+        TrayIcons.DrawMark(graphics, new RectangleF(inset, top, markWidth, markHeight), _palette);
 
         using var titleFont = new Font("Segoe UI Semibold", 20f);
         using var subtitleFont = new Font("Segoe UI", 12f);

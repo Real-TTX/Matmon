@@ -232,7 +232,13 @@ builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemor
     provider.GetService<SensorWakeQueue>(),
     provider.GetService<ISyslogStore>()));
 builder.Services.AddSingleton<StorageOverviewProvider>();
-builder.Services.AddSingleton<AgentPackageStore>();
+// Agent packages: a hand-placed folder wins, else fetched on demand from the agent feed and cached in the data folder.
+builder.Services.AddSingleton(provider => new AgentPackageStore(
+    provider.GetRequiredService<IHostEnvironment>(),
+    provider.GetRequiredService<MatmonRuntimeOptions>(),
+    AgentFeedSettings.ForInstance(provider.GetRequiredService<MatmonRuntimeOptions>(), workspaceDirectory),
+    provider.GetRequiredService<ILogger<AgentPackageStore>>()));
+builder.Services.AddSingleton<AgentInstallerCodes>();
 builder.Services.AddSingleton<IProbeStorageSource>(provider => provider.GetRequiredService<StorageOverviewProvider>());
 builder.Services.AddSingleton<IConfigurationOverviewProvider, ConfigurationOverviewProvider>();
 builder.Services.AddSingleton<SlaveProbeRuntimeState>();
@@ -965,62 +971,9 @@ if (runtimeOptions.Mode == AppMode.Primary)
         return Results.Ok(new AgentEnrollResponse(redemption.ProbeId, redemption.ProbeToken, redemption.ProbeName));
     }).AllowAnonymous().RequireRateLimiting("agent-enroll");
 
-    // The bundled agent binaries. Three ways in, because three different parties need them: a signed-in user
-    // (the Agents page), an install recipe on a machine that has nothing yet but the enrolment code it is
-    // about to redeem (checked, NOT consumed), and an enrolled agent fetching its update (probe id + token).
-    // Not anonymous: it is our software, and an instance is often reachable from more places than its admin
-    // thinks.
-    app.MapGet("/api/agent/packages", (HttpContext http, AgentPackageStore packages, IMonitoringWorkspaceStore workspaceStore) =>
-    {
-        if (!IsAgentDownloadAuthorized(http, workspaceStore))
-        {
-            return Results.Unauthorized();
-        }
-
-        return Results.Ok(new
-        {
-            version = Matmon.Probe.MatmonVersion.Current,
-            packages = packages.GetPackages().Select(package => new
-            {
-                runtimeId = package.Platform.RuntimeId,
-                displayName = package.Platform.DisplayName,
-                fileName = package.Platform.FileName,
-                size = package.Length,
-                sha256 = package.Sha256,
-                signature = package.Signature,
-                url = $"/api/agent/packages/{package.Platform.RuntimeId}"
-            })
-        });
-    }).AllowAnonymous().RequireRateLimiting("agent-enroll");
-
-    app.MapGet("/api/agent/packages/{runtimeId}", (string runtimeId, HttpContext http, AgentPackageStore packages, IMonitoringWorkspaceStore workspaceStore) =>
-    {
-        if (!IsAgentDownloadAuthorized(http, workspaceStore))
-        {
-            return Results.Unauthorized();
-        }
-
-        var package = packages.TryGet(runtimeId);
-        if (package is null)
-        {
-            return Results.NotFound(new { error = "package_not_bundled" });
-        }
-
-        // The hash rides as a header too, so a script (or the updater) can verify what it wrote to disk.
-        http.Response.Headers["X-Matmon-Agent-Sha256"] = package.Sha256;
-        if (package.Signature is not null)
-        {
-            http.Response.Headers["X-Matmon-Agent-Signature"] = package.Signature;
-        }
-        http.Response.Headers["X-Content-Type-Options"] = "nosniff";
-        return Results.File(
-            package.FilePath,
-            "application/octet-stream",
-            package.Platform.FileName,
-            lastModified: new DateTimeOffset(package.WrittenUtc, TimeSpan.Zero),
-            entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{package.Sha256}\""),
-            enableRangeProcessing: true);
-    }).AllowAnonymous().RequireRateLimiting("agent-enroll");
+    // The agent downloads: the manifest and plain packages (fetched on demand from the agent feed - AgentPackageStore),
+    // the ready-to-install download with the instance address and a code appended, and the one-liner install scripts.
+    app.MapAgentDownloadEndpoints();
 
     app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore) =>
     {
@@ -1385,25 +1338,6 @@ static (int Width, int Height)? PngSize(byte[] bytes)
     }
 
     return (System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4)), System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4)));
-}
-
-static bool IsAgentDownloadAuthorized(HttpContext http, IMonitoringWorkspaceStore workspaceStore)
-{
-    if (http.User.Identity?.IsAuthenticated == true)
-    {
-        return true;
-    }
-
-    // A header, not a query parameter: a URL ends up in proxy and access logs, and while the code dies at
-    // enrolment, until then it is exactly what lets a machine become a probe.
-    if (http.Request.Headers.TryGetValue("X-Matmon-Enrollment-Code", out var code) &&
-        workspaceStore.IsAgentEnrollmentCodeValid(code.ToString()))
-    {
-        return true;
-    }
-
-    return http.Request.Headers.TryGetValue("X-Matmon-Probe-Id", out var probeId) &&
-        workspaceStore.TryValidateProbe(probeId.ToString(), ReadProbeToken(http.Request));
 }
 
 static string? ReadProbeToken(HttpRequest request)

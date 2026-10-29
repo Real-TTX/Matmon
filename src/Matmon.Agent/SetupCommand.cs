@@ -54,8 +54,10 @@ public static class SetupCommand
     [SupportedOSPlatform("windows")]
     private static async Task<SetupResult> SetUpWindowsAsync(string[] args, string configPath)
     {
-        var url = EnrollCommand.ReadOption(args, "--url");
-        var code = EnrollCommand.ReadOption(args, "--code");
+        // A "ready to install" download carries both (AgentInstallerPayload); typed values win.
+        var embedded = AgentInstallerPayload.ReadFile(Environment.ProcessPath);
+        var url = EnrollCommand.ReadOption(args, "--url") ?? embedded?.Url;
+        var code = EnrollCommand.ReadOption(args, "--code") ?? embedded?.Code;
         if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(code))
         {
             return new SetupResult(false, 2, "Usage: matmon-agent setup --url <instance url> --code <enrolment code> [--force]");
@@ -82,7 +84,7 @@ public static class SetupCommand
         {
             Directory.CreateDirectory(installDirectory);
             // The same set-aside swap as the updater: a tray still running the installed copy must not block it.
-            ApplyUpdateCommand.Replace(self, target, move: false);
+            InstallCommand.PlaceSelf(self, target);
         }
 
         if (service is null)

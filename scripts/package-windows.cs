@@ -1,5 +1,5 @@
 // Packs the published Windows instance into the update feed the Windows service reads (WindowsUpdateFeed):
-//   matmon-windows-x64.zip   the program folder (Matmon.Host.exe, wwwroot, mibs, the agent packages)
+//   matmon-windows-x64.zip   the program folder (Matmon.Host.exe, wwwroot, mibs - the agent packages come from the agent feed)
 //   matmon-windows-x64.json  the manifest: version, file, size, sha256 and - when the signing key is given - the CI
 //                            signature over platform "instance-win-x64", version and hash (AgentPackageSignature)
 //   MatmonSetup-x64.exe      with --setup: the setup program with the zip appended (SetupPayload) - the one file a person
