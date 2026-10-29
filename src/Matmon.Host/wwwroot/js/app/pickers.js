@@ -254,18 +254,17 @@ function initializeElementPickers() {
       closePickerDialog(dialog);
     };
 
-    const choose = (option) => {
-      const id = option.getAttribute("data-id") || "";
-      const name = option.getAttribute("data-name") || "";
-      const path = option.getAttribute("data-path") || "";
+    // What the trigger shows for a chosen option (null = nothing chosen).
+    const show = (option) => {
+      const id = option?.getAttribute("data-id") || "";
+      const name = option?.getAttribute("data-name") || "";
       const isTag = id.startsWith("tag:");
-      valueInput.value = id;
       valueInput.dataset.selectedName = id ? name : "";
       if (label) {
         label.textContent = id ? (isTag ? `# ${name}` : name) : (trigger.getAttribute("data-placeholder") || label.textContent);
       }
       if (triggerPath) {
-        triggerPath.textContent = path;
+        triggerPath.textContent = id ? option.getAttribute("data-path") || "" : "";
       }
       trigger.classList.toggle("is-empty", !id);
       options.forEach((candidate) => {
@@ -273,6 +272,11 @@ function initializeElementPickers() {
         candidate.classList.toggle("is-selected", selected);
         candidate.setAttribute("aria-selected", selected ? "true" : "false");
       });
+    };
+
+    const choose = (option) => {
+      valueInput.value = option.getAttribute("data-id") || "";
+      show(option);
       close();
       try {
         valueInput.dispatchEvent(new Event("change", { bubbles: true }));
@@ -281,7 +285,22 @@ function initializeElementPickers() {
       }
     };
 
-    trigger.setAttribute("data-placeholder", label ? label.textContent : "");
+    if (!trigger.hasAttribute("data-placeholder")) {
+      trigger.setAttribute("data-placeholder", label ? label.textContent : "");
+    }
+    // A picker cloned from a template (map pins, extra targets, rack devices, links) gets its value set by script
+    // and only then wired - the label the server rendered says "No target". Show what the value really is, or the
+    // choice looks lost while it is stored.
+    const current = (valueInput.value || "").trim().toLowerCase();
+    if (current) {
+      const match = options.find((option) => (option.getAttribute("data-id") || "").toLowerCase() === current);
+      if (match) {
+        show(match);
+      } else if (trigger.classList.contains("is-empty") && label) {
+        label.textContent = "Not found - choose again";
+        trigger.classList.remove("is-empty");
+      }
+    }
     trigger.addEventListener("click", open);
     closeButton?.addEventListener("click", close);
     // When the picker sits inside a <label> (e.g. the map tile "Target" field), the label forwards clicks on

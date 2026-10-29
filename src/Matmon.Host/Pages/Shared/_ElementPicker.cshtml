@@ -17,7 +17,7 @@
 }
 <div class="element-picker @(tagMode ? "is-tag-mode" : null)" data-element-picker id="@Model.DomId">
     <input type="hidden" name="@Model.FieldName" value="@Model.EffectiveValue" data-picker-value data-selected-name="@(Model.SelectedTagName ?? selected?.Name)" @Html.Raw(Model.ValueAttribute) />
-    <button type="button" class="mat-select element-picker-trigger @(string.IsNullOrEmpty(Model.EffectiveValue) ? "is-empty" : null)" id="@(Model.DomId)-trigger" data-picker-open aria-haspopup="dialog" aria-controls="@dialogId">
+    <button type="button" class="mat-select element-picker-trigger @(string.IsNullOrEmpty(Model.EffectiveValue) ? "is-empty" : null)" id="@(Model.DomId)-trigger" data-picker-open data-placeholder="@Model.Placeholder" aria-haspopup="dialog" aria-controls="@dialogId">
         <span class="element-picker-trigger-label" data-picker-label>@(Model.SelectedTagName is { } tagName ? $"# {tagName}" : (selected?.Name ?? Model.Placeholder))</span>
         <span class="element-picker-trigger-path" data-picker-trigger-path>@(tagMode ? "Tag · all matching sensors" : selected?.Path)</span>
     </button>

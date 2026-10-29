@@ -466,7 +466,7 @@
                 }
                 else
                 {
-                    <span class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style" style="--pin-x: @(pinX)%; --pin-y: @(pinY)%" title="@pin.Label">@{ PinInner(pin); }</span>
+                    <span class="map-pin" data-state="@pin.Tone" data-pin-style="@pin.Style" data-pin-id="@pin.Id" style="--pin-x: @(pinX)%; --pin-y: @(pinY)%" title="@pin.Label">@{ PinInner(pin); }</span>
                 }
             }
         </div>

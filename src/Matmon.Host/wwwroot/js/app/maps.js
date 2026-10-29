@@ -1300,6 +1300,21 @@ function initializeMapDesigner() {
   // names - index-bound nested fields would have to be re-indexed on every clone and delete.
   const pinTemplate = form?.querySelector("template[data-map-pin-template]");
 
+  // Every sync of a tile (syncTileFromPanel -> syncPanelVisibility, also 350 ms after each keystroke in a row)
+  // used to rebuild the pin / link / rack / target rows from scratch: the field being typed in lost focus and a
+  // picker that had just been chosen came back blank. The rows now remember the data they were built from and
+  // are only rebuilt when it changed. Keyed by the host ELEMENT, not an attribute: a cloned panel is a new
+  // element with no listeners and must be built afresh.
+  const renderedRows = new WeakMap();
+  const rowsUpToDate = (host, key) => renderedRows.get(host) === key;
+  const markRows = (host, key) => renderedRows.set(host, key);
+  const pinRowsKey = (panel) =>
+    `${normalizeKind(panel?.querySelector("[data-map-property-kind]")?.value)}|${panel?.querySelector("[data-map-property-pins]")?.value || ""}`;
+  const linkRowsKey = (panel) =>
+    `${panel?.querySelector("[data-map-property-links]")?.value || ""}|${readPins(panel).map((pin) => pin.id).join(",")}`;
+  const rackRowsKey = (panel) => panel?.querySelector("[data-map-property-rack]")?.value || "";
+  const targetRowsKey = (panel) => panel?.querySelector("[data-map-targets-value]")?.value || "";
+
   const readPins = (panel) => {
     const field = panel?.querySelector("[data-map-property-pins]");
     if (!field?.value) {
@@ -1389,6 +1404,9 @@ function initializeMapDesigner() {
     if (links.length !== all.length) {
       writeLinks(panel, links);
     }
+    if (rowsUpToDate(host, linkRowsKey(panel))) {
+      return;
+    }
     host.replaceChildren();
 
     links.forEach((link, index) => {
@@ -1418,6 +1436,7 @@ function initializeMapDesigner() {
         entry.showTraffic = row.querySelector('[data-link-field="showTraffic"]').checked;
         entry.targetToken = row.querySelector("[data-link-field-target]")?.value || null;
         writeLinks(panel, current);
+        markRows(host, linkRowsKey(panel));
       };
       row.querySelectorAll("[data-link-field], [data-link-field-target]").forEach((field) => {
         field.addEventListener("change", collect);
@@ -1435,6 +1454,7 @@ function initializeMapDesigner() {
       add.disabled = pins.length < 2;
       add.title = pins.length < 2 ? "Place two pins first." : "";
     }
+    markRows(host, linkRowsKey(panel));
     initializeElementPickers();
   };
 
@@ -1471,6 +1491,9 @@ function initializeMapDesigner() {
       return;
     }
     const devices = readRack(panel);
+    if (rowsUpToDate(host, rackRowsKey(panel))) {
+      return;
+    }
     host.replaceChildren();
     devices.forEach((device, index) => {
       const html = rackTemplate.innerHTML.replaceAll("__rackId__", device.id || `r${index}`);
@@ -1499,6 +1522,7 @@ function initializeMapDesigner() {
         entry.height = Math.max(1, Number(field("height").value) || 1);
         entry.targetToken = row.querySelector("[data-rack-field-target]")?.value || null;
         writeRack(panel, current);
+        markRows(host, rackRowsKey(panel));
       };
       row.querySelectorAll("[data-rack-field], [data-rack-field-target]").forEach((input) => {
         input.addEventListener("change", collect);
@@ -1510,6 +1534,7 @@ function initializeMapDesigner() {
       });
       host.appendChild(row);
     });
+    markRows(host, rackRowsKey(panel));
     initializeElementPickers();
   };
 
@@ -1605,6 +1630,9 @@ function initializeMapDesigner() {
     }
 
     const tokens = readTargets(panel);
+    if (rowsUpToDate(host, targetRowsKey(panel))) {
+      return;
+    }
     host.replaceChildren();
 
     [...tokens, ""].forEach((token, index) => {
@@ -1650,6 +1678,7 @@ function initializeMapDesigner() {
       host.appendChild(row);
     });
 
+    markRows(host, targetRowsKey(panel));
     initializeElementPickers();
   };
 
@@ -1665,6 +1694,9 @@ function initializeMapDesigner() {
     if (pins.some((pin) => !pin.id)) {
       pins.forEach((pin) => { pin.id = pin.id || createId(); });
       writePins(panel, pins);
+    }
+    if (rowsUpToDate(host, pinRowsKey(panel))) {
+      return;
     }
     host.replaceChildren();
 
@@ -1723,6 +1755,8 @@ function initializeMapDesigner() {
           entry.longitude = Number.isFinite(lon) ? lon : null;
         }
         writePins(panel, current);
+        // The rows already show this - the refresh the write queues must not rebuild them under the cursor.
+        markRows(host, pinRowsKey(panel));
         refreshLinkPinOptions(panel);
       };
 
@@ -1744,8 +1778,8 @@ function initializeMapDesigner() {
     const hint = panel.querySelector("[data-map-pin-hint]");
     if (hint) {
       hint.textContent = geo
-        ? "Enter latitude/longitude - the world map is equirectangular, so a pin lands exactly on its coordinates."
-        : 'Use "Place on picture" and then click the tile where the pin belongs.';
+        ? "Enter latitude/longitude, or drag the pin on the map - the world map is equirectangular, so a pin lands exactly on its coordinates."
+        : 'Use "Place on picture" and then click the tile where the pin belongs. Drag a pin on the tile to move it.';
     }
     const placeButton = panel.querySelector("[data-map-pin-place]");
     if (placeButton) {
@@ -1756,6 +1790,7 @@ function initializeMapDesigner() {
     if (addButton) {
       setButtonLabel(addButton, isTopologyPanel(panel) ? "Add device" : "Add pin");
     }
+    markRows(host, pinRowsKey(panel));
     initializeElementPickers();
   };
 
@@ -2466,6 +2501,68 @@ function initializeMapDesigner() {
 
   };
 
+  // Moving a placed pin: drag it on the canvas. Its point is a fraction of the layer its percentages refer to
+  // (the pin's offset parent), so that is what the pointer is measured against - right at any tile size and under
+  // the world map's letterboxing. On a world map the fraction goes back to latitude/longitude (the inverse of
+  // MonitoringMapGeoProjection.ToFraction), on a picture or topology it IS the stored position.
+  const dragPin = (tile, marker, startEvent) => {
+    const panel = getPanel(tile.dataset.tileIndex || "");
+    const frame = marker.offsetParent;
+    if (!panel || !frame) {
+      return;
+    }
+    const startX = startEvent.clientX;
+    const startY = startEvent.clientY;
+    let moved = false;
+    let fraction = null;
+
+    const move = (moveEvent) => {
+      if (!moved && Math.abs(moveEvent.clientX - startX) < 3 && Math.abs(moveEvent.clientY - startY) < 3) {
+        return;
+      }
+      moved = true;
+      marker.classList.add("is-moving");
+      const rect = frame.getBoundingClientRect();
+      const clamp = (value) => Math.min(1, Math.max(0, value));
+      fraction = {
+        x: clamp((moveEvent.clientX - rect.left) / Math.max(1, rect.width)),
+        y: clamp((moveEvent.clientY - rect.top) / Math.max(1, rect.height))
+      };
+      marker.style.setProperty("--pin-x", `${fraction.x * 100}%`);
+      marker.style.setProperty("--pin-y", `${fraction.y * 100}%`);
+    };
+
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      marker.classList.remove("is-moving");
+      if (!moved || !fraction) {
+        return;
+      }
+      const pins = readPins(panel);
+      const pin = pins.find((candidate) => candidate.id === marker.dataset.pinId);
+      if (!pin) {
+        return;
+      }
+      const round = (value, digits) => Number(value.toFixed(digits));
+      if (isGeoPanel(panel)) {
+        pin.longitude = round(fraction.x * 360 - 180, 4);
+        pin.latitude = round(90 - fraction.y * 180, 4);
+      } else {
+        pin.x = round(fraction.x, 4);
+        pin.y = round(fraction.y, 4);
+      }
+      writePins(panel, pins);
+      // The geo rows show latitude/longitude - rebuilt, since the data changed (nobody is typing in them).
+      renderPinRows(panel);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
   const wireTileDrag = (tile) => {
     // The WHOLE tile is the drag surface (except its interactive controls and the resize grip). Dragging
     // MOVES the tile to a cell: v4 stores a column and a row, so a widget goes where you drop it and the
@@ -2478,6 +2575,16 @@ function initializeMapDesigner() {
 
       if (event.target instanceof HTMLElement
         && event.target.closest("input, select, textarea, button, a, [data-map-resize-handle]")) {
+        return;
+      }
+
+      // A pin is dragged on its own; the tile stays where it is.
+      const pinMarker = event.target instanceof Element ? event.target.closest(".map-pin[data-pin-id]") : null;
+      if (pinMarker && pinMarker.dataset.pinId) {
+        event.preventDefault();
+        event.stopPropagation();
+        selectTile(tile.dataset.tileIndex || "");
+        dragPin(tile, pinMarker, event);
         return;
       }
 

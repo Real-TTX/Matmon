@@ -4858,8 +4858,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             : pin.Clone();
         if (pin.Id == Guid.Empty)
         {
+            // Everything Clone carries - the device symbol and the map it opens used to be dropped here.
             normalized.Style = pin.Style;
             normalized.ShowLabel = pin.ShowLabel;
+            normalized.Icon = pin.Icon;
+            normalized.LinkMapId = pin.LinkMapId;
         }
         normalized.Label = string.IsNullOrWhiteSpace(pin.Label) ? null : pin.Label.Trim();
         normalized.TargetToken = string.IsNullOrWhiteSpace(pin.TargetToken) ? null : pin.TargetToken.Trim();

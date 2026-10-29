@@ -181,6 +181,22 @@ public sealed class MapSaveRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void A_pin_without_an_id_gets_one_and_keeps_its_device_symbol_and_map_link()
+    {
+        var tile = FullyPopulatedTile();
+        var linkedMap = Guid.NewGuid();
+        tile.Pins = [new MonitoringMapPin { Id = Guid.Empty, Style = MonitoringMapPinStyle.Device, Icon = "router", LinkMapId = linkedMap, TargetToken = "tag:core", X = 0.3, Y = 0.6 }];
+
+        var pin = SaveAndReload(tile).Slides[0].Tiles.Single().Pins.Single();
+
+        Assert.NotEqual(Guid.Empty, pin.Id);
+        Assert.Equal("router", pin.Icon);
+        Assert.Equal(linkedMap, pin.LinkMapId);
+        Assert.Equal("tag:core", pin.TargetToken);
+        Assert.Equal((0.3, 0.6), (pin.X, pin.Y));
+    }
+
+    [Fact]
     public void Rack_devices_survive_a_save()
     {
         var original = FullyPopulatedTile();
