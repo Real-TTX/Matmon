@@ -27,7 +27,8 @@ internal static partial class TrayIcons
     // left flank sinks into a dark background below ~40 px and the M reads as a V.
     private const string MarkPath = "M74.6 2Q78 0 82 0L90 0Q93.7 0 96.8 2.5L224.6 107.3Q228.5 110.5 232.4 107.4L366.3 2.5Q369.4 0 372.8 2.1L440.6 44.4Q444 46.5 444 51.5L444 290.7Q444 295.7 440.5 298.2L350 352Q328 352 328 322L328 160L229.4 247.3Q226.4 250 222.4 250L215.1 250Q211.1 250 208.2 247.2L116 158.3L116 322Q116 352 94 352L4.3 294.9Q0 292.2 0 287.2L0 51.4Q0 46.4 4 43.9Z";
 
-    public static Icon Create(Color state)
+    /// <summary>The mark with a state dot; without <paramref name="state"/> the mark alone (a window's icon).</summary>
+    public static Icon Create(Color? state)
     {
         const int size = 32;
         using var bitmap = new Bitmap(size, size);
@@ -39,13 +40,15 @@ internal static partial class TrayIcons
 
             // The mark across the full width, kept clear of the bottom-right corner the dot sits in.
             var height = size * MarkHeight / MarkWidth;
-            DrawMark(graphics, new RectangleF(0, 2, size, height));
-
-            // State: a dot in the corner, outlined so it reads on light and dark taskbars alike.
-            using var dot = new SolidBrush(state);
-            using var outline = new Pen(Color.White, 2f);
-            graphics.FillEllipse(dot, 18, 18, 13, 13);
-            graphics.DrawEllipse(outline, 18, 18, 13, 13);
+            DrawMark(graphics, new RectangleF(0, state is null ? (size - height) / 2 : 2, size, height));
+            if (state is { } color)
+            {
+                // State: a dot in the corner, outlined so it reads on light and dark taskbars alike.
+                using var dot = new SolidBrush(color);
+                using var outline = new Pen(Color.White, 2f);
+                graphics.FillEllipse(dot, 18, 18, 13, 13);
+                graphics.DrawEllipse(outline, 18, 18, 13, 13);
+            }
         }
 
         var handle = bitmap.GetHicon();

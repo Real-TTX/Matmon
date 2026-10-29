@@ -41,6 +41,8 @@
     <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsFolderLocks.cs" Link="Shared\WindowsFolderLocks.cs" />
     <Compile Include="..\Matmon.Probe\SetupPayload.cs" Link="Shared\SetupPayload.cs" />
     <Compile Include="..\Matmon.Agent\Tray\TrayIcons.cs" Link="Shared\TrayIcons.cs" />
+    <!-- Header, button bar, headings and notices: the same window chrome as the agent's tray windows. -->
+    <Compile Include="..\Matmon.Agent\Tray\BrandChrome.cs" Link="Shared\BrandChrome.cs" />
     <!-- The online setup reads and verifies the release feed exactly like the self-update does. -->
     <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsUpdateFeed.cs" Link="Shared\WindowsUpdateFeed.cs" />
     <Compile Include="..\Matmon.Probe\AgentPackageSignature.cs" Link="Shared\AgentPackageSignature.cs" />

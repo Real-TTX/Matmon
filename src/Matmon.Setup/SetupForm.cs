@@ -18,10 +18,9 @@ internal sealed class SetupForm : Form
     private readonly WindowsInstallationInfo? _installed;
     private readonly PackageSource _source;
     private readonly Panel _body = new() { Dock = DockStyle.Fill, Padding = new Padding(28, 22, 28, 12) };
-    // Fixed size and the same margin for all three: AutoSize plus a margin of its own put Cancel a few pixels higher than the others.
-    private readonly Button _back = new() { Text = "< Back", Size = new Size(104, 32), Margin = new Padding(8, 0, 0, 0) };
-    private readonly Button _next = new() { Text = "Next >", Size = new Size(104, 32), Margin = new Padding(8, 0, 0, 0) };
-    private readonly Button _cancel = new() { Text = "Cancel", Size = new Size(104, 32), Margin = new Padding(16, 0, 0, 0) };
+    private readonly Button _back = BrandChrome.FooterButton("< Back");
+    private readonly Button _next = BrandChrome.FooterButton("Next >");
+    private readonly Button _cancel = BrandChrome.FooterButton("Cancel", gap: 16);
 
     private readonly TextBox _programFolder = new() { Width = 360 };
     private readonly TextBox _dataFolder = new() { Width = 360 };
@@ -74,43 +73,19 @@ internal sealed class SetupForm : Form
 
         // The bar: version and channel on the left, the buttons on the right, both centred on the same line.
         // The online setup does not know the version it installs until it has asked the feed - so it names the channel instead.
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Right,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            Padding = Padding.Empty,
-            Margin = Padding.Empty
-        };
-        buttons.Controls.AddRange([_cancel, _next, _back]);
-        var version = new Label
-        {
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(0x5B, 0x67, 0x78),
-            Text = arguments.Uninstall
+        var footer = BrandChrome.Footer(
+            arguments.Uninstall
                 ? $"Version {_installed?.Version ?? SetupRunner.Version}"
                 : _source == PackageSource.Online
                     ? $"Online setup · {SetupRunner.ChannelName} channel"
-                    : $"Version {SetupRunner.Version} · {SetupRunner.ChannelName} channel"
-        };
-        var footer = new Panel
-        {
-            Dock = DockStyle.Bottom,
-            Padding = new Padding(20, 13, 16, 13),
-            Height = 58,
-            BackColor = Color.FromArgb(0xF4, 0xF6, 0xF9)
-        };
-        footer.Controls.Add(version);
-        footer.Controls.Add(buttons);
+                    : $"Version {SetupRunner.Version} · {SetupRunner.ChannelName} channel",
+            _cancel, _next, _back);
         _back.Click += (_, _) => Show(Page.Welcome);
         _next.Click += (_, _) => Advance();
         _cancel.Click += (_, _) => Close();
         AcceptButton = _next;
 
-        var header = new BrandHeader(arguments.Uninstall ? "Uninstall" : _installed is null ? "Setup" : "Update")
+        var header = new BrandHeader("Matmon", arguments.Uninstall ? "Uninstall" : _installed is null ? "Setup" : "Update")
         {
             Dock = DockStyle.Top,
             Height = 84
@@ -276,27 +251,27 @@ internal sealed class SetupForm : Form
         switch (page)
         {
             case Page.Welcome:
-                content.Controls.Add(Heading(_installed is null ? "Welcome to Matmon" : "Update Matmon"));
+                content.Controls.Add(BrandChrome.Heading(_installed is null ? "Welcome to Matmon" : "Update Matmon"));
                 var target = _source == PackageSource.Online ? $"the newest Matmon ({SetupRunner.ChannelName} channel)" : $"Matmon {SetupRunner.Version}";
-                content.Controls.Add(Paragraph(_installed is null
+                content.Controls.Add(BrandChrome.Paragraph(_installed is null
                     ? $"This installs {target} on this computer. Matmon runs as a Windows service in the background, starts with Windows and is used in the browser."
                     : $"Matmon {_installed.Version ?? "(installed)"} is installed. Setup updates it to {target} - the configuration, the history and the sensors are kept."));
                 if (_source == PackageSource.Online)
                 {
-                    content.Controls.Add(Paragraph("Matmon is downloaded during the installation (about 190 MB) and checked before anything is changed: its checksum and its signature must match the release."));
+                    content.Controls.Add(BrandChrome.Paragraph("Matmon is downloaded during the installation (about 190 MB) and checked before anything is changed: its checksum and its signature must match the release."));
                 }
                 else if (_source == PackageSource.File && !File.Exists(_arguments.PackagePath))
                 {
-                    content.Controls.Add(Paragraph($"The package {_arguments.PackagePath} does not exist.", Color.Firebrick));
+                    content.Controls.Add(BrandChrome.Paragraph($"The package {_arguments.PackagePath} does not exist.", Color.Firebrick));
                     _next.Enabled = false;
                 }
 
-                content.Controls.Add(Paragraph("Once installed, Matmon keeps itself up to date if you want it to (System > Updates)."));
+                content.Controls.Add(BrandChrome.Paragraph("Once installed, Matmon keeps itself up to date if you want it to (System > Updates)."));
 
                 break;
 
             case Page.Options:
-                content.Controls.Add(Heading("Where and how"));
+                content.Controls.Add(BrandChrome.Heading("Where and how"));
                 content.Controls.Add(FolderRow("Program folder", _programFolder, "Replaced as a whole by every update."));
                 content.Controls.Add(FolderRow("Data folder", _dataFolder, "Configuration, history and backups. Kept by updates; readable only by administrators."));
                 var portRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 6, 0, 6) };
@@ -309,15 +284,15 @@ internal sealed class SetupForm : Form
                 break;
 
             case Page.Confirm:
-                content.Controls.Add(Heading("Uninstall Matmon"));
-                content.Controls.Add(Paragraph(_installed is null
+                content.Controls.Add(BrandChrome.Heading("Uninstall Matmon"));
+                content.Controls.Add(BrandChrome.Paragraph(_installed is null
                     ? "No Matmon installation was found on this computer. Uninstall still removes whatever is left (service, firewall rule, Installed apps entry)."
                     : $"This removes the Matmon service and the program from {_installed.ProgramFolder}. Without the box below, the data stays where it is and a new installation picks it up again."));
                 content.Controls.Add(_removeData);
                 break;
 
             case Page.Progress:
-                content.Controls.Add(Heading(_arguments.Uninstall ? "Removing Matmon" : "Installing Matmon"));
+                content.Controls.Add(BrandChrome.Heading(_arguments.Uninstall ? "Removing Matmon" : "Installing Matmon"));
                 content.Controls.Add(_step);
                 _progress.Width = 570;
                 content.Controls.Add(_progress);
@@ -329,22 +304,22 @@ internal sealed class SetupForm : Form
             case Page.Finish:
                 if (_succeeded)
                 {
-                    content.Controls.Add(Heading(_arguments.Uninstall ? "Matmon has been removed" : "Matmon is ready"));
-                    content.Controls.Add(Paragraph(_log.Items.Count > 0 ? (string)_log.Items[^1]! : string.Empty));
+                    content.Controls.Add(BrandChrome.Heading(_arguments.Uninstall ? "Matmon has been removed" : "Matmon is ready"));
+                    content.Controls.Add(BrandChrome.Paragraph(_log.Items.Count > 0 ? (string)_log.Items[^1]! : string.Empty));
                     if (!_arguments.Uninstall)
                     {
                         var address = $"http://localhost:{(int)_port.Value}";
                         var link = new LinkLabel { Text = address, AutoSize = true, Margin = new Padding(0, 4, 0, 12) };
                         link.LinkClicked += (_, _) => Process.Start(new ProcessStartInfo(address) { UseShellExecute = true });
                         content.Controls.Add(link);
-                        content.Controls.Add(Paragraph("On the first visit Matmon asks for the e-mail address and password of its administrator."));
+                        content.Controls.Add(BrandChrome.Paragraph("On the first visit Matmon asks for the e-mail address and password of its administrator."));
                         content.Controls.Add(_openNow);
                     }
                 }
                 else
                 {
-                    content.Controls.Add(Heading(_arguments.Uninstall ? "Uninstall did not finish" : "Setup did not finish"));
-                    content.Controls.Add(Paragraph(_failure ?? "Unknown error.", Color.Firebrick));
+                    content.Controls.Add(BrandChrome.Heading(_arguments.Uninstall ? "Uninstall did not finish" : "Setup did not finish"));
+                    content.Controls.Add(BrandChrome.Paragraph(_failure ?? "Unknown error.", Color.Firebrick));
                     var log = new LinkLabel { Text = "Open the setup log", AutoSize = true };
                     log.LinkClicked += (_, _) => Process.Start(new ProcessStartInfo("notepad.exe", SetupRunner.LogPath) { UseShellExecute = true });
                     content.Controls.Add(log);
@@ -363,24 +338,6 @@ internal sealed class SetupForm : Form
         // Enter presses the focused button: left on Cancel it closed the setup.
         ActiveControl = _next.Enabled && _next.Visible ? _next : _cancel.Visible ? _cancel : null;
     }
-
-    private static Label Heading(string text) => new()
-    {
-        Text = text,
-        AutoSize = true,
-        Font = new Font("Segoe UI Semibold", 14f),
-        ForeColor = Color.FromArgb(0x1B, 0x26, 0x38),
-        Margin = new Padding(0, 0, 0, 12)
-    };
-
-    private static Label Paragraph(string text, Color? color = null) => new()
-    {
-        Text = text,
-        AutoSize = true,
-        MaximumSize = new Size(560, 0),
-        ForeColor = color ?? Color.FromArgb(0x3A, 0x45, 0x55),
-        Margin = new Padding(0, 0, 0, 10)
-    };
 
     private Control FolderRow(string label, TextBox box, string hint)
     {
@@ -401,44 +358,5 @@ internal sealed class SetupForm : Form
         panel.Controls.Add(row);
         panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = Color.DimGray, MaximumSize = new Size(560, 0) });
         return panel;
-    }
-
-    /// <summary>The top band, like the header of matmon.eu: the flat M mark beside the name on a light ground.</summary>
-    private sealed class BrandHeader : Control
-    {
-        private readonly string _subtitle;
-
-        public BrandHeader(string subtitle)
-        {
-            _subtitle = subtitle;
-            DoubleBuffered = true;
-            BackColor = Color.White;
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var graphics = e.Graphics;
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
-            var markHeight = 40f;
-            var markWidth = markHeight * TrayIcons.MarkWidth / TrayIcons.MarkHeight;
-            var top = (Height - markHeight) / 2f;
-            TrayIcons.DrawMark(graphics, new RectangleF(24, top, markWidth, markHeight));
-
-            using var titleFont = new Font("Segoe UI Semibold", 20f);
-            using var subtitleFont = new Font("Segoe UI", 12f);
-            using var title = new SolidBrush(Color.FromArgb(0x0F, 0x1B, 0x2D));
-            using var soft = new SolidBrush(Color.FromArgb(0x5B, 0x67, 0x78));
-            var left = 24 + markWidth + 14;
-            var titleSize = graphics.MeasureString("Matmon", titleFont);
-            var subtitleSize = graphics.MeasureString(_subtitle, subtitleFont);
-            graphics.DrawString("Matmon", titleFont, title, left, (Height - titleSize.Height) / 2f);
-            graphics.DrawString(_subtitle, subtitleFont, soft, left + titleSize.Width + 6, (Height - subtitleSize.Height) / 2f + 2);
-
-            using var line = new Pen(Color.FromArgb(0xE3, 0xE8, 0xEF));
-            graphics.DrawLine(line, 0, Height - 1, Width, Height - 1);
-        }
     }
 }
