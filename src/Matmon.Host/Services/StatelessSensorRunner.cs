@@ -23,12 +23,25 @@ public sealed class StatelessSensorRunner
     internal StatelessSensorRunner(IEnumerable<ISensorExecutor> executors, ExecutorTargetGuard.Resolver resolver)
     {
         _resolver = resolver;
-        _executors = executors.ToDictionary(executor => executor.SensorTypeKey, StringComparer.OrdinalIgnoreCase);
+        // Only the checks a cloud sensor can be. The process registers every Core sensor (the same list as an instance),
+        // and without this a holder of the executor token could run a local script or program inside the sidecar.
+        _executors = executors
+            .Where(executor => CloudSensorTypes.Contains(executor.SensorTypeKey))
+            .ToDictionary(executor => executor.SensorTypeKey, StringComparer.OrdinalIgnoreCase);
         // Only advertise types this process can actually run (e.g. probe sensors aren't registered here).
         _catalog = SensorDefinitionCatalog.BuiltIns
             .Where(definition => _executors.ContainsKey(definition.Key))
             .ToArray();
     }
+
+    /// <summary>The sensor types the Executor runs at all: what Matmon.Cloud offers (its CloudSensorTypes - an "http" cloud
+    /// sensor runs as http-advanced) plus plain http for sensors from before. Everything else - local scripts and
+    /// programs, credentials-based remote sensors, SQL, SNMP - is refused as "no executor"; a new cloud type has to be
+    /// added here as well as in the cloud.</summary>
+    public static readonly IReadOnlySet<string> CloudSensorTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "ping", "http", "http-advanced", "ssl-certificate", "tcp-port", "dns"
+    };
 
     /// <summary>The runnable sensor catalog (types + parameters) - the cloud fetches this to build its UI.</summary>
     public IReadOnlyList<SensorDefinition> Catalog => _catalog;

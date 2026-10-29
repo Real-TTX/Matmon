@@ -69,6 +69,34 @@ public sealed class ExecutorTargetGuardTests
         Assert.Contains("public", result.Message);
     }
 
+    private sealed class LocalScriptStandIn : ISensorExecutor
+    {
+        public bool Ran { get; private set; }
+        public string SensorTypeKey => "local-script";
+        public ValueTask<SensorDiscoveryCheckResult> DiscoverAsync(SensorDiscoveryContext context, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
+        public ValueTask<SensorExecutionResult> ExecuteAsync(SensorExecutionContext context, CancellationToken cancellationToken = default)
+        {
+            Ran = true;
+            return ValueTask.FromResult(SensorExecutionResult.Healthy(TimeSpan.Zero, "ran"));
+        }
+    }
+
+    [Fact]
+    public async Task Only_cloud_sensor_types_run_in_the_executor()
+    {
+        // a holder of the executor token must not be able to run a local script or program inside the sidecar
+        var script = new LocalScriptStandIn();
+        var runner = new StatelessSensorRunner([script, new TcpPortSensorExecutor()], Resolve);
+
+        var result = await runner.ExecuteAsync(new ExecuteSensorRequest("local-script", "example.com", null, null, null), CancellationToken.None);
+
+        Assert.False(script.Ran);
+        Assert.Equal(SensorState.Critical, result.State);
+        Assert.DoesNotContain(runner.Catalog, definition => definition.Key == "local-script");
+        Assert.DoesNotContain("local-program", StatelessSensorRunner.CloudSensorTypes);
+    }
+
     [Fact]
     public async Task A_host_and_port_target_is_not_mistaken_for_a_url()
     {
