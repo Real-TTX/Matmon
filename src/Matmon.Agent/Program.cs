@@ -104,6 +104,12 @@ if (string.IsNullOrWhiteSpace(options.OfflineBufferPath))
 
 builder.Services.AddSingleton(options);
 
+// An agent set up before the Start menu entry existed gets it here, the next time its service starts (after an update).
+if (OperatingSystem.IsWindows() && ServiceControl.IsRunningAsService())
+{
+    SetupCommand.EnsureStartMenuShortcut();
+}
+
 // What "storage" means for an agent: the directory it is installed in and the drive under it. It keeps no
 // workspace, telemetry or backups - the primary does - so that is the only disk the agent itself can fill.
 // Matmon__DataPath points it elsewhere, e.g. at a data directory an installer created.

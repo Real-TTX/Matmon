@@ -98,12 +98,20 @@ internal static class Program
             }
 
             var installed = WindowsInstallation.Find();
+            var (probe, problem) = SetupRunner.ResolveProbe(arguments, installed);
+            if (problem is not null)
+            {
+                SetupRunner.Log(problem);
+                return 3;
+            }
+
             var options = new WindowsInstallOptions(
                 arguments.ProgramFolder ?? installed?.ProgramFolder ?? WindowsInstallation.DefaultProgramFolder,
                 arguments.DataFolder ?? installed?.DataFolder ?? WindowsInstallation.DefaultDataFolder,
                 arguments.Port ?? installed?.Port ?? 8099,
                 arguments.OpenFirewall,
-                !arguments.NoTray);
+                !arguments.NoTray,
+                probe);
             // The online setup logs its download every 10 % - enough to see that it moves, not a line per percent.
             var logged = -1;
             SetupRunner.Install(arguments, options, SetupRunner.Log, share =>

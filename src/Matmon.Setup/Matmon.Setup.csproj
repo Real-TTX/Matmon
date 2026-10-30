@@ -8,7 +8,8 @@
 
     Shipped as ONE file: this program, published self-contained single-file, with the program package appended
     (SetupPayload, linked below) - see scripts/package-windows.cs. The bare program, installed as
-    %ProgramData%\Matmon\setup\Matmon Setup.exe, is also the uninstaller and the tray icon (/tray, TrayApp).
+    %ProgramData%\Matmon\app\Matmon.exe, is also the uninstaller and the tray icon (/tray, TrayApp). The same setup installs
+    a remote probe (/probe, WindowsProbeConnection) - one Matmon service per machine, in one role.
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -39,7 +40,9 @@
   <ItemGroup>
     <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsInstallation.cs" Link="Shared\WindowsInstallation.cs" />
     <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsFolderLocks.cs" Link="Shared\WindowsFolderLocks.cs" />
+    <Compile Include="..\Matmon.Host\Services\SelfUpdate\WindowsSetupArguments.cs" Link="Shared\WindowsSetupArguments.cs" />
     <Compile Include="..\Matmon.Probe\SetupPayload.cs" Link="Shared\SetupPayload.cs" />
+    <Compile Include="..\Matmon.Probe\WindowsShortcut.cs" Link="Shared\WindowsShortcut.cs" />
     <Compile Include="..\Matmon.Agent\Tray\TrayIcons.cs" Link="Shared\TrayIcons.cs" />
     <!-- Header, button bar, headings and notices: the same window chrome as the agent's tray windows. -->
     <Compile Include="..\Matmon.Agent\Tray\BrandChrome.cs" Link="Shared\BrandChrome.cs" />

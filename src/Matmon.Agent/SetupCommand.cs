@@ -105,12 +105,55 @@ public static class SetupCommand
             run.SetValue(TrayRunValue, $"conhost.exe --headless \"{target}\" tray");
         }
 
+        // ...and in the Start menu, so a closed tray comes back before the next sign-in.
+        EnsureStartMenuShortcut(replace: true);
+
         return new SetupResult(true, 0, $"{enrolled.Message.Split(". Identity")[0]}. The '{service}' service is running.", target);
     }
 
     /// <summary>Where setup installs the agent.</summary>
     public static string InstalledPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Matmon Agent", "matmon-agent.exe");
+
+    /// <summary>The Start menu entry "Matmon Agent" (all users): starts the tray - or, when it runs already, shows its Info window.</summary>
+    [SupportedOSPlatform("windows")]
+    public static string StartMenuShortcutPath => WindowsShortcut.StartMenuPath("Matmon Agent");
+
+    /// <summary>The Start menu entry runs the tray the way sign-in does: <c>conhost --headless "&lt;exe&gt;" tray</c>, with the agent's icon.</summary>
+    public static (string Target, string Arguments) TrayCommand(string installedPath) =>
+        (Path.Combine(Environment.SystemDirectory, "conhost.exe"), $"--headless \"{installedPath}\" tray");
+
+    /// <summary>
+    /// Creates the Start menu entry when it is missing (<paramref name="replace"/>: always). Setup calls it; the service calls
+    /// it at every start, so an agent installed before the entry existed gets it after its next update or restart - but only
+    /// where setup registered the tray (a hand-made service install has none). Cosmetic: a failure changes nothing.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static void EnsureStartMenuShortcut(bool replace = false)
+    {
+        try
+        {
+            var path = StartMenuShortcutPath;
+            if ((File.Exists(path) && !replace) || !File.Exists(InstalledPath))
+            {
+                return;
+            }
+
+            using (var run = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"))
+            {
+                if (run?.GetValue(TrayRunValue) is not string)
+                {
+                    return;
+                }
+            }
+
+            var (target, arguments) = TrayCommand(InstalledPath);
+            WindowsShortcut.Create(path, target, arguments, $"{InstalledPath},0", "Matmon Agent", Path.GetDirectoryName(InstalledPath));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+        }
+    }
 
     /// <summary>The installed service's name, or null when setup has not run on this machine.</summary>
     [SupportedOSPlatform("windows")]

@@ -1,4 +1,4 @@
-using System.IO.Pipes;
+﻿using System.IO.Pipes;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -20,7 +20,8 @@ public sealed record AgentStatusSnapshot(
     string? UpdateStatus,
     DateTimeOffset StartedUtc,
     string ConfigPath,
-    string StateDirectory);
+    string StateDirectory,
+    int BufferedObservations = 0);
 
 /// <summary>
 /// The tray's window into the service: a local named pipe that answers one question - "status" - with a
@@ -120,7 +121,8 @@ public sealed class AgentStatusPipeServer : BackgroundService
             _runtimeState.AgentUpdateStatus,
             _startedUtc,
             _configLocation.Path,
-            _updateSettings.StateDirectory);
+            _updateSettings.StateDirectory,
+            _runtimeState.BufferedObservations);
     }
 
     [SupportedOSPlatform("windows")]

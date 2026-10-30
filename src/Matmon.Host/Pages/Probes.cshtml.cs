@@ -147,6 +147,9 @@ public sealed record ProbeUpdateView(
     /// <summary>Whether the Update action applies right now.</summary>
     public bool CanStart => Available && CanUpdate && !Updating && !Waiting;
 
+    /// <summary>A probe installed by the Windows setup: updated by running the newest setup there, not from the primary.</summary>
+    public bool IsWindowsService => UnavailableReason == Matmon.Host.Services.SelfUpdate.ProbeSelfUpdateService.WindowsServiceReason;
+
     public string? CannotStartReason =>
         !Available ? "it already runs the primary's version"
         : !Reported ? "it is too old to be updated from here - pull and recreate it by hand once"

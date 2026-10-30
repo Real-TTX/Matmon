@@ -14,57 +14,6 @@ internal enum PackageSource
     Online
 }
 
-/// <summary>
-/// The setup's command line: <c>MatmonSetup.exe [/silent] [/dir=&lt;folder&gt;] [/data=&lt;folder&gt;] [/port=8099] [/firewall]
-/// [/notray]</c> installs or updates; <c>/uninstall [/silent] [/removedata]</c> removes. <c>/package=&lt;zip&gt;</c> installs from
-/// a separate package. Without an appended package the setup is the ONLINE setup: it downloads the newest package of its
-/// channel (<c>/feed=&lt;url&gt;</c> another feed). The installed copy also runs the tray icon
-/// (<c>/tray</c>) and controls the service for it (<c>/service=start|stop|restart</c>).
-/// </summary>
-internal sealed record SetupArguments(
-    bool Uninstall,
-    bool Silent,
-    string? ProgramFolder,
-    string? DataFolder,
-    int? Port,
-    bool OpenFirewall,
-    bool RemoveData,
-    string? PackagePath,
-    bool Relaunched,
-    bool Tray,
-    bool NoTray,
-    string? ServiceAction,
-    string? FeedUrl)
-{
-    /// <summary>What needs administrator rights: everything but the tray icon.</summary>
-    public bool NeedsElevation => !Tray;
-
-    public static SetupArguments Parse(string[] args)
-    {
-        string? Value(string name) => args
-            .Select(arg => arg.Trim())
-            .FirstOrDefault(arg => arg.StartsWith($"/{name}=", StringComparison.OrdinalIgnoreCase) || arg.StartsWith($"--{name}=", StringComparison.OrdinalIgnoreCase))
-            ?.Split('=', 2)[1].Trim('"');
-        bool Flag(params string[] names) => args.Any(arg => names.Any(name =>
-            string.Equals(arg, $"/{name}", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, $"--{name}", StringComparison.OrdinalIgnoreCase)));
-
-        return new SetupArguments(
-            Flag("uninstall", "u"),
-            Flag("silent", "quiet", "s", "q"),
-            Value("dir"),
-            Value("data"),
-            int.TryParse(Value("port"), out var port) && port is > 0 and < 65536 ? port : null,
-            Flag("firewall"),
-            Flag("removedata"),
-            Value("package"),
-            Flag("relaunched"),
-            Flag("tray"),
-            Flag("notray"),
-            Value("service")?.ToLowerInvariant() is { } action && action is "start" or "stop" or "restart" ? action : null,
-            Value("feed"));
-    }
-}
-
 /// <summary>What the setup does, without a window - the wizard and the silent mode both call this.</summary>
 internal static class SetupRunner
 {
@@ -179,6 +128,11 @@ internal static class SetupRunner
     }
 
     public static void Uninstall(bool removeData, Action<string> progress) => WindowsInstallation.Uninstall(removeData, progress);
+
+    /// <summary>Instance or probe, and the probe's connection - an installed probe keeps its stored one (read from its data
+    /// folder, which needs the elevation this process has).</summary>
+    public static (WindowsProbeConnection? Probe, string? Problem) ResolveProbe(SetupArguments arguments, WindowsInstallationInfo? installed) =>
+        arguments.ResolveProbe(installed, installed?.Role == WindowsInstallationRole.Probe ? WindowsProbeSettings.ReadProbeSettings(installed.DataFolder) : null);
 
     /// <summary>For the tray icon: start / stop / restart the service (this process runs elevated).</summary>
     public static int ControlService(string action)

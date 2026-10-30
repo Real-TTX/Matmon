@@ -28,11 +28,7 @@ public sealed class ProbeStatusModel(MatmonRuntimeOptions options, SlaveProbeRun
     public string Version => MatmonVersion.Current;
 
     /// <summary>The update line: installing, how the last update ended, or whether the primary can update it at all.</summary>
-    public string? UpdateText => selfUpdate?.Report() is not { } report ? null
-        : report.Installing ? $"installing {report.InstallingTo}"
-        : ProbeUpdateView.DescribeOutcome(report) is { } outcome ? outcome
-        : report.CanUpdate ? "can be updated from its primary"
-        : $"updated by hand ({report.UnavailableReason})";
+    public string? UpdateText => ProbeLocalStatus.DescribeUpdate(selfUpdate?.Report());
 
     /// <summary>"ok" / "warning" / "error" for the state line.</summary>
     public string Tone => State.IsConnected ? "ok" : State.LastHeartbeatUtc is null ? "warning" : "error";

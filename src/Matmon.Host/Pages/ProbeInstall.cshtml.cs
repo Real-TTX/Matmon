@@ -73,6 +73,16 @@ public sealed class ProbeInstallModel : PageModel
         return ProbeInstallCommandBuilder.BuildCurlInstaller(Request, Overview, Probe);
     }
 
+    public string BuildWindowsSetupCommand() =>
+        Probe is null ? string.Empty : ProbeInstallCommandBuilder.BuildWindowsSetupCommand(Request, Overview, Probe);
+
+    public string BuildWindowsPowerShell() =>
+        Probe is null ? string.Empty : ProbeInstallCommandBuilder.BuildWindowsPowerShell(Request, Overview, Probe);
+
+    public string PrimaryUrl => ProbeInstallCommandBuilder.PrimaryUrl(Request, Overview);
+
+    public (string Full, string Online) WindowsDownloads => ProbeInstallCommandBuilder.WindowsSetupDownloads();
+
     public string GetSafeReturnUrl(string fallbackPage)
     {
         if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))

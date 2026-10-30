@@ -79,7 +79,11 @@
                                         else if (update.Available)
                                         {
                                             <span class="@MatUi.PillClass("warning")" title="This probe runs another build than the primary (@Model.PrimaryVersion)">Update available: @Model.PrimaryVersion</span>
-                                            @if (!update.CanUpdate)
+                                            @if (!update.CanUpdate && update.IsWindowsService)
+                                            {
+                                                <span class="probe-cell__meta">Runs as a Windows service: run the newest Matmon setup (MatmonSetup-x64.exe) on that machine - it keeps the probe's connection.</span>
+                                            }
+                                            else if (!update.CanUpdate)
                                             {
                                                 <span class="probe-cell__meta">
                                                     @(update.Reported ? $"Cannot update itself: {update.UnavailableReason ?? "no Docker socket"}." : "Too old to be updated from here.")

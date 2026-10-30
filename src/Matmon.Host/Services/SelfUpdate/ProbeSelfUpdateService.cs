@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Matmon.Probe;
 
 namespace Matmon.Host.Services.SelfUpdate;
@@ -86,9 +86,18 @@ public sealed class ProbeSelfUpdateService : BackgroundService, IProbeSelfUpdate
         _outcome = file.Read();
     }
 
+    /// <summary>What a probe installed by the Windows setup says instead of "no Docker socket": it is updated by running the
+    /// newest setup on its machine (which keeps its connection), not from the primary.</summary>
+    public const string WindowsServiceReason = "a Windows probe - run the newest Matmon setup on that machine";
+
     public ProbeSelfUpdateReport Report()
     {
         var canUpdate = _target.IsAvailable(out var reason);
+        if (!canUpdate && OperatingSystem.IsWindows() && Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+        {
+            reason = WindowsServiceReason;
+        }
+
         lock (_gate)
         {
             return new ProbeSelfUpdateReport(

@@ -1,19 +1,156 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.ServiceProcess;
 using Microsoft.Win32;
+using static Matmon.Host.Services.SelfUpdate.WindowsProbeSettings;
 
 namespace Matmon.Host.Services.SelfUpdate;
 
 /// <summary>What an installation is set up with.</summary>
 /// <remarks><paramref name="TrayIcon"/>: start the tray icon (the setup program, <c>/tray</c>) at every sign-in - only
 /// possible when the setup program is installed alongside (not for <c>install-service</c>).</remarks>
-public sealed record WindowsInstallOptions(string ProgramFolder, string DataFolder, int Port, bool OpenFirewall, bool TrayIcon = false);
+/// <paramref name="Probe"/>: install a REMOTE PROBE (Secondary mode) that reports to that primary instead of an instance.
+public sealed record WindowsInstallOptions(string ProgramFolder, string DataFolder, int Port, bool OpenFirewall, bool TrayIcon = false,
+    WindowsProbeConnection? Probe = null);
 
-/// <summary>What is installed on this machine right now (from the "Apps" entry, else from the service itself).</summary>
-public sealed record WindowsInstallationInfo(string ProgramFolder, string DataFolder, int Port, string? Version);
+/// <summary>What a Windows probe connects with - the same three values a Docker probe gets as Matmon__* variables.</summary>
+public sealed record WindowsProbeConnection(string PrimaryUrl, string ProbeId, string ProbeToken, string? ProbeName = null)
+{
+    /// <summary>What is wrong with it, in words - or null.</summary>
+    public string? Problem()
+    {
+        if (!Uri.TryCreate(PrimaryUrl?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || string.IsNullOrEmpty(uri.Host))
+        {
+            return "The primary's address must be a full http:// or https:// address, e.g. https://matmon.example.";
+        }
+
+        if (string.IsNullOrWhiteSpace(ProbeId) || string.IsNullOrWhiteSpace(ProbeToken))
+        {
+            return "The probe id and the probe token are both needed - copy them from the probe's Install page on the primary.";
+        }
+
+        return null;
+    }
+}
+
+/// <summary>Which Matmon this machine runs: ONE Matmon service per machine, either the instance or a remote probe.</summary>
+public enum WindowsInstallationRole
+{
+    Instance,
+    Probe
+}
+
+/// <summary>What is installed on this machine right now (from the "Apps" entry, else from the service itself).
+/// <paramref name="PrimaryUrl"/> is a probe's primary - scheme and host only, it is shown to every user.</summary>
+public sealed record WindowsInstallationInfo(string ProgramFolder, string DataFolder, int Port, string? Version,
+    WindowsInstallationRole Role = WindowsInstallationRole.Instance, string? PrimaryUrl = null);
+
+/// <summary>
+/// The pure half of a Windows PROBE installation (what goes into the service's environment and the settings file, which role
+/// change is refused) - apart from <see cref="WindowsInstallation"/> because it needs no Windows and is tested.
+/// </summary>
+public static class WindowsProbeSettings
+{
+    /// <summary>The variable that points the service at the probe's settings file (read by Program.cs as Matmon:SettingsFile).</summary>
+    public const string SettingsFileVariable = "Matmon__SettingsFile";
+
+    /// <summary>A probe's connection lives in the DATA folder, not in the service's registry environment: the service key
+    /// (HKLM\SYSTEM\CurrentControlSet\Services\Matmon) can be read by every local user, the data folder only by SYSTEM
+    /// and the administrators - and the token is the probe's credential.</summary>
+    public const string ProbeSettingsFileName = "probe-settings.json";
+
+    public static string ProbeSettingsPath(string dataFolder) => Path.Combine(dataFolder, ProbeSettingsFileName);
+
+    /// <summary>The service's registry environment: the port and the data folder, for a probe also where its settings are.
+    /// Never the token.</summary>
+    public static string[] ServiceEnvironment(WindowsInstallOptions options)
+    {
+        var environment = new List<string>
+        {
+            $"ASPNETCORE_URLS=http://+:{options.Port}",
+            $"Matmon__WorkspacePath={Path.Combine(options.DataFolder, "workspace.json")}"
+        };
+        if (options.Probe is not null)
+        {
+            environment.Add($"{SettingsFileVariable}={ProbeSettingsPath(options.DataFolder)}");
+        }
+
+        return [.. environment];
+    }
+
+    /// <summary>The probe's settings file - the "Matmon" section a Docker probe gets as Matmon__* variables.</summary>
+    public static string ProbeSettingsJson(WindowsProbeConnection probe)
+    {
+        var section = new System.Text.Json.Nodes.JsonObject
+        {
+            ["Mode"] = "Secondary",
+            ["PrimaryUrl"] = probe.PrimaryUrl.Trim().TrimEnd('/'),
+            ["ProbeId"] = probe.ProbeId.Trim(),
+            ["ProbeToken"] = probe.ProbeToken.Trim()
+        };
+        if (!string.IsNullOrWhiteSpace(probe.ProbeName))
+        {
+            section["ProbeName"] = probe.ProbeName.Trim();
+        }
+
+        return new System.Text.Json.Nodes.JsonObject { ["Matmon"] = section }
+            .ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>Reads a probe's connection back (an update keeps it); null when there is none or it cannot be read
+    /// (the file is readable by administrators only - the setup runs elevated).</summary>
+    public static WindowsProbeConnection? ReadProbeSettings(string dataFolder)
+    {
+        try
+        {
+            var path = ProbeSettingsPath(dataFolder);
+            return File.Exists(path) ? ParseProbeSettings(File.ReadAllText(path)) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    public static WindowsProbeConnection? ParseProbeSettings(string json)
+    {
+        try
+        {
+            var section = System.Text.Json.Nodes.JsonNode.Parse(json)?["Matmon"];
+            string? Value(string name) => section?[name]?.GetValue<string>();
+            return Value("PrimaryUrl") is { Length: > 0 } url && Value("ProbeId") is { Length: > 0 } id && Value("ProbeToken") is { Length: > 0 } token
+                ? new WindowsProbeConnection(url, id, token, Value("ProbeName"))
+                : null;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One Matmon service per machine, in ONE role: a setup that would turn an instance into a probe (or back) is refused -
+    /// the instance's data would sit unused beside a probe, and a probe has no users to sign in with. Uninstall first
+    /// (the data is kept unless asked), then install the other role.
+    /// </summary>
+    public static string? RoleChangeProblem(WindowsInstallationInfo? installed, bool probe)
+    {
+        if (installed is null || (installed.Role == WindowsInstallationRole.Probe) == probe)
+        {
+            return null;
+        }
+
+        return probe
+            ? "This computer runs a Matmon instance. A computer runs one Matmon - uninstall the instance first (its data is kept), then install the probe. A Matmon Agent can run beside the instance instead."
+            : "This computer runs a Matmon probe. A computer runs one Matmon - uninstall the probe first, then install the instance.";
+    }
+
+    /// <summary>The primary's address as it may be shown to every user: scheme, host and port only.</summary>
+    public static string? DisplayAddress(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? $"{uri.Scheme}://{uri.Authority}" : null; // Authority leaves user info out
+}
 
 /// <summary>
 /// Installing and removing the Windows instance - ONE implementation for the setup program (Matmon.Setup links this file)
@@ -75,7 +212,11 @@ public static class WindowsInstallation
             return new WindowsInstallationInfo(location,
                 entry.GetValue("MatmonDataFolder") as string ?? DefaultDataFolder,
                 entry.GetValue("MatmonPort") is int port ? port : 8099,
-                entry.GetValue("DisplayVersion") as string);
+                entry.GetValue("DisplayVersion") as string,
+                string.Equals(entry.GetValue("MatmonRole") as string, "probe", StringComparison.OrdinalIgnoreCase)
+                    ? WindowsInstallationRole.Probe
+                    : WindowsInstallationRole.Instance,
+                entry.GetValue("MatmonPrimaryUrl") as string);
         }
 
         // Installed with install-service before the setup existed: the service knows where it lives.
@@ -92,8 +233,10 @@ public static class WindowsInstallation
         var portText = urls?[(urls.LastIndexOf(':') + 1)..].TrimEnd('/');
         return new WindowsInstallationInfo(Path.GetDirectoryName(executable) ?? DefaultProgramFolder,
             workspace is null ? DefaultDataFolder : Path.GetDirectoryName(workspace) ?? DefaultDataFolder,
-            int.TryParse(portText, out var servicePort) ? servicePort : 8099, null);
+            int.TryParse(portText, out var servicePort) ? servicePort : 8099, null,
+            Read(environment, SettingsFileVariable + "=") is null ? WindowsInstallationRole.Instance : WindowsInstallationRole.Probe);
     }
+
 
     /// <summary>
     /// Installs (or updates in place) from <paramref name="sourceFolder"/> - an unpacked package. <paramref name="uninstaller"/>
@@ -121,26 +264,41 @@ public static class WindowsInstallation
         Directory.CreateDirectory(options.DataFolder);
         SecureFolder(options.DataFolder);
 
+        var settingsPath = ProbeSettingsPath(options.DataFolder);
+        if (options.Probe is { } probe)
+        {
+            // Into the data folder (SYSTEM + administrators only, inherited from the folder) - never the registry.
+            progress("Saving the probe's connection to its primary ...");
+            var temporary = settingsPath + ".tmp";
+            File.WriteAllText(temporary, ProbeSettingsJson(probe));
+            File.Move(temporary, settingsPath, overwrite: true);
+        }
+        else if (File.Exists(settingsPath))
+        {
+            File.Delete(settingsPath);
+        }
+
+        var displayName = options.Probe is null ? "Matmon" : "Matmon probe";
+        var description = options.Probe is null
+            ? "Matmon network monitoring - the web interface and the sensors of this instance."
+            : "Matmon remote probe - runs sensors on this network for its Matmon primary.";
         progress(exists ? "Updating the Windows service ..." : "Creating the Windows service ...");
         if (exists)
         {
-            Run("sc.exe", $"config {ServiceName} binPath= \"\\\"{executable}\\\"\" start= delayed-auto");
+            Run("sc.exe", $"config {ServiceName} binPath= \"\\\"{executable}\\\"\" start= delayed-auto DisplayName= \"{displayName}\"");
         }
         else
         {
-            Run("sc.exe", $"create {ServiceName} binPath= \"\\\"{executable}\\\"\" start= delayed-auto DisplayName= \"Matmon\"");
-            Run("sc.exe", $"description {ServiceName} \"Matmon network monitoring - the web interface and the sensors of this instance.\"");
+            Run("sc.exe", $"create {ServiceName} binPath= \"\\\"{executable}\\\"\" start= delayed-auto DisplayName= \"{displayName}\"");
             Run("sc.exe", $"failure {ServiceName} reset= 86400 actions= restart/10000/restart/60000/restart/60000");
         }
+
+        Run("sc.exe", $"description {ServiceName} \"{description}\"");
 
         using (var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{ServiceName}", writable: true)
                    ?? throw new InvalidOperationException("the service's registry key is missing"))
         {
-            key.SetValue("Environment", new[]
-            {
-                $"ASPNETCORE_URLS=http://+:{options.Port}",
-                $"Matmon__WorkspacePath={Path.Combine(options.DataFolder, "workspace.json")}"
-            }, RegistryValueKind.MultiString);
+            key.SetValue("Environment", ServiceEnvironment(options), RegistryValueKind.MultiString);
         }
 
         // One rule, named, so a changed port or an unticked box replaces it instead of piling rules up.
@@ -175,7 +333,9 @@ public static class WindowsInstallation
         progress("Starting Matmon ...");
         StartService();
         progress(WaitForHealth(options.Port, TimeSpan.FromSeconds(90))
-            ? $"Matmon {version} is running: http://localhost:{options.Port}"
+            ? options.Probe is null
+                ? $"Matmon {version} is running: http://localhost:{options.Port}"
+                : $"The Matmon probe {version} is running and reports to {DisplayAddress(options.Probe.PrimaryUrl)}."
             : $"The service was started, but Matmon does not answer on port {options.Port} yet - look at the Windows event log if that stays so.");
     }
 
@@ -415,7 +575,7 @@ public static class WindowsInstallation
     private static void Register(WindowsInstallOptions options, string version, string uninstallCommand)
     {
         using var entry = Registry.LocalMachine.CreateSubKey(UninstallKeyPath, writable: true);
-        entry.SetValue("DisplayName", "Matmon");
+        entry.SetValue("DisplayName", options.Probe is null ? "Matmon" : "Matmon probe");
         entry.SetValue("DisplayVersion", version);
         entry.SetValue("Publisher", "Matmon");
         entry.SetValue("DisplayIcon", $"{Path.Combine(options.ProgramFolder, ExecutableName)},0");
@@ -429,6 +589,16 @@ public static class WindowsInstallation
         entry.SetValue("EstimatedSize", (int)(FolderSize(options.ProgramFolder) / 1024), RegistryValueKind.DWord);
         entry.SetValue("MatmonDataFolder", options.DataFolder);
         entry.SetValue("MatmonPort", options.Port, RegistryValueKind.DWord);
+        // Read by the tray (every user may read this key): the role and the primary's address - never the token.
+        entry.SetValue("MatmonRole", options.Probe is null ? "instance" : "probe");
+        if (options.Probe is not null && DisplayAddress(options.Probe.PrimaryUrl) is { } primary)
+        {
+            entry.SetValue("MatmonPrimaryUrl", primary);
+        }
+        else
+        {
+            entry.DeleteValue("MatmonPrimaryUrl", throwOnMissingValue: false);
+        }
     }
 
     /// <summary>SYSTEM (the service) and Administrators only: under ProgramData a folder would inherit "Users may read"
@@ -482,8 +652,7 @@ public static class WindowsInstallation
 
     /// <summary>The Start menu entry "Matmon" (all users): starts the tray icon again after it was closed - or, when one runs
     /// already, opens Matmon in the browser.</summary>
-    public static string StartMenuShortcutPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Matmon.lnk");
+    public static string StartMenuShortcutPath => Matmon.Probe.WindowsShortcut.StartMenuPath("Matmon");
 
     /// <summary>Creates the Start menu entry when it is missing (an installation from before it existed gets it from the
     /// running service after its next update). Cosmetic: a failure is swallowed.</summary>
@@ -494,36 +663,8 @@ public static class WindowsInstallation
             return;
         }
 
-        try
-        {
-            // WScript.Shell is on every Windows; IShellLink by hand would be a page of COM interop for one file.
-            var shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType is null)
-            {
-                return;
-            }
-
-            dynamic shell = Activator.CreateInstance(shellType)!;
-            try
-            {
-                dynamic link = shell.CreateShortcut(StartMenuShortcutPath);
-                link.TargetPath = SetupProgramPath;
-                link.Arguments = "/tray";
-                link.WorkingDirectory = SetupFolder;
-                link.IconLocation = $"{SetupProgramPath},0";
-                link.Description = "Matmon";
-                link.Save();
-                System.Runtime.InteropServices.Marshal.FinalReleaseComObject(link);
-            }
-            finally
-            {
-                System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
-            }
-        }
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or IOException or InvalidCastException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
-        {
-            // No Start menu entry - the tray still starts at sign-in.
-        }
+        // No Start menu entry on a failure - the tray still starts at sign-in.
+        Matmon.Probe.WindowsShortcut.Create(StartMenuShortcutPath, SetupProgramPath, "/tray", $"{SetupProgramPath},0", "Matmon", SetupFolder);
     }
 
     private static void TryDelete(string path)

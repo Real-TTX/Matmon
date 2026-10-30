@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection.Extensions;
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Claims;
 using System.IO;
 using Matmon.Core;
@@ -46,6 +46,16 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null
 });
 builder.Services.AddWindowsService(options => options.ServiceName = WindowsServiceInstaller.ServiceName);
+
+// A settings file (Matmon__SettingsFile): the Windows setup keeps a probe's connection there, in the data folder, because the
+// service's registry environment is readable by every local user and the probe token is a credential. Environment variables
+// and switches are re-added after it, so they still win (the agent does the same with its agent.json).
+if (builder.Configuration["Matmon:SettingsFile"] is { Length: > 0 } settingsFile)
+{
+    builder.Configuration.AddJsonFile(settingsFile, optional: true, reloadOnChange: false);
+    builder.Configuration.AddEnvironmentVariables();
+    builder.Configuration.AddCommandLine(args);
+}
 
 // QuestPDF Community license (free for small businesses / < $1M revenue) - required before any PDF gen.
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
@@ -195,7 +205,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     }
 });
 builder.Services.AddSingleton<ITelemetryRepository>(_ => new SqliteTelemetryRepository(telemetryDatabasePath));
-// Notification hand-off queue (no deps → no DI cycle with the store) + SMTP sender. The store enqueues
+// Notification hand-off queue (no deps â†’ no DI cycle with the store) + SMTP sender. The store enqueues
 // alert transitions via INotificationSink; the Primary-only NotificationDispatchService drains + sends.
 builder.Services.AddSingleton<NotificationSpooler>();
 builder.Services.AddSingleton<INotificationSink>(sp => sp.GetRequiredService<NotificationSpooler>());
@@ -380,7 +390,7 @@ builder.Services.AddSingleton<IDashboardSnapshotProvider, DashboardSnapshotProvi
 // Per-process secret shared by the Full Access tunnel client (stamps it on replayed requests) and the
 // auto-login middleware (trusts the cloud's identity assertion only when this secret accompanies it).
 builder.Services.AddSingleton<TunnelAuthSecret>();
-// Live Full Access tunnel status (connected/last-error/served), surfaced on System → Cloud. Registered globally
+// Live Full Access tunnel status (connected/last-error/served), surfaced on System â†’ Cloud. Registered globally
 // (the Config page reads it) even though only the Primary's TunnelClient writes it.
 builder.Services.AddSingleton<TunnelState>();
 builder.Services.AddSingleton<Pending2faCookie>();
@@ -472,7 +482,7 @@ builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
-// Display timezone (#52): render timestamps in the signed-in user's zone → the admin system default → server
+// Display timezone (#52): render timestamps in the signed-in user's zone â†’ the admin system default â†’ server
 // local. Provider reads the store fresh (in-memory) but memoizes per request. Everything is stored UTC.
 {
     var tzAccessor = app.Services.GetRequiredService<IHttpContextAccessor>();
@@ -496,7 +506,7 @@ var app = builder.Build();
         {
             http.Items[key] = zone;
         }
-        return zone; // null → DisplayTimeZone.Current falls back to SystemDefault
+        return zone; // null â†’ DisplayTimeZone.Current falls back to SystemDefault
     };
 }
 
@@ -617,6 +627,22 @@ app.MapGet("/api/mode", () => Results.Ok(new
 {
     mode = runtimeOptions.Mode.ToString().ToLowerInvariant()
 })).AllowAnonymous();
+
+if (runtimeOptions.Mode == AppMode.Secondary)
+{
+    // The probe's status for a program on its own machine (the Windows tray): what /probe shows, as JSON, loopback only.
+    app.MapGet("/api/probe/status", (HttpContext http, Matmon.Probe.SlaveProbeRuntimeState runtime, IServiceProvider services) =>
+    {
+        if (!ProbeLocalStatus.IsLocalCaller(http))
+        {
+            return Results.NotFound();
+        }
+
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Json(ProbeLocalStatus.Build(runtimeOptions, runtime.Snapshot(), runtime.BufferedObservations,
+            services.GetService<Matmon.Probe.IProbeSelfUpdate>()?.Report()));
+    }).AllowAnonymous();
+}
 
 // The managing partner's co-branding logo, served (not inlined) so the prominently-shown logo - sidebar on
 // every page + the login card - is browser-cached instead of re-sent with each page. Anonymous (login needs it);

@@ -23,6 +23,9 @@
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- The mark the agent's tray draws (violet to blue, MarkPalette.Agent) - Explorer, the Start menu entry and the
+         taskbar show the same. Built by scripts/make-windows-icon.cs, mark agent. Windows build only. -->
+    <ApplicationIcon>matmon-agent.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!--

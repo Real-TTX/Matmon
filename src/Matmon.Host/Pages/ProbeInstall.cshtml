@@ -69,6 +69,7 @@ else
                         <button type="button" class="mat-tab" role="tab" id="tab-install-docker" aria-controls="panel-install-docker" aria-selected="true">Docker run</button>
                         <button type="button" class="mat-tab" role="tab" id="tab-install-compose" aria-controls="panel-install-compose" aria-selected="false" tabindex="-1">Compose</button>
                         <button type="button" class="mat-tab" role="tab" id="tab-install-curl" aria-controls="panel-install-curl" aria-selected="false" tabindex="-1">Curl installer</button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-install-windows" aria-controls="panel-install-windows" aria-selected="false" tabindex="-1">Windows</button>
                     </div>
                     <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-docker" aria-labelledby="tab-install-docker">
                         <div class="mm-snippet">
@@ -88,6 +89,29 @@ else
                             <pre class="mat-code"><code id="probe-install-curl">@Model.BuildCurlInstaller()</code></pre>
                             <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-curl">@MatUi.Icon("copy")<span>Copy</span></button>
                         </div>
+                    </div>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-install-windows" aria-labelledby="tab-install-windows" hidden>
+                        <p class="mat-muted">The Matmon setup installs the probe as a Windows service with the Matmon tray icon. One Matmon per computer: a computer that runs the instance cannot also run this probe (a Matmon Agent can).</p>
+                        <div class="mat-btn-row">
+                            <a class="mat-btn mat-btn--secondary" href="@Model.WindowsDownloads.Full" rel="noopener">@MatUi.Icon("download")<span>Setup (MatmonSetup-x64.exe)</span></a>
+                            <a class="mat-btn mat-btn--ghost" href="@Model.WindowsDownloads.Online" rel="noopener">@MatUi.Icon("download")<span>Online setup</span></a>
+                        </div>
+                        <p class="mat-muted">In the setup choose <strong>Remote probe</strong> and paste the values below - or install it silently from an administrator PowerShell (downloads the online setup):</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code"><code id="probe-install-windows-ps">@Model.BuildWindowsPowerShell()</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-windows-ps">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                        <p class="mat-muted">With the setup already downloaded, from an administrator command prompt:</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code"><code id="probe-install-windows-cmd">@Model.BuildWindowsSetupCommand()</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#probe-install-windows-cmd">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                        <dl class="mat-kv">
+                            <dt>Primary</dt><dd class="mat-mono">@Model.PrimaryUrl</dd>
+                            <dt>Probe ID</dt><dd class="mat-mono">@probe.ProbeId</dd>
+                            <dt>Token</dt><dd class="mat-mono">@probe.EnrollmentToken</dd>
+                        </dl>
+                        <p class="mat-hint">A Windows probe is updated by running the newest setup on that machine - it keeps the probe's connection.</p>
                     </div>
                 </div>
                 <p class="mat-hint">If primary and secondary run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.</p>
