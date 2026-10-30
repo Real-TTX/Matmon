@@ -13,7 +13,7 @@ A change that an app can see is written down under **Unreleased** in the pull re
 
 ## [Unreleased]
 
-## [0.9.4] - 2026-10-30
+## [0.10.0] - 2026-10-30
 ### Added
 
 - A strip of key figures (`mat-stats`): a row of compact tiles above a list or on a dashboard, without a card around each. `<div class="mat-stats">` holds `.mat-stat` tiles (a linked tile is `<a class="mat-stat" href>`) with the usual `mat-stat__label` / `__value` / `__delta` and an optional leading `<svg class="mat-icon mat-stat__icon">` (top right of the tile). The tiles share one row while they fit (at least 8.5rem each, so five or six sit side by side on a desktop), are two per row below 600 px (an odd last tile takes the whole row) and one below 340 px (`MOBILE-02`); the label is small, uppercase and spaced, the number `fs-xl` in tabular figures, the padding a third of a card's. A tone `mat-stat--danger | --warning | --success | --info | --accent` tints the tile with the status tint, mixes the status colour into its border, draws a bar at its start and colours the number and the icon; the words still say the state (`COLOR-04`). A linked tile has a hover state and the focus ring. A `.mat-stat` in a card (`.mat-card__body.mat-stat`) is unchanged. Nothing to do for an app but copy the files; a row of stat cards (`mat-grid` of `mat-card > .mat-stat`) that wraps or is too tall can move to it.
