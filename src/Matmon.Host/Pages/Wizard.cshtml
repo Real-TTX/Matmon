@@ -387,6 +387,8 @@
                             <div class="mat-card__body">
                                 <div class="mm-snippet">
                                     <pre class="mat-code" id="@commandId"><code>docker run -d \
+  --restart unless-stopped \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -e Matmon__Mode=Secondary \
   -e Matmon__ProbeId=@probe.ProbeId \
   -e Matmon__ProbeToken=@probe.Token \

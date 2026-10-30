@@ -91,6 +91,7 @@ else
                     </div>
                 </div>
                 <p class="mat-hint">If primary and secondary run on the same Docker host, change the left side of <code>-p 8099:8099</code> to a free port, for example <code>-p 8101:8099</code>.</p>
+                <p class="mat-hint">The Docker socket (<code>/var/run/docker.sock</code>) lets this primary update the probe (Probes &gt; Update). It gives the container control over Docker on that machine - leave the line out (curl installer: <code>MATMON_DOCKER_SOCKET=</code>) to update the probe by hand instead.</p>
             </div>
         </section>
     }

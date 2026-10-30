@@ -8,12 +8,6 @@ public static class ProbeInstallCommandBuilder
 {
     private const string DefaultImage = "ghcr.io/real-ttx/matmon:latest";
 
-    // The probe's own status page gets a login of ITS OWN - a fresh random password in the snippet. It used to be the
-    // primary's admin password (from Matmon__Auth__*), copied into the probe host's container environment on a
-    // possibly less trusted machine, or admin/admin on a published port when the primary had none.
-    private static string ProbeUiPassword() =>
-        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(12)).Replace('+', 'x').Replace('/', 'y').TrimEnd('=');
-
     public static bool CanInstallProbe(SystemProbeOverview probe)
     {
         return !string.Equals(probe.Role, "Primary", StringComparison.OrdinalIgnoreCase) &&
@@ -26,8 +20,6 @@ public static class ProbeInstallCommandBuilder
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
         var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
-        var authUsername = "admin";
-        var authPassword = ProbeUiPassword();
 
         return $"""
 docker run -d \
@@ -35,6 +27,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8099:8099 \
   -v {volumeName}:/app/data \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -e ASPNETCORE_URLS=http://+:8099 \
   -e Matmon__Mode=Secondary \
   -e Matmon__ProbeId={probe.ProbeId} \
@@ -43,8 +36,6 @@ docker run -d \
   -e Matmon__PrimaryUrl={ShellQuote(primaryUrl)} \
   -e Matmon__HeartbeatIntervalSeconds={overview.HeartbeatIntervalSeconds} \
   -e Matmon__WorkspacePath=/app/data/workspace.json \
-  -e Matmon__Auth__Username={ShellQuote(authUsername)} \
-  -e Matmon__Auth__Password={ShellQuote(authPassword)} \
   {DefaultImage}
 """;
     }
@@ -55,8 +46,6 @@ docker run -d \
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
         var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
-        var authUsername = "admin";
-        var authPassword = ProbeUiPassword();
 
         return $"""
 services:
@@ -76,10 +65,10 @@ services:
       Matmon__PrimaryUrl: {YamlQuote(primaryUrl)}
       Matmon__HeartbeatIntervalSeconds: {overview.HeartbeatIntervalSeconds}
       Matmon__WorkspacePath: /app/data/workspace.json
-      Matmon__Auth__Username: {YamlQuote(authUsername)}
-      Matmon__Auth__Password: {YamlQuote(authPassword)}
     volumes:
       - matmon-probe-data:/app/data
+      # lets the primary update this probe (Probes > Update); gives the container control over Docker here
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   matmon-probe-data:
@@ -93,8 +82,6 @@ volumes:
         var containerName = BuildContainerName(probe);
         var volumeName = $"{containerName}-data";
         var primaryUrl = BuildPrimaryUrl(request, overview.MasterUrl);
-        var authUsername = "admin";
-        var authPassword = ProbeUiPassword();
 
         return $"""
 curl -fsSL https://raw.githubusercontent.com/Real-TTX/Matmon/main/scripts/install-probe.sh | \
@@ -104,8 +91,6 @@ curl -fsSL https://raw.githubusercontent.com/Real-TTX/Matmon/main/scripts/instal
   MATMON_PRIMARY_URL={ShellQuote(primaryUrl)} \
   MATMON_CONTAINER_NAME={containerName} \
   MATMON_DATA_VOLUME={volumeName} \
-  MATMON_ADMIN_USER={ShellQuote(authUsername)} \
-  MATMON_ADMIN_PASSWORD={ShellQuote(authPassword)} \
   sh
 """;
     }
