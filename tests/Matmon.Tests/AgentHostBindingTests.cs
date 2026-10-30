@@ -373,6 +373,43 @@ public sealed class AgentHostBindingTests : IDisposable
         Assert.Equal(InMemoryMonitoringWorkspaceStore.CurrentSchemaVersion, document.RootElement.GetProperty("schemaVersion").GetInt32());
     }
 
+    // ---- the binding can be changed later -------------------------------------------------------------------------
+
+    [Fact]
+    public void An_agent_can_be_bound_to_another_host_and_its_machine_sensors_move_along()
+    {
+        var redeemed = Enrol(null, "SRV-01");
+        var oldHost = ProbeOf(redeemed).FindBoundHost()!;
+        var existing = ExistingHost("srv-01.lan", "10.0.0.5");
+
+        Assert.Null(_store.RebindAgentHost(redeemed.ElementId, existing.Id));
+
+        var probe = ProbeOf(redeemed);
+        Assert.Equal(existing.Id, probe.BoundHostId);
+        Assert.Equal(redeemed.ElementId, _store.FindElement(existing.Id)!.ParentId);
+        var moved = Children<SensorElement>(existing.Id).Select(sensor => sensor.SensorTypeKey).ToArray();
+        Assert.Contains(LocalHealthSensorExecutor.Definition.Key, moved);
+        Assert.Contains(WindowsUpdateSensorExecutor.Definition.Key, moved);
+        // the old host stays (it may hold the admin's own sensors), now without the machine sensors
+        Assert.NotNull(_store.FindElement(oldHost.Id));
+        Assert.Empty(Children<SensorElement>(oldHost.Id));
+    }
+
+    [Fact]
+    public void A_host_another_agent_sits_on_is_refused_in_words()
+    {
+        var first = Enrol(null, "A");
+        var second = Enrol(null, "B");
+        var taken = ProbeOf(first).FindBoundHost()!;
+
+        var problem = _store.RebindAgentHost(second.ElementId, taken.Id);
+
+        Assert.Contains("already has an agent", problem);
+        Assert.NotEqual(taken.Id, ProbeOf(second).BoundHostId);
+        Assert.NotNull(_store.RebindAgentHost(Guid.NewGuid(), taken.Id));
+        Assert.NotNull(_store.RebindAgentHost(second.ElementId, Guid.NewGuid()));
+    }
+
     public void Dispose()
     {
         _store.Dispose();

@@ -163,6 +163,29 @@ public sealed class AgentsModel : PageModel
         return RedirectToPage();
     }
 
+    /// <summary>Binds an agent to another host - the machine it sits on - without reinstalling it.</summary>
+    public IActionResult OnPostRebindHost(Guid probeElementId, Guid? hostElementId)
+    {
+        if (hostElementId is not Guid hostId || hostId == Guid.Empty)
+        {
+            ErrorMessage = "Pick the host this agent runs on.";
+            return RedirectToPage();
+        }
+
+        var problem = _workspaceStore.RebindAgentHost(probeElementId, hostId);
+        if (problem is null)
+        {
+            var hostName = _workspaceStore.FindElement(hostId)?.Name ?? "the host";
+            StatusMessage = $"The agent is now bound to '{hostName}'. Its sensors run on the agent.";
+        }
+        else
+        {
+            ErrorMessage = problem;
+        }
+
+        return RedirectToPage();
+    }
+
     public IActionResult OnPostRevoke(Guid enrollmentId)
     {
         _installerCodes.Forget(enrollmentId);

@@ -319,3 +319,6 @@ html[data-monitoring-size="s"] .monitoring-list-info small { display: none; }
 .monitoring-tree-row.is-drop-after { box-shadow: inset 0 -3px 0 0 var(--mat-accent); }
 .monitoring-sensor-chip.is-drop-before { box-shadow: inset 3px 0 0 0 var(--mat-accent); }
 .monitoring-sensor-chip.is-drop-after { box-shadow: inset -3px 0 0 0 var(--mat-accent); }
+
+/* A host a Matmon agent runs on: a badge beside the name, never squeezed out by a long name (also at tile size S). */
+.mm-agent-badge { flex: none; }

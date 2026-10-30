@@ -599,6 +599,10 @@ public interface IMonitoringWorkspaceStore
     /// <param name="operatingSystem">What the agent reported (e.g. "Microsoft Windows 10.0.26200"); picks its baseline sensors.</param>
     AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null);
 
+    /// <summary>Binds an agent to another host (the machine it sits on): the host moves under the agent's probe and the
+    /// agent's own machine sensors move with the binding. Null when done, else the reason in words.</summary>
+    string? RebindAgentHost(Guid probeElementId, Guid hostElementId);
+
     void Save();
 }
 

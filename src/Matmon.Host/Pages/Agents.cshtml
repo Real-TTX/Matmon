@@ -241,12 +241,39 @@
         @if (isAdmin)
         {
             <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@agent.ElementId" asp-route-returnUrl="/agents">@MatUi.Icon("edit")<span>Edit</span></a>
+            <button type="button" class="mat-menu__item" role="menuitem" data-dialog-open="agent-host-@agent.ElementId" aria-haspopup="dialog">@MatUi.Icon("server")<span>Change host</span></button>
             <div class="mat-menu__sep" role="separator"></div>
             <button type="submit" form="agent-row-actions" class="mat-menu__item" role="menuitem"
                     asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@agent.ElementId"
                     title="Reinstalling this machine? A code that gives the new install this probe back.">@MatUi.Icon("key")<span>New install code</span></button>
         }
     </div>
+    @if (isAdmin)
+    {
+        <dialog class="mat-dialog" id="agent-host-@agent.ElementId" aria-labelledby="agent-host-@(agent.ElementId)-title">
+            <form method="post" class="mat-dialog__form mat-form" novalidate asp-page-handler="RebindHost">
+                <input type="hidden" name="probeElementId" value="@agent.ElementId" />
+                <div class="mat-dialog__head">
+                    @MatUi.Icon("server")
+                    <h2 class="mat-dialog__title" id="agent-host-@(agent.ElementId)-title">Host of @agent.Name</h2>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                </div>
+                <div class="mat-dialog__body mat-stack">
+                    <div class="mat-field">
+                        <span class="mat-label">Host</span>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "hostElementId", DomId = $"picker-agent-rebind-{agent.ElementId:N}", Placeholder = string.IsNullOrWhiteSpace(agent.BoundHostName) ? "Pick a host" : agent.BoundHostName, Options = Model.HostOptions })" />
+                        <span class="mat-hint">The host moves under the agent, so its sensors run on the agent; settings it inherited from its old place (credentials, schedules) no longer apply. System Health and the update sensor move along. The old host stays where it is.</span>
+                    </div>
+                </div>
+                <div class="mat-dialog__foot">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Bind to this host</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                    </div>
+                </div>
+            </form>
+        </dialog>
+    }
 }
 
 <section class="mat-section">

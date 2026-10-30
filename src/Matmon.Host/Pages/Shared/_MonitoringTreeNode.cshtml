@@ -151,6 +151,10 @@
 
             <div class="monitoring-tree-main">
                 <span class="tree-name">@Model.Name</span>
+                @if (Model.IsAgentHost)
+                {
+                    <span class="mat-pill mat-pill--info mm-agent-badge" title="A Matmon agent runs on this machine">@MatUi.Icon("plug")<span>Agent</span></span>
+                }
                 @if (!string.IsNullOrWhiteSpace(Model.Details))
                 {
                     <span class="monitoring-tree-details">@Model.Details</span>

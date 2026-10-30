@@ -153,7 +153,8 @@ public sealed record WorkspaceNodeRow(
     string? StateMessage,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> OwnTags,
-    bool IsAcknowledged);
+    bool IsAcknowledged,
+    bool IsAgentHost = false);
 
 public sealed class WorkspaceMonitoringTreeNode
 {
@@ -222,6 +223,9 @@ public sealed class WorkspaceMonitoringTreeNode
     public string? SensorTypeLabel { get; init; }
 
     public IReadOnlyList<string> Tags { get; init; } = [];
+
+    /// <summary>A host a Matmon agent is installed on - shown as an "Agent" badge beside the name.</summary>
+    public bool IsAgentHost { get; init; }
 
     public IReadOnlyList<WorkspaceMonitoringTreeNode> Children { get; init; } = [];
 }

@@ -106,8 +106,6 @@ public sealed partial class WorkspaceModel
         {
             ProbeElement probe when !string.IsNullOrWhiteSpace(probe.Description) => probe.Description!,
             FolderElement folder when !string.IsNullOrWhiteSpace(folder.Description) => folder.Description!,
-            // The machine an agent is installed on says so - the tree is where "which of these has an agent" gets read.
-            HostElement host when agentHostIds.Contains(host.Id) => $"{(string.IsNullOrWhiteSpace(host.Address) ? "host" : host.Address)} · {ProbeElement.AgentLabel}",
             HostElement host when !string.IsNullOrWhiteSpace(host.Address) => host.Address,
             SensorElement sensorElement => $"{sensorElement.SensorTypeKey} -> {FormatSensorTarget(sensorElement)}",
             _ => string.Empty
@@ -146,7 +144,8 @@ public sealed partial class WorkspaceModel
             stateMessage,
             effectiveTags,
             ownTags,
-            acknowledgedElementIds.Contains(element.Id)));
+            acknowledgedElementIds.Contains(element.Id),
+            element is HostElement agentHost && agentHostIds.Contains(agentHost.Id)));
 
         if (element is MonitoringContainerElement container)
         {

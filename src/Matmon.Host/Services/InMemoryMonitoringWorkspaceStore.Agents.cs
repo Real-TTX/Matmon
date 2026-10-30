@@ -205,6 +205,69 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return host;
     }
 
+    /// <summary>
+    /// Binds an agent to another host later on - the wrong host was picked, or the machine is already in the tree under a
+    /// host of its own. The new host moves under the agent's probe (its sensors run on the agent from then on), and the
+    /// agent's machine sensors (System Health, the update sensors) go with the binding unless the new host already has
+    /// one of that type. The old host stays where it is - it may hold sensors the admin added - and can be moved or
+    /// deleted like any other host.
+    /// </summary>
+    public string? RebindAgentHost(Guid probeElementId, Guid hostElementId)
+    {
+        lock (_gate)
+        {
+            if (FindElement(probeElementId) is not ProbeElement { AgentEnrolledUtc: not null } probe)
+            {
+                return "That agent no longer exists.";
+            }
+
+            if (FindElement(hostElementId) is not HostElement host)
+            {
+                return "That host no longer exists.";
+            }
+
+            if (probe.FindBoundHost() is { } current && current.Id == host.Id)
+            {
+                return $"The agent is already bound to '{host.Name}'.";
+            }
+
+            if (IsAgentBoundHostLocked(host.Id, probe.Id))
+            {
+                return $"'{host.Name}' already has an agent of its own.";
+            }
+
+            var old = probe.FindBoundHost();
+            if (!MoveHostUnderProbeLocked(host, probe))
+            {
+                return $"'{host.Name}' cannot be moved under the agent.";
+            }
+
+            if (old is not null)
+            {
+                string[] machineSensors =
+                [
+                    LocalHealthSensorExecutor.Definition.Key,
+                    WindowsUpdateSensorExecutor.Definition.Key,
+                    LinuxUpdateSensorExecutor.Definition.Key
+                ];
+                var moving = old.Children
+                    .OfType<SensorElement>()
+                    .Where(sensor => machineSensors.Contains(sensor.SensorTypeKey, StringComparer.OrdinalIgnoreCase)
+                        && !host.Children.OfType<SensorElement>().Any(existing =>
+                            string.Equals(existing.SensorTypeKey, sensor.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+                foreach (var sensor in moving)
+                {
+                    MoveElement(sensor.Id, host.Id);
+                }
+            }
+
+            probe.BoundHostId = host.Id;
+            QueueSave(SavePriority.Configuration);
+            return null;
+        }
+    }
+
     /// <summary>Whether some agent probe other than <paramref name="exceptProbeId"/> has this host as its machine.</summary>
     private bool IsAgentBoundHostLocked(Guid hostId, Guid? exceptProbeId = null) =>
         EnumerateElements(_document.RootProbe)

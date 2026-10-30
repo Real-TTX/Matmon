@@ -295,6 +295,10 @@
                                         }
                                         <small>@node.Path</small>
                                     </span>
+                                    @if (node.IsAgentHost)
+                                    {
+                                        <span class="mat-pill mat-pill--info mm-agent-badge" title="A Matmon agent runs on this machine">@MatUi.Icon("plug")<span>Agent</span></span>
+                                    }
                                 </div>
                                 @if (node.OwnTags.Count > 0)
                                 {
