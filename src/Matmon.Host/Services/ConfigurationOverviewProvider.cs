@@ -51,6 +51,8 @@ public sealed class ConfigurationOverviewProvider : IConfigurationOverviewProvid
             slaveRuntime);
     }
 
+    public IReadOnlyList<SystemProbeOverview> GetProbes() => BuildProbeOverview();
+
     private IReadOnlyList<SystemProbeOverview> BuildProbeOverview()
     {
         var liveProbeMap = _probeRegistry.GetAll()

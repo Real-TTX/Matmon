@@ -240,6 +240,75 @@ public class ProbeUpdateTests
             ProbeUpdateView.DescribeOutcome(new ProbeSelfUpdateReport(true, LastOutcomeKind: "RolledBack", LastOutcomeFrom: "nightly-11", LastOutcomeTo: "nightly-12", LastOutcomeDetail: "no answer")));
         Assert.Null(ProbeUpdateView.DescribeOutcome(new ProbeSelfUpdateReport(true)));
     }
+
+    // --- the remote probes in the cloud, and updates asked for there ---
+
+    private static SystemProbeOverview CloudProbe(string probeId, string role = "Secondary", bool agent = false, string? version = "nightly-11", bool canUpdate = true) =>
+        new(Guid.NewGuid(), probeId, "Probe " + probeId, role, "Online", "", DateTimeOffset.UtcNow, null, 0,
+            Version: version, IsAgent: agent, SelfUpdate: role == "Primary" || agent ? null : new ProbeSelfUpdateReport(canUpdate, canUpdate ? null : "no Docker socket"));
+
+    [Fact]
+    public void The_cloud_heartbeat_reports_remote_probes_only_never_the_root_or_an_agent()
+    {
+        var probes = new[] { CloudProbe("root", "Primary"), CloudProbe("probe-01"), CloudProbe("agent-01", agent: true), CloudProbe("probe-02", canUpdate: false) };
+
+        var reports = CloudProbeRelay.BuildReports(probes, "nightly-12", new ProbeUpdateCommands());
+
+        Assert.Equal(["Probe probe-01", "Probe probe-02"], reports.Select(report => report.Name));
+        Assert.True(reports[0].UpdateAvailable);
+        Assert.True(reports[0].Connected);
+        Assert.Null(reports[0].CannotUpdateReason);
+        Assert.Contains("no Docker socket", reports[1].CannotUpdateReason);
+        Assert.Equal(CloudProbeRelay.MaxProbes, CloudProbeRelay.BuildReports(
+            Enumerable.Range(0, CloudProbeRelay.MaxProbes + 5).Select(n => CloudProbe("p" + n)), "nightly-12", null).Count);
+    }
+
+    [Fact]
+    public void A_probe_update_from_the_cloud_is_queued_like_the_probes_page_does_it()
+    {
+        var commands = new ProbeUpdateCommands();
+        var probe = CloudProbe("probe-01");
+        var command = new CloudProbeCommand(Guid.NewGuid(), probe.ElementId, "owner@example.com", "owner");
+
+        var answer = CloudProbeRelay.Decide(command, [probe], "nightly-12", commands, cloudInstallAllowed: true);
+
+        Assert.True(answer.Accepted);
+        Assert.Equal(command.Id, answer.Id);
+        var queued = commands.OnHeartbeat("probe-01", "nightly-11", null)!;
+        Assert.Equal("nightly-12", queued.Version);
+        Assert.Contains("owner@example.com", queued.RequestedBy);
+        // The probe now reports it as waiting - a second ask is refused.
+        Assert.False(CloudProbeRelay.Decide(command with { Id = Guid.NewGuid() }, [probe], "nightly-12", commands, true).Accepted);
+    }
+
+    [Fact]
+    public void A_probe_update_from_the_cloud_that_cannot_happen_says_why()
+    {
+        var commands = new ProbeUpdateCommands();
+        var probe = CloudProbe("probe-01");
+        var agent = CloudProbe("agent-01", agent: true);
+        CloudProbeCommand For(SystemProbeOverview target) => new(Guid.NewGuid(), target.ElementId, "a", "owner");
+
+        Assert.Contains("switched off", CloudProbeRelay.Decide(For(probe), [probe], "nightly-12", commands, cloudInstallAllowed: false).Message);
+        Assert.Contains("no such remote probe", CloudProbeRelay.Decide(For(agent), [probe, agent], "nightly-12", commands, true).Message);
+        Assert.Contains("no such remote probe", CloudProbeRelay.Decide(new CloudProbeCommand(Guid.NewGuid(), Guid.NewGuid(), "a", "owner"), [probe], "nightly-12", commands, true).Message);
+        Assert.Contains("already runs", CloudProbeRelay.Decide(For(probe), [probe], "nightly-11", commands, true).Message);
+        var noSocket = CloudProbe("probe-02", canUpdate: false);
+        Assert.Contains("cannot update itself", CloudProbeRelay.Decide(For(noSocket), [noSocket], "nightly-12", commands, true).Message);
+        Assert.Null(commands.State("probe-01")); // nothing was queued
+    }
+
+    [Fact]
+    public void The_cloud_command_reads_from_the_heartbeat_answer()
+    {
+        var id = Guid.NewGuid();
+        var probeId = Guid.NewGuid();
+        var json = $$"""[{"id":"{{id}}","probeId":"{{probeId}}","requestedBy":"owner@example.com","via":"owner"}]""";
+
+        var commands = JsonSerializer.Deserialize<List<CloudProbeCommand>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+        Assert.Equal(new CloudProbeCommand(id, probeId, "owner@example.com", "owner"), commands.Single());
+    }
 }
 
 file sealed class ProbeUpdateClock(DateTimeOffset start) : TimeProvider

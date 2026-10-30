@@ -431,6 +431,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
     builder.Services.AddSingleton<InstanceRestarter>();
     // Update commands for remote Docker probes (Probes page > Update), handed out with their heartbeat answers.
     builder.Services.AddSingleton<ProbeUpdateCommands>();
+    // The remote probes in the cloud heartbeat, and probe updates asked for in the cloud (relayed through this primary).
+    builder.Services.AddSingleton<CloudProbeRelay>();
 
     // Syslog: the central log of the network's devices. The database is its own file (syslog.db) so a chatty switch
     // can never bloat or lock the sensor history. Receiving is the syslog collector plugin's job (System > Plugins - on

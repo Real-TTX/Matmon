@@ -21,6 +21,7 @@ public sealed class CloudConnectionService : BackgroundService
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly CloudUpdateState _updateState;
     private readonly SelfUpdate.SelfUpdateService _selfUpdate;
+    private readonly CloudProbeRelay _probes;
     private readonly ILogger<CloudConnectionService> _logger;
 
     private string? _lastStatus;
@@ -30,12 +31,14 @@ public sealed class CloudConnectionService : BackgroundService
         MatmonRuntimeOptions runtimeOptions,
         CloudUpdateState updateState,
         SelfUpdate.SelfUpdateService selfUpdate,
+        CloudProbeRelay probes,
         ILogger<CloudConnectionService> logger)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
         _updateState = updateState;
         _selfUpdate = selfUpdate;
+        _probes = probes;
         _logger = logger;
     }
 
@@ -239,6 +242,8 @@ public sealed class CloudConnectionService : BackgroundService
             _logger.LogWarning(ex, "Failed to gather heartbeat metadata; sending a minimal beat");
         }
 
+        // The remote probes (no agents) and the answers to probe-update commands from the last answer.
+        var probeAnswers = _probes.PendingAnswers();
         using var request = new HttpRequestMessage(HttpMethod.Post, $"api/instances/{instanceId}/heartbeat")
         {
             Content = JsonContent.Create(new CloudHeartbeatRequest(
@@ -260,7 +265,9 @@ public sealed class CloudConnectionService : BackgroundService
                 _workspaceStore.GetSelfUpdateSettings().AllowCloudInstall,
                 _commandAnswer?.Id,
                 _commandAnswer?.Accepted,
-                _commandAnswer?.Message))
+                _commandAnswer?.Message,
+                _probes.Reports(),
+                probeAnswers.Count == 0 ? null : probeAnswers))
         };
         request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
 
@@ -296,10 +303,14 @@ public sealed class CloudConnectionService : BackgroundService
             _updateState.Set(body?.UpdateAvailable ?? false, body?.LatestVersion);
             // The answer to the last command was carried by this beat - say it once.
             _commandAnswer = null;
+            _probes.AnswersDelivered(probeAnswers);
             if (body?.InstallUpdate is { } command)
             {
                 StartCloudInstall(command);
             }
+
+            // Probe updates asked for in the cloud: queued here like the Probes page's Update, answered with the next beat.
+            _probes.Handle(body?.UpdateProbes);
         }
         catch (OperationCanceledException) { throw; }
         catch { /* older cloud without the fields, or a non-JSON body - ignore */ }
@@ -316,7 +327,12 @@ public sealed class CloudConnectionService : BackgroundService
     // re-downloading the ~256KB logo. In-memory only (a restart just costs one full re-fetch).
     private string? _servicePartnerETag;
 
-    private sealed record HeartbeatResponse(string? Status, string? LatestVersion, bool UpdateAvailable, InstallCommand? InstallUpdate = null);
+    private sealed record HeartbeatResponse(
+        string? Status,
+        string? LatestVersion,
+        bool UpdateAvailable,
+        InstallCommand? InstallUpdate = null,
+        IReadOnlyList<CloudProbeCommand>? UpdateProbes = null);
 
     /// <summary>"Install the update", sent by the cloud with a heartbeat answer (owner, partner or platform admin).</summary>
     private sealed record InstallCommand(Guid Id, string? RequestedBy, string? Via);
@@ -543,7 +559,10 @@ public sealed class CloudConnectionService : BackgroundService
         bool? CloudInstallAllowed,
         Guid? UpdateCommandId,
         bool? UpdateCommandAccepted,
-        string? UpdateCommandMessage);
+        string? UpdateCommandMessage,
+        // Optional (protocol 1 stays): the remote probes and the answers to probe-update commands. An older cloud ignores them.
+        IReadOnlyList<CloudProbeReport>? Probes,
+        IReadOnlyList<CloudProbeCommandAnswer>? ProbeCommandAnswers);
 
     /// <summary>The version an update is being installed to right now ("installing" on System > Updates), else null.</summary>
     private string? UpdatingTo()
