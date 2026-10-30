@@ -126,15 +126,16 @@ function initializeUpdateScreen() {
     request.send();
   });
 
-  // true / false from the page itself, null when it cannot be asked (restarting, signed out, an older build).
-  const stillInstalling = () => new Promise((resolve) => {
+  // The page's own account of the install ({ installing, step, steps, download }), null when it cannot be asked
+  // (restarting, signed out, an older build).
+  const installState = () => new Promise((resolve) => {
     const request = new XMLHttpRequest();
     request.open("GET", location.pathname + "?handler=State&t=" + Date.now());
     request.timeout = 4000;
     request.onload = () => {
       try {
         const answer = request.status === 200 ? JSON.parse(request.responseText) : null;
-        resolve(answer && typeof answer.installing === "boolean" ? answer.installing : null);
+        resolve(answer && typeof answer.installing === "boolean" ? answer : null);
       } catch {
         resolve(null);
       }
@@ -142,6 +143,85 @@ function initializeUpdateScreen() {
     request.onerror = request.ontimeout = () => resolve(null);
     request.send();
   });
+
+  // The steps and the download, drawn from that account - all text through textContent.
+  const stepList = screen.querySelector("[data-update-steps]");
+  const downloadBox = screen.querySelector("[data-update-download]");
+  const meter = screen.querySelector("[data-update-meter]");
+  const bytes = screen.querySelector("[data-update-bytes]");
+  const note = screen.querySelector("[data-update-note]");
+  let steps = [];
+  let lastInstalling = Date.now();
+  const megabytes = (value) => (value / 1048576).toFixed(value < 10 * 1048576 ? 1 : 0);
+  const duration = (seconds) => seconds >= 90 ? "about " + Math.round(seconds / 60) + " min left" : "about " + Math.max(1, Math.round(seconds)) + " s left";
+  const drawSteps = (current) => {
+    if (!stepList || steps.length === 0) {
+      return;
+    }
+    const index = steps.findIndex((step) => step.key === current);
+    stepList.replaceChildren(...steps.map((step, position) => {
+      const item = document.createElement("li");
+      item.textContent = step.title;
+      item.dataset.state = position < index ? "done" : position === index ? "current" : "pending";
+      if (position === index) {
+        item.setAttribute("aria-current", "step");
+      }
+      return item;
+    }));
+    stepList.hidden = false;
+  };
+  const showProgress = (answer) => {
+    if (!answer || !Array.isArray(answer.steps) || answer.steps.length === 0) {
+      return;
+    }
+    steps = answer.steps;
+    drawSteps(answer.step);
+    const current = steps.find((step) => step.key === answer.step);
+    if (current) {
+      say(current.title + " ...");
+    }
+
+    const download = answer.download;
+    if (!downloadBox || !download) {
+      if (downloadBox) {
+        downloadBox.hidden = true;
+      }
+      return;
+    }
+    const percent = download.total > 0 ? Math.min(100, Math.floor(download.done * 100 / download.total)) : 0;
+    if (meter) {
+      meter.setAttribute("aria-valuenow", String(percent));
+      meter.querySelector(".mat-meter__fill")?.style.setProperty("--mat-meter", percent + "%");
+    }
+    const parts = [megabytes(download.done) + " of " + megabytes(download.total) + " MB"];
+    if (download.complete) {
+      parts.push("complete");
+    } else {
+      if (download.bytesPerSecond > 0) {
+        parts.push((download.bytesPerSecond / 1048576).toFixed(1) + " MB/s");
+      }
+      if (typeof download.secondsLeft === "number") {
+        parts.push(duration(download.secondsLeft));
+      }
+    }
+    if (bytes) {
+      bytes.textContent = parts.join(" · ");
+    }
+    if (note) {
+      note.textContent = download.note || "";
+      note.hidden = !download.note;
+    }
+    downloadBox.hidden = false;
+  };
+  // Once the old build went away, everything before the restart is done.
+  const showRestarting = () => {
+    if (steps.some((step) => step.key === "restart")) {
+      drawSteps("restart");
+    }
+    if (downloadBox) {
+      downloadBox.hidden = true;
+    }
+  };
 
   window.setInterval(() => {
     const seconds = Math.floor((Date.now() - started) / 1000);
@@ -178,6 +258,7 @@ function initializeUpdateScreen() {
 
     if (!version) {
       wentAway = true;
+      showRestarting();
       say("Matmon is restarting ...");
     } else if (version !== from) {
       say("Matmon " + version + " is up - loading ...");
@@ -188,22 +269,33 @@ function initializeUpdateScreen() {
       finish(4000);
       return;
     } else {
-      say(Date.now() - started < 15000 ? "Installing the update ..." : "Downloading and preparing " + to + " ...");
-      // Still the old build and nothing being installed any more: the install ended without a restart (the download
-      // broke off, the package was refused) - show how it ended instead of waiting out the eight minutes.
-      if (await stillInstalling() === false) {
+      const answer = await installState();
+      if (answer && answer.installing) {
+        lastInstalling = Date.now();
+        if (answer.steps && answer.steps.length > 0) {
+          showProgress(answer);
+        } else {
+          say("Downloading and preparing " + to + " ...");
+        }
+      } else if (answer && answer.installing === false) {
+        // Still the old build and nothing being installed any more: the install ended without a restart (the download
+        // broke off, the package was refused) - show how it ended instead of waiting out the eight minutes.
         finish(0);
         return;
+      } else {
+        say(Date.now() - started < 15000 ? "Installing the update ..." : "Downloading and preparing " + to + " ...");
       }
     }
 
-    if (Date.now() - started > giveUpAfter) {
+    // A slow download is not a hung update: the eight minutes count from the last time the install said it was busy.
+    if (Date.now() - Math.max(started, lastInstalling) > giveUpAfter) {
       finish(0);
       return;
     }
 
-    window.setTimeout(poll, 3000);
+    // While the download runs, a little more often - the figures should move.
+    window.setTimeout(poll, downloadBox && !downloadBox.hidden ? 1500 : 3000);
   };
 
-  window.setTimeout(poll, 2000);
+  window.setTimeout(poll, restart ? 2000 : 300);
 }

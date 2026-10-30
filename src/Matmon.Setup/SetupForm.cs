@@ -288,12 +288,16 @@ internal sealed class SetupForm : Form
                 }
                 else
                 {
-                    SetupRunner.Install(_arguments, options, Report, share => BeginInvoke(() =>
+                    SetupRunner.Install(_arguments, options, Report, state => BeginInvoke(() =>
                     {
                         // While the online setup downloads, the bar shows how far it is; afterwards it goes back to "busy".
-                        _progress.Style = share >= 1 ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
-                        _progress.Value = (int)(share * 100);
-                        _step.Text = share >= 1 ? _step.Text : $"Downloading Matmon ... {share * 100:0} %";
+                        var done = state.Complete || state.Share >= 1;
+                        _progress.Style = done ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
+                        _progress.Value = (int)(state.Share * 100);
+                        var speed = state.BytesPerSecond > 0 ? $", {state.BytesPerSecond / 1048576:0.0} MB/s" : "";
+                        _step.Text = done
+                            ? _step.Text
+                            : $"Downloading Matmon ... {state.Share * 100:0} % ({WindowsUpdateFeed.Megabytes(state.Done)} of {WindowsUpdateFeed.Megabytes(state.Total)} MB{speed})";
                     }));
                 }
 

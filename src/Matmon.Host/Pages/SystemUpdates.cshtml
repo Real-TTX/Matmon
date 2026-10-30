@@ -63,6 +63,13 @@
                 <h2 id="update-screen-title">Updating Matmon</h2>
                 <div class="mm-update-versions mat-mono"><span>@screen.FromVersion</span><span class="mm-update-versions__arrow">@MatUi.Icon("arrow-down")<span class="mat-sr-only">to</span></span><span>@screen.ToVersion</span></div>
                 <p id="update-screen-state" data-update-state aria-live="polite">Installing the update ...</p>
+                @* Filled from ?handler=State while the old build is still up: what the install does, and the download. *@
+                <ol class="mm-update-steps" data-update-steps hidden></ol>
+                <div class="mm-update-download" data-update-download hidden>
+                    <div class="mat-meter" role="progressbar" aria-label="Download" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-update-meter><div class="mat-meter__fill"></div></div>
+                    <p class="mat-small mat-mono" data-update-bytes></p>
+                    <p class="mat-small mat-text-muted" data-update-note hidden></p>
+                </div>
             }
             <p class="mat-text-muted mat-mono" data-update-elapsed>0:00</p>
         </div>

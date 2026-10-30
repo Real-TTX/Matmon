@@ -162,8 +162,12 @@ public sealed partial class DockerSelfUpdateTarget(
         return new SelfUpdateOffer(true, version, $"{wanted}", id) { ImageReference = wanted.ToString() };
     }
 
-    public async Task ApplyAsync(SelfUpdateOffer offer, CancellationToken cancellationToken)
+    // The new image was pulled at check time, so an install here is only starting the helper that swaps the container.
+    public IReadOnlyList<SelfUpdateStep> InstallSteps { get; } = [new("helper", "Starting the update helper")];
+
+    public async Task ApplyAsync(SelfUpdateOffer offer, ISelfUpdateProgress? progress, CancellationToken cancellationToken)
     {
+        progress?.Step("helper");
         using var docker = Client();
         var self = await SelfAsync(docker, cancellationToken);
         var name = self["Name"]!.GetValue<string>().TrimStart('/');

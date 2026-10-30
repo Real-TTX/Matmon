@@ -11,7 +11,8 @@ public sealed record SelfUpdateStatus(
     string? LastError,
     SelfUpdateOutcome? LastOutcome,
     bool Installing,
-    string? AutomaticState);
+    string? AutomaticState,
+    SelfUpdateProgress? Progress = null);
 
 /// <summary>
 /// Keeps an eye on updates for this installation (Primary only): hourly it reads how the last update ended, asks the
@@ -35,6 +36,7 @@ public sealed class SelfUpdateService : BackgroundService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private volatile SelfUpdateStatus _status;
     private DateTimeOffset? _handedOverUtc;
+    private volatile SelfUpdateProgress? _progress;
     private CancellationToken _stopping;
 
     // A hand-over normally ends this process within seconds. Still running this long after it, the updater gave up
@@ -59,9 +61,12 @@ public sealed class SelfUpdateService : BackgroundService
         get
         {
             var status = _status;
-            return status.Installing && _handedOverUtc is { } since && DateTimeOffset.UtcNow - since >= HandOverTimeout
-                ? status with { Installing = false }
-                : status;
+            if (status.Installing && _handedOverUtc is { } since && DateTimeOffset.UtcNow - since >= HandOverTimeout)
+            {
+                status = status with { Installing = false };
+            }
+
+            return status with { Progress = status.Installing ? _progress : null };
         }
     }
 
@@ -280,14 +285,26 @@ public sealed class SelfUpdateService : BackgroundService
             return "an update is already being installed";
         }
 
+        // The steps the update screen lists: found, backup, what the installation method does, and the restart its
+        // updater does once this process has handed over.
+        var progress = new ProgressReporter(this,
+        [
+            new SelfUpdateStep("check", $"Found {offer.Version}"),
+            new SelfUpdateStep("backup", "Backing up the configuration"),
+            .. target.InstallSteps,
+            new SelfUpdateStep("restart", "Restarting with the new version")
+        ]);
+
         try
         {
+            _handedOverUtc = null; // downloading: "installing" for as long as that takes
+            progress.Step("backup");
+            _status = _status with { Installing = true, LastError = null };
             await BackUpBeforeUpdateAsync(offer, cancellationToken);
 
             _logger.LogInformation("Installing update {Current} -> {Version} ({Mode})", MatmonVersion.Current, offer.Version, target.Mode);
-            _handedOverUtc = null; // downloading: "installing" for as long as that takes
-            _status = _status with { Installing = true, LastError = null };
-            await target.ApplyAsync(offer, cancellationToken);
+            await target.ApplyAsync(offer, progress, cancellationToken);
+            progress.Step("restart");
             _handedOverUtc = DateTimeOffset.UtcNow;
             return null;
         }
@@ -299,6 +316,7 @@ public sealed class SelfUpdateService : BackgroundService
             var failed = new SelfUpdateOutcome(SelfUpdateOutcomeKind.Failed, MatmonVersion.Current, offer.Version, DateTimeOffset.UtcNow, reason, offer.Identity);
             _store.RecordSelfUpdateOutcome(failed);
             // Not LastError: that is the CHECK's (the page shows it as "the check failed"); the outcome says what went wrong.
+            _progress = null;
             _status = _status with { Installing = false, LastOutcome = failed };
             return reason;
         }
@@ -340,5 +358,22 @@ public sealed class SelfUpdateService : BackgroundService
         }
 
         return (null, string.Join("; ", reasons));
+    }
+
+    /// <summary>Keeps <see cref="Status"/>'s progress current while an install runs; the update screen polls it.</summary>
+    private sealed class ProgressReporter(SelfUpdateService service, IReadOnlyList<SelfUpdateStep> steps) : ISelfUpdateProgress
+    {
+        public void Step(string key)
+        {
+            // The download's figures stay while its checks run (they say what was downloaded); any later step drops them.
+            var keep = key == "verify" ? service._progress?.Download : null;
+            service._progress = new SelfUpdateProgress(steps, key, keep);
+        }
+
+        public void Download(UpdateDownloadProgress progress)
+        {
+            var current = service._progress?.Current ?? "download";
+            service._progress = new SelfUpdateProgress(steps, current, progress);
+        }
     }
 }

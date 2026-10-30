@@ -45,9 +45,9 @@ internal static class SetupRunner
 
     public static string ChannelName => Version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "nightly" : "release";
 
-    /// <summary>Installs (or updates). <paramref name="download"/> gets the downloaded share 0..1 while the online setup
+    /// <summary>Installs (or updates). <paramref name="download"/> gets how far the download is while the online setup
     /// downloads; the version that ends up installed is returned.</summary>
-    public static string Install(SetupArguments arguments, WindowsInstallOptions options, Action<string> progress, Action<double>? download = null)
+    public static string Install(SetupArguments arguments, WindowsInstallOptions options, Action<string> progress, Action<UpdateDownloadProgress>? download = null)
     {
         var temporary = Path.Combine(Path.GetTempPath(), $"matmon-setup-{Guid.NewGuid():N}");
         var version = Version;
@@ -91,7 +91,7 @@ internal static class SetupRunner
         }
     }
 
-    private static string DownloadAndUnpack(SetupArguments arguments, string target, Action<string> progress, Action<double>? download)
+    private static string DownloadAndUnpack(SetupArguments arguments, string target, Action<string> progress, Action<UpdateDownloadProgress>? download)
     {
         var feed = FeedOf(arguments);
         var zip = Path.Combine(Path.GetTempPath(), $"matmon-setup-{Guid.NewGuid():N}.zip");
@@ -102,7 +102,20 @@ internal static class SetupRunner
             progress($"Looking up the newest Matmon ({ChannelName} channel) ...");
             var manifest = WindowsUpdateFeed.ReadManifestAsync(client, feed, CancellationToken.None).GetAwaiter().GetResult();
             progress($"Downloading Matmon {manifest.Version} ({manifest.Size / 1048576.0:0} MB) ...");
-            WindowsUpdateFeed.DownloadAsync(client, feed, manifest, zip, AgentPackageSignature.RequiredByThisBuild, download, CancellationToken.None)
+            // A connection that breaks off is resumed; each time that happens the log (and the setup's list) says so.
+            string? lastNote = null;
+            void Downloading(UpdateDownloadProgress state)
+            {
+                if (state.Note is { } note && note != lastNote)
+                {
+                    lastNote = note;
+                    progress(note);
+                }
+
+                download?.Invoke(state);
+            }
+
+            WindowsUpdateFeed.DownloadAsync(client, feed, manifest, zip, AgentPackageSignature.RequiredByThisBuild, Downloading, CancellationToken.None)
                 .GetAwaiter().GetResult();
             progress(string.IsNullOrWhiteSpace(manifest.Signature)
                 ? "Download complete and checked (SHA-256; this build is not signed)."

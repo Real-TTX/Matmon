@@ -59,7 +59,15 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         return new SelfUpdateOffer(true, _manifest.Version, $"{MatmonVersion.Channel.ToLowerInvariant()} channel", _manifest.Version);
     }
 
-    public async Task ApplyAsync(SelfUpdateOffer offer, CancellationToken cancellationToken)
+    public IReadOnlyList<SelfUpdateStep> InstallSteps { get; } =
+    [
+        new("download", "Downloading the package"),
+        new("verify", "Checking checksum and signature"),
+        new("unpack", "Unpacking and test-starting the new build"),
+        new("handover", "Handing over to the updater")
+    ];
+
+    public async Task ApplyAsync(SelfUpdateOffer offer, ISelfUpdateProgress? progress, CancellationToken cancellationToken)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -76,17 +84,29 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         Directory.CreateDirectory(StateDirectory);
         var package = Path.Combine(StateDirectory, WindowsUpdateFeed.PackageFile);
 
+        progress?.Step("download");
         using (var client = Client())
         {
-            await WindowsUpdateFeed.DownloadAsync(client, _feed!, manifest, package, AgentPackageSignature.RequiredByThisBuild, progress: null, cancellationToken);
+            var verifying = false;
+            await WindowsUpdateFeed.DownloadAsync(client, _feed!, manifest, package, AgentPackageSignature.RequiredByThisBuild, state =>
+            {
+                progress?.Download(state);
+                if (state.Complete && !verifying)
+                {
+                    verifying = true; // every byte is there: the hash and the signature are checked next
+                    progress?.Step("verify");
+                }
+            }, cancellationToken);
         }
 
+        progress?.Step("unpack");
         TryDeleteDirectory(staged);
         ZipFile.ExtractToDirectory(package, staged, overwriteFiles: true);
         File.Delete(package);
         await VerifyRunsAsync(Path.Combine(staged, "Matmon.Host.exe"), manifest.Version, cancellationToken);
 
         // The updater is a copy of the RUNNING build, outside the folder it is about to replace.
+        progress?.Step("handover");
         TryDeleteDirectory(updater);
         CopyDirectory(install, updater);
 

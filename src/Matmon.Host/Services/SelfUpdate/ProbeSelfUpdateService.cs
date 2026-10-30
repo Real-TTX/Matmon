@@ -162,7 +162,7 @@ public sealed class ProbeSelfUpdateService : BackgroundService, IProbeSelfUpdate
             }
 
             _logger.LogInformation("Installing update {Current} -> {Version} ({Image})", _currentVersion, offer.Version, offer.ImageReference ?? "own tag");
-            await _target.ApplyAsync(offer, _stopping);
+            await _target.ApplyAsync(offer, null, _stopping);
             // From here the helper stops this container; "installing" stays until then (or until the outcome says otherwise).
         }
         catch (Exception ex)

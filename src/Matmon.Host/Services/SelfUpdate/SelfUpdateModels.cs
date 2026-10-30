@@ -80,12 +80,41 @@ public interface ISelfUpdateTarget
 
     Task<SelfUpdateOffer> CheckAsync(CancellationToken cancellationToken);
 
+    /// <summary>What <see cref="ApplyAsync"/> does, in order - the keys it reports to its <see cref="ISelfUpdateProgress"/>.</summary>
+    IReadOnlyList<SelfUpdateStep> InstallSteps { get; }
+
     /// <summary>
     /// Hands over to the updater, which stops this process. Returns once the hand-over is done (or throws); everything
-    /// after that is the updater's job, including the rollback.
+    /// after that is the updater's job, including the rollback. <paramref name="progress"/> (optional) hears each step
+    /// of <see cref="InstallSteps"/> as it starts, and the download's progress.
     /// </summary>
-    Task ApplyAsync(SelfUpdateOffer offer, CancellationToken cancellationToken);
+    Task ApplyAsync(SelfUpdateOffer offer, ISelfUpdateProgress? progress, CancellationToken cancellationToken);
 
     /// <summary>How the last update ended, or null when there was none to report.</summary>
     Task<SelfUpdateOutcome?> ReadLastOutcomeAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>One step of an install as the update screen lists it - <see cref="Key"/> is what a target reports.</summary>
+public sealed record SelfUpdateStep(string Key, string Title);
+
+/// <summary>Where an installation method says what it is doing while it installs (the update screen shows it).</summary>
+public interface ISelfUpdateProgress
+{
+    /// <summary>The step that starts now (a key of <see cref="ISelfUpdateTarget.InstallSteps"/>).</summary>
+    void Step(string key);
+
+    /// <summary>How far the package download is.</summary>
+    void Download(UpdateDownloadProgress progress);
+}
+
+/// <summary>What an install is doing right now: the steps (done / current / pending follow from <see cref="Current"/>)
+/// and, while a package downloads, how far it is.</summary>
+public sealed record SelfUpdateProgress(IReadOnlyList<SelfUpdateStep> Steps, string Current, UpdateDownloadProgress? Download)
+{
+    public string StateOf(string key)
+    {
+        var current = Steps.ToList().FindIndex(step => step.Key == Current);
+        var index = Steps.ToList().FindIndex(step => step.Key == key);
+        return index < current ? "done" : index == current ? "current" : "pending";
+    }
 }

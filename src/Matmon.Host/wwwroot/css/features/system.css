@@ -49,3 +49,17 @@
 .mm-update-versions__arrow { display: inline-flex; color: var(--mat-text-muted); }
 .mm-update-versions[hidden] { display: none; }
 .mm-update-screen[hidden] { display: none; }
+/* what the install is doing: one line per step - done (a tick), current (a pulsing dot, bold), pending (muted) */
+.mm-update-steps { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: var(--mat-space-1); text-align: left; font-size: var(--mat-fs-sm); }
+.mm-update-steps[hidden] { display: none; }
+.mm-update-steps li { display: grid; grid-template-columns: 1.25rem 1fr; align-items: center; gap: var(--mat-space-2); color: var(--mat-text-muted); }
+.mm-update-steps li::before { content: ""; justify-self: center; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--mat-border-strong); }
+.mm-update-steps li[data-state="done"] { color: var(--mat-text); }
+.mm-update-steps li[data-state="done"]::before { content: "\2713"; width: auto; height: auto; border: 0; border-radius: 0; color: var(--mat-success); font-weight: 700; line-height: 1; }
+.mm-update-steps li[data-state="current"] { color: var(--mat-text); font-weight: 600; }
+.mm-update-steps li[data-state="current"]::before { border-color: var(--mat-accent); background: var(--mat-accent); animation: mm-update-pulse 1.2s var(--mat-ease) infinite; }
+@keyframes mm-update-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .mm-update-steps li[data-state="current"]::before { animation: none; } }
+/* the download: a meter, "80 of 115 MB · 2.4 MB/s · about 15 s left", and what happened when the line broke off */
+.mm-update-download { display: grid; gap: var(--mat-space-1); width: 100%; }
+.mm-update-download[hidden], .mm-update-download [hidden] { display: none; }

@@ -115,8 +115,24 @@ public sealed class SystemUpdatesModel(SelfUpdateService updates, IMonitoringWor
     }
 
     /// <summary>The update screen asks this while Matmon is still up: once nothing is being installed any more and
-    /// Matmon did not restart, the install failed (e.g. the download broke off) and the screen shows the outcome.</summary>
-    public IActionResult OnGetState() => new JsonResult(new { installing = updates.Status.Installing });
+    /// Matmon did not restart, the install failed (e.g. the download broke off) and the screen shows the outcome.
+    /// It also carries what the install is doing - its steps and the download's progress - for the screen to show.</summary>
+    public IActionResult OnGetState() => new JsonResult(BuildState(updates.Status));
+
+    public static UpdateScreenState BuildState(SelfUpdateStatus status)
+    {
+        if (status.Progress is not { } progress)
+        {
+            return new UpdateScreenState(status.Installing, null, [], null);
+        }
+
+        var steps = progress.Steps.Select(step => new UpdateScreenStep(step.Key, step.Title, progress.StateOf(step.Key))).ToList();
+        var download = progress.Download is { } state
+            ? new UpdateScreenDownload(state.Done, state.Total, Math.Round(state.BytesPerSecond), state.SecondsLeft is { } left ? Math.Ceiling(left) : null,
+                state.Attempt, state.Note, state.Complete)
+            : null;
+        return new UpdateScreenState(status.Installing, progress.Current, steps, download);
+    }
 
     /// <summary>Restarts this installation; the restart screen watches it go away and come back.</summary>
     public IActionResult OnPostRestart()
@@ -208,3 +224,12 @@ public sealed class SelfUpdateSettingsInput
 
     public bool AllowCloudInstall { get; set; } = true;
 }
+
+/// <summary>What the update screen polls (<c>?handler=State</c>): installing or not, the steps with their state
+/// (done / current / pending) and, while a package downloads, how far it is.</summary>
+public sealed record UpdateScreenState(bool Installing, string? Step, IReadOnlyList<UpdateScreenStep> Steps, UpdateScreenDownload? Download);
+
+public sealed record UpdateScreenStep(string Key, string Title, string State);
+
+/// <param name="SecondsLeft">At the current speed; null when that cannot be said yet.</param>
+public sealed record UpdateScreenDownload(long Done, long Total, double BytesPerSecond, double? SecondsLeft, int Attempt, string? Note, bool Complete);

@@ -104,6 +104,61 @@ public sealed class SelfUpdateInterruptTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task The_status_and_the_update_screen_state_carry_the_step_and_the_download()
+    {
+        await Run(async (service, target) =>
+        {
+            await service.CheckNowAsync(CancellationToken.None);
+            Matmon.Host.Pages.UpdateScreenState? during = null;
+            target.ApplyWithProgress = (progress, _) =>
+            {
+                progress!.Step("download");
+                progress.Download(new UpdateDownloadProgress(80 * 1048576L, 115 * 1048576L, 2.5 * 1048576, 2, "Connection dropped - resuming at 80 MB (attempt 2)"));
+                during = Matmon.Host.Pages.SystemUpdatesModel.BuildState(service.Status);
+                progress.Step("handover");
+                return Task.CompletedTask;
+            };
+
+            Assert.Null(Matmon.Host.Pages.SystemUpdatesModel.BuildState(service.Status).Step); // nothing running yet
+            Assert.Null(await service.InstallNowAsync(CancellationToken.None));
+
+            Assert.NotNull(during);
+            Assert.True(during!.Installing);
+            Assert.Equal("download", during.Step);
+            Assert.Equal(["check", "backup", "download", "handover", "restart"], during.Steps.Select(step => step.Key));
+            Assert.Equal(["done", "done", "current", "pending", "pending"], during.Steps.Select(step => step.State));
+            Assert.Equal(80 * 1048576L, during.Download!.Done);
+            Assert.Equal(14, during.Download.SecondsLeft);
+            Assert.Equal(2, during.Download.Attempt);
+            Assert.Contains("resuming", during.Download.Note);
+
+            // Handed over: the updater restarts Matmon - the download's figures are gone.
+            var after = Matmon.Host.Pages.SystemUpdatesModel.BuildState(service.Status);
+            Assert.Equal("restart", after.Step);
+            Assert.Null(after.Download);
+        });
+    }
+
+    [Fact]
+    public async Task A_failed_install_leaves_no_progress_behind()
+    {
+        await Run(async (service, target) =>
+        {
+            await service.CheckNowAsync(CancellationToken.None);
+            target.ApplyWithProgress = (progress, _) =>
+            {
+                progress!.Step("download");
+                throw new IOException("the download kept breaking off");
+            };
+
+            Assert.NotNull(await service.InstallNowAsync(CancellationToken.None));
+            var state = Matmon.Host.Pages.SystemUpdatesModel.BuildState(service.Status);
+            Assert.False(state.Installing);
+            Assert.Empty(state.Steps);
+        });
+    }
+
     private Task Run(Func<SelfUpdateService, FakeTarget, Task> body) => Run((service, target, _) => body(service, target));
 
     private async Task Run(Func<SelfUpdateService, FakeTarget, InMemoryMonitoringWorkspaceStore, Task> body)
@@ -136,7 +191,12 @@ public sealed class SelfUpdateInterruptTests : IDisposable
         public Task<SelfUpdateOffer> CheckAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new SelfUpdateOffer(true, "test-2", "test-2 is available", "test-2"));
 
-        public Task ApplyAsync(SelfUpdateOffer offer, CancellationToken cancellationToken) => Apply(cancellationToken);
+        public IReadOnlyList<SelfUpdateStep> InstallSteps { get; } = [new("download", "Downloading"), new("handover", "Handing over")];
+
+        public Func<ISelfUpdateProgress?, CancellationToken, Task>? ApplyWithProgress { get; set; }
+
+        public Task ApplyAsync(SelfUpdateOffer offer, ISelfUpdateProgress? progress, CancellationToken cancellationToken) =>
+            ApplyWithProgress is { } apply ? apply(progress, cancellationToken) : Apply(cancellationToken);
 
         public Task<SelfUpdateOutcome?> ReadLastOutcomeAsync(CancellationToken cancellationToken) => Task.FromResult<SelfUpdateOutcome?>(null);
     }

@@ -114,9 +114,9 @@ internal static class Program
                 probe);
             // The online setup logs its download every 10 % - enough to see that it moves, not a line per percent.
             var logged = -1;
-            SetupRunner.Install(arguments, options, SetupRunner.Log, share =>
+            SetupRunner.Install(arguments, options, SetupRunner.Log, state =>
             {
-                var tenth = (int)(share * 10);
+                var tenth = (int)(state.Share * 10);
                 if (tenth != logged)
                 {
                     logged = tenth;
