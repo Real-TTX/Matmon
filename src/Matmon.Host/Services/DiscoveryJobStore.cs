@@ -338,6 +338,29 @@ public sealed class DiscoveryJobStore
         return true;
     }
 
+    /// <summary>Remembers where the import assistant puts this job's new hosts (null = the scanning probe itself), so
+    /// the choice survives a reload and a second import of the same job goes to the same place.</summary>
+    public bool SetTarget(Guid jobId, Guid? targetElementId)
+    {
+        if (!_jobs.TryGetValue(jobId, out var job))
+        {
+            return false;
+        }
+
+        lock (job)
+        {
+            if (job.TargetElementId == targetElementId)
+            {
+                return true;
+            }
+
+            job.TargetElementId = targetElementId;
+        }
+
+        PersistRecentJobs();
+        return true;
+    }
+
     private void LoadPersistedJobs()
     {
         try
@@ -427,7 +450,9 @@ public sealed class DiscoveryJobStore
                 Results = job.Results.ToArray(),
                 Message = job.Message,
                 TotalHosts = job.TotalHosts,
-                ScannedHosts = job.ScannedHosts
+                ScannedHosts = job.ScannedHosts,
+                LastActivityUtc = job.LastActivityUtc,
+                TargetElementId = job.TargetElementId
             };
         }
     }
@@ -473,6 +498,10 @@ public sealed class DiscoveryJobSnapshot
     public string ProbeId { get; set; } = string.Empty;
 
     public string ProbeName { get; set; } = string.Empty;
+
+    /// <summary>The probe or folder (inside <see cref="ProbeElementId"/>'s own subtree) new hosts are created in;
+    /// null = the probe itself - also what a job persisted before this existed reads back as.</summary>
+    public Guid? TargetElementId { get; set; }
 
     public NetworkDiscoveryRequest Request { get; set; } = new(Guid.Empty, string.Empty, DiscoveryDefaults.Options);
 

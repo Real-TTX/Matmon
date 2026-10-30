@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text.Json;
 using Matmon.Core.Domain;
 using Matmon.Host.Services;
+using Matmon.Host.Ui;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -58,6 +59,11 @@ public sealed class DiscoveryModel : PageModel
 
     [BindProperty]
     public Guid ImportJobId { get; set; }
+
+    /// <summary>Where the import puts NEW hosts: the scanning probe (null / empty) or a folder in its own subtree.
+    /// Prefilled from the job (<see cref="DiscoveryJobSnapshot.TargetElementId"/>) and remembered there on import.</summary>
+    [BindProperty]
+    public Guid? TargetElementId { get; set; }
 
     [BindProperty]
     public List<string> SelectedHostAddresses { get; set; } = [];
@@ -199,13 +205,29 @@ public sealed class DiscoveryModel : PageModel
                     ?? throw new InvalidOperationException("The selected host scope could not be resolved.");
             }
 
+            // New hosts go to the chosen probe/folder; an existing host (matched by address anywhere under the probe)
+            // is reused where it is and never moved. A host-scoped job attaches everything to its host, no target.
+            MonitoringContainerElement target = probe;
+            if (scopeHost is null)
+            {
+                var placement = DiscoveryTargetPlacement.Resolve(
+                    probe,
+                    TargetElementId,
+                    TargetElementId is Guid targetId && targetId != Guid.Empty ? _workspaceStore.FindElement(targetId) : null);
+                target = placement.Target ?? throw new InvalidOperationException(placement.Problem);
+                if (job is not null)
+                {
+                    _discoveryJobs.SetTarget(job.JobId, target.Id == probe.Id ? null : target.Id);
+                }
+            }
+
             foreach (var result in selected)
             {
                 var host = scopeHost ?? FindHostByAddress(probe, result.Address);
                 if (host is null)
                 {
                     host = _workspaceStore.CreateHost(
-                        probe.Id,
+                        target.Id,
                         BuildUniqueHostName(probe, result),
                         result.Address,
                         $"Discovered by auto discovery on {DateTimeOffset.Now:dd.MM.yyyy HH:mm}");
@@ -219,7 +241,8 @@ public sealed class DiscoveryModel : PageModel
                 createdSensors += EnsureSelectedSensors(host, result, importInput);
             }
 
-            StatusMessage = $"Discovery import done: {createdHosts} host{(createdHosts == 1 ? string.Empty : "s")} created, {reusedHosts} reused, {createdSensors} sensor{(createdSensors == 1 ? string.Empty : "s")} added.";
+            var createdWhere = createdHosts > 0 && target.Id != probe.Id ? $" in '{target.Name}'" : string.Empty;
+            StatusMessage = $"Discovery import done: {createdHosts} host{(createdHosts == 1 ? string.Empty : "s")} created{createdWhere}, {reusedHosts} reused, {createdSensors} sensor{(createdSensors == 1 ? string.Empty : "s")} added.";
             if (_licenseLimitReason is not null)
             {
                 StatusMessage += $" {_licenseLimitReason} Some selected sensors were not created.";
@@ -229,6 +252,14 @@ public sealed class DiscoveryModel : PageModel
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
+            if (JobId is null && ImportJobId != Guid.Empty)
+            {
+                // Come back to the job's import assistant (the posted selection and target are kept), so a refused
+                // target is answered where it was chosen.
+                JobId = ImportJobId;
+                Import = true;
+            }
+
             LoadView();
             return Page();
         }
@@ -255,6 +286,7 @@ public sealed class DiscoveryModel : PageModel
                 ApplyOptionsToInput(job.Request.Options, Input);
                 Results = job.Results.Select(ToInput).ToList();
                 ImportJobId = job.JobId;
+                TargetElementId ??= job.TargetElementId;
             }
         }
 
@@ -281,6 +313,16 @@ public sealed class DiscoveryModel : PageModel
 
         AnnotateExistingElements(job);
 
+        // The import target picker: the scan's probe and the folders in its own subtree (not a nested probe's).
+        IReadOnlyList<ElementPickerOption> targetOptions = [];
+        if (scopeProbe is not null && Results.Count > 0)
+        {
+            var candidateIds = DiscoveryTargetPlacement.Candidates(scopeProbe).Select(candidate => candidate.Id).ToHashSet();
+            targetOptions = ElementPickerOptions.Build(scopeProbe)
+                .Where(option => candidateIds.Contains(option.Id))
+                .ToArray();
+        }
+
         View = new DiscoveryPageViewModel(
             probes.Select(probe => new SelectListItem(
                 $"{probe.Name} ({probe.ProbeId})",
@@ -291,7 +333,9 @@ public sealed class DiscoveryModel : PageModel
             historyJobs,
             job,
             subnetSuggestions,
-            knownHostAddresses.Count);
+            knownHostAddresses.Count,
+            targetOptions,
+            scopeProbe?.Id);
     }
 
     /// <summary>Mark discovered hosts/sensors that already exist under the import probe, so the create assistant can
@@ -1077,4 +1121,6 @@ public sealed record DiscoveryPageViewModel(
     IReadOnlyList<DiscoveryJobSnapshot> HistoryJobs,
     DiscoveryJobSnapshot? SelectedJob,
     IReadOnlyList<string> SubnetSuggestions,
-    int KnownHostCount);
+    int KnownHostCount,
+    IReadOnlyList<ElementPickerOption> TargetOptions,
+    Guid? TargetProbeId);

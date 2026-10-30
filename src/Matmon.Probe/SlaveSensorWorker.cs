@@ -32,6 +32,8 @@ public sealed class SlaveSensorWorker : BackgroundService
     // Store-and-forward: the last assignments received from the primary (so the probe keeps executing on
     // schedule while the primary is unreachable) + the observations produced meanwhile (flushed on reconnect).
     private ProbeSensorAssignmentsResponse? _cachedAssignments;
+    // The scan that runs in the background (StartDiscoveryJobsAsync); only touched by the worker loop.
+    private Task? _discoveryTask;
     private readonly OfflineObservationBuffer _buffer;
 
     public SlaveSensorWorker(
@@ -80,23 +82,16 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         _logger.LogInformation("Secondary sensor worker started for {ProbeId} against {PrimaryUrl}", probeId, primaryUri);
 
+        // Three stages, each on its own: they used to share ONE try in this order, so anything that threw in the sensor
+        // pass (a check that ended in a stray cancellation, a failed post) skipped the run jobs and the discovery
+        // jobs as well - and since the same sensor was due again on the next tick, it did so every tick: a scan
+        // queued for the probe stayed "pending" for good. Discovery is looked at FIRST because it only hands a job
+        // to the background (see StartDiscoveryJobsAsync) and must not wait for a slow sensor pass.
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await SyncAssignmentsAsync(client, probeId, stoppingToken);
-                await SyncRunJobsAsync(client, probeId, stoppingToken);
-                await SyncDiscoveryJobsAsync(client, probeId, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _runtimeState.RecordAssignmentSync(0, ex.Message, success: false);
-                _logger.LogWarning(ex, "Secondary sensor sync failed for {ProbeId}", probeId);
-            }
+            await RunStageAsync("discovery jobs", probeId, () => StartDiscoveryJobsAsync(client, probeId, stoppingToken), stoppingToken);
+            await RunStageAsync("sensor assignments", probeId, () => SyncAssignmentsAsync(client, probeId, stoppingToken), stoppingToken);
+            await RunStageAsync("on-demand jobs", probeId, () => SyncRunJobsAsync(client, probeId, stoppingToken), stoppingToken);
 
             try
             {
@@ -106,6 +101,39 @@ public sealed class SlaveSensorWorker : BackgroundService
             {
                 break;
             }
+        }
+
+        if (_discoveryTask is { } running)
+        {
+            try
+            {
+                await running;
+            }
+            catch (Exception ex) when (ex is OperationCanceledException || stoppingToken.IsCancellationRequested)
+            {
+                // Shutting down mid-scan: the primary fails the job once it stops hearing about it.
+            }
+        }
+    }
+
+    private async Task RunStageAsync(string stage, string probeId, Func<Task> run, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await run();
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutting down.
+        }
+        catch (Exception ex)
+        {
+            if (stage == "sensor assignments")
+            {
+                _runtimeState.RecordAssignmentSync(0, ex.Message, success: false);
+            }
+
+            _logger.LogWarning(ex, "Secondary sync of {Stage} failed for {ProbeId}", stage, probeId);
         }
     }
 
@@ -437,12 +465,18 @@ public sealed class SlaveSensorWorker : BackgroundService
                 result.State is not SensorState.Critical);
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _runtimeState.RecordExecution(assignment.Name, ex.Message, success: false);
-            return SensorExecutionResult.Critical(TimeSpan.Zero, ex.Message);
+            // A cancellation the probe did not ask for (a timeout inside the executor that escaped it) is a failed
+            // check like any other. Let through, it used to abort the whole pass - and with it every other result.
+            var message = FailureMessage(ex);
+            _runtimeState.RecordExecution(assignment.Name, message, success: false);
+            return SensorExecutionResult.Critical(TimeSpan.Zero, message);
         }
     }
+
+    private static string FailureMessage(Exception ex) =>
+        ex is OperationCanceledException ? "The check was cancelled before it finished (timed out)." : ex.Message;
 
     private async Task PostResultsAsync(
         HttpClient client,
@@ -547,11 +581,12 @@ public sealed class SlaveSensorWorker : BackgroundService
             result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(job.Settings, result);
             return new ProbeRunJobResult(job.JobId, result, null, null, DateTimeOffset.UtcNow);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            var message = FailureMessage(ex);
             return job.Kind == ProbeRunJobKind.SnmpDiscover
-                ? new ProbeRunJobResult(job.JobId, null, null, ex.Message, DateTimeOffset.UtcNow)
-                : new ProbeRunJobResult(job.JobId, SensorExecutionResult.Critical(TimeSpan.Zero, ex.Message), null, null, DateTimeOffset.UtcNow);
+                ? new ProbeRunJobResult(job.JobId, null, null, message, DateTimeOffset.UtcNow)
+                : new ProbeRunJobResult(job.JobId, SensorExecutionResult.Critical(TimeSpan.Zero, message), null, null, DateTimeOffset.UtcNow);
         }
     }
 
@@ -589,7 +624,43 @@ public sealed class SlaveSensorWorker : BackgroundService
         }
     }
 
-    private async Task SyncDiscoveryJobsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
+    /// <summary>Takes the discovery jobs the primary queued for this probe and runs them in the BACKGROUND, one scan at a
+    /// time. A scan used to run inline in the worker loop: a subnet of a few thousand addresses (an agent suggests its
+    /// own /16 or /20) stopped every sensor on the probe until it was done, and a slow sensor pass held a queued scan
+    /// back. While a scan runs no further job is taken - it stays pending on the primary until this one ends.</summary>
+    private async Task StartDiscoveryJobsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
+    {
+        if (_discoveryTask is { IsCompleted: false })
+        {
+            return;
+        }
+
+        var jobs = await FetchDiscoveryJobsAsync(client, probeId, cancellationToken);
+        if (jobs.Count == 0)
+        {
+            return;
+        }
+
+        _discoveryTask = Task.Run(async () =>
+        {
+            foreach (var job in jobs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    await RunDiscoveryJobAsync(client, probeId, job, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    // Closing the job out failed too (the primary went away mid-scan); it fails the job itself once
+                    // it stops hearing about it. Never let one job stop the next.
+                    _logger.LogWarning(ex, "Discovery job {JobId} on {ProbeId} could not be completed", job.JobId, probeId);
+                }
+            }
+        }, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ProbeDiscoveryJobAssignment>> FetchDiscoveryJobsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/probes/{Uri.EscapeDataString(probeId)}/discovery-jobs");
         AddProbeToken(request);
@@ -597,20 +668,11 @@ public sealed class SlaveSensorWorker : BackgroundService
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return;
+            return [];
         }
 
         var assignments = await response.Content.ReadFromJsonAsync<ProbeDiscoveryJobAssignmentsResponse>(JsonOptions, cancellationToken);
-        if (assignments is null || assignments.Jobs.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var job in assignments.Jobs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await RunDiscoveryJobAsync(client, probeId, job, cancellationToken);
-        }
+        return assignments?.Jobs ?? [];
     }
 
     /// <summary>Runs one assigned discovery job: streams every found host to the primary as it appears, reports
@@ -682,18 +744,18 @@ public sealed class SlaveSensorWorker : BackgroundService
                 $"{hosts.Count} host{(hosts.Count == 1 ? string.Empty : "s")} discovered",
                 success: true);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (DiscoveryCancelledByPrimaryException)
         {
             _runtimeState.RecordExecution($"Discovery {job.Network}", "cancelled by primary", success: true);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             await PostDiscoveryResultsAsync(
                 client,
                 probeId,
-                [new ProbeDiscoveryJobResult(job.JobId, [], ex.Message, IsComplete: true)],
+                [new ProbeDiscoveryJobResult(job.JobId, [], FailureMessage(ex), IsComplete: true)],
                 cancellationToken);
-            _runtimeState.RecordExecution($"Discovery {job.Network}", ex.Message, success: false);
+            _runtimeState.RecordExecution($"Discovery {job.Network}", FailureMessage(ex), success: false);
         }
     }
 
@@ -731,7 +793,7 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         if (cancelled)
         {
-            throw new OperationCanceledException("Discovery job was cancelled by primary.");
+            throw new DiscoveryCancelledByPrimaryException();
         }
     }
 
@@ -754,3 +816,7 @@ public sealed class SlaveSensorWorker : BackgroundService
     }
 
 }
+
+/// <summary>The primary answered a discovery post with "cancelled": the one cancellation that ends a scan quietly.
+/// Any other cancellation the probe did not ask for is a failed scan and is reported as one.</summary>
+internal sealed class DiscoveryCancelledByPrimaryException() : OperationCanceledException("Discovery job was cancelled by primary.");

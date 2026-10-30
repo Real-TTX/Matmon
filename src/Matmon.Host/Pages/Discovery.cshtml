@@ -207,6 +207,17 @@ else if (Model.Mode == "job")
                     <input type="hidden" asp-for="Input.CreateHttpSensors" />
                     <input type="hidden" asp-for="Input.CreateSnmpSensor" />
 
+                    @if (!hostScopedImport && Model.View.TargetOptions.Count > 0)
+                    {
+                        <div class="mat-form">
+                            <div class="mat-field">
+                                <label class="mat-label" for="picker-discovery-target-trigger">Create new hosts in</label>
+                                <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "TargetElementId", DomId = "picker-discovery-target", SelectedId = Model.TargetElementId ?? Model.View.TargetProbeId, AllowClear = false, Placeholder = "Select a probe or folder…", Options = Model.View.TargetOptions })" />
+                                <span class="mat-hint">The probe @selectedJob?.ProbeName or a folder inside it. Hosts that already exist stay where they are.</span>
+                            </div>
+                        </div>
+                    }
+
                     <div class="mat-row">
                         <span class="mat-text-muted" id="discovery-preset-label">Preselect:</span>
                         <div class="mat-seg" role="group" aria-labelledby="discovery-preset-label">
