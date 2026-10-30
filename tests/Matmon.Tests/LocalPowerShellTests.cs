@@ -30,6 +30,70 @@ public sealed class LocalPowerShellTests
     }
 
     [Fact]
+    public void One_of_the_machines_own_addresses_counts_as_this_machine()
+    {
+        // An agent bound to a host that was added by its address measures that address: it must run locally, not go
+        // out over WinRM to itself (which failed on a Windows box without PowerShell 7).
+        var own = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(networkInterface => networkInterface.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+            .SelectMany(networkInterface => networkInterface.GetIPProperties().UnicastAddresses)
+            .Select(unicast => unicast.Address)
+            .FirstOrDefault(address => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(address));
+        if (own is null)
+        {
+            return; // no IPv4 interface on this machine
+        }
+
+        Assert.True(PowerShellRemoteSensorExecutor.IsLocalTarget(own.ToString()));
+        Assert.False(PowerShellRemoteSensorExecutor.IsLocalTarget("203.0.113.77")); // documentation range, never ours
+    }
+
+    [Fact]
+    public async Task The_winrm_wrapper_runs_in_windows_powershell_5()
+    {
+        // Without PowerShell 7 the WinRM session is opened by Windows PowerShell 5.1, which has no "??" operator: the
+        // wrapper has to parse there. No password = it stops at its own first check, which proves it got that far.
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.Environment["MATMON_PS_SCRIPT_B64"] = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes("1"));
+        startInfo.Environment["MATMON_PASSWORD"] = string.Empty;
+        foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
+                     Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(PowerShellRemoteSensorExecutor.BuildPowerShellRemotingWrapperCommand())) })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = System.Diagnostics.Process.Start(startInfo)!;
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        Assert.Contains("Windows password is required", error);
+        Assert.DoesNotContain("Unexpected token", error);
+    }
+
+    [Fact]
+    public void Windows_always_has_a_shell_for_winrm()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.True(File.Exists(PowerShellRemoteSensorExecutor.RemotingShell()));
+    }
+
+    [Fact]
     public async Task AScriptRunsLocallyWithoutAnyCredential()
     {
         if (!OperatingSystem.IsWindows())

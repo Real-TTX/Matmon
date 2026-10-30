@@ -499,7 +499,7 @@ catch {
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "pwsh",
+            FileName = RemotingShell(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -528,12 +528,48 @@ catch {
         startInfo.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(wrapperCommand)));
 
         var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("pwsh process could not be started.");
+            ?? throw new InvalidOperationException($"{startInfo.FileName} could not be started.");
 
         return process;
     }
 
-    private static string BuildPowerShellRemotingWrapperCommand()
+    /// <summary>
+    /// The shell that opens the WinRM session: PowerShell 7 (pwsh) where it is installed - the Docker image ships it -,
+    /// else on Windows the Windows PowerShell 5.1 every Windows has. A Windows agent or Windows primary has no pwsh unless
+    /// someone installed it, and every WinRM sensor used to fail there with "pwsh ... cannot find the file". The wrapper
+    /// is written so both run it.
+    /// </summary>
+    public static string RemotingShell()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return "pwsh";
+        }
+
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(directory.Trim('"'), "pwsh.exe");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // A malformed PATH entry - skip it.
+            }
+        }
+
+        var programFiles = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
+        return File.Exists(programFiles)
+            ? programFiles
+            : Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+    }
+
+    public static string BuildPowerShellRemotingWrapperCommand()
     {
         return """
 $ErrorActionPreference = 'Stop'
@@ -542,10 +578,11 @@ $ProgressPreference = 'SilentlyContinue'
 $target = $env:MATMON_TARGET
 $username = $env:MATMON_USERNAME
 $password = $env:MATMON_PASSWORD
-$port = [int]($env:MATMON_PORT ?? '5985')
-$useSsl = ($env:MATMON_USESSL ?? 'false') -eq 'true'
+$port = if ([string]::IsNullOrWhiteSpace($env:MATMON_PORT)) { 5985 } else { [int]$env:MATMON_PORT }
+$useSsl = "$env:MATMON_USESSL" -eq 'true'
 $configurationName = $env:MATMON_CONFIGURATION
-$outputFormat = ($env:MATMON_OUTPUT_FORMAT ?? 'auto').Trim().ToLowerInvariant()
+$outputFormat = "$env:MATMON_OUTPUT_FORMAT".Trim().ToLowerInvariant()
+if ([string]::IsNullOrWhiteSpace($outputFormat)) { $outputFormat = 'auto' }
 $regexPattern = $env:MATMON_REGEX_PATTERN
 $defaultChannelKey = $env:MATMON_DEFAULT_CHANNEL
 $script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:MATMON_PS_SCRIPT_B64))
@@ -559,7 +596,7 @@ if ([string]::IsNullOrWhiteSpace($password)) {
 }
 
 $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-$credential = [PSCredential]::new($username, $securePassword)
+$credential = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
 
 $sessionParams = @{
     ComputerName = $target
