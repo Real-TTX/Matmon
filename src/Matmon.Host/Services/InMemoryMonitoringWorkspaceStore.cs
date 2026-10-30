@@ -2540,6 +2540,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
             foreach (var candidate in activeAlertList)
             {
+                // First / last seen are the time of the CHECK that showed the problem. They used to be the moment the
+                // dashboard was opened, so every visit moved "last seen" to now even when the sensor last ran an hour ago.
+                var seen = candidate.ObservedUtc is { } observed && observed <= now ? observed : now;
+
                 // Muted element: suppress - don't raise (nor keep) an active alert for it while the mute holds.
                 if (IsElementMutedLocked(candidate.ElementId, now))
                 {
@@ -2576,12 +2580,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                         ElementPath = candidate.ElementPath,
                         State = candidate.State,
                         Message = candidate.Message,
-                        FirstSeenUtc = now,
-                        LastSeenUtc = now
+                        FirstSeenUtc = seen,
+                        LastSeenUtc = seen
                     });
                     AddEvent(new MonitoringEvent
                     {
-                        TimestampUtc = now,
+                        TimestampUtc = seen,
                         Kind = MonitoringEventKind.AlertRaised,
                         ElementId = candidate.ElementId,
                         ElementKind = candidate.ElementKind,
@@ -2630,7 +2634,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     changed = true;
                 }
 
-                existing.LastSeenUtc = now;
+                // Never backwards: the poll path may already have recorded a newer check.
+                if (seen > existing.LastSeenUtc)
+                {
+                    existing.LastSeenUtc = seen;
+                }
             }
 
             foreach (var alert in _document.Alerts.Where(alert => alert.IsActive))

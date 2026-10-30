@@ -307,7 +307,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                         sensorElement.Name,
                         path,
                         latestObservation.State,
-                        latestObservation.Message ?? BuildSensorStateMessage(sensorElement.SensorTypeKey, defaultValue, latestObservation.State)));
+                        latestObservation.Message ?? BuildSensorStateMessage(sensorElement.SensorTypeKey, defaultValue, latestObservation.State),
+                        latestObservation.TimestampUtc));
                 }
                 break;
             }

@@ -126,6 +126,28 @@ public sealed class AlertDelayAndEscalationTests : IDisposable
     }
 
     [Fact]
+    public void The_dashboard_sync_keeps_first_and_last_seen_at_the_time_of_the_check()
+    {
+        // Opening the dashboard used to stamp "last seen" (and a new alert's "first seen") with the moment of the visit.
+        var (store, telemetry) = Boot(null);
+        using (telemetry) using (store)
+        {
+            var checkedAt = T0;
+            store.SyncAlerts([Candidate() with { ObservedUtc = checkedAt }], T0.AddMinutes(40));
+            var alert = store.Workspace.Alerts.Single();
+            Assert.Equal(checkedAt, alert.FirstSeenUtc);
+            Assert.Equal(checkedAt, alert.LastSeenUtc);
+
+            // A later visit with no newer check moves nothing; a newer check moves "last seen" to it.
+            store.SyncAlerts([Candidate() with { ObservedUtc = checkedAt }], T0.AddMinutes(90));
+            Assert.Equal(checkedAt, store.Workspace.Alerts.Single().LastSeenUtc);
+            store.SyncAlerts([Candidate() with { ObservedUtc = T0.AddMinutes(60) }], T0.AddMinutes(95));
+            Assert.Equal(T0.AddMinutes(60), store.Workspace.Alerts.Single().LastSeenUtc);
+            Assert.Equal(checkedAt, store.Workspace.Alerts.Single().FirstSeenUtc);
+        }
+    }
+
+    [Fact]
     public void An_escalation_step_is_recorded_once_on_the_alert()
     {
         var (store, telemetry) = Boot(null);
