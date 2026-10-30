@@ -293,7 +293,7 @@ else
         .ToArray();
 
     var sensorStatusTotal = Math.Max(0, snapshot.SensorCount);
-    var alertTone = snapshot.ErrorAlertCount > 0 ? " mat-text-danger" : snapshot.ActiveAlertCount > 0 ? " mat-text-warning" : string.Empty;
+    var alertTone = snapshot.ErrorAlertCount > 0 ? " mat-stat--danger" : snapshot.ActiveAlertCount > 0 ? " mat-stat--warning" : string.Empty;
     var statusLabel = $"{snapshot.HealthySensorCount} OK, {snapshot.WarningSensorCount} warning, {snapshot.AcknowledgedSensorCount} acknowledged, {snapshot.ErrorSensorCount} error, {snapshot.PausedSensorCount} paused, {snapshot.OtherSensorCount} other - of {sensorStatusTotal} sensors";
     var hostsWithProblems = snapshot.Nodes.Count(node => node.Kind == MonitoringElementKind.Host && node.StateKey is "error" or "warning");
     var probesDown = snapshot.Probes.Where(probe => probe.ConnectionStateKey != "ok").ToArray();
@@ -314,34 +314,26 @@ else
 
     @* The four things an operator looks at first, each a way into its list. Templates and notification rules used to have
        a tile each: they are configuration, not the state of the network. *@
-    <div class="mat-grid mat-grid--4">
-        <a class="mat-card" asp-page="/Alerts">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Open alerts</span>
-                <span class="mat-stat__value@(alertTone)">@snapshot.ActiveAlertCount</span>
-                <span class="mat-stat__delta">@(snapshot.ActiveAlertCount == 0 ? "none open" : $"{snapshot.ErrorAlertCount} error{(snapshot.ErrorAlertCount == 1 ? "" : "s")} · {snapshot.WarningAlertCount} warning{(snapshot.WarningAlertCount == 1 ? "" : "s")}")</span>
-            </div>
+    <div class="mat-stats">
+        <a class="mat-stat@(alertTone)" asp-page="/Alerts">
+            <span class="mat-stat__label">Open alerts</span>
+            <span class="mat-stat__value">@snapshot.ActiveAlertCount</span>
+            <span class="mat-stat__delta">@(snapshot.ActiveAlertCount == 0 ? "none open" : $"{snapshot.ErrorAlertCount} error{(snapshot.ErrorAlertCount == 1 ? "" : "s")} · {snapshot.WarningAlertCount} warning{(snapshot.WarningAlertCount == 1 ? "" : "s")}")</span>
         </a>
-        <a class="mat-card" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Sensors</span>
-                <span class="mat-stat__value">@snapshot.SensorCount</span>
-                <span class="mat-stat__delta">@(snapshot.PausedSensorCount > 0 ? $"{snapshot.PausedSensorCount} paused" : "none paused")</span>
-            </div>
+        <a class="mat-stat" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="sensor">
+            <span class="mat-stat__label">Sensors</span>
+            <span class="mat-stat__value">@snapshot.SensorCount</span>
+            <span class="mat-stat__delta">@(snapshot.PausedSensorCount > 0 ? $"{snapshot.PausedSensorCount} paused" : "none paused")</span>
         </a>
-        <a class="mat-card" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="host">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Hosts</span>
-                <span class="mat-stat__value">@snapshot.HostCount</span>
-                <span class="mat-stat__delta@(hostsWithProblems > 0 ? " mat-text-danger" : string.Empty)">@(snapshot.HostCount == 0 ? "none yet" : hostsWithProblems == 0 ? "all OK" : $"{hostsWithProblems} with problems")</span>
-            </div>
+        <a class="mat-stat@(hostsWithProblems > 0 ? " mat-stat--danger" : string.Empty)" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="host">
+            <span class="mat-stat__label">Hosts</span>
+            <span class="mat-stat__value">@snapshot.HostCount</span>
+            <span class="mat-stat__delta">@(snapshot.HostCount == 0 ? "none yet" : hostsWithProblems == 0 ? "all OK" : $"{hostsWithProblems} with problems")</span>
         </a>
-        <a class="mat-card" asp-page="/Probes">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Probes</span>
-                <span class="mat-stat__value">@snapshot.ConfiguredProbeCount</span>
-                <span class="mat-stat__delta@(probesDown.Length > 0 ? " mat-text-danger" : string.Empty)">@(probesDown.Length == 0 ? "all connected" : probesDown.Length == 1 ? $"{probesDown[0].ProbeName} not connected" : $"{probesDown.Length} not connected")</span>
-            </div>
+        <a class="mat-stat@(probesDown.Length > 0 ? " mat-stat--danger" : string.Empty)" asp-page="/Probes">
+            <span class="mat-stat__label">Probes</span>
+            <span class="mat-stat__value">@snapshot.ConfiguredProbeCount</span>
+            <span class="mat-stat__delta">@(probesDown.Length == 0 ? "all connected" : probesDown.Length == 1 ? $"{probesDown[0].ProbeName} not connected" : $"{probesDown.Length} not connected")</span>
         </a>
     </div>
 

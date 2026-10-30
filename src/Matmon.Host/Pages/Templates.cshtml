@@ -36,34 +36,26 @@
     <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
 }
 
-<div class="mat-grid mat-grid--4">
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Total</span>
-            <span class="mat-stat__value">@templates.Count</span>
-            <span class="mat-stat__delta">@configuredTemplateCount configured</span>
-        </div>
+<div class="mat-stats">
+    <div class="mat-stat">
+        <span class="mat-stat__label">Total</span>
+        <span class="mat-stat__value">@templates.Count</span>
+        <span class="mat-stat__delta">@configuredTemplateCount configured</span>
     </div>
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Sensor templates</span>
-            <span class="mat-stat__value">@sensorTemplateCount</span>
-            <span class="mat-stat__delta">For one sensor type</span>
-        </div>
+    <div class="mat-stat">
+        <span class="mat-stat__label">Sensor templates</span>
+        <span class="mat-stat__value">@sensorTemplateCount</span>
+        <span class="mat-stat__delta">For one sensor type</span>
     </div>
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Inherited</span>
-            <span class="mat-stat__value">@linkedTemplateCount</span>
-            <span class="mat-stat__delta">Based on another template</span>
-        </div>
+    <div class="mat-stat">
+        <span class="mat-stat__label">Inherited</span>
+        <span class="mat-stat__value">@linkedTemplateCount</span>
+        <span class="mat-stat__delta">Based on another template</span>
     </div>
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Affected sensors</span>
-            <span class="mat-stat__value">@impactedSensorLinks</span>
-            <span class="mat-stat__delta">Created from a template</span>
-        </div>
+    <div class="mat-stat">
+        <span class="mat-stat__label">Affected sensors</span>
+        <span class="mat-stat__value">@impactedSensorLinks</span>
+        <span class="mat-stat__delta">Created from a template</span>
     </div>
 </div>
 

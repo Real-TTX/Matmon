@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Version 0.9.3 of the toolkit MatUi (what changed in each version: CHANGELOG.md; how to update an app: docs/VERSIONING.md).
+   Version 0.9.4 of the toolkit MatUi (what changed in each version: CHANGELOG.md; how to update an app: docs/VERSIONING.md).
    `node tools/bump.js` writes the version here, in matui.boot.js and in MatUiVersion (Directory.Build.props); window.MatUi.version has it.
    MatUi · behaviour
    Dependency-free. Everything is wired by delegated listeners and data-attributes, so server-rendered and dynamically added
@@ -8246,7 +8246,7 @@
   if (doc.readyState === 'loading') { doc.addEventListener('DOMContentLoaded', init); } else { init(); }
 
   window.MatUi = {
-    version: '0.9.3',
+    version: '0.9.4',
     dialog: { open: openDialog, close: closeDialog },
     confirm: confirmDialog,
     alert: alertDialog,

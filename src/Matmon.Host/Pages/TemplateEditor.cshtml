@@ -87,37 +87,29 @@
 }
 else
 {
-    <div class="mat-grid mat-grid--4">
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Scope</span>
-                <span class="mat-stat__value mat-text-truncate">@Model.TemplateEditor.TargetKind</span>
-                @if (isSensorScope)
-                {
-                    <span class="mat-stat__delta mat-mono">@Model.TemplateEditor.SensorTypeKey</span>
-                }
-            </div>
+    <div class="mat-stats">
+        <div class="mat-stat">
+            <span class="mat-stat__label">Scope</span>
+            <span class="mat-stat__value mat-text-truncate">@Model.TemplateEditor.TargetKind</span>
+            @if (isSensorScope)
+            {
+                <span class="mat-stat__delta mat-mono">@Model.TemplateEditor.SensorTypeKey</span>
+            }
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Parent</span>
-                <span class="mat-stat__value mat-text-truncate" title="@selectedParentLabel">@selectedParentLabel</span>
-                <span class="mat-stat__delta">blank fields inherit</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Parent</span>
+            <span class="mat-stat__value mat-text-truncate" title="@selectedParentLabel">@selectedParentLabel</span>
+            <span class="mat-stat__delta">blank fields inherit</span>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Impact</span>
-                <span class="mat-stat__value">@impactCount</span>
-                <span class="mat-stat__delta">affected sensors</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Impact</span>
+            <span class="mat-stat__value">@impactCount</span>
+            <span class="mat-stat__delta">affected sensors</span>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Content</span>
-                <span class="mat-stat__value mat-text-truncate">@templateCredentialCount creds</span>
-                <span class="mat-stat__delta">@templateParameterCount params / @templateChannelCount channels</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Content</span>
+            <span class="mat-stat__value mat-text-truncate">@templateCredentialCount creds</span>
+            <span class="mat-stat__delta">@templateParameterCount params / @templateChannelCount channels</span>
         </div>
     </div>
 

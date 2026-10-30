@@ -126,11 +126,11 @@ else
     @* ---- Step 2: choose ---- *@
     <form method="post" asp-page-handler="Import" class="mat-form" novalidate>
         <input type="hidden" name="session" value="@Model.Session" />
-        <div class="mat-grid mat-grid--4">
-            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Taken over</span><span class="mat-stat__value mat-text-success">@Count(PrtgMappingLevel.Supported)</span></div></div>
-            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Needs completing</span><span class="mat-stat__value mat-text-warning">@Count(PrtgMappingLevel.Partial)</span></div></div>
-            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Built into Matmon</span><span class="mat-stat__value">@Count(PrtgMappingLevel.Covered)</span></div></div>
-            <div class="mat-card"><div class="mat-card__body mat-stat"><span class="mat-stat__label">Not imported</span><span class="mat-stat__value mat-text-muted">@Count(PrtgMappingLevel.Unsupported)</span></div></div>
+        <div class="mat-stats">
+            <div class="mat-stat mat-stat--success"><span class="mat-stat__label">Taken over</span><span class="mat-stat__value">@Count(PrtgMappingLevel.Supported)</span></div>
+            <div class="mat-stat mat-stat--warning"><span class="mat-stat__label">Needs completing</span><span class="mat-stat__value">@Count(PrtgMappingLevel.Partial)</span></div>
+            <div class="mat-stat"><span class="mat-stat__label">Built into Matmon</span><span class="mat-stat__value">@Count(PrtgMappingLevel.Covered)</span></div>
+            <div class="mat-stat"><span class="mat-stat__label">Not imported</span><span class="mat-stat__value mat-text-muted">@Count(PrtgMappingLevel.Unsupported)</span></div>
         </div>
 
         <section class="mat-card">

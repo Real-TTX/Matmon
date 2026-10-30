@@ -14,12 +14,13 @@
         || !string.IsNullOrWhiteSpace(Model.StatsTo)
         || !string.IsNullOrWhiteSpace(Model.StatsChannel);
 
-    string StateTextClass(string key) => key switch
+    // The State tile takes the state's tone; any other state (paused, unknown) keeps a plain tile with a muted word.
+    string? StateTileTone(string key) => key switch
     {
-        "ok" => "mat-text-success",
-        "warning" => "mat-text-warning",
-        "error" => "mat-text-danger",
-        _ => "mat-text-muted"
+        "ok" => "mat-stat--success",
+        "warning" => "mat-stat--warning",
+        "error" => "mat-stat--danger",
+        _ => null
     };
     string? MeterTone(string key) => key switch
     {
@@ -92,46 +93,39 @@
     </section>
 }
 
-<div class="mat-grid mat-grid--4">
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Current value</span>
-            <span class="mat-stat__value sensor-current-value">
-                <span>@view.CurrentValueText</span>
-                @if (!string.IsNullOrWhiteSpace(view.Unit))
-                {
-                    <small>@view.Unit</small>
-                }
-            </span>
-            <span class="mat-stat__delta">primary: @view.DefaultChannelLabel</span>
-        </div>
-    </div>
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">State</span>
-            <span class="mat-stat__value @StateTextClass(view.StateKey)">@view.StateLabel</span>
-            @if (view.IsAcknowledged)
+<div class="mat-stats">
+    <div class="mat-stat">
+        <span class="mat-stat__label">Current value</span>
+        <span class="mat-stat__value sensor-current-value">
+            <span>@view.CurrentValueText</span>
+            @if (!string.IsNullOrWhiteSpace(view.Unit))
             {
-                <span class="mat-stat__delta"><span class="mat-pill mat-pill--info">Acknowledged</span></span>
+                <small>@view.Unit</small>
             }
-        </div>
+        </span>
+        <span class="mat-stat__delta">primary: @view.DefaultChannelLabel</span>
     </div>
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Last check</span>
-            <span class="mat-stat__value">@(view.LastSeenText ?? "–")</span>
-            @if (!string.IsNullOrWhiteSpace(view.LastDurationText))
-            {
-                <span class="mat-stat__delta">duration @view.LastDurationText</span>
-            }
-        </div>
+    @{ var stateTone = StateTileTone(view.StateKey); }
+    <div class="mat-stat @stateTone">
+        <span class="mat-stat__label">State</span>
+        <span class="mat-stat__value @(stateTone is null ? "mat-text-muted" : null)">@view.StateLabel</span>
+        @if (view.IsAcknowledged)
+        {
+            <span class="mat-stat__delta"><span class="mat-pill mat-pill--info">Acknowledged</span></span>
+        }
     </div>
-    <div class="mat-card">
-        <div class="mat-card__body mat-stat">
-            <span class="mat-stat__label">Type</span>
-            <span class="mat-stat__value sensor-type-value">@view.SensorTypeLabel</span>
-            <span class="mat-stat__delta"><span class="@MatUi.PillClass(UsageTone(view.UsageLevelKey))" data-tip="How much load a check puts on the target">@view.UsageLevelLabel usage</span></span>
-        </div>
+    <div class="mat-stat">
+        <span class="mat-stat__label">Last check</span>
+        <span class="mat-stat__value">@(view.LastSeenText ?? "–")</span>
+        @if (!string.IsNullOrWhiteSpace(view.LastDurationText))
+        {
+            <span class="mat-stat__delta">duration @view.LastDurationText</span>
+        }
+    </div>
+    <div class="mat-stat">
+        <span class="mat-stat__label">Type</span>
+        <span class="mat-stat__value sensor-type-value">@view.SensorTypeLabel</span>
+        <span class="mat-stat__delta"><span class="@MatUi.PillClass(UsageTone(view.UsageLevelKey))" data-tip="How much load a check puts on the target">@view.UsageLevelLabel usage</span></span>
     </div>
 </div>
 
@@ -270,27 +264,23 @@
             }
         </section>
 
-        <div class="mat-grid mat-grid--3">
+        <div class="mat-stats">
             @foreach (var window in view.Windows)
             {
                 var isSelected = window.Key == view.SelectedWindow.Key;
-                <article class="mat-card @(isSelected ? "mat-card--accent" : null)">
-                    <div class="mat-card__body mat-stat">
-                        <div class="mat-row mat-row--between">
-                            <span class="mat-stat__label">@window.Label</span>
-                            <span class="@MatUi.PillClass(window.StateKey)">@window.StateLabel</span>
-                        </div>
-                        <span class="mat-stat__value sensor-window-value">
-                            <small>avg</small>
-                            <span>@(window.Average?.ToString("0.###") ?? "-")</span>
-                            @if (!string.IsNullOrWhiteSpace(view.Unit))
-                            {
-                                <small>@view.Unit</small>
-                            }
-                        </span>
-                        <span class="mat-stat__delta">min @(window.Minimum?.ToString("0.###") ?? "-") · max @(window.Maximum?.ToString("0.###") ?? "-")</span>
-                        <span class="mat-stat__delta">@window.SampleCount checks · latest @(window.LatestValue?.ToString("0.###") ?? "-")</span>
-                    </div>
+                <article class="mat-stat @(isSelected ? "mat-stat--accent" : null)">
+                    <span class="mat-stat__label">@window.Label</span>
+                    <span class="mat-stat__value sensor-window-value">
+                        <small>avg</small>
+                        <span>@(window.Average?.ToString("0.###") ?? "-")</span>
+                        @if (!string.IsNullOrWhiteSpace(view.Unit))
+                        {
+                            <small>@view.Unit</small>
+                        }
+                    </span>
+                    <span class="mat-stat__delta">min @(window.Minimum?.ToString("0.###") ?? "-") · max @(window.Maximum?.ToString("0.###") ?? "-")</span>
+                    <span class="mat-stat__delta">@window.SampleCount checks · latest @(window.LatestValue?.ToString("0.###") ?? "-")</span>
+                    <span class="mat-stat__delta"><span class="@MatUi.PillClass(window.StateKey)">@window.StateLabel</span></span>
                 </article>
             }
         </div>

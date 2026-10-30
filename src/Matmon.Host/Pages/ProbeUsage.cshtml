@@ -118,48 +118,36 @@
 }
 
 <div class="mat-stack">
-    <div class="mat-grid mat-grid--3">
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Bytes per second</span>
-                <span class="mat-stat__value">@view.EstimatedBytesPerSecondText</span>
-                <span class="mat-stat__delta">estimated</span>
-            </div>
+    <div class="mat-stats">
+        <div class="mat-stat">
+            <span class="mat-stat__label">Bytes per second</span>
+            <span class="mat-stat__value">@view.EstimatedBytesPerSecondText</span>
+            <span class="mat-stat__delta">estimated</span>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Bytes per hour</span>
-                <span class="mat-stat__value">@view.EstimatedBytesPerHourText</span>
-                <span class="mat-stat__delta">estimated</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Bytes per hour</span>
+            <span class="mat-stat__value">@view.EstimatedBytesPerHourText</span>
+            <span class="mat-stat__delta">estimated</span>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Bytes per day</span>
-                <span class="mat-stat__value">@view.EstimatedBytesPerDayText</span>
-                <span class="mat-stat__delta">estimated</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Bytes per day</span>
+            <span class="mat-stat__value">@view.EstimatedBytesPerDayText</span>
+            <span class="mat-stat__delta">estimated</span>
         </div>
-        <div class="mat-card mat-card--accent" title="Steady-state on-disk footprint once retention has caught up: raw samples over the raw-retention window + downsampled per-channel statistics over their window. Covers the whole probe (ignores filters).">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Probe size at retention</span>
-                <span class="mat-stat__value">@view.EstimatedProbeSizeText</span>
-                <span class="mat-stat__delta">estimated, all sensors</span>
-            </div>
+        <div class="mat-stat mat-stat--accent" title="Steady-state on-disk footprint once retention has caught up: raw samples over the raw-retention window + downsampled per-channel statistics over their window. Covers the whole probe (ignores filters).">
+            <span class="mat-stat__label">Probe size at retention</span>
+            <span class="mat-stat__value">@view.EstimatedProbeSizeText</span>
+            <span class="mat-stat__delta">estimated, all sensors</span>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Storage used</span>
-                <span class="mat-stat__value">@view.DataSizeText</span>
-                <span class="mat-stat__delta">data directory</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Storage used</span>
+            <span class="mat-stat__value">@view.DataSizeText</span>
+            <span class="mat-stat__delta">data directory</span>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__body mat-stat">
-                <span class="mat-stat__label">Storage free</span>
-                <span class="mat-stat__value">@view.StorageFreeText</span>
-                <span class="mat-stat__delta">on its drive</span>
-            </div>
+        <div class="mat-stat">
+            <span class="mat-stat__label">Storage free</span>
+            <span class="mat-stat__value">@view.StorageFreeText</span>
+            <span class="mat-stat__delta">on its drive</span>
         </div>
     </div>
     <p class="mat-muted">Estimates = poll rate × payload size × retention. The probe-size estimate covers all sensors.@(view.FiltersActive ? $" Filtered: the other figures cover the {view.SensorCount} of {view.TotalSensorCount} sensors shown below." : string.Empty)</p>
