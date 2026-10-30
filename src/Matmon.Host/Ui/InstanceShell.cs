@@ -175,6 +175,9 @@ public sealed class InstanceShellBuilder(
             }
         }
 
+        // Each item says whether it is the open section (`active`, the same rule as the layout's menu): the cloud used to
+        // guess it from the first path segment, so System lit up on /config but on none of its own tabs (/system/...,
+        // /logs) and Probes not on /agents - switching a tab switched the highlight off.
         // The menu the Matmon.Cloud console mirrors (role- and mode-aware), so the cloud's menu is exactly this one -
         // one flat list, as in the layout.
         var embedNav = new List<object>();
@@ -182,23 +185,23 @@ public sealed class InstanceShellBuilder(
         {
             if (secondary)
             {
-                embedNav.Add(new { label = "Probe", path = "" });
+                embedNav.Add(new { label = "Probe", path = "", active = true });
             }
             else
             {
-                embedNav.Add(new { label = "Dashboard", path = "" });
-                embedNav.Add(new { label = "Alerts", path = "Alerts" });
-                embedNav.Add(new { label = "Sensors", path = "Monitoring" });
-                embedNav.Add(new { label = "Maps", path = "Maps" });
-                embedNav.Add(new { label = "Events", path = "Events" });
-                embedNav.Add(new { label = "Probes", path = "Probes" });
-                embedNav.Add(new { label = "Discovery", path = "Discovery" });
-                embedNav.Add(new { label = "Templates", path = "Templates" });
-                embedNav.Add(new { label = "Notifications", path = "Notifications" });
-                embedNav.Add(new { label = "Maintenance", path = "Maintenance" });
+                embedNav.Add(new { label = "Dashboard", path = "", active = dashboardActive || Starts("/index") });
+                embedNav.Add(new { label = "Alerts", path = "Alerts", active = alertsActive });
+                embedNav.Add(new { label = "Sensors", path = "Monitoring", active = sensorsActive });
+                embedNav.Add(new { label = "Maps", path = "Maps", active = Starts("/maps") });
+                embedNav.Add(new { label = "Events", path = "Events", active = Starts("/events") });
+                embedNav.Add(new { label = "Probes", path = "Probes", active = probesActive });
+                embedNav.Add(new { label = "Discovery", path = "Discovery", active = Starts("/discovery") });
+                embedNav.Add(new { label = "Templates", path = "Templates", active = templatesActive });
+                embedNav.Add(new { label = "Notifications", path = "Notifications", active = Starts("/notifications") });
+                embedNav.Add(new { label = "Maintenance", path = "Maintenance", active = Starts("/maintenance") });
                 if (isAdmin)
                 {
-                    embedNav.Add(new { label = "System", path = "Config" });
+                    embedNav.Add(new { label = "System", path = "Config", active = systemActive });
                 }
             }
         }
