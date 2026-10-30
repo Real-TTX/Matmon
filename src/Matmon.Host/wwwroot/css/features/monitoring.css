@@ -312,7 +312,12 @@ html[data-monitoring-size="s"] .monitoring-list-info small { display: none; }
 }
 
 /* ---- Drag and drop in the tree: what a drop would do, shown on the row / chip under the pointer ---- */
-.monitoring-tree-row[draggable="true"], .monitoring-sensor-chip[draggable="true"] { cursor: grab; }
+/* The browser's own "grab" hand is white with a hairline edge on Windows - on the light theme it all but vanishes.
+   Ours is the same hand drawn twice: a wide white stroke under a black one, so it reads on light and dark rows alike.
+   (Lucide "hand", ISC.) The keyword after it is the fallback where a data cursor is not supported. */
+.monitoring-tree-row[draggable="true"], .monitoring-sensor-chip[draggable="true"] {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg stroke='%23fff' stroke-width='4.5'%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0'/%3E%3Cpath d='M14 10V4a2 2 0 0 0-4 0v2'/%3E%3Cpath d='M10 10.5V6a2 2 0 0 0-4 0v8'/%3E%3Cpath d='M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15'/%3E%3C/g%3E%3Cg stroke='%23000' stroke-width='1.8'%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0'/%3E%3Cpath d='M14 10V4a2 2 0 0 0-4 0v2'/%3E%3Cpath d='M10 10.5V6a2 2 0 0 0-4 0v8'/%3E%3Cpath d='M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15'/%3E%3C/g%3E%3C/svg%3E") 13 6, grab;
+}
 .monitoring-tree-row.is-dragging, .monitoring-sensor-chip.is-dragging { opacity: 0.5; }
 .monitoring-tree-row.is-drop-into, .monitoring-sensor-chip.is-drop-into { background: var(--mat-accent-soft); box-shadow: inset 0 0 0 2px var(--mat-accent); }
 .monitoring-tree-row.is-drop-before { box-shadow: inset 0 3px 0 0 var(--mat-accent); }
