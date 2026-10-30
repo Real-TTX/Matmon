@@ -121,7 +121,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         EnsureDefaultNotificationConfiguration();
         EnsureDefaultUsers();
         EnsureDefaultMaps(_runtimeOptions.CreateStarterMap);
-        EnsureDefaultAlertCollection();
+        CloseAlertsOfMissingElements();
         EnsurePushTokens();
         EnsureBrowserPushSender();
         EnsureDefaultBackupJobsLocked(cloudConnected: false);
@@ -2192,12 +2192,14 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             // Capture the sensor ids in the subtree so their telemetry can be purged after removal.
             removedSensorIds = EnumerateElements(target).OfType<SensorElement>().Select(element => element.Id).ToList();
 
+            var removedIds = EnumerateElements(target).Select(element => element.Id).ToHashSet();
             var removed = RemoveChild(_document.RootProbe, id);
             if (!removed)
             {
                 return false;
             }
 
+            CloseAlertsOfRemovedElementsLocked(removedIds.Contains, DateTimeOffset.UtcNow);
             QueueSave(SavePriority.Configuration);
         }
 
@@ -3599,6 +3601,55 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         {
             _document.Alerts ??= [];
             _document.AlertMutes ??= [];
+        }
+    }
+
+    /// <summary>
+    /// Boot / restore invariant: before deleting an element closed its alerts, they stayed open for good - nothing ever
+    /// reported on them again - and their links led to a sensor that was not there.
+    /// </summary>
+    private void CloseAlertsOfMissingElements()
+    {
+        lock (_gate)
+        {
+            EnsureDefaultAlertCollection();
+            var existing = EnumerateElements(_document.RootProbe).Select(element => element.Id).ToHashSet();
+            CloseAlertsOfRemovedElementsLocked(elementId => !existing.Contains(elementId), DateTimeOffset.UtcNow);
+        }
+    }
+
+    /// <summary>
+    /// Under <c>_gate</c>: an element that was deleted can neither recover nor be acknowledged from its page, so its open
+    /// alerts are closed (kept in the history with their own message) and its mutes dropped.
+    /// </summary>
+    private void CloseAlertsOfRemovedElementsLocked(Func<Guid, bool> isRemoved, DateTimeOffset now)
+    {
+        var changed = false;
+        foreach (var alert in _document.Alerts.Where(alert => alert.IsActive && isRemoved(alert.ElementId)))
+        {
+            alert.ResolvedUtc = now;
+            changed = true;
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = now,
+                Kind = MonitoringEventKind.AlertResolved,
+                ElementId = alert.ElementId,
+                ElementKind = alert.ElementKind,
+                ElementName = alert.ElementName,
+                ElementPath = alert.ElementPath,
+                State = alert.State,
+                Message = $"Closed - the {alert.ElementKind.ToString().ToLowerInvariant()} was deleted"
+            });
+        }
+
+        if (_document.AlertMutes.RemoveAll(mute => isRemoved(mute.ElementId)) > 0)
+        {
+            changed = true;
+        }
+
+        if (changed)
+        {
+            QueueSave(SavePriority.Configuration);
         }
     }
 

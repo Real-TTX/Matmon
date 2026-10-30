@@ -75,7 +75,14 @@ public sealed partial class SensorDetailsModel : PageModel
 
     public IActionResult OnGet()
     {
-        return LoadView() ? Page() : NotFound();
+        if (LoadView())
+        {
+            return Page();
+        }
+
+        // An old link (an alert, a notification, a bookmark) to a sensor that was deleted: say so instead of a bare 404.
+        ErrorMessage = "That sensor no longer exists - it was deleted.";
+        return RedirectToPage("/Monitoring");
     }
 
     public async Task<IActionResult> OnPostRunNowAsync()

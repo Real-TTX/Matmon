@@ -148,6 +148,63 @@ public sealed class AlertDelayAndEscalationTests : IDisposable
     }
 
     [Fact]
+    public void Deleting_a_sensor_closes_its_open_alert_and_drops_its_mute()
+    {
+        var (store, telemetry) = Boot(null);
+        using (telemetry) using (store)
+        {
+            store.RecordSensorObservation(SensorId, Critical(), T0);
+            Assert.True(Assert.Single(store.Workspace.Alerts).IsActive);
+
+            Assert.True(store.DeleteElement(SensorId));
+
+            var alert = Assert.Single(store.Workspace.Alerts);
+            Assert.False(alert.IsActive);
+            Assert.Equal("On battery", alert.Message); // kept as history with what it said
+        }
+    }
+
+    [Fact]
+    public void Deleting_a_muted_sensor_drops_its_mute()
+    {
+        var (store, telemetry) = Boot(null);
+        using (telemetry) using (store)
+        {
+            store.MuteElementAlerts(SensorId, null, "ops");
+            Assert.Single(store.GetActiveAlertMutes());
+
+            Assert.True(store.DeleteElement(SensorId));
+
+            Assert.Empty(store.GetActiveAlertMutes());
+        }
+    }
+
+    [Fact]
+    public void An_alert_left_open_for_an_element_that_no_longer_exists_is_closed_at_start()
+    {
+        var path = Path.Combine(_dir, "orphan.json");
+        File.WriteAllText(path, $$"""
+            {
+              "schemaVersion": {{InMemoryMonitoringWorkspaceStore.CurrentSchemaVersion}},
+              "rootProbe": { "$kind": "probe", "probeId": "primary", "id": "11111111-1111-1111-1111-111111111111", "name": "Primary Probe", "children": [] },
+              "alerts": [ { "id": "{{Guid.NewGuid()}}", "elementId": "{{SensorId}}", "elementKind": "Sensor", "elementName": "UPS", "elementPath": "Primary Probe / UPS", "state": "Critical", "message": "On battery", "firstSeenUtc": "2026-10-22T12:00:00Z", "lastSeenUtc": "2026-10-22T12:00:00Z" } ]
+            }
+            """);
+
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "orphan.db"));
+        using var store = new InMemoryMonitoringWorkspaceStore(
+            new DelayTestHostEnvironment(_dir),
+            new MatmonRuntimeOptions { WorkspacePath = path },
+            new MatmonAuthOptions(),
+            new EphemeralDataProtectionProvider(),
+            telemetry,
+            NullLogger<InMemoryMonitoringWorkspaceStore>.Instance,
+            new RecordingSink(_notified));
+
+        Assert.False(Assert.Single(store.Workspace.Alerts).IsActive);
+    }
+
+    [Fact]
     public void An_escalation_step_is_recorded_once_on_the_alert()
     {
         var (store, telemetry) = Boot(null);

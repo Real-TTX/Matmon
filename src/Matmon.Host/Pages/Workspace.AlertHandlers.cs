@@ -115,6 +115,7 @@ public sealed partial class WorkspaceModel
 
     private IReadOnlyList<WorkspaceAlertRow> BuildAlertRows(MonitoringWorkspaceSnapshot snapshot)
     {
+        var existing = MonitoringTopology.EnumerateSelfAndDescendants(snapshot.RootProbe).Select(element => element.Id).ToHashSet();
         return snapshot.Alerts
             .OrderByDescending(alert => alert.IsActive)
             .ThenByDescending(alert => alert.LastSeenUtc)
@@ -138,7 +139,8 @@ public sealed partial class WorkspaceModel
                 alert.RecoveredUtc?.ToDisplay().ToString("g"),
                 alert.ResolvedUtc?.ToDisplay().ToString("g"),
                 alert.FirstSeenUtc.ToUnixTimeMilliseconds(),
-                alert.LastSeenUtc.ToUnixTimeMilliseconds()))
+                alert.LastSeenUtc.ToUnixTimeMilliseconds(),
+                existing.Contains(alert.ElementId)))
             .ToArray();
     }
 

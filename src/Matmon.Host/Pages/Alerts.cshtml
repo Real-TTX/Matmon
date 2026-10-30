@@ -250,13 +250,17 @@
                                     <div class="mat-table__name">
                                         <span class="mat-tag">@alert.ElementKind</span>
                                         <span class="mat-min-w-0">@alert.ElementName<small class="mm-break">@alert.ElementPath</small></span>
+                                        @if (!alert.ElementExists)
+                                        {
+                                            <span class="mat-pill mat-pill--plain" data-tip="This @alert.ElementKind.ToString().ToLowerInvariant() was deleted - the alert is kept as history">Deleted</span>
+                                        }
                                     </div>
                                 </td>
                                 <td data-label="Message" class="mm-break">@alert.Message</td>
                                 <td data-label="First seen" class="mat-hide-sm mat-mono mat-nowrap">@alert.FirstSeen</td>
                                 @{ var seenText = alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt); }
                                 <td data-label="Last seen" class="mat-mono mat-nowrap">
-                                    @if (alert.ElementKind == MonitoringElementKind.Sensor)
+                                    @if (alert.ElementKind == MonitoringElementKind.Sensor && alert.ElementExists)
                                     {
                                         <a href="@SensorDetailsModel.FailingChecksPath(Request.PathBase, alert.ElementId)" data-tip="The failing checks">@seenText</a>
                                     }
@@ -287,11 +291,14 @@
                                 </td>
                                 <td class="mat-table__cell-actions">
                                     <div class="mat-table__actions">
-                                        @if (alert.ElementKind == MonitoringElementKind.Sensor)
+                                        @if (alert.ElementExists)
                                         {
-                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId" aria-label="Details of @alert.ElementName" data-tip="Details">@MatUi.Icon("bar-chart")</a>
+                                            @if (alert.ElementKind == MonitoringElementKind.Sensor)
+                                            {
+                                                <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorDetails" asp-route-sensorId="@alert.ElementId" aria-label="Details of @alert.ElementName" data-tip="Details">@MatUi.Icon("bar-chart")</a>
+                                            }
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl" aria-label="Edit @alert.ElementName" data-tip="Edit">@MatUi.Icon("edit")</a>
                                         }
-                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/ElementEditor" asp-route-selectedId="@alert.ElementId" asp-route-returnUrl="@returnUrl" aria-label="Edit @alert.ElementName" data-tip="Edit">@MatUi.Icon("edit")</a>
                                         @if (canAck)
                                         {
                                             <button type="submit" form="alerts-form" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm"
