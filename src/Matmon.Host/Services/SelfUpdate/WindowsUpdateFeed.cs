@@ -16,6 +16,9 @@ public sealed record WindowsUpdateManifest(string Version, string File, long Siz
 /// attempt this is, and - after the connection broke off - a note saying so ("connection dropped - resuming at 80 MB
 /// (attempt 2)"). <see cref="Complete"/> = every byte is there and the checks (hash, signature) are about to run.
 /// </summary>
+/// <summary>The downloaded package is not the one the manifest describes (the hash differs).</summary>
+public sealed class PackageMismatchException(string message) : InvalidOperationException(message);
+
 public sealed record UpdateDownloadProgress(long Done, long Total, double BytesPerSecond, int Attempt, string? Note, bool Complete = false)
 {
     /// <summary>The share downloaded, 0..1 (0 while the size is unknown).</summary>
@@ -121,7 +124,7 @@ public static class WindowsUpdateFeed
         if (!string.Equals(actual, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
         {
             TryDelete(target);
-            throw new InvalidOperationException($"the downloaded package does not match its manifest (sha256 {actual}, expected {manifest.Sha256})");
+            throw new PackageMismatchException($"the downloaded package does not match its manifest (sha256 {actual}, expected {manifest.Sha256})");
         }
 
         if (!string.IsNullOrWhiteSpace(manifest.Signature) &&
@@ -129,6 +132,40 @@ public static class WindowsUpdateFeed
         {
             TryDelete(target);
             throw new InvalidOperationException("the package's signature is not valid");
+        }
+    }
+
+    /// <summary>How long to wait before reading the manifest again after a package that did not match it.</summary>
+    public static TimeSpan RepublishWait { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Reads the feed's manifest NOW and downloads the package it names (<see cref="DownloadAsync"/>); returns the manifest
+    /// that was used. The feed is a ROLLING release that CI replaces on every build - package first, manifest a moment
+    /// later - so a manifest read at check time, or a download that overlapped a publish, can name another build than
+    /// the package that arrived ("does not match its manifest"; it happened on a real instance). On such a mismatch the
+    /// manifest is read again after <see cref="RepublishWait"/> and, when it changed, the download is repeated once.
+    /// </summary>
+    public static async Task<WindowsUpdateManifest> DownloadLatestAsync(HttpClient client, string feed, string target, bool requireSignature,
+        Action<UpdateDownloadProgress>? progress, CancellationToken cancellationToken, UpdateDownloadPolicy? policy = null)
+    {
+        var manifest = await ReadManifestAsync(client, feed, cancellationToken);
+        try
+        {
+            await DownloadAsync(client, feed, manifest, target, requireSignature, progress, cancellationToken, policy);
+            return manifest;
+        }
+        catch (PackageMismatchException)
+        {
+            await Task.Delay(RepublishWait, cancellationToken);
+            var again = await ReadManifestAsync(client, feed, cancellationToken);
+            if (string.Equals(again.Sha256, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw;
+            }
+
+            progress?.Invoke(new UpdateDownloadProgress(0, again.Size, 0, 1, $"A new build was published meanwhile ({again.Version}) - downloading it", false));
+            await DownloadAsync(client, feed, again, target, requireSignature, progress, cancellationToken, policy);
+            return again;
         }
     }
 

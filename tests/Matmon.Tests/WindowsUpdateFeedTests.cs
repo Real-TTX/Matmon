@@ -45,6 +45,54 @@ public sealed class WindowsUpdateFeedTests
     }
 
     [Fact]
+    public async Task A_build_published_during_the_download_is_fetched_again_with_the_new_manifest()
+    {
+        // The rolling release: the package was already replaced, the manifest read first still named the old build
+        // (a real instance: "does not match its manifest").
+        var stale = new string('7', 64);
+        var feed = new Feed { Manifests = call => call == 1 ? ("0.1.41", stale) : ("0.1.42", Sha) };
+        var target = Path.GetTempFileName();
+        var wait = WindowsUpdateFeed.RepublishWait;
+        WindowsUpdateFeed.RepublishWait = TimeSpan.FromMilliseconds(1);
+        try
+        {
+            using var client = new HttpClient(feed);
+            var used = await WindowsUpdateFeed.DownloadLatestAsync(client, FeedUrl, target, requireSignature: false, null, default, Quick);
+
+            Assert.Equal("0.1.42", used.Version);
+            Assert.Equal(Package, await File.ReadAllBytesAsync(target));
+            Assert.Equal(2, feed.ManifestRequests);
+            Assert.Equal(2, feed.PackageRequests);
+        }
+        finally
+        {
+            WindowsUpdateFeed.RepublishWait = wait;
+            File.Delete(target);
+        }
+    }
+
+    [Fact]
+    public async Task A_mismatch_that_stays_after_reading_the_manifest_again_is_an_error()
+    {
+        var feed = new Feed { Manifests = _ => ("0.1.42", new string('7', 64)) };
+        var target = Path.GetTempFileName();
+        var wait = WindowsUpdateFeed.RepublishWait;
+        WindowsUpdateFeed.RepublishWait = TimeSpan.FromMilliseconds(1);
+        try
+        {
+            using var client = new HttpClient(feed);
+            await Assert.ThrowsAsync<PackageMismatchException>(() =>
+                WindowsUpdateFeed.DownloadLatestAsync(client, FeedUrl, target, requireSignature: false, null, default, Quick));
+            Assert.Equal(1, feed.PackageRequests);
+            Assert.False(File.Exists(target));
+        }
+        finally
+        {
+            WindowsUpdateFeed.RepublishWait = wait;
+        }
+    }
+
+    [Fact]
     public async Task A_connection_that_drops_is_resumed_with_a_range_request()
     {
         var feed = new Feed { Behaviour = (call, from) => call == 1 ? Respond.Drop(from, after: 120_000) : Respond.Normal(from) };
@@ -217,7 +265,7 @@ public sealed class WindowsUpdateFeedTests
         using var client = new HttpClient(new Feed());
         var manifest = Manifest with { Sha256 = new string('0', 64) };
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<PackageMismatchException>(() =>
             WindowsUpdateFeed.DownloadAsync(client, FeedUrl, manifest, target, false, null, default));
         Assert.Contains("does not match", error.Message);
         Assert.False(File.Exists(target));
@@ -351,12 +399,18 @@ public sealed class WindowsUpdateFeedTests
         /// <summary>The answer to the n-th (1-based) package request, given where it asked to start.</summary>
         public Func<int, long?, HttpResponseMessage> Behaviour { get; init; } = (_, from) => Respond.Normal(from);
 
+        public int ManifestRequests { get; private set; }
+
+        /// <summary>The version and hash the n-th (1-based) manifest request names - by default the real package.</summary>
+        public Func<int, (string Version, string Sha)> Manifests { get; init; } = _ => ("0.1.42", Sha);
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
             if (path.EndsWith(WindowsUpdateFeed.ManifestFile, StringComparison.Ordinal))
             {
-                var json = $$"""{"version":"0.1.42","file":"{{WindowsUpdateFeed.PackageFile}}","size":{{Package.Length}},"sha256":"{{Sha}}","signature":null}""";
+                var (version, sha) = Manifests(++ManifestRequests);
+                var json = $$"""{"version":"{{version}}","file":"{{WindowsUpdateFeed.PackageFile}}","size":{{Package.Length}},"sha256":"{{sha}}","signature":null}""";
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") });
             }
 

@@ -74,21 +74,25 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
             throw new PlatformNotSupportedException();
         }
 
-        var manifest = _manifest is { } known && known.Version == offer.Version
-            ? known
-            : throw new InvalidOperationException("check for updates again first - the offer is no longer current");
+        if (_feed is null || _manifest is null)
+        {
+            throw new InvalidOperationException("check for updates again first - the offer is no longer current");
+        }
+
         var service = ServiceName() ?? throw new InvalidOperationException("cannot find the Windows service this program runs as");
         var install = InstallDirectory;
-        var staged = $"{install}.new-{Sanitize(manifest.Version)}";
         var updater = $"{install}.updater";
         Directory.CreateDirectory(StateDirectory);
         var package = Path.Combine(StateDirectory, WindowsUpdateFeed.PackageFile);
 
+        // The manifest is read again here: the feed is a rolling release, and the one read at check time may describe
+        // a build CI has replaced since - that is how an install failed with "does not match its manifest".
         progress?.Step("download");
+        WindowsUpdateManifest manifest;
         using (var client = Client())
         {
             var verifying = false;
-            await WindowsUpdateFeed.DownloadAsync(client, _feed!, manifest, package, AgentPackageSignature.RequiredByThisBuild, state =>
+            manifest = await WindowsUpdateFeed.DownloadLatestAsync(client, _feed, package, AgentPackageSignature.RequiredByThisBuild, state =>
             {
                 progress?.Download(state);
                 if (state.Complete && !verifying)
@@ -100,6 +104,7 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         }
 
         progress?.Step("unpack");
+        var staged = $"{install}.new-{Sanitize(manifest.Version)}";
         TryDeleteDirectory(staged);
         ZipFile.ExtractToDirectory(package, staged, overwriteFiles: true);
         File.Delete(package);

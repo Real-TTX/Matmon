@@ -100,8 +100,8 @@ internal static class SetupRunner
         try
         {
             progress($"Looking up the newest Matmon ({ChannelName} channel) ...");
-            var manifest = WindowsUpdateFeed.ReadManifestAsync(client, feed, CancellationToken.None).GetAwaiter().GetResult();
-            progress($"Downloading Matmon {manifest.Version} ({manifest.Size / 1048576.0:0} MB) ...");
+            var announced = WindowsUpdateFeed.ReadManifestAsync(client, feed, CancellationToken.None).GetAwaiter().GetResult();
+            progress($"Downloading Matmon {announced.Version} ({announced.Size / 1048576.0:0} MB) ...");
             // A connection that breaks off is resumed; each time that happens the log (and the setup's list) says so.
             string? lastNote = null;
             void Downloading(UpdateDownloadProgress state)
@@ -115,7 +115,8 @@ internal static class SetupRunner
                 download?.Invoke(state);
             }
 
-            WindowsUpdateFeed.DownloadAsync(client, feed, manifest, zip, AgentPackageSignature.RequiredByThisBuild, Downloading, CancellationToken.None)
+            // Reads the manifest again and copes with a build published while it downloads (the feed is a rolling release).
+            var manifest = WindowsUpdateFeed.DownloadLatestAsync(client, feed, zip, AgentPackageSignature.RequiredByThisBuild, Downloading, CancellationToken.None)
                 .GetAwaiter().GetResult();
             progress(string.IsNullOrWhiteSpace(manifest.Signature)
                 ? "Download complete and checked (SHA-256; this build is not signed)."
