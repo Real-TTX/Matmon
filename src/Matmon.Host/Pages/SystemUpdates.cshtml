@@ -88,6 +88,10 @@
             <dt>Version</dt><dd class="mat-mono">@status.CurrentVersion</dd>
             <dt>Channel</dt><dd>@status.Channel</dd>
             <dt>Updates</dt><dd>@ModeText(status.Mode)</dd>
+            @if (OperatingSystem.IsWindows() && Matmon.Host.Services.SelfUpdate.WindowsInstallation.LastTrayRefresh is { } trayRefresh)
+            {
+                <dt>Tray icon</dt><dd>@trayRefresh</dd>
+            }
             @if (canUpdate)
             {
                 <dt>Last check</dt><dd>@(status.LastCheckUtc is { } checkedAt ? checkedAt.ToDisplay().ToString("g") : "not yet")</dd>

@@ -424,20 +424,28 @@ public static class WindowsInstallation
 
             DeleteLeftovers(SetupFolder, SetupProgramName);
 
+            // The tray program FIRST: the Start menu entry below is cosmetic and must never be what keeps an old tray in place.
+            LastTrayRefresh = ReplaceRunning(source, SetupProgramPath)
+                ? $"Tray program replaced by this build's ({DateTime.Now:g}) - a running tray restarts onto it within a few seconds."
+                : "Tray program is this build's.";
+
             // An installation from before the Start menu entry existed gets it here.
             if (TrayIconRegistered())
             {
                 EnsureStartMenuShortcut();
             }
-
-            ReplaceRunning(source, SetupProgramPath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
-            // The tray and the uninstaller keep working on the old build; the next start tries again.
+            // The tray and the uninstaller keep working on the old build; the next look tries again (every failure, not
+            // only file errors - an unexpected one used to leave the old tray in place for good, said nowhere).
+            LastTrayRefresh = $"Tray program could not be replaced: {ex.Message}";
             Interlocked.Exchange(ref _setupRefreshed, 0);
         }
     }
+
+    /// <summary>What the last <see cref="RefreshSetupProgram"/> did - shown on System > Updates; null before it ran.</summary>
+    public static string? LastTrayRefresh { get; private set; }
 
     /// <summary>
     /// Moves an installation from "setup\Matmon Setup.exe" to "app\Matmon.exe": the new file, the sign-in entry, the
@@ -503,11 +511,11 @@ public static class WindowsInstallation
 
     /// <summary>Puts <paramref name="source"/> in place of <paramref name="target"/>, which may be running: the running copy is
     /// renamed aside (Windows allows renaming a running exe, not overwriting it) and deleted on a later start.</summary>
-    private static void ReplaceRunning(string source, string target)
+    private static bool ReplaceRunning(string source, string target)
     {
         if (SameContent(source, target))
         {
-            return;
+            return false;
         }
 
         var aside = $"{target}.old-{DateTime.UtcNow:yyyyMMddHHmmss}";
@@ -515,12 +523,16 @@ public static class WindowsInstallation
         try
         {
             File.Copy(source, target);
+            // A copy keeps the SOURCE's write time; the running tray watches time + length to notice it was replaced.
+            File.SetLastWriteTimeUtc(target, DateTime.UtcNow);
         }
         catch
         {
             File.Move(aside, target);
             throw;
         }
+
+        return true;
     }
 
     private static void DeleteLeftovers(string folder, string fileName)
