@@ -50,7 +50,8 @@
 .mm-update-versions[hidden] { display: none; }
 .mm-update-screen[hidden] { display: none; }
 /* what the install is doing: one line per step - done (a tick), current (a pulsing dot, bold), pending (muted) */
-.mm-update-steps { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: var(--mat-space-1); text-align: left; font-size: var(--mat-fs-sm); }
+/* the steps as a block in the middle of the card, set off from the status line above by a short rule */
+.mm-update-steps { list-style: none; margin: var(--mat-space-2) 0 0; padding: var(--mat-space-3) 0 0; justify-self: center; min-width: 60%; border-top: 1px solid var(--mat-border); display: grid; gap: var(--mat-space-2); text-align: left; font-size: var(--mat-fs-sm); }
 .mm-update-steps[hidden] { display: none; }
 .mm-update-steps li { display: grid; grid-template-columns: 1.25rem 1fr; align-items: center; gap: var(--mat-space-2); color: var(--mat-text-muted); }
 .mm-update-steps li::before { content: ""; justify-self: center; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--mat-border-strong); }
