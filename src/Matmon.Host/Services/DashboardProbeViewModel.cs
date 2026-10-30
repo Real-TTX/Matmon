@@ -10,4 +10,5 @@ public sealed record DashboardProbeViewModel(
     string StateColor,
     string LastSeen,
     string Message,
-    string ConnectionStateKey);
+    string ConnectionStateKey,
+    bool IsAgent = false);

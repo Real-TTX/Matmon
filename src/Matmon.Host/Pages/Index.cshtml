@@ -296,7 +296,9 @@ else
     var alertTone = snapshot.ErrorAlertCount > 0 ? " mat-stat--danger" : snapshot.ActiveAlertCount > 0 ? " mat-stat--warning" : string.Empty;
     var statusLabel = $"{snapshot.HealthySensorCount} OK, {snapshot.WarningSensorCount} warning, {snapshot.AcknowledgedSensorCount} acknowledged, {snapshot.ErrorSensorCount} error, {snapshot.PausedSensorCount} paused, {snapshot.OtherSensorCount} other - of {sensorStatusTotal} sensors";
     var hostsWithProblems = snapshot.Nodes.Count(node => node.Kind == MonitoringElementKind.Host && node.StateKey is "error" or "warning");
-    var probesDown = snapshot.Probes.Where(probe => probe.ConnectionStateKey != "ok").ToArray();
+    var probesDown = snapshot.Probes.Where(probe => !probe.IsAgent && probe.ConnectionStateKey != "ok").ToArray();
+    var agents = snapshot.Probes.Where(probe => probe.IsAgent).ToArray();
+    var agentsDown = agents.Where(agent => agent.ConnectionStateKey != "ok").ToArray();
     var okShare = sensorStatusTotal == 0 ? 0 : (int)Math.Round(snapshot.HealthySensorCount * 100d / sensorStatusTotal);
 
     string ParentOf(string path)
@@ -335,6 +337,14 @@ else
             <span class="mat-stat__value">@snapshot.ConfiguredProbeCount</span>
             <span class="mat-stat__delta">@(probesDown.Length == 0 ? "all connected" : probesDown.Length == 1 ? $"{probesDown[0].ProbeName} not connected" : $"{probesDown.Length} not connected")</span>
         </a>
+        @if (agents.Length > 0)
+        {
+            <a class="mat-stat@(agentsDown.Length > 0 ? " mat-stat--danger" : string.Empty)" asp-page="/Agents">
+                <span class="mat-stat__label">Agents</span>
+                <span class="mat-stat__value">@agents.Length</span>
+                <span class="mat-stat__delta">@(agentsDown.Length == 0 ? "all connected" : agentsDown.Length == 1 ? $"{agentsDown[0].ProbeName} not connected" : $"{agentsDown.Length} not connected")</span>
+            </a>
+        }
     </div>
 
     @* The status of every sensor as one bar: OK, warning, acknowledged and error each a part of it; paused and other are

@@ -440,7 +440,12 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         switch (element.Kind)
         {
             case MonitoringElementKind.Probe:
-                counters.Probes++;
+                // An agent is not a probe to the user: it has a tile of its own, the Probes count leaves it out.
+                if (element is not ProbeElement { AgentEnrolledUtc: not null })
+                {
+                    counters.Probes++;
+                }
+
 
                 if (element is ProbeElement probeItem && probeHealthMap.TryGetValue(probeItem.Id, out var probeItemHealth))
                 {
@@ -452,7 +457,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                         stateColor,
                         probeItemHealth.LastSeen,
                         probeItemHealth.Message,
-                        MonitoringStatePresentation.Key(probeItemHealth.Severity)));
+                        MonitoringStatePresentation.Key(probeItemHealth.Severity),
+                        probeItem.AgentEnrolledUtc is not null));
                 }
                 break;
             case MonitoringElementKind.Host:
