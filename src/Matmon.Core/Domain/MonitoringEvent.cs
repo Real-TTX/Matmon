@@ -14,7 +14,14 @@ public enum MonitoringEventKind
     Paused = 9,
     Resumed = 10,
     AlertMuted = 11,
-    AlertUnmuted = 12
+    AlertUnmuted = 12,
+
+    /// <summary>The condition behind an UNACKNOWLEDGED alert cleared - the alert stays open until someone acknowledges it
+    /// (an acknowledged one is resolved instead, <see cref="AlertResolved"/>).</summary>
+    AlertRecovered = 13,
+
+    /// <summary>A recovered (not yet acknowledged) alert fired again - the same episode re-opened.</summary>
+    AlertReopened = 14
 }
 
 public sealed class MonitoringEvent
@@ -38,4 +45,8 @@ public sealed class MonitoringEvent
     public string Message { get; set; } = string.Empty;
 
     public string? Details { get; set; }
+
+    /// <summary>The user who did it (pause, resume, acknowledge, mute, un-mute) - null for what the monitor did by itself
+    /// and for events recorded before the field existed.</summary>
+    public string? Actor { get; set; }
 }

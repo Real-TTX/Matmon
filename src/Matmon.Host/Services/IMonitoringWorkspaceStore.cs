@@ -298,6 +298,18 @@ public interface IMonitoringWorkspaceStore
 
     IReadOnlyList<MonitoringEvent> GetEvents(int take = 500);
 
+    /// <summary>The most recent events of one element, newest first (the sensor page's status history).</summary>
+    IReadOnlyList<MonitoringEvent> GetElementEvents(Guid elementId, int take = 5000);
+
+    /// <summary>The alerts (open and the kept history) of one element, cloned.</summary>
+    IReadOnlyList<MonitoringAlert> GetElementAlerts(Guid elementId);
+
+    /// <summary>One page of a sensor's checks, newest first, optionally only those in <paramref name="states"/>.</summary>
+    IReadOnlyList<SensorObservation> GetSensorObservationPage(Guid sensorId, IReadOnlyCollection<SensorState>? states, int skip, int take);
+
+    /// <summary>How many checks of the sensor are stored, per state.</summary>
+    IReadOnlyDictionary<SensorState, int> GetSensorObservationStateCounts(Guid sensorId);
+
     IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId);
 
     /// <summary>Only the buckets at or after <paramref name="fromUtc"/> - pushed into the SQL rather than
@@ -553,10 +565,11 @@ public interface IMonitoringWorkspaceStore
 
     bool MoveElementAfter(Guid elementId, Guid siblingId);
 
-    bool SetSensorPaused(Guid sensorId, bool paused);
+    /// <summary><paramref name="by"/>: the user who did it, recorded on the Paused / Resumed event.</summary>
+    bool SetSensorPaused(Guid sensorId, bool paused, string? by = null);
 
     /// <summary>Pauses/resumes an element and every sensor in its subtree; returns the number changed.</summary>
-    int SetElementPaused(Guid elementId, bool paused);
+    int SetElementPaused(Guid elementId, bool paused, string? by = null);
 
     void SyncAlerts(IEnumerable<MonitoringAlertCandidate> activeAlerts, DateTimeOffset now);
 

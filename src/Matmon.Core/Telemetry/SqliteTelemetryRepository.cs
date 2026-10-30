@@ -90,7 +90,8 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 element_path TEXT    NOT NULL,
                 state        INTEGER NULL,
                 message      TEXT    NOT NULL,
-                details      TEXT    NULL
+                details      TEXT    NULL,
+                actor        TEXT    NULL
             );
             CREATE INDEX IF NOT EXISTS ix_event_ts ON event (ts);
 
@@ -128,6 +129,30 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
 
         EnsureStatisticsColumns();
         MigrateStatisticsToPerChannelKey();
+        EnsureEventActorColumn();
+    }
+
+    // The user behind an event (pause, acknowledge, mute ...) came after the table; an older database gets the column,
+    // and the per-element index the sensor page's status history reads by.
+    private void EnsureEventActorColumn()
+    {
+        var hasActor = false;
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(event);";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                hasActor |= string.Equals(reader.GetString(1), "actor", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        if (!hasActor)
+        {
+            ExecuteLocked("ALTER TABLE event ADD COLUMN actor TEXT NULL;");
+        }
+
+        ExecuteLocked("CREATE INDEX IF NOT EXISTS ix_event_element_ts ON event (element_id, ts);");
     }
 
     // Adds the richer-statistics columns to a sensor_statistics table created by
@@ -472,6 +497,52 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         }
     }
 
+    public IReadOnlyList<SensorObservation> GetObservationPage(Guid sensorId, IReadOnlyCollection<SensorState>? states, int skip, int take)
+    {
+        if (take <= 0 || states is { Count: 0 })
+        {
+            return [];
+        }
+
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            // The states are enum values, written into the statement as numbers - never text from a request.
+            var stateClause = states is null ? string.Empty : $" AND state IN ({string.Join(",", states.Select(state => (int)state))})";
+            cmd.CommandText =
+                $"""
+                 SELECT sensor_id, ts, state, value, default_channel_key, channels,
+                        executed_probe_id, executed_probe_name, duration_ticks, message
+                 FROM observation
+                 WHERE sensor_id = $sensor{stateClause}
+                 ORDER BY ts DESC, id DESC
+                 LIMIT $take OFFSET $skip;
+                 """;
+            cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
+            cmd.Parameters.AddWithValue("$take", take);
+            cmd.Parameters.AddWithValue("$skip", Math.Max(skip, 0));
+            return ReadObservations(cmd);
+        }
+    }
+
+    public IReadOnlyDictionary<SensorState, int> GetObservationStateCounts(Guid sensorId)
+    {
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT state, COUNT(*) FROM observation WHERE sensor_id = $sensor GROUP BY state;";
+            cmd.Parameters.AddWithValue("$sensor", sensorId.ToString());
+            var counts = new Dictionary<SensorState, int>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                counts[(SensorState)reader.GetInt32(0)] = reader.GetInt32(1);
+            }
+
+            return counts;
+        }
+    }
+
     public int PruneObservations(Guid sensorId, DateTimeOffset cutoffUtc)
     {
         lock (_sync)
@@ -516,9 +587,9 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         cmd.CommandText =
             """
             INSERT OR REPLACE INTO event
-                (id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details)
+                (id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details, actor)
             VALUES
-                ($id, $ts, $kind, $elementId, $elementKind, $elementName, $elementPath, $state, $message, $details);
+                ($id, $ts, $kind, $elementId, $elementKind, $elementName, $elementPath, $state, $message, $details, $actor);
             """;
         cmd.Parameters.AddWithValue("$id", monitoringEvent.Id.ToString());
         cmd.Parameters.AddWithValue("$ts", monitoringEvent.TimestampUtc.ToUnixTimeMilliseconds());
@@ -530,7 +601,32 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
         cmd.Parameters.AddWithValue("$state", ToDb(monitoringEvent.State is { } state ? (int)state : (int?)null));
         cmd.Parameters.AddWithValue("$message", monitoringEvent.Message);
         cmd.Parameters.AddWithValue("$details", ToDb(monitoringEvent.Details));
+        cmd.Parameters.AddWithValue("$actor", ToDb(monitoringEvent.Actor));
         cmd.ExecuteNonQuery();
+    }
+
+    public IReadOnlyList<MonitoringEvent> GetElementEvents(Guid elementId, int take)
+    {
+        if (take <= 0)
+        {
+            return [];
+        }
+
+        lock (_sync)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText =
+                """
+                SELECT id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details, actor
+                FROM event
+                WHERE element_id = $element
+                ORDER BY ts DESC
+                LIMIT $take;
+                """;
+            cmd.Parameters.AddWithValue("$element", elementId.ToString());
+            cmd.Parameters.AddWithValue("$take", take);
+            return ReadEvents(cmd);
+        }
     }
 
     public IReadOnlyList<MonitoringEvent> GetEvents(int take)
@@ -545,7 +641,7 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             using var cmd = _connection.CreateCommand();
             cmd.CommandText =
                 """
-                SELECT id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details
+                SELECT id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details, actor
                 FROM event
                 ORDER BY ts DESC
                 LIMIT $take;
@@ -562,7 +658,7 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
             using var cmd = _connection.CreateCommand();
             cmd.CommandText =
                 """
-                SELECT id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details
+                SELECT id, ts, kind, element_id, element_kind, element_name, element_path, state, message, details, actor
                 FROM event
                 ORDER BY ts ASC;
                 """;
@@ -1036,7 +1132,8 @@ public sealed class SqliteTelemetryRepository : ITelemetryRepository, IDisposabl
                 ElementPath = reader.GetString(6),
                 State = reader.IsDBNull(7) ? null : (SensorState)reader.GetInt32(7),
                 Message = reader.GetString(8),
-                Details = reader.IsDBNull(9) ? null : reader.GetString(9)
+                Details = reader.IsDBNull(9) ? null : reader.GetString(9),
+                Actor = reader.IsDBNull(10) ? null : reader.GetString(10)
             });
         }
 

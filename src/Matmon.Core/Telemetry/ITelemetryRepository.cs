@@ -46,6 +46,13 @@ public interface ITelemetryRepository
 
     IReadOnlyList<SensorObservation> GetAllObservations();
 
+    /// <summary>One page of a sensor's checks, NEWEST first, optionally only those in <paramref name="states"/>
+    /// (null = every state, empty = none).</summary>
+    IReadOnlyList<SensorObservation> GetObservationPage(Guid sensorId, IReadOnlyCollection<SensorState>? states, int skip, int take);
+
+    /// <summary>How many checks of the sensor are stored, per state - one GROUP BY over the sensor index.</summary>
+    IReadOnlyDictionary<SensorState, int> GetObservationStateCounts(Guid sensorId);
+
     /// <summary>Removes observations for one sensor older than the cutoff. Returns rows removed.</summary>
     int PruneObservations(Guid sensorId, DateTimeOffset cutoffUtc);
 
@@ -55,6 +62,9 @@ public interface ITelemetryRepository
 
     /// <summary>The most recent <paramref name="take"/> events, newest first.</summary>
     IReadOnlyList<MonitoringEvent> GetEvents(int take);
+
+    /// <summary>The most recent <paramref name="take"/> events of one element, newest first.</summary>
+    IReadOnlyList<MonitoringEvent> GetElementEvents(Guid elementId, int take);
 
     IReadOnlyList<MonitoringEvent> GetAllEvents();
 

@@ -243,6 +243,8 @@ public sealed class EventsModel : PageModel
             MonitoringEventKind.AlertResolved => "Alert resolved",
             MonitoringEventKind.AlertMuted => "Alert muted",
             MonitoringEventKind.AlertUnmuted => "Alert unmuted",
+            MonitoringEventKind.AlertRecovered => "Alert recovered",
+            MonitoringEventKind.AlertReopened => "Alert re-opened",
             MonitoringEventKind.Created => "Created",
             MonitoringEventKind.Updated => "Updated",
             MonitoringEventKind.Moved => "Moved",

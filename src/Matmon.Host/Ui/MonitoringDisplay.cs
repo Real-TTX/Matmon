@@ -23,6 +23,33 @@ public static class MonitoringDisplay
         return duration.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>How long something lasted, in the two largest units that matter: "40 s", "12 min", "3 h 5 min",
+    /// "2 d 4 h". Negative spans count as zero.</summary>
+    public static string FormatSpan(TimeSpan span)
+    {
+        if (span < TimeSpan.Zero)
+        {
+            span = TimeSpan.Zero;
+        }
+
+        if (span.TotalSeconds < 60)
+        {
+            return $"{(int)span.TotalSeconds} s";
+        }
+
+        if (span.TotalMinutes < 60)
+        {
+            return $"{(int)span.TotalMinutes} min";
+        }
+
+        if (span.TotalHours < 24)
+        {
+            return span.Minutes == 0 ? $"{(int)span.TotalHours} h" : $"{(int)span.TotalHours} h {span.Minutes} min";
+        }
+
+        return span.Hours == 0 ? $"{(int)span.TotalDays} d" : $"{(int)span.TotalDays} d {span.Hours} h";
+    }
+
     /// <summary>Thousands-separated count for the UI ("12,345").</summary>
     public static string FormatCount(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
 

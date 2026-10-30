@@ -14,6 +14,84 @@
         || !string.IsNullOrWhiteSpace(Model.StatsTo)
         || !string.IsNullOrWhiteSpace(Model.StatsChannel);
 
+    // The same for the two history lists: a filter or a page of theirs in the address opens their tab.
+    bool InQuery(params string[] keys) => keys.Any(key => !string.IsNullOrWhiteSpace(Request.Query[key]));
+    var activeTab = InQuery("status", "statusPage") ? "status"
+        : InQuery("checks", "checksPage") ? "checks"
+        : statsTabActive ? "statistics"
+        : "general";
+    statsTabActive = activeTab == "statistics";
+
+    // The address of this page with some query values replaced (null = removed), ending in the tab's hash.
+    string HistoryUrl(string tab, params (string Key, string? Value)[] changes)
+    {
+        var values = Request.Query.ToDictionary(kv => kv.Key, kv => (string?)kv.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in changes)
+        {
+            values[key] = value;
+        }
+
+        var query = string.Join("&", values
+            .Where(kv => !string.IsNullOrEmpty(kv.Value))
+            .Select(kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value!)}"));
+        return $"{Request.PathBase}/monitoring/sensor/{view.SensorId}{(query.Length > 0 ? "?" + query : string.Empty)}#{tab}";
+    }
+
+    // The pager of a history list (LIST-06): nothing for one page; the first, the last and two either side of the current.
+    void Pager(string tab, string pageKey, int page, int pageCount, int total)
+    {
+        if (pageCount <= 1)
+        {
+            return;
+        }
+
+        var size = SensorDetailsModel.HistoryPageSize;
+        var last = 0;
+        <nav class="mat-pager" aria-label="Pagination">
+            <span class="mat-pager__info">@((page - 1) * size + 1) to @Math.Min(page * size, total) of @MonitoringDisplay.FormatCount(total)</span>
+            <div class="mat-pager__pages">
+                @if (page > 1)
+                {
+                    <a class="mat-pager__btn" href="@HistoryUrl(tab, (pageKey, (page - 1).ToString(inv)))" aria-label="Previous page" rel="prev">@MatUi.Icon("chevron-left")</a>
+                }
+                else
+                {
+                    <span class="mat-pager__btn is-disabled" aria-hidden="true">@MatUi.Icon("chevron-left")</span>
+                }
+                @for (var p = 1; p <= pageCount; p++)
+                {
+                    if (p != 1 && p != pageCount && Math.Abs(p - page) > 2)
+                    {
+                        continue;
+                    }
+
+                    if (last != 0 && p - last > 1)
+                    {
+                        <span class="mat-pager__gap" aria-hidden="true">…</span>
+                    }
+
+                    last = p;
+                    if (p == page)
+                    {
+                        <span class="mat-pager__btn is-current" aria-current="page">@p</span>
+                    }
+                    else
+                    {
+                        <a class="mat-pager__btn" href="@HistoryUrl(tab, (pageKey, p.ToString(inv)))" aria-label="Page @p">@p</a>
+                    }
+                }
+                @if (page < pageCount)
+                {
+                    <a class="mat-pager__btn" href="@HistoryUrl(tab, (pageKey, (page + 1).ToString(inv)))" aria-label="Next page" rel="next">@MatUi.Icon("chevron-right")</a>
+                }
+                else
+                {
+                    <span class="mat-pager__btn is-disabled" aria-hidden="true">@MatUi.Icon("chevron-right")</span>
+                }
+            </div>
+        </nav>
+    }
+
     // The State tile takes the state's tone; any other state (paused, unknown) keeps a plain tile with a muted word.
     string? StateTileTone(string key) => key switch
     {
@@ -131,13 +209,15 @@
 
 <section data-tabs data-tab-hash>
     <div class="mat-tabs" role="tablist" aria-label="Sensor sections">
-        <button type="button" class="mat-tab" role="tab" id="tab-general" aria-controls="panel-general" aria-selected="@(statsTabActive ? "false" : "true")" tabindex="@(statsTabActive ? "-1" : null)">General</button>
-        <button type="button" class="mat-tab" role="tab" id="tab-statistics" aria-controls="panel-statistics" aria-selected="@(statsTabActive ? "true" : "false")" tabindex="@(statsTabActive ? null : "-1")">Statistics</button>
-        <button type="button" class="mat-tab" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1">History</button>
+        @foreach (var (tabKey, tabLabel) in new[] { ("general", "General"), ("statistics", "Statistics"), ("checks", "Checks"), ("status", "Status history") })
+        {
+            var selected = activeTab == tabKey;
+            <button type="button" class="mat-tab" role="tab" id="tab-@tabKey" aria-controls="panel-@tabKey" aria-selected="@(selected ? "true" : "false")" tabindex="@(selected ? null : "-1")">@tabLabel</button>
+        }
     </div>
 
     @* ---------- GENERAL ---------- *@
-    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general" hidden="@statsTabActive">
+    <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general" hidden="@(activeTab != "general")">
         <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("info")<h2 class="mat-card__title">Details</h2></div>
             <div class="mat-card__body">
@@ -596,27 +676,56 @@
         }
     </div>
 
-    @* ---------- HISTORY ---------- *@
-    <div class="mat-tabpanel" role="tabpanel" id="panel-history" aria-labelledby="tab-history" hidden>
-        @if (view.RecentObservations.Count == 0)
-        {
-            <div class="mat-empty mat-empty--framed">
-                <span class="mat-empty__icon">@MatUi.Icon("clock")</span>
-                <div class="mat-empty__title">No measurements yet</div>
-                <p>Press Run now.</p>
-            </div>
-        }
-        else
-        {
-            <section class="mat-card">
-                <div class="mat-card__head">
-                    @MatUi.Icon("clock")
-                    <h2 class="mat-card__title">Last results</h2>
-                    <span class="mat-text-muted mm-push-end">@view.RecentObservations.Count shown</span>
+    @* ---------- CHECKS ---------- *@
+    @{
+        var checks = Model.Checks;
+        var checksFilterLabel = checks.Options.FirstOrDefault(o => o.Key == checks.Filter)?.Label;
+    }
+    <div class="mat-tabpanel" role="tabpanel" id="panel-checks" aria-labelledby="tab-checks" hidden="@(activeTab != "checks")">
+        <div class="mat-list">
+            <div class="mat-toolbar" role="toolbar" aria-label="Checks tools">
+                <span class="mat-toolbar__spacer"></span>
+                <span class="mat-toolbar__info" aria-live="polite">@MonitoringDisplay.FormatCount(checks.Matching) check@(checks.Matching == 1 ? string.Empty : "s")@(checks.Filter is null ? string.Empty : $" of {MonitoringDisplay.FormatCount(checks.Total)}") · kept @checks.RetentionDays day@(checks.RetentionDays == 1 ? string.Empty : "s")</span>
+                <div class="mat-toolbar__end">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn @(checks.Filter is null ? null : "is-active")" data-dialog-open="checks-filter" aria-haspopup="dialog">
+                        @MatUi.Icon("sliders")<span>Filter</span>
+                        @if (checks.Filter is not null)
+                        {
+                            <span class="mat-badge">1</span>
+                        }
+                    </button>
                 </div>
+            </div>
+
+            @if (checksFilterLabel is not null)
+            {
+                <div class="mat-chips" role="group" aria-label="Filters in effect">
+                    <span class="mat-chip">State: @checksFilterLabel<a class="mat-chip__x" href="@HistoryUrl("checks", ("checks", null), ("checksPage", null))" aria-label="Remove the filter State">@MatUi.Icon("x")</a></span>
+                </div>
+            }
+
+            @if (checks.Rows.Count == 0)
+            {
+                <div class="mat-empty mat-empty--framed">
+                    <span class="mat-empty__icon">@MatUi.Icon("clock")</span>
+                    @if (checks.Total == 0)
+                    {
+                        <div class="mat-empty__title">No checks yet</div>
+                        <p>Press Run now.</p>
+                    }
+                    else
+                    {
+                        <div class="mat-empty__title">No @checksFilterLabel?.ToLowerInvariant() checks</div>
+                        <p>Checks are kept for @checks.RetentionDays day@(checks.RetentionDays == 1 ? string.Empty : "s").</p>
+                        <a class="mat-btn mat-btn--secondary" href="@HistoryUrl("checks", ("checks", null), ("checksPage", null))">Show every check</a>
+                    }
+                </div>
+            }
+            else
+            {
                 <div class="mat-table-wrap sensor-history-table">
                     <table class="mat-table mat-table--compact">
-                        <caption class="mat-sr-only">Last results of @view.Name</caption>
+                        <caption class="mat-sr-only">Checks of @view.Name</caption>
                         <thead>
                             <tr>
                                 <th scope="col">Time</th>
@@ -628,10 +737,10 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var observation in view.RecentObservations)
+                            @foreach (var observation in checks.Rows)
                             {
                                 <tr data-state="@observation.StateKey">
-                                    <td data-label="Time" class="mat-mono">@observation.TimestampText</td>
+                                    <td data-label="Time" class="mat-table__primary mat-mono mat-nowrap">@observation.TimestampText</td>
                                     <td data-label="State"><span class="@MatUi.PillClass(observation.StateKey)">@observation.StateLabel</span></td>
                                     <td data-label="Value" class="mat-num mat-mono">
                                         @observation.ValueText @observation.Unit
@@ -648,7 +757,177 @@
                         </tbody>
                     </table>
                 </div>
-            </section>
-        }
+                Pager("checks", "checksPage", checks.Page, checks.PageCount, checks.Matching);
+            }
+        </div>
+
+        <form id="checks-form" method="get" action="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}#checks")" hidden>
+            @if (!string.IsNullOrWhiteSpace(Model.Window))
+            {
+                <input type="hidden" name="window" value="@Model.Window" />
+            }
+        </form>
+        <dialog class="mat-dialog mat-dialog--sm" id="checks-filter" aria-labelledby="checks-filter-title">
+            <div class="mat-dialog__form">
+                <div class="mat-dialog__head">
+                    @MatUi.Icon("sliders")
+                    <h2 class="mat-dialog__title" id="checks-filter-title">Filter</h2>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                </div>
+                <div class="mat-dialog__body mat-form">
+                    <div class="mat-field">
+                        <label class="mat-label" for="checks-state">State</label>
+                        <select class="mat-select" id="checks-state" name="checks" form="checks-form">
+                            <option value="" selected="@(checks.Filter is null)">All (@MonitoringDisplay.FormatCount(checks.Total))</option>
+                            @foreach (var option in checks.Options)
+                            {
+                                <option value="@option.Key" selected="@(option.Key == checks.Filter)">@option.Label (@MonitoringDisplay.FormatCount(option.Count))</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mat-dialog__foot">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="submit" form="checks-form" class="mat-btn mat-btn--primary">@MatUi.Icon("sliders")<span>Apply</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </dialog>
+    </div>
+
+    @* ---------- STATUS HISTORY ---------- *@
+    @{
+        var status = Model.StatusHistory;
+        var statusFilterLabel = status.Options.FirstOrDefault(o => o.Key == status.Filter)?.Label;
+    }
+    <div class="mat-tabpanel" role="tabpanel" id="panel-status" aria-labelledby="tab-status" hidden="@(activeTab != "status")">
+        <div class="mat-list">
+            <div class="mat-toolbar" role="toolbar" aria-label="Status history tools">
+                <span class="mat-toolbar__spacer"></span>
+                <span class="mat-toolbar__info" aria-live="polite">@MonitoringDisplay.FormatCount(status.Matching) entr@(status.Matching == 1 ? "y" : "ies")@(status.Filter is null ? string.Empty : $" of {MonitoringDisplay.FormatCount(status.Total)}") · kept @status.RetentionDays days</span>
+                <div class="mat-toolbar__end">
+                    <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn @(status.Filter is null ? null : "is-active")" data-dialog-open="status-filter" aria-haspopup="dialog">
+                        @MatUi.Icon("sliders")<span>Filter</span>
+                        @if (status.Filter is not null)
+                        {
+                            <span class="mat-badge">1</span>
+                        }
+                    </button>
+                </div>
+            </div>
+
+            @if (statusFilterLabel is not null)
+            {
+                <div class="mat-chips" role="group" aria-label="Filters in effect">
+                    <span class="mat-chip">Kind: @statusFilterLabel<a class="mat-chip__x" href="@HistoryUrl("status", ("status", null), ("statusPage", null))" aria-label="Remove the filter Kind">@MatUi.Icon("x")</a></span>
+                </div>
+            }
+
+            @if (status.Rows.Count == 0)
+            {
+                <div class="mat-empty mat-empty--framed">
+                    <span class="mat-empty__icon">@MatUi.Icon("activity")</span>
+                    <div class="mat-empty__title">@(status.Total == 0 ? "Nothing has happened yet" : $"No {statusFilterLabel?.ToLowerInvariant()}")</div>
+                    <p>Changes are kept for @status.RetentionDays days.</p>
+                    @if (status.Total > 0)
+                    {
+                        <a class="mat-btn mat-btn--secondary" href="@HistoryUrl("status", ("status", null), ("statusPage", null))">Show everything</a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="mat-table-wrap sensor-status-table">
+                    <table class="mat-table mat-table--compact">
+                        <caption class="mat-sr-only">Status history of @view.Name</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Time</th>
+                                <th scope="col">What happened</th>
+                                <th scope="col">State</th>
+                                <th scope="col">Duration</th>
+                                <th scope="col">By</th>
+                                <th scope="col">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in status.Rows)
+                            {
+                                <tr data-kind="@entry.KindKey" data-state="@entry.ToKey">
+                                    <td data-label="Time" class="mat-table__primary mat-mono mat-nowrap">@entry.TimestampText</td>
+                                    <td data-label="What happened" class="mat-nowrap">
+                                        <span class="sensor-status-kind" data-tone="@entry.Tone">@MatUi.Icon(entry.Icon)<span>@entry.KindLabel</span></span>
+                                    </td>
+                                    <td data-label="State">
+                                        @if (entry.FromLabel is not null || entry.ToLabel is not null)
+                                        {
+                                            <span class="sensor-status-transition">
+                                                @if (entry.FromLabel is not null)
+                                                {
+                                                    <span class="@MatUi.PillClass(entry.FromKey!)">@entry.FromLabel</span>
+                                                    @if (entry.ToLabel is not null)
+                                                    {
+                                                        <span class="mat-text-muted" aria-label="to">→</span>
+                                                    }
+                                                }
+                                                @if (entry.ToLabel is not null)
+                                                {
+                                                    <span class="@MatUi.PillClass(entry.ToKey!)">@entry.ToLabel</span>
+                                                }
+                                            </span>
+                                        }
+                                    </td>
+                                    <td data-label="Duration" class="mat-nowrap">@entry.DurationText</td>
+                                    <td data-label="By">@entry.Actor</td>
+                                    <td data-label="Message" class="mm-break">
+                                        @entry.Message
+                                        @if (entry.ChecksLink is not null)
+                                        {
+                                            <a class="sensor-status-link" href="@entry.ChecksLink">Failing checks</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                Pager("status", "statusPage", status.Page, status.PageCount, status.Matching);
+            }
+        </div>
+
+        <form id="status-form" method="get" action="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}#status")" hidden>
+            @if (!string.IsNullOrWhiteSpace(Model.Window))
+            {
+                <input type="hidden" name="window" value="@Model.Window" />
+            }
+        </form>
+        <dialog class="mat-dialog mat-dialog--sm" id="status-filter" aria-labelledby="status-filter-title">
+            <div class="mat-dialog__form">
+                <div class="mat-dialog__head">
+                    @MatUi.Icon("sliders")
+                    <h2 class="mat-dialog__title" id="status-filter-title">Filter</h2>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                </div>
+                <div class="mat-dialog__body mat-form">
+                    <div class="mat-field">
+                        <label class="mat-label" for="status-kind">Kind</label>
+                        <select class="mat-select" id="status-kind" name="status" form="status-form">
+                            <option value="" selected="@(status.Filter is null)">All (@MonitoringDisplay.FormatCount(status.Total))</option>
+                            @foreach (var option in status.Options)
+                            {
+                                <option value="@option.Key" selected="@(option.Key == status.Filter)">@option.Label (@MonitoringDisplay.FormatCount(option.Count))</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mat-dialog__foot">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="submit" form="status-form" class="mat-btn mat-btn--primary">@MatUi.Icon("sliders")<span>Apply</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </dialog>
     </div>
 </section>

@@ -137,7 +137,7 @@ public sealed partial class WorkspaceModel
                 ?? throw new InvalidOperationException("Selected element is not a sensor.");
 
             var paused = !sensor.IsPaused;
-            if (!_workspaceStore.SetSensorPaused(sensor.Id, paused))
+            if (!_workspaceStore.SetSensorPaused(sensor.Id, paused, User.Identity?.Name))
             {
                 throw new InvalidOperationException("Sensor could not be updated.");
             }
@@ -290,7 +290,7 @@ public sealed partial class WorkspaceModel
             var element = _workspaceStore.FindElement(elementId)
                 ?? throw new InvalidOperationException("Element not found.");
 
-            var count = _workspaceStore.SetElementPaused(elementId, paused);
+            var count = _workspaceStore.SetElementPaused(elementId, paused, User.Identity?.Name);
             var noun = count == 1 ? "sensor" : "sensors";
             StatusMessage = paused
                 ? $"Paused {count} {noun} under '{element.Name}'."

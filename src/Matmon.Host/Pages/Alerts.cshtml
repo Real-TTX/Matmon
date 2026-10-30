@@ -254,7 +254,17 @@
                                 </td>
                                 <td data-label="Message" class="mm-break">@alert.Message</td>
                                 <td data-label="First seen" class="mat-hide-sm mat-mono mat-nowrap">@alert.FirstSeen</td>
-                                <td data-label="Last seen" class="mat-mono mat-nowrap">@(alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt))</td>
+                                @{ var seenText = alert.IsRecovered && alert.IsActive ? alert.RecoveredAt : (alert.IsActive ? alert.LastSeen : alert.ResolvedAt); }
+                                <td data-label="Last seen" class="mat-mono mat-nowrap">
+                                    @if (alert.ElementKind == MonitoringElementKind.Sensor)
+                                    {
+                                        <a href="@SensorDetailsModel.FailingChecksPath(Request.PathBase, alert.ElementId)" data-tip="The failing checks">@seenText</a>
+                                    }
+                                    else
+                                    {
+                                        @seenText
+                                    }
+                                </td>
                                 <td data-label="Status">
                                     <span class="mat-row mat-row--nowrap mat-gap-2">
                                         @if (!alert.IsActive)

@@ -1012,7 +1012,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     ElementName = alert.ElementName,
                     ElementPath = alert.ElementPath,
                     State = alert.State,
-                    Message = $"Alert acknowledged{(string.IsNullOrWhiteSpace(alert.AcknowledgedBy) ? string.Empty : $" by {alert.AcknowledgedBy}")}"
+                    Message = $"Alert acknowledged{(string.IsNullOrWhiteSpace(alert.AcknowledgedBy) ? string.Empty : $" by {alert.AcknowledgedBy}")}",
+                    Actor = alert.AcknowledgedBy
                 });
                 QueueSave(SavePriority.Configuration);
             }
@@ -1075,7 +1076,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 Kind = MonitoringEventKind.AlertMuted,
                 ElementId = elementId,
                 ElementName = elementName,
-                Message = $"Alerts muted {scope}{(by is null ? string.Empty : $" by {by}")}"
+                Message = $"Alerts muted {scope}{(by is null ? string.Empty : $" by {by}")}",
+                Actor = by
             });
             QueueSave(SavePriority.Configuration);
         }
@@ -1098,7 +1100,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 Kind = MonitoringEventKind.AlertUnmuted,
                 ElementId = elementId,
                 ElementName = FindElementInternal(elementId)?.Name ?? string.Empty,
-                Message = $"Alerts un-muted{(trimmedBy is null ? string.Empty : $" by {trimmedBy}")}"
+                Message = $"Alerts un-muted{(trimmedBy is null ? string.Empty : $" by {trimmedBy}")}",
+                Actor = trimmedBy
             });
             QueueSave(SavePriority.Configuration);
             return true;
@@ -2372,7 +2375,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         return MoveElementRelative(elementId, siblingId, before: false);
     }
 
-    public bool SetSensorPaused(Guid sensorId, bool paused)
+    public bool SetSensorPaused(Guid sensorId, bool paused, string? by = null)
     {
         lock (_gate)
         {
@@ -2391,22 +2394,24 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             }
 
             sensor.IsPaused = paused;
+            var now = DateTimeOffset.UtcNow; // one moment: the pause and the alert it resolves
 
             if (paused)
             {
-                ResolveAlertsForElement(sensor.Id, DateTimeOffset.UtcNow, "sensor paused");
+                ResolveAlertsForElement(sensor.Id, now, "sensor paused");
             }
 
             AddEvent(new MonitoringEvent
             {
-                TimestampUtc = DateTimeOffset.UtcNow,
+                TimestampUtc = now,
                 Kind = paused ? MonitoringEventKind.Paused : MonitoringEventKind.Resumed,
                 ElementId = sensor.Id,
                 ElementKind = sensor.Kind,
                 ElementName = sensor.Name,
                 ElementPath = GetElementPath(sensor),
                 State = paused ? SensorState.Paused : SensorState.Healthy,
-                Message = paused ? "Sensor paused" : "Sensor resumed"
+                Message = (paused ? "Sensor paused" : "Sensor resumed") + (string.IsNullOrWhiteSpace(by) ? string.Empty : $" by {by.Trim()}"),
+                Actor = string.IsNullOrWhiteSpace(by) ? null : by.Trim()
             });
 
             QueueSave(SavePriority.Configuration);
@@ -2414,7 +2419,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
-    public int SetElementPaused(Guid elementId, bool paused)
+    public int SetElementPaused(Guid elementId, bool paused, string? by = null)
     {
         lock (_gate)
         {
@@ -2453,7 +2458,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                     ElementName = sensor.Name,
                     ElementPath = GetElementPath(sensor),
                     State = paused ? SensorState.Paused : SensorState.Healthy,
-                    Message = paused ? "Sensor paused" : "Sensor resumed"
+                    Message = (paused ? "Sensor paused" : "Sensor resumed") + (string.IsNullOrWhiteSpace(by) ? string.Empty : $" by {by.Trim()}"),
+                    Actor = string.IsNullOrWhiteSpace(by) ? null : by.Trim()
                 });
 
                 changed++;
@@ -4569,6 +4575,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 // Condition cleared but nobody has acknowledged it yet - keep it open.
                 alert.RecoveredUtc = recoveredAt;
                 changed = true;
+                AddEvent(new MonitoringEvent
+                {
+                    TimestampUtc = recoveredAt,
+                    Kind = MonitoringEventKind.AlertRecovered,
+                    ElementId = alert.ElementId,
+                    ElementKind = alert.ElementKind,
+                    ElementName = alert.ElementName,
+                    ElementPath = alert.ElementPath,
+                    State = SensorState.Healthy,
+                    Message = "Condition cleared - the alert stays open until it is acknowledged"
+                });
                 _notificationSink?.Enqueue(new AlertNotificationEvent(
                     alert.Id, alert.ElementId, SensorState.Healthy, "Condition cleared", recoveredAt, NotificationTransition.Recovered));
             }
@@ -4687,6 +4704,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         if (reAlarm)
         {
             existing.RecoveredUtc = null;
+            AddEvent(new MonitoringEvent
+            {
+                TimestampUtc = timestampUtc,
+                Kind = MonitoringEventKind.AlertReopened,
+                ElementId = sensor.Id,
+                ElementKind = sensor.Kind,
+                ElementName = sensor.Name,
+                ElementPath = path,
+                State = result.State,
+                Message = message
+            });
             _notificationSink?.Enqueue(new AlertNotificationEvent(
                 existing.Id, existing.ElementId, result.State, message, timestampUtc, NotificationTransition.Raised));
         }

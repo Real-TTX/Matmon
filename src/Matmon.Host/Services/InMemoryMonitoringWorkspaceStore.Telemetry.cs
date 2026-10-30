@@ -179,6 +179,51 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return _telemetry.GetEvents(take);
     }
 
+    public IReadOnlyList<MonitoringEvent> GetElementEvents(Guid elementId, int take = 5000)
+    {
+        return _telemetry.GetElementEvents(elementId, take);
+    }
+
+    public IReadOnlyList<MonitoringAlert> GetElementAlerts(Guid elementId)
+    {
+        lock (_gate)
+        {
+            return _document.Alerts
+                .Where(alert => alert.ElementId == elementId)
+                .Select(alert => new MonitoringAlert
+                {
+                    Id = alert.Id,
+                    ElementId = alert.ElementId,
+                    ElementKind = alert.ElementKind,
+                    ElementName = alert.ElementName,
+                    ElementPath = alert.ElementPath,
+                    State = alert.State,
+                    Message = alert.Message,
+                    FirstSeenUtc = alert.FirstSeenUtc,
+                    LastSeenUtc = alert.LastSeenUtc,
+                    AcknowledgedUtc = alert.AcknowledgedUtc,
+                    AcknowledgedBy = alert.AcknowledgedBy,
+                    AcknowledgedState = alert.AcknowledgedState,
+                    ResolvedUtc = alert.ResolvedUtc,
+                    RecoveredUtc = alert.RecoveredUtc,
+                    Escalations = alert.Escalations
+                        .Select(mark => new AlertEscalationMark { RuleId = mark.RuleId, Step = mark.Step, SentUtc = mark.SentUtc })
+                        .ToList()
+                })
+                .ToArray();
+        }
+    }
+
+    public IReadOnlyList<SensorObservation> GetSensorObservationPage(Guid sensorId, IReadOnlyCollection<SensorState>? states, int skip, int take)
+    {
+        return _telemetry.GetObservationPage(sensorId, states, skip, take);
+    }
+
+    public IReadOnlyDictionary<SensorState, int> GetSensorObservationStateCounts(Guid sensorId)
+    {
+        return _telemetry.GetObservationStateCounts(sensorId);
+    }
+
     public IReadOnlyList<SensorStatisticsBucket> GetSensorStatistics(Guid sensorId)
     {
         return _telemetry.GetStatistics(sensorId);

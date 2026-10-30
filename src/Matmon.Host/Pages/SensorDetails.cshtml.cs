@@ -9,7 +9,7 @@ using Matmon.Host.Ui;
 namespace Matmon.Host.Pages;
 
 [Authorize]
-public sealed class SensorDetailsModel : PageModel
+public sealed partial class SensorDetailsModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly ISensorExecutionService _sensorExecutionService;
@@ -123,7 +123,7 @@ public sealed class SensorDetailsModel : PageModel
                 ?? throw new InvalidOperationException("Selected element is not a sensor.");
 
             var paused = !sensor.IsPaused;
-            if (!_workspaceStore.SetSensorPaused(sensor.Id, paused))
+            if (!_workspaceStore.SetSensorPaused(sensor.Id, paused, User.Identity?.Name))
             {
                 throw new InvalidOperationException("Sensor could not be updated.");
             }
@@ -210,6 +210,9 @@ public sealed class SensorDetailsModel : PageModel
         var isAcknowledged = workspace.Alerts
             .Any(alert => alert.IsActive && alert.IsAcknowledged && alert.ElementId == sensor.Id);
 
+        Checks = BuildChecks(sensor, effectiveSettings, fallbackUnit, defaultChannelKey, displayScale);
+        StatusHistory = BuildStatusHistory(sensor);
+
         SyslogLogRoute = MatmonSecurity.CanOperateAlerts(User)
             ? SyslogPageSupport.BuildLogRoute(sensor.SensorTypeKey, SensorTargetResolver.Resolve(sensor, lineage), effectiveSettings)
             : null;
@@ -239,7 +242,6 @@ public sealed class SensorDetailsModel : PageModel
             windows,
             selectedWindow,
             BuildChannelRows(latestObservation, fallbackUnit, defaultChannelKey, effectiveSettings),
-            BuildRecentObservationRows(history, fallbackUnit, defaultChannelKey, displayScale),
             statisticsSummary,
             unitConversion,
             tagChips);
@@ -758,7 +760,7 @@ public sealed class SensorDetailsModel : PageModel
         };
     }
 
-    private static IReadOnlyList<SensorObservationRow> BuildRecentObservationRows(
+    private static IReadOnlyList<SensorObservationRow> BuildObservationRows(
         IReadOnlyList<SensorObservation> history,
         string fallbackUnit,
         string? defaultChannelKey,
@@ -766,10 +768,8 @@ public sealed class SensorDetailsModel : PageModel
     {
         var displayScale = scale ?? SensorUnitScale.Identity(fallbackUnit);
 
-        // history is oldest-first; show the most recent runs at the TOP (newest-first), not the bottom.
+        // The page comes newest first already (the checks list reads it from the database that way).
         return history
-            .TakeLast(50)
-            .Reverse()
             .Select(observation =>
             {
                 var defaultValue = SensorHistoryAnalytics.GetDefaultValue(observation, defaultChannelKey);
@@ -914,7 +914,6 @@ public sealed record SensorDetailsViewModel(
     IReadOnlyList<SensorWindowStatistics> Windows,
     SensorWindowStatistics SelectedWindow,
     IReadOnlyList<SensorChannelRow> Channels,
-    IReadOnlyList<SensorObservationRow> RecentObservations,
     SensorStatisticsSummary? Statistics,
     SensorUnitConversion? UnitConversion,
     IReadOnlyList<SensorTagChip> Tags);
