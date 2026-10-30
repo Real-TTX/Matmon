@@ -35,6 +35,11 @@ if (args.FirstOrDefault() == "install")
     return await InstallCommand.RunAsync(args, configPath);
 }
 
+if (args.FirstOrDefault() == "uninstall")
+{
+    return UninstallCommand.Run(args, configPath);
+}
+
 // A "ready to install" download started from a terminal on Linux / macOS without arguments: it is not a service yet,
 // so say the one thing to do instead of failing with "not enrolled".
 if (!OperatingSystem.IsWindows() && args.Length == 0 && !ServiceControl.IsRunningAsService() &&
@@ -108,6 +113,7 @@ builder.Services.AddSingleton(options);
 if (OperatingSystem.IsWindows() && ServiceControl.IsRunningAsService())
 {
     SetupCommand.EnsureStartMenuShortcut();
+    UninstallCommand.EnsureUninstallEntry();
 }
 
 // What "storage" means for an agent: the directory it is installed in and the drive under it. It keeps no

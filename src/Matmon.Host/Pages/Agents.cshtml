@@ -236,7 +236,7 @@
 @foreach (var agent in Model.Agents)
 {
     <div class="mat-menu" id="agent-menu-@agent.ElementId" role="menu" aria-label="Actions for @agent.Name" hidden>
-        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringView="list" asp-route-monitoringKind="probe">@MatUi.Icon("activity")<span>Sensors</span></a>
+        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringProbe="@agent.ElementId">@MatUi.Icon("activity")<span>Sensors</span></a>
         <a class="mat-menu__item" role="menuitem" asp-page="/ProbeUsage" asp-route-probeElementId="@agent.ElementId">@MatUi.Icon("bar-chart")<span>Usage</span></a>
         @if (isAdmin)
         {
@@ -246,6 +246,7 @@
             <button type="submit" form="agent-row-actions" class="mat-menu__item" role="menuitem"
                     asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@agent.ElementId"
                     title="Reinstalling this machine? A code that gives the new install this probe back.">@MatUi.Icon("key")<span>New install code</span></button>
+            <button type="button" class="mat-menu__item" role="menuitem" data-dialog-open="agent-remove-@agent.ElementId" aria-haspopup="dialog">@MatUi.Icon("trash")<span>Remove…</span></button>
         }
     </div>
     @if (isAdmin)
@@ -268,6 +269,30 @@
                 <div class="mat-dialog__foot">
                     <div class="mat-btn-row mat-btn-row--plain">
                         <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Bind to this host</span></button>
+                        <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                    </div>
+                </div>
+            </form>
+        </dialog>
+        <dialog class="mat-dialog" id="agent-remove-@agent.ElementId" aria-labelledby="agent-remove-@(agent.ElementId)-title">
+            <form method="post" class="mat-dialog__form mat-form" novalidate asp-page="/ElementEditor" asp-page-handler="DeleteElement">
+                <input type="hidden" name="ElementEditor.Id" value="@agent.ElementId" />
+                <div class="mat-dialog__head">
+                    @MatUi.Icon("trash")
+                    <h2 class="mat-dialog__title" id="agent-remove-@(agent.ElementId)-title">Remove @agent.Name</h2>
+                    <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+                </div>
+                <div class="mat-dialog__body mat-stack">
+                    <p>First uninstall the agent on that machine:</p>
+                    <ul class="mat-stack">
+                        <li><strong>Windows:</strong> tray icon > Uninstall…, or Settings > Apps > Installed apps > Matmon Agent.</li>
+                        <li><strong>Linux / macOS:</strong> <code class="mat-mono">sudo matmon-agent uninstall</code></li>
+                    </ul>
+                    <p>Then delete it here: the agent, its host and their sensors and history are removed from Matmon.</p>
+                </div>
+                <div class="mat-dialog__foot">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <button type="submit" class="mat-btn mat-btn--danger">@MatUi.Icon("trash")<span>Delete from Matmon</span></button>
                         <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
                     </div>
                 </div>

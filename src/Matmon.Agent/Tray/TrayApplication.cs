@@ -61,6 +61,7 @@ public sealed class TrayApplication : ApplicationContext
         menu.Items.Add(_openInstanceItem);
         menu.Items.Add(new ToolStripMenuItem("Set up…", null, (_, _) => ShowSetup()));
         menu.Items.Add(new ToolStripMenuItem("Open log folder", null, (_, _) => OpenLogFolder()));
+        menu.Items.Add(new ToolStripMenuItem("Uninstall…", null, (_, _) => Uninstall()));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
 
@@ -167,6 +168,20 @@ public sealed class TrayApplication : ApplicationContext
         if (!string.IsNullOrWhiteSpace(Status?.PrimaryUrl))
         {
             Open(Status.PrimaryUrl.TrimEnd('/') + "/agents");
+        }
+    }
+
+    /// <summary>Removes the agent from this computer: "matmon-agent uninstall --gui" asks, then asks for administrator rights, and ends this tray too.</summary>
+    private static void Uninstall()
+    {
+        var executable = File.Exists(SetupCommand.InstalledPath) ? SetupCommand.InstalledPath : Environment.ProcessPath!;
+        try
+        {
+            using var _ = Process.Start(new ProcessStartInfo(executable, "uninstall --gui") { UseShellExecute = false, CreateNoWindow = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            MessageBox.Show($"The uninstaller did not start: {ex.Message}", "Matmon Agent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 

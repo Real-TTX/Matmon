@@ -7,11 +7,10 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Matmon.Host.Pages;
 
 /// <summary>
-/// Where the sensors run - the local primary, remote Docker probes and agents - in ONE list. It used to be two (this page
+/// The primary and the remote probes - agents have their own tab (Agents), to the user an agent is not a probe. It used to be two (this page
 /// for everyone, a System > Probes tab for admins with edit / install / token), which showed the same table twice with
 /// different buttons; the admin actions are this page's row menu now, and the old tab sends its visitors here.
 /// A remote Docker probe can be updated from here (it follows the primary's build, see <see cref="ProbeUpdatePolicy"/>);
-/// an agent updates itself and gets no such button.
 /// </summary>
 public class ProbesModel : PageModel
 {
@@ -26,7 +25,8 @@ public class ProbesModel : PageModel
 
     public ConfigurationOverview Overview { get; private set; } = default!;
 
-    public IReadOnlyList<SystemProbeOverview> Probes => Overview.Probes;
+    /// <summary>The primary and the remote probes. An agent is not a probe for the user - it has the Agents tab.</summary>
+    public IReadOnlyList<SystemProbeOverview> Probes => Overview.Probes.Where(probe => !probe.IsAgent).ToList();
 
     /// <summary>The primary's own build - what a Docker probe is updated to.</summary>
     public string PrimaryVersion => MatmonVersion.Current;
@@ -45,7 +45,7 @@ public class ProbesModel : PageModel
 
     /// <summary>The update line of one row: null for the primary, an agent and a probe that never reported.</summary>
     public ProbeUpdateView? UpdateFor(SystemProbeOverview probe) =>
-        probe.Role == "Primary" || probe.IsAgent ? null : ProbeUpdateView.Build(probe, PrimaryVersion, _updateCommands);
+        probe.Role == "Primary" ? null : ProbeUpdateView.Build(probe, PrimaryVersion, _updateCommands);
 
     /// <summary>The Docker probes the "Update all" button would update.</summary>
     public IReadOnlyList<SystemProbeOverview> UpdatableProbes =>
@@ -111,18 +111,9 @@ public class ProbesModel : PageModel
             return "only an administrator can update a probe";
         }
 
-        if (_updateCommands is null || UpdateFor(probe) is not { } view)
-        {
-            return "this probe cannot be updated from here";
-        }
-
-        if (!view.CanStart)
-        {
-            return view.CannotStartReason;
-        }
-
-        var by = User.Identity?.Name ?? "an admin";
-        return _updateCommands.Queue(probe.ProbeId, PrimaryVersion, by);
+        return _updateCommands is null
+            ? "this probe cannot be updated from here"
+            : ProbeUpdateView.TryQueue(probe, PrimaryVersion, _updateCommands, User.Identity?.Name ?? "an admin");
     }
 }
 
@@ -157,6 +148,22 @@ public sealed record ProbeUpdateView(
         : Updating ? "it is being updated right now"
         : Waiting ? "an update is already waiting for its next heartbeat"
         : null;
+
+    /// <summary>
+    /// Queues "update to <paramref name="primaryVersion"/>" for one probe - null when queued, else why not. The ONE check
+    /// behind the Probes page's Update and an update asked for from Matmon Cloud (<see cref="CloudProbeRelay"/>): a remote
+    /// probe that is no agent, runs another build and can replace its own container.
+    /// </summary>
+    public static string? TryQueue(SystemProbeOverview probe, string primaryVersion, ProbeUpdateCommands commands, string requestedBy)
+    {
+        if (probe.Role == "Primary" || probe.IsAgent)
+        {
+            return "this probe cannot be updated from here";
+        }
+
+        var view = Build(probe, primaryVersion, commands);
+        return view.CanStart ? commands.Queue(probe.ProbeId, primaryVersion, requestedBy) : view.CannotStartReason;
+    }
 
     public static ProbeUpdateView Build(SystemProbeOverview probe, string primaryVersion, ProbeUpdateCommands? commands)
     {

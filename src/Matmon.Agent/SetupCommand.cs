@@ -20,7 +20,7 @@ namespace Matmon.Agent;
 public static class SetupCommand
 {
     public const string ServiceName = "Matmon Agent";
-    private const string TrayRunValue = "Matmon Agent Tray";
+    internal const string TrayRunValue = "Matmon Agent Tray";
 
     public static async Task<int> RunAsync(string[] args, string configPath)
     {
@@ -107,6 +107,7 @@ public static class SetupCommand
 
         // ...and in the Start menu, so a closed tray comes back before the next sign-in.
         EnsureStartMenuShortcut(replace: true);
+        UninstallCommand.EnsureUninstallEntry();
 
         return new SetupResult(true, 0, $"{enrolled.Message.Split(". Identity")[0]}. The '{service}' service is running.", target);
     }
@@ -159,7 +160,7 @@ public static class SetupCommand
     [SupportedOSPlatform("windows")]
     public static string? InstalledServiceName() => ServiceControl.ResolveWindowsServiceName(InstalledPath);
 
-    private static void Sc(params string[] arguments)
+    internal static void Sc(params string[] arguments)
     {
         using var process = Process.Start(new ProcessStartInfo("sc.exe", string.Join(' ', arguments))
         {

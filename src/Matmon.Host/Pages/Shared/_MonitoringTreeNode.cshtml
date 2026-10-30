@@ -147,13 +147,17 @@
                 <span class="monitoring-tree-toggle is-spacer" aria-hidden="true"></span>
             }
 
-            <span class="tree-kind" data-kind="@kindKey" title="@Model.Kind">@MatmonIcons.Render(Model.KindIconKey)<span class="mat-sr-only">@Model.Kind</span></span>
+            <span class="tree-kind" data-kind="@kindKey" title="@(Model.IsAgent ? "Agent" : Model.Kind.ToString())">@MatmonIcons.Render(Model.KindIconKey)<span class="mat-sr-only">@(Model.IsAgent ? "Agent" : Model.Kind.ToString())</span></span>
 
             <div class="monitoring-tree-main">
                 <span class="tree-name">@Model.Name</span>
                 @if (Model.IsAgentHost)
                 {
                     <span class="mat-pill mat-pill--info mm-agent-badge" title="A Matmon agent runs on this machine">@MatUi.Icon("plug")<span>Agent</span></span>
+                }
+                else if (Model.IsAgent)
+                {
+                    <span class="mat-pill mat-pill--info mm-agent-badge" title="The connection of a Matmon agent">@MatUi.Icon("plug")<span>Agent</span></span>
                 }
                 @if (!string.IsNullOrWhiteSpace(Model.Details))
                 {

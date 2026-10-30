@@ -154,7 +154,8 @@ public sealed record WorkspaceNodeRow(
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> OwnTags,
     bool IsAcknowledged,
-    bool IsAgentHost = false);
+    bool IsAgentHost = false,
+    bool IsAgent = false);
 
 public sealed class WorkspaceMonitoringTreeNode
 {
@@ -227,6 +228,9 @@ public sealed class WorkspaceMonitoringTreeNode
     /// <summary>A host a Matmon agent is installed on - shown as an "Agent" badge beside the name.</summary>
     public bool IsAgentHost { get; init; }
 
+    /// <summary>The connection of a Matmon agent (a probe element underneath) - to the user an agent, not a probe.</summary>
+    public bool IsAgent { get; init; }
+
     public IReadOnlyList<WorkspaceMonitoringTreeNode> Children { get; init; } = [];
 }
 
@@ -250,7 +254,8 @@ public sealed record WorkspaceAlertRow(
     string? RecoveredAt,
     string? ResolvedAt,
     long FirstSeenSortKey,
-    long LastSeenSortKey);
+    long LastSeenSortKey,
+    bool ElementExists = true);
 
 public sealed record WorkspaceProbeRow(
     Guid Id,

@@ -245,6 +245,7 @@
                         {
                             MonitoringElementKind.Sensor when !string.IsNullOrWhiteSpace(node.SensorTypeKey) => node.SensorTypeKey,
                             MonitoringElementKind.Host => "host address",
+                            MonitoringElementKind.Probe when node.IsAgent => "agent",
                             MonitoringElementKind.Probe => "probe id",
                             MonitoringElementKind.Folder => "folder",
                             _ => node.Kind.ToString()
@@ -295,7 +296,7 @@
                                         }
                                         <small>@node.Path</small>
                                     </span>
-                                    @if (node.IsAgentHost)
+                                    @if (node.IsAgentHost || node.IsAgent)
                                     {
                                         <span class="mat-pill mat-pill--info mm-agent-badge" title="A Matmon agent runs on this machine">@MatUi.Icon("plug")<span>Agent</span></span>
                                     }

@@ -114,6 +114,17 @@ public sealed partial class WorkspaceModel
 
     // Queues a transient (non-recording) sensor test on a remote probe and exposes the job id + probe name
     // to the view so the client can poll GET /api/run-jobs/{id} for the channel preview.
+    /// <summary>
+    /// The agent being edited, null for anything else. To the user an agent is not a probe: its editor says "Agent", shows the
+    /// machine it is bound to and leaves out what belongs to a probe (probe id, token, Docker snippet, Rotate) - its id and token
+    /// are what the installed agent uses, and a new token comes with a new install code on the Agents page. Read from the store
+    /// rather than the bound form, so a re-rendered POST still knows.
+    /// </summary>
+    public ProbeElement? EditedAgent =>
+        ElementEditor.Id != Guid.Empty && _workspaceStore.FindElement(ElementEditor.Id) is ProbeElement { AgentEnrolledUtc: not null } agent
+            ? agent
+            : null;
+
     private void QueueRemoteTest(string owningProbeId, Guid? sensorId, string sensorTypeKey, string target, MonitoringSettings settings)
     {
         _assignmentProvider.MakeSettingsProbeReady(settings, sensorTypeKey);

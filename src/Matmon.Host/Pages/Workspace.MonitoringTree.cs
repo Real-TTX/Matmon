@@ -359,6 +359,7 @@ public sealed partial class WorkspaceModel
                 SensorTypeLabel = _series?.SensorTypeLabel,
                 Tags = _node.OwnTags,
                 IsAgentHost = _node.IsAgentHost,
+                IsAgent = _node.IsAgent,
                 Children = DisplayChildren.Select(child => child.ToViewModel()).ToArray()
             };
         }

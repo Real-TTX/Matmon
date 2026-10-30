@@ -4,12 +4,17 @@
     var backUrl = Model.GetSafeReturnUrl("/Monitoring");
     var hasElement = Model.ElementEditor.Id != Guid.Empty;
     var isSensor = Model.ElementEditor.Kind == "Sensor";
+    var agent = Model.EditedAgent;
+    var agentHost = agent?.FindBoundHost();
+    var deleteConfirm = agent is not null
+        ? "Delete this agent with its host and sensors? The installed agent stops reporting - uninstall it on that machine."
+        : "Delete this element and all children?";
     var sensorCredentialFields = Model.ElementEditor.SensorParameterFields.Where(field => field.IsCredential).ToList();
     var sensorTypeName = isSensor
         ? Model.ElementEditor.SensorTypeOptions.FirstOrDefault(option => string.Equals(option.Value, Model.ElementEditor.SensorTypeKey, StringComparison.OrdinalIgnoreCase))?.Text
         : null;
     var pageTitle = hasElement && !string.IsNullOrWhiteSpace(Model.ElementEditor.Name) ? Model.ElementEditor.Name : "Element";
-    var kindLabel = string.IsNullOrWhiteSpace(sensorTypeName) ? Model.ElementEditor.Kind : $"{Model.ElementEditor.Kind} · {sensorTypeName}";
+    var kindLabel = agent is not null ? "Agent" : string.IsNullOrWhiteSpace(sensorTypeName) ? Model.ElementEditor.Kind : $"{Model.ElementEditor.Kind} · {sensorTypeName}";
     ViewData["Title"] = pageTitle;
     ViewData["OwnHead"] = true;
 }
@@ -51,7 +56,14 @@
 {
     <div class="mat-empty mat-empty--framed">
         <span class="mat-empty__icon">@MatUi.Icon("search")</span>
-        <div class="mat-empty__title">Select an element</div>
+        @if (Model.SelectedId is { } missingId && missingId != Guid.Empty)
+        {
+            <div class="mat-empty__title">This element no longer exists - it was deleted</div>
+        }
+        else
+        {
+            <div class="mat-empty__title">Select an element</div>
+        }
         <a class="mat-btn mat-btn--primary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
     </div>
 }
@@ -86,7 +98,7 @@ else
             @* ---------- GENERAL (the element's own fields, then where its values came from) ---------- *@
             <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general">
                 <section class="mat-card">
-                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@Model.View.SelectedElementKind</h2></div>
+                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@(agent is null ? Model.View.SelectedElementKind : "Agent")</h2></div>
                     <div class="mat-card__body">
                         <div class="mat-form__grid">
                             <div class="mat-field mat-field--full">
@@ -109,7 +121,27 @@ else
                                 </div>
                             }
 
-                            @if (Model.ElementEditor.Kind == "Probe")
+                            @if (agent is not null)
+                            {
+                                <div class="mat-field mat-field--full">
+                                    <span class="mat-label">Machine</span>
+                                    @if (agentHost is not null)
+                                    {
+                                        <span><a asp-page="/ElementEditor" asp-route-selectedId="@agentHost.Id" asp-route-returnUrl="@(Request.Path + Request.QueryString)">@agentHost.Name</a> <span class="mat-text-muted mat-mono">@agentHost.Address</span></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="mat-text-muted">Not bound to a host.</span>
+                                    }
+                                    <span class="mat-hint"><a asp-page="/Agents">Change the host or get a new install code on the Agents page</a></span>
+                                </div>
+                                <div class="mat-field mat-field--full">
+                                    <label class="mat-label" asp-for="ElementEditor.ProbeSubnetsText">Scan networks (subnets)</label>
+                                    <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="mat-textarea mat-mono" placeholder="10.10.0.0/16&#10;192.168.1.0/24" aria-describedby="element-agent-subnets-hint"></textarea>
+                                    <span class="mat-hint" id="element-agent-subnets-hint">One CIDR per line. Offered as Discovery suggestions.</span>
+                                </div>
+                            }
+                            else if (Model.ElementEditor.Kind == "Probe")
                             {
                                 <div class="mat-field">
                                     <label class="mat-label" asp-for="ElementEditor.ProbeId">Probe ID</label>
@@ -571,13 +603,13 @@ else
                     @MatUi.Icon(Model.ElementEditor.IsPaused ? "play" : "pause")<span>@(Model.ElementEditor.IsPaused ? "Resume" : "Pause")</span>
                 </button>
             }
-            @if (Model.ElementEditor.Kind == "Probe" && Model.ElementEditor.ParentId is not null)
+            @if (agent is null && Model.ElementEditor.Kind == "Probe" && Model.ElementEditor.ParentId is not null)
             {
                 <button type="submit" asp-page-handler="RotateToken" formnovalidate class="mat-btn mat-btn--secondary mat-btn--end">@MatUi.Icon("refresh")<span>Rotate</span></button>
             }
             @if (!(isSensor && string.Equals(Model.ElementEditor.SensorTypeKey, "probe-heartbeat", StringComparison.OrdinalIgnoreCase)))
             {
-                <button type="submit" asp-page-handler="DeleteElement" formnovalidate class="mat-btn mat-btn--danger" data-confirm="Delete this element and all children?" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
+                <button type="submit" asp-page-handler="DeleteElement" formnovalidate class="mat-btn mat-btn--danger" data-confirm="@deleteConfirm" data-confirm-ok="Delete">@MatUi.Icon("trash")<span>Delete</span></button>
             }
 
             <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate hidden data-sensor-preview-submit>Preview</button>

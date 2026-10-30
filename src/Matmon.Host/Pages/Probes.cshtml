@@ -24,7 +24,7 @@
         <div class="mat-empty">
             <span class="mat-empty__icon">@MatUi.Icon("server")</span>
             <div class="mat-empty__title">No probes configured yet</div>
-            <p>A probe runs the sensors: the local primary, a remote Docker probe or an agent on the machine it monitors.</p>
+            <p>A probe runs the sensors: the local primary or a remote probe.</p>
         </div>
     }
     else
@@ -114,10 +114,6 @@
                             <td data-label="Role">
                                 <div class="probe-cell">
                                     <span>@probe.Role</span>
-                                    @if (probe.IsAgent)
-                                    {
-                                        <span class="mat-tag" title="Enrolled agent - installed on the machine it monitors">Agent</span>
-                                    }
                                 </div>
                             </td>
                             <td data-label="Status">
@@ -145,8 +141,7 @@
     {
         <div class="mat-actions">
             <div class="mat-btn-row">
-                <a class="mat-btn mat-btn--primary" asp-page="/Agents">@MatUi.Icon("plus")<span>Add an agent</span></a>
-                <a class="mat-btn mat-btn--secondary" asp-page="/ProbeCreate" asp-route-returnUrl="/Probes">@MatUi.Icon("server")<span>New Docker probe</span></a>
+                <a class="mat-btn mat-btn--primary" asp-page="/ProbeCreate" asp-route-returnUrl="/Probes">@MatUi.Icon("server")<span>New Docker probe</span></a>
                 @if (Model.UpdatableProbes is { Count: > 1 } updatable)
                 {
                     <button type="submit" form="probe-row-actions" class="mat-btn mat-btn--secondary" asp-page-handler="UpdateAll"
@@ -181,19 +176,15 @@
                         asp-page-handler="Update" name="probeElementId" value="@probe.ElementId"
                         data-confirm="Update @probe.Name from @probe.Version to @Model.PrimaryVersion? It replaces its container and is away for a moment; if the new one does not come up within 3 minutes it goes back to the old build." data-confirm-ok="Update">@MatUi.Icon("download")<span>Update to @Model.PrimaryVersion</span></button>
             }
-            @if (!probe.IsAgent && Matmon.Host.Ui.ProbeInstallCommandBuilder.CanInstallProbe(probe))
+            @if (Matmon.Host.Ui.ProbeInstallCommandBuilder.CanInstallProbe(probe))
             {
                 <a class="mat-menu__item" role="menuitem" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Probes">@MatUi.Icon("download")<span>Install (Docker)</span></a>
             }
             <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
-                    asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@probe.ElementId">@MatUi.Icon("key")<span>@(probe.IsAgent ? "New install code" : "Move to an agent")</span></button>
-            @* An agent gets a new token through a new install code - rotating it here would only lock it out. *@
-            @if (!probe.IsAgent)
-            {
-                <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
-                        asp-page="/Config" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId"
-                        data-confirm="Give @probe.Name a new token? Whatever runs with the old one stops reporting until it gets the new one." data-confirm-ok="Rotate token">@MatUi.Icon("refresh")<span>Rotate token</span></button>
-            }
+                    asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@probe.ElementId">@MatUi.Icon("key")<span>Move to an agent</span></button>
+            <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
+                    asp-page="/Config" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId"
+                    data-confirm="Give @probe.Name a new token? Whatever runs with the old one stops reporting until it gets the new one." data-confirm-ok="Rotate token">@MatUi.Icon("refresh")<span>Rotate token</span></button>
         }
     </div>
 }
