@@ -997,28 +997,38 @@
                         <caption class="mat-sr-only">Alerts of @view.Name</caption>
                         <thead>
                             <tr>
-                                <th scope="col">State</th>
-                                <th scope="col">Status</th>
-                                <th scope="col">First seen</th>
-                                <th scope="col">Last seen</th>
-                                <th scope="col" class="mat-hide-sm">Ended</th>
-                                <th scope="col">Duration</th>
-                                <th scope="col" class="mat-hide-sm">Acknowledged</th>
-                                <th scope="col">Message</th>
+                                <th scope="col">Alert</th>
+                                <th scope="col">Started</th>
+                                <th scope="col">Problem</th>
+                                <th scope="col">Handled</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var row in alertList.Rows)
                             {
                                 <tr data-state="@row.StateKey">
-                                    <td data-label="State"><span class="@MatUi.PillClass(row.StateKey)">@row.StateLabel</span></td>
-                                    <td data-label="Status"><span class="@MatUi.PillClass(row.PhaseKey == "open" ? "error" : row.PhaseKey == "recovered" ? "info" : "plain")">@row.PhaseLabel</span></td>
-                                    <td data-label="First seen" class="mat-mono mat-nowrap">@row.FirstSeen</td>
-                                    <td data-label="Last seen" class="mat-mono mat-nowrap"><a href="@SensorDetailsModel.FailingChecksPath(Request.PathBase, view.SensorId)">@row.LastSeen</a></td>
-                                    <td data-label="Ended" class="mat-mono mat-nowrap mat-hide-sm">@(row.Ended ?? "-")</td>
-                                    <td data-label="Duration" class="mat-nowrap">@row.Duration</td>
-                                    <td data-label="Acknowledged" class="mat-hide-sm">@(row.Acknowledged ?? "-")</td>
-                                    <td data-label="Message" class="mm-break">@row.Message</td>
+                                    <td data-label="Alert">
+                                        <div class="mm-alert-cell">
+                                            <span class="mat-row">
+                                                <span class="@MatUi.PillClass(row.StateKey)">@row.StateLabel</span>
+                                                <span class="@MatUi.PillClass(row.PhaseKey == "open" ? "error" : row.PhaseKey == "recovered" ? "info" : "plain")">@row.PhaseLabel</span>
+                                            </span>
+                                            @if (row.Message is not null)
+                                            {
+                                                <span class="mat-small mat-text-muted mm-break">@row.Message</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td data-label="Started" class="mat-mono mat-nowrap">@row.Started</td>
+                                    <td data-label="Problem">
+                                        <div class="mm-alert-cell">
+                                            <strong class="@(row.Ongoing ? "mat-text-danger" : null)">@row.Problem</strong>
+                                            <span class="mat-small mat-text-muted">
+                                                last failing check <a class="mat-mono" href="@SensorDetailsModel.FailingChecksPath(Request.PathBase, view.SensorId)">@row.LastFailingCheck</a>@(row.Recovered is null ? string.Empty : " · " + row.Recovered)
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td data-label="Handled" class="@(row.AwaitsAcknowledgement ? "mat-text-warning" : "mat-text-muted")">@row.Handled</td>
                                 </tr>
                             }
                         </tbody>

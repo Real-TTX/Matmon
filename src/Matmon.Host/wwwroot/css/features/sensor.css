@@ -521,3 +521,6 @@
 
 /* Four tabs (General, Statistics, Checks, Status) fit a 360 px phone: a narrower tab padding there, through MatUi's own hook. */
 @media (max-width: 420px) { .mm-sensor-tabs { --mat-tabs-pad-x: var(--mat-space-3); } }
+
+/* History > Alerts: a cell with a main line and a quieter one under it (state + status over the message; how long over the last failing check). */
+.mm-alert-cell { display: flex; flex-direction: column; gap: var(--mat-space-1); min-width: 0; }

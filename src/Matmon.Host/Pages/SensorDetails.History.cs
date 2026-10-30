@@ -58,7 +58,7 @@ public sealed partial class SensorDetailsModel
     [
         ("open", "Open"),
         ("recovered", "Recovered, not acknowledged"),
-        ("resolved", "Resolved")
+        ("resolved", "Closed")
     ];
 
     public SensorStatusHistoryView StatusHistory { get; private set; } = default!;
@@ -89,22 +89,31 @@ public sealed partial class SensorDetailsModel
             .Select(alert =>
             {
                 var phase = Phase(alert);
-                // How long the problem lasted: until it recovered, else until the alert was closed, else until now.
-                var end = alert.RecoveredUtc ?? alert.ResolvedUtc ?? now;
-                var ongoing = alert.RecoveredUtc is null && alert.ResolvedUtc is null;
+                // The problem lasted from the first failing check until it recovered - or, when the alert was closed
+                // before it recovered (a pause, a mute), until it was closed; with neither it is still going on.
+                var problemEnd = alert.RecoveredUtc ?? alert.ResolvedUtc;
+                var span = MonitoringDisplay.FormatSpan((problemEnd ?? now) - alert.FirstSeenUtc);
+                string Time(DateTimeOffset at) => at.ToDisplay().ToString("dd.MM HH:mm");
+
+                var handled = alert.AcknowledgedUtc is { } acked
+                    ? $"Acknowledged {Time(acked)}{(string.IsNullOrWhiteSpace(alert.AcknowledgedBy) ? string.Empty : " by " + alert.AcknowledgedBy)}"
+                    : alert.ResolvedUtc is { } closed
+                        ? $"Closed {Time(closed)}"
+                        : "Not acknowledged yet";
+
                 return new SensorAlertRow(
                     MonitoringStatePresentation.Key(alert.State),
                     MonitoringStatePresentation.Label(alert.State),
                     phase,
-                    phase switch { "open" => "Open", "recovered" => "Recovered", _ => "Resolved" },
-                    alert.FirstSeenUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
+                    phase switch { "open" => "Open", "recovered" => "Recovered", _ => "Closed" },
+                    string.IsNullOrWhiteSpace(alert.Message) ? null : alert.Message,
+                    Time(alert.FirstSeenUtc),
+                    problemEnd is null ? $"Still failing - {span} so far" : $"Lasted {span}",
+                    problemEnd is null,
                     alert.LastSeenUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
-                    (alert.RecoveredUtc ?? alert.ResolvedUtc)?.ToDisplay().ToString("dd.MM HH:mm:ss"),
-                    $"{MonitoringDisplay.FormatSpan(end - alert.FirstSeenUtc)}{(ongoing ? " so far" : string.Empty)}",
-                    alert.AcknowledgedUtc is { } acked
-                        ? $"{acked.ToDisplay():dd.MM HH:mm}{(string.IsNullOrWhiteSpace(alert.AcknowledgedBy) ? string.Empty : " · " + alert.AcknowledgedBy)}"
-                        : null,
-                    string.IsNullOrWhiteSpace(alert.Message) ? null : alert.Message);
+                    alert.RecoveredUtc is { } recovered ? $"recovered {Time(recovered)}" : null,
+                    handled,
+                    alert.AcknowledgedUtc is null && alert.IsActive);
             })
             .ToArray();
 
@@ -270,19 +279,21 @@ public sealed record SensorAlertsView(
     int Page,
     int PageCount);
 
-/// <summary>One alert of the sensor: its state, where it stands (open / recovered / resolved), when it began, was last
-/// seen and ended, how long the problem lasted, who acknowledged it.</summary>
+/// <summary>One alert of the sensor, said in words: what it was (state + where it stands), when the problem started, how
+/// long it lasted (or that it still goes on), the last check that still failed, and whether someone dealt with it.</summary>
 public sealed record SensorAlertRow(
     string StateKey,
     string StateLabel,
     string PhaseKey,
     string PhaseLabel,
-    string FirstSeen,
-    string LastSeen,
-    string? Ended,
-    string Duration,
-    string? Acknowledged,
-    string? Message);
+    string? Message,
+    string Started,
+    string Problem,
+    bool Ongoing,
+    string LastFailingCheck,
+    string? Recovered,
+    string Handled,
+    bool AwaitsAcknowledgement);
 
 public sealed record SensorChecksView(
     string? Filter,
