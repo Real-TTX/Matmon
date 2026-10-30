@@ -23,6 +23,17 @@ public sealed class TunnelClient : BackgroundService
     // through Full Access (e.g. a backup snapshot) can't disconnect every console user of the instance.
     private const long MaxReplayBodyBytes = 20L * 1024 * 1024;
 
+    // A cloud that asks for it (TunnelRequest.Stream) takes a large body in pieces instead: the head, then binary
+    // messages of the 32-character request id + up to 256 KB, then an end message. Used for anything past
+    // StreamThreshold or of unknown length that the cloud does not rewrite (HTML and CSS it rewrites whole, so those
+    // stay one message and keep the 20 MB cap) - which is what lets an agent package (40-55 MB) or a backup through.
+    internal const long StreamThreshold = 4L * 1024 * 1024;
+    internal const int StreamPieceBytes = 256 * 1024;
+    internal const int StreamIdLength = 32;
+
+    // The responses being streamed right now, by request id, so a cancel from the cloud can stop one.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _streams = new();
+
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly IServer _server;
@@ -255,6 +266,16 @@ public sealed class TunnelClient : BackgroundService
                     continue;
                 }
 
+                if (request.Cancel)
+                {
+                    // The browser stopped reading a streamed response - stop sending it.
+                    if (_streams.TryRemove(request.Id, out var running))
+                    {
+                        running.Cancel();
+                    }
+                    continue;
+                }
+
                 // Handle each request without blocking the receive loop (multiplexed responses).
                 _ = Task.Run(() => HandleRequestAsync(socket, sendLock, request, ct), ct);
             }
@@ -282,29 +303,25 @@ public sealed class TunnelClient : BackgroundService
 
     private async Task HandleRequestAsync(ClientWebSocket socket, SemaphoreSlim sendLock, TunnelRequest request, CancellationToken cancellationToken)
     {
-        TunnelResponse response;
+        ReplayResult result;
         try
         {
-            response = await ReplayAsync(request, cancellationToken);
+            result = await ReplayAsync(request, cancellationToken);
             _tunnelState.MarkRequestServed();
         }
         catch (Exception ex)
         {
             _logger.LogInformation(ex, "Remote access replay failed for {Path}", request.Path);
-            response = new TunnelResponse(request.Id, 502, new(), Convert.ToBase64String("Remote access replay failed."u8.ToArray()));
+            result = new ReplayResult(new TunnelResponse(request.Id, 502, new(), Convert.ToBase64String("Remote access replay failed."u8.ToArray())), null);
         }
 
+        using var streamed = result.Stream;
         try
         {
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(response, Json);
-            await sendLock.WaitAsync(cancellationToken);
-            try
+            await SendTextAsync(socket, sendLock, result.Head, cancellationToken);
+            if (streamed is not null)
             {
-                await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
-            }
-            finally
-            {
-                sendLock.Release();
+                await StreamBodyAsync(socket, sendLock, request.Id, streamed, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -313,7 +330,105 @@ public sealed class TunnelClient : BackgroundService
         }
     }
 
-    private async Task<TunnelResponse> ReplayAsync(TunnelRequest request, CancellationToken cancellationToken)
+    private static async Task SendTextAsync(ClientWebSocket socket, SemaphoreSlim sendLock, TunnelResponse response, CancellationToken cancellationToken)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(response, Json);
+        await sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+        }
+        finally
+        {
+            sendLock.Release();
+        }
+    }
+
+    /// <summary>Sends a body in pieces after its head: each a binary message of the request id + up to 256 KB, then an
+    /// end message (with the reason when it could not finish). Every piece takes the send lock on its own, so other
+    /// requests' answers go out in between - a download never holds up the rest of the console.</summary>
+    private async Task StreamBodyAsync(ClientWebSocket socket, SemaphoreSlim sendLock, string requestId, HttpResponseMessage reply, CancellationToken cancellationToken)
+    {
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _streams[requestId] = stop;
+        string? error = null;
+        try
+        {
+            await using var body = await reply.Content.ReadAsStreamAsync(stop.Token);
+            await SendPiecesAsync(socket, sendLock, requestId, body, stop.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The cloud asked to stop (the browser went away): nobody reads the rest, and the cloud forgot the stream.
+            return;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogInformation(ex, "Remote access stream failed for request {RequestId}", requestId);
+            error = "The instance could not finish sending this.";
+        }
+        finally
+        {
+            _streams.TryRemove(requestId, out _);
+        }
+
+        await SendTextAsync(socket, sendLock, new TunnelResponse(requestId, 0, new(), null, End: true, Error: error), cancellationToken);
+    }
+
+    /// <summary>The body as binary messages: the 32-character request id, then up to <see cref="StreamPieceBytes"/>
+    /// bytes. The wire format the cloud's TunnelRegistry reads.</summary>
+    internal static async Task SendPiecesAsync(WebSocket socket, SemaphoreSlim sendLock, string requestId, Stream body, CancellationToken cancellationToken)
+    {
+        var piece = new byte[StreamIdLength + StreamPieceBytes];
+        System.Text.Encoding.ASCII.GetBytes(requestId).CopyTo(piece, 0);
+        while (true)
+        {
+            var read = await FillAsync(body, piece.AsMemory(StreamIdLength), cancellationToken);
+            if (read == 0)
+            {
+                return;
+            }
+
+            await sendLock.WaitAsync(cancellationToken);
+            try
+            {
+                await socket.SendAsync(piece.AsMemory(0, StreamIdLength + read), WebSocketMessageType.Binary, endOfMessage: true, cancellationToken);
+            }
+            finally
+            {
+                sendLock.Release();
+            }
+        }
+    }
+
+    /// <summary>Reads until the buffer is full or the body ends, so pieces are full-sized rather than whatever one
+    /// read happened to return.</summary>
+    private static async Task<int> FillAsync(Stream body, Memory<byte> buffer, CancellationToken cancellationToken)
+    {
+        var total = 0;
+        while (total < buffer.Length)
+        {
+            var read = await body.ReadAsync(buffer[total..], cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+            total += read;
+        }
+        return total;
+    }
+
+    /// <summary>Whether a response goes to the cloud in pieces: only when the cloud asked for it, the request id can
+    /// head a piece, the cloud will not rewrite it (HTML and CSS) and it is large or of unknown length.</summary>
+    internal static bool ShouldStream(bool cloudAccepts, string requestId, string? contentType, long? contentLength) =>
+        cloudAccepts
+        && requestId.Length == StreamIdLength
+        && requestId.All(char.IsAsciiLetterOrDigit)
+        && !(contentType ?? string.Empty).Contains("text/html", StringComparison.OrdinalIgnoreCase)
+        && !(contentType ?? string.Empty).Contains("text/css", StringComparison.OrdinalIgnoreCase)
+        && (contentLength is null || contentLength > StreamThreshold);
+
+    private async Task<ReplayResult> ReplayAsync(TunnelRequest request, CancellationToken cancellationToken)
     {
         // Only ever replay against OURSELVES. A network-path ("//evil.com/x") or absolute reference resolved against
         // the self base would dial a third party - carrying the operator's cookies, the identity assertion and our
@@ -328,7 +443,7 @@ public sealed class TunnelClient : BackgroundService
             || !string.Equals(target.Host, self.Host, StringComparison.OrdinalIgnoreCase)
             || target.Port != self.Port)
         {
-            return new TunnelResponse(request.Id, 400, new(), Convert.ToBase64String("Invalid remote access path."u8.ToArray()));
+            return new ReplayResult(new TunnelResponse(request.Id, 400, new(), Convert.ToBase64String("Invalid remote access path."u8.ToArray())), null);
         }
 
         using var message = new HttpRequestMessage(new HttpMethod(request.Method), target);
@@ -360,15 +475,43 @@ public sealed class TunnelClient : BackgroundService
         // auto-login middleware may trust the cloud's X-Matmon-Cloud-User identity assertion carried above.
         message.Headers.TryAddWithoutValidation(TunnelAutoLogin.TunnelAuthHeader, _tunnelSecret.Value);
 
-        using var reply = await _local.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-
-        // Cap the response before buffering it: one over-large frame would tear the whole tunnel down for every
-        // console user of this instance. Refuse early (declared length) or while reading (chunked/unknown length).
-        if (reply.Content.Headers.ContentLength is > MaxReplayBodyBytes)
+        var reply = await _local.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var handedOver = false;
+        try
         {
-            return TooLargeResponse(request.Id);
-        }
+            var head = BuildHead(request.Id, reply);
+            if (ShouldStream(request.Stream, request.Id, reply.Content.Headers.ContentType?.ToString(), reply.Content.Headers.ContentLength))
+            {
+                // The body follows in pieces; the caller owns (and disposes) the reply from here on.
+                handedOver = true;
+                return new ReplayResult(head with { Stream = true }, reply);
+            }
 
+            // Cap the response before buffering it: one over-large frame would tear the whole tunnel down for every
+            // console user of this instance. Refuse early (declared length) or while reading (chunked/unknown length).
+            if (reply.Content.Headers.ContentLength is > MaxReplayBodyBytes)
+            {
+                return new ReplayResult(TooLargeResponse(request.Id), null);
+            }
+
+            var body = await ReadCappedAsync(reply.Content, cancellationToken);
+            if (body is null)
+            {
+                return new ReplayResult(TooLargeResponse(request.Id), null);
+            }
+            return new ReplayResult(head with { Body = body.Length == 0 ? null : Convert.ToBase64String(body) }, null);
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                reply.Dispose();
+            }
+        }
+    }
+
+    private TunnelResponse BuildHead(string requestId, HttpResponseMessage reply)
+    {
         var selfBase = SelfBaseUrl();
         var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var header in reply.Headers)
@@ -384,12 +527,7 @@ public sealed class TunnelClient : BackgroundService
             headers[header.Key] = header.Value.ToArray();
         }
 
-        var body = await ReadCappedAsync(reply.Content, cancellationToken);
-        if (body is null)
-        {
-            return TooLargeResponse(request.Id);
-        }
-        return new TunnelResponse(request.Id, (int)reply.StatusCode, headers, body.Length == 0 ? null : Convert.ToBase64String(body));
+        return new TunnelResponse(requestId, (int)reply.StatusCode, headers, null);
     }
 
     /// <summary>Reads the response body but aborts (returns null) once it exceeds <see cref="MaxReplayBodyBytes"/>,
@@ -458,7 +596,13 @@ public sealed class TunnelClient : BackgroundService
         }
     }
 
-    private sealed record TunnelRequest(string Id, string Method, string Path, Dictionary<string, string[]> Headers, string? Body);
+    // Stream / Cancel / End / Error: the piecewise body (see StreamThreshold). A cloud that sends neither flag gets the
+    // one-message answer it always got.
+    private sealed record TunnelRequest(string Id, string Method, string Path, Dictionary<string, string[]> Headers, string? Body,
+        bool Stream = false, bool Cancel = false);
 
-    private sealed record TunnelResponse(string Id, int Status, Dictionary<string, string[]> Headers, string? Body);
+    private sealed record TunnelResponse(string Id, int Status, Dictionary<string, string[]> Headers, string? Body,
+        bool Stream = false, bool End = false, string? Error = null);
+
+    private sealed record ReplayResult(TunnelResponse Head, HttpResponseMessage? Stream);
 }
