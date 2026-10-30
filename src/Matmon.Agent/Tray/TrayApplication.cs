@@ -52,20 +52,22 @@ public sealed class TrayApplication : ApplicationContext
         }, MarkPalette.Agent));
         _installedWriteTimeAtStart = WriteTime(SetupCommand.InstalledPath);
 
-        _openInstanceItem = new ToolStripMenuItem("Open instance", null, (_, _) => OpenInstance());
+        _openInstanceItem = new ToolStripMenuItem("Open Matmon", null, (_, _) => OpenInstance());
         var menu = new ContextMenuStrip();
+        _openInstanceItem.Font = new Font(menu.Font, FontStyle.Bold);
         menu.Items.Add(new ToolStripMenuItem($"Matmon Agent {MatmonVersion.Current}") { Enabled = false });
         menu.Items.Add(_stateItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Info…", null, (_, _) => ShowInfo()) { Font = new Font(menu.Font, FontStyle.Bold) });
+        // The same order and the same bold default as the instance's tray: Open Matmon (also a double-click), then Info.
         menu.Items.Add(_openInstanceItem);
+        menu.Items.Add(new ToolStripMenuItem("Info…", null, (_, _) => ShowInfo()));
         menu.Items.Add(new ToolStripMenuItem("Set up…", null, (_, _) => ShowSetup()));
         menu.Items.Add(new ToolStripMenuItem("Open log folder", null, (_, _) => OpenLogFolder()));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
 
         _icon = new NotifyIcon { ContextMenuStrip = menu, Icon = _icons[State], Text = "Matmon Agent", Visible = true };
-        _icon.DoubleClick += (_, _) => ShowInfo();
+        _icon.DoubleClick += (_, _) => { if (_openInstanceItem.Enabled) { OpenInstance(); } else { ShowInfo(); } };
 
         _timer.Tick += async (_, _) => await RefreshAsync();
         _timer.Start();
@@ -182,7 +184,7 @@ public sealed class TrayApplication : ApplicationContext
     {
         if (_infoForm is null || _infoForm.IsDisposed)
         {
-            var openInstance = BrandChrome.FooterButton("Open instance", width: 116);
+            var openInstance = BrandChrome.FooterButton("Open Matmon", width: 124);
             openInstance.Click += (_, _) => OpenInstance();
             var logs = BrandChrome.FooterButton("Open log folder", width: 120);
             logs.Click += (_, _) => OpenLogFolder();
