@@ -212,6 +212,7 @@ public sealed partial class SensorDetailsModel : PageModel
 
         Checks = BuildChecks(sensor, effectiveSettings, fallbackUnit, defaultChannelKey, displayScale);
         StatusHistory = BuildStatusHistory(sensor);
+        Alerts = BuildAlerts(sensor);
 
         SyslogLogRoute = MatmonSecurity.CanOperateAlerts(User)
             ? SyslogPageSupport.BuildLogRoute(sensor.SensorTypeKey, SensorTargetResolver.Resolve(sensor, lineage), effectiveSettings)

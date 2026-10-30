@@ -7,7 +7,9 @@ namespace Matmon.Host.Pages;
 
 // The sensor page's two history lists: every CHECK (paged from the database, filterable by state) and the STATUS history
 // (state changes, alerts, acknowledgements, pauses - built by SensorStatusHistory). Both filters and pages live in the
-// address, so a link can open them: /monitoring/sensor/<id>?checks=problems#checks.
+// address, so a link can open them: /monitoring/sensor/<id>?checks=problems#history. Since 2026-10-30 they are ONE
+// History tab with a switch (Checks / Status / Alerts) in its toolbar; ?history= names the list, the third one being
+// the sensor's alerts (open / recovered / resolved, with first and last seen, end, duration, acknowledgement).
 public sealed partial class SensorDetailsModel
 {
     public const int HistoryPageSize = 50;
@@ -26,13 +28,95 @@ public sealed partial class SensorDetailsModel
     [BindProperty(SupportsGet = true, Name = "statusPage")]
     public int StatusPage { get; set; } = 1;
 
+    /// <summary>The alerts filter: open | recovered | resolved (empty = all).</summary>
+    [BindProperty(SupportsGet = true, Name = "alerts")]
+    public string? AlertsFilter { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "alertsPage")]
+    public int AlertsPage { get; set; } = 1;
+
+    /// <summary>Which list the History tab shows: checks (default) | status | alerts. A filter or a page of a list in
+    /// the address picks it too, so an older link (?status=alerts) still opens the right one.</summary>
+    [BindProperty(SupportsGet = true, Name = "history")]
+    public string? HistoryView { get; set; }
+
     public SensorChecksView Checks { get; private set; } = default!;
+
+    public SensorAlertsView Alerts { get; private set; } = default!;
+
+    public string ActiveHistoryView =>
+        string.Equals(HistoryView, "status", StringComparison.OrdinalIgnoreCase) || HasQuery("status", "statusPage") ? "status"
+        : string.Equals(HistoryView, "alerts", StringComparison.OrdinalIgnoreCase) || HasQuery("alerts", "alertsPage") ? "alerts"
+        : "checks";
+
+    /// <summary>Whether the address opens the History tab at all.</summary>
+    public bool HistoryRequested => HasQuery("history", "checks", "checksPage", "status", "statusPage", "alerts", "alertsPage");
+
+    private bool HasQuery(params string[] keys) => keys.Any(key => !string.IsNullOrWhiteSpace(Request.Query[key]));
+
+    private static readonly (string Key, string Label)[] AlertFilters =
+    [
+        ("open", "Open"),
+        ("recovered", "Recovered, not acknowledged"),
+        ("resolved", "Resolved")
+    ];
 
     public SensorStatusHistoryView StatusHistory { get; private set; } = default!;
 
     /// <summary>The address of the checks of a sensor filtered to its problems - what an alert links to.</summary>
     public static string FailingChecksPath(string pathBase, Guid sensorId)
-        => $"{pathBase}/monitoring/sensor/{sensorId}?checks=problems#checks";
+        => $"{pathBase}/monitoring/sensor/{sensorId}?checks=problems#history";
+
+    private SensorAlertsView BuildAlerts(SensorElement sensor)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var all = _workspaceStore.GetElementAlerts(sensor.Id)
+            .OrderByDescending(alert => alert.FirstSeenUtc)
+            .ToArray();
+
+        static string Phase(MonitoringAlert alert) =>
+            !alert.IsActive ? "resolved" : alert.IsRecovered ? "recovered" : "open";
+
+        var filter = AlertFilters.FirstOrDefault(option => string.Equals(option.Key, AlertsFilter?.Trim(), StringComparison.OrdinalIgnoreCase));
+        AlertsFilter = filter.Key;
+        var matching = filter.Key is null ? all : all.Where(alert => Phase(alert) == filter.Key).ToArray();
+        var pageCount = Math.Max(1, (matching.Length + HistoryPageSize - 1) / HistoryPageSize);
+        AlertsPage = Math.Clamp(AlertsPage, 1, pageCount);
+
+        var rows = matching
+            .Skip((AlertsPage - 1) * HistoryPageSize)
+            .Take(HistoryPageSize)
+            .Select(alert =>
+            {
+                var phase = Phase(alert);
+                // How long the problem lasted: until it recovered, else until the alert was closed, else until now.
+                var end = alert.RecoveredUtc ?? alert.ResolvedUtc ?? now;
+                var ongoing = alert.RecoveredUtc is null && alert.ResolvedUtc is null;
+                return new SensorAlertRow(
+                    MonitoringStatePresentation.Key(alert.State),
+                    MonitoringStatePresentation.Label(alert.State),
+                    phase,
+                    phase switch { "open" => "Open", "recovered" => "Recovered", _ => "Resolved" },
+                    alert.FirstSeenUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
+                    alert.LastSeenUtc.ToDisplay().ToString("dd.MM HH:mm:ss"),
+                    (alert.RecoveredUtc ?? alert.ResolvedUtc)?.ToDisplay().ToString("dd.MM HH:mm:ss"),
+                    $"{MonitoringDisplay.FormatSpan(end - alert.FirstSeenUtc)}{(ongoing ? " so far" : string.Empty)}",
+                    alert.AcknowledgedUtc is { } acked
+                        ? $"{acked.ToDisplay():dd.MM HH:mm}{(string.IsNullOrWhiteSpace(alert.AcknowledgedBy) ? string.Empty : " · " + alert.AcknowledgedBy)}"
+                        : null,
+                    string.IsNullOrWhiteSpace(alert.Message) ? null : alert.Message);
+            })
+            .ToArray();
+
+        return new SensorAlertsView(
+            AlertsFilter,
+            AlertFilters.Select(option => new SensorHistoryFilterOption(option.Key, option.Label, all.Count(alert => Phase(alert) == option.Key))).ToArray(),
+            rows,
+            all.Length,
+            matching.Length,
+            AlertsPage,
+            pageCount);
+    }
 
     private static readonly (string Key, string Label, SensorState[] States)[] CheckFilters =
     [
@@ -176,6 +260,29 @@ public sealed partial class SensorDetailsModel
 }
 
 public sealed record SensorHistoryFilterOption(string Key, string Label, int Count);
+
+public sealed record SensorAlertsView(
+    string? Filter,
+    IReadOnlyList<SensorHistoryFilterOption> Options,
+    IReadOnlyList<SensorAlertRow> Rows,
+    int Total,
+    int Matching,
+    int Page,
+    int PageCount);
+
+/// <summary>One alert of the sensor: its state, where it stands (open / recovered / resolved), when it began, was last
+/// seen and ended, how long the problem lasted, who acknowledged it.</summary>
+public sealed record SensorAlertRow(
+    string StateKey,
+    string StateLabel,
+    string PhaseKey,
+    string PhaseLabel,
+    string FirstSeen,
+    string LastSeen,
+    string? Ended,
+    string Duration,
+    string? Acknowledged,
+    string? Message);
 
 public sealed record SensorChecksView(
     string? Filter,
