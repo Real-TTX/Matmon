@@ -518,3 +518,6 @@
 /* A check that failed is marked down its edge too, so it stands out in a long list (the pill says which state). */
 .sensor-history-table tr[data-state="error"] { box-shadow: inset 3px 0 0 var(--mat-danger); }
 .sensor-history-table tr[data-state="warning"] { box-shadow: inset 3px 0 0 var(--mat-warning); }
+
+/* Four tabs (General, Statistics, Checks, Status) fit a 360 px phone: a narrower tab padding there, through MatUi's own hook. */
+@media (max-width: 420px) { .mm-sensor-tabs { --mat-tabs-pad-x: var(--mat-space-3); } }

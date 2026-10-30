@@ -208,8 +208,8 @@
 </div>
 
 <section data-tabs data-tab-hash>
-    <div class="mat-tabs" role="tablist" aria-label="Sensor sections">
-        @foreach (var (tabKey, tabLabel) in new[] { ("general", "General"), ("statistics", "Statistics"), ("checks", "Checks"), ("status", "Status history") })
+    <div class="mat-tabs mm-sensor-tabs" role="tablist" aria-label="Sensor sections">
+        @foreach (var (tabKey, tabLabel) in new[] { ("general", "General"), ("statistics", "Statistics"), ("checks", "Checks"), ("status", "Status") })
         {
             var selected = activeTab == tabKey;
             <button type="button" class="mat-tab" role="tab" id="tab-@tabKey" aria-controls="panel-@tabKey" aria-selected="@(selected ? "true" : "false")" tabindex="@(selected ? null : "-1")">@tabLabel</button>
