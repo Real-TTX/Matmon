@@ -101,7 +101,7 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(_stopItem);
         menu.Items.Add(_restartItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Close this icon", null, (_, _) => ExitThread()));
+        menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
 
         _icon = new NotifyIcon { ContextMenuStrip = menu, Icon = _icons[InstanceState.NotInstalled], Text = "Matmon", Visible = true };
         _icon.DoubleClick += (_, _) => OpenDefault();
