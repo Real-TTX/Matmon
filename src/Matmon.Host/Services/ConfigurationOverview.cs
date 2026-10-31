@@ -37,4 +37,9 @@ public sealed record SystemProbeOverview(
     Guid? BoundHostId = null,
     string? BoundHostName = null,
     // A Docker probe's self-update report from its heartbeat (null for the primary, an agent and an older probe).
-    Matmon.Probe.ProbeSelfUpdateReport? SelfUpdate = null);
+    Matmon.Probe.ProbeSelfUpdateReport? SelfUpdate = null,
+    // An agent: the probe it talks through (the nearest probe above its host - the primary or a remote probe that relays).
+    Guid? ViaProbeElementId = null,
+    string? ViaProbeName = null,
+    // An agent: the remote probe its last heartbeat actually came through (null = straight to the primary).
+    string? RelayedByName = null);

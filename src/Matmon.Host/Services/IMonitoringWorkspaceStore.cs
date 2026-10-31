@@ -126,6 +126,9 @@ public interface IMonitoringWorkspaceStore
 
     ProbeElement? FindProbeByProbeId(string probeId);
 
+    /// <summary>The probe or agent host reporting under this id (live reference); null when none does.</summary>
+    MonitoringContainerElement? FindRunnerByProbeId(string probeId);
+
     /// <summary>The primary (root) probe's configured discovery subnets (CIDR strings).</summary>
     IReadOnlyList<string> GetPrimaryProbeSubnets();
 
@@ -578,10 +581,14 @@ public interface IMonitoringWorkspaceStore
     bool TryValidateProbe(string probeId, string? probeToken);
 
     /// <summary>Issues a single-use agent enrolment code (returned once, stored only as a hash).</summary>
-    /// <param name="probeElementId">An existing (non-root) probe to re-enrol; null creates a new probe on redemption.</param>
-    /// <param name="hostElementId">The existing host the agent belongs to - it moves under the agent's probe when the code is
-    /// redeemed. Null: a new host named after the machine. A host that already has an agent is refused.</param>
-    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? probeElementId = null, Guid? hostElementId = null);
+    /// <param name="parentElementId">Where a NEW agent host is created (a probe or a folder); null = under the primary.</param>
+    /// <param name="hostElementId">An existing host the agent becomes (it stays where it is). A host that already has an agent
+    /// is re-enrolled: a new token, everything else kept.</param>
+    AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? parentElementId = null, Guid? hostElementId = null);
+
+    /// <summary>The probe an agent installed with this code talks through: the nearest probe above its place (the primary or a
+    /// remote probe, which relays).</summary>
+    ProbeElement? FindAgentRelayProbe(AgentEnrollment enrollment);
 
     /// <summary>Unexpired, unused codes - expired ones are pruned on the way.</summary>
     IReadOnlyList<AgentEnrollment> GetPendingAgentEnrollments();
@@ -604,17 +611,20 @@ public interface IMonitoringWorkspaceStore
     /// the agent binary with the same code it is about to enrol with.</summary>
     bool IsAgentEnrollmentCodeValid(string? code);
 
+    /// <summary>The pending enrolment a valid code belongs to (not consumed); null for a wrong, used or expired code.</summary>
+    AgentEnrollment? FindAgentEnrollmentByCode(string? code);
+
     /// <summary>
-    /// Consumes a code: creates the probe the agent becomes, or - for a re-enrolment code - gives the existing
-    /// probe a new token. Wrong, used, expired and orphaned codes are all <see cref="AgentEnrollmentStatus.Invalid"/>,
+    /// Consumes a code: gives a host the agent identity - a new host, or the existing one the code names (a host that
+    /// already has an agent gets a new token). Wrong, used, expired and orphaned codes are all <see cref="AgentEnrollmentStatus.Invalid"/>,
     /// deliberately indistinguishable. No licence check: agents are not probes in the licence model.
     /// </summary>
     /// <param name="operatingSystem">What the agent reported (e.g. "Microsoft Windows 10.0.26200"); picks its baseline sensors.</param>
     AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null);
 
-    /// <summary>Binds an agent to another host (the machine it sits on): the host moves under the agent's probe and the
-    /// agent's own machine sensors move with the binding. Null when done, else the reason in words.</summary>
-    string? RebindAgentHost(Guid probeElementId, Guid hostElementId);
+    /// <summary>Moves an agent's identity to another host (the machine it sits on); its own machine sensors go with it. Null
+    /// when done, else the reason in words.</summary>
+    string? RebindAgentHost(Guid agentHostId, Guid hostElementId);
 
     void Save();
 }

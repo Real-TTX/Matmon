@@ -215,9 +215,12 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var probeHealthMap = new Dictionary<Guid, ProbeHealthSnapshot>();
         var heartbeatWindowSeconds = Math.Clamp(_runtimeOptions.HeartbeatIntervalSeconds, 5, 300);
 
-        foreach (var probe in MonitoringTopology.EnumerateSelfAndDescendants(root).OfType<ProbeElement>())
+        // Probes and agents (a host with an agent reports like a probe) - the agents for their dashboard tile.
+        foreach (var probe in MonitoringTopology.EnumerateSelfAndDescendants(root)
+                     .Where(element => element is ProbeElement or HostElement { Agent: not null })
+                     .Cast<MonitoringContainerElement>())
         {
-            if (probe.ParentId is null)
+            if (probe is ProbeElement { ParentId: null })
             {
                 probeHealthMap[probe.Id] = new ProbeHealthSnapshot(
                     MonitoringSeverity.Ok,
@@ -226,7 +229,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                 continue;
             }
 
-            if (!liveProbes.TryGetValue(probe.ProbeId, out var liveSnapshot))
+            if (!liveProbes.TryGetValue(MonitoringTopology.RunnerId(probe), out var liveSnapshot))
             {
                 // The registry is in memory: right after this primary started it knows no probe yet. Calling every
                 // remote probe dead for that minute raised a probe alert on every restart.
@@ -441,10 +444,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         {
             case MonitoringElementKind.Probe:
                 // An agent is not a probe to the user: it has a tile of its own, the Probes count leaves it out.
-                if (element is not ProbeElement { AgentEnrolledUtc: not null })
-                {
-                    counters.Probes++;
-                }
+                counters.Probes++;
 
 
                 if (element is ProbeElement probeItem && probeHealthMap.TryGetValue(probeItem.Id, out var probeItemHealth))
@@ -457,12 +457,25 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                         stateColor,
                         probeItemHealth.LastSeen,
                         probeItemHealth.Message,
-                        MonitoringStatePresentation.Key(probeItemHealth.Severity),
-                        probeItem.AgentEnrolledUtc is not null));
+                        MonitoringStatePresentation.Key(probeItemHealth.Severity)));
                 }
                 break;
             case MonitoringElementKind.Host:
                 counters.Hosts++;
+                // An agent is a host: listed for the Agents tile, never counted as a probe.
+                if (element is HostElement { Agent: { } agentIdentity } agentHost && probeHealthMap.TryGetValue(agentHost.Id, out var agentHealth))
+                {
+                    probes.Add(new DashboardProbeViewModel(
+                        agentIdentity.ProbeId,
+                        agentHost.Name,
+                        stateKey,
+                        stateLabel,
+                        stateColor,
+                        agentHealth.LastSeen,
+                        agentHealth.Message,
+                        MonitoringStatePresentation.Key(agentHealth.Severity),
+                        true));
+                }
                 break;
             case MonitoringElementKind.Sensor:
                 counters.Sensors++;
@@ -889,7 +902,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var address = string.IsNullOrWhiteSpace(host.Address) ? "host" : host.Address;
 
         // The machine an agent is installed on says so: the tree is where "which of these has an agent" gets read.
-        return lineage.OfType<ProbeElement>().Any(probe => probe.BoundHostId == host.Id)
+        return host.Agent is not null
             ? $"{address} · {ProbeElement.AgentLabel}"
             : address;
     }

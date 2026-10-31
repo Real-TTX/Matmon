@@ -314,6 +314,9 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
 
     public string? ProbeSubnetsText { get; set; }
 
+    /// <summary>A remote probe: the address agents in its network use to reach it (it relays them).</summary>
+    public string? ProbeAgentAddress { get; set; }
+
     public string? Address { get; set; }
 
     public string? SensorTypeKey { get; set; }

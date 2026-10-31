@@ -40,7 +40,7 @@ public sealed partial class WorkspaceModel
             return new SavedSensorRunRouting(RemoteRunOutcome.Local, null, string.Empty);
         }
 
-        var probeName = _workspaceStore.FindProbeByProbeId(owningProbeId)?.Name ?? owningProbeId;
+        var probeName = _workspaceStore.FindRunnerByProbeId(owningProbeId)?.Name ?? owningProbeId;
         var job = _onDemandRunStore.Create(
             owningProbeId,
             sensorId,

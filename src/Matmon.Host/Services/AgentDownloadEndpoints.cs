@@ -148,6 +148,29 @@ public static class AgentDownloadEndpoints
     }
 
     /// <summary>
+    /// The address an agent installed with this enrolment talks to: the one the request came through when a remote probe
+    /// relayed it, else the address set for the remote probe above the agent's place (that probe relays it), else
+    /// <paramref name="fallback"/> (the instance's own). Null when none can go into a script.
+    /// </summary>
+    public static string? AgentUrl(HttpContext http, IMonitoringWorkspaceStore store, AgentEnrollment? enrollment, string fallback)
+    {
+        if (AgentRelay.ReadRelay(http.Request, store, out var origin) is not null && origin is not null)
+        {
+            return origin;
+        }
+
+        var relay = enrollment is null ? null : store.FindAgentRelayProbe(enrollment);
+        return relay is { ParentId: not null }
+            ? AgentInstallScripts.SafeUrl(relay.AgentAddress)
+            : AgentInstallScripts.SafeUrl(fallback);
+    }
+
+    private static string MissingAddress(IMonitoringWorkspaceStore store, AgentEnrollment? enrollment) =>
+        enrollment is not null && store.FindAgentRelayProbe(enrollment) is { ParentId: not null } probe
+            ? $"The agent talks through the probe '{probe.Name}', and nobody has set the address agents use to reach it. Set it in the probe's settings (Probes > {probe.Name} > Edit)."
+            : "This instance does not know the address agents should use. Set the public address under System > General, or open Matmon directly once.";
+
+    /// <summary>
     /// The download name of a ready-to-install agent: says it installs, and for which machine when the code names one -
     /// e.g. <c>matmon-agent-setup-FILESRV-01.exe</c>, <c>matmon-agent-linux-x64-FILESRV-01</c>.
     /// </summary>
@@ -179,11 +202,13 @@ public static class AgentDownloadEndpoints
                 "The enrolment code is wrong, already used or expired. Create a new one under Probes > Agents on the instance.");
         }
 
-        // The address the script was just fetched from IS reachable from the machine that runs it.
-        var url = AgentInstallScripts.SafeUrl($"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}");
+        // The address the script was just fetched from IS reachable from the machine that runs it - through a relaying
+        // probe that is the probe's, and an agent placed under a remote probe talks to that probe in any case.
+        var url = AgentUrl(http, workspaceStore, workspaceStore.FindAgentEnrollmentByCode(code),
+            $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}");
         if (url is null)
         {
-            return Text(StatusCodes.Status400BadRequest, "The address this request came in on cannot be put into a script.");
+            return Text(StatusCodes.Status400BadRequest, MissingAddress(workspaceStore, workspaceStore.FindAgentEnrollmentByCode(code)));
         }
 
         var catalog = await packages.GetCatalogAsync(http.RequestAborted);

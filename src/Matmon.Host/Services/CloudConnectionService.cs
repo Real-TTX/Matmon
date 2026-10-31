@@ -233,7 +233,7 @@ public sealed class CloudConnectionService : BackgroundService
         {
             var allElements = _workspaceStore.GetAllElements();
             sensorCount = allElements.OfType<SensorElement>().Count();
-            probeCount = allElements.OfType<ProbeElement>().Count(probe => probe.AgentEnrolledUtc is null);
+            probeCount = allElements.OfType<ProbeElement>().Count();
             mapCount = _workspaceStore.GetMaps().Count;
             (openAlerts, ackAlerts, errorAlerts, warningAlerts) = _workspaceStore.GetActiveAlertCounts();
         }

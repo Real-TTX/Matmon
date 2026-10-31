@@ -7,11 +7,11 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Matmon.Host.Pages;
 
 /// <summary>
-/// Agents: the probes that were installed ON a machine and enrolled with a one-time code. A view over the
-/// probe elements (<see cref="ProbeElement.AgentEnrolledUtc"/>), not a second model - an agent is managed,
-/// assigned and alarmed exactly like any other probe. What this page adds is the enrolment itself: create a code
-/// (optionally for an existing host), then either download the agent with the code inside (one click / one command on
-/// the machine) or copy a one-line install command.
+/// Agents: a Matmon agent installed ON a machine, enrolled with a one-time code. An agent IS a host - the machine it measures
+/// (<see cref="HostElement.Agent"/>) - not a probe: its sensors live under the host and run on the agent, and the probe above
+/// the host is the one it talks through (a remote probe relays it to the primary). What this page adds is the enrolment
+/// itself: create a code (for a new host in a chosen place, or for an existing host), then either download the agent with the
+/// code inside (one click / one command on the machine) or copy a one-line install command.
 /// </summary>
 public sealed class AgentsModel : PageModel
 {
@@ -51,13 +51,20 @@ public sealed class AgentsModel : PageModel
     [BindProperty]
     public int NewValidityHours { get; set; } = 24;
 
-    /// <summary>The existing host the new agent belongs to (it moves under the agent's probe); empty = a new host,
-    /// named after the machine. An agent is bound to a host either way.</summary>
+    /// <summary>An existing host the new agent becomes (it stays where it is); empty = a new host, named after the machine,
+    /// under <see cref="NewParentId"/>.</summary>
     [BindProperty]
     public Guid? NewHostId { get; set; }
 
+    /// <summary>Where a NEW agent host goes: the primary, a remote probe (which then relays the agent) or a folder.</summary>
+    [BindProperty]
+    public Guid? NewParentId { get; set; }
+
     /// <summary>What the host picker offers: every host that has no agent yet.</summary>
     public IReadOnlyList<ElementPickerOption> HostOptions { get; private set; } = [];
+
+    /// <summary>What the "place under" picker offers: probes and folders.</summary>
+    public IReadOnlyList<ElementPickerOption> PlaceOptions { get; private set; } = [];
 
     /// <summary>The code just issued - shown on exactly one render, then gone for good (only its hash is kept).</summary>
     [TempData]
@@ -72,11 +79,11 @@ public sealed class AgentsModel : PageModel
     [TempData]
     public string? IssuedName { get; set; }
 
-    /// <summary>The issued code re-enrols an existing probe - the page then says what that replaces.</summary>
+    /// <summary>The issued code re-installs an existing agent - the page then says what that replaces.</summary>
     [TempData]
     public bool IssuedReplaces { get; set; }
 
-    /// <summary>The existing host the issued code binds the agent to - the page then says what moving it means.</summary>
+    /// <summary>The existing host the issued code turns into an agent.</summary>
     [TempData]
     public string? IssuedHostName { get; set; }
 
@@ -93,12 +100,17 @@ public sealed class AgentsModel : PageModel
 
     public IReadOnlyList<int> ValidityChoices => ValidityHours;
 
+    /// <summary>The probe the agent of the issued code talks through (the primary, or a remote probe that relays it).</summary>
+    public ProbeElement? IssuedVia { get; private set; }
+
+    public bool IssuedViaRemote => IssuedVia is { ParentId: not null };
+
     /// <summary>
-    /// The address an agent enrols against: the public address set under System > General, else the one this page was
-    /// opened on - or, inside the cloud console (where the request only knows the instance's internal host), the one
-    /// remembered from a direct visit. Null when none is known.
+    /// The address the agent of the issued code is installed against: under a remote probe the address set for that probe
+    /// (it relays), else the instance's own - the public address under System > General, else the one this page was opened
+    /// on (inside the cloud console: the one remembered from a direct visit). Null when none is known.
     /// </summary>
-    public string? InstanceUrl { get; private set; }
+    public string? IssuedAgentUrl { get; private set; }
 
     public string InstanceVersion => _packageStore.InstanceVersion;
 
@@ -122,6 +134,18 @@ public sealed class AgentsModel : PageModel
     /// <summary>Whether the ready-to-install downloads still work for this pending code (created in this process).</summary>
     public bool CanDownload(Guid enrollmentId) => _installerCodes.Find(enrollmentId) is not null;
 
+    private Guid? _rootId;
+
+    /// <summary>What an agent's heartbeats should name as their relay: nothing under the primary, else the probe it sits under.</summary>
+    public string? RelayNameFor(SystemProbeOverview agent) => agent.ViaProbeElementId == _rootId ? null : agent.ViaProbeName;
+
+    /// <summary>The probe a pending code's agent will talk through.</summary>
+    public ProbeElement? ViaOf(AgentEnrollment enrollment) => _workspaceStore.FindAgentRelayProbe(enrollment);
+
+    /// <summary>Whether a pending code re-installs an agent that exists.</summary>
+    public bool IsReinstall(AgentEnrollment enrollment) =>
+        enrollment.HostElementId is Guid hostId && _workspaceStore.FindElement(hostId) is HostElement { Agent: not null };
+
     public async Task OnGetAsync() => await LoadAsync();
 
     public IActionResult OnPostCreate()
@@ -129,13 +153,13 @@ public sealed class AgentsModel : PageModel
         var hours = ValidityHours.Contains(NewValidityHours) ? NewValidityHours : 24;
         try
         {
-            var issue = _workspaceStore.CreateAgentEnrollment(NewName, TimeSpan.FromHours(hours), User.Identity?.Name, hostElementId: NewHostId);
+            var issue = _workspaceStore.CreateAgentEnrollment(NewName, TimeSpan.FromHours(hours), User.Identity?.Name, NewParentId, NewHostId);
             Issue(issue);
             IssuedHostName = issue.Enrollment.HostElementId is Guid hostId ? _workspaceStore.FindElement(hostId)?.Name : null;
         }
         catch (InvalidOperationException ex)
         {
-            // An unknown host, or one that already has an agent: said on the page, nothing issued.
+            // An unknown host or place: said on the page, nothing issued.
             ErrorMessage = ex.Message;
         }
 
@@ -143,15 +167,14 @@ public sealed class AgentsModel : PageModel
     }
 
     /// <summary>
-    /// A code that re-enrols an EXISTING probe: a reinstalled machine gets its probe back (sensors, history,
-    /// alerts) instead of a new, empty one - and a Docker probe can move onto an agent the same way. Reached
-    /// from an agent's row here and from a remote probe's row on the Probes page.
+    /// A code that re-installs an EXISTING agent: a reinstalled machine keeps its host, sensors, history and alerts instead of
+    /// becoming a new, empty one; whatever still runs under the old token is locked out once the new install enrols.
     /// </summary>
-    public IActionResult OnPostCreateForProbe(Guid probeElementId)
+    public IActionResult OnPostReinstall(Guid agentHostId)
     {
         try
         {
-            var issue = _workspaceStore.CreateAgentEnrollment(null, TimeSpan.FromHours(24), User.Identity?.Name, probeElementId);
+            var issue = _workspaceStore.CreateAgentEnrollment(null, TimeSpan.FromHours(24), User.Identity?.Name, hostElementId: agentHostId);
             Issue(issue);
             IssuedReplaces = true;
         }
@@ -163,8 +186,8 @@ public sealed class AgentsModel : PageModel
         return RedirectToPage();
     }
 
-    /// <summary>Binds an agent to another host - the machine it sits on - without reinstalling it.</summary>
-    public IActionResult OnPostRebindHost(Guid probeElementId, Guid? hostElementId)
+    /// <summary>Moves an agent to another host - the machine it sits on - without reinstalling it.</summary>
+    public IActionResult OnPostRebindHost(Guid agentHostId, Guid? hostElementId)
     {
         if (hostElementId is not Guid hostId || hostId == Guid.Empty)
         {
@@ -172,11 +195,11 @@ public sealed class AgentsModel : PageModel
             return RedirectToPage();
         }
 
-        var problem = _workspaceStore.RebindAgentHost(probeElementId, hostId);
+        var problem = _workspaceStore.RebindAgentHost(agentHostId, hostId);
         if (problem is null)
         {
             var hostName = _workspaceStore.FindElement(hostId)?.Name ?? "the host";
-            StatusMessage = $"The agent is now bound to '{hostName}'. Its sensors run on the agent.";
+            StatusMessage = $"The agent is now '{hostName}'. Its machine sensors moved along and run on the agent.";
         }
         else
         {
@@ -212,11 +235,11 @@ public sealed class AgentsModel : PageModel
 
     /// <summary>Windows: an administrator PowerShell fetches the install script with the code as a header and runs it.</summary>
     public string BuildWindowsCommand(string code) =>
-        $"irm '{InstanceUrl}/api/agent/install.ps1' -UseBasicParsing -Headers @{{'{AgentDownloadEndpoints.CodeHeader}'='{code}'}} | iex";
+        $"irm '{IssuedAgentUrl}/api/agent/install.ps1' -UseBasicParsing -Headers @{{'{AgentDownloadEndpoints.CodeHeader}'='{code}'}} | iex";
 
     /// <summary>Linux and macOS: the shell script, run as root.</summary>
     public string BuildUnixCommand(string code) =>
-        $"curl -fsSL -H '{AgentDownloadEndpoints.CodeHeader}: {code}' '{InstanceUrl}/api/agent/install.sh' | sudo sh";
+        $"curl -fsSL -H '{AgentDownloadEndpoints.CodeHeader}: {code}' '{IssuedAgentUrl}/api/agent/install.sh' | sudo sh";
 
     /// <summary>The ready-to-install download of one platform for a pending code.</summary>
     public string InstallerUrl(AgentPackage package, Guid enrollmentId) =>
@@ -241,23 +264,27 @@ public sealed class AgentsModel : PageModel
 
     private async Task LoadAsync()
     {
-        InstanceUrl = AgentInstallScripts.SafeUrl(PublicLinks.Absolute(HttpContext, _workspaceStore, string.Empty));
-        Agents = _configurationOverviewProvider.GetOverview().Probes
+        Agents = _configurationOverviewProvider.GetProbes()
             .Where(probe => probe.IsAgent)
             .OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var elements = _workspaceStore.GetAllElements();
-        var hostsWithAnAgent = elements.OfType<ProbeElement>()
-            .Where(probe => probe.FindBoundHost() is not null)
-            .Select(probe => probe.BoundHostId!.Value)
-            .ToHashSet();
-        HostOptions = ElementPickerOptions.Build(
-                elements.FirstOrDefault(element => element.ParentId is null),
-                new HashSet<MonitoringElementKind> { MonitoringElementKind.Host })
+        var root = elements.FirstOrDefault(element => element.ParentId is null);
+        _rootId = root?.Id;
+        var hostsWithAnAgent = elements.OfType<HostElement>().Where(host => host.Agent is not null).Select(host => host.Id).ToHashSet();
+        HostOptions = ElementPickerOptions.Build(root, new HashSet<MonitoringElementKind> { MonitoringElementKind.Host })
             .Where(option => !hostsWithAnAgent.Contains(option.Id))
             .ToArray();
+        PlaceOptions = ElementPickerOptions.Build(root, new HashSet<MonitoringElementKind> { MonitoringElementKind.Probe, MonitoringElementKind.Folder });
 
         PendingEnrollments = _workspaceStore.GetPendingAgentEnrollments();
+        if (IssuedEnrollmentId is Guid issuedId && PendingEnrollments.FirstOrDefault(pending => pending.Id == issuedId) is { } issued)
+        {
+            IssuedVia = _workspaceStore.FindAgentRelayProbe(issued);
+            IssuedAgentUrl = AgentDownloadEndpoints.AgentUrl(HttpContext, _workspaceStore, issued,
+                PublicLinks.Absolute(HttpContext, _workspaceStore, string.Empty));
+        }
+
         Catalog = await _packageStore.GetCatalogAsync(HttpContext.RequestAborted);
     }
 }

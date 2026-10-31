@@ -40,35 +40,50 @@ public static class MonitoringTopology
         }
     }
 
-    /// <summary>What a probe RUNS: every element below it except what sits under a nested probe, which belongs to that
-    /// probe. A probe placed under another one used to hand its sensors - and their credentials - to the outer probe
-    /// as well, so both executed them.</summary>
-    public static IEnumerable<MonitoringElement> EnumerateOwnedDescendants(ProbeElement probe)
+    /// <summary>
+    /// Where a sensor's checks run: the nearest agent host or probe in its lineage (root-first, as
+    /// <see cref="BuildLineage"/> returns it). A host with an agent runs what is under it; any other host or folder belongs to
+    /// the probe above it. Null when the lineage has neither (a detached element).
+    /// </summary>
+    public static MonitoringContainerElement? FindRunner(IReadOnlyList<MonitoringElement> lineage)
     {
-        foreach (var child in probe.Children)
+        for (var index = lineage.Count - 1; index >= 0; index--)
         {
-            if (child is ProbeElement)
+            if (lineage[index] is ProbeElement or HostElement { Agent: not null })
             {
-                continue;
-            }
-
-            yield return child;
-
-            if (child is MonitoringContainerElement container)
-            {
-                foreach (var descendant in EnumerateOwnedBelow(container))
-                {
-                    yield return descendant;
-                }
+                return (MonitoringContainerElement)lineage[index];
             }
         }
+
+        return null;
     }
 
-    private static IEnumerable<MonitoringElement> EnumerateOwnedBelow(MonitoringContainerElement parent)
+    /// <summary>The nearest PROBE in a lineage - the one an agent below it talks through (it relays), or the one that runs a sensor.</summary>
+    public static ProbeElement? FindProbe(IReadOnlyList<MonitoringElement> lineage) =>
+        lineage.OfType<ProbeElement>().LastOrDefault();
+
+    /// <summary>The id a runner reports under: a probe's <see cref="ProbeElement.ProbeId"/>, an agent's <see cref="AgentIdentity.ProbeId"/>.</summary>
+    public static string RunnerId(MonitoringContainerElement runner) => runner switch
     {
-        foreach (var child in parent.Children)
+        ProbeElement probe => probe.ProbeId,
+        HostElement { Agent: { } agent } => agent.ProbeId,
+        _ => string.Empty
+    };
+
+    /// <summary>Whether a runner is somewhere else than the primary itself: a remote probe or an agent.</summary>
+    public static bool IsRemoteRunner(MonitoringContainerElement? runner) =>
+        runner is HostElement { Agent: not null } or ProbeElement { ParentId: not null };
+
+    private static bool IsRunner(MonitoringElement element) => element is ProbeElement or HostElement { Agent: not null };
+
+    /// <summary>What a runner RUNS: every element below it except what sits under a nested probe or agent host, which
+    /// belongs to that one. A probe placed under another one used to hand its sensors - and their credentials - to the
+    /// outer probe as well, so both executed them; the same goes for an agent's host under a probe.</summary>
+    public static IEnumerable<MonitoringElement> EnumerateOwnedDescendants(MonitoringContainerElement runner)
+    {
+        foreach (var child in runner.Children)
         {
-            if (child is ProbeElement)
+            if (IsRunner(child))
             {
                 continue;
             }
@@ -77,7 +92,7 @@ public static class MonitoringTopology
 
             if (child is MonitoringContainerElement container)
             {
-                foreach (var descendant in EnumerateOwnedBelow(container))
+                foreach (var descendant in EnumerateOwnedDescendants(container))
                 {
                     yield return descendant;
                 }

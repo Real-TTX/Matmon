@@ -14,7 +14,7 @@ public sealed class ProbeSensorAssignmentProvider
 
     public ProbeSensorAssignmentsResponse BuildAssignments(string probeId)
     {
-        var probe = _workspaceStore.FindProbeByProbeId(probeId)
+        var probe = _workspaceStore.FindRunnerByProbeId(probeId)
             ?? throw new InvalidOperationException($"Probe '{probeId}' was not found.");
         var snapshot = _workspaceStore.Workspace;
         var elementsById = _workspaceStore.GetAllElements().ToDictionary(element => element.Id);
@@ -48,7 +48,7 @@ public sealed class ProbeSensorAssignmentProvider
             .ToArray();
 
         return new ProbeSensorAssignmentsResponse(
-            probe.ProbeId,
+            MonitoringTopology.RunnerId(probe),
             probe.Name,
             DateTimeOffset.UtcNow,
             sensors,
@@ -58,7 +58,7 @@ public sealed class ProbeSensorAssignmentProvider
     public bool TryBuildRecordingContext(
         string probeId,
         Guid sensorId,
-        out ProbeElement probe,
+        out ProbeRunnerRef probe,
         out SensorElement sensor,
         out MonitoringSettings settings)
     {
@@ -66,7 +66,7 @@ public sealed class ProbeSensorAssignmentProvider
         sensor = null!;
         settings = null!;
 
-        var foundProbe = _workspaceStore.FindProbeByProbeId(probeId);
+        var foundProbe = _workspaceStore.FindRunnerByProbeId(probeId);
         if (foundProbe is null)
         {
             return false;
@@ -85,7 +85,7 @@ public sealed class ProbeSensorAssignmentProvider
         var templateMap = snapshot.Templates.ToDictionary(template => template.Id);
         var lineage = MonitoringTopology.BuildLineage(foundSensor, elementsById);
 
-        probe = foundProbe;
+        probe = new ProbeRunnerRef(foundProbe.Id, MonitoringTopology.RunnerId(foundProbe), foundProbe.Name);
         sensor = foundSensor;
         settings = _resolver.Resolve(lineage, templateMap);
         return true;
@@ -128,12 +128,12 @@ public sealed class ProbeSensorAssignmentProvider
         settings.SelectedCredentialId = null;
         target = SensorTargetResolver.Resolve(sensor, lineage);
 
-        // The nearest ProbeElement in the lineage owns the sensor; a probe with no parent is the local
-        // primary root (runs in-process), any other probe is remote (must run there) - except a sensor that
-        // only the primary can run (SensorPlacement), which stays here whatever probe it sits under.
-        var probe = lineage.OfType<ProbeElement>().LastOrDefault();
-        owningProbeId = probe is { ParentId: not null } && !SensorPlacement.RunsOnPrimaryOnly(sensorTypeKey)
-            ? probe.ProbeId
+        // The nearest agent host or probe in the lineage runs the sensor; the probe with no parent is the local primary
+        // root (runs in-process), an agent or any other probe is remote (must run there) - except a sensor that only the
+        // primary can run (SensorPlacement), which stays here whatever it sits under.
+        var runner = MonitoringTopology.FindRunner(lineage);
+        owningProbeId = MonitoringTopology.IsRemoteRunner(runner) && !SensorPlacement.RunsOnPrimaryOnly(sensorTypeKey)
+            ? MonitoringTopology.RunnerId(runner!)
             : null;
         return true;
     }
@@ -163,3 +163,6 @@ public sealed class ProbeSensorAssignmentProvider
         }
     }
 }
+
+/// <summary>Who a probe endpoint is talking to: a remote probe or an agent (its host).</summary>
+public sealed record ProbeRunnerRef(Guid ElementId, string ProbeId, string Name);

@@ -36,7 +36,7 @@ namespace Matmon.Host.Services;
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>The schema version a workspace saved by THIS build carries. Bump when adding a migration.</summary>
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
 
     private sealed record SchemaMigration(int Version, string Name, Action<InMemoryMonitoringWorkspaceStore> Apply);
 
@@ -83,7 +83,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             store => store.MigrateAddBrowserPushRule()),
 
         new(11, "Local backup jobs that held every section also get the collectors, the general settings and (with the history) the syslog messages",
-            store => store.MigrateBackupJobsToCollectorSections())
+            store => store.MigrateBackupJobsToCollectorSections()),
+
+        new(12, "An agent is a host: every agent probe becomes the host it sits on (same id and token), its other contents move up a level",
+            store => store.MigrateAgentProbesToHosts())
     ];
 
     /// <summary>The registry as plain data, for tests that assert its shape (unique, ascending, and in step

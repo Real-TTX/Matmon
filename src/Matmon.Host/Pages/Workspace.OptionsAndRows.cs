@@ -77,9 +77,9 @@ public sealed partial class WorkspaceModel
     {
         var rows = new List<WorkspaceNodeRow>();
         var agentHostIds = MonitoringTopology.EnumerateSelfAndDescendants(root)
-            .OfType<ProbeElement>()
-            .Select(probe => probe.FindBoundHost()?.Id)
-            .OfType<Guid>()
+            .OfType<HostElement>()
+            .Where(host => host.Agent is not null)
+            .Select(host => host.Id)
             .ToHashSet();
         BuildNodeRows(root, rows, templateMap, telemetrySeriesMap, acknowledgedElementIds, agentHostIds, depth: 0, parentPath: string.Empty, inheritedTags: []);
         return rows;
@@ -146,7 +146,7 @@ public sealed partial class WorkspaceModel
             ownTags,
             acknowledgedElementIds.Contains(element.Id),
             element is HostElement agentHost && agentHostIds.Contains(agentHost.Id),
-            element is ProbeElement { AgentEnrolledUtc: not null }));
+            false));
 
         if (element is MonitoringContainerElement container)
         {

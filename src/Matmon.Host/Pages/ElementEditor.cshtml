@@ -5,16 +5,16 @@
     var hasElement = Model.ElementEditor.Id != Guid.Empty;
     var isSensor = Model.ElementEditor.Kind == "Sensor";
     var agent = Model.EditedAgent;
-    var agentHost = agent?.FindBoundHost();
+    var agentVia = agent is null ? null : Model.EditedAgentVia;
     var deleteConfirm = agent is not null
-        ? "Delete this agent with its host and sensors? The installed agent stops reporting - uninstall it on that machine."
+        ? "Delete this host with its agent and sensors? The installed agent stops reporting - uninstall it on that machine."
         : "Delete this element and all children?";
     var sensorCredentialFields = Model.ElementEditor.SensorParameterFields.Where(field => field.IsCredential).ToList();
     var sensorTypeName = isSensor
         ? Model.ElementEditor.SensorTypeOptions.FirstOrDefault(option => string.Equals(option.Value, Model.ElementEditor.SensorTypeKey, StringComparison.OrdinalIgnoreCase))?.Text
         : null;
     var pageTitle = hasElement && !string.IsNullOrWhiteSpace(Model.ElementEditor.Name) ? Model.ElementEditor.Name : "Element";
-    var kindLabel = agent is not null ? "Agent" : string.IsNullOrWhiteSpace(sensorTypeName) ? Model.ElementEditor.Kind : $"{Model.ElementEditor.Kind} · {sensorTypeName}";
+    var kindLabel = agent is not null ? "Host · Matmon agent" : string.IsNullOrWhiteSpace(sensorTypeName) ? Model.ElementEditor.Kind : $"{Model.ElementEditor.Kind} · {sensorTypeName}";
     ViewData["Title"] = pageTitle;
     ViewData["OwnHead"] = true;
 }
@@ -98,7 +98,7 @@ else
             @* ---------- GENERAL (the element's own fields, then where its values came from) ---------- *@
             <div class="mat-tabpanel mat-stack" role="tabpanel" id="panel-general" aria-labelledby="tab-general">
                 <section class="mat-card">
-                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@(agent is null ? Model.View.SelectedElementKind : "Agent")</h2></div>
+                    <div class="mat-card__head">@MatUi.Icon("edit")<h2 class="mat-card__title">@Model.View.SelectedElementKind</h2></div>
                     <div class="mat-card__body">
                         <div class="mat-form__grid">
                             <div class="mat-field mat-field--full">
@@ -123,22 +123,16 @@ else
 
                             @if (agent is not null)
                             {
-                                <div class="mat-field mat-field--full">
-                                    <span class="mat-label">Machine</span>
-                                    @if (agentHost is not null)
-                                    {
-                                        <span><a asp-page="/ElementEditor" asp-route-selectedId="@agentHost.Id" asp-route-returnUrl="@(Request.Path + Request.QueryString)">@agentHost.Name</a> <span class="mat-text-muted mat-mono">@agentHost.Address</span></span>
-                                    }
-                                    else
-                                    {
-                                        <span class="mat-text-muted">Not bound to a host.</span>
-                                    }
-                                    <span class="mat-hint"><a asp-page="/Agents">Change the host or get a new install code on the Agents page</a></span>
+                                <div class="mat-field">
+                                    <span class="mat-label">Agent</span>
+                                    <span class="mat-mono">@agent.Agent!.ProbeId</span>
+                                </div>
+                                <div class="mat-field">
+                                    <span class="mat-label">Talks through</span>
+                                    <span>@(agentVia is null ? "-" : agentVia.ParentId is null ? $"{agentVia.Name} (this instance)" : agentVia.Name)</span>
                                 </div>
                                 <div class="mat-field mat-field--full">
-                                    <label class="mat-label" asp-for="ElementEditor.ProbeSubnetsText">Scan networks (subnets)</label>
-                                    <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="mat-textarea mat-mono" placeholder="10.10.0.0/16&#10;192.168.1.0/24" aria-describedby="element-agent-subnets-hint"></textarea>
-                                    <span class="mat-hint" id="element-agent-subnets-hint">One CIDR per line. Offered as Discovery suggestions.</span>
+                                    <span class="mat-hint">Its sensors run on the agent. Moving this host under another probe makes the agent talk through that probe - it has to be able to reach it. <a asp-page="/Agents">New install code or another host: Agents page</a></span>
                                 </div>
                             }
                             else if (Model.ElementEditor.Kind == "Probe")
@@ -160,6 +154,14 @@ else
                                     <textarea asp-for="ElementEditor.ProbeSubnetsText" rows="3" class="mat-textarea mat-mono" placeholder="10.10.0.0/16&#10;192.168.1.0/24" aria-describedby="element-subnets-hint"></textarea>
                                     <span class="mat-hint" id="element-subnets-hint">One CIDR per line. Offered as Discovery suggestions.</span>
                                 </div>
+                                @if (Model.ElementEditor.ParentId is not null)
+                                {
+                                    <div class="mat-field mat-field--full">
+                                        <label class="mat-label" asp-for="ElementEditor.ProbeAgentAddress">Address for agents</label>
+                                        <input asp-for="ElementEditor.ProbeAgentAddress" class="mat-input mat-mono" placeholder="http://10.0.0.5:8099" aria-describedby="element-agent-address-hint" />
+                                        <span class="mat-hint" id="element-agent-address-hint">How machines in this probe's network reach it. Agents placed under this probe are installed against this address and talk through the probe.</span>
+                                    </div>
+                                }
                                 <div class="mat-field mat-field--full">
                                     <span class="mat-label">Snippet</span>
                                     <div class="mm-snippet">

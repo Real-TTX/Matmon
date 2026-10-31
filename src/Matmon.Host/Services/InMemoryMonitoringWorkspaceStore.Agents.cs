@@ -2,14 +2,26 @@ using Matmon.Core.Domain;
 
 namespace Matmon.Host.Services;
 
-// Agent enrolment: single-use codes an admin creates on the Agents page and an agent redeems for a probe of
-// its own. See AgentEnrollment for why it is a code and not the probe token.
+// Agents: an agent IS a host - the machine it is installed on - with an identity of its own (HostElement.Agent). Its
+// sensors live under the host and run on the agent; where the host sits says which probe the agent talks through (a
+// remote probe relays its requests to the primary). Enrolment: single-use codes an admin creates on the Agents page and
+// an agent redeems for that identity - see AgentEnrollment for why it is a code and not the token.
 public sealed partial class InMemoryMonitoringWorkspaceStore
 {
     /// <summary>Upper bound on how long a code may live - a code is for an install that is about to happen.</summary>
     public static readonly TimeSpan MaxAgentEnrollmentValidity = TimeSpan.FromDays(7);
 
-    public AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? probeElementId = null, Guid? hostElementId = null)
+    /// <summary>The types an agent's machine is measured with - they move along when the agent moves to another host.</summary>
+    private static readonly string[] AgentMachineSensorTypes =
+    [
+        LocalHealthSensorExecutor.Definition.Key,
+        WindowsUpdateSensorExecutor.Definition.Key,
+        LinuxUpdateSensorExecutor.Definition.Key,
+        ProbeHeartbeatSensorExecutor.Definition.Key,
+        ProbeHealthSensorExecutor.Definition.Key
+    ];
+
+    public AgentEnrollmentIssue CreateAgentEnrollment(string? name, TimeSpan validity, string? createdBy, Guid? parentElementId = null, Guid? hostElementId = null)
     {
         var now = DateTimeOffset.UtcNow;
         var clamped = validity <= TimeSpan.Zero
@@ -27,30 +39,22 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
 
         lock (_gate)
         {
-            if (probeElementId is Guid targetId)
-            {
-                // Only a remote probe can be re-enrolled - the local root is this instance itself.
-                var target = FindElement(targetId) as ProbeElement;
-                if (target is null || target.ParentId is null)
-                {
-                    throw new InvalidOperationException("Only an existing remote probe can be re-enrolled as an agent.");
-                }
-
-                enrollment.ProbeElementId = target.Id;
-                enrollment.Name = target.Name;
-            }
-
             if (hostElementId is Guid chosenId)
             {
                 var chosen = FindElement(chosenId) as HostElement
-                    ?? throw new InvalidOperationException("Choose an existing host for the agent to belong to.");
-                if (IsAgentBoundHostLocked(chosen.Id, exceptProbeId: enrollment.ProbeElementId))
-                {
-                    throw new InvalidOperationException($"'{chosen.Name}' already has an agent - a host belongs to one agent.");
-                }
-
+                    ?? throw new InvalidOperationException("Choose an existing host for the agent.");
                 enrollment.HostElementId = chosen.Id;
                 enrollment.Name ??= chosen.Name;
+            }
+            else if (parentElementId is Guid parentId && parentId != Guid.Empty)
+            {
+                var parent = FindElement(parentId);
+                if (parent is not (ProbeElement or FolderElement))
+                {
+                    throw new InvalidOperationException("Choose a probe or a folder for the new agent.");
+                }
+
+                enrollment.ParentElementId = parent.Id;
             }
 
             _document.AgentEnrollments ??= [];
@@ -94,6 +98,23 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
+    public AgentEnrollment? FindAgentEnrollmentByCode(string? code)
+    {
+        var hash = AgentEnrollmentCode.Hash(code);
+        if (hash.Length == 0)
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var found = (_document.AgentEnrollments ??= []).FirstOrDefault(candidate =>
+                !candidate.IsExpired(now) && string.Equals(candidate.CodeHash, hash, StringComparison.Ordinal));
+            return found is null ? null : Clone(found);
+        }
+    }
+
     public bool IsAgentEnrollmentCodeValid(string? code)
     {
         var hash = AgentEnrollmentCode.Hash(code);
@@ -108,6 +129,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             var now = DateTimeOffset.UtcNow;
             return _document.AgentEnrollments.Any(candidate =>
                 !candidate.IsExpired(now) && string.Equals(candidate.CodeHash, hash, StringComparison.Ordinal));
+        }
+    }
+
+    public ProbeElement? FindAgentRelayProbe(AgentEnrollment enrollment)
+    {
+        lock (_gate)
+        {
+            var place = enrollment.HostElementId is Guid hostId
+                ? FindElementInternal(hostId)
+                : enrollment.ParentElementId is Guid parentId ? FindElementInternal(parentId) : null;
+            return place is null ? _document.RootProbe : MonitoringTopology.FindProbe(BuildLineage(place)) ?? _document.RootProbe;
         }
     }
 
@@ -136,87 +168,57 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 return invalid;
             }
 
-            if (enrollment.ProbeElementId is Guid targetId)
-            {
-                // Single use either way; a code whose probe was deleted meanwhile is simply dead.
-                _document.AgentEnrollments.Remove(enrollment);
-                QueueSave(SavePriority.Configuration);
-                if (FindElement(targetId) is not ProbeElement existing || existing.ParentId is null)
-                {
-                    return invalid;
-                }
-
-                // A NEW token, not the old one handed out again: the previous install (a replaced machine, the
-                // Docker container this agent takes over from) is locked out on its next request, so two
-                // processes can never report as one probe.
-                existing.EnrollmentToken = CreateToken();
-                existing.AgentEnrolledUtc = now;
-                BindAgentHostLocked(existing, enrollment.HostElementId, hostName);
-                EnsureAgentBaselineSensorsLocked(existing, operatingSystem);
-                return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
-                    new AgentEnrollmentRedemption(existing.Id, existing.ProbeId, existing.EnrollmentToken, existing.Name, Reenrolled: true));
-            }
-
-            // No licence check: agents are not probes in the licence model, so a plan's probe limit never stops one.
-            // Single use: gone before the probe exists, so a second agent racing the same code cannot also win.
+            // Single use: gone before anything is created, so a second agent racing the same code cannot also win.
+            // No licence check: agents are not probes in the licence model.
             _document.AgentEnrollments.Remove(enrollment);
 
-            var name = enrollment.Name
-                ?? (string.IsNullOrWhiteSpace(hostName) ? "Agent" : hostName.Trim());
-            var probe = CreateProbe(null, name, "Matmon agent");
-            probe.AgentEnrolledUtc = now;
-            BindAgentHostLocked(probe, enrollment.HostElementId, hostName);
-            EnsureAgentBaselineSensorsLocked(probe, operatingSystem);
+            var machine = string.IsNullOrWhiteSpace(hostName) ? null : hostName.Trim();
+            var reenrolled = false;
+            HostElement host;
+            if (enrollment.HostElementId is Guid hostId && FindElement(hostId) is HostElement existing)
+            {
+                host = existing;
+                reenrolled = existing.Agent is not null;
+            }
+            else
+            {
+                MonitoringContainerElement parent = enrollment.ParentElementId is Guid parentId
+                    && FindElement(parentId) is (ProbeElement or FolderElement) and MonitoringContainerElement found
+                        ? found
+                        : _document.RootProbe;
+                var name = enrollment.Name ?? machine ?? "Agent";
+                host = CreateHost(parent.Id, name, machine ?? "localhost", "The machine this agent runs on.");
+            }
+
+            // A NEW token every time, never the old one handed out again: a previous install (a replaced machine) is
+            // locked out on its next request, so two processes can never report as one agent.
+            host.Agent = new AgentIdentity
+            {
+                ProbeId = host.Agent?.ProbeId is { Length: > 0 } kept ? kept : GenerateUniqueProbeId(host.Name),
+                Token = CreateToken(),
+                EnrolledUtc = now
+            };
+            EnsureAgentHeartbeatSensor(host);
+            EnsureAgentBaselineSensorsLocked(host, operatingSystem);
             QueueSave(SavePriority.Configuration);
 
             return new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
-                new AgentEnrollmentRedemption(probe.Id, probe.ProbeId, probe.EnrollmentToken ?? string.Empty, probe.Name));
+                new AgentEnrollmentRedemption(host.Id, host.Agent.ProbeId, host.Agent.Token!, host.Name, reenrolled));
         }
     }
 
     /// <summary>
-    /// An agent belongs to a HOST: the machine it sits on. Binds <paramref name="probe"/> to one and returns it - the
-    /// host the code named (moved under the probe, so its sensors run on the agent), the one the probe is already
-    /// bound to (a re-enrolment), or a new host named after the machine. A named host that has gone, or that
-    /// another agent already measures, is not an error: the agent still enrols, with a host of its own.
+    /// Moves an agent to another host later on - the machine is already in the tree under a host of its own, or the wrong
+    /// one was picked. The identity goes over (the installed agent keeps working, nothing to reinstall), and so do the
+    /// agent's machine sensors (System Health, the update sensors, its heartbeat) unless the new host already has one of
+    /// that type. The new host stays where it is - so the probe above it is the one the agent talks through from then on -
+    /// and the old host keeps everything else as an ordinary host.
     /// </summary>
-    private HostElement BindAgentHostLocked(ProbeElement probe, Guid? chosenHostId, string? machineName)
-    {
-        if (chosenHostId is Guid id
-            && FindElement(id) is HostElement chosen
-            && !IsAgentBoundHostLocked(chosen.Id, probe.Id)
-            && MoveHostUnderProbeLocked(chosen, probe))
-        {
-            probe.BoundHostId = chosen.Id;
-            return chosen;
-        }
-
-        if (probe.FindBoundHost() is { } bound)
-        {
-            return bound;
-        }
-
-        // Under an agent the machine is "this machine" whatever it is called, so without a reported name the
-        // address is localhost - which every machine-local sensor already treats as itself.
-        var hasName = !string.IsNullOrWhiteSpace(machineName);
-        var host = CreateHost(probe.Id, hasName ? machineName!.Trim() : probe.Name, hasName ? machineName!.Trim() : "localhost",
-            "The machine this agent runs on.");
-        probe.BoundHostId = host.Id;
-        return host;
-    }
-
-    /// <summary>
-    /// Binds an agent to another host later on - the wrong host was picked, or the machine is already in the tree under a
-    /// host of its own. The new host moves under the agent's probe (its sensors run on the agent from then on), and the
-    /// agent's machine sensors (System Health, the update sensors) go with the binding unless the new host already has
-    /// one of that type. The old host stays where it is - it may hold sensors the admin added - and can be moved or
-    /// deleted like any other host.
-    /// </summary>
-    public string? RebindAgentHost(Guid probeElementId, Guid hostElementId)
+    public string? RebindAgentHost(Guid agentHostId, Guid hostElementId)
     {
         lock (_gate)
         {
-            if (FindElement(probeElementId) is not ProbeElement { AgentEnrolledUtc: not null } probe)
+            if (FindElement(agentHostId) is not HostElement { Agent: not null } old)
             {
                 return "That agent no longer exists.";
             }
@@ -226,109 +228,183 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 return "That host no longer exists.";
             }
 
-            if (probe.FindBoundHost() is { } current && current.Id == host.Id)
+            if (host.Id == old.Id)
             {
-                return $"The agent is already bound to '{host.Name}'.";
+                return $"The agent already runs on '{host.Name}'.";
             }
 
-            if (IsAgentBoundHostLocked(host.Id, probe.Id))
+            if (host.Agent is not null)
             {
                 return $"'{host.Name}' already has an agent of its own.";
             }
 
-            var old = probe.FindBoundHost();
-            if (!MoveHostUnderProbeLocked(host, probe))
+            host.Agent = old.Agent;
+            old.Agent = null;
+
+            var moving = old.Children
+                .OfType<SensorElement>()
+                .Where(sensor => AgentMachineSensorTypes.Contains(sensor.SensorTypeKey, StringComparer.OrdinalIgnoreCase)
+                    && !host.Children.OfType<SensorElement>().Any(present =>
+                        string.Equals(present.SensorTypeKey, sensor.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            foreach (var sensor in moving)
             {
-                return $"'{host.Name}' cannot be moved under the agent.";
+                MoveElement(sensor.Id, host.Id);
             }
 
-            if (old is not null)
-            {
-                string[] machineSensors =
-                [
-                    LocalHealthSensorExecutor.Definition.Key,
-                    WindowsUpdateSensorExecutor.Definition.Key,
-                    LinuxUpdateSensorExecutor.Definition.Key
-                ];
-                var moving = old.Children
-                    .OfType<SensorElement>()
-                    .Where(sensor => machineSensors.Contains(sensor.SensorTypeKey, StringComparer.OrdinalIgnoreCase)
-                        && !host.Children.OfType<SensorElement>().Any(existing =>
-                            string.Equals(existing.SensorTypeKey, sensor.SensorTypeKey, StringComparison.OrdinalIgnoreCase)))
-                    .ToList();
-                foreach (var sensor in moving)
-                {
-                    MoveElement(sensor.Id, host.Id);
-                }
-            }
-
-            probe.BoundHostId = host.Id;
+            EnsureAgentHeartbeatSensor(host);
             QueueSave(SavePriority.Configuration);
             return null;
         }
     }
 
-    /// <summary>Whether some agent probe other than <paramref name="exceptProbeId"/> has this host as its machine.</summary>
-    private bool IsAgentBoundHostLocked(Guid hostId, Guid? exceptProbeId = null) =>
-        EnumerateElements(_document.RootProbe)
-            .OfType<ProbeElement>()
-            .Any(probe => probe.Id != exceptProbeId && probe.BoundHostId == hostId && probe.FindBoundHost() is not null);
-
-    /// <summary>Puts a host into the agent's probe - unless it is already somewhere inside it, where it sits is then
-    /// the admin's business. A host that cannot move (a refusal, not a crash) simply is not bound.</summary>
-    private bool MoveHostUnderProbeLocked(HostElement host, ProbeElement probe)
-    {
-        if (EnumerateElements(probe).Any(element => element.Id == host.Id))
-        {
-            return true;
-        }
-
-        try
-        {
-            return MoveElement(host.Id, probe.Id);
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
     /// <summary>
-    /// An agent's whole point is the machine it sits on, so it arrives measuring it: "System Health" (local
-    /// CPU / memory / disks) and, for an OS it recognises, the pending-updates sensor for it - both run locally
-    /// on the agent, so neither needs a credential. They live under the HOST the agent is bound to, not loose
-    /// under the probe. Each only if the probe has no sensor of that type yet - a re-enrolled probe keeps what it
-    /// had. Created through CreateSensor, so the default thresholds and schedule apply.
+    /// An agent's whole point is the machine it sits on, so it arrives measuring it: "System Health" (local CPU / memory /
+    /// disks) and, for an OS it recognises, the pending-updates sensor for it - both run locally on the agent, so neither
+    /// needs a credential. Each only if the host has no sensor of that type yet - a re-enrolled host keeps what it had.
+    /// Created through CreateSensor, so the default thresholds and schedule apply.
     /// </summary>
-    private void EnsureAgentBaselineSensorsLocked(ProbeElement probe, string? operatingSystem)
+    private void EnsureAgentBaselineSensorsLocked(HostElement host, string? operatingSystem)
     {
-        MonitoringContainerElement under = probe.FindBoundHost() ?? (MonitoringContainerElement)probe;
-
-        EnsureSensorOfTypeLocked(probe, under, LocalHealthSensorExecutor.Definition.Key, "System Health", string.Empty,
+        EnsureSensorOfTypeLocked(host, LocalHealthSensorExecutor.Definition.Key, "System Health", string.Empty,
             "CPU, memory and disks of this machine, measured by the agent itself.");
 
-        // An explicit "localhost": with no target the sensor would inherit its host's address, and a host that
-        // was chosen by its IP address is not recognised as this machine - the sensor would go out over WinRM/SSH
-        // to itself instead of simply running here.
+        // An explicit "localhost": with no target the sensor would inherit its host's address, and a host that was
+        // chosen by its IP address is not recognised as this machine - the sensor would go out over WinRM/SSH to itself
+        // instead of simply running here.
         switch (AgentOperatingSystem(operatingSystem))
         {
             case "windows":
-                EnsureSensorOfTypeLocked(probe, under, WindowsUpdateSensorExecutor.Definition.Key, "Windows Update", "localhost",
+                EnsureSensorOfTypeLocked(host, WindowsUpdateSensorExecutor.Definition.Key, "Windows Update", "localhost",
                     "Pending Windows updates on this machine, checked locally by the agent.");
                 break;
             case "linux":
-                EnsureSensorOfTypeLocked(probe, under, LinuxUpdateSensorExecutor.Definition.Key, "Package Updates", "localhost",
+                EnsureSensorOfTypeLocked(host, LinuxUpdateSensorExecutor.Definition.Key, "Package Updates", "localhost",
                     "Pending package updates on this machine, checked locally by the agent.");
                 break;
         }
     }
 
+    /// <summary>The agent's connection, judged by the primary: the heartbeat sensor of a probe, under the agent's host.</summary>
+    private void EnsureAgentHeartbeatSensor(HostElement host)
+    {
+        if (host.Agent is not { } agent)
+        {
+            return;
+        }
+
+        var sensor = host.Children
+            .OfType<SensorElement>()
+            .FirstOrDefault(candidate => string.Equals(candidate.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase));
+        if (sensor is null)
+        {
+            sensor = new SensorElement("Agent connection", ProbeHeartbeatSensorExecutor.Definition.Key, agent.ProbeId)
+            {
+                Description = "Whether the agent on this machine reports in"
+            };
+            AddChild(host, sensor);
+        }
+
+        sensor.Target = agent.ProbeId;
+        ApplyParameterDefaults(sensor.Settings, ProbeHeartbeatSensorExecutor.Definition);
+        EnsureHeartbeatThresholdDefaults(sensor.Settings, Math.Max(_runtimeOptions.HeartbeatIntervalSeconds, 30));
+    }
+
+    /// <summary>Boot invariant: every agent host has an id, a token and its heartbeat sensor.</summary>
+    private void EnsureAgentHostsLocked()
+    {
+        foreach (var host in EnumerateElements(_document.RootProbe).OfType<HostElement>().Where(host => host.Agent is not null).ToList())
+        {
+            if (string.IsNullOrWhiteSpace(host.Agent!.ProbeId))
+            {
+                host.Agent.ProbeId = GenerateUniqueProbeId(host.Name);
+            }
+
+            if (string.IsNullOrWhiteSpace(host.Agent.Token))
+            {
+                host.Agent.Token = CreateToken();
+            }
+
+            EnsureAgentHeartbeatSensor(host);
+        }
+    }
+
     /// <summary>
-    /// Migration 6. An agent used to be a probe with its machine's sensors loose underneath it; now it is bound to a
-    /// host. Every agent that has none gets one - named after the probe, address localhost (the machine's real name
-    /// is only known while the agent is connected, and under an agent "localhost" is exactly right) - and its
-    /// baseline sensors move into it. Everything else the probe holds (its heartbeat and health sensors, whatever
-    /// the admin added) stays where it is.
+    /// Migration 12. An agent used to be a PROBE (with its machine as a bound host under it); now it IS that host. For every
+    /// agent probe: its host gets the agent's identity (same id and token - the installed agent keeps working), moves to
+    /// where the probe was (so the agent still talks to the same place), takes the probe's own sensors along (heartbeat,
+    /// health, whatever sat directly under it), and anything else the probe held - other hosts, folders - moves up next to
+    /// it, where the probe above runs it. References to the probe (rules, maintenance windows, map tiles) point at the host;
+    /// a plugin placed on the agent is dropped (an agent measures its machine and runs no collector); pending codes that
+    /// would re-enrol it re-enrol the host, any other re-enrolment code is dropped. Then the probe is gone.
+    /// </summary>
+    private void MigrateAgentProbesToHosts()
+    {
+        var agents = EnumerateElements(_document.RootProbe)
+            .OfType<ProbeElement>()
+            .Where(probe => probe.ParentId is not null && probe.AgentEnrolledUtc is not null)
+            .ToList();
+
+        foreach (var probe in agents)
+        {
+            var parentId = probe.ParentId!.Value;
+            var host = probe.FindBoundHost()
+                ?? CreateHost(probe.Id, probe.Name, "localhost", "The machine this agent runs on.");
+            host.Agent = new AgentIdentity
+            {
+                ProbeId = probe.ProbeId,
+                Token = probe.EnrollmentToken,
+                EnrolledUtc = probe.AgentEnrolledUtc!.Value
+            };
+            MoveElement(host.Id, parentId);
+
+            foreach (var child in probe.Children.ToList())
+            {
+                MoveElement(child.Id, child is SensorElement ? host.Id : parentId);
+            }
+
+            RetargetElementLocked(probe.Id, host.Id);
+            var dropped = (_document.Plugins ??= []).RemoveAll(assignment => assignment.ProbeElementId == probe.Id);
+            if (dropped > 0)
+            {
+                _logger.LogWarning("Agent {Agent}: {Count} plugin assignment(s) removed - an agent runs no collector any more", probe.Name, dropped);
+            }
+
+            foreach (var enrollment in (_document.AgentEnrollments ??= []).Where(enrollment => enrollment.ProbeElementId == probe.Id))
+            {
+                enrollment.ProbeElementId = null;
+                enrollment.HostElementId = host.Id;
+            }
+
+            RemoveChild(_document.RootProbe, probe.Id);
+        }
+
+        // A code that would have turned a Docker probe into an agent means nothing now.
+        (_document.AgentEnrollments ??= []).RemoveAll(enrollment => enrollment.ProbeElementId is not null);
+    }
+
+    /// <summary>Points what referred to one element (notification rules, maintenance windows, map tiles) at another.</summary>
+    private void RetargetElementLocked(Guid from, Guid to)
+    {
+        foreach (var rule in _document.NotificationRules.Where(rule => rule.TargetElementId == from))
+        {
+            rule.TargetElementId = to;
+        }
+
+        foreach (var window in (_document.MaintenanceWindows ??= []).Where(window => window.TargetElementId == from))
+        {
+            window.TargetElementId = to;
+        }
+
+        foreach (var tile in (_document.Maps ??= []).SelectMany(map => map.Tiles.Concat(map.Slides.SelectMany(slide => slide.Tiles))).Where(tile => tile.ElementId == from))
+        {
+            tile.ElementId = to;
+        }
+    }
+
+    /// <summary>
+    /// Migration 6 (LEGACY - from when an agent was a probe): every agent probe without a bound host got one, named after
+    /// the probe, and its machine sensors moved into it. Migration 12 then turns that host into the agent.
     /// </summary>
     private void MigrateAgentProbesToBoundHosts()
     {
@@ -348,12 +424,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         {
             var host = CreateHost(probe.Id, probe.Name, "localhost", "The machine this agent runs on.");
             probe.BoundHostId = host.Id;
-
-            var machine = probe.Children
-                .OfType<SensorElement>()
-                .Where(sensor => machineSensors.Contains(sensor.SensorTypeKey, StringComparer.OrdinalIgnoreCase))
-                .ToList();
-            foreach (var sensor in machine)
+            foreach (var sensor in probe.Children.OfType<SensorElement>()
+                         .Where(sensor => machineSensors.Contains(sensor.SensorTypeKey, StringComparer.OrdinalIgnoreCase)).ToList())
             {
                 MoveElement(sensor.Id, host.Id);
             }
@@ -379,15 +451,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         return linux.Any(name => description.Contains(name, StringComparison.OrdinalIgnoreCase)) ? "linux" : null;
     }
 
-    /// <summary>One sensor of a type per probe: looked for in the whole probe, created under <paramref name="under"/>.</summary>
-    private void EnsureSensorOfTypeLocked(ProbeElement probe, MonitoringContainerElement under, string sensorTypeKey, string name, string target, string description)
+    /// <summary>One sensor of a type per agent host.</summary>
+    private void EnsureSensorOfTypeLocked(HostElement host, string sensorTypeKey, string name, string target, string description)
     {
-        var hasOne = EnumerateElements(probe)
+        var hasOne = host.Children
             .OfType<SensorElement>()
             .Any(sensor => string.Equals(sensor.SensorTypeKey, sensorTypeKey, StringComparison.OrdinalIgnoreCase));
         if (!hasOne)
         {
-            CreateSensor(under.Id, name, sensorTypeKey, target, description);
+            CreateSensor(host.Id, name, sensorTypeKey, target, description);
         }
     }
 
@@ -400,6 +472,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         CodeHash = source.CodeHash,
         Name = source.Name,
         ProbeElementId = source.ProbeElementId,
+        ParentElementId = source.ParentElementId,
         HostElementId = source.HostElementId,
         CreatedUtc = source.CreatedUtc,
         ExpiresUtc = source.ExpiresUtc,

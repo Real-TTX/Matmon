@@ -721,6 +721,25 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>The probe or agent host that reports under <paramref name="probeId"/> - what a probe endpoint serves. Live reference.</summary>
+    public MonitoringContainerElement? FindRunnerByProbeId(string probeId)
+    {
+        if (string.IsNullOrWhiteSpace(probeId))
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            return (MonitoringContainerElement?)FindAgentHostLocked(probeId) ?? FindProbeByProbeId(probeId);
+        }
+    }
+
+    private HostElement? FindAgentHostLocked(string probeId) =>
+        EnumerateElements(_document.RootProbe)
+            .OfType<HostElement>()
+            .FirstOrDefault(host => host.Agent is { } agent && string.Equals(agent.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
+
     public ProbeElement? FindProbeByProbeId(string probeId)
     {
         if (string.IsNullOrWhiteSpace(probeId))
@@ -883,8 +902,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
                 return null;
             }
 
-            var probe = BuildLineage(element).OfType<ProbeElement>().LastOrDefault();
-            return probe is { ParentId: not null } ? probe.ProbeId : null;
+            var runner = MonitoringTopology.FindRunner(BuildLineage(element));
+            return MonitoringTopology.IsRemoteRunner(runner) ? MonitoringTopology.RunnerId(runner!) : null;
         }
     }
 
@@ -2723,6 +2742,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         lock (_gate)
         {
+            // An agent authenticates exactly like a remote probe, with the identity on its host.
+            if (FindAgentHostLocked(probeId) is { Agent: { } agent })
+            {
+                return !string.IsNullOrEmpty(agent.Token) && !string.IsNullOrEmpty(probeToken) && FixedTimeEquals(agent.Token, probeToken);
+            }
+
             var probe = EnumerateElements(_document.RootProbe)
                 .OfType<ProbeElement>()
                 .FirstOrDefault(candidate => string.Equals(candidate.ProbeId, probeId, StringComparison.OrdinalIgnoreCase));
@@ -2829,6 +2854,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         lock (_gate)
         {
             EnsureProbeMetadataRecursive(_document.RootProbe, isRoot: true);
+            EnsureAgentHostsLocked();
             if (createSystemSensors)
             {
                 EnsureProbeHeartbeatSensorsRecursive(_document.RootProbe, isRoot: true);
@@ -4407,6 +4433,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         var existing = EnumerateElements(_document.RootProbe)
             .OfType<ProbeElement>()
             .Select(probe => probe.ProbeId)
+            .Concat(EnumerateElements(_document.RootProbe).OfType<HostElement>().Select(host => host.Agent?.ProbeId ?? string.Empty))
             .Where(probeId => !string.IsNullOrWhiteSpace(probeId))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 

@@ -42,15 +42,14 @@
     {
         <div class="mat-alert mat-alert--warning" role="status">
             @MatUi.Icon("alert")
-            <div class="mat-alert__body">This code takes over the existing probe <strong>@Model.IssuedName</strong> - sensors, history and alerts stay. Whatever runs as that probe now is locked out once the new agent enrols; remove it afterwards.</div>
+            <div class="mat-alert__body">This code re-installs the agent <strong>@Model.IssuedName</strong> - its host, sensors, history and alerts stay. Whatever runs as that agent now is locked out once the new install enrols.</div>
         </div>
     }
-
-    @if (!string.IsNullOrWhiteSpace(Model.IssuedHostName))
+    else if (!string.IsNullOrWhiteSpace(Model.IssuedHostName))
     {
-        <div class="mat-alert mat-alert--warning" role="status">
-            @MatUi.Icon("alert")
-            <div class="mat-alert__body">When the agent enrols, the host <strong>@Model.IssuedHostName</strong> moves under its probe; settings it inherited from its old place (credentials, schedules) no longer apply.</div>
+        <div class="mat-alert mat-alert--info" role="status">
+            @MatUi.Icon("info")
+            <div class="mat-alert__body">When the agent enrols, the host <strong>@Model.IssuedHostName</strong> becomes its machine: its sensors run on the agent from then on.</div>
         </div>
     }
 
@@ -60,11 +59,22 @@
             <h2 class="mat-card__title">Install the agent</h2>
         </div>
         <div class="mat-card__body mat-stack">
-            @if (Model.InstanceUrl is null)
+            @if (Model.IssuedViaRemote)
+            {
+                <p class="mat-muted">The agent talks through the probe <strong>@Model.IssuedVia!.Name</strong>, which passes everything on to this instance - the machine only has to reach that probe.</p>
+            }
+            @if (Model.IssuedAgentUrl is null)
             {
                 <div class="mat-alert mat-alert--warning" role="status">
                     @MatUi.Icon("alert")
-                    <div class="mat-alert__body">This instance does not know the address agents should connect to. Set the public address under <a asp-page="/Config" asp-route-tab="general">System &gt; General</a> (or open Matmon directly once), then create a new code.</div>
+                    @if (Model.IssuedViaRemote)
+                    {
+                        <div class="mat-alert__body">Nobody has set the address agents use to reach the probe <strong>@Model.IssuedVia!.Name</strong>. Set it in <a asp-page="/ElementEditor" asp-route-selectedId="@Model.IssuedVia.Id" asp-route-returnUrl="/agents">the probe's settings</a>, then create a new code.</div>
+                    }
+                    else
+                    {
+                        <div class="mat-alert__body">This instance does not know the address agents should connect to. Set the public address under <a asp-page="/Config" asp-route-tab="general">System &gt; General</a> (or open Matmon directly once), then create a new code.</div>
+                    }
                 </div>
             }
             else
@@ -160,25 +170,20 @@
                             <tr>
                                 <td data-label="Agent">
                                     <div class="probe-cell">
-                                        <strong>@agent.Name</strong>
-                                        <span class="probe-cell__meta mat-mono">@agent.ProbeId</span>
-                                        @if (!string.IsNullOrWhiteSpace(agent.BoundHostName))
+                                        @if (isAdmin)
                                         {
-                                            <span class="probe-cell__meta" title="The machine this agent runs on - its sensors live under this host">
-                                                Host:
-                                                @if (isAdmin)
-                                                {
-                                                    <a asp-page="/ElementEditor" asp-route-selectedId="@agent.BoundHostId" asp-route-returnUrl="/agents">@agent.BoundHostName</a>
-                                                }
-                                                else
-                                                {
-                                                    @agent.BoundHostName
-                                                }
-                                            </span>
+                                            <a asp-page="/ElementEditor" asp-route-selectedId="@agent.ElementId" asp-route-returnUrl="/agents"><strong>@agent.Name</strong></a>
                                         }
                                         else
                                         {
-                                            <span class="probe-cell__warn" title="Its host was deleted or moved out of the agent. A new install code gives it a host again.">@MatUi.Icon("alert")<span>Not bound to a host</span></span>
+                                            <strong>@agent.Name</strong>
+                                        }
+                                        <span class="probe-cell__meta mat-mono">@agent.ProbeId</span>
+                                        <span class="probe-cell__meta" title="The probe this agent talks through - the nearest probe above its host">Via: @(agent.ViaProbeName ?? "-")</span>
+                                        @if (agent.ViaProbeElementId is not null && agent.State != "Waiting"
+                                             && !string.Equals(agent.RelayedByName, Model.RelayNameFor(agent), StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span class="probe-cell__warn" title="Where the agent's heartbeats actually arrive from differs from where it sits in the tree. Its sensors still run on the agent.">@MatUi.Icon("alert")<span>Reports @(agent.RelayedByName is null ? "straight to the primary" : $"through {agent.RelayedByName}")</span></span>
                                         }
                                         @if (!string.IsNullOrWhiteSpace(agent.DuplicateWarning))
                                         {
@@ -217,8 +222,11 @@
                                 <td data-label="Sensors" class="mat-num mat-mono">@agent.SensorCount</td>
                                 <td class="mat-table__cell-actions">
                                     <div class="mat-table__actions">
-                                        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="agent-menu-@agent.ElementId" data-menu-place="bottom"
-                                                aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @agent.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                                        @if (isAdmin)
+                                        {
+                                            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-menu-toggle="agent-menu-@agent.ElementId" data-menu-place="bottom"
+                                                    aria-haspopup="menu" aria-expanded="false" aria-label="Actions for @agent.Name" data-tip="Actions">@MatUi.Icon("more-horizontal")</button>
+                                        }
                                     </div>
                                 </td>
                             </tr>
@@ -231,21 +239,19 @@
 </section>
 
 @* The row menus. "New install code" posts the one hidden form (it carries the anti-forgery token): reinstalling this machine?
-   A code that gives the new install this probe back. *@
+   A code that gives the new install this agent back. *@
 <form method="post" id="agent-row-actions" hidden></form>
 @foreach (var agent in Model.Agents)
 {
     <div class="mat-menu" id="agent-menu-@agent.ElementId" role="menu" aria-label="Actions for @agent.Name" hidden>
-        <a class="mat-menu__item" role="menuitem" asp-page="/Monitoring" asp-route-monitoringProbe="@agent.ElementId">@MatUi.Icon("activity")<span>Sensors</span></a>
-        <a class="mat-menu__item" role="menuitem" asp-page="/ProbeUsage" asp-route-probeElementId="@agent.ElementId">@MatUi.Icon("bar-chart")<span>Usage</span></a>
         @if (isAdmin)
         {
             <a class="mat-menu__item" role="menuitem" asp-page="/ElementEditor" asp-route-selectedId="@agent.ElementId" asp-route-returnUrl="/agents">@MatUi.Icon("edit")<span>Edit</span></a>
             <button type="button" class="mat-menu__item" role="menuitem" data-dialog-open="agent-host-@agent.ElementId" aria-haspopup="dialog">@MatUi.Icon("server")<span>Change host</span></button>
             <div class="mat-menu__sep" role="separator"></div>
             <button type="submit" form="agent-row-actions" class="mat-menu__item" role="menuitem"
-                    asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@agent.ElementId"
-                    title="Reinstalling this machine? A code that gives the new install this probe back.">@MatUi.Icon("key")<span>New install code</span></button>
+                    asp-page="/Agents" asp-page-handler="Reinstall" name="agentHostId" value="@agent.ElementId"
+                    title="Reinstalling this machine? A code that gives the new install this agent back.">@MatUi.Icon("key")<span>New install code</span></button>
             <button type="button" class="mat-menu__item" role="menuitem" data-dialog-open="agent-remove-@agent.ElementId" aria-haspopup="dialog">@MatUi.Icon("trash")<span>Remove…</span></button>
         }
     </div>
@@ -253,22 +259,22 @@
     {
         <dialog class="mat-dialog" id="agent-host-@agent.ElementId" aria-labelledby="agent-host-@(agent.ElementId)-title">
             <form method="post" class="mat-dialog__form mat-form" novalidate asp-page-handler="RebindHost">
-                <input type="hidden" name="probeElementId" value="@agent.ElementId" />
+                <input type="hidden" name="agentHostId" value="@agent.ElementId" />
                 <div class="mat-dialog__head">
                     @MatUi.Icon("server")
-                    <h2 class="mat-dialog__title" id="agent-host-@(agent.ElementId)-title">Host of @agent.Name</h2>
+                    <h2 class="mat-dialog__title" id="agent-host-@(agent.ElementId)-title">Move @agent.Name to another host</h2>
                     <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
                 </div>
                 <div class="mat-dialog__body mat-stack">
                     <div class="mat-field">
                         <span class="mat-label">Host</span>
-                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "hostElementId", DomId = $"picker-agent-rebind-{agent.ElementId:N}", Placeholder = string.IsNullOrWhiteSpace(agent.BoundHostName) ? "Pick a host" : agent.BoundHostName, Options = Model.HostOptions })" />
-                        <span class="mat-hint">The host moves under the agent, so its sensors run on the agent; settings it inherited from its old place (credentials, schedules) no longer apply. System Health and the update sensor move along. The old host stays where it is.</span>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "hostElementId", DomId = $"picker-agent-rebind-{agent.ElementId:N}", Placeholder = "Pick a host", Options = Model.HostOptions })" />
+                        <span class="mat-hint">That host becomes the agent: it stays where it is, and the probe above it is the one the agent talks through from then on. System Health, the update sensor and the connection sensor move along; @agent.Name keeps everything else as an ordinary host.</span>
                     </div>
                 </div>
                 <div class="mat-dialog__foot">
                     <div class="mat-btn-row mat-btn-row--plain">
-                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Bind to this host</span></button>
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check")<span>Move the agent</span></button>
                         <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
                     </div>
                 </div>
@@ -288,7 +294,7 @@
                         <li><strong>Windows:</strong> Settings > Apps > Installed apps > Matmon Agent > Uninstall.</li>
                         <li><strong>Linux / macOS:</strong> <code class="mat-mono">sudo matmon-agent uninstall</code></li>
                     </ul>
-                    <p>Then delete it here: the agent, its host and their sensors and history are removed from Matmon.</p>
+                    <p>Then delete it here: the agent's host with its sensors and history is removed from Matmon.</p>
                 </div>
                 <div class="mat-dialog__foot">
                     <div class="mat-btn-row mat-btn-row--plain">
@@ -401,9 +407,14 @@
                         </select>
                     </div>
                     <div class="mat-field mat-field--full">
-                        <span class="mat-label">Host</span>
+                        <span class="mat-label">Place in</span>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewParentId", DomId = "picker-agent-place", SelectedId = Model.NewParentId, Placeholder = "The primary", Options = Model.PlaceOptions })" />
+                        <span class="mat-hint">Where the new host goes. Under a remote probe the agent talks to that probe, which passes everything on - for a machine that cannot reach this instance itself.</span>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <span class="mat-label">Or an existing host</span>
                         <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "NewHostId", DomId = "picker-agent-host", SelectedId = Model.NewHostId, Placeholder = "A new host, named after the machine", Options = Model.HostOptions })" />
-                        <span class="mat-hint">Optional - the machine the agent runs on. An existing host moves under the agent; settings it inherited from its old place (credentials, schedules) no longer apply.</span>
+                        <span class="mat-hint">Optional - when the machine is already in the tree. It stays where it is, becomes the agent, and its sensors run on the agent.</span>
                     </div>
                 </div>
                 <div class="mat-btn-row">
@@ -440,19 +451,20 @@
                                 <td data-label="For">
                                     <div class="probe-cell">
                                         <strong>@(pending.Name ?? "host name of the machine")</strong>
-                                        @if (pending.ProbeElementId is not null || pending.HostElementId is not null)
-                                        {
-                                            <span class="mat-chips">
-                                                @if (pending.ProbeElementId is not null)
-                                                {
-                                                    <span class="mat-tag" title="Takes over this existing probe instead of creating a new one">re-install</span>
-                                                }
-                                                @if (pending.HostElementId is not null)
-                                                {
-                                                    <span class="mat-tag" title="Binds the agent to this existing host - it moves under the agent's probe">existing host</span>
-                                                }
-                                            </span>
-                                        }
+                                        <span class="mat-chips">
+                                            @if (Model.IsReinstall(pending))
+                                            {
+                                                <span class="mat-tag" title="Re-installs this agent - its host, sensors and history stay">re-install</span>
+                                            }
+                                            else if (pending.HostElementId is not null)
+                                            {
+                                                <span class="mat-tag" title="This existing host becomes the agent">existing host</span>
+                                            }
+                                            @if (Model.ViaOf(pending) is { ParentId: not null } via)
+                                            {
+                                                <span class="mat-tag" title="The agent talks through this probe">via @via.Name</span>
+                                            }
+                                        </span>
                                     </div>
                                 </td>
                                 <td data-label="Created" class="mat-mono">@pending.CreatedUtc.ToDisplay().ToString("g")@(string.IsNullOrWhiteSpace(pending.CreatedBy) ? string.Empty : $" · {pending.CreatedBy}")</td>

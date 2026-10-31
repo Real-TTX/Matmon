@@ -214,6 +214,8 @@ builder.Services.AddSingleton<INotificationEmailSender, MailKitEmailSender>();
 builder.Services.AddSingleton<NotificationDeliveryFactory>();
 builder.Services.AddSingleton<NotificationTransportClient>();
 builder.Services.AddHttpClient(NotificationTransportClient.HttpClientName);
+// A remote probe passing its agents' requests on to the primary - downloads of agent packages take a while.
+builder.Services.AddHttpClient(AgentRelay.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(15));
 // Browser notifications (Web Push): the instance's VAPID key pair beside the workspace, a client that only ever connects
 // to a public address (the endpoint comes from a browser), and the notifier the transport uses.
 builder.Services.AddSingleton(provider => new Matmon.Host.Services.WebPush.WebPushKeys(
@@ -566,6 +568,12 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
         await next();
     });
+}
+
+if (runtimeOptions.Mode == AppMode.Secondary)
+{
+    // Agents in this probe's network talk to it as if it were the primary; it passes their requests on (AgentRelay).
+    app.UseAgentRelay(runtimeOptions);
 }
 
 if (runtimeOptions.Mode == AppMode.Secondary)
@@ -1017,7 +1025,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
     // the ready-to-install download with the instance address and a code appended, and the one-liner install scripts.
     app.MapAgentDownloadEndpoints();
 
-    app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore, ProbeUpdateCommands updateCommands) =>
+    app.MapPost("/api/probes/heartbeat", (ProbeHeartbeatRequest request, HttpRequest http, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore, ProbeUpdateCommands updateCommands) =>
     {
         if (string.IsNullOrWhiteSpace(request.ProbeId) || string.IsNullOrWhiteSpace(request.ProbeName))
         {
@@ -1029,7 +1037,8 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.Unauthorized();
         }
 
-        registry.Record(request, DateTimeOffset.UtcNow);
+        // An agent behind a remote probe: which probe relayed it (only when that probe vouched with its own token).
+        registry.Record(request, DateTimeOffset.UtcNow, AgentRelay.ReadRelay(http, workspaceStore, out _));
         // The answer carries the primary's version and an update command for a Docker probe (Probes page > Update); an
         // older probe ignores the body, so this is backward compatible both ways.
         var command = updateCommands.OnHeartbeat(request.ProbeId, request.AgentVersion, request.SelfUpdate);

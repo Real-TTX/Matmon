@@ -20,22 +20,25 @@ public sealed class AgentEnrollment
     /// <summary>SHA-256 of the normalised code. The code itself is shown once and never stored.</summary>
     public string CodeHash { get; set; } = string.Empty;
 
-    /// <summary>Name for the probe the agent becomes; null = the agent's host name.</summary>
+    /// <summary>Name for the host the agent becomes; null = the machine's host name.</summary>
     public string? Name { get; set; }
 
-    /// <summary>
-    /// Set when the code re-enrols an EXISTING probe instead of creating one: a reinstalled machine, or a
-    /// Docker probe moving onto an agent. Redeeming it gives that probe a new token - sensors, history and
-    /// alerts stay where they are, and whatever still runs under the old token is locked out, so two agents
-    /// never share one identity.
-    /// </summary>
+    /// <summary>LEGACY (before migration 12, when an agent was a probe): a code that re-enrolled an existing probe. Such a
+    /// code is dropped by migration 12; nothing sets it any more.</summary>
     public Guid? ProbeElementId { get; set; }
 
     /// <summary>
-    /// The existing host this agent is to be bound to: redeeming the code moves it under the agent's probe, so its
-    /// sensors run on the agent - from the machine itself. Null = Matmon creates a host named after the machine.
-    /// A host that is gone (or taken by another agent) by redemption is not an error: the agent still enrols,
-    /// with a host of its own.
+    /// Where a NEW agent host is created: a probe or a folder (under a remote probe = the agent talks through that probe).
+    /// Null = directly under the primary. Ignored when <see cref="HostElementId"/> names a host.
+    /// </summary>
+    public Guid? ParentElementId { get; set; }
+
+    /// <summary>
+    /// An existing host the agent becomes - it stays where it is, and its sensors run on the agent from then on. When that
+    /// host already has an agent, redeeming the code is a RE-enrolment: a reinstalled machine keeps its host, sensors, history
+    /// and alerts, gets a new token, and whatever still runs under the old token is locked out. Null = Matmon creates a host
+    /// named after the machine under <see cref="ParentElementId"/>. A host that is gone by redemption is not an error: the
+    /// agent still enrols, with a host of its own.
     /// </summary>
     public Guid? HostElementId { get; set; }
 

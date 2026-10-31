@@ -93,7 +93,7 @@ public sealed partial class SensorDetailsModel : PageModel
             if (_assignmentProvider.TryBuildProbeReadyRun(SensorId, out var owningProbeId, out var sensorTypeKey, out var target, out var settings)
                 && owningProbeId is not null)
             {
-                var probeName = _workspaceStore.FindProbeByProbeId(owningProbeId)?.Name ?? owningProbeId;
+                var probeName = _workspaceStore.FindRunnerByProbeId(owningProbeId)?.Name ?? owningProbeId;
                 var job = _onDemandRunStore.Create(
                     owningProbeId,
                     SensorId,

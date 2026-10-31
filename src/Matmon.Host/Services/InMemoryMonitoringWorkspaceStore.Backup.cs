@@ -1369,9 +1369,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     }
 
     /// <summary>The token each probe of the live tree uses right now, by probe id.</summary>
-    private static Dictionary<Guid, string> CollectProbeTokens(ProbeElement? root)
+    private static Dictionary<string, string> CollectProbeTokens(ProbeElement? root)
     {
-        var tokens = new Dictionary<Guid, string>();
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (root is null)
         {
             return tokens;
@@ -1380,7 +1380,16 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         {
             if (!string.IsNullOrEmpty(probe.EnrollmentToken))
             {
-                tokens[probe.Id] = probe.EnrollmentToken;
+                tokens[probe.Id.ToString()] = probe.EnrollmentToken;
+            }
+        }
+
+        // An agent is a host: keyed by the id it reports under, which survives migration 12 and a re-enrolment alike.
+        foreach (var host in EnumerateElements(root).OfType<HostElement>())
+        {
+            if (host.Agent is { ProbeId.Length: > 0, Token.Length: > 0 } agent)
+            {
+                tokens["agent:" + agent.ProbeId] = agent.Token!;
             }
         }
         return tokens;
@@ -1392,7 +1401,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     /// agent) would otherwise be locked out by restoring an older backup. A probe the live tree no longer has keeps the backup's
     /// token, which is the one that probe still knows when it was only deleted here.
     /// </summary>
-    private static void KeepLiveProbeTokens(ProbeElement? root, Dictionary<Guid, string> liveTokens)
+    private static void KeepLiveProbeTokens(ProbeElement? root, Dictionary<string, string> liveTokens)
     {
         if (root is null || liveTokens.Count == 0)
         {
@@ -1400,9 +1409,17 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
         foreach (var probe in EnumerateElements(root).OfType<ProbeElement>())
         {
-            if (probe.ParentId is not null && liveTokens.TryGetValue(probe.Id, out var token))
+            if (probe.ParentId is not null && liveTokens.TryGetValue(probe.Id.ToString(), out var token))
             {
                 probe.EnrollmentToken = token;
+            }
+        }
+
+        foreach (var host in EnumerateElements(root).OfType<HostElement>())
+        {
+            if (host.Agent is { } agent && liveTokens.TryGetValue("agent:" + agent.ProbeId, out var token))
+            {
+                agent.Token = token;
             }
         }
     }

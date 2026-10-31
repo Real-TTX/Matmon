@@ -10,7 +10,7 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
 
     public InMemoryProbeRegistry(MatmonRuntimeOptions runtimeOptions) => _runtimeOptions = runtimeOptions;
 
-    public ProbeStatusSnapshot Record(ProbeHeartbeatRequest request, DateTimeOffset receivedAtUtc)
+    public ProbeStatusSnapshot Record(ProbeHeartbeatRequest request, DateTimeOffset receivedAtUtc, string? relayProbeId = null)
     {
         var duplicateWarning = DetectDuplicate(request, receivedAtUtc);
 
@@ -27,7 +27,8 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             duplicateWarning,
             request.UpdateStatus,
             request.HeartbeatIntervalSeconds is > 0 ? Math.Clamp(request.HeartbeatIntervalSeconds.Value, 5, 300) : null,
-            request.SelfUpdate);
+            request.SelfUpdate,
+            string.IsNullOrWhiteSpace(relayProbeId) ? null : relayProbeId);
 
         _probes[request.ProbeId] = snapshot;
         return snapshot;

@@ -181,8 +181,6 @@
                 <a class="mat-menu__item" role="menuitem" asp-page="/ProbeInstall" asp-route-probeId="@probe.ElementId" asp-route-returnUrl="/Probes">@MatUi.Icon("download")<span>Install (Docker)</span></a>
             }
             <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
-                    asp-page="/Agents" asp-page-handler="CreateForProbe" name="probeElementId" value="@probe.ElementId">@MatUi.Icon("key")<span>Move to an agent</span></button>
-            <button type="submit" form="probe-row-actions" class="mat-menu__item" role="menuitem"
                     asp-page="/Config" asp-page-handler="RotateProbeToken" asp-route-probeId="@probe.ElementId"
                     data-confirm="Give @probe.Name a new token? Whatever runs with the old one stops reporting until it gets the new one." data-confirm-ok="Rotate token">@MatUi.Icon("refresh")<span>Rotate token</span></button>
         }

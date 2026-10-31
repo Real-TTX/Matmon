@@ -161,8 +161,8 @@ public sealed class SensorPollingService : BackgroundService
             return true;
         }
 
-        var lineage = MonitoringTopology.BuildLineage(element, elementsById);
-        var probeAncestor = lineage.OfType<ProbeElement>().LastOrDefault();
-        return probeAncestor is not null && probeAncestor.ParentId is null;
+        // Local = run by the primary root itself: not under a remote probe, not on an agent's host.
+        var runner = MonitoringTopology.FindRunner(MonitoringTopology.BuildLineage(element, elementsById));
+        return runner is ProbeElement { ParentId: null };
     }
 }

@@ -39,34 +39,29 @@ public sealed class AgentEnrollmentTests : IDisposable
         return _store.CreateProbe(rootId, name, null);
     }
 
-    // An agent is bound to a host (the machine it sits on) and its machine sensors live under it.
-    private Guid BoundHostOf(Guid probeId) =>
-        ((ProbeElement)_store.FindElement(probeId)!).FindBoundHost()?.Id
-        ?? throw new InvalidOperationException("The agent probe has no bound host.");
+    // An agent IS a host: the machine it sits on, whose sensors run on the agent.
+    private static Guid BoundHostOf(Guid agentHostId) => agentHostId;
 
     [Fact]
-    public void AReenrolmentCodeHandsTheExistingProbeANewToken()
+    public void AReinstallCodeHandsTheExistingAgentANewToken()
     {
-        var probe = RemoteProbe("Docker probe 01");
-        var oldToken = probe.EnrollmentToken!;
-        var probesBefore = _store.GetAllElements().OfType<ProbeElement>().Count();
-        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), "admin", probe.Id);
+        var first = Redeem(_store, _store.CreateAgentEnrollment("FILESRV-01", TimeSpan.FromHours(1), "admin").Code, "FILESRV-01")!;
+        var hostsBefore = _store.GetAllElements().OfType<HostElement>().Count();
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), "admin", hostElementId: first.ElementId);
 
-        Assert.Equal("Docker probe 01", issue.Enrollment.Name);
+        Assert.Equal("FILESRV-01", issue.Enrollment.Name);
 
         var redeemed = Redeem(_store, issue.Code, "SOME-OTHER-HOSTNAME");
 
         Assert.NotNull(redeemed);
         Assert.True(redeemed.Reenrolled);
-        Assert.Equal(probe.Id, redeemed.ElementId);
-        Assert.Equal(probe.ProbeId, redeemed.ProbeId);
-        Assert.Equal("Docker probe 01", redeemed.ProbeName);
-        Assert.Equal(probesBefore, _store.GetAllElements().OfType<ProbeElement>().Count());
+        Assert.Equal(first.ElementId, redeemed.ElementId);
+        Assert.Equal(first.ProbeId, redeemed.ProbeId);
+        Assert.Equal(hostsBefore, _store.GetAllElements().OfType<HostElement>().Count());
 
-        // The install it takes over from is locked out; the agent is in.
-        Assert.False(_store.TryValidateProbe(probe.ProbeId, oldToken));
-        Assert.True(_store.TryValidateProbe(probe.ProbeId, redeemed.ProbeToken));
-        Assert.NotNull(((ProbeElement)_store.FindElement(probe.Id)!).AgentEnrolledUtc);
+        // The install it replaces is locked out; the new one is in.
+        Assert.False(_store.TryValidateProbe(first.ProbeId, first.ProbeToken));
+        Assert.True(_store.TryValidateProbe(first.ProbeId, redeemed.ProbeToken));
     }
 
     [Fact]
@@ -75,14 +70,14 @@ public sealed class AgentEnrollmentTests : IDisposable
         var issue = _store.CreateAgentEnrollment("WS-01", TimeSpan.FromHours(1), null);
         var redeemed = Redeem(_store, issue.Code, "WS-01")!;
 
-        int LocalHealthUnder(Guid probeId) => _store.GetAllElements().OfType<SensorElement>()
-            .Count(sensor => sensor.ParentId == BoundHostOf(probeId) && sensor.SensorTypeKey == "local-health");
+        int LocalHealthUnder(Guid hostId) => _store.GetAllElements().OfType<SensorElement>()
+            .Count(sensor => sensor.ParentId == BoundHostOf(hostId) && sensor.SensorTypeKey == "local-health");
 
         Assert.Equal(1, LocalHealthUnder(redeemed.ElementId));
         var sensor = _store.GetAllElements().OfType<SensorElement>().Single(s => s.ParentId == BoundHostOf(redeemed.ElementId) && s.SensorTypeKey == "local-health");
         Assert.NotEmpty(sensor.Settings.Thresholds); // created through CreateSensor, so the defaults apply
 
-        var again = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, redeemed.ElementId);
+        var again = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, hostElementId: redeemed.ElementId);
         Redeem(_store, again.Code, "WS-01");
         Assert.Equal(1, LocalHealthUnder(redeemed.ElementId));
     }
@@ -133,34 +128,30 @@ public sealed class AgentEnrollmentTests : IDisposable
     }
 
     [Fact]
-    public void MovingAProbeOntoAnAgentFreesItsLicenceSlot()
+    public void AHostDeletedBeforeTheCodeIsUsedLeavesTheAgentAHostOfItsOwn()
     {
-        var probe = RemoteProbe("Docker probe");
-        Assert.Equal(2, LicenseInfo.CountLicensedProbes(_store.GetAllElements()));
+        var rootId = _store.GetAllElements().OfType<ProbeElement>().First(probe => probe.ParentId is null).Id;
+        var host = _store.CreateHost(rootId, "Gone soon", "10.0.0.9", null);
+        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, hostElementId: host.Id);
+        _store.DeleteElement(host.Id);
 
-        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
-        Assert.Equal(AgentEnrollmentStatus.Enrolled, _store.RedeemAgentEnrollment(issue.Code, "srv-01").Status);
+        var redeemed = _store.RedeemAgentEnrollment(issue.Code, "srv-09").Redemption;
 
-        Assert.Equal(1, LicenseInfo.CountLicensedProbes(_store.GetAllElements()));
-    }
-
-    [Fact]
-    public void ACodeForADeletedProbeIsDead()
-    {
-        var probe = RemoteProbe("Gone soon");
-        var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, probe.Id);
-        _store.DeleteElement(probe.Id);
-
-        Assert.Equal(AgentEnrollmentStatus.Invalid, _store.RedeemAgentEnrollment(issue.Code, "x").Status);
+        Assert.NotNull(redeemed);
+        Assert.NotEqual(host.Id, redeemed.ElementId);
         Assert.Empty(_store.GetPendingAgentEnrollments());
     }
 
     [Fact]
-    public void TheLocalRootCannotBeReenrolled()
+    public void OnlyAProbeOrAFolderCanTakeANewAgent()
     {
         var rootId = _store.GetAllElements().OfType<ProbeElement>().First(probe => probe.ParentId is null).Id;
+        var host = _store.CreateHost(rootId, "Box", "10.0.0.9", null);
+        var sensor = _store.CreateSensor(host.Id, "Ping", "ping", "10.0.0.9", null);
 
-        Assert.Throws<InvalidOperationException>(() => _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, rootId));
+        Assert.Throws<InvalidOperationException>(() => _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, sensor.Id));
+        Assert.Throws<InvalidOperationException>(() => _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, host.Id));
+        Assert.NotNull(_store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null, RemoteProbe("Branch").Id));
     }
 
     [Fact]
@@ -176,7 +167,7 @@ public sealed class AgentEnrollmentTests : IDisposable
     }
 
     [Fact]
-    public void ACodeCreatesAnAgentProbeExactlyOnce()
+    public void ACodeCreatesAnAgentExactlyOnce()
     {
         var issue = _store.CreateAgentEnrollment("FILESRV-01", TimeSpan.FromHours(24), "admin");
 
@@ -186,8 +177,8 @@ public sealed class AgentEnrollmentTests : IDisposable
         Assert.Equal("FILESRV-01", redeemed.ProbeName);
         Assert.False(string.IsNullOrWhiteSpace(redeemed.ProbeToken));
         Assert.True(_store.TryValidateProbe(redeemed.ProbeId, redeemed.ProbeToken));
-        var probe = Assert.IsType<ProbeElement>(_store.FindElement(redeemed.ElementId));
-        Assert.NotNull(probe.AgentEnrolledUtc);
+        var host = Assert.IsType<HostElement>(_store.FindElement(redeemed.ElementId));
+        Assert.NotNull(host.Agent);
 
         Assert.Null(Redeem(_store, issue.Code, "second-machine"));
         Assert.Empty(_store.GetPendingAgentEnrollments());
@@ -208,7 +199,7 @@ public sealed class AgentEnrollmentTests : IDisposable
     }
 
     [Fact]
-    public void WithoutANameTheProbeIsNamedAfterTheMachine()
+    public void WithoutANameTheHostIsNamedAfterTheMachine()
     {
         var issue = _store.CreateAgentEnrollment(null, TimeSpan.FromHours(1), null);
 
