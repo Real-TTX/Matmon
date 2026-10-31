@@ -13,6 +13,11 @@ A change that an app can see is written down under **Unreleased** in the pull re
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-31
+### Added
+
+- A compact density (`data-density="compact"` on `<html>`): for a back office with a long menu, many fields and long tables. The menu is 236 px wide, the top bar 52 px, the body type 14 px, the page padding 28 / 24 / 16 px by width; with a mouse the controls are 34 px (large 40 px), a menu row 32 px and the table cells tighter (`--mat-table-pad-y: 9px`, `--mat-table-pad-x: 14px`). A touch screen keeps its 44 px targets (`MOBILE-04`) and the 16 px type of a field (`MOBILE-06`); nothing is under 32 px. Opt-in per app; without the attribute nothing changes. It is the slim mode MatCMS has carried in its own `admin-matui.css` (layer 1), now in the toolkit: an app that copied those rules can delete them and keep the attribute. Described in docs/ADOPTING.md (2b).
+
 ## [0.10.0] - 2026-10-30
 ### Added
 

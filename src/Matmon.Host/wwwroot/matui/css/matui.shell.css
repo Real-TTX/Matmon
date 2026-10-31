@@ -550,3 +550,22 @@ html.mat-lock { overflow: hidden; }
   .mat-footer__links { row-gap: 0; }
   .mat-footer__links a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
 }
+
+/* ---- Density compact (data-density="compact", the tokens are in matui.tokens.css): the menu's own spacing, which has no
+   property of its own yet ---- */
+:root[data-density="compact"] .mat-nav__brand { padding: 14px 14px 10px; }
+:root[data-density="compact"] .mat-nav__scroll { padding: 0 8px 8px; }
+:root[data-density="compact"] .mat-nav__group { padding: 14px 10px 4px; font-size: var(--mat-fs-xs); }
+:root[data-density="compact"] .mat-nav__list > li:first-child.mat-nav__group { padding-top: 4px; }
+:root[data-density="compact"] .mat-nav__foot { padding: 8px 8px calc(8px + var(--mat-safe-bottom)); gap: 4px; }
+:root[data-density="compact"] .mat-user { min-height: var(--mat-control-h); padding: 4px 8px; gap: 10px; }
+:root[data-density="compact"] .mat-avatar { width: 28px; height: 28px; font-size: var(--mat-fs-xs); }
+:root[data-density="compact"] .mat-page { padding-top: var(--mat-space-5); }
+/* the rows of the menu with a mouse - :where() keeps the weight of .mat-nav__item, so an app's --mat-nav-item-* still applies */
+@media (pointer: fine) {
+  :where(:root[data-density="compact"]) .mat-nav__item {
+    gap: var(--mat-nav-item-gap, 10px);
+    min-height: var(--mat-nav-item-height, 32px);
+    padding: 0 var(--mat-nav-item-pad-x, 10px);
+  }
+}

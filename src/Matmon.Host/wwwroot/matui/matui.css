@@ -1,4 +1,4 @@
-/* MatUi 0.10.0 (3bf0cbd1cb) - build local-20261030 - bundled from matui.tokens.css, matui.base.css, matui.shell.css, matui.controls.css, matui.forms.css, matui.pickers.css, matui.lists.css, matui.dialogs.css, matui.layout.css, matui.apps.css */
+/* MatUi 0.11.0 (c862573312) - build local-20261031 - bundled from matui.tokens.css, matui.base.css, matui.shell.css, matui.controls.css, matui.forms.css, matui.pickers.css, matui.lists.css, matui.dialogs.css, matui.layout.css, matui.apps.css */
 /* ==========================================================================
    MatUi · tokens
    The single source of the look of every Mat app. Components use only these custom properties, never a raw colour.
@@ -145,6 +145,29 @@
     --mat-control-h: 44px;
     --mat-control-h-sm: 36px;
     --mat-control-h-lg: 52px;
+  }
+}
+
+
+/* ---- Density (data-density on <html>) ----
+   Opt-in: <html data-density="compact">. Absent or any other value is the look above. For an app whose pages are dense - a back
+   office with a long menu, many fields, long tables (MatCMS, Matmon) - where the default air is made for a sparse page. It
+   changes sizes only: the menu is narrower, the top bar lower, the body type 14 px and the page padding smaller; with a MOUSE the
+   controls are 34 px, the menu rows 32 px and the table cells tighter (those two as rules in matui.shell.css / matui.lists.css,
+   so the component properties stay the app's to set). A touch screen keeps the 44 px targets above (MOBILE-04)
+   and its 16 px field type (MOBILE-06); nothing is ever under 32 px. The rules for the menu's own spacing are in matui.shell.css. */
+:root[data-density="compact"] {
+  --mat-nav-w: 236px;
+  --mat-topbar-h: 52px;
+  --mat-content-pad: 28px;
+  --mat-fs-md: .875rem;
+}
+@media (max-width: 1199px) { :root[data-density="compact"] { --mat-content-pad: 24px; } }
+@media (max-width: 899px) { :root[data-density="compact"] { --mat-content-pad: 16px; } }
+@media (pointer: fine) {
+  :root[data-density="compact"] {
+    --mat-control-h: 34px;
+    --mat-control-h-lg: 40px;
   }
 }
 
@@ -1115,6 +1138,25 @@ html.mat-lock { overflow: hidden; }
   .mat-crumbs a { display: block; min-width: 44px; line-height: 44px; text-align: center; }
   .mat-footer__links { row-gap: 0; }
   .mat-footer__links a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
+}
+
+/* ---- Density compact (data-density="compact", the tokens are in matui.tokens.css): the menu's own spacing, which has no
+   property of its own yet ---- */
+:root[data-density="compact"] .mat-nav__brand { padding: 14px 14px 10px; }
+:root[data-density="compact"] .mat-nav__scroll { padding: 0 8px 8px; }
+:root[data-density="compact"] .mat-nav__group { padding: 14px 10px 4px; font-size: var(--mat-fs-xs); }
+:root[data-density="compact"] .mat-nav__list > li:first-child.mat-nav__group { padding-top: 4px; }
+:root[data-density="compact"] .mat-nav__foot { padding: 8px 8px calc(8px + var(--mat-safe-bottom)); gap: 4px; }
+:root[data-density="compact"] .mat-user { min-height: var(--mat-control-h); padding: 4px 8px; gap: 10px; }
+:root[data-density="compact"] .mat-avatar { width: 28px; height: 28px; font-size: var(--mat-fs-xs); }
+:root[data-density="compact"] .mat-page { padding-top: var(--mat-space-5); }
+/* the rows of the menu with a mouse - :where() keeps the weight of .mat-nav__item, so an app's --mat-nav-item-* still applies */
+@media (pointer: fine) {
+  :where(:root[data-density="compact"]) .mat-nav__item {
+    gap: var(--mat-nav-item-gap, 10px);
+    min-height: var(--mat-nav-item-height, 32px);
+    padding: 0 var(--mat-nav-item-pad-x, 10px);
+  }
 }
 
 /* ==========================================================================
@@ -2871,6 +2913,11 @@ fieldset.mat-rating:not(.is-ready) > .mat-hint, fieldset.mat-rating:not(.is-read
   white-space: nowrap;
 }
 .mat-table td { padding: var(--mat-table-pad-y, var(--mat-space-3)) var(--mat-table-pad-x, var(--mat-space-4)); border-top: 1px solid var(--mat-border); vertical-align: middle; }
+/* Density compact with a mouse (data-density="compact", the tokens are in matui.tokens.css): tighter cells. :where() keeps the weight of the rule
+   above, so a table variant (mat-table--compact) still wins and an app's --mat-table-pad-* still applies. */
+@media (pointer: fine) {
+  :where(:root[data-density="compact"]) .mat-table :is(caption, th, td) { padding: var(--mat-table-pad-y, 9px) var(--mat-table-pad-x, 14px); }
+}
 .mat-table tbody tr:hover { background: var(--mat-surface-2); }
 .mat-table tbody tr.is-selected { background: var(--mat-accent-soft-strong); }
 .mat-table th.mat-num { text-align: right; }

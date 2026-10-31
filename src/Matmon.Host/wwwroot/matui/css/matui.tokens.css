@@ -147,6 +147,29 @@
   }
 }
 
+
+/* ---- Density (data-density on <html>) ----
+   Opt-in: <html data-density="compact">. Absent or any other value is the look above. For an app whose pages are dense - a back
+   office with a long menu, many fields, long tables (MatCMS, Matmon) - where the default air is made for a sparse page. It
+   changes sizes only: the menu is narrower, the top bar lower, the body type 14 px and the page padding smaller; with a MOUSE the
+   controls are 34 px, the menu rows 32 px and the table cells tighter (those two as rules in matui.shell.css / matui.lists.css,
+   so the component properties stay the app's to set). A touch screen keeps the 44 px targets above (MOBILE-04)
+   and its 16 px field type (MOBILE-06); nothing is ever under 32 px. The rules for the menu's own spacing are in matui.shell.css. */
+:root[data-density="compact"] {
+  --mat-nav-w: 236px;
+  --mat-topbar-h: 52px;
+  --mat-content-pad: 28px;
+  --mat-fs-md: .875rem;
+}
+@media (max-width: 1199px) { :root[data-density="compact"] { --mat-content-pad: 24px; } }
+@media (max-width: 899px) { :root[data-density="compact"] { --mat-content-pad: 16px; } }
+@media (pointer: fine) {
+  :root[data-density="compact"] {
+    --mat-control-h: 34px;
+    --mat-control-h-lg: 40px;
+  }
+}
+
 :root[data-theme="light"] { color-scheme: light; }
 
 /* ---- Dark, explicit ---- */

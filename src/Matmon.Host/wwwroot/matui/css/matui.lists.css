@@ -100,6 +100,11 @@
   white-space: nowrap;
 }
 .mat-table td { padding: var(--mat-table-pad-y, var(--mat-space-3)) var(--mat-table-pad-x, var(--mat-space-4)); border-top: 1px solid var(--mat-border); vertical-align: middle; }
+/* Density compact with a mouse (data-density="compact", the tokens are in matui.tokens.css): tighter cells. :where() keeps the weight of the rule
+   above, so a table variant (mat-table--compact) still wins and an app's --mat-table-pad-* still applies. */
+@media (pointer: fine) {
+  :where(:root[data-density="compact"]) .mat-table :is(caption, th, td) { padding: var(--mat-table-pad-y, 9px) var(--mat-table-pad-x, 14px); }
+}
 .mat-table tbody tr:hover { background: var(--mat-surface-2); }
 .mat-table tbody tr.is-selected { background: var(--mat-accent-soft-strong); }
 .mat-table th.mat-num { text-align: right; }

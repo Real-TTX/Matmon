@@ -178,3 +178,7 @@ full-screen look - still on tokens.
   `mat-alert` at the top. A dependent field shows with `data-show-if="#id"` + `data-show-value` (FORM-04).
 - A choice from a list that can grow without limit (accounts, organizations, customers, instances) is never a `<select>` of every entry and never a list of every entry: it is the MatUi select picker with `data-source-url` (FORM-25), searched and paged on the server (the element picker is the exception: the topology is filtered in the browser, and it is bounded by what one instance monitors), only with what this user may choose; the posted value is checked again.
 - Every page is checked in light and dark and at 390 px (MOBILE-01).
+
+## Density (since 2026-10-31)
+
+The app's own pages run in MatUi's compact density: `data-density="compact"` on `<html>` in `_Layout` (MatUi 0.11.0, the slim mode MatCMS has). With a mouse: 236 px menu, 52 px top bar, 14 px body, 34 px controls, 32 px menu rows, tighter table cells; a touch screen keeps the 44 px targets and 16 px fields (MOBILE-04/06). The sign-in, setup and error pages (anonymous layout) and the public pages stay at the default. No app CSS repeats these values - they live in MatUi.
