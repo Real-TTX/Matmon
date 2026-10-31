@@ -45,14 +45,17 @@ public sealed record SummaryReport(string Subject, string TextBody, string HtmlB
 /// <summary>Pure renderer that turns <see cref="SummaryReportData"/> into a subject + text + HTML e-mail body.</summary>
 public static class SummaryReportBuilder
 {
-    public static SummaryReport Build(SummaryReportData data)
+    /// <param name="fallbackLogoPng">The logo when the partner has none (Matmon's PNG).</param>
+    /// <param name="logoCid">Set = the logo is referenced as <c>cid:</c> and the caller attaches it inline - mail clients
+    /// block <c>data:</c> pictures; unset (an on-screen preview) = a data URI.</param>
+    public static SummaryReport Build(SummaryReportData data, byte[]? fallbackLogoPng = null, string? logoCid = null)
     {
         ArgumentNullException.ThrowIfNull(data);
 
         var period = $"{data.FromUtc.ToLocalTime():g} – {data.ToUtc.ToLocalTime():g}";
         var subject = $"{data.WorkspaceName} summary - {data.ActiveAlertCount} active alert{(data.ActiveAlertCount == 1 ? string.Empty : "s")}";
 
-        return new SummaryReport(subject, BuildText(data, period), BuildHtml(data, period));
+        return new SummaryReport(subject, BuildText(data, period), BuildHtml(data, period, fallbackLogoPng, logoCid));
     }
 
     private static string BuildText(SummaryReportData data, string period)
@@ -110,7 +113,7 @@ public static class SummaryReportBuilder
         return sb.ToString().TrimEnd();
     }
 
-    private static string BuildHtml(SummaryReportData data, string period)
+    private static string BuildHtml(SummaryReportData data, string period, byte[]? fallbackLogoPng, string? logoCid)
     {
         // Reseller co-branding: accent the heading in the partner's colour and surface the support link
         // (both re-validated - #RRGGBB / absolute http(s) - so a garbage cached value can't inject CSS or a
@@ -123,17 +126,24 @@ public static class SummaryReportBuilder
 
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#111827;max-width:720px;\">");
+        if (Matmon.Core.Telemetry.ReportEmail.PickLogo(data.Partner, fallbackLogoPng) is { } logo)
+        {
+            var src = logoCid is null ? $"data:{logo.ContentType};base64,{Convert.ToBase64String(logo.Bytes)}" : $"cid:{logoCid}";
+            sb.Append($"<img src=\"{src}\" alt=\"{Enc(data.Partner?.LogoPng is { Length: > 0 } ? data.Partner.PartnerName : "Matmon")}\" style=\"max-height:44px;max-width:220px;display:block;margin:0 0 12px;\" />");
+        }
+        else if (data.Partner?.ProductName is { Length: > 0 } productName)
+        {
+            // White label without a logo: the product name in its colour, never Matmon's logo.
+            var productColor = accent ?? "#111827";
+            sb.Append($"<div style=\"font-size:20px;font-weight:700;color:{productColor};margin:0 0 12px;\">{Enc(productName)}</div>");
+        }
+
         sb.Append($"<h2 style=\"margin:0 0 4px 0;{headingRule}color:{accent ?? "#111827"};\">{Enc(data.WorkspaceName)} - summary report</h2>");
         sb.Append($"<div style=\"color:#6b7280;margin-bottom:16px;\">{Enc(period)}</div>");
 
-        if (data.Partner is { } brand && (brand.LogoPng is { Length: > 0 } || !string.IsNullOrWhiteSpace(brand.PartnerName) || contactUrl is not null))
+        if (data.Partner is { } brand && (!string.IsNullOrWhiteSpace(brand.PartnerName) || contactUrl is not null))
         {
             sb.Append("<div style=\"margin:0 0 16px;\">");
-            if (brand.LogoPng is { Length: > 0 } logo)
-            {
-                var mime = string.IsNullOrWhiteSpace(brand.LogoContentType) ? "image/png" : brand.LogoContentType;
-                sb.Append($"<img src=\"data:{mime};base64,{Convert.ToBase64String(logo)}\" alt=\"{Enc(brand.PartnerName)}\" style=\"max-height:44px;max-width:220px;display:block;\" />");
-            }
 
             if (!string.IsNullOrWhiteSpace(brand.PartnerName))
             {

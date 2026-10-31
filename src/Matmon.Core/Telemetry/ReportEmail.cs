@@ -9,12 +9,14 @@ namespace Matmon.Core.Telemetry;
 /// (<see cref="BrandingSafety"/>) before it reaches the markup.</summary>
 public static class ReportEmail
 {
-    public static SummaryReport Build(AvailabilityReportData data, string? attachmentNote)
+    /// <param name="fallbackLogoPng">The logo shown when the partner has none (Matmon's, as PNG - mail clients show no SVG).</param>
+    /// <param name="logoCid">Set = the logo is referenced as <c>cid:</c> and the caller attaches it inline (<see cref="Logo"/>).</param>
+    public static SummaryReport Build(AvailabilityReportData data, string? attachmentNote, byte[]? fallbackLogoPng = null, string? logoCid = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         var period = $"{data.Window.Label} ({data.LocalTime(data.Window.FromUtc)} – {data.LocalTime(data.Window.ToUtc)})";
         var subject = $"{data.Title} - {data.Window.Label} - {ReportMath.Percent(data.Overall.Percent)} available";
-        return new SummaryReport(subject, Text(data, period, attachmentNote), Html(data, period, attachmentNote));
+        return new SummaryReport(subject, Text(data, period, attachmentNote), Html(data, period, attachmentNote, fallbackLogoPng, logoCid));
     }
 
     private static string Text(AvailabilityReportData data, string period, string? attachmentNote)
@@ -73,7 +75,7 @@ public static class ReportEmail
         return sb.ToString().TrimEnd();
     }
 
-    private static string Html(AvailabilityReportData data, string period, string? attachmentNote)
+    private static string Html(AvailabilityReportData data, string period, string? attachmentNote, byte[]? fallbackLogoPng, string? logoCid)
     {
         var accent = BrandingSafety.SafeHexColor(data.Branding?.BrandColor) ?? "#1D4ED8";
         var secondary = BrandingSafety.SafeHexColor(data.Branding?.SecondaryColor);
@@ -83,9 +85,18 @@ public static class ReportEmail
 
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#111827;max-width:680px;\">");
-        if (data.Branding?.LogoPng is { Length: > 0 } logo && BrandingSafety.DetectRasterContentType(logo) is { } mime)
+        if (Logo(data, fallbackLogoPng) is { } logo)
         {
-            sb.Append($"<img src=\"data:{mime};base64,{Convert.ToBase64String(logo)}\" alt=\"{Enc(data.Branding.PartnerName)}\" style=\"max-height:44px;max-width:220px;display:block;margin:0 0 12px;\" />");
+            // Inline (cid:) when the sender can attach it - mail clients block data: pictures; a data: URI only where the
+            // message cannot carry an inline part (the cloud relay) or for an on-screen preview.
+            var src = logoCid is null ? $"data:{logo.ContentType};base64,{Convert.ToBase64String(logo.Bytes)}" : $"cid:{logoCid}";
+            var alt = data.Branding?.LogoPng is { Length: > 0 } ? data.Branding.PartnerName : "Matmon";
+            sb.Append($"<img src=\"{src}\" alt=\"{Enc(alt)}\" style=\"max-height:44px;max-width:220px;display:block;margin:0 0 12px;\" />");
+        }
+        else if (data.Branding?.ProductName is { Length: > 0 } productName)
+        {
+            // White label without a logo: the product name in its colour, never Matmon's logo.
+            sb.Append($"<div style=\"font-size:20px;font-weight:700;color:{accent};margin:0 0 12px;\">{Enc(productName)}</div>");
         }
 
         sb.Append($"<h2 style=\"margin:0 0 4px;padding-bottom:6px;{rule}color:{accent};\">{Enc(data.Title)}</h2>");
@@ -157,6 +168,22 @@ public static class ReportEmail
         sb.Append($"<p style=\"color:#9ca3af;font-size:11px;margin-top:18px;\">{Enc(credit)}</p>");
         sb.Append("</div>");
         return sb.ToString();
+    }
+
+    /// <summary>The logo the e-mail shows: the partner's (PNG/JPEG only), else the fallback (Matmon's); null = none.</summary>
+    public static (byte[] Bytes, string ContentType)? Logo(AvailabilityReportData data, byte[]? fallbackLogoPng) => PickLogo(data.Branding, fallbackLogoPng);
+
+    public static (byte[] Bytes, string ContentType)? PickLogo(SummaryReportBranding? branding, byte[]? fallbackLogoPng)
+    {
+        if (branding?.LogoPng is { Length: > 0 } partner && BrandingSafety.DetectRasterContentType(partner) is { } mime)
+        {
+            return (partner, mime);
+        }
+
+        // White label (a product name) never shows Matmon's logo - the product name in the heading carries the brand.
+        return string.IsNullOrWhiteSpace(branding?.ProductName) && fallbackLogoPng is { Length: > 0 } matmon && BrandingSafety.DetectRasterContentType(matmon) is { } fallbackMime
+            ? (matmon, fallbackMime)
+            : null;
     }
 
     /// <summary>The five sensors with the lowest availability below 100 % (none when everything was up).</summary>

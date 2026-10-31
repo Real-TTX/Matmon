@@ -180,13 +180,23 @@ public sealed class SummaryReportSender
 
         var now = DateTimeOffset.UtcNow;
         var window = WindowFor(settings.Cadence);
-        var report = SummaryReportBuilder.Build(_collector.Collect(now, window));
+        var data = _collector.Collect(now, window);
+        var matmonLogo = Reports.ReportPdfChrome.MatmonLogoPng;
+        var logo = Matmon.Core.Telemetry.ReportEmail.PickLogo(data.Partner, matmonLogo);
+        var report = SummaryReportBuilder.Build(data, matmonLogo, logo is null ? null : Reports.ReportService.LogoCid);
         var subject = string.IsNullOrWhiteSpace(settings.Subject) ? report.Subject : settings.Subject;
 
-        // A fuller sensor list for the PDF than the (short) e-mail body.
-        IReadOnlyList<EmailAttachment> attachments = settings.AttachPdf
-            ? [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines)), "application/pdf")]
-            : [];
+        // A fuller sensor list for the PDF than the (short) e-mail body; the logo as an inline part after it.
+        var attachments = new List<EmailAttachment>();
+        if (settings.AttachPdf)
+        {
+            attachments.Add(new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines)), "application/pdf"));
+        }
+
+        if (logo is { } inline)
+        {
+            attachments.Add(new EmailAttachment(inline.ContentType == "image/png" ? "logo.png" : "logo.jpg", inline.Bytes, inline.ContentType, Reports.ReportService.LogoCid));
+        }
 
         var result = await _mailer.SendAsync(settings.SenderId, settings.ReceiverId, settings.Recipients, subject, report.TextBody, report.HtmlBody, attachments, cancellationToken);
         if (result.Sent)
@@ -205,7 +215,7 @@ public sealed class SummaryReportSender
     /// can see exactly what the scheduled e-mail will contain, from live data, without SMTP or the cloud.</summary>
     public (string Subject, string HtmlBody) BuildPreview(SummaryReportCadence cadence)
     {
-        var report = SummaryReportBuilder.Build(_collector.Collect(DateTimeOffset.UtcNow, WindowFor(cadence)));
+        var report = SummaryReportBuilder.Build(_collector.Collect(DateTimeOffset.UtcNow, WindowFor(cadence)), Reports.ReportPdfChrome.MatmonLogoPng);
         return (report.Subject, report.HtmlBody);
     }
 

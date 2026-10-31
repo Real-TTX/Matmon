@@ -267,6 +267,45 @@ public sealed class ReportTests : IDisposable
         Assert.Equal("%PDF", Encoding.ASCII.GetString(table, 0, 4));
     }
 
+    [Fact]
+    public void Matmon_logo_only_without_a_white_label_and_as_an_inline_part()
+    {
+        var png = ReportPdfChrome.MatmonLogoPng;
+        Assert.NotNull(png);
+        Assert.Equal("image/png", BrandingSafety.DetectRasterContentType(png!));
+
+        // No partner: Matmon's logo, referenced by cid when the sender attaches it, as data: for a preview.
+        var plain = ReportEmail.Build(SampleData(branding: null), null, png, "logo@x");
+        Assert.Contains("src=\"cid:logo@x\"", plain.HtmlBody);
+        Assert.Contains("alt=\"Matmon\"", plain.HtmlBody);
+        Assert.Contains("data:image/png", ReportEmail.Build(SampleData(branding: null), null, png).HtmlBody);
+
+        // Co-branding without a logo and without a product name: still Matmon's.
+        Assert.NotNull(ReportEmail.PickLogo(new SummaryReportBranding("Example IT", null, null, "#AA0000", null), png));
+
+        // White label without a logo: NO Matmon logo - the product name instead (the e-mail and the PDF).
+        var whiteLabel = new SummaryReportBranding("Example IT", null, null, "#AA0000", null, "NetGuard");
+        Assert.Null(ReportEmail.PickLogo(whiteLabel, png));
+        var mail = ReportEmail.Build(SampleData(whiteLabel), null, png, "logo@x");
+        Assert.DoesNotContain("alt=\"Matmon\"", mail.HtmlBody);
+        Assert.DoesNotContain("cid:", mail.HtmlBody);
+        Assert.Contains(">NetGuard</div>", mail.HtmlBody);
+        var summary = SummaryReportBuilder.Build(new SummaryReportData("HQ", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, 1, 1, 0, 0, 0, 0, 0, [], [], whiteLabel), png, "logo@x");
+        Assert.DoesNotContain("alt=\"Matmon\"", summary.HtmlBody);
+        Assert.Contains(">NetGuard</div>", summary.HtmlBody);
+        Assert.Equal("%PDF", Encoding.ASCII.GetString(new ReportPdfBuilder().Build(SampleData(whiteLabel)), 0, 4));
+    }
+
+    [Fact]
+    public void The_outage_count_is_the_real_total_not_the_capped_list()
+    {
+        // Found live: a busy instance reported exactly 1000 outages - the size of the (capped) list.
+        var data = SampleData(branding: null) with { OutagesTotal = 1500 };
+        Assert.Equal(1500, data.OutageCount);
+        Assert.Equal(TimeSpan.FromHours(2), data.LongestOutage);
+        Assert.Contains("Outages: 1500", ReportEmail.Build(data, null).TextBody);
+    }
+
     // --- store + collector --------------------------------------------------------------------------------
 
     [Fact]
@@ -396,6 +435,74 @@ public sealed class ReportTests : IDisposable
             Assert.Equal(1, figures.GetProperty("sensors").GetInt32());
             Assert.Equal(1, figures.GetProperty("outages").GetInt32());
             Assert.True(figures.GetProperty("longestOutageSeconds").GetDouble() > 3000);
+        }
+    }
+
+    /// <summary>A scheduled report through a REAL SMTP server: the PDF and the CSVs as attachments, the logo as an inline
+    /// part the HTML refers to by cid (mail clients block data: pictures). Runs only with MATMON_SMTP_TEST=host:port and
+    /// MATMON_SMTP_API=&lt;Mailpit API base&gt; (e.g. a throwaway axllent/mailpit container).</summary>
+    [Fact]
+    public async Task A_report_mail_goes_out_through_real_smtp_with_its_files_and_an_inline_logo()
+    {
+        var smtp = Environment.GetEnvironmentVariable("MATMON_SMTP_TEST");
+        var api = Environment.GetEnvironmentVariable("MATMON_SMTP_API");
+        if (string.IsNullOrWhiteSpace(smtp) || string.IsNullOrWhiteSpace(api))
+        {
+            return;
+        }
+
+        var (store, telemetry) = Boot();
+        using (telemetry) using (store)
+        {
+            var now = DateTimeOffset.UtcNow;
+            store.RecordSensorObservation(SensorId, SensorExecutionResult.Critical(TimeSpan.FromMilliseconds(5), "Down"), now.AddHours(-2));
+            store.RecordSensorObservation(SensorId, SensorExecutionResult.Healthy(TimeSpan.FromMilliseconds(5), "OK"), now.AddHours(-1));
+            var parts = smtp.Split(':');
+            store.Workspace.NotificationConfiguration.Email = new EmailNotificationSettings
+            {
+                SenderEmail = "matmon@test.example",
+                SmtpHost = parts[0],
+                SmtpPort = int.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+                UseSsl = false
+            };
+
+            var mailer = new ReportMailer(new MailKitEmailSender(), store, NullLogger<ReportMailer>.Instance);
+            var service = new ReportService(new ReportDataCollector(store), new ReportPdfBuilder(), mailer, store, NullLogger<ReportService>.Instance);
+            var subjectMarker = "Report " + Guid.NewGuid().ToString("N")[..8];
+            var result = await service.SendAsync(new ReportDefinition
+            {
+                Name = subjectMarker,
+                TargetToken = HostId.ToString(),
+                Period = ReportPeriod.Last24Hours,
+                Recipients = "customer@test.example",
+                Attachment = ReportAttachment.PdfAndCsv
+            }, default);
+            Assert.True(result.Sent, result.Message);
+
+            using var http = new HttpClient { BaseAddress = new Uri(api!.TrimEnd('/') + "/") };
+            System.Text.Json.JsonElement message = default;
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                using var list = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"api/v1/search?query={Uri.EscapeDataString("subject:\"" + subjectMarker + "\"")}"));
+                var found = list.RootElement.GetProperty("messages").EnumerateArray().FirstOrDefault();
+                if (found.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    using var detail = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"api/v1/message/{found.GetProperty("ID").GetString()}"));
+                    message = detail.RootElement.Clone();
+                    break;
+                }
+
+                await Task.Delay(250);
+            }
+
+            Assert.Equal(System.Text.Json.JsonValueKind.Object, message.ValueKind);
+            var files = message.GetProperty("Attachments").EnumerateArray().Select(file => file.GetProperty("FileName").GetString()).ToArray();
+            Assert.Contains(files, name => name!.EndsWith(".pdf", StringComparison.Ordinal));
+            Assert.Contains(files, name => name!.Contains("sensors", StringComparison.Ordinal));
+            var inline = Assert.Single(message.GetProperty("Inline").EnumerateArray());
+            Assert.Equal("image/png", inline.GetProperty("ContentType").GetString());
+            Assert.Contains($"cid:{ReportService.LogoCid}", message.GetProperty("HTML").GetString());
+            Assert.DoesNotContain("data:image", message.GetProperty("HTML").GetString());
         }
     }
 

@@ -113,6 +113,13 @@ public sealed class ReportMailer(
         }
 
         var url = $"{cloud.Url!.Trim().TrimEnd('/')}/api/instances/{cloud.InstanceId!.Trim()}/notify";
+        // The cloud gateway carries no inline parts: a cid: picture goes into the HTML as a data URI there instead.
+        foreach (var inline in attachments.Where(candidate => !string.IsNullOrWhiteSpace(candidate.ContentId)))
+        {
+            html = html.Replace($"cid:{inline.ContentId}", $"data:{inline.ContentType};base64,{Convert.ToBase64String(inline.Content)}", StringComparison.Ordinal);
+        }
+
+        attachments = attachments.Where(candidate => string.IsNullOrWhiteSpace(candidate.ContentId)).ToArray();
         var first = attachments.FirstOrDefault();
         object? attachment = first is null ? null : new { FileName = first.FileName, ContentType = first.ContentType, Content = first.Content };
         var body = new { Channel = "email", To = to, Subject = subject, Text = text, Html = html, Attachment = attachment };

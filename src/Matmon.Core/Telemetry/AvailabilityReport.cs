@@ -112,7 +112,10 @@ public sealed record AvailabilityReportData
     /// <summary>The managing partner's branding (logo, colours, "Managed by"); null = Matmon's own look.</summary>
     public SummaryReportBranding? Branding { get; init; }
 
-    public int OutageCount => Outages.Count;
+    /// <summary>All outages of the period - the list (<see cref="Outages"/>) is capped, the count is not.</summary>
+    public int? OutagesTotal { get; init; }
+
+    public int OutageCount => OutagesTotal ?? Outages.Count;
 
     public int SensorsBelowTarget => Sensors.Count(row => row.BelowTarget);
 
@@ -120,7 +123,8 @@ public sealed record AvailabilityReportData
     /// (twenty sensors down for the same hour would read as twenty hours).</summary>
     public int SensorsWithOutages => Sensors.Count(row => row.OutageCount > 0);
 
-    public TimeSpan LongestOutage => Outages.Count == 0 ? TimeSpan.Zero : Outages.Max(outage => outage.Duration);
+    /// <summary>The longest outage of any sensor (from the rows - the outage list is capped to the newest).</summary>
+    public TimeSpan LongestOutage => Sensors.Select(row => row.LongestOutage ?? TimeSpan.Zero).Concat(Outages.Select(outage => outage.Duration)).DefaultIfEmpty(TimeSpan.Zero).Max();
 
     public string LocalTime(DateTimeOffset utc, string format = "dd.MM.yyyy HH:mm") =>
         TimeZoneInfo.ConvertTime(utc, Zone).ToString(format, CultureInfo.InvariantCulture);

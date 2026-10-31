@@ -78,9 +78,14 @@ public static class ReportPdfChrome
                     // A fixed box (width AND height), aspect kept - FitHeight alone lets a wide logo overflow and throw.
                     row.ConstantItem(full ? 170 : 110).AlignTop().AlignRight().Height(full ? 46 : 26).Image(logo).FitArea();
                 }
+                else if (branding?.ProductName is { Length: > 0 } product)
+                {
+                    // White label without a logo: the partner's product name - never Matmon's logo on a white-labelled report.
+                    row.ConstantItem(full ? 170 : 110).AlignTop().AlignRight().Text(product).FontSize(full ? 16 : 11).Bold().FontColor(accent);
+                }
                 else if (MatmonLogoSvg is { } matmonLogo)
                 {
-                    // No partner, or a partner without a (raster) logo: the report carries Matmon's own. The SVG draws its
+                    // No partner, or a co-branding partner without a (raster) logo: Matmon's own. The SVG draws its
                     // letters as geometry, so no font is needed; 552 x 104 is its viewBox.
                     var width = full ? 150f : 100f;
                     row.ConstantItem(width).AlignTop().AlignRight().Width(width).Height(width * 104 / 552).Svg(matmonLogo);
@@ -121,6 +126,35 @@ public static class ReportPdfChrome
     /// <summary>The Matmon logo (wwwroot/brand/matmon-logo-horizontal.svg, embedded in the assembly so a PDF built anywhere -
     /// a background job, a test - has it); null when the resource is missing, and the header simply has no logo then.</summary>
     public static string? MatmonLogoSvg { get; } = LoadMatmonLogo();
+
+    /// <summary>The Matmon logo as a PNG for e-mails (mail clients show no SVG): the embedded SVG drawn once by QuestPDF at
+    /// 2x, so there is no second picture file to keep in step with the brand. Null when the SVG is missing.</summary>
+    public static byte[]? MatmonLogoPng => LazyPng.Value;
+
+    private static readonly Lazy<byte[]?> LazyPng = new(() =>
+    {
+        if (MatmonLogoSvg is not { } svg)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Document.Create(container => container.Page(page =>
+                {
+                    page.Size(new PageSize(184, 184f * 104 / 552));
+                    page.Margin(0);
+                    page.PageColor(Colors.White);
+                    page.Content().Svg(svg);
+                }))
+                .GenerateImages(new ImageGenerationSettings { ImageFormat = ImageFormat.Png, RasterDpi = 144 })
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null; // no logo rather than no e-mail
+        }
+    });
 
     private static string? LoadMatmonLogo()
     {

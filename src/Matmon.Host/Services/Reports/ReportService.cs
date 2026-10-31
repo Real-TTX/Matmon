@@ -12,6 +12,9 @@ public sealed class ReportService(
     IMonitoringWorkspaceStore store,
     ILogger<ReportService> logger)
 {
+    /// <summary>The content id of the logo inline part of a report e-mail.</summary>
+    public const string LogoCid = "report-logo@matmon";
+
     public ReportRequest RequestFor(ReportDefinition report, DateTimeOffset nowUtc) => new(
         report.TargetToken ?? string.Empty,
         ReportRules.Resolve(report.Period, nowUtc, store.ReportZone(), report.CustomFromUtc, report.CustomToUtc),
@@ -73,7 +76,14 @@ public sealed class ReportService(
             1 => $"The full report is attached ({attachments[0].FileName}).",
             _ => $"The full report is attached ({string.Join(", ", attachments.Select(attachment => attachment.FileName))})."
         };
-        var mail = ReportEmail.Build(data, note);
+        // The logo travels as an inline part (cid:) - after the files, so the PDF stays the first attachment.
+        var logo = ReportEmail.Logo(data, ReportPdfChrome.MatmonLogoPng);
+        if (logo is { } inline)
+        {
+            attachments.Add(new EmailAttachment(inline.ContentType == "image/png" ? "logo.png" : "logo.jpg", inline.Bytes, inline.ContentType, LogoCid));
+        }
+
+        var mail = ReportEmail.Build(data, note, ReportPdfChrome.MatmonLogoPng, logo is null ? null : LogoCid);
         var result = await mailer.SendAsync(report.SenderId, report.ReceiverId, report.Recipients, mail.Subject, mail.TextBody, mail.HtmlBody, attachments, cancellationToken);
         logger.Log(result.Sent ? LogLevel.Information : LogLevel.Warning, "Report {Report}: {Result}", report.Name, result.Message);
         return result;

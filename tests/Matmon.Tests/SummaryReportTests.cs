@@ -132,7 +132,7 @@ public class SummaryReportBuilderTests
     public void Build_stamps_partner_branding_into_html_and_text()
     {
         var data = Branded(new SummaryReportBranding(
-            "ACME MSP", [0x89, 0x50, 0x4E, 0x47], "image/png", "#AABBCC", "https://acme.example/support",
+            "ACME MSP", [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00], "image/png", "#AABBCC", "https://acme.example/support",
             ProductName: "ACME Monitor", Slogan: "Watch everything."));
 
         var report = SummaryReportBuilder.Build(data);

@@ -5,7 +5,9 @@ using MimeKit;
 
 namespace Matmon.Host.Services;
 
-public sealed record EmailAttachment(string FileName, byte[] Content, string ContentType);
+/// <param name="ContentId">Set = an INLINE picture the HTML shows as <c>cid:&lt;ContentId&gt;</c> (a logo) - mail clients block
+/// <c>data:</c> pictures, so a logo has to travel this way.</param>
+public sealed record EmailAttachment(string FileName, byte[] Content, string ContentType, string? ContentId = null);
 
 public interface INotificationEmailSender
 {
@@ -75,6 +77,13 @@ public sealed class MailKitEmailSender : INotificationEmailSender
         {
             foreach (var attachment in attachments)
             {
+                if (!string.IsNullOrWhiteSpace(attachment.ContentId))
+                {
+                    var inline = builder.LinkedResources.Add(attachment.FileName, attachment.Content, MimeKit.ContentType.Parse(attachment.ContentType));
+                    inline.ContentId = attachment.ContentId;
+                    continue;
+                }
+
                 builder.Attachments.Add(attachment.FileName, attachment.Content, MimeKit.ContentType.Parse(attachment.ContentType));
             }
         }

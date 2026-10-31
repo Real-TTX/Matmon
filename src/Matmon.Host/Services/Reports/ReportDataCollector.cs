@@ -266,6 +266,7 @@ public sealed class ReportDataCollector(IMonitoringWorkspaceStore store)
             MachineCount = rows.Select(row => row.Machine).Where(machine => machine is not null).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             Sensors = rows,
             Outages = orderedOutages,
+            OutagesTotal = outages.Count,
             Alerts = alerts.OrderByDescending(alert => alert.FirstSeenUtc).Take(500).ToArray(),
             Charts = chosenCharts,
             ChartsLeftOut = Math.Max(0, charts.Count - chosenCharts.Length),
