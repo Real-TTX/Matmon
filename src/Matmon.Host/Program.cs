@@ -678,6 +678,22 @@ app.MapGet("/api/branding/logo", (HttpContext http, IMonitoringWorkspaceStore st
     return Results.File(logo.Value.Bytes, logo.Value.ContentType, entityTag: etag);
 }).AllowAnonymous();
 
+// The partner's optional logo for dark mode - the same rules as the logo above (anonymous, magic-byte checked at cache time,
+// nosniff, ETag); 404 when there is none, and the layouts then show the one logo on both themes.
+app.MapGet("/api/branding/logo-dark", (HttpContext http, IMonitoringWorkspaceStore store) =>
+{
+    var logo = store.GetServicePartnerDarkLogo();
+    if (logo is null)
+    {
+        return Results.NotFound();
+    }
+
+    http.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
+        "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(logo.Value.Bytes))[..16] + "\"");
+    return Results.File(logo.Value.Bytes, logo.Value.ContentType, entityTag: etag);
+}).AllowAnonymous();
+
 // An uploaded map picture. Anonymous because the PUBLIC wallboard has to load it, but the id is an opaque
 // GUID and nothing enumerates them. Content type comes from the stored bytes' magic bytes - never from the
 // upload's own claim - plus nosniff, because these are served same-origin.

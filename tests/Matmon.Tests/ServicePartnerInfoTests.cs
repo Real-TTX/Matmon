@@ -61,6 +61,20 @@ public class ServicePartnerInfoTests
     }
 
     [Fact]
+    public void The_dark_mode_logo_is_cloned_and_compared()
+    {
+        var original = Sample();
+        original.LogoDarkPng = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 7];
+        original.LogoDarkContentType = "image/png";
+        var clone = original.Clone();
+        Assert.True(original.ValueEquals(clone));
+
+        clone.LogoDarkPng![8] = 8; // a changed dark logo must persist and reach the pages
+        Assert.False(original.ValueEquals(clone));
+        Assert.Equal(7, original.LogoDarkPng[8]);
+    }
+
+    [Fact]
     public void Clone_deep_copies_the_small_logo_bytes()
     {
         var original = Sample();

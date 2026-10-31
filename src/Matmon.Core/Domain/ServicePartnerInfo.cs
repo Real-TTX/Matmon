@@ -37,6 +37,12 @@ public sealed class ServicePartnerInfo
     /// <summary>MIME type of <see cref="LogoPng"/> (image/png or image/jpeg) so the data: URI declares the truth.</summary>
     public string? LogoContentType { get; set; }
 
+    /// <summary>Optional logo for a DARK background (the partner's light lockup), shown where the instance is in dark mode;
+    /// null = the one logo stands on both. Reports and e-mails are white and keep <see cref="LogoPng"/>.</summary>
+    public byte[]? LogoDarkPng { get; set; }
+
+    public string? LogoDarkContentType { get; set; }
+
     // --- White-label extras (v2) ---
     /// <summary>Slogan/tagline shown beneath the product name (sidebar, login, reports). White-label only.</summary>
     public string? Slogan { get; set; }
@@ -66,6 +72,8 @@ public sealed class ServicePartnerInfo
         BrandColor = BrandColor,
         LogoPng = LogoPng is null ? null : (byte[])LogoPng.Clone(),
         LogoContentType = LogoContentType,
+        LogoDarkPng = LogoDarkPng is null ? null : (byte[])LogoDarkPng.Clone(),
+        LogoDarkContentType = LogoDarkContentType,
         Slogan = Slogan,
         BrandColorSecondary = BrandColorSecondary,
         SmallLogoPng = SmallLogoPng is null ? null : (byte[])SmallLogoPng.Clone(),
@@ -89,6 +97,8 @@ public sealed class ServicePartnerInfo
         && string.Equals(BrandColorSecondary, other.BrandColorSecondary, StringComparison.Ordinal)
         && string.Equals(LogoContentType, other.LogoContentType, StringComparison.Ordinal)
         && string.Equals(SmallLogoContentType, other.SmallLogoContentType, StringComparison.Ordinal)
+        && string.Equals(LogoDarkContentType, other.LogoDarkContentType, StringComparison.Ordinal)
+        && LogosEqual(LogoDarkPng, other.LogoDarkPng)
         && LogosEqual(LogoPng, other.LogoPng)
         && LogosEqual(SmallLogoPng, other.SmallLogoPng);
 

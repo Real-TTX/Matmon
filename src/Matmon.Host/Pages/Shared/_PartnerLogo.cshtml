@@ -1,0 +1,19 @@
+@model (string CssClass, string Alt, bool Wrap)
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
+@*
+    The managing partner's logo, from the cached endpoints. With a logo for dark mode the theme shows one of two pictures
+    (MatUi's mat-brandmark--light / --dark, IDENT-08); without one the logo stands on both. Wrap = put the theme classes on
+    a wrapper: a class like mm-auth-logo sets its own display, which would beat the theme rule on the picture itself.
+*@
+@if (!WorkspaceStore.GetServicePartnerHasDarkLogo())
+{
+    <img class="@Model.CssClass" src="/api/branding/logo" alt="@Model.Alt" />
+}
+else if (Model.Wrap)
+{
+    <span class="mat-brandmark--light"><img class="@Model.CssClass" src="/api/branding/logo" alt="@Model.Alt" /></span><span class="mat-brandmark--dark"><img class="@Model.CssClass" src="/api/branding/logo-dark" alt="@Model.Alt" /></span>
+}
+else
+{
+    <img class="@Model.CssClass mat-brandmark--light" src="/api/branding/logo" alt="@Model.Alt" /><img class="@Model.CssClass mat-brandmark--dark" src="/api/branding/logo-dark" alt="@Model.Alt" />
+}

@@ -17,7 +17,7 @@
     <div class="mat-auth__brand">
         @if (partnerHasLogo)
         {
-            <img class="mm-auth-logo" src="/api/branding/logo" alt="" />
+            <partial name="_PartnerLogo" model="@(("mm-auth-logo", "", true))" />
         }
         else if (partnerProductName is null)
         {

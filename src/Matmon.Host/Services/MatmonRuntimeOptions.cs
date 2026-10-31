@@ -80,6 +80,9 @@ public sealed class MatmonRuntimeOptions : Matmon.Probe.ProbeRuntimeOptions
     public string? DemoServicePartnerSecondaryColor { get; set; }
     /// <summary>Path to a small square PNG/JPEG for the demo favicon + mobile header.</summary>
     public string? DemoServicePartnerSmallLogoPath { get; set; }
+
+    /// <summary>Optional PNG/JPEG for the demo partner's logo in dark mode (dev/preview only).</summary>
+    public string? DemoServicePartnerLogoDarkPath { get; set; }
     /// <summary>Demo sidebar style: 0 = logo top / name below, 1 = logo left / name right.</summary>
     public int DemoServicePartnerSidebarStyle { get; set; }
 

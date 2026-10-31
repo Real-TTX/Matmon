@@ -556,6 +556,12 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The partner logo bytes + MIME for the branding-logo endpoint, or null when suppressed / none.</summary>
     (byte[] Bytes, string ContentType)? GetServicePartnerLogo();
 
+    /// <summary>Whether the partner has its own logo for dark mode.</summary>
+    bool GetServicePartnerHasDarkLogo();
+
+    /// <summary>The partner's dark-mode logo; null when none or branding is suppressed.</summary>
+    (byte[] Bytes, string ContentType)? GetServicePartnerDarkLogo();
+
     /// <summary>Caches the cloud-reported service partner.</summary>
     void SetServicePartnerInfo(ServicePartnerInfo? info);
 

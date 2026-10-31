@@ -2072,6 +2072,26 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>Whether the partner has its own logo for dark mode (no clone) - the layouts then show one of two pictures by theme.</summary>
+    public bool GetServicePartnerHasDarkLogo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, LogoPng.Length: > 0, LogoDarkPng.Length: > 0 };
+        }
+    }
+
+    /// <summary>The partner's dark-mode logo (cloned) for its endpoint; null when there is none or branding is suppressed.</summary>
+    public (byte[] Bytes, string ContentType)? GetServicePartnerDarkLogo()
+    {
+        lock (_gate)
+        {
+            return _document.ServicePartner is { HasPartner: true, BrandingSuppressed: false, LogoPng.Length: > 0, LogoDarkPng: { Length: > 0 } logo } partner
+                ? ((byte[])logo.Clone(), string.IsNullOrWhiteSpace(partner.LogoDarkContentType) ? "image/png" : partner.LogoDarkContentType)
+                : null;
+        }
+    }
+
     /// <summary>Caches the cloud-reported service partner. Only saves on change.</summary>
     public void SetServicePartnerInfo(ServicePartnerInfo? info)
     {

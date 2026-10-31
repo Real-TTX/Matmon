@@ -17,6 +17,7 @@ internal static class DemoServicePartnerSeed
         var contactUrl = Trim(options.DemoServicePartnerContactUrl) ?? "https://acme-msp.example/support";
         var (logo, logoType) = ResolveLogo(options.DemoServicePartnerLogoPath);
         var (smallLogo, smallLogoType) = ResolveOptionalLogo(options.DemoServicePartnerSmallLogoPath);
+        var (logoDark, logoDarkType) = ResolveOptionalLogo(options.DemoServicePartnerLogoDarkPath);
 
         return new ServicePartnerInfo
         {
@@ -36,6 +37,8 @@ internal static class DemoServicePartnerSeed
             LogoPng = logo,
             SmallLogoPng = smallLogo,
             SmallLogoContentType = smallLogoType,
+            LogoDarkPng = logoDark,
+            LogoDarkContentType = logoDarkType,
         };
     }
 

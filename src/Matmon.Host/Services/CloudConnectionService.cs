@@ -465,6 +465,8 @@ public sealed class CloudConnectionService : BackgroundService
             var logoType = BrandingSafety.DetectRasterContentType(logoBytes);
             var smallLogoBytes = DecodeBase64(payload.SmallLogoBase64);
             var smallLogoType = BrandingSafety.DetectRasterContentType(smallLogoBytes);
+            var logoDarkBytes = logoType is null ? null : DecodeBase64(payload.LogoDarkBase64);
+            var logoDarkType = BrandingSafety.DetectRasterContentType(logoDarkBytes);
 
             _workspaceStore.SetServicePartnerInfo(payload.HasPartner
                 ? new ServicePartnerInfo
@@ -485,6 +487,8 @@ public sealed class CloudConnectionService : BackgroundService
                     LogoContentType = logoType,
                     SmallLogoPng = smallLogoType is null ? null : smallLogoBytes,
                     SmallLogoContentType = smallLogoType,
+                    LogoDarkPng = logoDarkType is null ? null : logoDarkBytes,
+                    LogoDarkContentType = logoDarkType,
                 }
                 : null);
 
@@ -527,7 +531,9 @@ public sealed class CloudConnectionService : BackgroundService
         string? Slogan = null,
         int SidebarStyle = 0,
         string? SmallLogoContentType = null,
-        string? SmallLogoBase64 = null);
+        string? SmallLogoBase64 = null,
+        string? LogoDarkContentType = null,
+        string? LogoDarkBase64 = null);
 
     /// <summary>Persists the last outcome. When <paramref name="force"/> is false, skips redundant writes.</summary>
     private void RecordStatus(string? baseUrl, Guid? instanceId, string status, bool heartbeatOk, bool force)

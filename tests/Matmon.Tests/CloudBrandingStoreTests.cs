@@ -113,6 +113,32 @@ public sealed class CloudBrandingStoreTests : IDisposable
     }
 
     [Fact]
+    public void The_dark_mode_logo_is_served_only_with_a_logo_and_unsuppressed_branding()
+    {
+        using var telemetry = new SqliteTelemetryRepository(_dbPath);
+        using var store = NewStore(telemetry);
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1];
+
+        var partner = Partner();
+        partner.LogoPng = png;
+        partner.LogoContentType = "image/png";
+        store.SetServicePartnerInfo(partner);
+        Assert.False(store.GetServicePartnerHasDarkLogo()); // none: the one logo stands on both themes
+        Assert.Null(store.GetServicePartnerDarkLogo());
+
+        partner.LogoDarkPng = [.. png, 2];
+        partner.LogoDarkContentType = "image/png";
+        store.SetServicePartnerInfo(partner);
+        Assert.True(store.GetServicePartnerHasDarkLogo());
+        Assert.Equal(10, store.GetServicePartnerDarkLogo()!.Value.Bytes.Length);
+
+        partner.BrandingSuppressed = true; // the customer opted out: no picture at all
+        store.SetServicePartnerInfo(partner);
+        Assert.False(store.GetServicePartnerHasDarkLogo());
+        Assert.Null(store.GetServicePartnerDarkLogo());
+    }
+
+    [Fact]
     public void GetServicePartnerProductName_reflects_white_label_and_suppression()
     {
         using var telemetry = new SqliteTelemetryRepository(_dbPath);

@@ -77,7 +77,7 @@
                     <a asp-page="/Index" aria-label="@shell.BrandName, start page" class="@brandClass">
                         @if (shell.PartnerLogo)
                         {
-                            <img class="mat-brandmark" src="/api/branding/logo" alt="@shell.BrandName" />
+                            <partial name="_PartnerLogo" model="@(("mat-brandmark", shell.BrandName, false))" />
                         }
                         else if (matmonBrand)
                         {
