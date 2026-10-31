@@ -349,6 +349,56 @@ public sealed class ReportTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task A_partner_report_request_from_the_cloud_is_made_and_uploaded_with_its_figures()
+    {
+        var (store, telemetry) = Boot();
+        using (telemetry) using (store)
+        {
+            var now = DateTimeOffset.UtcNow;
+            store.RecordSensorObservation(SensorId, SensorExecutionResult.Critical(TimeSpan.FromMilliseconds(5), "Down"), now.AddHours(-2));
+            store.RecordSensorObservation(SensorId, SensorExecutionResult.Healthy(TimeSpan.FromMilliseconds(5), "OK"), now.AddHours(-1));
+
+            // A stand-in for Matmon.Cloud's upload endpoint.
+            var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            probe.Start();
+            var port = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            using var listener = new System.Net.HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            listener.Start();
+            var partId = Guid.NewGuid();
+            var received = Task.Run(async () =>
+            {
+                var context = await listener.GetContextAsync();
+                using var reader = new StreamReader(context.Request.InputStream);
+                var body = await reader.ReadToEndAsync();
+                var answer = (context.Request.Url!.AbsolutePath, context.Request.Headers["X-Matmon-Instance-Token"], body);
+                context.Response.StatusCode = 204;
+                context.Response.Close();
+                return answer;
+            });
+
+            var collector = new ReportDataCollector(store);
+            var service = new ReportService(collector, new ReportPdfBuilder(), null!, store, NullLogger<ReportService>.Instance);
+            var relay = new CloudReportRelay(service, store, NullLogger<CloudReportRelay>.Instance);
+            var request = new CloudReportRequest(partId, now.AddDays(-1), now, "Last 24 hours", "Availability report - HQ", "Customer Co", null, (int)ReportSections.All, 99.9);
+            relay.Handle([request], $"http://127.0.0.1:{port}", "instance-1", "secret-token");
+            relay.Handle([request], $"http://127.0.0.1:{port}", "instance-1", "secret-token"); // the same request twice = made once
+
+            var (path, token, json) = await received.WaitAsync(TimeSpan.FromSeconds(30));
+            Assert.Equal($"/api/instances/instance-1/reports/{partId}", path);
+            Assert.Equal("secret-token", token);
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            var pdf = Convert.FromBase64String(document.RootElement.GetProperty("pdf").GetString()!);
+            Assert.Equal("%PDF", Encoding.ASCII.GetString(pdf, 0, 4));
+            var figures = document.RootElement.GetProperty("figures");
+            Assert.Equal(1, figures.GetProperty("sensors").GetInt32());
+            Assert.Equal(1, figures.GetProperty("outages").GetInt32());
+            Assert.True(figures.GetProperty("longestOutageSeconds").GetDouble() > 3000);
+        }
+    }
+
     // --- helpers ------------------------------------------------------------------------------------------
 
     private static ReportDefinition Scheduled(ReportSchedule schedule, DateTimeOffset created) => new()

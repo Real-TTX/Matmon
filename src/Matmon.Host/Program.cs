@@ -230,6 +230,7 @@ builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportMailer>();
 builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportDataCollector>();
 builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportPdfBuilder>();
 builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportService>();
+builder.Services.AddSingleton<Matmon.Host.Services.Reports.CloudReportRelay>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());

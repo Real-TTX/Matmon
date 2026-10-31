@@ -22,6 +22,7 @@ public sealed class CloudConnectionService : BackgroundService
     private readonly CloudUpdateState _updateState;
     private readonly SelfUpdate.SelfUpdateService _selfUpdate;
     private readonly CloudProbeRelay _probes;
+    private readonly Reports.CloudReportRelay _reports;
     private readonly ILogger<CloudConnectionService> _logger;
 
     private string? _lastStatus;
@@ -32,6 +33,7 @@ public sealed class CloudConnectionService : BackgroundService
         CloudUpdateState updateState,
         SelfUpdate.SelfUpdateService selfUpdate,
         CloudProbeRelay probes,
+        Reports.CloudReportRelay reports,
         ILogger<CloudConnectionService> logger)
     {
         _workspaceStore = workspaceStore;
@@ -39,6 +41,7 @@ public sealed class CloudConnectionService : BackgroundService
         _updateState = updateState;
         _selfUpdate = selfUpdate;
         _probes = probes;
+        _reports = reports;
         _logger = logger;
     }
 
@@ -311,6 +314,9 @@ public sealed class CloudConnectionService : BackgroundService
 
             // Probe updates asked for in the cloud: queued here like the Probes page's Update, answered with the next beat.
             _probes.Handle(body?.UpdateProbes);
+
+            // Partner availability reports: this instance makes its part (in the partner's branding) and uploads it.
+            _reports.Handle(body?.BuildReports, baseUrl, instanceId.ToString(), token);
         }
         catch (OperationCanceledException) { throw; }
         catch { /* older cloud without the fields, or a non-JSON body - ignore */ }
@@ -332,7 +338,8 @@ public sealed class CloudConnectionService : BackgroundService
         string? LatestVersion,
         bool UpdateAvailable,
         InstallCommand? InstallUpdate = null,
-        IReadOnlyList<CloudProbeCommand>? UpdateProbes = null);
+        IReadOnlyList<CloudProbeCommand>? UpdateProbes = null,
+        IReadOnlyList<Reports.CloudReportRequest>? BuildReports = null);
 
     /// <summary>"Install the update", sent by the cloud with a heartbeat answer (owner, partner or platform admin).</summary>
     private sealed record InstallCommand(Guid Id, string? RequestedBy, string? Via);
