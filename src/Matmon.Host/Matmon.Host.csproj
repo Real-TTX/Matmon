@@ -29,6 +29,8 @@
   <ItemGroup>
     <!-- The standard MIBs (IETF + Net-SNMP, see mibs/README.md) ship next to the binaries; uploads go to data/mibs. -->
     <None Include="mibs\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The Matmon logo for the PDFs whose partner has no logo (the file stays in wwwroot for the pages too). -->
+    <EmbeddedResource Include="wwwroot\brand\matmon-logo-horizontal.svg" LogicalName="Matmon.Brand.LogoHorizontal.svg" />
   </ItemGroup>
 
   <ItemGroup>

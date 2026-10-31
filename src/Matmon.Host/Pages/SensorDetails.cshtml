@@ -157,6 +157,7 @@
     <button type="submit" form="sensor-actions" asp-page-handler="RunNow" asp-route-window="@Model.Window" asp-route-sensorId="@view.SensorId" class="mat-btn mat-btn--primary">@MatUi.Icon("refresh")<span>Run now</span></button>
     <button type="submit" form="sensor-actions" asp-page-handler="ToggleSensorPause" asp-route-window="@Model.Window" asp-route-sensorId="@view.SensorId" class="mat-btn mat-btn--secondary">@MatUi.Icon(view.IsPaused ? "play" : "pause")<span>@(view.IsPaused ? "Resume" : "Pause")</span></button>
     <a class="mat-btn mat-btn--secondary" asp-page="/ElementEditor" asp-route-selectedId="@view.SensorId" asp-route-returnUrl="@Model.CurrentUrl">@MatUi.Icon("edit")<span>Edit</span></a>
+    <a class="mat-btn mat-btn--ghost" asp-page="/Reports" asp-route-target="@view.SensorId" data-tip="An availability report on this sensor">@MatUi.Icon("file-text")<span>Report</span></a>
     @if (Model.SyslogLogRoute is { } syslogRoute)
     {
         <a class="mat-btn mat-btn--ghost" asp-page="/Events" asp-all-route-data="@syslogRoute" asp-fragment="syslog" data-tip="The messages this sensor counts">@MatUi.Icon("list")<span>Log</span></a>
@@ -703,6 +704,8 @@
                 <span class="mat-toolbar__spacer"></span>
                 <span class="mat-toolbar__info" aria-live="polite">@MonitoringDisplay.FormatCount(checks.Matching) check@(checks.Matching == 1 ? string.Empty : "s")@(checks.Filter is null ? string.Empty : $" of {MonitoringDisplay.FormatCount(checks.Total)}") · kept @checks.RetentionDays day@(checks.RetentionDays == 1 ? string.Empty : "s")</span>
                 <div class="mat-toolbar__end">
+                    <a class="mat-btn mat-btn--ghost mat-toolbar__btn" href="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}?handler=ExportHistory&list=checks&format=csv&checks={checks.Filter}")" data-tip="This list, with its filter, as CSV">@MatUi.Icon("download")<span>CSV</span></a>
+                    <a class="mat-btn mat-btn--ghost mat-toolbar__btn" href="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}?handler=ExportHistory&list=checks&format=pdf&checks={checks.Filter}")" data-tip="This list, with its filter, as PDF">@MatUi.Icon("file-text")<span>PDF</span></a>
                     <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn @(checks.Filter is null ? null : "is-active")" data-dialog-open="checks-filter" aria-haspopup="dialog">
                         @MatUi.Icon("sliders")<span>Filter</span>
                         @if (checks.Filter is not null)
@@ -825,6 +828,8 @@
                 <span class="mat-toolbar__spacer"></span>
                 <span class="mat-toolbar__info" aria-live="polite">@MonitoringDisplay.FormatCount(status.Matching) entr@(status.Matching == 1 ? "y" : "ies")@(status.Filter is null ? string.Empty : $" of {MonitoringDisplay.FormatCount(status.Total)}") · kept @status.RetentionDays days</span>
                 <div class="mat-toolbar__end">
+                    <a class="mat-btn mat-btn--ghost mat-toolbar__btn" href="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}?handler=ExportHistory&list=status&format=csv&status={status.Filter}")" data-tip="This list, with its filter, as CSV">@MatUi.Icon("download")<span>CSV</span></a>
+                    <a class="mat-btn mat-btn--ghost mat-toolbar__btn" href="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}?handler=ExportHistory&list=status&format=pdf&status={status.Filter}")" data-tip="This list, with its filter, as PDF">@MatUi.Icon("file-text")<span>PDF</span></a>
                     <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn @(status.Filter is null ? null : "is-active")" data-dialog-open="status-filter" aria-haspopup="dialog">
                         @MatUi.Icon("sliders")<span>Filter</span>
                         @if (status.Filter is not null)
@@ -962,6 +967,8 @@
                 <span class="mat-toolbar__spacer"></span>
                 <span class="mat-toolbar__info" aria-live="polite">@MonitoringDisplay.FormatCount(alertList.Matching) alert@(alertList.Matching == 1 ? string.Empty : "s")@(alertList.Filter is null ? string.Empty : $" of {MonitoringDisplay.FormatCount(alertList.Total)}")</span>
                 <div class="mat-toolbar__end">
+                    <a class="mat-btn mat-btn--ghost mat-toolbar__btn" href="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}?handler=ExportHistory&list=alerts&format=csv&alerts={alertList.Filter}")" data-tip="This list, with its filter, as CSV">@MatUi.Icon("download")<span>CSV</span></a>
+                    <a class="mat-btn mat-btn--ghost mat-toolbar__btn" href="@($"{Request.PathBase}/monitoring/sensor/{view.SensorId}?handler=ExportHistory&list=alerts&format=pdf&alerts={alertList.Filter}")" data-tip="This list, with its filter, as PDF">@MatUi.Icon("file-text")<span>PDF</span></a>
                     <button type="button" class="mat-btn mat-btn--ghost mat-toolbar__btn @(alertList.Filter is null ? null : "is-active")" data-dialog-open="alerts-filter" aria-haspopup="dialog">
                         @MatUi.Icon("sliders")<span>Filter</span>
                         @if (alertList.Filter is not null)

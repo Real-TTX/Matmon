@@ -5094,6 +5094,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         /// <summary>Maintenance windows - alerting configuration, carried with the Notifications backup section.</summary>
         public List<MaintenanceWindow> MaintenanceWindows { get; set; } = [];
 
+        /// <summary>Saved reports (Reports) - like the summary report, carried with the Notifications backup section.</summary>
+        public List<ReportDefinition> Reports { get; set; } = [];
+
         /// <summary>The browsers users switched notifications on in (Web Push subscriptions). Instance-bound: never in a backup.</summary>
         public List<PushDevice> PushDevices { get; set; } = [];
 

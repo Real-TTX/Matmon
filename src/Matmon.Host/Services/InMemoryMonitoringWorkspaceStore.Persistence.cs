@@ -92,6 +92,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.Alerts ??= [];
         document.AlertMutes ??= [];
         document.MaintenanceWindows ??= [];
+        document.Reports ??= [];
         document.PushDevices ??= [];
         document.AgentEnrollments ??= [];
         document.ApiTokens ??= [];

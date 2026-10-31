@@ -165,6 +165,7 @@ public sealed class InstanceShellBuilder(
                     new("Sensors", "/Monitoring", "activity", sensorsActive),
                     new("Maps", "/Maps", "globe", Starts("/maps")),
                     new("Events", "/Events", "list", Starts("/events")),
+                    new("Reports", "/Reports", "file-text", Starts("/reports")),
                     new("Probes", "/Probes", "server", probesActive),
                     new("Discovery", "/Discovery", "compass", Starts("/discovery")),
                     new("Templates", "/Templates", "template", templatesActive),
@@ -194,6 +195,7 @@ public sealed class InstanceShellBuilder(
                 embedNav.Add(new { label = "Sensors", path = "Monitoring", active = sensorsActive });
                 embedNav.Add(new { label = "Maps", path = "Maps", active = Starts("/maps") });
                 embedNav.Add(new { label = "Events", path = "Events", active = Starts("/events") });
+                embedNav.Add(new { label = "Reports", path = "Reports", active = Starts("/reports") });
                 embedNav.Add(new { label = "Probes", path = "Probes", active = probesActive });
                 embedNav.Add(new { label = "Discovery", path = "Discovery", active = Starts("/discovery") });
                 embedNav.Add(new { label = "Templates", path = "Templates", active = templatesActive });

@@ -91,10 +91,7 @@ public sealed class SummaryReportDataCollector
                 monitoringEvent.Message))
             .ToArray();
 
-        var partner = _workspaceStore.GetServicePartnerInfo();
-        var branding = partner is { HasPartner: true, BrandingSuppressed: false }
-            ? new SummaryReportBranding(partner.Name, partner.LogoPng, partner.LogoContentType, partner.BrandColor, partner.ContactUrl, partner.ProductName, partner.Slogan, partner.BrandColorSecondary)
-            : null;
+        var branding = Reports.ReportDataCollector.Branding(_workspaceStore);
 
         return new SummaryReportData(
             workspaceName,
@@ -154,28 +151,26 @@ public sealed class SummaryReportDataCollector
     }
 }
 
-/// <summary>Builds and sends the summary report. Reusable by the scheduler and an on-demand "send now".</summary>
+/// <summary>Builds and sends the summary report. Reusable by the scheduler and an on-demand "send now"; the delivery
+/// (sender, receiver, SMTP or the cloud gateway) is the shared <see cref="Reports.ReportMailer"/>.</summary>
 public sealed class SummaryReportSender
 {
     private const int PdfSensorLines = 200;
 
     private readonly SummaryReportDataCollector _collector;
-    private readonly INotificationEmailSender _emailSender;
     private readonly AuditReportPdfBuilder _pdfBuilder;
-    private readonly IMonitoringWorkspaceStore _workspaceStore;
+    private readonly Reports.ReportMailer _mailer;
     private readonly ILogger<SummaryReportSender> _logger;
 
     public SummaryReportSender(
         SummaryReportDataCollector collector,
-        INotificationEmailSender emailSender,
         AuditReportPdfBuilder pdfBuilder,
-        IMonitoringWorkspaceStore workspaceStore,
+        Reports.ReportMailer mailer,
         ILogger<SummaryReportSender> logger)
     {
         _collector = collector;
-        _emailSender = emailSender;
         _pdfBuilder = pdfBuilder;
-        _workspaceStore = workspaceStore;
+        _mailer = mailer;
         _logger = logger;
     }
 
@@ -183,108 +178,27 @@ public sealed class SummaryReportSender
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var recipients = ResolveRecipients(settings);
-        if (string.IsNullOrWhiteSpace(recipients))
-        {
-            _logger.LogWarning("Summary report not sent: no recipients configured");
-            return false;
-        }
-
-        // A chosen "Cloud" sender routes the report through the cloud gateway instead of local SMTP - so an
-        // instance with no SMTP but a connected cloud link can still e-mail its summary + PDF.
-        var chosenSender = settings.SenderId is { } senderId
-            ? _workspaceStore.Workspace.NotificationSenders.FirstOrDefault(s => s.Id == senderId)
-            : null;
-        var viaCloud = chosenSender is { Kind: NotificationEndpointKind.Cloud };
-
         var now = DateTimeOffset.UtcNow;
         var window = WindowFor(settings.Cadence);
         var report = SummaryReportBuilder.Build(_collector.Collect(now, window));
         var subject = string.IsNullOrWhiteSpace(settings.Subject) ? report.Subject : settings.Subject;
 
-        // Collect a fuller sensor list for the PDF than the (short) e-mail body.
-        var pdf = settings.AttachPdf ? _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines)) : null;
+        // A fuller sensor list for the PDF than the (short) e-mail body.
+        IReadOnlyList<EmailAttachment> attachments = settings.AttachPdf
+            ? [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", _pdfBuilder.Build(_collector.Collect(now, window, PdfSensorLines)), "application/pdf")]
+            : [];
 
-        if (viaCloud)
+        var result = await _mailer.SendAsync(settings.SenderId, settings.ReceiverId, settings.Recipients, subject, report.TextBody, report.HtmlBody, attachments, cancellationToken);
+        if (result.Sent)
         {
-            return await SendViaCloudAsync(recipients, subject, report.TextBody, report.HtmlBody, pdf, now, cancellationToken);
+            _logger.LogInformation("Summary report: {Result}", result.Message);
+        }
+        else
+        {
+            _logger.LogWarning("Summary report: {Result}", result.Message);
         }
 
-        var smtp = ResolveSmtp(settings);
-        if (smtp is null)
-        {
-            _logger.LogWarning("Summary report not sent: no SMTP sender configured");
-            return false;
-        }
-
-        IReadOnlyList<EmailAttachment>? attachments = pdf is null
-            ? null
-            : [new EmailAttachment($"matmon-audit-{now:yyyyMMdd}.pdf", pdf, "application/pdf")];
-
-        await _emailSender.SendAsync(smtp, recipients, subject, report.TextBody, report.HtmlBody, cancellationToken, attachments);
-        _logger.LogInformation("Summary report sent to {Recipients}", recipients);
-        return true;
-    }
-
-    private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
-
-    /// <summary>Relay the summary report (subject/body + optional PDF) through the connected Matmon.Cloud gateway
-    /// (POST /api/instances/{id}/notify, instance-token auth) - the cloud spools + retries it like every cloud mail.</summary>
-    private async Task<bool> SendViaCloudAsync(string recipients, string subject, string? text, string? html, byte[]? pdf, DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var cloud = _workspaceStore.GetCloudConnectionSettings();
-        if (!cloud.Configured || string.IsNullOrWhiteSpace(cloud.Url) || string.IsNullOrWhiteSpace(cloud.InstanceId))
-        {
-            _logger.LogWarning("Summary report not sent: Cloud sender chosen but the cloud link isn't configured.");
-            return false;
-        }
-        var token = _workspaceStore.GetCloudConnectionToken();
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            _logger.LogWarning("Summary report not sent: Cloud sender chosen but no cloud token is stored.");
-            return false;
-        }
-
-        var url = $"{cloud.Url!.Trim().TrimEnd('/')}/api/instances/{cloud.InstanceId!.Trim()}/notify";
-        object? attachment = pdf is null
-            ? null
-            : new { FileName = $"matmon-audit-{now:yyyyMMdd}.pdf", ContentType = "application/pdf", Content = pdf };
-        var body = new { Channel = "email", To = recipients, Subject = subject, Text = text, Html = html, Attachment = attachment };
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body) };
-            request.Headers.TryAddWithoutValidation("X-Matmon-Instance-Token", token);
-            using var response = await CloudHttp.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            _logger.LogInformation("Summary report relayed to Matmon.Cloud -> {Recipients}", recipients);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Summary report relay to Matmon.Cloud failed");
-            return false;
-        }
-    }
-
-    /// <summary>Recipient(s): the chosen receiver's target, else the free-text recipients list.</summary>
-    private string ResolveRecipients(SummaryReportSettings settings)
-    {
-        if (settings.ReceiverId is { } receiverId)
-        {
-            if (NotificationReceiverDefaults.IsBuiltIn(receiverId))
-            {
-                return _workspaceStore.ResolveBuiltInRecipients(receiverId);
-            }
-
-            var receiver = _workspaceStore.Workspace.NotificationReceivers.FirstOrDefault(r => r.Id == receiverId);
-            if (receiver is not null && !string.IsNullOrWhiteSpace(receiver.Target))
-            {
-                return receiver.Target;
-            }
-        }
-
-        return settings.Recipients;
+        return result.Sent;
     }
 
     /// <summary>Renders the report for an on-screen preview (subject + HTML body), sending nothing - so the admin
@@ -304,51 +218,29 @@ public sealed class SummaryReportSender
 
     private static TimeSpan WindowFor(SummaryReportCadence cadence) =>
         cadence == SummaryReportCadence.Weekly ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
-
-    private EmailNotificationSettings? ResolveSmtp(SummaryReportSettings settings)
-    {
-        var workspace = _workspaceStore.Workspace;
-
-        // A chosen sender wins (lets the user pick a specific SMTP endpoint, like a trigger rule does).
-        if (settings.SenderId is { } senderId)
-        {
-            var chosen = workspace.NotificationSenders.FirstOrDefault(s => s.Id == senderId);
-            if (chosen is not null && chosen.Kind == NotificationEndpointKind.Email && !string.IsNullOrWhiteSpace(chosen.Email.SmtpHost))
-            {
-                return chosen.Email;
-            }
-        }
-
-        var configured = workspace.NotificationConfiguration.Email;
-        if (!string.IsNullOrWhiteSpace(configured.SmtpHost))
-        {
-            return configured;
-        }
-
-        var sender = workspace.NotificationSenders.FirstOrDefault(candidate =>
-            candidate.Enabled && candidate.Kind == NotificationEndpointKind.Email && !string.IsNullOrWhiteSpace(candidate.Email.SmtpHost));
-        return sender?.Email;
-    }
 }
 
-/// <summary>Primary-only scheduler: sends the summary report when a scheduled slot has passed.</summary>
+/// <summary>Primary-only scheduler: sends the summary report and every saved report whose scheduled slot has passed.</summary>
 public sealed class ReportSchedulerService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(1);
 
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly SummaryReportSender _sender;
+    private readonly Reports.ReportService _reports;
     private readonly MatmonRuntimeOptions _runtimeOptions;
     private readonly ILogger<ReportSchedulerService> _logger;
 
     public ReportSchedulerService(
         IMonitoringWorkspaceStore workspaceStore,
         SummaryReportSender sender,
+        Reports.ReportService reports,
         MatmonRuntimeOptions runtimeOptions,
         ILogger<ReportSchedulerService> logger)
     {
         _workspaceStore = workspaceStore;
         _sender = sender;
+        _reports = reports;
         _runtimeOptions = runtimeOptions;
         _logger = logger;
     }
@@ -366,19 +258,11 @@ public sealed class ReportSchedulerService : BackgroundService
             try
             {
                 var settings = _workspaceStore.GetSummaryReportSettings();
-                if (!SummaryReportSchedule.IsDue(settings, DateTimeOffset.Now))
+                if (SummaryReportSchedule.IsDue(settings, DateTimeOffset.Now))
                 {
-                    continue;
-                }
-
-                if (await _sender.SendAsync(settings, stoppingToken))
-                {
-                    _workspaceStore.MarkSummaryReportSent(DateTimeOffset.UtcNow);
-                }
-                else
-                {
-                    // Mark anyway so a misconfigured report doesn't retry every minute; a fix + the next
-                    // slot will pick it back up.
+                    // Marked whatever the outcome, so a misconfigured report doesn't retry every minute; a fix + the
+                    // next slot pick it back up.
+                    await _sender.SendAsync(settings, stoppingToken);
                     _workspaceStore.MarkSummaryReportSent(DateTimeOffset.UtcNow);
                 }
             }
@@ -390,6 +274,35 @@ public sealed class ReportSchedulerService : BackgroundService
             {
                 // Includes a network-send timeout (TaskCanceledException) - log + keep the scheduler alive.
                 _logger.LogError(ex, "Summary report scheduler tick failed");
+            }
+
+            await SendSavedReportsAsync(stoppingToken);
+        }
+    }
+
+    private async Task SendSavedReportsAsync(CancellationToken stoppingToken)
+    {
+        var zone = _workspaceStore.ReportZone();
+        foreach (var report in _workspaceStore.GetReports())
+        {
+            if (stoppingToken.IsCancellationRequested || !Matmon.Core.Domain.ReportRules.IsDue(report, DateTimeOffset.UtcNow, zone))
+            {
+                continue;
+            }
+
+            try
+            {
+                var result = await _reports.SendAsync(report, stoppingToken);
+                _workspaceStore.MarkReportSent(report.Id, DateTimeOffset.UtcNow, !result.Sent, result.Message);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Scheduled report {Report} failed", report.Name);
+                _workspaceStore.MarkReportSent(report.Id, DateTimeOffset.UtcNow, true, $"Not sent: {ex.Message}");
             }
         }
     }

@@ -1,0 +1,301 @@
+@page "/reports"
+@model Matmon.Host.Pages.ReportsModel
+@using Matmon.Core.Domain
+@{
+    ViewData["Title"] = "Reports";
+    var canManage = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
+    var schedule = Model.Input.Schedule;
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.Editing)
+{
+    <form method="post" asp-page-handler="Save" asp-route-edit="@Model.Edit" class="mat-form" novalidate>
+        <input type="hidden" asp-for="Input.Id" />
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("file-text")<h2 class="mat-card__title">Report</h2><span class="mat-text-muted mm-push-end">@(Model.IsNew ? "new" : "edit")</span></div>
+            <div class="mat-card__body">
+                @if (!string.IsNullOrWhiteSpace(Model.FormError))
+                {
+                    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.FormError</div></div>
+                }
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Name">Name</label>
+                        <input asp-for="Input.Name" class="mat-input" required maxlength="120" placeholder="Monthly availability - Example GmbH" data-msg-required="Give the report a name." />
+                        <span class="mat-hint">Also the title on the report.</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="picker-report-target-trigger">Covers</label>
+                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "Input.TargetToken", DomId = "picker-report-target", SelectedValue = Model.Input.TargetToken, AllowTags = true, AllowClear = false, Placeholder = "Select an element or a tag…", Options = Model.PickerOptions })" />
+                        <span class="mat-hint">An element with everything below it, or every sensor with a tag.</span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Period">Period</label>
+                        <select asp-for="Input.Period" class="mat-select">
+                            @foreach (var (value, label) in ReportRules.Periods)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </select>
+                        <span class="mat-hint">Calendar periods are whole days in @Model.ZoneName.</span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.SlaTarget">Agreed availability <span class="mat-text-muted">optional</span></label>
+                        <input asp-for="Input.SlaTarget" class="mat-input mat-mono" inputmode="decimal" maxlength="8" placeholder="99.9" />
+                        <span class="mat-hint">In percent. Sensors below it are marked red.</span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Period" data-show-value="Custom" hidden="@(Model.Input.Period != ReportPeriod.Custom)">
+                        <label class="mat-label" asp-for="Input.CustomFrom">From</label>
+                        <input asp-for="Input.CustomFrom" type="date" class="mat-input mat-mono" required data-msg-required="When does the period start?" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Period" data-show-value="Custom" hidden="@(Model.Input.Period != ReportPeriod.Custom)">
+                        <label class="mat-label" asp-for="Input.CustomTo">To (included)</label>
+                        <input asp-for="Input.CustomTo" type="date" class="mat-input mat-mono" required data-msg-required="When does the period end?" />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.PreparedFor">Prepared for <span class="mat-text-muted">optional</span></label>
+                        <input asp-for="Input.PreparedFor" class="mat-input" maxlength="120" placeholder="Example GmbH" />
+                        <span class="mat-hint">Printed under the title.</span>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <label class="mat-label" asp-for="Input.Note">Text at the top <span class="mat-text-muted">optional</span></label>
+                        <textarea asp-for="Input.Note" class="mat-textarea" rows="3" maxlength="1000" placeholder="What the report covers, what happened this month"></textarea>
+                    </div>
+                    <fieldset class="mat-field mat-field--full mat-fieldset">
+                        <legend class="mat-legend">Shows</legend>
+                        <div class="mat-checks mat-checks--inline">
+                            <label class="mat-check"><input asp-for="Input.ShowSummary" type="checkbox" /><span class="mat-check__text">Summary</span></label>
+                            <label class="mat-check"><input asp-for="Input.ShowSensors" type="checkbox" /><span class="mat-check__text">Sensors</span></label>
+                            <label class="mat-check"><input asp-for="Input.ShowOutages" type="checkbox" /><span class="mat-check__text">Outages</span></label>
+                            <label class="mat-check"><input asp-for="Input.ShowAlerts" type="checkbox" /><span class="mat-check__text">Alerts</span></label>
+                            <label class="mat-check"><input asp-for="Input.ShowCharts" type="checkbox" /><span class="mat-check__text">Charts</span></label>
+                        </div>
+                    </fieldset>
+                </div>
+                @if (Model.BrandedAs is not null)
+                {
+                    <p class="mat-hint">The PDF and the e-mail carry the branding of @Model.BrandedAs.</p>
+                }
+            </div>
+        </section>
+
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("mail")<h2 class="mat-card__title">E-mail</h2></div>
+            <div class="mat-card__body">
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Schedule">Send</label>
+                        <select asp-for="Input.Schedule" class="mat-select">
+                            @foreach (var (value, label) in Matmon.Host.Pages.ReportsModel.Schedules)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </select>
+                        <span class="mat-hint">Daily suits "Yesterday", weekly "Previous week", monthly "Previous month".</span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Schedule" data-show-value="Weekly" hidden="@(schedule != ReportSchedule.Weekly)">
+                        <label class="mat-label" asp-for="Input.DayOfWeek">On</label>
+                        <select asp-for="Input.DayOfWeek" class="mat-select">
+                            @foreach (var day in Matmon.Host.Pages.ReportsModel.Week)
+                            {
+                                <option value="@day">@day</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Schedule" data-show-value="Monthly" hidden="@(schedule != ReportSchedule.Monthly)">
+                        <label class="mat-label" asp-for="Input.DayOfMonth">Day of the month</label>
+                        <input asp-for="Input.DayOfMonth" type="number" min="1" max="28" class="mat-input mat-mono" data-msg-range="1 to 28." />
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field" data-show-if="#Input_Schedule" data-show-value="Daily,Weekly,Monthly" hidden="@(schedule == ReportSchedule.None)">
+                        <label class="mat-label" asp-for="Input.HourOfDay">At (hour)</label>
+                        <input asp-for="Input.HourOfDay" type="number" min="0" max="23" class="mat-input mat-mono" data-msg-range="0 to 23." />
+                        <span class="mat-hint">@Model.ZoneName</span>
+                        <span class="mat-error" aria-live="polite"></span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.SenderId">Sender</label>
+                        <select asp-for="Input.SenderId" asp-items="Model.Senders" class="mat-select">
+                            <option value="">The default e-mail sender</option>
+                        </select>
+                        <span class="mat-hint">Manage under <a asp-page="/Notifications" asp-fragment="senders">Senders</a>.</span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.ReceiverId">Receiver</label>
+                        <select asp-for="Input.ReceiverId" asp-items="Model.Receivers" class="mat-select">
+                            <option value="">The addresses below</option>
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Recipients">Addresses</label>
+                        <input asp-for="Input.Recipients" class="mat-input" maxlength="1000" placeholder="it@example.com, boss@example.com" />
+                        <span class="mat-hint">Used when no receiver is chosen. Comma-separated.</span>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" asp-for="Input.Attachment">Attached</label>
+                        <select asp-for="Input.Attachment" class="mat-select">
+                            @foreach (var (value, label) in Matmon.Host.Pages.ReportsModel.Attachments)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </select>
+                        <span class="mat-hint">Through Matmon Cloud only the first file goes along.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="mat-btn-row">
+            <button type="submit" class="mat-btn mat-btn--primary" data-default-submit>@MatUi.Icon("save")<span>Save</span></button>
+            @if (!Model.IsNew)
+            {
+                <a class="mat-btn mat-btn--secondary" asp-page="/Reports" asp-page-handler="Download" asp-route-id="@Model.Input.Id" asp-route-inline="true" target="_blank" rel="noopener">@MatUi.Icon("eye")<span>Open the PDF</span></a>
+            }
+            <a class="mat-btn mat-btn--secondary" asp-page="/Reports" asp-route-edit="">@MatUi.Icon("back")<span>Back</span></a>
+        </div>
+    </form>
+}
+else
+{
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("bar-chart")<h2 class="mat-card__title">Quick report</h2></div>
+        <div class="mat-card__body">
+            <form method="get" class="mat-form" novalidate>
+                <input type="hidden" name="handler" value="Download" />
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" for="picker-quick-target-trigger">Covers</label>
+                        <partial name="_ElementPicker" model="@(new Matmon.Host.Ui.ElementPickerModel { FieldName = "target", DomId = "picker-quick-target", SelectedValue = Model.QuickTarget, AllowTags = true, AllowClear = false, Placeholder = "Select an element or a tag…", Options = Model.PickerOptions })" />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="quick-period">Period</label>
+                        <select id="quick-period" name="period" class="mat-select">
+                            @foreach (var (value, label) in ReportRules.Periods)
+                            {
+                                <option value="@value" selected="@(value == ReportPeriod.Last7Days)">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field" data-show-if="#quick-period" data-show-value="Custom" hidden>
+                        <label class="mat-label" for="quick-from">From</label>
+                        <input id="quick-from" name="from" type="date" class="mat-input mat-mono" value="@Model.QuickFrom" />
+                    </div>
+                    <div class="mat-field" data-show-if="#quick-period" data-show-value="Custom" hidden>
+                        <label class="mat-label" for="quick-to">To (included)</label>
+                        <input id="quick-to" name="to" type="date" class="mat-input mat-mono" value="@Model.QuickTo" />
+                    </div>
+                </div>
+                <div class="mat-btn-row">
+                    <button type="submit" name="format" value="pdf" class="mat-btn mat-btn--primary">@MatUi.Icon("download")<span>PDF</span></button>
+                    <button type="submit" name="format" value="csv" class="mat-btn mat-btn--secondary">@MatUi.Icon("table")<span>CSV: sensors</span></button>
+                    <button type="submit" name="format" value="outages" class="mat-btn mat-btn--secondary">@MatUi.Icon("table")<span>CSV: outages</span></button>
+                </div>
+                @if (Model.BrandedAs is not null)
+                {
+                    <p class="mat-hint">Reports carry the branding of @Model.BrandedAs.</p>
+                }
+            </form>
+        </div>
+    </section>
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("file-text")<h2 class="mat-card__title">Saved reports</h2><span class="mat-text-muted mm-push-end">@Model.Rows.Count</span></div>
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="mat-card__body">
+                <div class="mat-empty">
+                    <div class="mat-empty__icon">@MatUi.Icon("file-text")</div>
+                    <div class="mat-empty__title">No saved report yet</div>
+                    <p>A saved report keeps what it covers and how it looks, and can be e-mailed every day, week or month.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="mat-table-wrap">
+                <table class="mat-table">
+                    <caption class="mat-sr-only">Saved reports</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Covers</th>
+                            <th scope="col">Period</th>
+                            <th scope="col">E-mail</th>
+                            <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Rows)
+                        {
+                            <tr>
+                                <td data-label="Name" class="mat-table__primary">
+                                    @if (canManage)
+                                    {
+                                        <a asp-page="/Reports" asp-route-edit="@row.Report.Id">@row.Report.Name</a>
+                                    }
+                                    else
+                                    {
+                                        @row.Report.Name
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(row.Report.PreparedFor))
+                                    {
+                                        <span class="mat-text-muted">for @row.Report.PreparedFor</span>
+                                    }
+                                </td>
+                                <td data-label="Covers">@row.Covers</td>
+                                <td data-label="Period">@row.Period</td>
+                                <td data-label="E-mail">
+                                    @row.Schedule
+                                    @if (row.NextSend is not null)
+                                    {
+                                        <span class="mat-text-muted">next @row.NextSend</span>
+                                    }
+                                    @if (row.LastSend is not null)
+                                    {
+                                        <span class="@MatUi.PillClass(row.LastFailed ? "error" : "plain")">@row.LastSend</span>
+                                    }
+                                </td>
+                                <td class="mat-table__cell-actions">
+                                    <div class="mat-table__actions">
+                                        <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/Reports" asp-page-handler="Download" asp-route-id="@row.Report.Id" asp-route-format="pdf">@MatUi.Icon("download")<span>PDF</span></a>
+                                        <a class="mat-btn mat-btn--ghost mat-btn--sm" asp-page="/Reports" asp-page-handler="Download" asp-route-id="@row.Report.Id" asp-route-format="csv">@MatUi.Icon("table")<span>CSV</span></a>
+                                        @if (canManage)
+                                        {
+                                            <form method="post" asp-page-handler="SendNow" asp-route-id="@row.Report.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm mat-btn--icon" data-tip="Send now" aria-label="Send now" data-confirm="Send '@row.Report.Name' now to its recipients?" data-confirm-ok="Send">@MatUi.Icon("mail")</button>
+                                            </form>
+                                            <form method="post" asp-page-handler="Delete" asp-route-id="@row.Report.Id">
+                                                <button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm mat-btn--icon" data-tip="Delete" aria-label="Delete" data-confirm="Delete the report '@row.Report.Name'?" data-confirm-ok="Delete">@MatUi.Icon("trash")</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (canManage)
+    {
+        <div class="mat-btn-row">
+            <a class="mat-btn mat-btn--primary" asp-page="/Reports" asp-route-edit="new">@MatUi.Icon("plus")<span>New report</span></a>
+            <a class="mat-btn mat-btn--secondary" asp-page="/NotificationReportEditor">@MatUi.Icon("clock")<span>Summary e-mail</span></a>
+        </div>
+    }
+}

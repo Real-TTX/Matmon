@@ -888,6 +888,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             document.NotificationRules = [];
             document.SummaryReport = new();
             document.MaintenanceWindows = [];
+            document.Reports = [];
         }
 
         if (!sections.HasFlag(WorkspaceBackupSection.Maps))
@@ -1209,6 +1210,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             ["Alerts"] = (WorkspaceBackupSection.Alerts, ""),
             ["AlertMutes"] = (WorkspaceBackupSection.Alerts, ""),
             ["MaintenanceWindows"] = (WorkspaceBackupSection.Notifications, ""),
+            ["Reports"] = (WorkspaceBackupSection.Notifications, ""),
             ["PushDevices"] = (null, "a browser subscription belongs to this instance's key pair and to that browser"),
             ["AgentEnrollments"] = (null, "short-lived install codes issued here"),
             ["ApiTokens"] = (null, "they open this instance's API"),
@@ -1251,6 +1253,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             target.NotificationReceivers = source.NotificationReceivers;
             target.NotificationRules = source.NotificationRules;
             target.MaintenanceWindows = source.MaintenanceWindows ?? [];
+            target.Reports = source.Reports ?? [];
             // The scheduled summary report rides the same section - it was packed but never put back.
             target.SummaryReport = source.SummaryReport ?? new();
         }

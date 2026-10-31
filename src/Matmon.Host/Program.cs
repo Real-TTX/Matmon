@@ -226,6 +226,10 @@ builder.Services.AddTransient<Matmon.Host.Services.WebPush.BrowserPushNotifier>(
 builder.Services.AddSingleton<SummaryReportDataCollector>();
 builder.Services.AddSingleton<AuditReportPdfBuilder>();
 builder.Services.AddSingleton<SummaryReportSender>();
+builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportMailer>();
+builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportDataCollector>();
+builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportPdfBuilder>();
+builder.Services.AddSingleton<Matmon.Host.Services.Reports.ReportService>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());

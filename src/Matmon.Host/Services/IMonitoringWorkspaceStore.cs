@@ -98,6 +98,26 @@ public interface IMonitoringWorkspaceStore
 
     string RotateMapPublicToken(Guid mapId);
 
+    /// <summary>The saved reports, by name.</summary>
+    IReadOnlyList<ReportDefinition> GetReports();
+
+    ReportDefinition? FindReport(Guid id);
+
+    /// <summary>Creates or updates a report (its send bookkeeping is kept). Throws <see cref="InvalidOperationException"/>
+    /// with a reason in words when it is refused.</summary>
+    ReportDefinition SaveReport(ReportDefinition report);
+
+    bool DeleteReport(Guid id);
+
+    /// <summary>Records a scheduled send (a failed one too, so a broken report does not retry every minute).</summary>
+    void MarkReportSent(Guid id, DateTimeOffset sentUtc, bool failed, string result);
+
+    /// <summary>The workspace's display time zone (reports), else the machine's.</summary>
+    TimeZoneInfo ReportZone();
+
+    /// <summary>A sensor's observations in [from, to], oldest first, at most <paramref name="maxCount"/> (the newest).</summary>
+    IReadOnlyList<SensorObservation> GetSensorObservationsBetween(Guid sensorId, DateTimeOffset fromUtc, DateTimeOffset toUtc, int maxCount);
+
     IReadOnlyList<StatusPage> GetStatusPages();
 
     StatusPage? FindStatusPage(Guid id);
