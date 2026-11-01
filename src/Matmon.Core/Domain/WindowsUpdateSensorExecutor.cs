@@ -7,6 +7,11 @@ namespace Matmon.Core.Domain;
 /// </summary>
 public sealed class WindowsUpdateSensorExecutor : ISensorExecutor
 {
+    /// <summary>How long an update search may take - for Windows Update and for the Linux package managers alike. A search
+    /// commonly needs half a minute and more, so a short timeout inherited from above (a few seconds is fine for a ping)
+    /// would end every check as "timed out"; the agent's baseline sensors and the discovery suggestions carry this one.</summary>
+    public static readonly TimeSpan SearchTimeout = TimeSpan.FromMinutes(3);
+
     private static readonly PowerShellRemoteSensorExecutor Inner = new();
 
     // Emits pendingUpdates / securityUpdates counts and a 'state' string the engine maps to the
@@ -52,9 +57,19 @@ try {
         SensorDiscoveryContext context,
         CancellationToken cancellationToken = default)
     {
-        _ = context;
         _ = cancellationToken;
-        return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
+
+        // Only offered for an agent on this Windows machine (over WinRM it stays manual: a remote update search
+        // needs rights most monitoring accounts do not have).
+        return ValueTask.FromResult(context.LocalWindows
+            ? SensorDiscoveryCheckResult.Available(new SensorDiscoverySuggestion(
+                Definition.Key,
+                "Windows Update",
+                SensorDiscoveryContext.ThisMachine,
+                new MonitoringSettings { Timeout = SearchTimeout },
+                "Runs on this machine through the agent - counts pending updates, no WinRM, no credential.",
+                60))
+            : SensorDiscoveryCheckResult.NotAvailable);
     }
 
     public ValueTask<SensorExecutionResult> ExecuteAsync(

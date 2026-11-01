@@ -135,7 +135,7 @@ public sealed class NetworkDiscoveryService
                 options.SnmpCommunity,
                 options.SnmpVersion,
                 options.SnmpPort,
-                timeout),
+                timeout) { OnThisMachine = options.OnThisMachine },
             cancellationToken);
 
         var messages = new List<string>();
@@ -614,6 +614,10 @@ public sealed record NetworkDiscoveryOptions(
     int MaxHosts,
     int Parallelism)
 {
+    /// <summary>An agent discovering its own host: the suggestions are made for this machine (see
+    /// <see cref="SensorDiscoveryContext.OnThisMachine"/>). Optional on the wire - an older probe ignores it.</summary>
+    public bool OnThisMachine { get; init; }
+
     public NetworkDiscoveryOptions Normalized()
     {
         var ports = TcpPorts

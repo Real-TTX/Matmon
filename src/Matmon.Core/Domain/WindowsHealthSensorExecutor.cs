@@ -31,6 +31,12 @@ public sealed class WindowsHealthSensorExecutor : ISensorExecutor
     {
         _ = cancellationToken;
 
+        // An agent on this Windows machine: the health script runs locally - no WinRM, no credential.
+        if (context.LocalWindows)
+        {
+            return ValueTask.FromResult(SensorDiscoveryCheckResult.Available(BuildSuggestion(port: null, useSsl: false)));
+        }
+
         var suggestions = new List<SensorDiscoverySuggestion>();
         if (context.OpenTcpPorts.Contains(5985))
         {
@@ -61,15 +67,18 @@ public sealed class WindowsHealthSensorExecutor : ISensorExecutor
         return Inner.ExecuteAsync(inner, cancellationToken);
     }
 
-    private static SensorDiscoverySuggestion BuildSuggestion(int port, bool useSsl)
+    private static SensorDiscoverySuggestion BuildSuggestion(int? port, bool useSsl)
     {
         var settings = new MonitoringSettings
         {
             Timeout = TimeSpan.FromSeconds(30),
             DefaultChannelKey = "cpuLoad"
         };
-        settings.Parameters["winrm.port"] = port.ToString(CultureInfo.InvariantCulture);
-        settings.Parameters["winrm.useSsl"] = useSsl ? "true" : "false";
+        if (port is int winrmPort)
+        {
+            settings.Parameters["winrm.port"] = winrmPort.ToString(CultureInfo.InvariantCulture);
+            settings.Parameters["winrm.useSsl"] = useSsl ? "true" : "false";
+        }
 
         foreach (var channel in new[] { "cpuLoad", "memoryUsedPercent", "diskUsedPercent" })
         {
@@ -82,10 +91,12 @@ public sealed class WindowsHealthSensorExecutor : ISensorExecutor
 
         return new SensorDiscoverySuggestion(
             Definition.Key,
-            useSsl ? "Windows Health (WinRM HTTPS)" : "Windows Health",
-            string.Empty,
+            port is null ? "Windows Health" : useSsl ? "Windows Health (WinRM HTTPS)" : "Windows Health",
+            port is null ? SensorDiscoveryContext.ThisMachine : string.Empty,
             settings,
-            $"WinRM port {port} is open. Windows credentials can be inherited from the parent.",
+            port is null
+                ? "Runs on this machine through the agent - no WinRM, no credential."
+                : $"WinRM port {port} is open. Windows credentials can be inherited from the parent.",
             88);
     }
 }

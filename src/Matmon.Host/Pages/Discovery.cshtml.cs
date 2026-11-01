@@ -123,10 +123,28 @@ public sealed class DiscoveryModel : PageModel
         }
     }
 
+    /// <summary>What an agent scans when it looks at its own machine: loopback, so a service bound to it is found too.</summary>
+    private const string AgentSelfAddress = "127.0.0.1";
+
     public IActionResult OnPostScope(Guid scopeElementId, string? returnUrl)
     {
         try
         {
+            // A host with an agent is looked at BY its agent: the scan runs on that machine, against itself, and the
+            // Windows / Linux sensors are suggested to run locally there - no WinRM or SSH, no credential.
+            if (_workspaceStore.FindElement(scopeElementId) is HostElement { Agent: { } agent } agentHost)
+            {
+                var agentRequest = new NetworkDiscoveryRequest(
+                    Guid.NewGuid(),
+                    AgentSelfAddress,
+                    BuildScopeOptions(ResolveEffectiveSettings(agentHost), 1) with { OnThisMachine = true },
+                    ScopeElementId: agentHost.Id,
+                    ScopeKind: MonitoringElementKind.Host);
+                var agentJob = _discoveryJobs.Create(ResolveOwningProbe(agentHost).Id, agent.ProbeId, agentHost.Name, agentRequest);
+                StatusMessage = $"Discovery queued on the agent of '{agentHost.Name}' - it looks at its own machine and picks the job up within a few seconds.";
+                return RedirectToPage(new { jobId = agentJob.JobId });
+            }
+
             var (probe, scope, hosts) = ResolveDiscoveryScope(scopeElementId);
             var network = string.Join(", ", hosts.Select(host => host.Address.Trim()));
             var effectiveSettings = ResolveEffectiveSettings(scope);

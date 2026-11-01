@@ -82,6 +82,20 @@ printf 'uptimeHours=%s\n' "${uptime_hours:-0}"
     {
         _ = cancellationToken;
 
+        // An agent on this Linux machine: the script runs locally - no SSH server, no key, no user.
+        if (context.LocalLinux)
+        {
+            return ValueTask.FromResult(
+                SensorDiscoveryCheckResult.Available(
+                    new SensorDiscoverySuggestion(
+                        Definition.Key,
+                        "Linux Health",
+                        SensorDiscoveryContext.ThisMachine,
+                        new MonitoringSettings(),
+                        "Runs on this machine through the agent - no SSH, no credential.",
+                        75)));
+        }
+
         if (!context.OpenTcpPorts.Contains(22))
         {
             return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);

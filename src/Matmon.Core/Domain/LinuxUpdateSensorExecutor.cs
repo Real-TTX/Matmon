@@ -43,9 +43,18 @@ printf 'updatesAvailable=%s\n' "$([ "$upd" -gt 0 ] 2>/dev/null && echo 1 || echo
         SensorDiscoveryContext context,
         CancellationToken cancellationToken = default)
     {
-        _ = context;
         _ = cancellationToken;
-        return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
+
+        // Only offered for an agent on this Linux machine (over SSH it stays manual).
+        return ValueTask.FromResult(context.LocalLinux
+            ? SensorDiscoveryCheckResult.Available(new SensorDiscoverySuggestion(
+                Definition.Key,
+                "Package Updates",
+                SensorDiscoveryContext.ThisMachine,
+                new MonitoringSettings { Timeout = WindowsUpdateSensorExecutor.SearchTimeout },
+                "Runs on this machine through the agent - counts pending packages, no SSH, no credential.",
+                60))
+            : SensorDiscoveryCheckResult.NotAvailable);
     }
 
     public async ValueTask<SensorExecutionResult> ExecuteAsync(

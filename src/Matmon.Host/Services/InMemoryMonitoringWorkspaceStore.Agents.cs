@@ -276,11 +276,13 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         {
             case "windows":
                 EnsureSensorOfTypeLocked(host, WindowsUpdateSensorExecutor.Definition.Key, "Windows Update", "localhost",
-                    "Pending Windows updates on this machine, checked locally by the agent.");
+                    "Pending Windows updates on this machine, checked locally by the agent.",
+                    new MonitoringSettings { Timeout = WindowsUpdateSensorExecutor.SearchTimeout });
                 break;
             case "linux":
                 EnsureSensorOfTypeLocked(host, LinuxUpdateSensorExecutor.Definition.Key, "Package Updates", "localhost",
-                    "Pending package updates on this machine, checked locally by the agent.");
+                    "Pending package updates on this machine, checked locally by the agent.",
+                    new MonitoringSettings { Timeout = WindowsUpdateSensorExecutor.SearchTimeout });
                 break;
         }
     }
@@ -452,14 +454,15 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     }
 
     /// <summary>One sensor of a type per agent host.</summary>
-    private void EnsureSensorOfTypeLocked(HostElement host, string sensorTypeKey, string name, string target, string description)
+    private void EnsureSensorOfTypeLocked(HostElement host, string sensorTypeKey, string name, string target, string description,
+        MonitoringSettings? settings = null)
     {
         var hasOne = host.Children
             .OfType<SensorElement>()
             .Any(sensor => string.Equals(sensor.SensorTypeKey, sensorTypeKey, StringComparison.OrdinalIgnoreCase));
         if (!hasOne)
         {
-            CreateSensor(host.Id, name, sensorTypeKey, target, description);
+            CreateSensor(host.Id, name, sensorTypeKey, target, description, settings);
         }
     }
 

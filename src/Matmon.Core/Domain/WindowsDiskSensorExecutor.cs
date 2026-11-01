@@ -68,6 +68,12 @@ $out["state"] = if ($worst -ge 2) { 'critical' } elseif ($worst -ge 1) { 'warnin
     {
         _ = cancellationToken;
 
+        // An agent on this Windows machine: the disk script runs locally - no WinRM, no credential.
+        if (context.LocalWindows)
+        {
+            return ValueTask.FromResult(SensorDiscoveryCheckResult.Available(BuildSuggestion(port: null, useSsl: false)));
+        }
+
         var suggestions = new List<SensorDiscoverySuggestion>();
         if (context.OpenTcpPorts.Contains(5985))
         {
@@ -99,24 +105,29 @@ $out["state"] = if ($worst -ge 2) { 'critical' } elseif ($worst -ge 1) { 'warnin
         return Inner.ExecuteAsync(inner, cancellationToken);
     }
 
-    private static SensorDiscoverySuggestion BuildSuggestion(int port, bool useSsl)
+    private static SensorDiscoverySuggestion BuildSuggestion(int? port, bool useSsl)
     {
         var settings = new MonitoringSettings
         {
             Timeout = TimeSpan.FromSeconds(30),
             DefaultChannelKey = "smartStatus"
         };
-        settings.Parameters["winrm.port"] = port.ToString(CultureInfo.InvariantCulture);
-        settings.Parameters["winrm.useSsl"] = useSsl ? "true" : "false";
+        if (port is int winrmPort)
+        {
+            settings.Parameters["winrm.port"] = winrmPort.ToString(CultureInfo.InvariantCulture);
+            settings.Parameters["winrm.useSsl"] = useSsl ? "true" : "false";
+        }
         MonitoringSettings.SetChannelThreshold(settings, "smartStatus", "warning", new ThresholdRule(ThresholdDirection.Above, 0));
         MonitoringSettings.SetChannelThreshold(settings, "smartStatus", "critical", new ThresholdRule(ThresholdDirection.Above, 1));
 
         return new SensorDiscoverySuggestion(
             Definition.Key,
-            useSsl ? "Windows Disk (WinRM HTTPS)" : "Windows Disk",
-            string.Empty,
+            port is not null && useSsl ? "Windows Disk (WinRM HTTPS)" : "Windows Disk",
+            port is null ? SensorDiscoveryContext.ThisMachine : string.Empty,
             settings,
-            $"WinRM port {port} is open. Windows credentials can be inherited from the parent.",
+            port is null
+                ? "Runs on this machine through the agent - no WinRM, no credential."
+                : $"WinRM port {port} is open. Windows credentials can be inherited from the parent.",
             68);
     }
 }

@@ -69,7 +69,8 @@ public sealed class PingSensorExecutor : ISensorExecutor
     {
         _ = cancellationToken;
 
-        if (!context.PingAlive)
+        // Pinging the machine one runs on says nothing (an agent's own connection sensor covers that).
+        if (!context.PingAlive || context.OnThisMachine)
         {
             return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
         }

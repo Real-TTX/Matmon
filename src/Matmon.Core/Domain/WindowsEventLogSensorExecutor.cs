@@ -63,16 +63,31 @@ public sealed class WindowsEventLogSensorExecutor : ISensorExecutor
     {
         _ = cancellationToken;
 
+        var settings = new MonitoringSettings();
+        settings.Parameters["eventlog.logName"] = "System";
+
+        // An agent on this Windows machine reads its own event log - no WinRM, no credential.
+        if (context.LocalWindows)
+        {
+            return ValueTask.FromResult(
+                SensorDiscoveryCheckResult.Available(
+                    new SensorDiscoverySuggestion(
+                        Definition.Key,
+                        "Windows Event Log",
+                        SensorDiscoveryContext.ThisMachine,
+                        settings,
+                        "Runs on this machine through the agent - counts the System event log, no WinRM, no credential.",
+                        55)));
+        }
+
         if (!context.OpenTcpPorts.Contains(5985) && !context.OpenTcpPorts.Contains(5986))
         {
             return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
         }
 
         var useSsl = context.OpenTcpPorts.Contains(5986);
-        var settings = new MonitoringSettings();
         settings.Parameters["winrm.port"] = useSsl ? "5986" : "5985";
         settings.Parameters["winrm.useSsl"] = useSsl ? "true" : "false";
-        settings.Parameters["eventlog.logName"] = "System";
 
         return ValueTask.FromResult(
             SensorDiscoveryCheckResult.Available(

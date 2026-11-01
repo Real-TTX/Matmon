@@ -50,6 +50,20 @@ if [ -n "$maxtemp" ]; then printf 'maxTemperature=%s\n' "$maxtemp"; fi
     {
         _ = cancellationToken;
 
+        // An agent on this Linux machine: smartctl + df run locally - no SSH server, no key, no user.
+        if (context.LocalLinux)
+        {
+            return ValueTask.FromResult(
+                SensorDiscoveryCheckResult.Available(
+                    new SensorDiscoverySuggestion(
+                        Definition.Key,
+                        "Linux Disk",
+                        SensorDiscoveryContext.ThisMachine,
+                        new MonitoringSettings { DefaultChannelKey = "smartStatus" },
+                        "Runs on this machine through the agent - no SSH, no credential (SMART needs smartctl).",
+                        66)));
+        }
+
         if (!context.OpenTcpPorts.Contains(22))
         {
             return ValueTask.FromResult(SensorDiscoveryCheckResult.NotAvailable);
