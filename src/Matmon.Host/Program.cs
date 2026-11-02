@@ -1021,14 +1021,30 @@ if (runtimeOptions.Mode == AppMode.Primary)
     // An agent trades a one-time enrolment code (issued on the Agents page) for a probe of its own. Wrong,
     // used and expired codes all answer the same 400 - which codes once existed is not the caller's business.
     // No licence check: agents are not probes in the licence model.
-    app.MapPost("/api/agents/enroll", (AgentEnrollRequest request, IMonitoringWorkspaceStore workspaceStore, ILogger<Program> logger) =>
+    app.MapPost("/api/agents/enroll", (AgentEnrollRequest request, HttpContext http, IMonitoringWorkspaceStore workspaceStore, ILogger<Program> logger) =>
     {
         if (string.IsNullOrWhiteSpace(request.Code))
         {
             return Results.BadRequest(new { error = "code_required" });
         }
 
-        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, request.OperatingSystem);
+        // A rollout key (mmr_...): one secret for many machines - the machine gets its identity now and waits for an admin.
+        if (AgentRolloutKeySecret.IsKey(request.Code))
+        {
+            var pending = workspaceStore.EnrollWithRolloutKey(request.Code, request.HostName, request.OperatingSystem,
+                request.AgentVersion, request.MachineId, http.Connection.RemoteIpAddress?.ToString());
+            if (pending is null)
+            {
+                logger.LogWarning("Agent enrolment rejected: invalid, revoked, expired or exhausted rollout key (host {Host})", request.HostName);
+                return Results.BadRequest(new { error = "invalid_key" });
+            }
+
+            logger.LogInformation("Agent {Host} ({OperatingSystem}, {Version}) enrolled with a rollout key and waits for approval as {ProbeId}",
+                request.HostName, request.OperatingSystem, request.AgentVersion, pending.ProbeId);
+            return Results.Ok(new AgentEnrollResponse(pending.ProbeId, pending.Token, pending.MachineName ?? pending.ProbeId, Pending: true));
+        }
+
+        var result = workspaceStore.RedeemAgentEnrollment(request.Code, request.HostName, request.OperatingSystem, request.MachineId);
         if (result.Redemption is not { } redemption)
         {
             logger.LogWarning("Agent enrolment rejected: invalid, used or expired code (host {Host})", request.HostName);
@@ -1055,6 +1071,12 @@ if (runtimeOptions.Mode == AppMode.Primary)
 
         if (!workspaceStore.TryValidateProbe(request.ProbeId, request.ProbeToken))
         {
+            // A machine that enrolled with a rollout key and waits for an admin: say so, so the agent can tell its user.
+            if (workspaceStore.IsPendingAgent(request.ProbeId, request.ProbeToken))
+            {
+                return Results.Json(new { error = "pending_approval" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
             return Results.Unauthorized();
         }
 

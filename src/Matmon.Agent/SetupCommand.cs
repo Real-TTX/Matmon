@@ -54,20 +54,33 @@ public static class SetupCommand
     [SupportedOSPlatform("windows")]
     private static async Task<SetupResult> SetUpWindowsAsync(string[] args, string configPath)
     {
-        // A "ready to install" download carries both (AgentInstallerPayload); typed values win.
+        // A "ready to install" download carries both (AgentInstallerPayload); typed values win. An MSI passes its
+        // properties as they are - an unset one arrives as "" - so empty counts as not given.
         var embedded = AgentInstallerPayload.ReadFile(Environment.ProcessPath);
-        var url = EnrollCommand.ReadOption(args, "--url") ?? embedded?.Url;
-        var code = EnrollCommand.ReadOption(args, "--code") ?? embedded?.Code;
-        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(code))
-        {
-            return new SetupResult(false, 2, "Usage: matmon-agent setup --url <instance url> --code <enrolment code> [--force]");
-        }
+        var url = Given(EnrollCommand.ReadOption(args, "--url")) ?? embedded?.Url;
+        var code = Given(EnrollCommand.ReadOption(args, "--code")) ?? Given(EnrollCommand.ReadOption(args, "--key")) ?? embedded?.Code;
 
-        // Enrol FIRST: a wrong code must not leave a half-installed service behind.
-        var enrolled = await EnrollCommand.EnrollAsync(url, code, args.Contains("--force"), args.Contains("--allow-http"), configPath);
-        if (!enrolled.Success)
+        // --keep-identity (the MSI on an upgrade, a repair or a second rollout): a machine that is already enrolled keeps
+        // its identity and only gets the program, service and tray brought up to date.
+        var keep = args.Contains("--keep-identity") && AgentConfigFile.ReadEnrolledProbeName(configPath) is not null;
+        EnrollResult enrolled;
+        if (keep)
         {
-            return new SetupResult(false, enrolled.ExitCode, enrolled.Message);
+            enrolled = new EnrollResult(0, $"Kept the existing identity '{AgentConfigFile.ReadEnrolledProbeName(configPath)}'.");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(code))
+            {
+                return new SetupResult(false, 2, "Usage: matmon-agent setup --url <instance url> --code <enrolment code or rollout key> [--force] [--keep-identity]");
+            }
+
+            // Enrol FIRST: a wrong code must not leave a half-installed service behind.
+            enrolled = await EnrollCommand.EnrollAsync(url, code, args.Contains("--force"), args.Contains("--allow-http"), configPath);
+            if (!enrolled.Success)
+            {
+                return new SetupResult(false, enrolled.ExitCode, enrolled.Message);
+            }
         }
 
         var self = Environment.ProcessPath ?? throw new InvalidOperationException("the agent does not know its own executable");
@@ -111,6 +124,8 @@ public static class SetupCommand
 
         return new SetupResult(true, 0, $"{enrolled.Message.Split(". Identity")[0]}. The '{service}' service is running.", target);
     }
+
+    private static string? Given(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>Where setup installs the agent.</summary>
     public static string InstalledPath =>

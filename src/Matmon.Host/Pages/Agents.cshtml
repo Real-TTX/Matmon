@@ -125,6 +125,147 @@
     </section>
 }
 
+@if (!string.IsNullOrWhiteSpace(Model.IssuedRolloutKey))
+{
+    @* The rollout key just made: shown on exactly this render, only its hash is kept. *@
+    <div class="mat-alert mat-alert--success" role="status">
+        @MatUi.Icon("key")
+        <div class="mat-alert__body">
+            <span class="mat-alert__title">Rollout key &ldquo;@Model.IssuedRolloutName&rdquo;</span>
+            <span>For many machines - every one waits below for your approval. Shown only now: copy it into your deployment.</span>
+            <div class="mat-input-group">
+                <input class="mat-input mat-mono" id="agent-issued-rollout" value="@Model.IssuedRolloutKey" readonly aria-label="Rollout key" />
+                <button type="button" class="mat-btn mat-btn--secondary" data-copy="#agent-issued-rollout">@MatUi.Icon("copy")<span>Copy</span></button>
+            </div>
+        </div>
+    </div>
+
+    <section class="mat-card" id="agent-rollout-install">
+        <div class="mat-card__head">
+            @MatUi.Icon("download")
+            <h2 class="mat-card__title">Roll the agent out</h2>
+        </div>
+        <div class="mat-card__body mat-stack">
+            @if (Model.IssuedRolloutVia is { ParentId: not null } rolloutVia)
+            {
+                <p class="mat-muted">The machines talk through the probe <strong>@rolloutVia.Name</strong>, which passes everything on to this instance - they only have to reach that probe.</p>
+            }
+            @if (Model.IssuedRolloutUrl is null)
+            {
+                <div class="mat-alert mat-alert--warning" role="status">
+                    @MatUi.Icon("alert")
+                    <div class="mat-alert__body">This instance does not know the address the machines should connect to. Set the public address under <a asp-page="/Config" asp-route-tab="general">System &gt; General</a> (or, for a remote probe, its address for agents), then make a new key.</div>
+                </div>
+            }
+            else
+            {
+                <div data-tabs>
+                    <div class="mat-tabs" role="tablist" aria-label="Rollout method">
+                        <button type="button" class="mat-tab" role="tab" id="tab-rollout-msi" aria-controls="panel-rollout-msi" aria-selected="true">Windows MSI</button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-rollout-ps" aria-controls="panel-rollout-ps" aria-selected="false" tabindex="-1">PowerShell</button>
+                        <button type="button" class="mat-tab" role="tab" id="tab-rollout-unix" aria-controls="panel-rollout-unix" aria-selected="false" tabindex="-1">Linux / macOS</button>
+                    </div>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-rollout-msi" aria-labelledby="tab-rollout-msi">
+                        <p class="mat-muted">For Intune, a GPO start script, PDQ or your RMM tool: install the MSI silently with the address and the key. Running it again on a machine that has the agent only updates the program.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code agent-oneliner"><code id="agent-rollout-msi">@Model.BuildMsiCommand(Model.IssuedRolloutKey)</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-rollout-msi">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                        @if (Model.MsiUrl is { } msi)
+                        {
+                            <div class="mat-btn-row mat-btn-row--plain">
+                                <a class="mat-btn mat-btn--primary" href="@msi" rel="noreferrer">@MatUi.Icon("download")<span>Download the MSI</span></a>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="mat-hint">This build follows no agent feed, so there is no MSI to link here - take it from the release of your channel.</p>
+                        }
+                        <p class="mat-hint">Intune: a Windows app (Win32 or line-of-business) with the command above. GPO software installation cannot pass the two values - use a computer start-up script with the command, or an MST transform that sets MATMON_URL and MATMON_KEY. Removing the MSI removes the agent.</p>
+                    </div>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-rollout-ps" aria-labelledby="tab-rollout-ps" hidden>
+                        <p class="mat-muted">Run as Administrator on each machine, or push it with your remote management.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code agent-oneliner"><code id="agent-rollout-ps">@Model.RolloutWindowsCommand(Model.IssuedRolloutKey)</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-rollout-ps">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                    </div>
+                    <div class="mat-tabpanel mat-stack mat-stack--sm" role="tabpanel" id="panel-rollout-unix" aria-labelledby="tab-rollout-unix" hidden>
+                        <p class="mat-muted">Run as root - by hand, or from Ansible, Salt or a cloud-init script. Linux with systemd, macOS 12 or later.</p>
+                        <div class="mm-snippet">
+                            <pre class="mat-code agent-oneliner"><code id="agent-rollout-unix">@Model.RolloutUnixCommand(Model.IssuedRolloutKey)</code></pre>
+                            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#agent-rollout-unix">@MatUi.Icon("copy")<span>Copy</span></button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+}
+
+@if (Model.WaitingAgents.Count > 0)
+{
+    <section class="mat-section" id="agent-approval">
+        <div class="mat-section__head">
+            <h2>Waiting for approval</h2>
+            <p class="mat-section__lead">@Model.WaitingAgents.Count machine@(Model.WaitingAgents.Count == 1 ? string.Empty : "s") enrolled with a rollout key</p>
+        </div>
+        @if (isAdmin)
+        {
+            <form method="post" asp-page-handler="Approve" id="agent-approve" hidden></form>
+            <form method="post" asp-page-handler="Reject" id="agent-reject" hidden></form>
+        }
+        <div class="mat-table-wrap">
+            <table class="mat-table">
+                <caption class="mat-sr-only">Machines waiting for approval</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Machine</th>
+                        <th scope="col">Rollout key</th>
+                        <th scope="col" class="mat-hide-sm">Enrolled</th>
+                        <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var waiting in Model.WaitingAgents)
+                    {
+                        <tr>
+                            <td data-label="Machine">
+                                <div class="probe-cell">
+                                    <strong>@(waiting.MachineName ?? waiting.ProbeId)</strong>
+                                    <span class="probe-cell__meta">@(waiting.OperatingSystem ?? "unknown system")@(waiting.AgentVersion is null ? string.Empty : $" · {waiting.AgentVersion}")</span>
+                                    @if (Model.ReplacedHostName(waiting) is { } replaced)
+                                    {
+                                        <span class="mat-chips"><span class="mat-tag" title="The same machine is already in the tree - approving re-installs that host: its sensors and history stay">re-install of @replaced</span></span>
+                                    }
+                                </div>
+                            </td>
+                            <td data-label="Rollout key">@Model.RolloutKeyName(waiting)</td>
+                            <td data-label="Enrolled" class="mat-hide-sm mat-mono">@waiting.RequestedUtc.ToDisplay().ToString("g")@(waiting.RemoteAddress is null ? string.Empty : $" · {waiting.RemoteAddress}")</td>
+                            <td class="mat-table__cell-actions">
+                                @if (isAdmin)
+                                {
+                                    <div class="mat-table__actions">
+                                        <button type="submit" form="agent-approve" name="pendingId" value="@waiting.Id" class="mat-btn mat-btn--primary mat-btn--sm">@MatUi.Icon("check")<span>Approve</span></button>
+                                        <button type="submit" form="agent-reject" name="pendingId" value="@waiting.Id" class="mat-btn mat-btn--secondary mat-btn--sm"
+                                                data-confirm="Reject @(waiting.MachineName ?? waiting.ProbeId)? The machine stays locked out until it enrols again." data-confirm-ok="Reject">@MatUi.Icon("x")<span>Reject</span></button>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (isAdmin && Model.WaitingAgents.Count > 1)
+        {
+            <form method="post" asp-page-handler="ApproveAll" class="mat-btn-row">
+                <button type="submit" class="mat-btn mat-btn--secondary" data-confirm="Approve all @Model.WaitingAgents.Count machines? Each becomes a host and is monitored." data-confirm-ok="Approve all">@MatUi.Icon("check")<span>Approve all</span></button>
+            </form>
+        }
+    </section>
+}
+
 <section class="mat-section">
     <div class="mat-section__head">
         <h2>Installed agents</h2>
@@ -494,4 +635,94 @@
             }
         </section>
     }
+
+    <section class="mat-card" id="rollout">
+        <div class="mat-card__head">
+            @MatUi.Icon("users")
+            <h2 class="mat-card__title">Roll out to many machines</h2>
+        </div>
+        <div class="mat-card__body mat-stack">
+            <p class="mat-muted">One key for a whole deployment - the Windows MSI through Intune, a GPO or your RMM tool, or a script on Linux and macOS. Every machine that enrols with it waits under &ldquo;Waiting for approval&rdquo; and is only monitored once you approve it. A machine that is installed again is recognised and keeps its host.</p>
+            <form method="post" asp-page-handler="CreateRollout" class="mat-form" novalidate>
+                <div class="mat-form__grid">
+                    <div class="mat-field">
+                        <label class="mat-label" for="RolloutName">Name</label>
+                        <input asp-for="RolloutName" class="mat-input" placeholder="e.g. Office PCs Hamburg" maxlength="120" required data-msg-required="Give the key a name." />
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="RolloutValidityDaysChoice">Valid for</label>
+                        <select asp-for="RolloutValidityDaysChoice" class="mat-select">
+                            @foreach (var days in Model.RolloutValidityChoices)
+                            {
+                                <option value="@days">@(days switch { 0 => "Until revoked", 365 => "1 year", _ => $"{days} days" })</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mat-field">
+                        <label class="mat-label" for="RolloutMaxDevices">Machines at most</label>
+                        <input asp-for="RolloutMaxDevices" class="mat-input" type="number" min="1" max="100000" placeholder="No limit" />
+                        <span class="mat-hint">Optional. A machine installed again does not count twice.</span>
+                    </div>
+                    <div class="mat-field mat-field--full">
+                        <span class="mat-label">Place approved machines in</span>
+                        <partial name="_ElementPicker" model="@(new ElementPickerModel { FieldName = "RolloutParentId", DomId = "picker-rollout-place", SelectedId = Model.RolloutParentId, Placeholder = "The primary", Options = Model.PlaceOptions })" />
+                        <span class="mat-hint">A folder or a probe. Under a remote probe the machines talk to that probe, which passes everything on.</span>
+                    </div>
+                </div>
+                <div class="mat-btn-row">
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("key")<span>Create rollout key</span></button>
+                </div>
+            </form>
+
+            @if (Model.RolloutKeys.Count > 0)
+            {
+                var now = DateTimeOffset.UtcNow;
+                <form method="post" asp-page-handler="RevokeRollout" id="rollout-revoke" hidden></form>
+                <form method="post" asp-page-handler="DeleteRollout" id="rollout-delete" hidden></form>
+                <div class="mat-table-wrap">
+                    <table class="mat-table">
+                        <caption class="mat-sr-only">Rollout keys</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Key</th>
+                                <th scope="col">Machines</th>
+                                <th scope="col" class="mat-hide-sm">Valid until</th>
+                                <th scope="col"><span class="mat-sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var key in Model.RolloutKeys)
+                            {
+                                var state = AgentsModel.RolloutState(key, now);
+                                <tr>
+                                    <td data-label="Key">
+                                        <div class="probe-cell">
+                                            <strong>@key.Name</strong>
+                                            <span class="probe-cell__meta">into @Model.RolloutPlaceName(key)@(string.IsNullOrWhiteSpace(key.CreatedBy) ? string.Empty : $" · by {key.CreatedBy}")</span>
+                                            <span class="@MatUi.PillClass(state == "Active" ? "ok" : "plain")">@state</span>
+                                        </div>
+                                    </td>
+                                    <td data-label="Machines" class="mat-mono">@key.DeviceCount@(key.MaxDevices is { } max ? $" / {max}" : string.Empty)@(key.LastUsedUtc is { } used ? $" · last {used.ToDisplay():g}" : string.Empty)</td>
+                                    <td data-label="Valid until" class="mat-hide-sm mat-mono">@(key.ExpiresUtc is { } expires ? expires.ToDisplay().ToString("g") : "until revoked")</td>
+                                    <td class="mat-table__cell-actions">
+                                        <div class="mat-table__actions">
+                                            @if (state is "Active" or "Full")
+                                            {
+                                                <button type="submit" form="rollout-revoke" name="keyId" value="@key.Id" class="mat-btn mat-btn--secondary mat-btn--sm"
+                                                        data-confirm="Revoke &ldquo;@key.Name&rdquo;? No new machine can enrol with it; agents already approved keep working." data-confirm-ok="Revoke">@MatUi.Icon("x")<span>Revoke</span></button>
+                                            }
+                                            else
+                                            {
+                                                <button type="submit" form="rollout-delete" name="keyId" value="@key.Id" class="mat-btn mat-btn--ghost mat-btn--sm">@MatUi.Icon("trash")<span>Remove</span></button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </section>
 }

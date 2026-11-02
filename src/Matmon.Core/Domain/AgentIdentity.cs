@@ -16,10 +16,15 @@ public sealed class AgentIdentity
 
     public DateTimeOffset EnrolledUtc { get; set; }
 
+    /// <summary>A hash of the machine's own id (<see cref="AgentMachineId"/>), when the agent reported one - recognises the machine when it
+    /// enrols again with a rollout key.</summary>
+    public string? MachineId { get; set; }
+
     public AgentIdentity Clone() => new()
     {
         ProbeId = ProbeId,
         Token = Token,
-        EnrolledUtc = EnrolledUtc
+        EnrolledUtc = EnrolledUtc,
+        MachineId = MachineId
     };
 }

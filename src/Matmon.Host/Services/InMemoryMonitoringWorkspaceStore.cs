@@ -4454,6 +4454,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             .OfType<ProbeElement>()
             .Select(probe => probe.ProbeId)
             .Concat(EnumerateElements(_document.RootProbe).OfType<HostElement>().Select(host => host.Agent?.ProbeId ?? string.Empty))
+            .Concat((_document.PendingAgents ??= []).Select(pending => pending.ProbeId))
             .Where(probeId => !string.IsNullOrWhiteSpace(probeId))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -5122,6 +5123,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>Pending agent enrolment codes (hashed). Instance-bound and short-lived: never in a backup.</summary>
         public List<AgentEnrollment> AgentEnrollments { get; set; } = [];
+
+        /// <summary>Rollout keys (hashed) - one secret for many machines, every one of them approved by an admin. Instance-bound: never in a backup.</summary>
+        public List<AgentRolloutKey> AgentRolloutKeys { get; set; } = [];
+
+        /// <summary>Machines that enrolled with a rollout key and wait for approval. Instance-bound: never in a backup.</summary>
+        public List<PendingAgent> PendingAgents { get; set; } = [];
 
         /// <summary>Tokens for the instance's own API (hashed). Instance-bound: never in a backup.</summary>
         public List<ApiToken> ApiTokens { get; set; } = [];

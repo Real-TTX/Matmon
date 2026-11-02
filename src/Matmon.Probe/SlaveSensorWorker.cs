@@ -89,6 +89,21 @@ public sealed class SlaveSensorWorker : BackgroundService
         // to the background (see StartDiscoveryJobsAsync) and must not wait for a slow sensor pass.
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Enrolled with a rollout key and not approved yet: every call would be refused - wait until the heartbeat says otherwise.
+            if (_runtimeState.PendingApproval)
+            {
+                try
+                {
+                    await Task.Delay(interval, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
             await RunStageAsync("discovery jobs", probeId, () => StartDiscoveryJobsAsync(client, probeId, stoppingToken), stoppingToken);
             await RunStageAsync("sensor assignments", probeId, () => SyncAssignmentsAsync(client, probeId, stoppingToken), stoppingToken);
             await RunStageAsync("on-demand jobs", probeId, () => SyncRunJobsAsync(client, probeId, stoppingToken), stoppingToken);

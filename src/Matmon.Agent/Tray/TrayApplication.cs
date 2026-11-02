@@ -159,6 +159,7 @@ public sealed class TrayApplication : ApplicationContext
     public string Describe() => State switch
     {
         TrayState.Connected => $"{Status!.ProbeName}: connected",
+        TrayState.Unreachable when Status!.PendingApproval => $"{Status.ProbeName}: waiting for approval on the instance",
         TrayState.Unreachable => $"{Status!.ProbeName}: instance not reachable - {Status.StatusMessage}",
         TrayState.Stopped => "the Matmon Agent service is not running",
         _ => "not set up"

@@ -921,6 +921,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         // A pending enrolment code belongs to this instance and today: restored elsewhere (or next month) it
         // would let an agent enrol against a workspace whose admin never issued it.
         document.AgentEnrollments = [];
+        document.AgentRolloutKeys = [];
+        document.PendingAgents = [];
 
         // An API token opens this instance's API; restored elsewhere it would open that one too.
         document.ApiTokens = [];
@@ -1213,6 +1215,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             ["Reports"] = (WorkspaceBackupSection.Notifications, ""),
             ["PushDevices"] = (null, "a browser subscription belongs to this instance's key pair and to that browser"),
             ["AgentEnrollments"] = (null, "short-lived install codes issued here"),
+            ["AgentRolloutKeys"] = (null, "rollout keys issued here - restored elsewhere they would let machines enrol there"),
+            ["PendingAgents"] = (null, "machines waiting for approval on this instance"),
             ["ApiTokens"] = (null, "they open this instance's API"),
             ["BackupJobs"] = (WorkspaceBackupSection.BackupJobs, ""),
             ["SensorHistory"] = (WorkspaceBackupSection.SensorHistory, ""),

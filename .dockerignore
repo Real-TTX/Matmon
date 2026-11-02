@@ -28,3 +28,5 @@ LICENSE
 .dockerignore
 docker-compose*.yml
 .env*
+# The agent MSI is built by its own CI job on Windows.
+installer/

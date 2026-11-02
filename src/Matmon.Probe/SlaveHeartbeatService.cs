@@ -7,6 +7,8 @@ namespace Matmon.Probe;
 
 public sealed class SlaveHeartbeatService : BackgroundService
 {
+    internal const string PendingApprovalMessage = "waiting for an administrator to approve this machine (Agents page on the instance)";
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SlaveHeartbeatService> _logger;
     private readonly ProbeRuntimeOptions _runtimeOptions;
@@ -101,6 +103,20 @@ public sealed class SlaveHeartbeatService : BackgroundService
         try
         {
             using var response = await client.PostAsJsonAsync("/api/probes/heartbeat", request, stoppingToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                && (await response.Content.ReadAsStringAsync(stoppingToken)).Contains("pending_approval", StringComparison.Ordinal))
+            {
+                // Enrolled with a rollout key: the identity works once an admin approves the machine. Not a fault - said once.
+                if (!_runtimeState.PendingApproval)
+                {
+                    _logger.LogInformation("Waiting for an administrator to approve this machine (Agents page on the instance)");
+                }
+
+                _runtimeState.PendingApproval = true;
+                _runtimeState.RecordHeartbeat(success: false, PendingApprovalMessage);
+                return;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 var message = $"heartbeat returned {response.StatusCode}";
@@ -109,6 +125,7 @@ public sealed class SlaveHeartbeatService : BackgroundService
                 return;
             }
 
+            _runtimeState.PendingApproval = false;
             _runtimeState.RecordHeartbeat(success: true, "heartbeat accepted by primary");
             await HandleAnswerAsync(response, stoppingToken);
         }

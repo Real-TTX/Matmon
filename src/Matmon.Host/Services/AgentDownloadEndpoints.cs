@@ -195,20 +195,38 @@ public static class AgentDownloadEndpoints
                 $"Send the enrolment code in the {CodeHeader} header - copy the complete command from Probes > Agents on the instance.");
         }
 
-        var code = AgentEnrollmentCode.Canonical(header);
-        if (code is null || !workspaceStore.IsAgentEnrollmentCodeValid(code))
+        // A rollout key works here as well (for many machines; each waits for approval) - it places the agent like a code would.
+        string? code;
+        AgentEnrollment? place;
+        if (AgentRolloutKeySecret.Canonical(header) is { } key)
         {
-            return Text(StatusCodes.Status400BadRequest,
-                "The enrolment code is wrong, already used or expired. Create a new one under Probes > Agents on the instance.");
+            if (workspaceStore.FindAgentRolloutKey(key) is not { } rollout)
+            {
+                return Text(StatusCodes.Status400BadRequest,
+                    "The rollout key is wrong, revoked or expired. Check it under Probes > Agents on the instance.");
+            }
+
+            code = key;
+            place = new AgentEnrollment { ParentElementId = rollout.ParentElementId };
+        }
+        else
+        {
+            code = AgentEnrollmentCode.Canonical(header);
+            if (code is null || !workspaceStore.IsAgentEnrollmentCodeValid(code))
+            {
+                return Text(StatusCodes.Status400BadRequest,
+                    "The enrolment code is wrong, already used or expired. Create a new one under Probes > Agents on the instance.");
+            }
+
+            place = workspaceStore.FindAgentEnrollmentByCode(code);
         }
 
         // The address the script was just fetched from IS reachable from the machine that runs it - through a relaying
         // probe that is the probe's, and an agent placed under a remote probe talks to that probe in any case.
-        var url = AgentUrl(http, workspaceStore, workspaceStore.FindAgentEnrollmentByCode(code),
-            $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}");
+        var url = AgentUrl(http, workspaceStore, place, $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}");
         if (url is null)
         {
-            return Text(StatusCodes.Status400BadRequest, MissingAddress(workspaceStore, workspaceStore.FindAgentEnrollmentByCode(code)));
+            return Text(StatusCodes.Status400BadRequest, MissingAddress(workspaceStore, place));
         }
 
         var catalog = await packages.GetCatalogAsync(http.RequestAborted);
@@ -284,7 +302,7 @@ public static class AgentDownloadEndpoints
         // A header, not a query parameter: a URL ends up in proxy and access logs, and while the code dies at
         // enrolment, until then it is exactly what lets a machine become a probe.
         if (http.Request.Headers.TryGetValue(CodeHeader, out var code) &&
-            workspaceStore.IsAgentEnrollmentCodeValid(code.ToString()))
+            (workspaceStore.IsAgentEnrollmentCodeValid(code.ToString()) || workspaceStore.IsAgentRolloutKeyValid(code.ToString())))
         {
             return true;
         }

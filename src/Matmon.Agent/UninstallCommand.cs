@@ -207,6 +207,14 @@ public static class UninstallCommand
     {
         try
         {
+            // Installed through the MSI: Windows Installer keeps the entry (and removes the agent through it) - a second one
+            // of our own would list the agent twice.
+            if (InstalledByMsi())
+            {
+                Registry.LocalMachine.DeleteSubKeyTree(UninstallKey, throwOnMissingSubKey: false);
+                return;
+            }
+
             var installed = SetupCommand.InstalledPath;
             if (!File.Exists(installed))
             {
@@ -229,6 +237,16 @@ public static class UninstallCommand
         {
         }
     }
+
+    /// <summary>The MSI writes <c>HKLM\SOFTWARE\Matmon Agent\InstalledByMsi</c> (and removes it with itself).</summary>
+    [SupportedOSPlatform("windows")]
+    public static bool InstalledByMsi()
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(MsiMarkerKey);
+        return key?.GetValue("InstalledByMsi") is int and not 0;
+    }
+
+    public const string MsiMarkerKey = @"SOFTWARE\Matmon Agent";
 
     [SupportedOSPlatform("windows")]
     private static int RelaunchElevated(string[] args, bool gui)

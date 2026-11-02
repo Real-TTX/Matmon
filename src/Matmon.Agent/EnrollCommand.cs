@@ -17,10 +17,10 @@ public static class EnrollCommand
     public static async Task<int> RunAsync(string[] args, string configPath)
     {
         var url = ReadOption(args, "--url");
-        var code = ReadOption(args, "--code");
+        var code = ReadOption(args, "--code") ?? ReadOption(args, "--key");
         if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(code))
         {
-            Console.Error.WriteLine("Usage: matmon-agent enroll --url <instance url> --code <enrolment code> [--force] [--config <path>]");
+            Console.Error.WriteLine("Usage: matmon-agent enroll --url <instance url> --code <enrolment code or rollout key> [--force] [--config <path>]");
             Console.Error.WriteLine("Create the code under Agents on your Matmon instance.");
             return 2;
         }
@@ -62,7 +62,7 @@ public static class EnrollCommand
         {
             response = await client.PostAsJsonAsync(
                 "api/agents/enroll",
-                new AgentEnrollRequest(code.Trim(), system.Host, system.OperatingSystem, MatmonVersion.Current));
+                new AgentEnrollRequest(code.Trim(), system.Host, system.OperatingSystem, MatmonVersion.Current, MachineIdentity.Read()));
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -83,6 +83,14 @@ public static class EnrollCommand
             }
 
             AgentConfigFile.Write(configPath, baseUri.ToString().TrimEnd('/'), enrolled.ProbeId, enrolled.ProbeToken, enrolled.ProbeName);
+            if (enrolled.Pending)
+            {
+                return new EnrollResult(0,
+                    $"Registered as '{enrolled.ProbeName}' - waiting for an administrator to approve this machine under Agents on the instance. " +
+                    $"Identity written to {configPath}; the agent starts reporting once it is approved, nothing more to do here.",
+                    enrolled.ProbeName);
+            }
+
             return new EnrollResult(0,
                 $"Enrolled as probe '{enrolled.ProbeName}' ({enrolled.ProbeId}). Identity written to {configPath}. Start (or restart) the Matmon Agent service.",
                 enrolled.ProbeName);
@@ -92,6 +100,7 @@ public static class EnrollCommand
     private static string DescribeFailure(HttpStatusCode status, string? error) => (status, error) switch
     {
         (HttpStatusCode.BadRequest, "invalid_code") => "The code is wrong, already used or expired. Create a new one under Agents on the instance.",
+        (HttpStatusCode.BadRequest, "invalid_key") => "The rollout key is wrong, revoked or expired, or its number of machines is reached. Check it under Agents on the instance.",
         // Only an older instance answers this: agents no longer count as probes in the licence.
         (HttpStatusCode.Forbidden, "probe_limit") => "The instance's licence allows no further probes - update the instance, newer versions do not count agents as probes.",
         (HttpStatusCode.TooManyRequests, _) => "Too many enrolment attempts from this address. Wait a minute and try again.",

@@ -32,6 +32,8 @@ internal static class AgentInfo
         var (title, detail) = state switch
         {
             TrayState.Connected => ("Connected", $"{status?.ProbeName ?? "This machine"} reports to its Matmon instance."),
+            TrayState.Unreachable when status?.PendingApproval == true => ("Waiting for approval",
+                "This machine is registered. An administrator approves it under Agents on the instance - then it reports, nothing to do here."),
             TrayState.Unreachable => ("Instance not reachable", status?.StatusMessage is { Length: > 0 } message ? message : Capitalize(description)),
             TrayState.Stopped => ("Service not running", "The \"Matmon Agent\" service is installed but not running."),
             _ => ("Not set up", "This machine is not connected to a Matmon instance yet.")
@@ -77,7 +79,7 @@ internal sealed class SetupForm : AgentWindow
 {
     private readonly TrayApplication _tray;
     private readonly TextBox _url = new() { Width = ContentWidth, PlaceholderText = "https://matmon.example", Margin = Padding.Empty };
-    private readonly TextBox _code = new() { Width = ContentWidth, PlaceholderText = "XXXX-XXXX-XXXX-XXXX-XXXX", CharacterCasing = CharacterCasing.Upper, Margin = Padding.Empty };
+    private readonly TextBox _code = new() { Width = ContentWidth, PlaceholderText = "XXXX-XXXX-XXXX-XXXX-XXXX or mmr_...", Margin = Padding.Empty };
     private readonly BrandNotice _replaceWarning = new(ContentWidth) { Tone = NoticeTone.Warning, Visible = false };
     private readonly FlowLayoutPanel _busy = new()
     {
@@ -133,8 +135,8 @@ internal sealed class SetupForm : AgentWindow
                     "Setting up needs administrator rights once.", width: ContentWidth),
                 FieldLabel("Instance URL"), _url,
                 Hint("The address you open Matmon at in the browser."),
-                FieldLabel("Enrolment code"), _code,
-                Hint("A code works once and only for the time chosen when it was created."),
+                FieldLabel("Enrolment code or rollout key"), _code,
+                Hint("A code works once and only for the time chosen when it was created. A rollout key (mmr_...) works for many machines; an administrator approves each one."),
                 _replaceWarning,
                 _busy,
                 _result
@@ -168,7 +170,7 @@ internal sealed class SetupForm : AgentWindow
                     "service and needs administrator rights once.", width: ContentWidth),
                 FieldLabel("Instance URL"), _url,
                 Hint("Taken from the download."),
-                FieldLabel("Enrolment code"), _code,
+                FieldLabel("Enrolment code or rollout key"), _code,
                 Hint("Single use. If it was used or has expired, create a new one under Probes > Agents and download again."),
                 _change,
                 _replaceWarning,

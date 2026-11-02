@@ -100,6 +100,161 @@ public sealed class AgentsModel : PageModel
 
     public IReadOnlyList<int> ValidityChoices => ValidityHours;
 
+    // ---- Rollout: one key for many machines (MSI / script), each machine approved here ----
+
+    private static readonly int[] RolloutValidityDays = [30, 90, 365, 0];
+
+    public IReadOnlyList<int> RolloutValidityChoices => RolloutValidityDays;
+
+    public IReadOnlyList<AgentRolloutKey> RolloutKeys { get; private set; } = [];
+
+    public IReadOnlyList<PendingAgent> WaitingAgents { get; private set; } = [];
+
+    [BindProperty]
+    public string? RolloutName { get; set; }
+
+    [BindProperty]
+    public Guid? RolloutParentId { get; set; }
+
+    /// <summary>Days the key works; 0 = until revoked.</summary>
+    [BindProperty]
+    public int RolloutValidityDaysChoice { get; set; } = 90;
+
+    [BindProperty]
+    public int? RolloutMaxDevices { get; set; }
+
+    /// <summary>The rollout key just made - shown on exactly one render (only its hash is kept).</summary>
+    [TempData]
+    public string? IssuedRolloutKey { get; set; }
+
+    [TempData]
+    public string? IssuedRolloutName { get; set; }
+
+    [TempData]
+    public Guid? IssuedRolloutId { get; set; }
+
+    /// <summary>The address machines installed with the issued key connect to (as for a code).</summary>
+    public string? IssuedRolloutUrl { get; private set; }
+
+    /// <summary>The probe the machines of the issued key talk through.</summary>
+    public ProbeElement? IssuedRolloutVia { get; private set; }
+
+    /// <summary>Where the MSI comes from - the agent feed of this instance's channel; null for a local build.</summary>
+    public string? MsiUrl => _packageStore.MsiUrl;
+
+    public string RolloutPlaceName(AgentRolloutKey key) =>
+        key.ParentElementId is Guid id && _workspaceStore.FindElement(id) is { } place ? place.Name : "The primary";
+
+    public string RolloutKeyName(PendingAgent pending) =>
+        RolloutKeys.FirstOrDefault(key => key.Id == pending.RolloutKeyId)?.Name ?? "a removed key";
+
+    public string? ReplacedHostName(PendingAgent pending) =>
+        pending.ReplacesHostId is Guid id && _workspaceStore.FindElement(id) is HostElement host ? host.Name : null;
+
+    public static string RolloutState(AgentRolloutKey key, DateTimeOffset now) =>
+        key.RevokedUtc is not null ? "Revoked"
+        : key.ExpiresUtc is { } expires && now >= expires ? "Expired"
+        : key.MaxDevices is { } max && key.DeviceCount >= max ? "Full"
+        : "Active";
+
+    public IActionResult OnPostCreateRollout()
+    {
+        var days = RolloutValidityDays.Contains(RolloutValidityDaysChoice) ? RolloutValidityDaysChoice : 90;
+        try
+        {
+            var issue = _workspaceStore.CreateAgentRolloutKey(RolloutName ?? string.Empty, RolloutParentId,
+                days == 0 ? null : DateTimeOffset.UtcNow.AddDays(days), RolloutMaxDevices, User.Identity?.Name);
+            IssuedRolloutKey = issue.Secret;
+            IssuedRolloutName = issue.Key.Name;
+            IssuedRolloutId = issue.Key.Id;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage(null, null, IssuedRolloutKey is null ? "rollout" : "agent-rollout-install");
+    }
+
+    public IActionResult OnPostRevokeRollout(Guid keyId)
+    {
+        if (_workspaceStore.RevokeAgentRolloutKey(keyId))
+        {
+            StatusMessage = "Rollout key revoked - no new machine can enrol with it. Agents already approved keep working.";
+        }
+        else
+        {
+            ErrorMessage = "That rollout key no longer exists or was already revoked.";
+        }
+
+        return RedirectToPage(null, null, "rollout");
+    }
+
+    public IActionResult OnPostDeleteRollout(Guid keyId)
+    {
+        if (!_workspaceStore.DeleteAgentRolloutKey(keyId))
+        {
+            ErrorMessage = "Only a revoked or expired rollout key can be removed from the list.";
+        }
+
+        return RedirectToPage(null, null, "rollout");
+    }
+
+    public IActionResult OnPostApprove(Guid pendingId)
+    {
+        var approval = _workspaceStore.ApprovePendingAgent(pendingId);
+        if (approval.Problem is { } problem)
+        {
+            ErrorMessage = problem;
+        }
+        else
+        {
+            var name = approval.HostId is Guid hostId ? _workspaceStore.FindElement(hostId)?.Name : null;
+            StatusMessage = $"Approved - '{name ?? "the machine"}' reports within a minute.";
+        }
+
+        return RedirectToPage();
+    }
+
+    public IActionResult OnPostApproveAll()
+    {
+        var approved = 0;
+        foreach (var pending in _workspaceStore.GetPendingAgents())
+        {
+            if (_workspaceStore.ApprovePendingAgent(pending.Id).Problem is null)
+            {
+                approved++;
+            }
+        }
+
+        StatusMessage = approved == 1 ? "1 machine approved." : $"{approved} machines approved.";
+        return RedirectToPage();
+    }
+
+    public IActionResult OnPostReject(Guid pendingId)
+    {
+        if (_workspaceStore.RejectPendingAgent(pendingId))
+        {
+            StatusMessage = "Rejected - that machine stays locked out. Uninstall the agent there, or run the rollout again to ask once more.";
+        }
+        else
+        {
+            ErrorMessage = "That machine is no longer waiting.";
+        }
+
+        return RedirectToPage();
+    }
+
+    public string RolloutWindowsCommand(string key) =>
+        $"irm '{IssuedRolloutUrl}/api/agent/install.ps1' -UseBasicParsing -Headers @{{'{AgentDownloadEndpoints.CodeHeader}'='{key}'}} | iex";
+
+    public string RolloutUnixCommand(string key) =>
+        $"curl -fsSL -H '{AgentDownloadEndpoints.CodeHeader}: {key}' '{IssuedRolloutUrl}/api/agent/install.sh' | sudo sh";
+
+    /// <summary>The MSI command line for the issued key - what Intune, a GPO start script or an RMM tool runs.</summary>
+    public string BuildMsiCommand(string key) =>
+        $"msiexec /i {AgentFeed.MsiFile} /qn MATMON_URL=\"{IssuedRolloutUrl}\" MATMON_KEY=\"{key}\"";
+
     /// <summary>The probe the agent of the issued code talks through (the primary, or a remote probe that relays it).</summary>
     public ProbeElement? IssuedVia { get; private set; }
 
@@ -282,6 +437,16 @@ public sealed class AgentsModel : PageModel
         {
             IssuedVia = _workspaceStore.FindAgentRelayProbe(issued);
             IssuedAgentUrl = AgentDownloadEndpoints.AgentUrl(HttpContext, _workspaceStore, issued,
+                PublicLinks.Absolute(HttpContext, _workspaceStore, string.Empty));
+        }
+
+        RolloutKeys = _workspaceStore.GetAgentRolloutKeys();
+        WaitingAgents = _workspaceStore.GetPendingAgents();
+        if (IssuedRolloutId is Guid rolloutId && RolloutKeys.FirstOrDefault(key => key.Id == rolloutId) is { } rollout)
+        {
+            var place = new AgentEnrollment { ParentElementId = rollout.ParentElementId };
+            IssuedRolloutVia = _workspaceStore.FindAgentRelayProbe(place);
+            IssuedRolloutUrl = AgentDownloadEndpoints.AgentUrl(HttpContext, _workspaceStore, place,
                 PublicLinks.Absolute(HttpContext, _workspaceStore, string.Empty));
         }
 

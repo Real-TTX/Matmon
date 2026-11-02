@@ -53,6 +53,16 @@ public sealed class SlaveProbeRuntimeState
         set { lock (_gate) { _bufferedObservations = value; } }
     }
 
+    private volatile bool _pendingApproval;
+
+    /// <summary>The primary answered the heartbeat "waiting for approval": the agent enrolled with a rollout key and an admin has
+    /// not approved it yet. Set by the heartbeat; the sensor worker does nothing meanwhile (its calls would only be refused).</summary>
+    public bool PendingApproval
+    {
+        get => _pendingApproval;
+        set => _pendingApproval = value;
+    }
+
     /// <summary>Set by the agent's auto-update; carried to the primary on every heartbeat.</summary>
     public string? AgentUpdateStatus
     {

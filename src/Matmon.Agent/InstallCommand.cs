@@ -21,10 +21,10 @@ public static class InstallCommand
     {
         var embedded = AgentInstallerPayload.ReadFile(Environment.ProcessPath);
         var url = EnrollCommand.ReadOption(args, "--url") ?? embedded?.Url;
-        var code = EnrollCommand.ReadOption(args, "--code") ?? embedded?.Code;
+        var code = EnrollCommand.ReadOption(args, "--code") ?? EnrollCommand.ReadOption(args, "--key") ?? embedded?.Code;
         if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(code))
         {
-            Console.Error.WriteLine("Usage: matmon-agent install --url <instance url> --code <enrolment code> [--force]");
+            Console.Error.WriteLine("Usage: matmon-agent install --url <instance url> --code <enrolment code or rollout key> [--force] [--keep-identity]");
             Console.Error.WriteLine("Or download the agent from the Agents page of your instance - that download carries both.");
             return 2;
         }
@@ -32,7 +32,7 @@ public static class InstallCommand
         if (OperatingSystem.IsWindows())
         {
             // The same path the tray's Set up takes - pass the values on explicitly.
-            return await SetupCommand.RunAsync(["setup", "--url", url, "--code", code, .. args.Where(a => a is "--force" or "--allow-http")], configPath);
+            return await SetupCommand.RunAsync(["setup", "--url", url, "--code", code, .. args.Where(a => a is "--force" or "--allow-http" or "--keep-identity")], configPath);
         }
 
         if (!Environment.IsPrivilegedProcess)
@@ -41,7 +41,10 @@ public static class InstallCommand
             return 2;
         }
 
-        var enrolled = await EnrollCommand.EnrollAsync(url, code, args.Contains("--force"), args.Contains("--allow-http"), configPath);
+        // --keep-identity (a rollout run again over machines that already have the agent): keep the identity, refresh the program.
+        var enrolled = args.Contains("--keep-identity") && AgentConfigFile.ReadEnrolledProbeName(configPath) is { } kept
+            ? new EnrollResult(0, $"Kept the existing identity '{kept}'.")
+            : await EnrollCommand.EnrollAsync(url, code, args.Contains("--force"), args.Contains("--allow-http"), configPath);
         if (!enrolled.Success)
         {
             Console.Error.WriteLine(enrolled.Message);

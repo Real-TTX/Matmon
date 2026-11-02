@@ -646,7 +646,36 @@ public interface IMonitoringWorkspaceStore
     /// deliberately indistinguishable. No licence check: agents are not probes in the licence model.
     /// </summary>
     /// <param name="operatingSystem">What the agent reported (e.g. "Microsoft Windows 10.0.26200"); picks its baseline sensors.</param>
-    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null);
+    AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null, string? machineId = null);
+
+    /// <summary>Creates a rollout key (one secret for many machines, each approved by an admin). Throws <see cref="InvalidOperationException"/> with the reason.</summary>
+    AgentRolloutKeyIssue CreateAgentRolloutKey(string name, Guid? parentElementId, DateTimeOffset? expiresUtc, int? maxDevices, string? createdBy);
+
+    IReadOnlyList<AgentRolloutKey> GetAgentRolloutKeys();
+
+    bool RevokeAgentRolloutKey(Guid keyId);
+
+    /// <summary>Removes a revoked or expired key from the list.</summary>
+    bool DeleteAgentRolloutKey(Guid keyId);
+
+    /// <summary>Whether a rollout key is usable (not consumed by asking).</summary>
+    bool IsAgentRolloutKeyValid(string? secret);
+
+    /// <summary>The usable (not revoked, not expired) rollout key a secret belongs to.</summary>
+    AgentRolloutKey? FindAgentRolloutKey(string? secret);
+
+    /// <summary>A machine enrolling with a rollout key: it gets an identity and waits for approval. Null for a wrong, revoked or
+    /// expired key, a key whose machine limit is reached, or when too many machines wait already.</summary>
+    PendingAgent? EnrollWithRolloutKey(string? secret, string? hostName, string? operatingSystem, string? agentVersion, string? machineId, string? remoteAddress);
+
+    IReadOnlyList<PendingAgent> GetPendingAgents();
+
+    bool IsPendingAgent(string? probeId, string? probeToken);
+
+    /// <summary>Makes a waiting machine a host (or re-enrols the host it replaces) with the identity it already holds.</summary>
+    AgentApproval ApprovePendingAgent(Guid pendingId);
+
+    bool RejectPendingAgent(Guid pendingId);
 
     /// <summary>Moves an agent's identity to another host (the machine it sits on); its own machine sensors go with it. Null
     /// when done, else the reason in words.</summary>
@@ -668,6 +697,12 @@ public enum AgentEnrollmentStatus
 }
 
 public sealed record AgentEnrollmentResult(AgentEnrollmentStatus Status, AgentEnrollmentRedemption? Redemption = null);
+
+/// <summary>A freshly made rollout key and its secret - the only time the secret exists in the clear.</summary>
+public sealed record AgentRolloutKeyIssue(AgentRolloutKey Key, string Secret);
+
+/// <summary>The host an approved machine became, or why it could not be approved.</summary>
+public sealed record AgentApproval(Guid? HostId, string? Problem);
 
 /// <summary>A currently-muted element for the Alerts page (name/path resolved, timing for display).</summary>
 /// <summary>The sensor a push address belongs to.</summary>

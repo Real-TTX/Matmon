@@ -83,6 +83,9 @@ public sealed partial class AgentPackageStore : IDisposable
     /// <summary>The feed this instance follows, or null (a local build, unless Matmon__AgentFeedUrl names one).</summary>
     public string? FeedUrl => _http is null ? null : _feed.FeedUrl;
 
+    /// <summary>The Windows installer (MSI) for mass rollout - published next to the agent packages by CI; null without a feed.</summary>
+    public string? MsiUrl => _feed.FeedUrl is { } feed ? $"{feed}/{AgentFeed.MsiFile}" : null;
+
     public string InstanceVersion => _feed.InstanceVersion;
 
     /// <summary>The packages placed in the folder by hand - no network.</summary>
@@ -476,6 +479,9 @@ public sealed record AgentFeedSettings(
 public static class AgentFeed
 {
     public const string ManifestFile = "matmon-agent.json";
+
+    /// <summary>The Windows installer for mass rollout (msiexec /i ... MATMON_URL=... MATMON_KEY=...), built by CI on Windows.</summary>
+    public const string MsiFile = "matmon-agent-x64.msi";
 
     public const string DefaultBaseUrl = "https://github.com/Real-TTX/Matmon/releases/download";
 

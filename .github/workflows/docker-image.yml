@@ -15,6 +15,8 @@ permissions:
 jobs:
   build-image:
     runs-on: ubuntu-latest
+    outputs:
+      msi_version: ${{ steps.version.outputs.msi_version }}
 
     steps:
       - name: Check out repository
@@ -77,6 +79,8 @@ jobs:
           tags="$(printf '%s' "$tags" | sed '/^$/d')"
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # The MSI wants a numeric a.b.c (c < 65536): the VERSION file's major.minor and the run number.
+          echo "msi_version=$(echo "$base" | cut -d. -f1-2).$(( run % 65536 ))" >> "$GITHUB_OUTPUT"
           {
             echo "tags<<EOF"
             echo "${tags}"
@@ -200,3 +204,49 @@ jobs:
           done
           gh release upload "$tag" agent-feed/matmon-agent.json --clobber
           echo "Published $(jq -r .version agent-feed/matmon-agent.json) to $tag"
+
+      # The signed Windows agent goes on to the MSI job (WiX needs Windows).
+      - name: Hand the Windows agent to the MSI job
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-win-x64
+          path: agent-feed/matmon-agent-win-x64.exe
+          retention-days: 1
+
+  # The Matmon Agent as an MSI, for rolling it out to many Windows machines (Intune, GPO, RMM): the same signed agent
+  # program the instances hand out, wrapped by installer/agent-msi/MatmonAgent.wxs, attached to the agent release of its
+  # channel next to the packages (the Agents page links it there).
+  agent-msi:
+    if: github.event_name == 'push'
+    needs: build-image
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch the Windows agent
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-win-x64
+          path: agent
+
+      - name: Build the MSI
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix build -arch x64 `
+            -d Version=${{ needs.build-image.outputs.msi_version }} `
+            -d AgentExe=agent/matmon-agent-win-x64.exe `
+            -d Icon=src/Matmon.Agent/matmon-agent.ico `
+            -o matmon-agent-x64.msi installer/agent-msi/MatmonAgent.wxs
+
+      - name: Publish the MSI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then tag="agent-latest"; else tag="agent-nightly"; fi
+          gh release upload "$tag" matmon-agent-x64.msi --clobber
+          echo "Published the MSI ${{ needs.build-image.outputs.msi_version }} to $tag"

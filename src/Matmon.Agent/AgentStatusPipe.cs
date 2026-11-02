@@ -21,7 +21,8 @@ public sealed record AgentStatusSnapshot(
     DateTimeOffset StartedUtc,
     string ConfigPath,
     string StateDirectory,
-    int BufferedObservations = 0);
+    int BufferedObservations = 0,
+    bool PendingApproval = false);
 
 /// <summary>
 /// The tray's window into the service: a local named pipe that answers one question - "status" - with a
@@ -122,7 +123,8 @@ public sealed class AgentStatusPipeServer : BackgroundService
             _startedUtc,
             _configLocation.Path,
             _updateSettings.StateDirectory,
-            _runtimeState.BufferedObservations);
+            _runtimeState.BufferedObservations,
+            _runtimeState.PendingApproval);
     }
 
     [SupportedOSPlatform("windows")]

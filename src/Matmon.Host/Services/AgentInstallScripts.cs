@@ -42,7 +42,7 @@ public static class AgentInstallScripts
         var hash = SafeHash(sha256);
         return $$"""
             # Matmon agent installer for {{safeUrl}}
-            # Generated for ONE enrolment code: it works once and expires. Run in PowerShell as Administrator.
+            # {{Generated(code)}} Run in PowerShell as Administrator.
             & {
                 $ErrorActionPreference = 'Stop'
                 $ProgressPreference = 'SilentlyContinue'
@@ -65,7 +65,7 @@ public static class AgentInstallScripts
                     if ($actual -ne $Expected) {
                         throw "The downloaded agent does not match its checksum ($actual, expected $Expected) - not installed."
                     }
-                    & $file setup --url $MatmonUrl --code $MatmonCode
+                    & $file setup --url $MatmonUrl --code $MatmonCode{{KeepIdentity(code)}}
                     if ($LASTEXITCODE -ne 0) {
                         throw "The agent setup failed (exit code $LASTEXITCODE)."
                     }
@@ -88,7 +88,7 @@ public static class AgentInstallScripts
         return $$"""
             #!/bin/sh
             # Matmon agent installer for {{safeUrl}}
-            # Generated for ONE enrolment code: it works once and expires. Run as root: curl ... | sudo sh
+            # {{Generated(code)}} Run as root: curl ... | sudo sh
             set -eu
             MATMON_URL='{{safeUrl}}'
             MATMON_CODE='{{safeCode}}'
@@ -141,7 +141,7 @@ public static class AgentInstallScripts
             fi
 
             chmod 0755 "$file"
-            "$file" install --url "$MATMON_URL" --code "$MATMON_CODE"
+            "$file" install --url "$MATMON_URL" --code "$MATMON_CODE"{{KeepIdentity(code)}}
 
             """.ReplaceLineEndings("\n");
     }
@@ -149,9 +149,17 @@ public static class AgentInstallScripts
     private static (string Url, string Code) Check(string url, string code)
     {
         var safeUrl = SafeUrl(url) ?? throw new ArgumentException("not a usable instance address", nameof(url));
-        var safeCode = AgentEnrollmentCode.Canonical(code) ?? throw new ArgumentException("not an enrolment code", nameof(code));
+        var safeCode = AgentRolloutKeySecret.Canonical(code) ?? AgentEnrollmentCode.Canonical(code)
+            ?? throw new ArgumentException("not an enrolment code or rollout key", nameof(code));
         return (safeUrl, safeCode);
     }
+
+    // A rollout key is run again over machines that have the agent already (a deployment repeated): those keep their identity.
+    private static string KeepIdentity(string code) => AgentRolloutKeySecret.IsKey(code) ? " --keep-identity" : string.Empty;
+
+    private static string Generated(string code) => AgentRolloutKeySecret.IsKey(code)
+        ? "Generated for a ROLLOUT KEY: every machine that runs it waits for approval under Probes > Agents."
+        : "Generated for ONE enrolment code: it works once and expires.";
 
     private static string SafeHash(string? sha256) =>
         sha256 is { Length: 64 } && sha256.All(char.IsAsciiHexDigit) ? sha256.ToLowerInvariant() : string.Empty;

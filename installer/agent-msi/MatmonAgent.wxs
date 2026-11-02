@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Matmon Agent as an MSI - for rolling it out to many Windows machines (Intune, a GPO start-up script, PDQ, an RMM tool):
+
+    msiexec /i matmon-agent-x64.msi /qn MATMON_URL="https://matmon.example" MATMON_KEY="mmr_..."
+
+  The MSI only carries the agent program and hands everything else to the agent's own "setup" (the same thing the tray's
+  Set up and the PowerShell one-liner run): enrol with the key, copy itself to Program Files\Matmon Agent, create the
+  service, the tray at sign-in and the Start menu entry. So an MSI install and a manual one are the same installation.
+
+  - The program the MSI owns sits in its own folder ("Matmon Agent Installer"): the agent updates ITSELF in Program
+    Files\Matmon Agent, and Windows Installer must not see that as a damaged file to "repair" back to an old build.
+  - Installed again (a new version, a repair, the same deployment pushed once more) on a machine that is enrolled already,
+    setup keeps its identity (keep-identity) and only brings the program up to date.
+  - A wrong or missing key fails the install and rolls it back - nothing half-installed stays behind.
+  - Removing the MSI removes the agent (service, tray, program, configuration); an upgrade does not.
+  - InstalledByMsi tells the agent not to write an "Installed apps" entry of its own - Windows Installer lists it.
+
+  Built by CI (windows job): wix build -arch x64 -d Version=... -d AgentExe=... -d Icon=... -o matmon-agent-x64.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Matmon Agent"
+           Manufacturer="Matmon"
+           Version="$(var.Version)"
+           UpgradeCode="079CDC41-E682-484A-BCC8-EB1592FBF20F"
+           Scope="perMachine"
+           InstallerVersion="500">
+
+    <!-- The agent follows the version its instance hands out, up or down - so an older MSI may replace a newer one. -->
+    <MajorUpgrade AllowDowngrades="yes" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AgentIcon" SourceFile="$(var.Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="AgentIcon" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <!-- The instance address and the rollout key (or a single-use code). Hidden: the key is kept out of the MSI log. -->
+    <Property Id="MATMON_URL" Secure="yes" />
+    <Property Id="MATMON_KEY" Secure="yes" Hidden="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Matmon Agent Installer">
+        <Component Id="AgentProgram">
+          <File Id="AgentExe" Source="$(var.AgentExe)" Name="matmon-agent.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="MsiMarker">
+          <RegistryValue Root="HKLM" Key="SOFTWARE\Matmon Agent" Name="InstalledByMsi" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Agent" Title="Matmon Agent">
+      <ComponentRef Id="AgentProgram" />
+      <ComponentRef Id="MsiMarker" />
+    </Feature>
+
+    <!-- Deferred and as LocalSystem: setup creates a service and writes HKLM. HideTarget keeps the command line (with the
+         key) out of the log. Return="check": a refused key fails the install. -->
+    <CustomAction Id="SetUpAgent"
+                  FileRef="AgentExe"
+                  ExeCommand="setup --url &quot;[MATMON_URL]&quot; --code &quot;[MATMON_KEY]&quot; --keep-identity"
+                  Execute="deferred"
+                  Impersonate="no"
+                  HideTarget="yes"
+                  Return="check" />
+
+    <CustomAction Id="RemoveAgent"
+                  FileRef="AgentExe"
+                  ExeCommand="uninstall --confirmed"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="SetUpAgent" Before="InstallFinalize" Condition="NOT REMOVE" />
+      <Custom Action="RemoveAgent" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

@@ -143,7 +143,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         }
     }
 
-    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null)
+    public AgentEnrollmentResult RedeemAgentEnrollment(string? code, string? hostName, string? operatingSystem = null, string? machineId = null)
     {
         var invalid = new AgentEnrollmentResult(AgentEnrollmentStatus.Invalid);
         var hash = AgentEnrollmentCode.Hash(code);
@@ -196,7 +196,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             {
                 ProbeId = host.Agent?.ProbeId is { Length: > 0 } kept ? kept : GenerateUniqueProbeId(host.Name),
                 Token = CreateToken(),
-                EnrolledUtc = now
+                EnrolledUtc = now,
+                MachineId = AgentMachineId.Clean(machineId) ?? host.Agent?.MachineId
             };
             EnsureAgentHeartbeatSensor(host);
             EnsureAgentBaselineSensorsLocked(host, operatingSystem);
