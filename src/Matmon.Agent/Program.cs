@@ -151,6 +151,33 @@ return 0;
 static int RunTray()
 {
 #if WINDOWS
+    // A double-click from Explorer starts this CONSOLE program in a console window of its own. FreeConsole lets go of
+    // it, but on Windows 11 that window is a Windows Terminal tab, which stays open (empty) for as long as the tray
+    // runs. So when the console was made just for us, start again under a hidden console host - the way sign-in starts
+    // the tray - and end at once: the window closes with this process. The variable keeps the second start from
+    // doing the same again (it is alone in its hidden console too).
+    if (Environment.GetEnvironmentVariable("MATMON_AGENT_DETACHED") is null && ConsoleMadeForUs() &&
+        Environment.ProcessPath is { } self)
+    {
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "conhost.exe"))
+            {
+                UseShellExecute = false,
+            };
+            start.ArgumentList.Add("--headless");
+            start.ArgumentList.Add(self);
+            start.ArgumentList.Add("tray");
+            start.Environment["MATMON_AGENT_DETACHED"] = "1";
+            System.Diagnostics.Process.Start(start)?.Dispose();
+            return 0;
+        }
+        catch
+        {
+            // No conhost (unlikely): carry on in this process; FreeConsole below still lets go of the window.
+        }
+    }
+
     // WinForms needs a single-threaded apartment; top-level statements run on an MTA thread.
     var thread = new Thread(Matmon.Agent.Tray.TrayApplication.Run);
     thread.SetApartmentState(ApartmentState.STA);
@@ -162,3 +189,16 @@ static int RunTray()
     return 2;
 #endif
 }
+
+#if WINDOWS
+// True when this process is the only one in its console: Explorer made the window for it (a terminal or a parent that
+// shares its console would be in the list as well).
+static bool ConsoleMadeForUs()
+{
+    var ids = new uint[2];
+    return GetConsoleProcessList(ids, (uint)ids.Length) == 1;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
+}
+#endif

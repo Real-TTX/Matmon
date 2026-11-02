@@ -307,20 +307,16 @@
     }
 }
 
-<section class="mat-section">
-    <div class="mat-section__head">
-        <h2>Agent packages</h2>
-        <p class="mat-section__lead">
+<details class="mat-collapse">
+    <summary><span>Plain downloads without a code - for installing by hand (<span class="mat-mono">matmon-agent enroll</span>)</span>@MatUi.Icon("chevron-down", "mat-accordion__chev")</summary>
+    <div class="mat-accordion__body">
+        <p class="mat-hint">
+            The agent program per platform, without an address or code inside. To add a machine, create a code above - its download installs in one step.
             @if (Model.ServedVersion is { } served)
             {
-                <span>Agents get <span class="mat-mono">@served</span> - the newest of this channel; this instance is <span class="mat-mono">@Model.InstanceVersion</span></span>
-            }
-            else
-            {
-                <span>Build <span class="mat-mono">@Model.InstanceVersion</span></span>
+                <span>Agent version <span class="mat-mono">@served</span> (this instance: <span class="mat-mono">@Model.InstanceVersion</span>).</span>
             }
         </p>
-    </div>
 
     @if (Model.Packages.Count == 0)
     {
@@ -379,7 +375,8 @@
             </table>
         </div>
     }
-</section>
+    </div>
+</details>
 
 @if (isAdmin)
 {
