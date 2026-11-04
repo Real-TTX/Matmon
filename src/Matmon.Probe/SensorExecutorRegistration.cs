@@ -34,6 +34,7 @@ public static class SensorExecutorRegistration
         services.AddTransient<ISensorExecutor>(_ => new ProxmoxBackupSensorExecutor());
         services.AddTransient<ISensorExecutor, PrinterSensorExecutor>();
         services.AddTransient<ISensorExecutor>(_ => new DomainExpirySensorExecutor());
+        services.AddTransient<ISensorExecutor>(_ => new RssFeedSensorExecutor());
         services.AddTransient<ISensorExecutor, SipSensorExecutor>();
         services.AddTransient<ISensorExecutor, LdapSensorExecutor>();
         services.AddTransient<ISensorExecutor>(_ => new OpnsenseSensorExecutor());

@@ -154,6 +154,56 @@ public sealed partial class WorkspaceModel
         }
     }
 
+    /// <summary>A template file: one template with the ones it is based on (<paramref name="id"/>), else all of them.
+    /// Never a secret - see <see cref="TemplateTransfer"/>.</summary>
+    public IActionResult OnGetExportTemplates(Guid? id)
+    {
+        var all = _workspaceStore.GetAllTemplates();
+        var chosen = id is Guid one ? [one] : all.Select(template => template.Id);
+        var templates = TemplateTransfer.WithParents(all, chosen);
+        if (templates.Count == 0)
+        {
+            return NotFound();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var bytes = TemplateTransfer.Export(templates, _workspaceStore.GetSecretParameterKeys(), $"Matmon {Matmon.Probe.MatmonVersion.Current}", now);
+        return File(bytes, "application/json", TemplateTransfer.FileName(id is null ? templates : [templates[^1]], now));
+    }
+
+    public async Task<IActionResult> OnPostImportTemplatesAsync(IFormFile? templateFile)
+    {
+        try
+        {
+            if (templateFile is null || templateFile.Length == 0)
+            {
+                throw new InvalidDataException("Choose a template file (.json) first.");
+            }
+
+            if (templateFile.Length > TemplateTransfer.MaxFileBytes)
+            {
+                throw new InvalidDataException("The file is too large for a template file (at most 2 MB).");
+            }
+
+            using var buffer = new MemoryStream();
+            await templateFile.CopyToAsync(buffer, HttpContext.RequestAborted);
+            var read = TemplateTransfer.Read(
+                buffer.ToArray(),
+                _workspaceStore.GetAllTemplates().Select(template => template.Name).ToArray(),
+                _workspaceStore.GetSensorDefinitions().Select(definition => definition.Key).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                _workspaceStore.GetSecretParameterKeys());
+            var added = _workspaceStore.ImportTemplates(read.Templates);
+            StatusMessage = $"Imported {added.Count} template{(added.Count == 1 ? string.Empty : "s")}: {string.Join(", ", added.Select(template => template.Name))}."
+                + (read.Notes.Count == 0 ? string.Empty : " " + string.Join(" ", read.Notes));
+        }
+        catch (InvalidDataException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage();
+    }
+
     private WorkspaceTemplateEditorInput BuildTemplateEditor(MonitoringTemplate template)
     {
         var localSettings = template.Settings;

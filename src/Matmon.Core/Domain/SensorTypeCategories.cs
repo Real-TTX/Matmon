@@ -31,6 +31,7 @@ public static class SensorTypeCategories
         ["ping"] = "Network",
         ["http"] = "Network",
         ["http-advanced"] = "Network",
+        ["rss-feed"] = "Network",
         ["tcp-port"] = "Network",
         ["dns"] = "Network",
         ["ntp"] = "Network",

@@ -92,8 +92,8 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
                 Key = "jsonPaths",
                 Label = "JSON paths",
                 Kind = SensorParameterKind.Multiline,
-                Description = "One path per line. Use path|Label. Arrays return their length.",
-                Placeholder = "data.count|Count",
+                Description = "One path per line: path|Label. An array returns its length - unless the path walks through it with [*], then every element is a channel of its own and {field} in the label is read from that element ({../field} from the one above). A text value such as Operational, Degraded or Outage becomes OK / warning / critical.",
+                Placeholder = "data.count|Count\nresult.status[*].status|{name}",
                 VisibleWhenParameterKey = "extractMode",
                 VisibleWhenValues = ["json"]
             },
@@ -224,6 +224,12 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             var message = !statusOk
                 ? $"http {statusCode} expected {expectedLabel}"
                 : contentProblem ?? $"http {statusCode} ok";
+            if (state == SensorState.Healthy && DescribeStatusChannels(channels) is { } rollup)
+            {
+                // Status texts read from the page (one channel per service of a status page): the worst one is the
+                // sensor's state, and the message names what is not fine.
+                (state, message) = rollup;
+            }
 
             var defaultValue = channels.FirstOrDefault(channel => channel.IsDefault)?.Value;
             var result = new SensorExecutionResult(state, watch.Elapsed, defaultValue, message)
@@ -244,6 +250,31 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             watch.Stop();
             return SensorExecutionResult.Critical(watch.Elapsed, ex.Message);
         }
+    }
+
+    /// <summary>The state and message from the channels that carry a status text: null when there are none. All fine =
+    /// "12 OK"; otherwise the worst state and the channels that are not fine with their text.</summary>
+    public static (SensorState State, string Message)? DescribeStatusChannels(IReadOnlyList<SensorChannelValue> channels)
+    {
+        var statuses = channels.Where(channel => channel.State is not null && channel.Message is not null).ToArray();
+        if (statuses.Length == 0)
+        {
+            return null;
+        }
+
+        var problems = statuses.Where(channel => channel.State != SensorState.Healthy).ToArray();
+        if (problems.Length == 0)
+        {
+            return (SensorState.Healthy, $"{statuses.Length} OK");
+        }
+
+        var worst = problems.Any(channel => channel.State == SensorState.Critical) ? SensorState.Critical : SensorState.Warning;
+        var named = problems
+            .OrderByDescending(channel => channel.State == SensorState.Critical)
+            .Take(3)
+            .Select(channel => $"{channel.Label}: {channel.Message}");
+        var more = problems.Length > 3 ? $" (+{problems.Length - 3} more)" : string.Empty;
+        return (worst, $"{problems.Length} of {statuses.Length} not OK - {string.Join("; ", named)}{more}");
     }
 
     // Cap on the response body buffered for content checks, so a huge/misbehaving endpoint can't OOM.
@@ -402,11 +433,180 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
         }
 
         using var document = JsonDocument.Parse(body);
-        return ParsePathLines(paths)
-            .Select(path => BuildJsonChannel(document.RootElement, path.Path, path.Label))
-            .Where(channel => channel is not null)
-            .Cast<SensorChannelValue>()
-            .ToArray();
+        var channels = new List<SensorChannelValue>();
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "latency", "statusCode", "contentLength" };
+        foreach (var (path, label) in ParsePathLines(paths))
+        {
+            foreach (var match in ResolveJsonMatches(document.RootElement, path))
+            {
+                if (channels.Count >= MaxJsonChannels)
+                {
+                    return channels;
+                }
+
+                var name = ResolveLabel(label, match.Scopes, match.Index);
+                if (BuildJsonChannel(match.Value, name, match.HasWildcard) is not { } channel)
+                {
+                    continue;
+                }
+
+                channels.Add(channel with { Key = UniqueKey(keys, channel.Key) });
+            }
+        }
+
+        return channels;
+    }
+
+    /// <summary>At most this many channels from the JSON paths: a path with [*] over a long list must not make a sensor
+    /// with thousands of channels.</summary>
+    public const int MaxJsonChannels = 200;
+
+    private sealed record JsonMatch(JsonElement Value, IReadOnlyList<JsonElement> Scopes, int Index, bool HasWildcard);
+
+    /// <summary>Every value a path names. Segments are separated by dots; <c>name[*]</c> (or a bare <c>[*]</c> / <c>*</c>)
+    /// walks through every element of an array (or every value of an object), <c>name[2]</c> takes one element. The
+    /// elements walked through are kept, innermost last, for the label's placeholders.</summary>
+    private static IEnumerable<JsonMatch> ResolveJsonMatches(JsonElement root, string path)
+    {
+        var segments = new List<string>();
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var bracket = part.IndexOf('[');
+            if (bracket > 0)
+            {
+                segments.Add(part[..bracket]);
+                segments.Add(part[bracket..]);
+            }
+            else
+            {
+                segments.Add(part);
+            }
+        }
+
+        var hasWildcard = segments.Any(segment => segment is "*" or "[*]");
+        var index = 0;
+        foreach (var (value, scopes) in Walk(root, segments, 0, []))
+        {
+            yield return new JsonMatch(value, scopes, index++, hasWildcard);
+        }
+    }
+
+    private static IEnumerable<(JsonElement Value, IReadOnlyList<JsonElement> Scopes)> Walk(
+        JsonElement element, IReadOnlyList<string> segments, int position, IReadOnlyList<JsonElement> scopes)
+    {
+        if (position == segments.Count)
+        {
+            yield return (element, scopes);
+            yield break;
+        }
+
+        var segment = segments[position];
+        if (segment is "*" or "[*]")
+        {
+            var children = element.ValueKind switch
+            {
+                JsonValueKind.Array => element.EnumerateArray().ToArray(),
+                JsonValueKind.Object => element.EnumerateObject().Select(property => property.Value).ToArray(),
+                _ => []
+            };
+            foreach (var child in children)
+            {
+                foreach (var match in Walk(child, segments, position + 1, [.. scopes, child]))
+                {
+                    yield return match;
+                }
+            }
+
+            yield break;
+        }
+
+        if (segment.StartsWith('[') && segment.EndsWith(']'))
+        {
+            if (element.ValueKind == JsonValueKind.Array &&
+                int.TryParse(segment[1..^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var item) &&
+                item >= 0 && item < element.GetArrayLength())
+            {
+                foreach (var match in Walk(element[item], segments, position + 1, scopes))
+                {
+                    yield return match;
+                }
+            }
+
+            yield break;
+        }
+
+        if (element.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(element, segment, out var child2))
+        {
+            foreach (var match in Walk(child2, segments, position + 1, scopes))
+            {
+                yield return match;
+            }
+        }
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.TryGetProperty(name, out value))
+        {
+            return true;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static readonly Regex Placeholder = new(@"\{((?:\.\./)*)([^{}]+)\}", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    /// <summary>The label of one match: <c>{field}</c> is read from the innermost element walked through, every
+    /// <c>../</c> goes one element further out. A label without placeholders over a list gets the item number.</summary>
+    private static string ResolveLabel(string label, IReadOnlyList<JsonElement> scopes, int index)
+    {
+        if (scopes.Count == 0)
+        {
+            return label;
+        }
+
+        if (!label.Contains('{'))
+        {
+            return $"{label} {index + 1}";
+        }
+
+        var resolved = Placeholder.Replace(label, match =>
+        {
+            var up = match.Groups[1].Value.Length / 3;
+            var level = scopes.Count - 1 - up;
+            if (level < 0)
+            {
+                return string.Empty;
+            }
+
+            var value = ResolveJsonMatches(scopes[level], match.Groups[2].Value).FirstOrDefault()?.Value;
+            return value is { ValueKind: JsonValueKind.String } text ? text.GetString() ?? string.Empty
+                : value is { ValueKind: JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False } other ? other.ToString()
+                : string.Empty;
+        }).Trim();
+
+        return resolved.Length == 0 ? $"Item {index + 1}" : resolved;
+    }
+
+    private static string UniqueKey(HashSet<string> keys, string key)
+    {
+        var candidate = key;
+        for (var number = 2; !keys.Add(candidate); number++)
+        {
+            candidate = $"{key}_{number}";
+        }
+
+        return candidate;
     }
 
     private static IReadOnlyList<SensorChannelValue> ExtractXml(MonitoringSettings settings, string body)
@@ -425,15 +625,10 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             .ToArray();
     }
 
-    private static SensorChannelValue? BuildJsonChannel(JsonElement root, string path, string label)
+    private static SensorChannelValue? BuildJsonChannel(JsonElement element, string label, bool walkedList)
     {
-        if (!TryResolveJsonPath(root, path, out var element))
-        {
-            return null;
-        }
-
         double value;
-        if (element.ValueKind == JsonValueKind.Array)
+        if (element.ValueKind == JsonValueKind.Array && !walkedList)
         {
             value = element.GetArrayLength();
         }
@@ -445,7 +640,26 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
         {
             value = element.GetBoolean() ? 1 : 0;
         }
-        else if (!double.TryParse(element.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+        else if (element.ValueKind == JsonValueKind.String &&
+                 double.TryParse(element.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+        {
+            value = number;
+        }
+        else if (element.ValueKind == JsonValueKind.String && StatusText.Classify(element.GetString()) is { } state)
+        {
+            // A status page says "Operational" / "Degraded Performance" / "Major Outage": the channel is 0 / 1 / 2 and
+            // carries the state itself, with the text as its message.
+            var text = element.GetString()!.Trim();
+            return new SensorChannelValue
+            {
+                Key = NormalizeKey(label),
+                Label = label,
+                Value = state switch { SensorState.Healthy => 0, SensorState.Warning => 1, _ => 2 },
+                State = state,
+                Message = text.Length <= 80 ? text : text[..80] + "..."
+            };
+        }
+        else
         {
             return null;
         }
@@ -479,24 +693,6 @@ public sealed class HttpAdvancedSensorExecutor : ISensorExecutor
             Label = label,
             Value = value
         };
-    }
-
-    private static bool TryResolveJsonPath(JsonElement root, string path, out JsonElement element)
-    {
-        element = root;
-        foreach (var segment in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (element.ValueKind == JsonValueKind.Object &&
-                element.TryGetProperty(segment, out var child))
-            {
-                element = child;
-                continue;
-            }
-
-            return false;
-        }
-
-        return true;
     }
 
     private static IReadOnlyList<(string Path, string Label)> ParsePathLines(string raw)

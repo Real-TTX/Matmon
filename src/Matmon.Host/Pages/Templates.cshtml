@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Templates";
     var returnUrl = Request.Path + Request.QueryString;
+    var isAdmin = Matmon.Host.Services.MatmonSecurity.IsAdmin(User);
     var templates = Model.View.Templates;
     var sensorTemplateCount = templates.Count(template => template.IsSensorTemplate);
     var linkedTemplateCount = templates.Count(template => !string.IsNullOrWhiteSpace(template.ParentName));
@@ -132,6 +133,7 @@
                                         {
                                             <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/SensorCreate" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl" aria-label="New sensor from @template.Name" data-tip="New sensor">@MatUi.Icon("plus")</a>
                                         }
+                                        <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/Templates" asp-page-handler="ExportTemplates" asp-route-id="@template.Id" download aria-label="Export @template.Name" data-tip="Export as a file">@MatUi.Icon("download")</a>
                                         <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/TemplateEditor" asp-route-selectedTemplateId="@template.Id" asp-route-returnUrl="@returnUrl" aria-label="Edit @template.Name" data-tip="Edit">@MatUi.Icon("edit")</a>
                                     </div>
                                 </td>
@@ -145,5 +147,42 @@
 
     <div class="mat-actions">
         <a class="mat-btn mat-btn--primary" asp-page="/TemplateEditor" asp-route-returnUrl="@returnUrl">@MatUi.Icon("plus")<span>New template</span></a>
+        @if (isAdmin)
+        {
+            <button type="button" class="mat-btn mat-btn--secondary" data-dialog-open="templates-import" aria-haspopup="dialog">@MatUi.Icon("upload")<span>Import</span></button>
+        }
+        @if (templates.Count > 0)
+        {
+            <a class="mat-btn mat-btn--secondary" asp-page="/Templates" asp-page-handler="ExportTemplates" download>@MatUi.Icon("download")<span>Export all</span></a>
+        }
     </div>
 </div>
+
+@if (isAdmin)
+{
+    <dialog class="mat-dialog" id="templates-import" aria-labelledby="templates-import-title">
+        <form method="post" asp-page="/Templates" asp-page-handler="ImportTemplates" enctype="multipart/form-data" class="mat-dialog__form mat-form" novalidate>
+            <div class="mat-dialog__head">
+                @MatUi.Icon("upload")
+                <h2 class="mat-dialog__title" id="templates-import-title">Import templates</h2>
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-dialog__close" data-dialog-close aria-label="Close">@MatUi.Icon("x")</button>
+            </div>
+            <div class="mat-dialog__body mat-stack">
+                <div class="mat-field">
+                    <label class="mat-label" for="templates-import-file">Template file <span class="mat-req" aria-hidden="true">*</span></label>
+                    <div class="mat-upload" data-upload>
+                        <input class="mat-upload__input" type="file" id="templates-import-file" name="templateFile" accept=".json,application/json" required data-msg-required="Choose a template file." aria-describedby="templates-import-hint" />
+                    </div>
+                    <span class="mat-hint" id="templates-import-hint">A file exported from Matmon. The templates are added beside yours - a name that exists gets "(imported)". Credentials come without their secrets: fill them in afterwards.</span>
+                    <span class="mat-error" aria-live="polite"></span>
+                </div>
+            </div>
+            <div class="mat-dialog__foot">
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("upload")<span>Import</span></button>
+                    <button type="button" class="mat-btn mat-btn--secondary" data-dialog-close>Cancel</button>
+                </div>
+            </div>
+        </form>
+    </dialog>
+}

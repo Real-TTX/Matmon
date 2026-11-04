@@ -33,6 +33,7 @@ public static class SensorUsageCatalog
             ["ldap"] = SensorUsageLevel.Moderate,
             ["opnsense"] = SensorUsageLevel.Moderate,
             ["domain-expiry"] = SensorUsageLevel.Moderate,
+            ["rss-feed"] = SensorUsageLevel.Moderate,
             ["snmp-printer"] = SensorUsageLevel.Moderate,
             ["redfish"] = SensorUsageLevel.Moderate,
             ["proxmox-backup"] = SensorUsageLevel.Moderate,

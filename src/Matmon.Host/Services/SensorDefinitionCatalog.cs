@@ -38,6 +38,7 @@ public static class SensorDefinitionCatalog
         ProxmoxBackupSensorExecutor.Definition,
         PrinterSensorExecutor.Definition,
         DomainExpirySensorExecutor.Definition,
+        RssFeedSensorExecutor.Definition,
         SipSensorExecutor.Definition,
         LdapSensorExecutor.Definition,
         OpnsenseSensorExecutor.Definition,

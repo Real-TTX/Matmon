@@ -74,6 +74,7 @@ public static class SensorScheduleDefaults
         ["certificate-chain"] = OncePerDay,
         // A registry is asked once a day - an expiry date moves by a year at a time, and registries rate-limit WHOIS.
         ["domain-expiry"] = OncePerDay,
+        ["rss-feed"] = TimeSpan.FromMinutes(5),
 
         // Mail round-trip: a send + receive probe every 15 min balances freshness against mail-server
         // load; the sensor's tolerance parameter (default 15 min) governs the actual alarm window.

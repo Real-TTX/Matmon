@@ -50,6 +50,7 @@ public static class SensorExecutionLoadRanking
         ["ldap"] = Light,
         ["opnsense"] = Moderate,
         ["domain-expiry"] = Light,
+        ["rss-feed"] = Light,
         ["snmp-printer"] = Moderate,
         ["proxmox-backup"] = Moderate,
         ["mssql"] = Heavy,

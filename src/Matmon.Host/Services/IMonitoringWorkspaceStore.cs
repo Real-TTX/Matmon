@@ -582,6 +582,13 @@ public interface IMonitoringWorkspaceStore
 
     bool DeleteTemplate(Guid id);
 
+    /// <summary>Adds templates read from a template file (<see cref="TemplateTransfer.Read"/>): new ids, parents first.
+    /// A parent that is not among them and not on this instance is dropped.</summary>
+    IReadOnlyList<MonitoringTemplate> ImportTemplates(IReadOnlyList<MonitoringTemplate> templates);
+
+    /// <summary>The parameter keys the sensor types declare secret - what a template export leaves out.</summary>
+    IReadOnlySet<string> GetSecretParameterKeys();
+
     bool DeleteNotificationSender(Guid id);
 
     bool DeleteNotificationReceiver(Guid id);

@@ -54,6 +54,7 @@ public static class SensorTelemetryProfiles
         ["opnsense"] = Responsive,
         ["hyperv-health"] = Responsive,
         ["domain-expiry"] = Availability,
+        ["rss-feed"] = Availability,
         ["snmp-printer"] = Availability,
         ["redfish"] = Responsive,
         ["proxmox-backup"] = Responsive,
