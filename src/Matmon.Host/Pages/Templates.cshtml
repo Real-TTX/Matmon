@@ -1,5 +1,7 @@
 @page "/templates"
 @model WorkspaceModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
+@inject Matmon.Host.Services.CloudTemplateStoreClient StoreClient
 @{
     ViewData["Title"] = "Templates";
     var returnUrl = Request.Path + Request.QueryString;
@@ -35,6 +37,28 @@
 @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
 {
     <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (isAdmin)
+{
+    // Sets added from the template store that have another version there now (the cloud is asked at most every 30 minutes).
+    var storeUpdates = (await Matmon.Host.Services.TemplateStoreUpdates.FindAsync(WorkspaceStore, StoreClient, ViewContext.HttpContext.RequestAborted))
+        .Where(set => set.UpdateAvailable).ToList();
+    if (storeUpdates.Count > 0)
+    {
+        <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("refresh")<div class="mat-alert__body">
+            @(storeUpdates.Count == 1 ? "A newer version of a template set is in the store:" : "Newer versions of template sets are in the store:")
+            @for (var i = 0; i < storeUpdates.Count; i++)
+            {
+                var update = storeUpdates[i];
+                if (i > 0)
+                {
+                    <span>, </span>
+                }
+                <a href="/templates/store?show=@Uri.EscapeDataString(update.Slug)">@(update.Title ?? update.Slug)</a> <span class="mat-mono">@(string.IsNullOrEmpty(update.Installed) ? "" : update.Installed + " → ")@update.Live</span>
+            }
+        </div></div>
+    }
 }
 
 <div class="mat-stats">

@@ -584,7 +584,17 @@ public interface IMonitoringWorkspaceStore
 
     /// <summary>Adds templates read from a template file (<see cref="TemplateTransfer.Read"/>): new ids, parents first.
     /// A parent that is not among them and not on this instance is dropped.</summary>
-    IReadOnlyList<MonitoringTemplate> ImportTemplates(IReadOnlyList<MonitoringTemplate> templates);
+    /// <paramref name="storeSlug"/> / <paramref name="storeVersion"/> = the template store set and version they came from (remembered
+    /// on each template, so a newer version can be pointed out and applied with <see cref="UpdateTemplatesFromStore"/>).
+    IReadOnlyList<MonitoringTemplate> ImportTemplates(IReadOnlyList<MonitoringTemplate> templates, string? storeSlug = null, string? storeVersion = null);
+
+    /// <summary>
+    /// Brings the templates added from store set <paramref name="storeSlug"/> to a newer version IN PLACE: a template of the set is
+    /// matched by name and keeps its id (so its sensors' origin stays), its name and the credential values / secret parameters filled
+    /// in here; a template new in the set is added; one the set no longer has is left alone and named. Sensors made from them are not
+    /// changed (copy model - "Restore from template" applies the new values).
+    /// </summary>
+    TemplateStoreUpdateResult UpdateTemplatesFromStore(string storeSlug, string? storeVersion, IReadOnlyList<MonitoringTemplate> templates);
 
     /// <summary>The parameter keys the sensor types declare secret - what a template export leaves out.</summary>
     IReadOnlySet<string> GetSecretParameterKeys();

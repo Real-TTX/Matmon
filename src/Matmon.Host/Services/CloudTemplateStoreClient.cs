@@ -25,7 +25,16 @@ public sealed class CloudTemplateStoreClient
     }
 
     public sealed record StoreItem(string Slug, string Title, string Summary, string[] Tags, string Author, string Version, int TemplateCount,
-        string[] SensorTypes, int Downloads, DateTimeOffset Updated);
+        string[] SensorTypes, int Downloads, DateTimeOffset Updated, bool HasScripts = false);
+
+    /// <summary>A script inside a set's live file, as the cloud lists it before anybody adds the set.</summary>
+    public sealed record StoreScript(string Template, string SensorType, string Parameter, string Content);
+
+    /// <summary>A set's file and the version it is (null from an older cloud).</summary>
+    public sealed record StoreFile(byte[] Bytes, string? Version);
+
+    /// <summary>The live version of a set this instance added.</summary>
+    public sealed record StoreLiveVersion(string Slug, string Version, string Title);
 
     public sealed record StorePage(IReadOnlyList<StoreItem> Items, int Total, int Page, int PageSize, string[] AllTags);
 
@@ -35,7 +44,7 @@ public sealed class CloudTemplateStoreClient
 
     public sealed record StoreDetail(string Slug, string Title, string Summary, string Description, string[] Tags, string Author, string Version,
         int TemplateCount, string[] SensorTypes, int Downloads, DateTimeOffset Updated, IReadOnlyList<StoreTemplateItem> Templates,
-        IReadOnlyList<StoreVersion> Versions);
+        IReadOnlyList<StoreVersion> Versions, IReadOnlyList<StoreScript>? Scripts = null);
 
     /// <summary>Why the store could not be read, in words for the page.</summary>
     public sealed class StoreUnavailableException(string message) : Exception(message);
@@ -70,14 +79,68 @@ public sealed class CloudTemplateStoreClient
     public async Task<StoreDetail?> GetAsync(string slug, CancellationToken cancellationToken) =>
         await GetJsonAsync<StoreDetail>("/store/templates/" + Uri.EscapeDataString(slug), cancellationToken, allowNotFound: true);
 
+    // The live versions of the added sets, asked at most every 30 minutes (the Templates page shows them on every visit).
+    private readonly object _versionsGate = new();
+    private (string Key, DateTimeOffset At, IReadOnlyList<StoreLiveVersion> Versions)? _versionsCache;
+    private static readonly TimeSpan VersionsCacheFor = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// The live store versions of <paramref name="slugs"/> (sets this instance added). Cached 30 minutes; null when the store cannot
+    /// be asked right now (not connected, unreachable, an older cloud) - a hint that simply does not show, never an error page.
+    /// </summary>
+    public async Task<IReadOnlyList<StoreLiveVersion>?> LiveVersionsAsync(IReadOnlyCollection<string> slugs, CancellationToken cancellationToken)
+    {
+        var wanted = slugs.Select(slug => slug.Trim().ToLowerInvariant()).Where(slug => slug.Length > 0).Distinct().Order().ToList();
+        if (wanted.Count == 0 || !IsConnected)
+        {
+            return wanted.Count == 0 ? [] : null;
+        }
+
+        var key = string.Join(",", wanted);
+        lock (_versionsGate)
+        {
+            if (_versionsCache is { } cached && cached.Key == key && DateTimeOffset.UtcNow - cached.At < VersionsCacheFor)
+            {
+                return cached.Versions;
+            }
+        }
+
+        try
+        {
+            var versions = await GetJsonAsync<List<StoreLiveVersion>>(
+                "/store/versions?" + string.Join("&", wanted.Select(slug => "slug=" + Uri.EscapeDataString(slug))), cancellationToken);
+            lock (_versionsGate)
+            {
+                _versionsCache = (key, DateTimeOffset.UtcNow, versions ?? []);
+            }
+
+            return versions;
+        }
+        catch (StoreUnavailableException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Forgets the cached live versions (after adding or updating a set).</summary>
+    public void ForgetVersions()
+    {
+        lock (_versionsGate)
+        {
+            _versionsCache = null;
+        }
+    }
+
     /// <summary>The file of a published entry (the cloud counts it as an install). Null when the entry is gone.</summary>
-    public async Task<byte[]?> FileAsync(string slug, CancellationToken cancellationToken)
+    public async Task<StoreFile?> FileAsync(string slug, CancellationToken cancellationToken)
     {
         using var response = await SendAsync("/store/templates/" + Uri.EscapeDataString(slug) + "/file", cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
+
+        var version = response.Headers.TryGetValues("X-Matmon-Store-Version", out var values) ? values.FirstOrDefault() : null;
 
         Ensure(response);
         if (response.Content.Headers.ContentLength > TemplateTransfer.MaxFileBytes)
@@ -88,7 +151,7 @@ public sealed class CloudTemplateStoreClient
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         return bytes.Length > TemplateTransfer.MaxFileBytes
             ? throw new StoreUnavailableException("The template file from the store is larger than 2 MB.")
-            : bytes;
+            : new StoreFile(bytes, string.IsNullOrWhiteSpace(version) ? null : version.Trim());
     }
 
     private async Task<T?> GetJsonAsync<T>(string path, CancellationToken cancellationToken, bool allowNotFound = false) where T : class

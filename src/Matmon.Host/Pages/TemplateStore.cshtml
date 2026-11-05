@@ -32,6 +32,21 @@
 }
 else if (catalogue is not null)
 {
+    @if (Model.Updates.Count > 0 && detail is null)
+    {
+        <div class="mat-alert mat-alert--info" role="status">@MatUi.Icon("refresh")<div class="mat-alert__body">
+            Newer versions in the store:
+            @for (var i = 0; i < Model.Updates.Count; i++)
+            {
+                var update = Model.Updates[i];
+                if (i > 0)
+                {
+                    <span>, </span>
+                }
+                <a href="@Model.Link(show: update.Slug)">@(update.Title ?? update.Slug)</a> <span class="mat-mono">@(string.IsNullOrEmpty(update.Installed) ? "" : update.Installed + " → ")@update.Live</span>
+            }
+        </div></div>
+    }
     @if (detail is not null)
     {
         <section class="mat-card" aria-labelledby="store-detail-title">
@@ -84,6 +99,39 @@ else if (catalogue is not null)
                         </tbody>
                     </table>
                 </div>
+                @{
+                    var scripts = detail.Scripts ?? [];
+                    var installedVersion = Model.InstalledVersion(detail.Slug);
+                    var hasUpdate = installedVersion is not null && !string.Equals(installedVersion, detail.Version, StringComparison.OrdinalIgnoreCase);
+                }
+                @if (scripts.Count > 0)
+                {
+                    <div class="mat-alert mat-alert--warning" role="note">@MatUi.Icon("alert")<div class="mat-alert__body">
+                        This set carries @scripts.Count script@(scripts.Count == 1 ? "" : "s"). A sensor made from @(scripts.Count == 1 ? "that template" : "those templates") runs the script on this instance or the probe / agent it belongs to, with that machine's rights. Read @(scripts.Count == 1 ? "it" : "them") before you add the set.
+                    </div></div>
+                    <details>
+                        <summary>Scripts (@scripts.Count)</summary>
+                        <div class="mat-stack mat-stack--sm">
+                            @foreach (var script in scripts)
+                            {
+                                <div>
+                                    <p class="mat-text-muted"><strong>@script.Template</strong> · <span class="mat-mono">@script.SensorType</span> · <span class="mat-mono">@script.Parameter</span></p>
+                                    <pre class="mat-code"><code>@script.Content</code></pre>
+                                </div>
+                            }
+                        </div>
+                    </details>
+                }
+                @if (installedVersion is not null)
+                {
+                    <p class="@(hasUpdate ? "" : "mat-text-muted")">
+                        @if (hasUpdate)
+                        {
+                            <span class="mat-pill mat-pill--info">Update available</span>
+                        }
+                        Added here@(installedVersion.Length == 0 ? "" : " as version " + installedVersion)@(hasUpdate ? " - the store has version " + detail.Version + "." : " - that is the current version.")
+                    </p>
+                }
                 @if (detail.Versions.Count > 1)
                 {
                     <details>
@@ -101,9 +149,17 @@ else if (catalogue is not null)
                     <input type="hidden" name="q" value="@Model.Q" />
                     <input type="hidden" name="tag" value="@Model.Tag" />
                     <input type="hidden" name="sort" value="@Model.Sort" />
+                    @if (hasUpdate)
+                    {
+                        <button type="submit" asp-page-handler="Update" class="mat-btn mat-btn--primary" data-confirm="Update the templates added from this set to version @detail.Version? They keep their names and the credentials filled in here; sensors made from them stay as they are until you use Restore from template.@(scripts.Count > 0 ? " The new version carries scripts - read them first." : "")" data-confirm-ok="Update">@MatUi.Icon("refresh")<span>Update to @detail.Version</span></button>
+                    }
                     @if (Model.AlreadyAdded(detail))
                     {
-                        <button type="submit" class="mat-btn mat-btn--secondary" data-confirm="These templates are already here by name. Add them again? The copies get a new name." data-confirm-ok="Add again">@MatUi.Icon("plus")<span>Add again</span></button>
+                        <button type="submit" class="mat-btn mat-btn--secondary" data-confirm="These templates are already here. Add them again? The copies get a new name." data-confirm-ok="Add again">@MatUi.Icon("plus")<span>Add again</span></button>
+                    }
+                    else if (scripts.Count > 0)
+                    {
+                        <button type="submit" class="mat-btn mat-btn--primary" data-confirm="This set carries scripts that run when a sensor is made from it. Did you read them? Add the set?" data-confirm-ok="Add">@MatUi.Icon("plus")<span>Add to this instance</span></button>
                     }
                     else
                     {
@@ -176,6 +232,27 @@ else if (catalogue is not null)
                             }
                             <p class="mat-text-muted">@item.TemplateCount template@(item.TemplateCount == 1 ? "" : "s") · <span class="mat-mono">@string.Join(", ", item.SensorTypes)</span></p>
                             <p class="mat-text-muted">@(string.IsNullOrWhiteSpace(item.Author) ? "" : item.Author + " · ")v@(item.Version) · used @item.Downloads times</p>
+                            @{
+                                var added = Model.InstalledVersion(item.Slug);
+                                var itemUpdate = added is not null && !string.Equals(added, item.Version, StringComparison.OrdinalIgnoreCase);
+                            }
+                            @if (item.HasScripts || added is not null)
+                            {
+                                <p>
+                                    @if (itemUpdate)
+                                    {
+                                        <span class="mat-pill mat-pill--info">Update available</span>
+                                    }
+                                    else if (added is not null)
+                                    {
+                                        <span class="mat-pill mat-pill--ok">Added</span>
+                                    }
+                                    @if (item.HasScripts)
+                                    {
+                                        <span class="mat-pill mat-pill--warn" title="A sensor made from it runs a script">Contains scripts</span>
+                                    }
+                                </p>
+                            }
                         </div>
                         <div class="mat-card__foot">
                             <a class="mat-btn mat-btn--secondary mat-btn--sm" href="@Model.Link(page: Model.PageNumber, show: item.Slug)">@MatUi.Icon("eye")<span>Details</span></a>

@@ -20,6 +20,14 @@ public sealed class MonitoringTemplate
 
     public Guid? ParentTemplateId { get; set; }
 
+    /// <summary>The template store set this template was added from (its slug on Matmon Cloud), null for one made or imported here.
+    /// With <see cref="StoreVersion"/> it lets the instance say when the store has a newer version and update the set in place.
+    /// Instance-local: never written into a template file.</summary>
+    public string? StoreSlug { get; set; }
+
+    /// <summary>The store version this template was added or last updated from.</summary>
+    public string? StoreVersion { get; set; }
+
     /// <summary>The target this template gives a sensor: its own, else the nearest parent's (null = none).</summary>
     public static string? ResolveTarget(MonitoringTemplate template, IReadOnlyDictionary<Guid, MonitoringTemplate> templates)
     {
@@ -53,6 +61,8 @@ public sealed class MonitoringTemplate
             SensorTypeKey = SensorTypeKey,
             Target = Target,
             ParentTemplateId = ParentTemplateId,
+            StoreSlug = StoreSlug,
+            StoreVersion = StoreVersion,
             Settings = Settings.Clone(),
             Tags = [.. Tags]
         };

@@ -76,10 +76,90 @@ public sealed class TemplateStoreClientTests : IDisposable
                     "version":"1.0","templateCount":1,"sensorTypes":["http-advanced"],"downloads":3,"updated":"2026-11-05T10:00:00+00:00"}],
                     "total":1,"page":1,"pageSize":24,"allTags":["status page"]}
                     """),
-                $"/api/instances/{InstanceId}/store/templates/hornetsecurity-status/file" => Json(StoreFile()),
+                $"/api/instances/{InstanceId}/store/templates/hornetsecurity-status/file" => WithVersion(Json(_file ?? StoreFile())),
+                $"/api/instances/{InstanceId}/store/versions" => Json(
+                    $$"""[{"slug":"hornetsecurity-status","version":"{{_storeVersion}}","title":"Hornetsecurity status"}]"""),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound)
             };
         });
+    }
+
+    private string _storeVersion = "1.0";
+    private string? _file;
+
+    private HttpResponseMessage WithVersion(HttpResponseMessage response)
+    {
+        response.Headers.TryAddWithoutValidation("X-Matmon-Store-Version", _storeVersion);
+        return response;
+    }
+
+    // Version 1.1 of the set: the services template changed (and now carries a script), a template was added.
+    private static string StoreFileV2() => new JsonObject
+    {
+        ["format"] = "matmon-templates", ["version"] = 1,
+        ["templates"] = new JsonArray(
+            new JsonObject
+            {
+                ["id"] = Guid.NewGuid().ToString(), ["name"] = "Hornetsecurity - services", ["targetKind"] = "Sensor", ["sensorTypeKey"] = "local-script",
+                ["settings"] = new JsonObject
+                {
+                    ["parameters"] = new JsonObject { ["script"] = "Invoke-RestMethod https://status.example\nWrite-Output 'ok=1'" },
+                    ["credentials"] = new JsonArray(new JsonObject { ["name"] = "Status API", ["kind"] = "Generic", ["values"] = new JsonObject() })
+                }
+            },
+            new JsonObject
+            {
+                ["id"] = Guid.NewGuid().ToString(), ["name"] = "Hornetsecurity - incidents", ["targetKind"] = "Sensor", ["sensorTypeKey"] = "rss-feed",
+                ["target"] = "https://status.example/rss"
+            })
+    }.ToJsonString();
+
+    [Fact]
+    public async Task An_added_set_remembers_its_version_and_is_updated_in_place_when_the_store_has_a_newer_one()
+    {
+        FakeCloud();
+        _store.SetCloudConnectionSettings("https://cloud.example.test/", InstanceId, "instance-token", enabled: true);
+        await Page().OnPostAddAsync("hornetsecurity-status", CancellationToken.None);
+        var added = _store.GetAllTemplates().Single(template => template.Name == "Hornetsecurity - services");
+        Assert.Equal("hornetsecurity-status", added.StoreSlug);
+        Assert.Equal("1.0", added.StoreVersion);
+
+        // Filled in here after adding: a credential the store file had without values.
+        _store.UpdateTemplate(added.Id, template => template.Settings.Credentials.Add(new Matmon.Core.Domain.MonitoringCredentialBundle
+        {
+            Name = "Status API", Kind = Matmon.Core.Domain.MonitoringCredentialKind.Generic,
+            Values = new(StringComparer.OrdinalIgnoreCase) { ["generic.token"] = "local-secret" }
+        }));
+
+        var client = new CloudTemplateStoreClient(_store, new MatmonRuntimeOptions());
+        Assert.False(Assert.Single(await TemplateStoreUpdates.FindAsync(_store, client, CancellationToken.None)).UpdateAvailable);
+
+        // The store publishes 1.1: the hint appears (after the cache is dropped), the update keeps the id and the filled-in secret.
+        _storeVersion = "1.1";
+        _file = StoreFileV2();
+        client.ForgetVersions();
+        var set = Assert.Single(await TemplateStoreUpdates.FindAsync(_store, client, CancellationToken.None));
+        Assert.True(set.UpdateAvailable);
+        Assert.Equal(("1.0", "1.1"), (set.Installed, set.Live));
+
+        var page = Page();
+        await page.OnGetAsync(CancellationToken.None);
+        Assert.Single(page.Updates);
+
+        await Page().OnPostUpdateAsync("hornetsecurity-status", CancellationToken.None);
+        var templates = _store.GetAllTemplates().Where(template => template.StoreSlug == "hornetsecurity-status").ToList();
+        Assert.Equal(2, templates.Count);
+        var updated = templates.Single(template => template.Id == added.Id);
+        Assert.Equal("Hornetsecurity - services", updated.Name);                       // not "(imported)"
+        Assert.Equal("local-script", updated.SensorTypeKey);
+        Assert.Equal("1.1", updated.StoreVersion);
+        Assert.Equal("local-secret", Assert.Single(updated.Settings.Credentials).Values["generic.token"]);
+        Assert.Contains(templates, template => template.Name == "Hornetsecurity - incidents" && template.StoreVersion == "1.1");
+        Assert.Single(TemplateTransfer.Scripts(templates));
+
+        // A template file exported from here never carries where it came from.
+        var exported = System.Text.Encoding.UTF8.GetString(TemplateTransfer.Export(templates, new HashSet<string>(), "test", DateTimeOffset.UtcNow));
+        Assert.DoesNotContain("hornetsecurity-status", exported);
     }
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
