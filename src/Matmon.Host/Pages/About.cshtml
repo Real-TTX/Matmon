@@ -1,5 +1,6 @@
 @page "/About"
 @model AboutModel
+@inject Matmon.Host.Services.IMonitoringWorkspaceStore WorkspaceStore
 @{
     ViewData["Title"] = "About";
     ViewData["Width"] = "narrow";
@@ -10,20 +11,55 @@
         "nightly" => "accent",
         _ => "plain"
     };
+
+    // A managing partner whose branding is shown: its logo (or its software's name) first, and under it "powered by"
+    // with the Matmon logo - both makers are named here. Both accessors are null / false while the branding is
+    // suppressed (not unlocked, or the customer opted out), so then this is Matmon's own About.
+    var partnerHasLogo = WorkspaceStore.GetServicePartnerHasLogo();
+    var productName = WorkspaceStore.GetServicePartnerProductName();
+    var partnerName = WorkspaceStore.GetServicePartnerName();
+    var partnerBranded = partnerHasLogo || productName is not null;
+    var nameInLogo = partnerHasLogo && productName is not null && WorkspaceStore.GetServicePartnerLogoIsOem();
+    var brandName = productName ?? partnerName ?? "Matmon";
 }
 
 <section class="mat-card">
     <div class="mat-card__body">
-        <div class="mat-row mat-gap-4">
-            <img class="mat-brandmark--light mm-authlogo" src="/brand/matmon-logo-horizontal.svg" alt="" width="233" height="44" /><img class="mat-brandmark--dark mm-authlogo" src="/brand/matmon-logo-horizontal-dark.svg" alt="" width="233" height="44" />
-            <div class="mat-stack mat-stack--sm">
-                <h2 class="mat-sr-only">Matmon</h2>
-                <div class="mat-row">
-                    <span class="mat-tag mat-mono">@Model.Version</span>
-                    <span class="@MatUi.PillClass(channelTone)">@Model.Channel</span>
+        @if (partnerBranded)
+        {
+            <div class="mat-stack">
+                <div class="mat-row mat-gap-4">
+                    @if (partnerHasLogo)
+                    {
+                        <partial name="_PartnerLogo" model="@(("mm-auth-logo", "", true))" />
+                    }
+                    <div class="mat-stack mat-stack--sm">
+                        <h2 class="@(partnerHasLogo && (nameInLogo || productName is null) ? "mat-sr-only" : "mat-card__title")">@brandName</h2>
+                        <div class="mat-row">
+                            <span class="mat-tag mat-mono">@Model.Version</span>
+                            <span class="@MatUi.PillClass(channelTone)">@Model.Channel</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mm-about-powered">
+                    <span class="mat-text-muted">powered by</span>
+                    <img class="mat-brandmark--light mm-about-powered__logo" src="/brand/matmon-logo-horizontal.svg" alt="Matmon" width="127" height="24" /><img class="mat-brandmark--dark mm-about-powered__logo" src="/brand/matmon-logo-horizontal-dark.svg" alt="Matmon" width="127" height="24" />
                 </div>
             </div>
-        </div>
+        }
+        else
+        {
+            <div class="mat-row mat-gap-4">
+                <img class="mat-brandmark--light mm-authlogo" src="/brand/matmon-logo-horizontal.svg" alt="" width="233" height="44" /><img class="mat-brandmark--dark mm-authlogo" src="/brand/matmon-logo-horizontal-dark.svg" alt="" width="233" height="44" />
+                <div class="mat-stack mat-stack--sm">
+                    <h2 class="mat-sr-only">Matmon</h2>
+                    <div class="mat-row">
+                        <span class="mat-tag mat-mono">@Model.Version</span>
+                        <span class="@MatUi.PillClass(channelTone)">@Model.Channel</span>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
     <div class="mat-card__foot mat-row mat-row--between">
         <a class="mat-btn mat-btn--ghost mat-btn--sm" href="https://matmon.eu" target="_blank" rel="noopener">@MatUi.Icon("globe")<span>matmon.eu</span></a>

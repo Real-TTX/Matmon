@@ -161,6 +161,11 @@ else
                                 <label class="mat-label" asp-for="TemplateEditor.SensorTypeKey">Sensor type</label>
                                 <select asp-for="TemplateEditor.SensorTypeKey" class="mat-select" asp-items="Model.View.SensorTypeOptions" data-sensor-type-select></select>
                             </div>
+                            <div class="mat-field" data-template-sensor-only>
+                                <label class="mat-label" asp-for="TemplateEditor.Target">Target</label>
+                                <input asp-for="TemplateEditor.Target" class="mat-input" placeholder="Empty = the host's address" autocomplete="off" />
+                                <span class="mat-hint">A sensor made from this template checks this address or URL unless another is typed.</span>
+                            </div>
                             @if (isSensorScope)
                             {
                                 <div class="mat-field">

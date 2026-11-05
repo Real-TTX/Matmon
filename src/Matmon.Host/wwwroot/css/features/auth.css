@@ -72,3 +72,7 @@
 
 /* The full Matmon logo (mark + lettering) on the sign-in, setup and about cards - one per theme (mat-brandmark--light/--dark). */
 .mm-authlogo { height: 44px; width: auto; max-width: 100%; }
+
+/* About with a managing partner: its brand first, then "powered by" and the Matmon logo, smaller, on one line. */
+.mm-about-powered { display: flex; align-items: center; gap: var(--mat-space-2); flex-wrap: wrap; }
+.mm-about-powered__logo { height: 24px; width: auto; }

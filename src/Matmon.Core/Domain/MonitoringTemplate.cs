@@ -12,7 +12,29 @@ public sealed class MonitoringTemplate
 
     public string? SensorTypeKey { get; set; }
 
+    /// <summary>
+    /// A sensor template's target (an address, a URL): a sensor made from it gets this target unless one is typed,
+    /// and re-applying / restoring the template sets it again. Empty = the parent template's, else the sensor's own.
+    /// </summary>
+    public string? Target { get; set; }
+
     public Guid? ParentTemplateId { get; set; }
+
+    /// <summary>The target this template gives a sensor: its own, else the nearest parent's (null = none).</summary>
+    public static string? ResolveTarget(MonitoringTemplate template, IReadOnlyDictionary<Guid, MonitoringTemplate> templates)
+    {
+        var seen = new HashSet<Guid>();
+        for (MonitoringTemplate? current = template; current is not null && seen.Add(current.Id);
+             current = current.ParentTemplateId is Guid parentId && templates.TryGetValue(parentId, out var parent) ? parent : null)
+        {
+            if (!string.IsNullOrWhiteSpace(current.Target))
+            {
+                return current.Target.Trim();
+            }
+        }
+
+        return null;
+    }
 
     public MonitoringSettings Settings { get; set; } = new();
 
@@ -29,6 +51,7 @@ public sealed class MonitoringTemplate
             Name = Name,
             TargetKind = TargetKind,
             SensorTypeKey = SensorTypeKey,
+            Target = Target,
             ParentTemplateId = ParentTemplateId,
             Settings = Settings.Clone(),
             Tags = [.. Tags]

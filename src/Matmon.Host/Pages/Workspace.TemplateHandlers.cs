@@ -248,6 +248,7 @@ public sealed partial class WorkspaceModel
             SensorTypeKey = string.IsNullOrWhiteSpace(template.SensorTypeKey)
                 ? PingSensorExecutor.Definition.Key
                 : template.SensorTypeKey,
+            Target = template.Target,
             ParentTemplateId = template.ParentTemplateId,
             Highlight = localSettings.Highlight,
             HighlightInheritedLabel = FormatInheritedBooleanLabel(effectiveSettings.Highlight),
@@ -306,6 +307,9 @@ public sealed partial class WorkspaceModel
         template.TargetKind = editor.TargetKind;
         template.SensorTypeKey = editor.TargetKind == MonitoringTemplateScope.Sensor
             ? RequireSensorDefinition(editor.SensorTypeKey).Key
+            : null;
+        template.Target = editor.TargetKind == MonitoringTemplateScope.Sensor && !string.IsNullOrWhiteSpace(editor.Target)
+            ? editor.Target.Trim()
             : null;
         template.ParentTemplateId = editor.ParentTemplateId;
 
@@ -373,6 +377,13 @@ public sealed partial class WorkspaceModel
         }
 
         NewSensor.SensorChannelMode = GetSensorChannelMode(NewSensor.SensorTypeKey);
+
+        // The template's target fills an empty Target field, so the form shows what the sensor will check.
+        if (string.IsNullOrWhiteSpace(NewSensor.Target) &&
+            MonitoringTemplate.ResolveTarget(template, _workspaceStore.GetAllTemplates().ToDictionary(candidate => candidate.Id)) is { } templateTarget)
+        {
+            NewSensor.Target = templateTarget;
+        }
 
         var effectiveTemplateSettings = ResolveTemplateEffectiveSettings(template);
         NewSensor.HighlightInheritedLabel = FormatInheritedBooleanLabel(effectiveTemplateSettings.Highlight);
@@ -537,6 +548,23 @@ public sealed partial class WorkspaceModel
 
         if (elementWins)
         {
+            // A new sensor already carries its type's default thresholds (baked in by CreateSensor). Where the template
+            // sets a threshold of its own, the bare default must not beat it - only something the user typed may.
+            if (element is SensorElement created && resolved.Thresholds.Count > 0)
+            {
+                var defaults = new MonitoringSettings();
+                SensorThresholdDefaults.Apply(created.SensorTypeKey, defaults);
+                foreach (var (key, value) in defaults.Thresholds)
+                {
+                    if (resolved.Thresholds.ContainsKey(key) &&
+                        element.Settings.Thresholds.TryGetValue(key, out var own) &&
+                        string.Equals(own, value, StringComparison.Ordinal))
+                    {
+                        element.Settings.Thresholds.Remove(key);
+                    }
+                }
+            }
+
             resolved.ApplyFrom(element.Settings);
             element.Settings = resolved;
         }
@@ -549,6 +577,14 @@ public sealed partial class WorkspaceModel
         if (template.Tags.Count > 0)
         {
             element.Tags = MonitoringTagResolver.Normalize(element.Tags.Concat(template.Tags));
+        }
+
+        // The template's target: on create only where none was typed, on re-apply / restore it wins.
+        if (element is SensorElement sensor &&
+            MonitoringTemplate.ResolveTarget(template, templates) is { } templateTarget &&
+            (!elementWins || string.IsNullOrWhiteSpace(sensor.Target)))
+        {
+            sensor.Target = templateTarget;
         }
 
         element.TemplateOriginId = template.Id;

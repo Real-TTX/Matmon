@@ -552,6 +552,8 @@ public sealed class WorkspaceTemplateEditorInput : ISensorThresholdEditor, ISens
 
     public string SensorTypeKey { get; set; } = PingSensorExecutor.Definition.Key;
 
+    public string? Target { get; set; }
+
     public List<WorkspaceSensorParameterFieldInput> SensorParameterFields { get; set; } = [];
 
     public string SensorAdvancedParametersText { get; set; } = string.Empty;

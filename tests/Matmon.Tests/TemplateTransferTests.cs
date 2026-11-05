@@ -130,4 +130,37 @@ public sealed class TemplateTransferTests
         Assert.Equal(2, result.Templates.Count);
         Assert.All(result.Templates, template => Assert.Null(template.ParentTemplateId));
     }
+
+    [Fact]
+    public void A_target_travels_with_the_template_without_a_user_name_or_password()
+    {
+        var template = new MonitoringTemplate
+        {
+            Name = "Status API",
+            TargetKind = MonitoringTemplateScope.Sensor,
+            SensorTypeKey = "http-advanced",
+            Target = "https://reader:s3cret@api.example.com/1.0/status/abc"
+        };
+
+        var text = Encoding.UTF8.GetString(TemplateTransfer.Export([template], Secrets, "Matmon test", Now));
+        Assert.Contains("https://api.example.com/1.0/status/abc", text);
+        Assert.DoesNotContain("s3cret", text);
+
+        var result = TemplateTransfer.Read(Encoding.UTF8.GetBytes(text), [], Types, Secrets);
+        Assert.Equal("https://api.example.com/1.0/status/abc", Assert.Single(result.Templates).Target);
+    }
+
+    [Fact]
+    public void A_template_without_a_target_takes_its_parents()
+    {
+        var parent = new MonitoringTemplate { Name = "Parent", Target = " https://status.example.com/rss " };
+        var child = new MonitoringTemplate { Name = "Child", ParentTemplateId = parent.Id };
+        var own = new MonitoringTemplate { Name = "Own", ParentTemplateId = parent.Id, Target = "https://own.example.com" };
+        var map = new[] { parent, child, own }.ToDictionary(template => template.Id);
+
+        Assert.Equal("https://status.example.com/rss", MonitoringTemplate.ResolveTarget(child, map));
+        Assert.Equal("https://own.example.com", MonitoringTemplate.ResolveTarget(own, map));
+        Assert.Null(MonitoringTemplate.ResolveTarget(new MonitoringTemplate { Name = "None" }, map));
+        Assert.Equal("https://status.example.com/rss", child.Clone().ParentTemplateId is { } id ? MonitoringTemplate.ResolveTarget(map[id], map) : null);
+    }
 }

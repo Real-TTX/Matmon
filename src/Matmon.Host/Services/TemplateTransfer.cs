@@ -99,6 +99,7 @@ public static class TemplateTransfer
     private static MonitoringTemplate Strip(MonitoringTemplate template, IReadOnlySet<string> declaredSecretParameters)
     {
         template.Key = null;
+        template.Target = StripUserInfo(template.Target);
         var settings = template.Settings;
         settings.DependencySensorId = null;
         foreach (var key in settings.Parameters.Keys.ToArray())
@@ -117,6 +118,20 @@ public static class TemplateTransfer
         }
 
         return template;
+    }
+
+    /// <summary>A target URL's user name and password (https://user:pass@host/) never travel in a file.</summary>
+    internal static string? StripUserInfo(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return null;
+        }
+
+        var trimmed = target.Trim();
+        return Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.UserInfo)
+            ? new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty }.Uri.ToString()
+            : trimmed;
     }
 
     /// <summary>
@@ -216,6 +231,7 @@ public static class TemplateTransfer
                 Name = unique,
                 TargetKind = source.TargetKind,
                 SensorTypeKey = sensorType,
+                Target = string.IsNullOrWhiteSpace(source.Target) ? null : source.Target.Trim(),
                 ParentTemplateId = parent,
                 Settings = source.Settings ?? new MonitoringSettings(),
                 Tags = MonitoringTagResolver.Normalize(source.Tags)
