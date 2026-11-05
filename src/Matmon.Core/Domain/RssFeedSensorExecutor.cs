@@ -232,8 +232,11 @@ public sealed class RssFeedSensorExecutor : ISensorExecutor
             ? matchRaw.Split([',', '\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : [];
 
-        var newItems = feed.Items.Where(item => item.Published is { } published && now - published <= TimeSpan.FromHours(windowHours)).ToArray();
-        var newest = feed.Items.Where(item => item.Published is not null).Select(item => item.Published!.Value).DefaultIfEmpty().Max();
+        // An item dated in the future is an announcement (Statuspage dates a scheduled maintenance by its start): it is neither "new"
+        // nor the newest item - counted as new, it made every page with planned work look busy, with a negative age.
+        var past = feed.Items.Where(item => item.Published is { } published && published <= now + TimeSpan.FromMinutes(5)).ToArray();
+        var newItems = past.Where(item => now - item.Published!.Value <= TimeSpan.FromHours(windowHours)).ToArray();
+        var newest = past.Select(item => item.Published!.Value).DefaultIfEmpty().Max();
 
         var open = new List<FeedItem>();
         var underway = new List<FeedItem>();

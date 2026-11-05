@@ -1,0 +1,78 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "6e5c330e-6883-495c-b4de-07c223fbf992",
+      "name": "AnyDesk - overall status",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.anydesk.com/api/v2/status.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "status.description|AnyDesk"
+        }
+      },
+      "tags": [
+        "status-page",
+        "anydesk"
+      ]
+    },
+    {
+      "id": "e97789ca-ec11-4e82-9aa7-b74904341f00",
+      "name": "AnyDesk - components",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.anydesk.com/api/v2/summary.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "components[*].status|{name}"
+        }
+      },
+      "tags": [
+        "status-page",
+        "anydesk"
+      ]
+    },
+    {
+      "id": "bd1b30e9-c780-433b-a8a6-c1a020e35233",
+      "name": "AnyDesk - incidents (RSS)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "rss-feed",
+      "target": "https://status.anydesk.com/history.rss",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "rss.window": "24",
+          "rss.statusPage": "true",
+          "rss.openDays": "14"
+        }
+      },
+      "tags": [
+        "status-page",
+        "anydesk"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "5173ca6c-6f52-406b-b800-aecb2a407a27",
+      "name": "Dropbox - overall status",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.dropbox.com/api/v2/status.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "status.description|Dropbox"
+        }
+      },
+      "tags": [
+        "status-page",
+        "dropbox"
+      ]
+    },
+    {
+      "id": "512d62ef-6251-46c9-9615-3934432e66fc",
+      "name": "Dropbox - components",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.dropbox.com/api/v2/summary.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "components[*].status|{name}"
+        }
+      },
+      "tags": [
+        "status-page",
+        "dropbox"
+      ]
+    },
+    {
+      "id": "d593e7fe-2788-4f4f-89fe-49597c56a7cd",
+      "name": "Dropbox - incidents (RSS)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "rss-feed",
+      "target": "https://status.dropbox.com/history.rss",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "rss.window": "24",
+          "rss.statusPage": "true",
+          "rss.openDays": "14"
+        }
+      },
+      "tags": [
+        "status-page",
+        "dropbox"
+      ]
+    }
+  ]
+}

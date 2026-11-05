@@ -177,6 +177,21 @@ public sealed class StatusFeedTests
     }
 
     [Fact]
+    public void An_announcement_dated_in_the_future_is_neither_new_nor_the_newest_item()
+    {
+        const string rss = """
+            <rss version="2.0"><channel><title>Provider status</title>
+              <item><title>Scheduled maintenance - Frankfurt</title><description>Scheduled</description><pubDate>Wed, 18 Nov 2026 22:00:00 GMT</pubDate></item>
+              <item><title>Elevated errors</title><description><b>Resolved</b> - fixed.</description><pubDate>Mon, 02 Nov 2026 09:00:00 GMT</pubDate></item>
+            </channel></rss>
+            """;
+        var result = RssFeedSensorExecutor.Evaluate(ParseFeed(rss), new MonitoringSettings(), Now, TimeSpan.Zero);
+        Assert.Equal(0, result.Channels.Single(channel => channel.Key == "newItems").Value);
+        Assert.Equal(48, result.Channels.Single(channel => channel.Key == "newestAgeHours").Value);
+        Assert.DoesNotContain("-", result.Channels.Single(channel => channel.Key == "newestAgeHours").Value.ToString());
+    }
+
+    [Fact]
     public void An_atom_feed_is_read_too_and_without_phases_it_only_counts()
     {
         const string atom = """

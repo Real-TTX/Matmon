@@ -64,6 +64,12 @@ public static class SensorExecutorRegistration
         services.AddTransient<ISensorExecutor, MssqlSensorExecutor>();
         services.AddTransient<ISensorExecutor, PostgreSqlSensorExecutor>();
         services.AddTransient<ISensorExecutor, MySqlSensorExecutor>();
+        services.AddTransient<ISensorExecutor, MssqlHealthSensorExecutor>();
+        services.AddTransient<ISensorExecutor, PostgresHealthSensorExecutor>();
+        services.AddTransient<ISensorExecutor, MySqlHealthSensorExecutor>();
+        services.AddTransient<ISensorExecutor, ExchangeHealthSensorExecutor>();
+        services.AddTransient<ISensorExecutor, ActiveDirectoryHealthSensorExecutor>();
+        services.AddTransient<ISensorExecutor, AzureDevOpsServerHealthSensorExecutor>();
         services.AddTransient<ISensorExecutor, TcpPortSensorExecutor>();
         services.AddTransient<ISensorExecutor, DnsSensorExecutor>();
         services.AddTransient<ISensorExecutor, NtpSensorExecutor>();

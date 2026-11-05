@@ -1,0 +1,53 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "a0d4ca68-7f01-4115-a512-722313913a9a",
+      "name": "Zoom - overall status",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.zoom.us/api/v2/status.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "status.description|Zoom"
+        }
+      },
+      "tags": [
+        "status-page",
+        "zoom"
+      ]
+    },
+    {
+      "id": "8bb79db1-f780-4dc3-9765-d96b813da5d1",
+      "name": "Zoom - incidents (RSS)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "rss-feed",
+      "target": "https://status.zoom.us/history.rss",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "rss.window": "24",
+          "rss.statusPage": "true",
+          "rss.openDays": "14"
+        }
+      },
+      "tags": [
+        "status-page",
+        "zoom"
+      ]
+    }
+  ]
+}

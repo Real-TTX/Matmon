@@ -30,3 +30,6 @@ docker-compose*.yml
 .env*
 # The agent MSI is built by its own CI job on Windows.
 installer/
+
+# The template sets Matmon.eu publishes in the store - files for the store, not part of an image.
+store-templates/

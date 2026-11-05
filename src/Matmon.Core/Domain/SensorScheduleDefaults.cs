@@ -47,6 +47,9 @@ public static class SensorScheduleDefaults
         // Backups arrive hours apart and a datastore fills over days - a quarter of an hour is plenty.
         ["proxmox-backup"] = TimeSpan.FromMinutes(15),
 
+        // dcdiag takes up to a minute and a domain controller does not change by the minute.
+        ["ad-health"] = TimeSpan.FromMinutes(15),
+
         // The probe's own machine, read locally: next to free, and CPU/memory are only interesting close up.
         ["local-health"] = TimeSpan.FromMinutes(1),
 

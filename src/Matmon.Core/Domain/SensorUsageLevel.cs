@@ -53,6 +53,12 @@ public static class SensorUsageCatalog
             ["mssql"] = SensorUsageLevel.High,
             ["postgres"] = SensorUsageLevel.High,
             ["mysql"] = SensorUsageLevel.High,
+            ["mssql-health"] = SensorUsageLevel.High,
+            ["postgres-health"] = SensorUsageLevel.High,
+            ["mysql-health"] = SensorUsageLevel.High,
+            ["exchange-health"] = SensorUsageLevel.High,
+            ["ad-health"] = SensorUsageLevel.High,
+            ["azure-devops-health"] = SensorUsageLevel.High,
             ["proxmox-pve"] = SensorUsageLevel.High,
             ["powershell-remote"] = SensorUsageLevel.High
         };

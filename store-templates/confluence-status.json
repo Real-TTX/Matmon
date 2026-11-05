@@ -1,0 +1,78 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "ce240598-6348-4cc0-8d35-984d8d9a5b3f",
+      "name": "Confluence - overall status",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://confluence.status.atlassian.com/api/v2/status.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "status.description|Confluence"
+        }
+      },
+      "tags": [
+        "status-page",
+        "confluence"
+      ]
+    },
+    {
+      "id": "a8136620-dd4b-4ed8-9562-a91e07641418",
+      "name": "Confluence - components",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://confluence.status.atlassian.com/api/v2/summary.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "components[*].status|{name}"
+        }
+      },
+      "tags": [
+        "status-page",
+        "confluence"
+      ]
+    },
+    {
+      "id": "9e6ee443-7122-478e-b99b-87874fe386cb",
+      "name": "Confluence - incidents (RSS)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "rss-feed",
+      "target": "https://confluence.status.atlassian.com/history.rss",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "rss.window": "24",
+          "rss.statusPage": "true",
+          "rss.openDays": "14"
+        }
+      },
+      "tags": [
+        "status-page",
+        "confluence"
+      ]
+    }
+  ]
+}

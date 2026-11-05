@@ -1,0 +1,78 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "74b2dc6a-fd02-489a-8786-85bae669a049",
+      "name": "TeamViewer - overall status",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.teamviewer.com/api/v2/status.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "status.description|TeamViewer"
+        }
+      },
+      "tags": [
+        "status-page",
+        "teamviewer"
+      ]
+    },
+    {
+      "id": "61411edc-a0a7-48ca-a65f-47c4e4544bb9",
+      "name": "TeamViewer - components",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://status.teamviewer.com/api/v2/summary.json",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "components[*].status|{name}"
+        }
+      },
+      "tags": [
+        "status-page",
+        "teamviewer"
+      ]
+    },
+    {
+      "id": "aa02f73a-05e2-40e0-be21-4f2712c04ed5",
+      "name": "TeamViewer - incidents (RSS)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "rss-feed",
+      "target": "https://status.teamviewer.com/history.rss",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "rss.window": "24",
+          "rss.statusPage": "true",
+          "rss.openDays": "14"
+        }
+      },
+      "tags": [
+        "status-page",
+        "teamviewer"
+      ]
+    }
+  ]
+}

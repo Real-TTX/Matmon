@@ -90,6 +90,13 @@ public static class SensorTypeCategories
         ["mssql"] = "Databases",
         ["postgres"] = "Databases",
         ["mysql"] = "Databases",
+        ["mssql-health"] = "Databases",
+        ["postgres-health"] = "Databases",
+        ["mysql-health"] = "Databases",
+
+        ["exchange-health"] = "Windows",
+        ["ad-health"] = "Windows",
+        ["azure-devops-health"] = "Windows",
 
         ["probe-heartbeat"] = "Probe",
         ["probe-health"] = "Probe",

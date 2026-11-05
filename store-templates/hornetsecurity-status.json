@@ -1,0 +1,78 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "aedc5edb-3d87-4584-bf13-8df0db2e405f",
+      "name": "Hornetsecurity - services",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://api.status.io/1.0/status/591aaa7fe69f388425000fda",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "result.status[*].status|{name}"
+        }
+      },
+      "tags": [
+        "hornetsecurity",
+        "status-page"
+      ]
+    },
+    {
+      "id": "6eb3c0e3-7cb8-4d35-b9ef-7c1522142067",
+      "name": "Hornetsecurity - services by location",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://api.status.io/1.0/status/591aaa7fe69f388425000fda",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "result.status[*].containers[*].status|{../name} - {name}"
+        }
+      },
+      "tags": [
+        "hornetsecurity",
+        "status-page"
+      ]
+    },
+    {
+      "id": "931ee38d-6bf7-4889-972d-b7ebf4132575",
+      "name": "Hornetsecurity - incidents (RSS)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "rss-feed",
+      "target": "https://live.hornet-status.com/pages/591aaa7fe69f388425000fda/rss",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "rss.window": "24",
+          "rss.statusPage": "true",
+          "rss.openDays": "14"
+        }
+      },
+      "tags": [
+        "hornetsecurity",
+        "status-page"
+      ]
+    }
+  ]
+}

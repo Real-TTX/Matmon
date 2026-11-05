@@ -126,13 +126,14 @@ public static class TemplateTransfer
 
     /// <summary>
     /// The code templates carry: every parameter that is a script (its name says "script" - PowerShell Remote, Local Script, the
-    /// SSH sensors - or its value runs over several lines). A sensor made from such a template RUNS it here or on a probe/agent,
-    /// so the store says so before a set is added - computed from the file itself, the same rule the cloud's review uses.
+    /// SSH sensors). A sensor made from such a template RUNS it here or on a probe/agent, so the store says so before a set is
+    /// added - computed from the file itself, the same rule the cloud's review uses. (A multi-line value alone is no script: a
+    /// SQL query or a list of JSON paths runs nothing on the machine.)
     /// </summary>
     public static IReadOnlyList<TemplateScript> Scripts(IEnumerable<MonitoringTemplate> templates) =>
         templates.SelectMany(template => template.Settings.Parameters
                 .Where(pair => !string.IsNullOrWhiteSpace(pair.Value)
-                               && (pair.Key[(pair.Key.LastIndexOf('.') + 1)..].Contains("script", StringComparison.OrdinalIgnoreCase) || pair.Value.Contains('\n')))
+                               && pair.Key[(pair.Key.LastIndexOf('.') + 1)..].Contains("script", StringComparison.OrdinalIgnoreCase))
                 .Select(pair => new TemplateScript(template.Name, template.SensorTypeKey ?? string.Empty, pair.Key, pair.Value.Replace("\r\n", "\n"))))
             .ToList();
 

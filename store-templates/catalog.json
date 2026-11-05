@@ -1,0 +1,146 @@
+[
+  {
+    "file": "microsoft-365-azure-status.json",
+    "title": "Microsoft 365 \u0026 Azure status",
+    "summary": "Microsoft\u0027s public status: Azure, the Microsoft 365 admin center, Microsoft 365 consumer services and Azure incidents.",
+    "description": "Reads Microsoft\u0027s public status pages (status.cloud.microsoft and azure.status.microsoft) - no account or credential needed.\n\n\u0022Azure - status\u0022 and \u0022Microsoft 365 - status\u0022 are Microsoft\u0027s overall verdicts; \u0022Microsoft 365 consumer services\u0022 gives every consumer service (Outlook.com, OneDrive, Teams free ...) its own channel; \u0022Azure - incidents (RSS)\u0022 counts open Azure incidents.\n\nNote: the health of YOUR tenant\u0027s Exchange Online, Teams or SharePoint is only in the Microsoft 365 admin center (Service health) and needs a sign-in to Microsoft Graph; these templates show what Microsoft reports publicly - which is what matters when a whole region is down.",
+    "tags": "Status page, Microsoft 365, Azure, Exchange Online, Microsoft",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "aws-status.json",
+    "title": "AWS status",
+    "summary": "Amazon Web Services\u0027 public health feed: open events of every service and region.",
+    "description": "Reads the public AWS Health Dashboard feed - no AWS account needed.\n\n\u0022AWS - service health (RSS)\u0022 counts open AWS events (an item closes when AWS marks it resolved). The default feed covers every service in every region; to watch only what you use, change the sensor\u0027s target to that service\u0027s feed, e.g. https://status.aws.amazon.com/rss/ec2-eu-central-1.rss (the dashboard lists every feed).",
+    "tags": "Status page, AWS, Amazon, Cloud",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "google-cloud-workspace-status.json",
+    "title": "Google Cloud \u0026 Google Workspace status",
+    "summary": "Google\u0027s public incident feeds for Google Cloud and Google Workspace (Gmail, Drive, Meet ...).",
+    "description": "Reads Google\u0027s public status dashboards - no account needed.\n\n\u0022Google Cloud - incidents (Atom)\u0022 and \u0022Google Workspace - incidents (Atom)\u0022 count open incidents; an incident closes when Google marks it RESOLVED.",
+    "tags": "Status page, Google Cloud, Google Workspace, Gmail, Google",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "hornetsecurity-status.json",
+    "title": "Hornetsecurity status",
+    "summary": "Hornetsecurity\u0027s public status page: every service, every service per location, and open incidents and maintenance.",
+    "description": "Reads Hornetsecurity\u0027s public status page (status.io API and its RSS feed) - no account or credential needed.\n\n\u0022Hornetsecurity - services\u0022 gives every service (Spam and Malware Protection, Email Encryption, Backup ...) its own channel; \u0022Hornetsecurity - services by location\u0022 does the same per data centre (\u0022Spam and Malware Protection - Germany - Frankfurt\u0022); \u0022Hornetsecurity - incidents (RSS)\u0022 counts open incidents and maintenance. A service that is not operational turns its channel - and the sensor - to warning or error, and the message names it.",
+    "tags": "Status page, Hornetsecurity, E-mail security, Microsoft 365",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "github-status.json",
+    "title": "GitHub status",
+    "summary": "GitHub\u0027s public status: overall, every component (Git, Actions, Copilot ...) and incidents.",
+    "description": "Reads GitHub\u0027s public status page (www.githubstatus.com) - no account or credential needed.\n\n\u0022GitHub - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022GitHub - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022GitHub - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, GitHub, DevOps",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "cloudflare-status.json",
+    "title": "Cloudflare status",
+    "summary": "Cloudflare\u0027s public status: overall verdict and incidents.",
+    "description": "Reads Cloudflare\u0027s public status page (www.cloudflarestatus.com) - no account or credential needed.\n\n\u0022Cloudflare - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022Cloudflare - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, Cloudflare, CDN, DNS",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "jira-status.json",
+    "title": "Jira status",
+    "summary": "Jira Cloud\u0027s public status: overall, every component and incidents.",
+    "description": "Reads Jira\u0027s public status page (jira-software.status.atlassian.com) - no account or credential needed.\n\n\u0022Jira - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022Jira - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022Jira - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, Atlassian, Jira",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "confluence-status.json",
+    "title": "Confluence status",
+    "summary": "Confluence Cloud\u0027s public status: overall, every component and incidents.",
+    "description": "Reads Confluence\u0027s public status page (confluence.status.atlassian.com) - no account or credential needed.\n\n\u0022Confluence - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022Confluence - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022Confluence - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, Atlassian, Confluence",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "zoom-status.json",
+    "title": "Zoom status",
+    "summary": "Zoom\u0027s public status: overall verdict and incidents.",
+    "description": "Reads Zoom\u0027s public status page (status.zoom.us) - no account or credential needed.\n\n\u0022Zoom - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022Zoom - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, Zoom, Video conferencing",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "dropbox-status.json",
+    "title": "Dropbox status",
+    "summary": "Dropbox\u0027s public status: overall, every component and incidents.",
+    "description": "Reads Dropbox\u0027s public status page (status.dropbox.com) - no account or credential needed.\n\n\u0022Dropbox - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022Dropbox - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022Dropbox - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, Dropbox, File sharing",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "teamviewer-status.json",
+    "title": "TeamViewer status",
+    "summary": "TeamViewer\u0027s public status: overall, every component and incidents.",
+    "description": "Reads TeamViewer\u0027s public status page (status.teamviewer.com) - no account or credential needed.\n\n\u0022TeamViewer - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022TeamViewer - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022TeamViewer - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, TeamViewer, Remote access",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "anydesk-status.json",
+    "title": "AnyDesk status",
+    "summary": "AnyDesk\u0027s public status: overall, every component and incidents.",
+    "description": "Reads AnyDesk\u0027s public status page (status.anydesk.com) - no account or credential needed.\n\n\u0022AnyDesk - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022AnyDesk - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022AnyDesk - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, AnyDesk, Remote access",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "openai-status.json",
+    "title": "OpenAI status",
+    "summary": "OpenAI\u0027s public status: overall, every component (ChatGPT, API ...) and incidents.",
+    "description": "Reads OpenAI\u0027s public status page (status.openai.com) - no account or credential needed.\n\n\u0022OpenAI - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022OpenAI - components\u0022 gives every component its own channel, so a warning names what is affected; \u0022OpenAI - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, OpenAI, ChatGPT, AI",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "digitalocean-status.json",
+    "title": "DigitalOcean status",
+    "summary": "DigitalOcean\u0027s public status: overall verdict and incidents.",
+    "description": "Reads DigitalOcean\u0027s public status page (status.digitalocean.com) - no account or credential needed.\n\n\u0022DigitalOcean - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u0022DigitalOcean - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, DigitalOcean, Cloud",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "1password-status.json",
+    "title": "1Password status",
+    "summary": "1Password\u0027s public status: overall verdict and incidents.",
+    "description": "Reads 1Password\u0027s public status page (status.1password.com) - no account or credential needed.\n\n\u00221Password - overall status\u0022 is the page\u0027s own verdict (All Systems Operational / Minor / Major Outage / Maintenance) as one channel; \u00221Password - incidents (RSS)\u0022 counts open incidents and maintenance from the page\u0027s history feed.\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, 1Password, Passwords",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "slack-status.json",
+    "title": "Slack status",
+    "summary": "Slack\u0027s public status: the overall verdict, how many incidents are active, and the incident feed.",
+    "description": "Reads Slack\u0027s public status API (slack-status.com) - no workspace or token needed.\n\n\u0022Slack - status\u0022 is Slack\u0027s overall verdict plus the number of active incidents (a warning from the first one); \u0022Slack - incidents (RSS)\u0022 counts open incidents and maintenance.",
+    "tags": "Status page, Slack, Chat",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  }
+]
