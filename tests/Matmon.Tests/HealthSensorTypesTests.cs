@@ -105,20 +105,26 @@ public sealed class HealthSensorTypesTests(ITestOutputHelper output)
             return;
         }
 
-        var optional = new[] { "certificateDaysLeft", "timeOffsetSeconds", "appPoolsStopped" };
-        foreach (var (type, executor) in new (string, ISensorExecutor)[]
+        var optional = new[] { "certificateDaysLeft", "timeOffsetSeconds", "appPoolsStopped", "maxTemperature", "securityUpdates" };
+        // The message says what the script found in words - on a PC that is no Exchange server / DC / DevOps server, exactly that.
+        foreach (var (type, executor, says) in new (string, ISensorExecutor, string)[]
                  {
-                     ("exchange-health", new ExchangeHealthSensorExecutor()),
-                     ("ad-health", new ActiveDirectoryHealthSensorExecutor()),
-                     ("azure-devops-health", new AzureDevOpsServerHealthSensorExecutor())
+                     ("exchange-health", new ExchangeHealthSensorExecutor(), "Exchange Management Shell not found"),
+                     ("ad-health", new ActiveDirectoryHealthSensorExecutor(), "is this a domain controller?"),
+                     ("azure-devops-health", new AzureDevOpsServerHealthSensorExecutor(), "no TFS Job Agent"),
+                     ("windows-health", new WindowsHealthSensorExecutor(), "CPU "),
+                     ("windows-disk", new WindowsDiskSensorExecutor(), "disk"),
+                     ("windows-update", new WindowsUpdateSensorExecutor(), "up to date|pending|search failed")
                  })
         {
-            var settings = new MonitoringSettings { Timeout = TimeSpan.FromMinutes(2) };
+            var settings = new MonitoringSettings { Timeout = TimeSpan.FromMinutes(4) };
             SensorThresholdDefaults.Apply(type, settings);
             var result = await executor.ExecuteAsync(new SensorExecutionContext(type, "localhost", settings));
             var channels = result.Channels.Where(channel => !channel.IsVirtual).ToList();
             output.WriteLine($"{type}: {result.State} - {result.Message} [{string.Join(", ", channels.Select(c => $"{c.Key}={c.Value}"))}]");
             Assert.NotEmpty(channels);
+            Assert.Matches(says, result.Message);
+            Assert.DoesNotContain("message", channels.Select(c => c.Key));
             AssertThresholdsNameChannels(settings, channels, optional);
         }
     }

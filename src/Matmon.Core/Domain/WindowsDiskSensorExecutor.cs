@@ -21,6 +21,7 @@ $out = [ordered]@{}
 $worst = 0
 $maxTemp = $null
 $i = 0
+$troubled = @()
 foreach ($d in (Get-PhysicalDisk)) {
     $i++
     $sev = 0
@@ -28,6 +29,7 @@ foreach ($d in (Get-PhysicalDisk)) {
     elseif ($d.HealthStatus -eq 'Warning') { $sev = 1 }
     if ($d.OperationalStatus -and $d.OperationalStatus -ne 'OK' -and $sev -lt 1) { $sev = 1 }
     if ($sev -gt $worst) { $worst = $sev }
+    if ($sev -gt 0) { $troubled += "disk $i ($($d.FriendlyName)): $($d.HealthStatus), $($d.OperationalStatus -join '/')" }
     $out["disk${i}Status"] = $sev
     $rc = $d | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue
     if ($rc -and $null -ne $rc.Temperature -and $rc.Temperature -gt 0) {
@@ -39,13 +41,21 @@ foreach ($d in (Get-PhysicalDisk)) {
         $out["disk${i}Wear"] = [double]$rc.Wear
     }
 }
-foreach ($v in (Get-Volume | Where-Object { $_.DriveLetter -and $_.Size -gt 0 })) {
-    $out["volume$($v.DriveLetter)FreePercent"] = [math]::Round(($v.SizeRemaining / $v.Size) * 100, 1)
+$volumes = @()
+foreach ($v in (Get-Volume | Where-Object { $_.DriveLetter -and $_.Size -gt 0 } | Sort-Object DriveLetter)) {
+    $free = [math]::Round(($v.SizeRemaining / $v.Size) * 100, 1)
+    $out["volume$($v.DriveLetter)FreePercent"] = $free
+    $volumes += [string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}: {1:0} % free', $v.DriveLetter, $free)
 }
 $out["diskCount"] = $i
 $out["smartStatus"] = $worst
 if ($null -ne $maxTemp) { $out["maxTemperature"] = [math]::Round($maxTemp, 1) }
 $out["state"] = if ($worst -ge 2) { 'critical' } elseif ($worst -ge 1) { 'warning' } else { 'ok' }
+$summary = @()
+if ($troubled.Count -gt 0) { $summary += $troubled } else { $summary += $(if ($i -eq 1) { '1 disk healthy' } else { "$i disks healthy" }) }
+if ($null -ne $maxTemp) { $summary += [string]::Format([Globalization.CultureInfo]::InvariantCulture, 'hottest {0:0} °C', $maxTemp) }
+if ($volumes.Count -gt 0) { $summary += ($volumes | Select-Object -First 4) }
+$out["message"] = $summary -join ', '
 [pscustomobject]$out
 """;
 

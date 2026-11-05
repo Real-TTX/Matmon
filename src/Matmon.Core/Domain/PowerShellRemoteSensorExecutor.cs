@@ -140,12 +140,23 @@ if ($physical) {
     }
 }
 
+$smartText = switch ($smartStatus) {
+    2 { "SMART: $(@($physical | Where-Object { $_.HealthStatus -eq 'Unhealthy' } | ForEach-Object { $_.FriendlyName }) -join ', ') failing" }
+    1 { "SMART warning: $(@($physical | Where-Object { $_.HealthStatus -eq 'Warning' } | ForEach-Object { $_.FriendlyName }) -join ', ')" }
+    0 { 'disks healthy' }
+    default { 'no SMART data' }
+}
+$message = [string]::Format([Globalization.CultureInfo]::InvariantCulture,
+    'CPU {0:0} %, memory {1:0} % used ({2:0.0} GB free), disks {3:0} % used, {4}',
+    [double]$cpu, [double]$memoryUsedPercent, [double]$freeMemoryMb / 1024, [double]$diskUsedPercent, $smartText)
+
 [pscustomobject]@{
     cpuLoad = [math]::Round([double]$cpu, 2)
     memoryUsedPercent = [math]::Round([double]$memoryUsedPercent, 2)
     memoryFreeMb = [math]::Round([double]$freeMemoryMb, 2)
     diskUsedPercent = [math]::Round([double]$diskUsedPercent, 2)
     smartStatus = $smartStatus
+    message = $message
 }
 """;
 
@@ -944,7 +955,7 @@ catch {
         switch (effectiveFormat)
         {
             case "json":
-                if (!TryParseJsonChannels(trimmed, channels, ref stateHint))
+                if (!TryParseJsonChannels(trimmed, channels, ref stateHint, ref message))
                 {
                     throw new InvalidOperationException("script output is not valid JSON");
                 }
@@ -1018,13 +1029,29 @@ catch {
     private static bool TryParseJsonChannels(
         string json,
         List<SensorChannelValue> channels,
-        ref SensorState? stateHint)
+        ref SensorState? stateHint,
+        ref string? message)
     {
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
             AllowTrailingCommas = true,
             CommentHandling = JsonCommentHandling.Skip
         });
+
+        // A top-level "message" string is the sensor's message (what the script found, in words) - not a channel.
+        if (document.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (string.Equals(property.Name, "message", StringComparison.OrdinalIgnoreCase) &&
+                    property.Value.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(property.Value.GetString()))
+                {
+                    var text = property.Value.GetString()!.Trim();
+                    message = text.Length > 500 ? text[..500] : text;
+                }
+            }
+        }
 
         FlattenJsonElement(document.RootElement, string.Empty, channels, ref stateHint);
         return true;
@@ -1041,8 +1068,10 @@ catch {
             case JsonValueKind.Object:
                 foreach (var property in element.EnumerateObject())
                 {
-                    if (IsPowerShellRemotingMetadataKey(property.Name))
+                    if (IsPowerShellRemotingMetadataKey(property.Name) ||
+                        (path.Length == 0 && string.Equals(property.Name, "message", StringComparison.OrdinalIgnoreCase)))
                     {
+                        // The top-level message is the sensor's text (read above) - its words must not be taken for a state.
                         continue;
                     }
 

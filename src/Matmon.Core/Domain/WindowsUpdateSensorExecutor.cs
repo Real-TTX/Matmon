@@ -33,9 +33,14 @@ try {
     $out["pendingUpdates"] = $total
     $out["securityUpdates"] = $security
     $out["state"] = if ($total -gt 0) { 'warning' } else { 'ok' }
+    $out["message"] = if ($total -eq 0) { 'up to date' } else {
+        $titles = @($result.Updates | Select-Object -First 2 | ForEach-Object { $_.Title })
+        "$total update$(if ($total -ne 1) { 's' }) pending" + $(if ($security -gt 0) { " ($security security)" } else { '' }) + ": " + ($titles -join '; ') + $(if ($total -gt 2) { ' ...' } else { '' })
+    }
 } catch {
     $out["pendingUpdates"] = -1
     $out["state"] = 'critical'
+    $out["message"] = "Windows Update search failed: $("$($_.Exception.Message)".Trim())"
 }
 [pscustomobject]$out
 """;

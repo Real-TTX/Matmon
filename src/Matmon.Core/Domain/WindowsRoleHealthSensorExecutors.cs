@@ -27,11 +27,20 @@ internal static class WindowsRoleHealth
         return Engine.ExecuteAsync(new SensorExecutionContext(PowerShellRemoteSensorExecutor.Definition.Key, context.Target, settings), cancellationToken);
     }
 
-    // A small helper every script starts with: is a cmdlet / tool there at all?
+    // What every script starts with: is a cmdlet / tool there at all (Has), a list of what is wrong in words ($problems),
+    // numbers formatted the same on every server (Inv - a German server would write "8,2"), and a count with its noun (N).
+    // The script ends with $out.message: the problems, or - when there are none - a short summary.
     public const string Prelude = """
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
 function Has([string]$name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+function Inv([string]$format) { [string]::Format([Globalization.CultureInfo]::InvariantCulture, $format, $args) }
+function N([int]$count, [string]$noun) { if ($count -eq 1) { "1 $noun" } else { "$count $($noun)s" } }
+function Short($items, [int]$max = 3) {
+    $list = @($items | Where-Object { $_ })
+    if ($list.Count -le $max) { $list -join ', ' } else { ($list[0..($max - 1)] -join ', ') + " and $($list.Count - $max) more" }
+}
+$problems = New-Object System.Collections.Generic.List[string]
 $out = [ordered]@{}
 """;
 }
@@ -44,28 +53,46 @@ if (-not (Has 'Get-Queue')) {
     try { Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop } catch { }
 }
 $out.exchangeShell = [int](Has 'Get-Queue')
+if ($out.exchangeShell -eq 0) { $problems.Add("Exchange Management Shell not found on $env:COMPUTERNAME - is this an Exchange server?") }
 $services = @(Get-Service -Name 'MSExchange*' -ErrorAction SilentlyContinue | Where-Object { $_.StartType -eq 'Automatic' })
-$out.servicesStopped = @($services | Where-Object { $_.Status -ne 'Running' }).Count
-$out.servicesRunning = @($services | Where-Object { $_.Status -eq 'Running' }).Count
+$stopped = @($services | Where-Object { $_.Status -ne 'Running' })
+$out.servicesStopped = $stopped.Count
+$out.servicesRunning = $services.Count - $stopped.Count
+if ($stopped.Count -gt 0) { $problems.Add("$(N $stopped.Count 'service') stopped: $(Short ($stopped | ForEach-Object { $_.Name }))") }
 $queues = @()
 if (Has 'Get-Queue') { $queues = @(Get-Queue -Server $env:COMPUTERNAME -ErrorAction SilentlyContinue) }
 $total = ($queues | Measure-Object -Property MessageCount -Sum).Sum
 $out.queueMessages = [int]$(if ($total) { $total } else { 0 })
-$out.queuesRetry = @($queues | Where-Object { "$($_.Status)" -eq 'Retry' }).Count
+$retry = @($queues | Where-Object { "$($_.Status)" -eq 'Retry' })
+$out.queuesRetry = $retry.Count
+if ($retry.Count -gt 0) {
+    $first = $retry[0]
+    $problems.Add("$(N $retry.Count 'queue') in Retry: $(Short ($retry | ForEach-Object { "$($_.Identity)" }) 2)" + $(if ($first.LastError) { " ($("$($first.LastError)".Trim()))" } else { '' }))
+}
 $databases = @()
 if (Has 'Get-MailboxDatabase') { $databases = @(Get-MailboxDatabase -Server $env:COMPUTERNAME -Status -ErrorAction SilentlyContinue) }
+$dismounted = @($databases | Where-Object { -not $_.Mounted })
 $out.databases = $databases.Count
-$out.databasesDismounted = @($databases | Where-Object { -not $_.Mounted }).Count
+$out.databasesDismounted = $dismounted.Count
+if ($dismounted.Count -gt 0) { $problems.Add("$(N $dismounted.Count 'database') dismounted: $(Short ($dismounted | ForEach-Object { $_.Name }))") }
+$certificateText = ''
 if (Has 'Get-ExchangeCertificate') {
     $certificates = @(Get-ExchangeCertificate -Server $env:COMPUTERNAME -ErrorAction SilentlyContinue | Where-Object { "$($_.Services)" -ne 'None' })
     if ($certificates.Count -gt 0) {
-        $out.certificateDaysLeft = [int](($certificates | ForEach-Object { ($_.NotAfter - (Get-Date)).TotalDays } | Measure-Object -Minimum).Minimum)
+        $soonest = $certificates | Sort-Object NotAfter | Select-Object -First 1
+        $out.certificateDaysLeft = [int][math]::Floor(($soonest.NotAfter - (Get-Date)).TotalDays)
+        $certificateText = "certificate $($soonest.Subject -replace '^CN=([^,]+).*$', '$1') valid $($out.certificateDaysLeft) more days"
     }
 }
 $health = @()
 if (Has 'Test-ServiceHealth') { $health = @(Test-ServiceHealth -Server $env:COMPUTERNAME -ErrorAction SilentlyContinue) }
-$out.rolesUnhealthy = @($health | Where-Object { -not $_.RequiredServicesRunning }).Count
+$unhealthy = @($health | Where-Object { -not $_.RequiredServicesRunning })
+$out.rolesUnhealthy = $unhealthy.Count
+foreach ($role in ($unhealthy | Select-Object -First 3)) { $problems.Add("role $($role.Role): $(Short $role.ServicesNotRunning) not running") }
 $out.state = if ($out.exchangeShell -eq 0 -or $out.servicesStopped -gt 0 -or $out.databasesDismounted -gt 0 -or $out.rolesUnhealthy -gt 0) { 'critical' } elseif ($out.queuesRetry -gt 0) { 'warning' } else { 'ok' }
+$out.message = if ($problems.Count -gt 0) { $problems -join '; ' } else {
+    ((@("$(N $out.servicesRunning 'service') running", "$(N $out.databases 'database') mounted", "$(N $out.queueMessages 'message') queued", $certificateText) | Where-Object { $_ }) -join ', ')
+}
 [pscustomobject]$out
 """;
 
@@ -93,25 +120,48 @@ public sealed class ActiveDirectoryHealthSensorExecutor : ISensorExecutor
     public const string Script = WindowsRoleHealth.Prelude + "\n" + """
 $names = 'NTDS', 'DNS', 'Netlogon', 'kdc', 'W32Time', 'DFSR'
 $services = @(Get-Service -Name $names -ErrorAction SilentlyContinue)
-$out.servicesStopped = @($services | Where-Object { $_.Status -ne 'Running' }).Count + ($names.Count - $services.Count)
+$stopped = @($services | Where-Object { $_.Status -ne 'Running' } | ForEach-Object { $_.Name })
+$missing = @($names | Where-Object { $services.Name -notcontains $_ })
+$out.servicesStopped = $stopped.Count + $missing.Count
+if ($missing -contains 'NTDS') { $problems.Add("no Active Directory Domain Services on $env:COMPUTERNAME - is this a domain controller?") }
+elseif ($missing.Count -gt 0) { $problems.Add("not installed: $(Short $missing)") }
+if ($stopped.Count -gt 0) { $problems.Add("$(N $stopped.Count 'service') stopped: $(Short $stopped)") }
 $shares = @()
 if (Has 'Get-SmbShare') { $shares = @(Get-SmbShare -Name 'SYSVOL', 'NETLOGON' -ErrorAction SilentlyContinue) }
 $out.sharesMissing = 2 - $shares.Count
+if ($out.sharesMissing -gt 0 -and $missing -notcontains 'NTDS') {
+    $problems.Add("share missing: $(Short (@('SYSVOL', 'NETLOGON') | Where-Object { $shares.Name -notcontains $_ }))")
+}
 $replication = @()
 if (Has 'repadmin.exe') { $replication = @(repadmin /showrepl $env:COMPUTERNAME /csv 2>$null | ConvertFrom-Csv) }
-$out.replicationLinks = @($replication | Where-Object { $_.'Source DSA' }).Count
-$out.replicationFailures = @($replication | Where-Object { [int]("0" + $_.'Number of Failures') -gt 0 }).Count
+$links = @($replication | Where-Object { $_.'Source DSA' })
+$failing = @($links | Where-Object { [int]("0" + $_.'Number of Failures') -gt 0 })
+$out.replicationLinks = $links.Count
+$out.replicationFailures = $failing.Count
+if ($failing.Count -gt 0) {
+    $partners = @($failing | ForEach-Object { "$($_.'Source DSA') ($($_.'Naming Context' -replace ',.*$', ''): $($_.'Number of Failures') failures, last error $($_.'Last Failure Status'))" } | Select-Object -Unique)
+    $problems.Add("replication failing from $(Short $partners 2)")
+}
 $dcdiag = @()
 if (Has 'dcdiag.exe') { $dcdiag = @(dcdiag /q /s:$env:COMPUTERNAME 2>$null) }
-$out.dcdiagFailedTests = @($dcdiag | Where-Object { $_ -match 'failed test' }).Count
+$failedTests = @($dcdiag | ForEach-Object { if ("$_" -match 'failed test\s+(\S+)') { $Matches[1] } } | Select-Object -Unique)
+$out.dcdiagFailedTests = $failedTests.Count
+if ($failedTests.Count -gt 0) { $problems.Add("dcdiag failed: $(Short $failedTests 4)") }
+$timeText = ''
 if ((Has 'Get-ADDomain') -and (Has 'w32tm.exe')) {
     $pdc = (Get-ADDomain -ErrorAction SilentlyContinue).PDCEmulator
     if ($pdc) {
         $sample = w32tm /stripchart /computer:$pdc /samples:1 /dataonly 2>$null | Select-Object -Last 1
-        if ("$sample" -match ',\s*([+-]?\d+(\.\d+)?)s') { $out.timeOffsetSeconds = [math]::Round([math]::Abs([double]$Matches[1]), 2) }
+        if ("$sample" -match ',\s*([+-]?\d+(\.\d+)?)s') {
+            $out.timeOffsetSeconds = [math]::Round([math]::Abs([double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)), 2)
+            $timeText = Inv 'time {0:0.##} s off the PDC ({1})' $out.timeOffsetSeconds ($pdc -replace '\..*$', '')
+        }
     }
 }
 $out.state = if ($out.servicesStopped -gt 0 -or $out.sharesMissing -gt 0 -or $out.replicationFailures -gt 0) { 'critical' } elseif ($out.dcdiagFailedTests -gt 0) { 'warning' } else { 'ok' }
+$out.message = if ($problems.Count -gt 0) { $problems -join '; ' } else {
+    ((@('AD services running', "$(N $links.Count 'replication link') healthy", $(if (Has 'dcdiag.exe') { 'dcdiag passed' } else { '' }), $timeText) | Where-Object { $_ }) -join ', ')
+}
 [pscustomobject]$out
 """;
 
@@ -140,23 +190,40 @@ public sealed class AzureDevOpsServerHealthSensorExecutor : ISensorExecutor
 
     public const string Script = WindowsRoleHealth.Prelude + "\n" + """
 $url = '__MATMON_DEVOPS_URL__'
-$services = @(Get-Service -Name 'TFSJobAgent', 'W3SVC', 'WAS' -ErrorAction SilentlyContinue)
-$out.servicesStopped = @($services | Where-Object { $_.Status -ne 'Running' }).Count
+$names = 'TFSJobAgent', 'W3SVC', 'WAS'
+$services = @(Get-Service -Name $names -ErrorAction SilentlyContinue)
+$stopped = @($services | Where-Object { $_.Status -ne 'Running' } | ForEach-Object { $_.Name })
+$out.servicesStopped = $stopped.Count + @($names | Where-Object { $services.Name -notcontains $_ }).Count
+if ($services.Name -notcontains 'TFSJobAgent') { $problems.Add("no TFS Job Agent on $env:COMPUTERNAME - is this the Azure DevOps application tier?") }
+if ($stopped.Count -gt 0) { $problems.Add("$(N $stopped.Count 'service') stopped: $(Short $stopped)") }
+$poolText = ''
 if (Get-Module -ListAvailable -Name WebAdministration) {
     try {
         Import-Module WebAdministration -ErrorAction Stop
         $pools = @(Get-ChildItem IIS:\AppPools | Where-Object { $_.Name -match 'Azure DevOps|Team Foundation|TFS' })
+        $stoppedPools = @($pools | Where-Object { $_.State -ne 'Started' } | ForEach-Object { $_.Name })
         $out.appPools = $pools.Count
-        $out.appPoolsStopped = @($pools | Where-Object { $_.State -ne 'Started' }).Count
+        $out.appPoolsStopped = $stoppedPools.Count
+        if ($stoppedPools.Count -gt 0) { $problems.Add("application pool stopped: $(Short $stoppedPools)") }
+        $poolText = "$(N $pools.Count 'application pool') started"
     } catch { }
 }
+$address = $url.TrimEnd('/') + '/_apis/connectionData'
 $watch = [Diagnostics.Stopwatch]::StartNew()
 try {
-    $response = Invoke-WebRequest -Uri ($url.TrimEnd('/') + '/_apis/connectionData') -UseDefaultCredentials -UseBasicParsing -TimeoutSec 30
+    $response = Invoke-WebRequest -Uri $address -UseDefaultCredentials -UseBasicParsing -TimeoutSec 30
     $out.webOk = [int]($response.StatusCode -eq 200)
-} catch { $out.webOk = 0 }
+    if ($out.webOk -eq 0) { $problems.Add("$address answered HTTP $($response.StatusCode)") }
+} catch {
+    $out.webOk = 0
+    $reason = if ($_.Exception.Response) { "HTTP $([int]$_.Exception.Response.StatusCode)" } else { "$($_.Exception.Message)".Trim() }
+    $problems.Add("no answer from $address`: $reason")
+}
 $out.webResponseMs = [int]$watch.ElapsedMilliseconds
 $out.state = if ($out.servicesStopped -gt 0 -or $out.webOk -eq 0 -or $out.appPoolsStopped -gt 0) { 'critical' } else { 'ok' }
+$out.message = if ($problems.Count -gt 0) { $problems -join '; ' } else {
+    ((@("web tier answers in $($out.webResponseMs) ms", $poolText, 'job agent and IIS running') | Where-Object { $_ }) -join ', ')
+}
 [pscustomobject]$out
 """;
 
