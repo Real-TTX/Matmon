@@ -53,6 +53,7 @@ public static class BreadcrumbBuilder
             "/system/probes/install" => [new("Probes", "/Probes"), new("Install")],
 
             "/monitoring/template" => [new("Templates", "/Templates"), new(GetLeafTitle(title, "Template"))],
+            "/templates/store" => [new("Templates", "/Templates"), new("Store")],
 
             // One page with three tabs (rules, senders, receivers): the trail ends at the page, not at one tab.
             "/notifications" => [new("Notifications")],

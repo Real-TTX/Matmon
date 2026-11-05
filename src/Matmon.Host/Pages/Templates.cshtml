@@ -149,6 +149,7 @@
         <a class="mat-btn mat-btn--primary" asp-page="/TemplateEditor" asp-route-returnUrl="@returnUrl">@MatUi.Icon("plus")<span>New template</span></a>
         @if (isAdmin)
         {
+            <a class="mat-btn mat-btn--secondary" asp-page="/TemplateStore">@MatUi.Icon("store")<span>Store</span></a>
             <button type="button" class="mat-btn mat-btn--secondary" data-dialog-open="templates-import" aria-haspopup="dialog">@MatUi.Icon("upload")<span>Import</span></button>
         }
         @if (templates.Count > 0)

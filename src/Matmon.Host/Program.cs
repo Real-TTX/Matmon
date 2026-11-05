@@ -372,6 +372,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/SensorAssistant", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/ElementEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/TemplateEditor", MatmonSecurity.AdminPolicy);
+    options.Conventions.AuthorizePage("/TemplateStore", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationRuleEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationSenderEditor", MatmonSecurity.AdminPolicy);
     options.Conventions.AuthorizePage("/NotificationReceiverEditor", MatmonSecurity.AdminPolicy);
@@ -412,6 +413,7 @@ builder.Services.AddScoped<Matmon.Host.Ui.InstanceShellBuilder>();
 // Talks to Matmon.Cloud's backup endpoints (push/list/download/delete + account-scoped restore). Shared by the
 // Config Backup tab, the backup scheduler and the setup wizard, so registered globally.
 builder.Services.AddSingleton<CloudBackupClient>();
+builder.Services.AddSingleton<CloudTemplateStoreClient>();
 
 if (runtimeOptions.Mode == AppMode.Primary)
 {

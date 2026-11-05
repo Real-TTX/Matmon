@@ -1,0 +1,207 @@
+@page "/templates/store"
+@model Matmon.Host.Pages.TemplateStoreModel
+@{
+    ViewData["Title"] = "Template store";
+    var catalogue = Model.Catalogue;
+    var detail = Model.Detail;
+    var pages = catalogue is null ? 1 : Math.Max(1, (catalogue.Total + catalogue.PageSize - 1) / catalogue.PageSize);
+    var sorts = new[] { ("", "Newest"), ("popular", "Most used"), ("name", "Name") };
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">@Model.ErrorMessage</div></div>
+}
+
+@if (Model.Problem is not null)
+{
+    <div class="mat-empty mat-empty--first">
+        <span class="mat-empty__icon">@MatUi.Icon("store")</span>
+        <div class="mat-empty__title">The template store is not available</div>
+        <p>@Model.Problem</p>
+        @if (!Model.Connected)
+        {
+            <a class="mat-btn mat-btn--primary" href="/Config?tab=cloud">@MatUi.Icon("cloud")<span>Connect to Matmon Cloud</span></a>
+        }
+        <a class="mat-btn mat-btn--secondary" asp-page="/Templates">@MatUi.Icon("back")<span>Back to templates</span></a>
+    </div>
+}
+else if (catalogue is not null)
+{
+    @if (detail is not null)
+    {
+        <section class="mat-card" aria-labelledby="store-detail-title">
+            <div class="mat-card__head">
+                @MatUi.Icon("template")
+                <h2 class="mat-card__title" id="store-detail-title">@detail.Title <span class="mat-mono mat-text-muted">@detail.Version</span></h2>
+                <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="@Model.Link(page: Model.PageNumber)" aria-label="Close the details" data-tip="Close">@MatUi.Icon("x")</a>
+            </div>
+            <div class="mat-card__body mat-stack">
+                @if (!string.IsNullOrWhiteSpace(detail.Summary))
+                {
+                    <p><strong>@detail.Summary</strong></p>
+                }
+                @foreach (var paragraph in detail.Description.Replace("\r\n", "\n").Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var lines = paragraph.Split('\n');
+                    <p>
+                        @for (var i = 0; i < lines.Length; i++)
+                        {
+                            if (i > 0)
+                            {
+                                <br />
+                            }
+                            @lines[i]
+                        }
+                    </p>
+                }
+                <p class="mat-text-muted">
+                    @(string.IsNullOrWhiteSpace(detail.Author) ? "" : "By " + detail.Author + " · ")@detail.TemplateCount template@(detail.TemplateCount == 1 ? "" : "s") · used @detail.Downloads times · updated @detail.Updated.ToString("yyyy-MM-dd")
+                </p>
+                <div class="mat-table-wrap">
+                    <table class="mat-table">
+                        <caption class="mat-sr-only">Templates in this set</caption>
+                        <thead><tr><th scope="col">Template</th><th scope="col">Sensor type</th><th scope="col">Scope</th></tr></thead>
+                        <tbody>
+                            @foreach (var template in detail.Templates)
+                            {
+                                <tr>
+                                    <td data-label="Template" class="mat-table__primary">
+                                        @template.Name
+                                        @if (Model.ExistingNames.Contains(template.Name))
+                                        {
+                                            <span class="mat-pill">already here</span>
+                                        }
+                                    </td>
+                                    <td data-label="Sensor type" class="mat-mono">@template.SensorType</td>
+                                    <td data-label="Scope">@template.Scope</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (detail.Versions.Count > 1)
+                {
+                    <details>
+                        <summary>Versions</summary>
+                        <ul>
+                            @foreach (var version in detail.Versions)
+                            {
+                                <li><span class="mat-mono">@version.Version</span> · @version.Date.ToString("yyyy-MM-dd")@(string.IsNullOrWhiteSpace(version.Notes) ? "" : " - " + version.Notes)</li>
+                            }
+                        </ul>
+                    </details>
+                }
+                <form method="post" asp-page-handler="Add" class="mat-row mat-gap-2">
+                    <input type="hidden" name="slug" value="@detail.Slug" />
+                    <input type="hidden" name="q" value="@Model.Q" />
+                    <input type="hidden" name="tag" value="@Model.Tag" />
+                    <input type="hidden" name="sort" value="@Model.Sort" />
+                    @if (Model.AlreadyAdded(detail))
+                    {
+                        <button type="submit" class="mat-btn mat-btn--secondary" data-confirm="These templates are already here by name. Add them again? The copies get a new name." data-confirm-ok="Add again">@MatUi.Icon("plus")<span>Add again</span></button>
+                    }
+                    else
+                    {
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Add to this instance</span></button>
+                    }
+                    <span class="mat-text-muted">Credentials and passwords are never part of a store template - fill them in on the sensors.</span>
+                </form>
+            </div>
+        </section>
+    }
+
+    <div class="mat-list">
+        <form method="get" class="mat-toolbar" role="search" aria-label="Search the store">
+            <div class="mat-input-icon mat-toolbar__search">
+                @MatUi.Icon("search")
+                <input class="mat-input" type="search" name="q" value="@Model.Q" placeholder="Provider, service or sensor type" aria-label="Search the store" autocomplete="off" enterkeyhint="search" />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.Tag))
+            {
+                <input type="hidden" name="tag" value="@Model.Tag" />
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Sort))
+            {
+                <input type="hidden" name="sort" value="@Model.Sort" />
+            }
+            <span class="mat-toolbar__spacer"></span>
+            <span class="mat-toolbar__info">@catalogue.Total set@(catalogue.Total == 1 ? "" : "s")</span>
+            <div class="mat-toolbar__end mat-seg" role="group" aria-label="Sort">
+                @foreach (var (value, label) in sorts)
+                {
+                    <a class="mat-seg__btn" href="@Model.Link(sort: value.Length == 0 ? "new" : value)" aria-current="@(((Model.Sort ?? "") == value || (value.Length == 0 && Model.Sort == "new")) ? "true" : "false")">@label</a>
+                }
+            </div>
+        </form>
+
+        @if (catalogue.AllTags.Length > 0)
+        {
+            <div class="mat-chips" aria-label="Keywords">
+                @foreach (var tag in catalogue.AllTags)
+                {
+                    var active = string.Equals(tag, Model.Tag, StringComparison.OrdinalIgnoreCase);
+                    <a class="mat-chip" href="@(active ? Model.Link(clearTag: true) : Model.Link(tag: tag))" aria-current="@(active ? "true" : "false")"><span class="mat-chip__text">@tag</span></a>
+                }
+            </div>
+        }
+
+        @if (catalogue.Items.Count == 0)
+        {
+            <div class="mat-empty">
+                <span class="mat-empty__icon">@MatUi.Icon(string.IsNullOrWhiteSpace(Model.Q) && string.IsNullOrWhiteSpace(Model.Tag) ? "store" : "search")</span>
+                <div class="mat-empty__title">@(string.IsNullOrWhiteSpace(Model.Q) && string.IsNullOrWhiteSpace(Model.Tag) ? "The store is still empty" : "Nothing matches")</div>
+                <p>Template sets are shared on matmon.eu and checked before they appear here.</p>
+                @if (!string.IsNullOrWhiteSpace(Model.Q) || !string.IsNullOrWhiteSpace(Model.Tag))
+                {
+                    <a class="mat-btn mat-btn--secondary" href="/templates/store">@MatUi.Icon("refresh")<span>Reset</span></a>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="mat-gallery">
+                @foreach (var item in catalogue.Items)
+                {
+                    <article class="mat-card">
+                        <div class="mat-card__head">@MatUi.Icon("template")<h3 class="mat-card__title"><a href="@Model.Link(page: Model.PageNumber, show: item.Slug)">@item.Title</a></h3></div>
+                        <div class="mat-card__body mat-stack mat-stack--sm">
+                            @if (!string.IsNullOrWhiteSpace(item.Summary))
+                            {
+                                <p>@item.Summary</p>
+                            }
+                            <p class="mat-text-muted">@item.TemplateCount template@(item.TemplateCount == 1 ? "" : "s") · <span class="mat-mono">@string.Join(", ", item.SensorTypes)</span></p>
+                            <p class="mat-text-muted">@(string.IsNullOrWhiteSpace(item.Author) ? "" : item.Author + " · ")v@(item.Version) · used @item.Downloads times</p>
+                        </div>
+                        <div class="mat-card__foot">
+                            <a class="mat-btn mat-btn--secondary mat-btn--sm" href="@Model.Link(page: Model.PageNumber, show: item.Slug)">@MatUi.Icon("eye")<span>Details</span></a>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        @if (pages > 1)
+        {
+            <nav class="mat-row mat-gap-2" aria-label="Pages">
+                @if (catalogue.Page > 1)
+                {
+                    <a class="mat-btn mat-btn--ghost mat-btn--sm" href="@Model.Link(page: catalogue.Page - 1)">@MatUi.Icon("chevron-left")<span>Previous</span></a>
+                }
+                <span class="mat-text-muted">Page @catalogue.Page of @pages</span>
+                @if (catalogue.Page < pages)
+                {
+                    <a class="mat-btn mat-btn--ghost mat-btn--sm" href="@Model.Link(page: catalogue.Page + 1)"><span>Next</span>@MatUi.Icon("chevron-right")</a>
+                }
+            </nav>
+        }
+
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--secondary" asp-page="/Templates">@MatUi.Icon("back")<span>Back to templates</span></a>
+        </div>
+    </div>
+}
