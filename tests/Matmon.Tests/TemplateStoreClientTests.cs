@@ -162,6 +162,45 @@ public sealed class TemplateStoreClientTests : IDisposable
         Assert.DoesNotContain("hornetsecurity-status", exported);
     }
 
+    // A template imported before templates carried a target (and before they remembered their store set): same name, no target.
+    private Matmon.Core.Domain.MonitoringTemplate OldImport() => _store.ImportTemplates([new Matmon.Core.Domain.MonitoringTemplate
+    {
+        Name = "Hornetsecurity - services",
+        TargetKind = Matmon.Core.Domain.MonitoringTemplateScope.Sensor,
+        SensorTypeKey = "http-advanced"
+    }]).Single();
+
+    [Fact]
+    public async Task A_namesake_template_from_before_targets_is_taken_over_by_the_store_update_not_duplicated()
+    {
+        FakeCloud();
+        _store.SetCloudConnectionSettings("https://cloud.example.test/", InstanceId, "instance-token", enabled: true);
+        var old = OldImport();
+
+        await Page().OnPostUpdateAsync("hornetsecurity-status", CancellationToken.None);
+
+        var templates = _store.GetAllTemplates().Where(template => template.Name.StartsWith("Hornetsecurity", StringComparison.Ordinal)).ToList();
+        var updated = Assert.Single(templates);
+        Assert.Equal(old.Id, updated.Id);
+        Assert.Equal("https://api.status.io/1.0/status/591aaa7fe69f388425000fda", updated.Target);
+        Assert.Equal(("hornetsecurity-status", "1.0"), (updated.StoreSlug, updated.StoreVersion));
+    }
+
+    [Fact]
+    public void A_file_imported_with_update_by_name_brings_the_target_into_the_existing_template()
+    {
+        var old = OldImport();
+        var read = TemplateTransfer.Read(System.Text.Encoding.UTF8.GetBytes(StoreFile()), [], new HashSet<string>(["http-advanced"]), new HashSet<string>());
+
+        var result = _store.UpdateTemplatesByName(read.Templates);
+
+        Assert.Equal(["Hornetsecurity - services"], result.Updated);
+        var updated = Assert.Single(_store.GetAllTemplates(), template => template.Name.StartsWith("Hornetsecurity", StringComparison.Ordinal));
+        Assert.Equal(old.Id, updated.Id);
+        Assert.Equal("https://api.status.io/1.0/status/591aaa7fe69f388425000fda", updated.Target);
+        Assert.Null(updated.StoreSlug);                                         // a file names no store set
+    }
+
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private TemplateStoreModel Page()

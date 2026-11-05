@@ -596,6 +596,10 @@ public interface IMonitoringWorkspaceStore
     /// </summary>
     TemplateStoreUpdateResult UpdateTemplatesFromStore(string storeSlug, string? storeVersion, IReadOnlyList<MonitoringTemplate> templates);
 
+    /// <summary>A template file imported with "update templates that have the same name": each template of the file whose name
+    /// exists here updates that template in place (same id, name and filled-in secrets); the others are added.</summary>
+    TemplateStoreUpdateResult UpdateTemplatesByName(IReadOnlyList<MonitoringTemplate> templates);
+
     /// <summary>The parameter keys the sensor types declare secret - what a template export leaves out.</summary>
     IReadOnlySet<string> GetSecretParameterKeys();
 

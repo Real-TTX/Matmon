@@ -103,6 +103,9 @@ else if (catalogue is not null)
                     var scripts = detail.Scripts ?? [];
                     var installedVersion = Model.InstalledVersion(detail.Slug);
                     var hasUpdate = installedVersion is not null && !string.Equals(installedVersion, detail.Version, StringComparison.OrdinalIgnoreCase);
+                    // Its templates are here by name but do not know their set: added from a file, or from the store before templates
+                    // remembered where they came from (those also lack the template target). Updating takes them over.
+                    var adoptable = installedVersion is null && Model.AlreadyAdded(detail);
                 }
                 @if (scripts.Count > 0)
                 {
@@ -121,6 +124,10 @@ else if (catalogue is not null)
                             }
                         </div>
                     </details>
+                }
+                @if (adoptable)
+                {
+                    <p><span class="mat-pill mat-pill--info">Update available</span> Templates of these names are already here, without the store's version - they may lack what was added since (the target, for one). "Update the existing templates" brings them to version @detail.Version.</p>
                 }
                 @if (installedVersion is not null)
                 {
@@ -149,7 +156,11 @@ else if (catalogue is not null)
                     <input type="hidden" name="q" value="@Model.Q" />
                     <input type="hidden" name="tag" value="@Model.Tag" />
                     <input type="hidden" name="sort" value="@Model.Sort" />
-                    @if (hasUpdate)
+                    @if (adoptable)
+                    {
+                        <button type="submit" asp-page-handler="Update" class="mat-btn mat-btn--primary" data-confirm="Update the templates of the same name here to version @detail.Version of this set? They keep their names and the credentials filled in here, and from now on Matmon tells you about newer versions. Sensors made from them stay as they are until you use Restore from template." data-confirm-ok="Update">@MatUi.Icon("refresh")<span>Update the existing templates</span></button>
+                    }
+                    else if (hasUpdate)
                     {
                         <button type="submit" asp-page-handler="Update" class="mat-btn mat-btn--primary" data-confirm="Update the templates added from this set to version @detail.Version? They keep their names and the credentials filled in here; sensors made from them stay as they are until you use Restore from template.@(scripts.Count > 0 ? " The new version carries scripts - read them first." : "")" data-confirm-ok="Update">@MatUi.Icon("refresh")<span>Update to @detail.Version</span></button>
                     }

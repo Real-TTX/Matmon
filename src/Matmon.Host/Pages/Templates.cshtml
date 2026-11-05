@@ -198,9 +198,14 @@
                     <div class="mat-upload" data-upload>
                         <input class="mat-upload__input" type="file" id="templates-import-file" name="templateFile" accept=".json,application/json" required data-msg-required="Choose a template file." aria-describedby="templates-import-hint" />
                     </div>
-                    <span class="mat-hint" id="templates-import-hint">A file exported from Matmon. The templates are added beside yours - a name that exists gets "(imported)". Credentials come without their secrets: fill them in afterwards.</span>
+                    <span class="mat-hint" id="templates-import-hint">A file exported from Matmon. Credentials come without their secrets: fill them in afterwards.</span>
                     <span class="mat-error" aria-live="polite"></span>
                 </div>
+                <label class="mat-check">
+                    <input type="checkbox" name="replaceExisting" value="true" aria-describedby="templates-import-replace-hint" />
+                    <span class="mat-check__text">Update templates that have the same name</span>
+                </label>
+                <span class="mat-hint" id="templates-import-replace-hint">On: a template of the same name is updated in place - it keeps its sensors' link and the credentials filled in here. Off: the file's templates are added beside yours, a name that exists gets "(imported)".</span>
             </div>
             <div class="mat-dialog__foot">
                 <div class="mat-btn-row mat-btn-row--plain">

@@ -107,9 +107,13 @@ public sealed class TemplateStoreModel(CloudTemplateStoreClient cloud, IMonitori
                 return RedirectToPage(new { Q, Tag, Sort, p = PageNumber });
             }
 
-            // Names are made unique against everything EXCEPT this set's own templates, so its names stay and match.
+            // Names are made unique against everything EXCEPT the templates this update takes over - the set's own, and a template of
+            // the same name without a store origin (added from a file, or from the store before templates remembered their set) -
+            // so their names stay and match.
+            var fileNames = Read(file, []).Templates.Select(template => template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var others = workspace.GetAllTemplates()
-                .Where(template => !string.Equals(template.StoreSlug, slug, StringComparison.OrdinalIgnoreCase))
+                .Where(template => !string.Equals(template.StoreSlug, slug, StringComparison.OrdinalIgnoreCase)
+                                   && !(template.StoreSlug is null && fileNames.Contains(template.Name)))
                 .Select(template => template.Name).ToArray();
             var read = Read(file, others);
             var result = workspace.UpdateTemplatesFromStore(slug, file.Version, read.Templates);

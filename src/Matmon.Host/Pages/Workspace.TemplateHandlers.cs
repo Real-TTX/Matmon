@@ -171,7 +171,7 @@ public sealed partial class WorkspaceModel
         return File(bytes, "application/json", TemplateTransfer.FileName(id is null ? templates : [templates[^1]], now));
     }
 
-    public async Task<IActionResult> OnPostImportTemplatesAsync(IFormFile? templateFile)
+    public async Task<IActionResult> OnPostImportTemplatesAsync(IFormFile? templateFile, bool replaceExisting = false)
     {
         try
         {
@@ -187,14 +187,28 @@ public sealed partial class WorkspaceModel
 
             using var buffer = new MemoryStream();
             await templateFile.CopyToAsync(buffer, HttpContext.RequestAborted);
-            var read = TemplateTransfer.Read(
-                buffer.ToArray(),
-                _workspaceStore.GetAllTemplates().Select(template => template.Name).ToArray(),
-                _workspaceStore.GetSensorDefinitions().Select(definition => definition.Key).ToHashSet(StringComparer.OrdinalIgnoreCase),
-                _workspaceStore.GetSecretParameterKeys());
-            var added = _workspaceStore.ImportTemplates(read.Templates);
-            StatusMessage = $"Imported {added.Count} template{(added.Count == 1 ? string.Empty : "s")}: {string.Join(", ", added.Select(template => template.Name))}."
-                + (read.Notes.Count == 0 ? string.Empty : " " + string.Join(" ", read.Notes));
+            var bytes = buffer.ToArray();
+            var knownTypes = _workspaceStore.GetSensorDefinitions().Select(definition => definition.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existing = _workspaceStore.GetAllTemplates().Select(template => template.Name).ToArray();
+            if (replaceExisting)
+            {
+                // Names are made unique only against templates the file does NOT update, so its own names stay and match.
+                var fileNames = TemplateTransfer.Read(bytes, [], knownTypes, _workspaceStore.GetSecretParameterKeys())
+                    .Templates.Select(template => template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var read = TemplateTransfer.Read(bytes, existing.Where(name => !fileNames.Contains(name)).ToArray(), knownTypes, _workspaceStore.GetSecretParameterKeys());
+                var result = _workspaceStore.UpdateTemplatesByName(read.Templates);
+                StatusMessage = (result.Updated.Count == 0 ? "No template of the same name was here." : $"Updated {string.Join(", ", result.Updated)}.")
+                    + (result.Added.Count == 0 ? string.Empty : $" Added {string.Join(", ", result.Added)}.")
+                    + (result.Updated.Count == 0 ? string.Empty : " Sensors made from them keep their values until you use \"Restore from template\" on them.")
+                    + (read.Notes.Count == 0 ? string.Empty : " " + string.Join(" ", read.Notes.Where(note => !note.Contains("exists already", StringComparison.Ordinal))));
+            }
+            else
+            {
+                var read = TemplateTransfer.Read(bytes, existing, knownTypes, _workspaceStore.GetSecretParameterKeys());
+                var added = _workspaceStore.ImportTemplates(read.Templates);
+                StatusMessage = $"Imported {added.Count} template{(added.Count == 1 ? string.Empty : "s")}: {string.Join(", ", added.Select(template => template.Name))}."
+                    + (read.Notes.Count == 0 ? string.Empty : " " + string.Join(" ", read.Notes));
+            }
         }
         catch (InvalidDataException ex)
         {

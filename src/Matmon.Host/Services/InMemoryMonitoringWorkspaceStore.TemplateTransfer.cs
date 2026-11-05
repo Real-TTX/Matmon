@@ -46,11 +46,34 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     public TemplateStoreUpdateResult UpdateTemplatesFromStore(string storeSlug, string? storeVersion, IReadOnlyList<MonitoringTemplate> templates)
     {
         var slug = CleanStoreText(storeSlug, 80) ?? throw new ArgumentException("A store set is required.", nameof(storeSlug));
-        var version = CleanStoreText(storeVersion, 40);
+        var names = templates.Select(template => template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // The set's own templates, and - adopted into the set - a template of the same name with no store origin: one added from a
+        // file, or from the store before templates remembered where they came from (those also lacked the Target field).
+        return UpdateInPlace(templates, template => string.Equals(template.StoreSlug, slug, StringComparison.OrdinalIgnoreCase)
+                                                    || (template.StoreSlug is null && names.Contains(template.Name)),
+            slug, CleanStoreText(storeVersion, 40), stampOrigin: true);
+    }
+
+    public TemplateStoreUpdateResult UpdateTemplatesByName(IReadOnlyList<MonitoringTemplate> templates)
+    {
+        var names = templates.Select(template => template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return UpdateInPlace(templates, template => names.Contains(template.Name), storeSlug: null, storeVersion: null, stampOrigin: false);
+    }
+
+    /// <summary>
+    /// The one in-place update both paths use: each incoming template matched by name among <paramref name="candidate"/> keeps its
+    /// id, name and filled-in secrets and takes everything else; an unmatched one is added. With <paramref name="stampOrigin"/> the
+    /// updated and added templates carry the store set and version; without it a matched template keeps whatever origin it had.
+    /// </summary>
+    private TemplateStoreUpdateResult UpdateInPlace(IReadOnlyList<MonitoringTemplate> templates, Func<MonitoringTemplate, bool> candidate,
+        string? storeSlug, string? storeVersion, bool stampOrigin)
+    {
+        var slug = storeSlug;
+        var version = storeVersion;
         lock (_gate)
         {
             var secretKeys = DeclaredSecretParameterKeys(_document);
-            var existing = _document.Templates.Where(template => string.Equals(template.StoreSlug, slug, StringComparison.OrdinalIgnoreCase)).ToList();
+            var existing = _document.Templates.Where(candidate).ToList();
             var byName = existing.GroupBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
             var ids = _document.Templates.Select(template => template.Id).ToHashSet();
@@ -75,7 +98,12 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                     target.ParentTemplateId = parent == target.Id ? null : parent;
                     target.Settings = settings;
                     target.Tags = [.. incoming.Tags];
-                    target.StoreVersion = version;
+                    if (stampOrigin)
+                    {
+                        target.StoreSlug = slug;
+                        target.StoreVersion = version;
+                    }
+
                     updated.Add(target.Name);
                 }
                 else if (!ids.Contains(incoming.Id))
@@ -96,7 +124,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 template.ParentTemplateId = null;
             }
 
-            var gone = existing.Where(template => !touched.Contains(template.Id)).Select(template => template.Name).ToList();
+            // "No longer in the set" only means something for a store set; a file update names no set.
+            var gone = stampOrigin
+                ? existing.Where(template => !touched.Contains(template.Id) && template.StoreSlug is not null).Select(template => template.Name).ToList()
+                : [];
             if (updated.Count + added.Count > 0)
             {
                 QueueSave(SavePriority.Configuration);
