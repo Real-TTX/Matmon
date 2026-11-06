@@ -16,6 +16,7 @@ namespace Matmon.Host.Services;
 public sealed class CloudConnectionService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AlertWatchInterval = TimeSpan.FromSeconds(1);
 
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly MatmonRuntimeOptions _runtimeOptions;
@@ -80,7 +81,6 @@ public sealed class CloudConnectionService : BackgroundService
         string? lastUpdatingTo = null;
         (int, int, int, int)? lastAlertCounts = null;
 
-        using var timer = new PeriodicTimer(PollInterval);
         do
         {
             try
@@ -141,7 +141,7 @@ public sealed class CloudConnectionService : BackgroundService
                     lastHeartbeat = DateTimeOffset.MinValue;
                 }
 
-                // Alerts acknowledged, muted, raised or closed are told at the next tick (5 s), not after the interval: the
+                // Alerts acknowledged, muted, raised or closed are told within about a second (WaitForNextTickAsync), not after the interval: the
                 // cloud shows these counts in its menu and lists, and a count that lags behind an acknowledge made through
                 // the console reads as if the acknowledge had not worked. Cheap - one pass over the kept alerts.
                 var alertCounts = _workspaceStore.GetActiveAlertCounts();
@@ -185,9 +185,37 @@ public sealed class CloudConnectionService : BackgroundService
                 _logger.LogWarning(ex, "Matmon.Cloud tick failed (will retry)");
             }
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
+        while (await WaitForNextTickAsync(lastAlertCounts, stoppingToken));
 
         client?.Dispose();
+    }
+
+    /// <summary>
+    /// Waits for the next tick (<see cref="PollInterval"/>), but looks at the open-alert counts every second and ends the
+    /// wait as soon as they change - an acknowledge, a mute, a new or a closed alert then reaches the cloud within about a
+    /// second (the tick beats at once on a change). Counting is one pass over the kept alerts under the store's lock; the
+    /// alerts change in too many places of the store for an event of its own to stay complete.
+    /// </summary>
+    private async Task<bool> WaitForNextTickAsync((int, int, int, int)? lastAlertCounts, CancellationToken stoppingToken)
+    {
+        var until = DateTimeOffset.UtcNow + PollInterval;
+        try
+        {
+            while (DateTimeOffset.UtcNow < until)
+            {
+                await Task.Delay(AlertWatchInterval, stoppingToken);
+                if (lastAlertCounts is { } previous && _workspaceStore.GetActiveAlertCounts() != previous)
+                {
+                    return true;
+                }
+            }
+
+            return true;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     /// <summary>Resolves the effective link: UI settings once the user has taken over, else env bootstrap.</summary>
