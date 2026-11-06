@@ -162,6 +162,25 @@ public sealed class TemplateStoreClientTests : IDisposable
         Assert.DoesNotContain("hornetsecurity-status", exported);
     }
 
+    [Fact]
+    public void The_export_the_cloud_asks_for_carries_no_secret_and_no_store_origin()
+    {
+        var template = new Matmon.Core.Domain.MonitoringTemplate
+        {
+            Name = "Shop checks", TargetKind = Matmon.Core.Domain.MonitoringTemplateScope.Sensor, SensorTypeKey = "http-advanced",
+            Target = "https://user:pw@shop.example/health"
+        };
+        template.Settings.Parameters["smtp.password"] = "secret-value";
+        _store.ImportTemplates([template], "some-set", "1.0");
+
+        var json = Encoding.UTF8.GetString(new CloudTemplateExportRelay(_store, NullLogger<CloudTemplateExportRelay>.Instance).BuildExport(DateTimeOffset.UtcNow));
+
+        Assert.Contains("Shop checks", json);
+        Assert.DoesNotContain("secret-value", json);
+        Assert.DoesNotContain("user:pw", json);
+        Assert.DoesNotContain("some-set", json);
+    }
+
     // A template imported before templates carried a target (and before they remembered their store set): same name, no target.
     private Matmon.Core.Domain.MonitoringTemplate OldImport() => _store.ImportTemplates([new Matmon.Core.Domain.MonitoringTemplate
     {

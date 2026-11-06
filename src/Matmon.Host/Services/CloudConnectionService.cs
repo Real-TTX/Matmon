@@ -23,6 +23,7 @@ public sealed class CloudConnectionService : BackgroundService
     private readonly SelfUpdate.SelfUpdateService _selfUpdate;
     private readonly CloudProbeRelay _probes;
     private readonly Reports.CloudReportRelay _reports;
+    private readonly CloudTemplateExportRelay _templateExports;
     private readonly ILogger<CloudConnectionService> _logger;
 
     private string? _lastStatus;
@@ -34,6 +35,7 @@ public sealed class CloudConnectionService : BackgroundService
         SelfUpdate.SelfUpdateService selfUpdate,
         CloudProbeRelay probes,
         Reports.CloudReportRelay reports,
+        CloudTemplateExportRelay templateExports,
         ILogger<CloudConnectionService> logger)
     {
         _workspaceStore = workspaceStore;
@@ -42,6 +44,7 @@ public sealed class CloudConnectionService : BackgroundService
         _selfUpdate = selfUpdate;
         _probes = probes;
         _reports = reports;
+        _templateExports = templateExports;
         _logger = logger;
     }
 
@@ -317,6 +320,9 @@ public sealed class CloudConnectionService : BackgroundService
 
             // Partner availability reports: this instance makes its part (in the partner's branding) and uploads it.
             _reports.Handle(body?.BuildReports, baseUrl, instanceId.ToString(), token);
+
+            // The cloud's Templates > Submit page asked for this instance's templates (an export, no secrets).
+            _templateExports.Handle(body?.ExportTemplates, baseUrl, instanceId.ToString(), token);
         }
         catch (OperationCanceledException) { throw; }
         catch { /* older cloud without the fields, or a non-JSON body - ignore */ }
@@ -339,7 +345,8 @@ public sealed class CloudConnectionService : BackgroundService
         bool UpdateAvailable,
         InstallCommand? InstallUpdate = null,
         IReadOnlyList<CloudProbeCommand>? UpdateProbes = null,
-        IReadOnlyList<Reports.CloudReportRequest>? BuildReports = null);
+        IReadOnlyList<Reports.CloudReportRequest>? BuildReports = null,
+        IReadOnlyList<CloudTemplateExportRequest>? ExportTemplates = null);
 
     /// <summary>"Install the update", sent by the cloud with a heartbeat answer (owner, partner or platform admin).</summary>
     private sealed record InstallCommand(Guid Id, string? RequestedBy, string? Via);
