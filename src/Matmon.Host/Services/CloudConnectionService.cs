@@ -78,6 +78,7 @@ public sealed class CloudConnectionService : BackgroundService
         var lastHeartbeat = DateTimeOffset.MinValue;
         var lastIntervalSeconds = 0;
         string? lastUpdatingTo = null;
+        (int, int, int, int)? lastAlertCounts = null;
 
         using var timer = new PeriodicTimer(PollInterval);
         do
@@ -139,6 +140,17 @@ public sealed class CloudConnectionService : BackgroundService
                     lastUpdatingTo = updatingTo;
                     lastHeartbeat = DateTimeOffset.MinValue;
                 }
+
+                // Alerts acknowledged, muted, raised or closed are told at the next tick (5 s), not after the interval: the
+                // cloud shows these counts in its menu and lists, and a count that lags behind an acknowledge made through
+                // the console reads as if the acknowledge had not worked. Cheap - one pass over the kept alerts.
+                var alertCounts = _workspaceStore.GetActiveAlertCounts();
+                if (lastAlertCounts is { } previousCounts && previousCounts != alertCounts)
+                {
+                    lastHeartbeat = DateTimeOffset.MinValue;
+                }
+
+                lastAlertCounts = alertCounts;
 
                 if (DateTimeOffset.UtcNow - lastHeartbeat >= TimeSpan.FromSeconds(link.IntervalSeconds))
                 {
