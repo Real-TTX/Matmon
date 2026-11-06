@@ -179,6 +179,33 @@ Set("slack-status", "Slack status",
         new JsonObject { ["channel:latency:warning"] = "> 3000", ["channel:latency:critical"] = "> 10000", ["channel:active_incidents:warning"] = "> 0" }),
     Template("Slack - incidents (RSS)", "rss-feed", "https://slack-status.com/feed/rss", Rss(), ["status-page", "slack"]));
 
+// ------------------------------------------------------------------ Matmon's own services
+
+Set("matmon-status", "Matmon status",
+    "Matmon's own services: Matmon Cloud, the matmon.eu website and the download feeds instances and agents update from.",
+    "Watches what a Matmon installation relies on - no account or credential needed.\n\n"
+    + "\"Matmon Cloud - health\" reads the cloud's health endpoint (cloud.matmon.eu/healthz): its own verdict and response time - "
+    + "if it fails, remote access, alert relay, SMS and cloud backups are affected. \"Matmon Cloud - certificate\" warns before "
+    + "the cloud's certificate runs out. \"Matmon Cloud - sign-in page\" checks the page people sign in on. \"matmon.eu - website\" "
+    + "checks the website. \"Matmon - agent download feed\" and \"Matmon - Windows update feed\" check the release files on GitHub "
+    + "that agents and Windows installations update from (how many agent packages there are, the size of the Windows package).\n\n"
+    + "Add the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    ["Status page", "Matmon", "Matmon Cloud"],
+    Template("Matmon Cloud - health", "http-advanced", "https://cloud.matmon.eu/healthz", Json("status|Matmon Cloud"), ["status-page", "matmon"], Latency()),
+    Template("Matmon Cloud - certificate", "ssl-certificate", "https://cloud.matmon.eu", new JsonObject(), ["status-page", "matmon"], poll: "1.00:00:00"),
+    Template("Matmon Cloud - sign-in page", "http-advanced", "https://cloud.matmon.eu/login",
+        new JsonObject { ["method"] = "GET", ["expectedStatus"] = "200", ["expectedText"] = "Matmon" }, ["status-page", "matmon"], Latency()),
+    Template("matmon.eu - website", "http-advanced", "https://matmon.eu/",
+        new JsonObject { ["method"] = "GET", ["expectedStatus"] = "200", ["expectedText"] = "Matmon" }, ["status-page", "matmon"], Latency()),
+    Template("Matmon - agent download feed", "http-advanced", "https://github.com/real-ttx/matmon/releases/download/agent-latest/matmon-agent.json",
+        Json("packages|Agent packages"), ["status-page", "matmon"],
+        new JsonObject { ["channel:latency:warning"] = "> 5000", ["channel:latency:critical"] = "> 15000", ["channel:agent_packages:warning"] = "< 1" },
+        poll: "01:00:00"),
+    Template("Matmon - Windows update feed", "http-advanced", "https://github.com/real-ttx/matmon/releases/download/windows-latest/matmon-windows-x64.json",
+        Json("size|Package size"), ["status-page", "matmon"],
+        new JsonObject { ["channel:latency:warning"] = "> 5000", ["channel:latency:critical"] = "> 15000" },
+        poll: "01:00:00"));
+
 // ------------------------------------------------------------------ the catalogue (store texts per file)
 
 File.WriteAllText(Path.Combine(root, "catalog.json"), catalog.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));

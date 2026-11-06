@@ -142,5 +142,14 @@
     "tags": "Status page, Slack, Chat",
     "version": "1.0",
     "author": "Matmon.eu"
+  },
+  {
+    "file": "matmon-status.json",
+    "title": "Matmon status",
+    "summary": "Matmon\u0027s own services: Matmon Cloud, the matmon.eu website and the download feeds instances and agents update from.",
+    "description": "Watches what a Matmon installation relies on - no account or credential needed.\n\n\u0022Matmon Cloud - health\u0022 reads the cloud\u0027s health endpoint (cloud.matmon.eu/healthz): its own verdict and response time - if it fails, remote access, alert relay, SMS and cloud backups are affected. \u0022Matmon Cloud - certificate\u0022 warns before the cloud\u0027s certificate runs out. \u0022Matmon Cloud - sign-in page\u0022 checks the page people sign in on. \u0022matmon.eu - website\u0022 checks the website. \u0022Matmon - agent download feed\u0022 and \u0022Matmon - Windows update feed\u0022 check the release files on GitHub that agents and Windows installations update from (how many agent packages there are, the size of the Windows package).\n\nAdd the templates to a host or folder of your choice and create a sensor from each; the target is already set.",
+    "tags": "Status page, Matmon, Matmon Cloud",
+    "version": "1.0",
+    "author": "Matmon.eu"
   }
 ]

@@ -1,0 +1,148 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "3d457d2a-ec06-4cfc-9946-fb7a53344aef",
+      "name": "Matmon Cloud - health",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://cloud.matmon.eu/healthz",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "status|Matmon Cloud"
+        }
+      },
+      "tags": [
+        "status-page",
+        "matmon"
+      ]
+    },
+    {
+      "id": "4a015325-616c-4369-ac09-c0d3631b2d6d",
+      "name": "Matmon Cloud - certificate",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "ssl-certificate",
+      "target": "https://cloud.matmon.eu",
+      "settings": {
+        "pollingInterval": "1.00:00:00",
+        "timeout": "00:00:15",
+        "parameters": {}
+      },
+      "tags": [
+        "status-page",
+        "matmon"
+      ]
+    },
+    {
+      "id": "091da4ce-997b-428a-9037-5237853e61bc",
+      "name": "Matmon Cloud - sign-in page",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://cloud.matmon.eu/login",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "expectedText": "Matmon"
+        }
+      },
+      "tags": [
+        "status-page",
+        "matmon"
+      ]
+    },
+    {
+      "id": "e639d63b-5c98-4d35-af38-c5c4be876177",
+      "name": "matmon.eu - website",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://matmon.eu/",
+      "settings": {
+        "pollingInterval": "00:05:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 3000",
+          "channel:latency:critical": "\u003E 10000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "expectedText": "Matmon"
+        }
+      },
+      "tags": [
+        "status-page",
+        "matmon"
+      ]
+    },
+    {
+      "id": "2033d9fd-c1c1-4337-a8f6-dba2a102ca8d",
+      "name": "Matmon - agent download feed",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://github.com/real-ttx/matmon/releases/download/agent-latest/matmon-agent.json",
+      "settings": {
+        "pollingInterval": "01:00:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 5000",
+          "channel:latency:critical": "\u003E 15000",
+          "channel:agent_packages:warning": "\u003C 1"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "packages|Agent packages"
+        }
+      },
+      "tags": [
+        "status-page",
+        "matmon"
+      ]
+    },
+    {
+      "id": "2eac5ef7-a4e3-4c7b-9669-711372c5a3bb",
+      "name": "Matmon - Windows update feed",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "http-advanced",
+      "target": "https://github.com/real-ttx/matmon/releases/download/windows-latest/matmon-windows-x64.json",
+      "settings": {
+        "pollingInterval": "01:00:00",
+        "timeout": "00:00:15",
+        "thresholds": {
+          "channel:latency:warning": "\u003E 5000",
+          "channel:latency:critical": "\u003E 15000"
+        },
+        "parameters": {
+          "method": "GET",
+          "expectedStatus": "200",
+          "extractMode": "json",
+          "jsonPaths": "size|Package size"
+        }
+      },
+      "tags": [
+        "status-page",
+        "matmon"
+      ]
+    }
+  ]
+}

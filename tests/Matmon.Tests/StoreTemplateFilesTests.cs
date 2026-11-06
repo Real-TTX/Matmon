@@ -79,12 +79,13 @@ public sealed class StoreTemplateFilesTests(ITestOutputHelper output)
 
         var http = new HttpAdvancedSensorExecutor(new HttpClient { Timeout = TimeSpan.FromSeconds(30) });
         var rss = new RssFeedSensorExecutor();
+        var ssl = new SslCertificateSensorExecutor();
         var failures = new List<string>();
         foreach (var file in Files().Select(row => (string)row[0]))
         {
             foreach (var template in Read(file).Templates)
             {
-                ISensorExecutor executor = template.SensorTypeKey == "rss-feed" ? rss : http;
+                ISensorExecutor executor = template.SensorTypeKey switch { "rss-feed" => rss, "ssl-certificate" => ssl, _ => http };
                 var result = await executor.ExecuteAsync(new SensorExecutionContext(template.SensorTypeKey!, template.Target!, template.Settings.Clone()));
                 var channels = result.Channels.Where(channel => !channel.IsVirtual).ToList();
                 output.WriteLine($"{template.Name}: {result.State} - {result.Message} [{string.Join(", ", channels.Take(6).Select(c => $"{c.Key}={c.Value}"))}{(channels.Count > 6 ? $", +{channels.Count - 6}" : "")}]");
