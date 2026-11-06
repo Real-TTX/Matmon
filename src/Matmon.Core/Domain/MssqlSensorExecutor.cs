@@ -120,7 +120,14 @@ public sealed class MssqlSensorExecutor : ISensorExecutor
 
     public ValueTask<SensorExecutionResult> ExecuteAsync(
         SensorExecutionContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(context, describe: null, cancellationToken);
+
+    /// <summary>Runs the query; <paramref name="describe"/> (the health sensors) turns the channels and text columns into the message.</summary>
+    internal ValueTask<SensorExecutionResult> ExecuteAsync(
+        SensorExecutionContext context,
+        Func<IReadOnlyList<SensorChannelValue>, IReadOnlyDictionary<string, string>, string?>? describe,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(context.Target) &&
             !MonitoringSettings.TryReadParameter(context.Settings, "mssql.connectionString", out _))
@@ -136,7 +143,7 @@ public sealed class MssqlSensorExecutor : ISensorExecutor
 
         var timeout = context.Settings.Timeout ?? TimeSpan.FromSeconds(10);
         return SqlQuerySensorSupport.RunQueryAsync(
-            new SqlConnection(BuildConnectionString(context)), query, context.Settings, timeout, cancellationToken);
+            new SqlConnection(BuildConnectionString(context)), query, context.Settings, timeout, cancellationToken, describe);
     }
 
     private static string BuildConnectionString(SensorExecutionContext context)

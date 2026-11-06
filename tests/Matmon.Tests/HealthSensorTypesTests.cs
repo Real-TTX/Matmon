@@ -89,7 +89,60 @@ public sealed class HealthSensorTypesTests(ITestOutputHelper output)
         var channels = result.Channels.Where(channel => !channel.IsVirtual).ToList();
         output.WriteLine($"{variable}: {result.State} - {result.Message} [{string.Join(", ", channels.Select(c => $"{c.Key}={c.Value}"))}]");
         Assert.NotEmpty(channels);
+        Assert.DoesNotContain("SQL channel", result.Message);
+        Assert.DoesNotContain(channels, channel => channel.Key.EndsWith("names", StringComparison.Ordinal) || channel.Key is "role" or "version");
         AssertThresholdsNameChannels(settings, channels);
+    }
+
+    private static SensorChannelValue Ch(string key, double value) => new() { Key = key, Label = key, Value = value };
+
+    [Fact]
+    public void Sql_server_says_what_is_wrong_and_names_it()
+    {
+        var channels = new[]
+        {
+            Ch("user.sessions", 42), Ch("blocked.requests", 0), Ch("databases.not.online", 1), Ch("databases.without.full.backup.26h", 2),
+            Ch("failed.agent.jobs.24h", 1), Ch("page.life.expectancy", 1200), Ch("uptime.hours", 300)
+        };
+        var texts = new Dictionary<string, string> { ["offline.names"] = "Archive", ["unbacked.names"] = "CRM, Shop", ["failed.job.names"] = "Nightly ETL" };
+
+        Assert.Equal("1 database not online (Archive); 1 failed SQL Agent job run in 24 h (Nightly ETL); 2 databases without a full backup in 26 h (CRM, Shop) - 42 user sessions, page life 1200 s, up 13 d",
+            DatabaseHealth.DescribeSqlServer(channels, texts));
+
+        var fine = new[] { Ch("user.sessions", 1), Ch("blocked.requests", 0), Ch("databases.not.online", 0), Ch("page.life.expectancy", 900), Ch("uptime.hours", 5) };
+        Assert.Equal("All databases online and backed up, no blocking - 1 user session, page life 900 s, up 5 h",
+            DatabaseHealth.DescribeSqlServer(fine, new Dictionary<string, string>()));
+    }
+
+    [Fact]
+    public void Postgres_and_mysql_describe_in_words()
+    {
+        var pg = new[]
+        {
+            Ch("connections", 18), Ch("connections.used.percent", 12), Ch("waiting.on.locks", 3), Ch("idle.in.transaction", 0),
+            Ch("longest.transaction.seconds", 600), Ch("database.size.gb", 2.4), Ch("replica.lag.seconds", 0)
+        };
+        Assert.Equal("3 sessions waiting on locks; a transaction open for 10 min (app on shop) - primary, 18 connections (12 % of max), 2.4 GB",
+            DatabaseHealth.DescribePostgres(pg, new Dictionary<string, string> { ["role"] = "primary", ["longest.transaction.by"] = "app on shop" }));
+
+        var my = new[] { Ch("threads.connected", 35), Ch("connections.used.percent", 23), Ch("threads.running", 3), Ch("queries.over.60s", 0), Ch("uptime.hours", 290) };
+        Assert.Equal("No long-running queries - MariaDB 11.4.2, 35 connections (23 % of max), 3 running, up 12 d",
+            DatabaseHealth.DescribeMySql(my, new Dictionary<string, string> { ["version"] = "11.4.2-MariaDB-ubu2404" }));
+        Assert.Equal("MySQL 8.4.0", DatabaseHealth.Product("8.4.0"));
+    }
+
+    [Fact]
+    public void A_channel_over_its_own_threshold_is_named_once()
+    {
+        var channels = new[]
+        {
+            Ch("connections", 5), Ch("connections.used.percent", 4),
+            Ch("deadlocks.total", 4) with { Label = "Deadlocks total", State = SensorState.Warning, Message = "warning > 0" },
+            Ch("waiting.on.locks", 2) with { State = SensorState.Warning, Message = "warning > 0" }
+        };
+
+        Assert.Equal("2 sessions waiting on locks; Deadlocks total 4 (warning > 0) - primary, 5 connections (4 % of max)",
+            DatabaseHealth.DescribePostgres(channels, new Dictionary<string, string>()));
     }
 
     /// <summary>

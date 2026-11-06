@@ -20,7 +20,8 @@ public sealed class HyperVSensorExecutor : ISensorExecutor
 $ErrorActionPreference = 'Stop'
 $out = [ordered]@{}
 try {
-    $vms = @(Get-VM)
+    # Module-qualified: VMware PowerCLI also has a Get-VM, and whichever loaded last would answer.
+    $vms = @(Hyper-V\Get-VM)
     $running = @($vms | Where-Object { "$($_.State)" -eq 'Running' })
     $critical = @($vms | Where-Object { "$($_.State)" -like '*Critical*' })
     $lost = @($running | Where-Object { "$($_.Heartbeat)" -match 'Lost|NoContact|Error' })

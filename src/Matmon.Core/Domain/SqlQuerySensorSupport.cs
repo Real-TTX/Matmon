@@ -15,7 +15,8 @@ internal static class SqlQuerySensorSupport
         string query,
         MonitoringSettings settings,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<IReadOnlyList<SensorChannelValue>, IReadOnlyDictionary<string, string>, string?>? describe = null)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
@@ -31,7 +32,8 @@ internal static class SqlQuerySensorSupport
                 command.CommandTimeout = Math.Max(1, (int)Math.Ceiling(timeout.TotalSeconds));
 
                 await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult, timeoutCts.Token);
-                var channels = await ReadChannelsAsync(reader, timeoutCts.Token);
+                var texts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var channels = await ReadChannelsAsync(reader, texts, timeoutCts.Token);
                 watch.Stop();
 
                 if (channels.Count == 0)
@@ -50,13 +52,28 @@ internal static class SqlQuerySensorSupport
                     })
                     .ToArray();
 
+                // The message: a text column called "message" (so a query can say in words what it found), else the channel count;
+                // the thresholds then name the channel that crossed its limit.
                 var result = SensorExecutionResult.Healthy(
                     watch.Elapsed,
-                    $"{markedChannels.Length} SQL channel{(markedChannels.Length == 1 ? string.Empty : "s")}",
+                    texts.TryGetValue("message", out var queryMessage)
+                        ? queryMessage.Trim()
+                        : $"{markedChannels.Length} SQL channel{(markedChannels.Length == 1 ? string.Empty : "s")}",
                     defaultChannel.Value,
                     defaultChannel.Key,
                     markedChannels);
-                return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result, describeBreaches: true);
+                if (describe is null)
+                {
+                    return SensorThresholdEvaluator.ApplyChannelThresholds(settings, result, describeBreaches: true);
+                }
+
+                // A health sensor describes the result itself from the channels AFTER the thresholds (a channel over its limit
+                // carries its state), so its sentence names every breach and nothing is said twice.
+                var judged = SensorThresholdEvaluator.ApplyChannelThresholds(settings, result, describeBreaches: false);
+                var described = describe(judged.Channels, texts);
+                return string.IsNullOrWhiteSpace(described)
+                    ? SensorThresholdEvaluator.ApplyChannelThresholds(settings, result, describeBreaches: true)
+                    : judged with { Message = described.Trim() };
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -78,6 +95,7 @@ internal static class SqlQuerySensorSupport
 
     private static async Task<IReadOnlyList<SensorChannelValue>> ReadChannelsAsync(
         DbDataReader reader,
+        Dictionary<string, string> texts,
         CancellationToken cancellationToken)
     {
         var schema = reader.GetColumnSchema();
@@ -122,14 +140,24 @@ internal static class SqlQuerySensorSupport
             for (var index = 0; index < reader.FieldCount; index++)
             {
                 var value = reader.GetValue(index);
+                var name = string.IsNullOrWhiteSpace(reader.GetName(index))
+                    ? $"value{index + 1}"
+                    : reader.GetName(index);
+                // A text column is no channel; it is kept (by its normalised name) for the message.
+                if (value is string text)
+                {
+                    if (!string.IsNullOrWhiteSpace(text) && !TryConvertDouble(text, out _))
+                    {
+                        texts[NormalizeChannelKey(name)] = text.Length > 500 ? text[..500] : text;
+                        continue;
+                    }
+                }
+
                 if (!TryConvertDouble(value, out var numericValue))
                 {
                     continue;
                 }
 
-                var name = string.IsNullOrWhiteSpace(reader.GetName(index))
-                    ? $"value{index + 1}"
-                    : reader.GetName(index);
                 channels.Add(new SensorChannelValue
                 {
                     Key = NormalizeChannelKey(name),
