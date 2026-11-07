@@ -82,7 +82,7 @@ public sealed partial class WorkspaceModel
             _workspaceStore.Save();
 
             StatusMessage = $"Template '{template.Name}' created.";
-            return RedirectToPage("/TemplateEditor", new { selectedTemplateId = template.Id, returnUrl = ReturnUrl });
+            return LocalRedirect(GetSafeReturnUrl("/templates"));
         }
         catch (Exception ex)
         {
@@ -144,7 +144,7 @@ public sealed partial class WorkspaceModel
             }
 
             StatusMessage = $"Template '{template.Name}' deleted.";
-            return RedirectToPage(new { selectedId = SelectedId });
+            return LocalRedirect(GetSafeReturnUrl("/templates"));
         }
         catch (Exception ex)
         {
