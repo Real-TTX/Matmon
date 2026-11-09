@@ -241,10 +241,11 @@
 
     <partial name="_RemoteRunPreview" model="Model" />
 
-    <div class="mat-btn-row">
+    <div class="mat-btn-row mat-btn-row--sticky">
         <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("plus")<span>Create</span></button>
         <button type="submit" asp-page-handler="RunSensorNow" formnovalidate class="mat-btn mat-btn--secondary">@MatUi.Icon("play")<span>Analyze</span></button>
         <a class="mat-btn mat-btn--secondary" href="@backUrl">@MatUi.Icon("back")<span>Back</span></a>
+        <span class="mat-text-muted mm-btn-row-note" data-snmp-walk-ticked role="status" aria-live="polite"></span>
     </div>
     <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate hidden data-sensor-preview-submit>Preview</button>
 </form>

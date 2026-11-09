@@ -12,6 +12,9 @@ namespace Matmon.Core.Domain;
 
 public sealed class PowerShellRemoteSensorExecutor : ISensorExecutor
 {
+    /// <summary>WinRM over HTTPS without checking the certificate (self-signed WinRM listeners). Only read while "Use SSL" is on.</summary>
+    public const string SkipCertificateCheckKey = "winrm.skipCertificateCheck";
+
     public static SensorDefinition Definition { get; } = new SensorDefinition
     {
         Key = "powershell",
@@ -57,6 +60,16 @@ public sealed class PowerShellRemoteSensorExecutor : ISensorExecutor
                 Kind = SensorParameterKind.Boolean,
                 Description = "Use WinRM over HTTPS instead of HTTP",
                 DefaultValue = "false"
+            },
+            new SensorParameterDefinition
+            {
+                Key = SkipCertificateCheckKey,
+                Label = "Do not check the certificate",
+                Kind = SensorParameterKind.Boolean,
+                Description = "For a self-signed WinRM certificate (winrm quickconfig -transport:https, New-SelfSignedCertificate): the connection stays encrypted, but Matmon no longer checks who it is talking to - anyone in between could pose as the server and receive the password. Better: trust the certificate on the probe and use the name it was issued for as the target.",
+                DefaultValue = "false",
+                VisibleWhenParameterKey = "winrm.useSsl",
+                VisibleWhenValues = ["true"]
             },
             new SensorParameterDefinition
             {
@@ -206,6 +219,8 @@ $message = [string]::Format([Globalization.CultureInfo]::InvariantCulture,
         var timeout = context.Settings.Timeout ?? TimeSpan.FromSeconds(30);
         var useSsl = MonitoringSettings.TryReadParameterBool(context.Settings, "winrm.useSsl", out var configuredUseSsl) &&
             configuredUseSsl;
+        var skipCertificateCheck = useSsl &&
+            MonitoringSettings.TryReadParameterBool(context.Settings, SkipCertificateCheckKey, out var configuredSkip) && configuredSkip;
         var port = MonitoringSettings.TryReadParameterInt(context.Settings, "winrm.port", out var configuredPort)
             ? configuredPort
             : (useSsl ? 5986 : 5985);
@@ -254,6 +269,7 @@ $message = [string]::Format([Globalization.CultureInfo]::InvariantCulture,
                     port,
                     password,
                     useSsl,
+                    skipCertificateCheck,
                     configurationName,
                     timeout,
                     outputFormat,
@@ -287,7 +303,7 @@ $message = [string]::Format([Globalization.CultureInfo]::InvariantCulture,
                         continue;
                     }
 
-                    return SensorExecutionResult.Critical(watch.Elapsed, BuildRemoteFailureHint(lastFailureMessage, context.Target, port, useSsl));
+                    return SensorExecutionResult.Critical(watch.Elapsed, BuildRemoteFailureHint(lastFailureMessage, context.Target, port, useSsl, skipCertificateCheck));
                 }
 
                 return BuildScriptResult(context, parse, stderr, process.ExitCode, watch.Elapsed, failOnStderr, defaultChannelKey, "remote execution");
@@ -295,7 +311,7 @@ $message = [string]::Format([Globalization.CultureInfo]::InvariantCulture,
 
             return SensorExecutionResult.Critical(
                 watch.Elapsed,
-                BuildRemoteFailureHint(string.IsNullOrWhiteSpace(lastFailureMessage) ? "remote execution failed" : lastFailureMessage, context.Target, port, useSsl));
+                BuildRemoteFailureHint(string.IsNullOrWhiteSpace(lastFailureMessage) ? "remote execution failed" : lastFailureMessage, context.Target, port, useSsl, skipCertificateCheck));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -501,6 +517,7 @@ catch {
         int port,
         string password,
         bool useSsl,
+        bool skipCertificateCheck,
         string configurationName,
         TimeSpan timeout,
         string outputFormat,
@@ -522,6 +539,7 @@ catch {
         startInfo.Environment["MATMON_PASSWORD"] = password;
         startInfo.Environment["MATMON_PORT"] = port.ToString(CultureInfo.InvariantCulture);
         startInfo.Environment["MATMON_USESSL"] = useSsl ? "true" : "false";
+        startInfo.Environment["MATMON_SKIPCERTCHECK"] = skipCertificateCheck ? "true" : "false";
         startInfo.Environment["MATMON_CONFIGURATION"] = configurationName;
         startInfo.Environment["MATMON_OUTPUT_FORMAT"] = outputFormat;
         startInfo.Environment["MATMON_REGEX_PATTERN"] = regexPattern;
@@ -591,6 +609,7 @@ $username = $env:MATMON_USERNAME
 $password = $env:MATMON_PASSWORD
 $port = if ([string]::IsNullOrWhiteSpace($env:MATMON_PORT)) { 5985 } else { [int]$env:MATMON_PORT }
 $useSsl = "$env:MATMON_USESSL" -eq 'true'
+$skipCertificateCheck = "$env:MATMON_SKIPCERTCHECK" -eq 'true'
 $configurationName = $env:MATMON_CONFIGURATION
 $outputFormat = "$env:MATMON_OUTPUT_FORMAT".Trim().ToLowerInvariant()
 if ([string]::IsNullOrWhiteSpace($outputFormat)) { $outputFormat = 'auto' }
@@ -622,6 +641,10 @@ if ($port -gt 0) {
 
 if ($useSsl) {
     $sessionParams.UseSSL = $true
+    if ($skipCertificateCheck) {
+        # a self-signed certificate: still encrypted, but the server is not verified (the sensor's setting says so)
+        $sessionParams.SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+    }
 }
 
 if (-not [string]::IsNullOrWhiteSpace($configurationName)) {
@@ -877,8 +900,28 @@ catch {
             message.Contains("unreachable", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string BuildRemoteFailureHint(string message, string target, int port, bool useSsl)
+    /// <summary>
+    /// What Windows PowerShell, pwsh on Windows and pwsh on Linux (OMI/curl) say when the WinRM certificate is not trusted or
+    /// not issued for the name that was connected to.
+    /// </summary>
+    public static bool IsCertificateFailure(string message)
     {
+        return message.Contains("certificate", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("SkipCACheck", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("SkipCNCheck", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("SSL peer", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("self signed", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("self-signed", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Zertifikat", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string BuildRemoteFailureHint(string message, string target, int port, bool useSsl, bool skipCertificateCheck = false)
+    {
+        if (useSsl && !skipCertificateCheck && IsCertificateFailure(message))
+        {
+            return $"WinRM over HTTPS to {target}:{port}: the server's certificate was not accepted ({message.Trim()}). Trust the certificate on the probe and use the name it was issued for as the target - or, for a self-signed certificate, switch on \"Do not check the certificate\" in the sensor.";
+        }
+
         if (message.Contains("Access is denied", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
         {

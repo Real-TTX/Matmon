@@ -162,6 +162,10 @@ function initializeSnmpWalkMibs() {
       if (count) {
         count.textContent = `${ticked} of ${all.length} ticked`;
       }
+      // the floating action row of the form says it too, so Create can be pressed knowing what it creates
+      scope.closest("form")?.querySelectorAll("[data-snmp-walk-ticked]").forEach((note) => {
+        note.textContent = ticked === 0 ? "" : `${ticked} OID${ticked === 1 ? "" : "s"} ticked`;
+      });
       if (allBox) {
         const shown = all.filter((row) => !row.hidden);
         const shownTicked = shown.filter((row) => boxOf(row)?.checked).length;

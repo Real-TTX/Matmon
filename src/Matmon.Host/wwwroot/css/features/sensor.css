@@ -343,7 +343,23 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--mat-space-2) var(--mat-space-3);
+  /* A walk can hold 2000 rows: the filter and the bulk ticks stay in reach under the header bar while scrolling through it. */
+  position: sticky;
+  top: var(--mat-topbar-h);
+  z-index: 2;
+  margin-inline: calc(var(--mat-space-2) * -1);
+  padding: var(--mat-space-2);
+  background: var(--mat-glass);
+  border-bottom: 1px solid var(--mat-border);
 }
+html[data-embedded="1"] .snmp-walk-tools { top: 0; }
+/* The form's own action row floats at the bottom of the window, so Create is never 2000 rows away; it says how many OIDs are ticked. */
+.mm-btn-row-note {
+  order: 2;
+  margin-left: auto;
+  font-size: var(--mat-fs-sm);
+}
+.mm-btn-row-note:empty { display: none; }
 .snmp-walk-count {
   margin-left: auto;
   font-size: var(--mat-fs-sm);
