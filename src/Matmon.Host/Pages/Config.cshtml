@@ -247,7 +247,6 @@ else if (Model.IsActiveTab("storage"))
         <div class="mat-card__body mat-stack">
             <div class="mat-stat">
                 <span class="mat-stat__value">@storage.FormatBytes(totalDataBytes)</span>
-                <span class="mat-stat__label">in <span class="mat-mono mm-break">@storage.DataPath</span> · how it is made up</span>
             </div>
             @* Every part is a segment, "Other" too: an empty rest of the bar read like free disk space. *@
             <div class="mat-meter mat-meter--lg mat-meter--stack" role="img"
