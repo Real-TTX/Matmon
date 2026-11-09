@@ -209,9 +209,13 @@ else if (Model.IsActiveTab("storage"))
     var usedValue = usedPercent.ToString("0.##", invariant);
     var diskTone = usedPercent >= 90 ? "error" : usedPercent >= 80 ? "warn" : "ok";
 
-    var driveUsedGigabytes = storage.DriveTotalGigabytes.HasValue && storage.DriveAvailableGigabytes.HasValue
-        ? Math.Max(0, storage.DriveTotalGigabytes.Value - storage.DriveAvailableGigabytes.Value)
-        : (double?)null;
+    // The disk in three parts: Matmon's data, everything else on it, and what is free (the empty rest).
+    var driveTotalBytes = storage.DriveTotalBytes ?? 0;
+    var driveFreeBytes = storage.DriveAvailableBytes ?? 0;
+    var driveOthersBytes = Math.Max(0, driveTotalBytes - driveFreeBytes - totalDataBytes);
+    string DiskWidth(long part) => (driveTotalBytes > 0 ? Math.Round((double)part / driveTotalBytes * 100, 3) : 0)
+        .ToString("0.###", invariant);
+    var diskPill = diskTone == "error" ? "mat-pill mat-pill--error" : diskTone == "warn" ? "mat-pill mat-pill--warn" : "mat-pill mat-pill--ok";
 
     @* The disk first: it is what decides whether something has to be done. *@
     <section class="mat-card">
@@ -221,13 +225,20 @@ else if (Model.IsActiveTab("storage"))
                 <span class="mat-stat__value">@ConfigModel.FormatPercent(storage.DriveFreePercent) free</span>
                 <span class="mat-stat__label">@(storage.DriveAvailableGigabytes.HasValue && storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB free of {storage.DriveTotalGigabytes.Value:0.##} GB" : "")</span>
             </div>
-            <div class="mat-meter mat-meter--lg" role="progressbar" aria-valuenow="@usedValue" aria-valuemin="0" aria-valuemax="100" aria-label="Disk used: @usedValue %">
-                <div class="mat-meter__fill" data-value="@usedValue" data-tone="@diskTone"></div>
-            </div>
-            <div class="mat-row">
-                <span class="@($"mat-pill mat-pill--{(diskTone == "error" ? "error" : diskTone == "warn" ? "warn" : "ok")}")">Used @(driveUsedGigabytes.HasValue ? $"{driveUsedGigabytes.Value:0.##} GB · " : "")@usedValue %</span>
-                <span class="mat-pill mat-pill--plain">Free @(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : ConfigModel.FormatPercent(storage.DriveFreePercent))</span>
-            </div>
+            @if (driveTotalBytes > 0)
+            {
+                <div class="mat-meter mat-meter--lg mat-meter--stack" role="img"
+                     aria-label="Disk: Matmon data @storage.FormatBytes(totalDataBytes), other data @storage.FormatBytes(driveOthersBytes), free @storage.FormatBytes(driveFreeBytes) (@usedValue % used)">
+                    @* Matmon's share is often a sliver of a big disk - it keeps a few pixels so it shows at all. *@
+                    <div class="mat-meter__fill mm-meter-min" data-value="@DiskWidth(totalDataBytes)"></div>
+                    <div class="mat-meter__fill" data-value="@DiskWidth(driveOthersBytes)" data-tone="@diskTone"></div>
+                </div>
+                <div class="mat-row">
+                    <span class="mat-pill mat-pill--accent">Matmon data @storage.FormatBytes(totalDataBytes)</span>
+                    <span class="@diskPill">Other data @storage.FormatBytes(driveOthersBytes)</span>
+                    <span class="mat-pill mat-pill--plain">Free @storage.FormatBytes(driveFreeBytes)</span>
+                </div>
+            }
         </div>
     </section>
 

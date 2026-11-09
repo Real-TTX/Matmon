@@ -159,3 +159,9 @@ a, button, label, summary, select, [role="button"], [role="tab"], [role="menuite
 .mm-update-notice { align-items: center; flex-wrap: wrap; }
 .mm-update-notice .mat-alert__body { flex: 1 1 18rem; }
 .mm-update-notice .mat-btn-row { flex-wrap: nowrap; margin: 0; }
+
+/* A button or pill in a card head must not make that head taller than the others: it may reach into the head's padding. */
+.mat-card__head > .mat-btn,
+.mat-card__head > form > .mat-btn,
+.mat-card__head > .mat-btn-row,
+.mat-card__head > .mat-pill { margin-block: -0.75rem; }

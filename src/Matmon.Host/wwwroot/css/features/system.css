@@ -82,3 +82,4 @@
 
 /* System > Storage: "Other" is a coloured part of its own - the empty, dark rest of a bar reads like free space. */
 .mm-meter-other { background: var(--mat-info); }
+.mm-meter-min { min-width: 4px; }
