@@ -79,3 +79,6 @@
     .mm-remote-access .mat-listgroup__item { flex-wrap: wrap; }
     .mm-remote-access__last { margin-inline-start: calc(2rem + var(--mat-space-3, 0.75rem)); white-space: normal; }
 }
+
+/* System > Storage: "Other" is a segment of its own, so the Matmon-data bar never ends in an empty stretch that reads like free disk space. */
+.mm-meter-other { background: var(--mat-text-muted); }

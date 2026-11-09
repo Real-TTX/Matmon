@@ -209,18 +209,42 @@ else if (Model.IsActiveTab("storage"))
     var usedValue = usedPercent.ToString("0.##", invariant);
     var diskTone = usedPercent >= 90 ? "error" : usedPercent >= 80 ? "warn" : "ok";
 
+    var driveUsedGigabytes = storage.DriveTotalGigabytes.HasValue && storage.DriveAvailableGigabytes.HasValue
+        ? Math.Max(0, storage.DriveTotalGigabytes.Value - storage.DriveAvailableGigabytes.Value)
+        : (double?)null;
+
+    @* The disk first: it is what decides whether something has to be done. *@
     <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("bar-chart")<h2 class="mat-card__title">Storage breakdown</h2><span class="mat-text-muted mm-push-end">@storage.DataFileCount files</span></div>
+        <div class="mat-card__head">@MatUi.Icon("hard-drive")<h2 class="mat-card__title">Disk capacity</h2><span class="mat-text-muted mat-mono mm-push-end">@storage.DriveName</span></div>
+        <div class="mat-card__body mat-stack">
+            <div class="mat-stat">
+                <span class="mat-stat__value">@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB free" : ConfigModel.FormatPercent(storage.DriveFreePercent) + " free")</span>
+                <span class="mat-stat__label">@(storage.DriveTotalGigabytes.HasValue ? $"of {storage.DriveTotalGigabytes.Value:0.##} GB · " : "")@ConfigModel.FormatPercent(storage.DriveFreePercent) free</span>
+            </div>
+            <div class="mat-meter mat-meter--lg" role="progressbar" aria-valuenow="@usedValue" aria-valuemin="0" aria-valuemax="100" aria-label="Disk used: @usedValue %">
+                <div class="mat-meter__fill" data-value="@usedValue" data-tone="@diskTone"></div>
+            </div>
+            <div class="mat-row">
+                <span class="@($"mat-pill mat-pill--{(diskTone == "error" ? "error" : diskTone == "warn" ? "warn" : "ok")}")">Used @(driveUsedGigabytes.HasValue ? $"{driveUsedGigabytes.Value:0.##} GB · " : "")@usedValue %</span>
+                <span class="mat-pill mat-pill--plain">Free @(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : ConfigModel.FormatPercent(storage.DriveFreePercent))</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="mat-card">
+        <div class="mat-card__head">@MatUi.Icon("bar-chart")<h2 class="mat-card__title">Matmon data</h2><span class="mat-text-muted mm-push-end">@storage.DataFileCount files</span></div>
         <div class="mat-card__body mat-stack">
             <div class="mat-stat">
                 <span class="mat-stat__value">@storage.FormatBytes(totalDataBytes)</span>
-                <span class="mat-stat__label">total Matmon data in <span class="mat-mono mm-break">@storage.DataPath</span></span>
+                <span class="mat-stat__label">in <span class="mat-mono mm-break">@storage.DataPath</span> · how it is made up</span>
             </div>
+            @* Every part is a segment, "Other" too: an empty rest of the bar read like free disk space. *@
             <div class="mat-meter mat-meter--lg mat-meter--stack" role="img"
-                 aria-label="Storage breakdown: Telemetry DB @storage.FormatBytes(telemetryBytes), Workspace @storage.FormatBytes(workspaceBytes), Backups @storage.FormatBytes(backupBytes), Other @storage.FormatBytes(otherBytes)">
+                 aria-label="Matmon data: Telemetry DB @storage.FormatBytes(telemetryBytes), Workspace @storage.FormatBytes(workspaceBytes), Backups @storage.FormatBytes(backupBytes), Other @storage.FormatBytes(otherBytes)">
                 <div class="mat-meter__fill" data-value="@SegWidth(telemetryBytes)"></div>
                 <div class="mat-meter__fill" data-value="@SegWidth(workspaceBytes)" data-tone="ok"></div>
                 <div class="mat-meter__fill" data-value="@SegWidth(backupBytes)" data-tone="warn"></div>
+                <div class="mat-meter__fill mm-meter-other" data-value="@SegWidth(otherBytes)"></div>
             </div>
             <div class="mat-row">
                 <span class="mat-pill mat-pill--accent">Telemetry DB @storage.FormatBytes(telemetryBytes)</span>
@@ -231,23 +255,7 @@ else if (Model.IsActiveTab("storage"))
         </div>
     </section>
 
-    <div class="mat-grid mat-grid--3">
-        <section class="mat-card">
-            <div class="mat-card__head">@MatUi.Icon("hard-drive")<h2 class="mat-card__title">Disk capacity</h2><span class="mat-text-muted mat-mono mm-push-end">@storage.DriveName</span></div>
-            <div class="mat-card__body mat-stack">
-                <div class="mat-stat">
-                    <span class="mat-stat__value">@ConfigModel.FormatPercent(storage.DriveFreePercent)</span>
-                    <span class="mat-stat__label">free</span>
-                </div>
-                <div class="mat-meter" role="progressbar" aria-valuenow="@usedValue" aria-valuemin="0" aria-valuemax="100" aria-label="Host disk usage">
-                    <div class="mat-meter__fill" data-value="@usedValue" data-tone="@diskTone"></div>
-                </div>
-                <dl class="mat-kv">
-                    <dt>Available</dt><dd class="mat-mono">@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : "-")</dd>
-                    <dt>Total</dt><dd class="mat-mono">@(storage.DriveTotalGigabytes.HasValue ? $"{storage.DriveTotalGigabytes.Value:0.##} GB" : "-")</dd>
-                </dl>
-            </div>
-        </section>
+    <div class="mat-grid mat-grid--2">
 
         <section class="mat-card">
             <div class="mat-card__head">@MatUi.Icon("database")<h2 class="mat-card__title">Telemetry database</h2><span class="mat-text-muted mm-push-end">SQLite · WAL</span></div>
