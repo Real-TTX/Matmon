@@ -79,6 +79,6 @@
     .mm-remote-access .mat-listgroup__item { flex-wrap: wrap; }
     .mm-remote-access__last { margin-inline-start: calc(2rem + var(--mat-space-3, 0.75rem)); white-space: normal; }
 }
-/* System > Storage: one bar for the whole disk. "Other files" is grey unless the disk is filling up; Matmon's own share keeps a few pixels so it shows on a big disk. */
-.mm-meter-other { background: var(--mat-text-muted); }
-.mm-meter-min { min-width: 4px; }
+
+/* System > Storage: "Other" is a coloured part of its own - the empty, dark rest of a bar reads like free space. */
+.mm-meter-other { background: var(--mat-info); }
