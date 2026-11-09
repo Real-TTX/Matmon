@@ -40,8 +40,8 @@ internal static class SetupRunner
 
     /// <summary>The feed the online setup downloads from: /feed=, else the channel of this setup's own build. A nightly
     /// setup installs the newest nightly, a release (and a local development build) the newest release.</summary>
-    public static string FeedOf(SetupArguments arguments) =>
-        WindowsUpdateFeed.FeedUrl(arguments.FeedUrl, Version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "Nightly" : "Release")!;
+    public static IReadOnlyList<string> FeedOf(SetupArguments arguments) =>
+        WindowsUpdateFeed.FeedUrls(arguments.FeedUrl, Version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "Nightly" : "Release");
 
     public static string ChannelName => Version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "nightly" : "release";
 
@@ -100,7 +100,7 @@ internal static class SetupRunner
         try
         {
             progress($"Looking up the newest Matmon ({ChannelName} channel) ...");
-            var announced = WindowsUpdateFeed.ReadManifestAsync(client, feed, CancellationToken.None).GetAwaiter().GetResult();
+            var (_, announced) = WindowsUpdateFeed.ReadManifestAsync(client, feed, CancellationToken.None).GetAwaiter().GetResult();
             progress($"Downloading Matmon {announced.Version} ({announced.Size / 1048576.0:0} MB) ...");
             // A connection that breaks off is resumed; each time that happens the log (and the setup's list) says so.
             string? lastNote = null;
@@ -127,7 +127,7 @@ internal static class SetupRunner
         }
         catch (HttpRequestException ex)
         {
-            throw new InvalidOperationException($"Matmon could not be downloaded from {feed}: {ex.Message}", ex);
+            throw new InvalidOperationException($"Matmon could not be downloaded from {string.Join(" or ", feed)}: {ex.Message}", ex);
         }
         finally
         {

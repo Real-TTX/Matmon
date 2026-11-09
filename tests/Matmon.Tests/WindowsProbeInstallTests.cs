@@ -187,7 +187,7 @@ public sealed class WindowsProbeInstallTests
         Assert.Contains("/probename=\"Branch office\"", command);
 
         var powerShell = ProbeInstallCommandBuilder.BuildWindowsPowerShell("https://primary.example", probe, "Nightly");
-        Assert.Contains("releases/download/windows-nightly/MatmonSetup-x64-online.exe", powerShell);
+        Assert.Contains("cloud.matmon.eu/feeds/windows-nightly/MatmonSetup-x64-online.exe", powerShell);
         Assert.Contains("-Verb RunAs", powerShell);
         Assert.Contains("'/token=tok-123'", powerShell);
         Assert.Contains("'/probename=\"Branch office\"'", powerShell);

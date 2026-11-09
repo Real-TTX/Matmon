@@ -58,6 +58,10 @@ public sealed partial class AgentPackageStore : IDisposable
     private DateTimeOffset _manifestFetchedUtc;
     private DateTimeOffset _retryManifestUtc;
     private string? _problem;
+    private string? _activeFeed;
+
+    /// <summary>The feed the last manifest came from (the cloud's copy, or GitHub when the cloud did not answer).</summary>
+    private string? ActiveFeed => _activeFeed ?? _feed.FeedUrl;
 
     public AgentPackageStore(IHostEnvironment environment, MatmonRuntimeOptions options, AgentFeedSettings? feed = null, ILogger<AgentPackageStore>? logger = null)
     {
@@ -202,7 +206,25 @@ public sealed partial class AgentPackageStore : IDisposable
         new(platform, path, new FileInfo(path).Length, File.GetLastWriteTimeUtc(path), entry.Sha256.ToLowerInvariant(), entry.Signature,
             manifest.Version, AgentPackageSource.Cache);
 
+    // The feed the manifest came from first (normally Matmon Cloud's copy), then the other one - GitHub when the cloud fails.
     private async Task DownloadAsync(AgentPlatform platform, AgentFeedManifest manifest, AgentFeedPackage entry, string target, CancellationToken cancellationToken)
+    {
+        var feeds = new[] { ActiveFeed, _feed.FeedUrl, _feed.FallbackFeedUrl }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; ; index++)
+        {
+            try
+            {
+                await DownloadFromAsync(feeds[index], platform, manifest, entry, target, cancellationToken);
+                return;
+            }
+            catch (AgentPackageUnavailableException ex) when (index < feeds.Count - 1 && !cancellationToken.IsCancellationRequested && !ex.Message.Contains("unsigned", StringComparison.Ordinal))
+            {
+                _logger?.LogWarning("The agent for {RuntimeId} could not be fetched from {Feed} ({Reason}) - trying {Next}", platform.RuntimeId, feeds[index], ex.Message, feeds[index + 1]);
+            }
+        }
+    }
+
+    private async Task DownloadFromAsync(string feedUrl, AgentPlatform platform, AgentFeedManifest manifest, AgentFeedPackage entry, string target, CancellationToken cancellationToken)
     {
         // A signed instance never hands out an unsigned agent - known from the manifest, so it is not even downloaded.
         if (_feed.RequireSignature && string.IsNullOrWhiteSpace(entry.Signature))
@@ -215,8 +237,8 @@ public sealed partial class AgentPackageStore : IDisposable
         var partial = $"{target}.part-{Guid.NewGuid():N}";
         try
         {
-            _logger?.LogInformation("Downloading the agent for {RuntimeId} ({Version}) from {Feed}", platform.RuntimeId, manifest.Version, _feed.FeedUrl);
-            using (var response = await _http!.GetAsync($"{_feed.FeedUrl}/{entry.File}", HttpCompletionOption.ResponseHeadersRead, cancellationToken))
+            _logger?.LogInformation("Downloading the agent for {RuntimeId} ({Version}) from {Feed}", platform.RuntimeId, manifest.Version, feedUrl);
+            using (var response = await _http!.GetAsync($"{feedUrl}/{entry.File}", HttpCompletionOption.ResponseHeadersRead, cancellationToken))
             {
                 if (!response.IsSuccessStatusCode)
                 {
@@ -281,7 +303,7 @@ public sealed partial class AgentPackageStore : IDisposable
         catch (Exception ex) when (ex is HttpRequestException or IOException && !cancellationToken.IsCancellationRequested)
         {
             throw new AgentPackageUnavailableException(
-                $"The agent for {platform.DisplayName} could not be downloaded from {_feed.FeedUrl} ({ex.Message}). Without internet access, put it into {_root}/{platform.RuntimeId}/.", notFound: false);
+                $"The agent for {platform.DisplayName} could not be downloaded from {feedUrl} ({ex.Message}). Without internet access, put it into {_root}/{platform.RuntimeId}/.", notFound: false);
         }
         finally
         {
@@ -341,31 +363,40 @@ public sealed partial class AgentPackageStore : IDisposable
                 return _manifest;
             }
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(ManifestTimeout);
-            try
+            // Matmon Cloud's copy first, GitHub when the cloud cannot be reached; the files then come from whichever answered.
+            var problems = new List<string>();
+            foreach (var feedUrl in new[] { _feed.FeedUrl, _feed.FallbackFeedUrl }.OfType<string>())
             {
-                var fetched = await _http.GetFromJsonAsync<AgentFeedManifest>($"{_feed.FeedUrl}/{AgentFeed.ManifestFile}", Json, timeout.Token);
-                var problem = Validate(fetched);
-                if (problem is not null)
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(ManifestTimeout);
+                try
                 {
-                    throw new InvalidDataException(problem);
-                }
+                    var fetched = await _http.GetFromJsonAsync<AgentFeedManifest>($"{feedUrl}/{AgentFeed.ManifestFile}", Json, timeout.Token);
+                    var problem = Validate(fetched);
+                    if (problem is not null)
+                    {
+                        throw new InvalidDataException(problem);
+                    }
 
-                _manifest = fetched;
-                _manifestFetchedUtc = DateTimeOffset.UtcNow;
-                _problem = null;
-                return _manifest;
+                    _manifest = fetched;
+                    _activeFeed = feedUrl;
+                    _manifestFetchedUtc = DateTimeOffset.UtcNow;
+                    _problem = null;
+                    return _manifest;
+                }
+                catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidDataException or NotSupportedException ||
+                                           (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+                {
+                    var reason = ex is OperationCanceledException ? "no answer within 20 seconds" : ex.Message;
+                    problems.Add(_feed.FallbackFeedUrl is null ? reason : $"{feedUrl}: {reason}");
+                    _logger?.LogWarning("The agent feed {Feed} could not be read: {Reason}", feedUrl, reason);
+                }
             }
-            catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidDataException or NotSupportedException ||
-                                       (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
-            {
-                _problem = ex is OperationCanceledException ? "no answer within 20 seconds" : ex.Message;
-                _retryManifestUtc = DateTimeOffset.UtcNow + RetryAfterFailure;
-                _logger?.LogWarning("The agent feed {Feed} could not be read: {Reason}", _feed.FeedUrl, _problem);
-                // Keep serving what is known: the last manifest in memory, else the one beside the cached files.
-                return _manifest ??= ReadCachedManifest();
-            }
+
+            _problem = string.Join("; ", problems);
+            _retryManifestUtc = DateTimeOffset.UtcNow + RetryAfterFailure;
+            // Keep serving what is known: the last manifest in memory, else the one beside the cached files.
+            return _manifest ??= ReadCachedManifest();
         }
         finally
         {
@@ -464,7 +495,8 @@ public sealed record AgentFeedSettings(
     HttpMessageHandler? Handler = null,
     string? PublicKeySpki = null,
     bool RequireSignature = false,
-    string? Version = null)
+    string? Version = null,
+    string? FallbackFeedUrl = null)
 {
     public string InstanceVersion => Version ?? MatmonVersion.Current;
 
@@ -472,7 +504,8 @@ public sealed record AgentFeedSettings(
     public static AgentFeedSettings ForInstance(MatmonRuntimeOptions options, string dataDirectory) => new(
         Path.Combine(dataDirectory, "agent-packages"),
         AgentFeed.FeedUrl(options.AgentFeedUrl, MatmonVersion.Channel),
-        RequireSignature: AgentPackageSignature.RequiredByThisBuild);
+        RequireSignature: AgentPackageSignature.RequiredByThisBuild,
+        FallbackFeedUrl: string.IsNullOrWhiteSpace(options.AgentFeedUrl) ? AgentFeed.GitHubFeedUrl(MatmonVersion.Channel) : null);
 }
 
 /// <summary>The agent feed's layout - shared with the CI script that writes it (scripts/package-agents.cs mirrors it).</summary>
@@ -485,11 +518,14 @@ public static class AgentFeed
 
     public const string DefaultBaseUrl = "https://github.com/Real-TTX/Matmon/releases/download";
 
+    /// <summary>Matmon Cloud's copy of the releases - where agents are fetched from first (GitHub is the fallback).</summary>
+    public const string CloudBaseUrl = "https://cloud.matmon.eu/feeds";
+
     /// <summary>The file a platform's package has in the feed (release assets must have unique names).</summary>
     public static string AssetName(string runtimeId) =>
         runtimeId.StartsWith("win-", StringComparison.OrdinalIgnoreCase) ? $"matmon-agent-{runtimeId}.exe" : $"matmon-agent-{runtimeId}";
 
-    /// <summary>The feed folder for this build's channel, or null for a local build (nothing to follow).</summary>
+    /// <summary>The feed folder for this build's channel - Matmon Cloud's copy unless one is configured - or null for a local build.</summary>
     public static string? FeedUrl(string? configured, string channel)
     {
         if (!string.IsNullOrWhiteSpace(configured))
@@ -497,13 +533,18 @@ public static class AgentFeed
             return configured.Trim().TrimEnd('/');
         }
 
-        return channel switch
-        {
-            "Release" => $"{DefaultBaseUrl}/agent-latest",
-            "Nightly" => $"{DefaultBaseUrl}/agent-nightly",
-            _ => null
-        };
+        return Release(channel) is { } release ? $"{CloudBaseUrl}/{release}" : null;
     }
+
+    /// <summary>The same release on GitHub - the fallback when the cloud cannot be reached.</summary>
+    public static string? GitHubFeedUrl(string channel) => Release(channel) is { } release ? $"{DefaultBaseUrl}/{release}" : null;
+
+    private static string? Release(string channel) => channel switch
+    {
+        "Release" => "agent-latest",
+        "Nightly" => "agent-nightly",
+        _ => null
+    };
 }
 
 public sealed record AgentFeedManifest(string Version, IReadOnlyList<AgentFeedPackage> Packages);

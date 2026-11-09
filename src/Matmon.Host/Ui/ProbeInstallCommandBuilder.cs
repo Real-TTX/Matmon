@@ -99,8 +99,8 @@ curl -fsSL https://raw.githubusercontent.com/Real-TTX/Matmon/main/scripts/instal
     /// the full setup and the online one, which downloads the package while it installs.</summary>
     public static (string Full, string Online) WindowsSetupDownloads(string? channel = null)
     {
-        var feed = Matmon.Host.Services.SelfUpdate.WindowsUpdateFeed.FeedUrl(null, channel ?? Matmon.Probe.MatmonVersion.Channel)
-            ?? Matmon.Host.Services.SelfUpdate.WindowsUpdateFeed.FeedUrl(null, "Release")!;
+        var feed = Matmon.Host.Services.SelfUpdate.WindowsUpdateFeed.FeedUrls(null, channel ?? Matmon.Probe.MatmonVersion.Channel).FirstOrDefault()
+            ?? Matmon.Host.Services.SelfUpdate.WindowsUpdateFeed.FeedUrls(null, "Release")[0]; // Matmon Cloud's copy - works while GitHub is down
         return ($"{feed}/MatmonSetup-x64.exe", $"{feed}/MatmonSetup-x64-online.exe");
     }
 

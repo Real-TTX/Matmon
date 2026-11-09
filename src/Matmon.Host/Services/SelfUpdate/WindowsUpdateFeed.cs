@@ -81,9 +81,78 @@ public static class WindowsUpdateFeed
         };
     }
 
+    /// <summary>Matmon Cloud's copy of the release downloads (its <c>/feeds</c>, the same layout as the GitHub releases) - the
+    /// first place every installation fetches from, so an update does not depend on GitHub being reachable. GitHub stays the
+    /// fallback when the cloud cannot be reached. The package is checked (hash, signature) whichever answered.</summary>
+    public const string CloudBaseUrl = "https://cloud.matmon.eu/feeds";
+
+    /// <summary>Where to look, in order: <paramref name="configured"/> alone when set (a mirror, a test feed), else the cloud's copy
+    /// of this channel's release and then GitHub's. Empty for a local build.</summary>
+    public static IReadOnlyList<string> FeedUrls(string? configured, string channel)
+    {
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return [configured.Trim().TrimEnd('/')];
+        }
+
+        var release = channel switch
+        {
+            "Release" => "windows-latest",
+            "Nightly" => "windows-nightly",
+            _ => null
+        };
+        return release is null ? [] : [$"{CloudBaseUrl}/{release}", $"{DefaultBaseUrl}/{release}"];
+    }
+
     public static async Task<WindowsUpdateManifest> ReadManifestAsync(HttpClient client, string feed, CancellationToken cancellationToken) =>
         await client.GetFromJsonAsync<WindowsUpdateManifest>($"{feed}/{ManifestFile}", ManifestJson, cancellationToken)
             ?? throw new InvalidOperationException("the update feed returned no manifest");
+
+    /// <summary>The manifest from the first of <paramref name="feeds"/> that answers, and which one that was.</summary>
+    public static async Task<(string Feed, WindowsUpdateManifest Manifest)> ReadManifestAsync(HttpClient client, IReadOnlyList<string> feeds, CancellationToken cancellationToken)
+    {
+        Exception? last = null;
+        foreach (var feed in feeds)
+        {
+            try
+            {
+                return (feed, await ReadManifestAsync(client, feed, cancellationToken));
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or JsonException
+                && !cancellationToken.IsCancellationRequested)
+            {
+                last = ex;
+            }
+        }
+
+        throw last ?? new InvalidOperationException("there is no update feed to read");
+    }
+
+    /// <summary><see cref="DownloadLatestAsync(HttpClient, string, string, bool, Action{UpdateDownloadProgress}?, CancellationToken, UpdateDownloadPolicy?)"/>
+    /// over several feeds: the first whose manifest answers; when its download fails for good the next one is tried. A refusal
+    /// that another feed cannot change (an unsigned package for a signed build, a cancellation) is not retried.</summary>
+    public static async Task<WindowsUpdateManifest> DownloadLatestAsync(HttpClient client, IReadOnlyList<string> feeds, string target, bool requireSignature,
+        Action<UpdateDownloadProgress>? progress, CancellationToken cancellationToken, UpdateDownloadPolicy? policy = null)
+    {
+        Exception? last = null;
+        for (var index = 0; index < feeds.Count; index++)
+        {
+            try
+            {
+                return await DownloadLatestAsync(client, feeds[index], target, requireSignature, progress, cancellationToken, policy);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested && index < feeds.Count - 1
+                && !(ex is InvalidOperationException && ex.Message.Contains("unsigned", StringComparison.Ordinal)))
+            {
+                last = ex;
+                progress?.Invoke(new UpdateDownloadProgress(0, 0, 0, 1, $"Could not download from {Host(feeds[index])} ({ex.Message}) - trying {Host(feeds[index + 1])}", false));
+            }
+        }
+
+        throw last ?? new InvalidOperationException("there is no update feed to read");
+    }
+
+    private static string Host(string feed) => Uri.TryCreate(feed, UriKind.Absolute, out var uri) ? uri.Host : feed;
 
     /// <summary>How long a download may go without a single byte before the connection counts as broken (and is resumed).</summary>
     public static TimeSpan StallTimeout => UpdateDownloadPolicy.Default.StallTimeout;

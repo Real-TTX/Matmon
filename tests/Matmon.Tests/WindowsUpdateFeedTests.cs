@@ -298,6 +298,46 @@ public sealed class WindowsUpdateFeedTests
         Assert.Equal($"{WindowsUpdateFeed.DefaultBaseUrl}/windows-nightly", WindowsUpdateFeed.FeedUrl(null, "Nightly"));
         Assert.Null(WindowsUpdateFeed.FeedUrl(null, "Local"));
         Assert.Equal("https://mirror.example/matmon", WindowsUpdateFeed.FeedUrl(" https://mirror.example/matmon/ ", "Nightly"));
+
+        // What installations really use: Matmon Cloud's copy first, GitHub behind it - a configured feed alone.
+        Assert.Equal(["https://cloud.matmon.eu/feeds/windows-latest", $"{WindowsUpdateFeed.DefaultBaseUrl}/windows-latest"],
+            WindowsUpdateFeed.FeedUrls(null, "Release"));
+        Assert.Equal(["https://cloud.matmon.eu/feeds/windows-nightly", $"{WindowsUpdateFeed.DefaultBaseUrl}/windows-nightly"],
+            WindowsUpdateFeed.FeedUrls(null, "Nightly"));
+        Assert.Empty(WindowsUpdateFeed.FeedUrls(null, "Local"));
+        Assert.Equal(["https://mirror.example/matmon"], WindowsUpdateFeed.FeedUrls("https://mirror.example/matmon/", "Nightly"));
+    }
+
+    [Fact]
+    public async Task When_the_cloud_does_not_answer_the_package_comes_from_github()
+    {
+        var target = Path.GetTempFileName();
+        try
+        {
+            using var client = new HttpClient(new FirstFeedDown(new Feed()));
+            var feeds = new[] { "http://cloud.test/feeds/windows-latest", FeedUrl };
+
+            var (used, manifest) = await WindowsUpdateFeed.ReadManifestAsync(client, feeds, default);
+            Assert.Equal(FeedUrl, used);
+            Assert.Equal("0.1.42", manifest.Version);
+
+            var downloaded = await WindowsUpdateFeed.DownloadLatestAsync(client, feeds, target, requireSignature: false, null, default, Quick);
+            Assert.Equal("0.1.42", downloaded.Version);
+            Assert.Equal(Package, await File.ReadAllBytesAsync(target));
+        }
+        finally
+        {
+            File.Delete(target);
+        }
+    }
+
+    // The cloud host answers 503 to everything; every other request goes to the stand-in feed.
+    private sealed class FirstFeedDown(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            request.RequestUri!.Host == "cloud.test"
+                ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))
+                : base.SendAsync(request, cancellationToken);
     }
 
     private static async Task Download(Feed feed, Action<UpdateDownloadProgress>? progress)

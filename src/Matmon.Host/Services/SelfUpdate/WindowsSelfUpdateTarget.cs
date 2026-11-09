@@ -15,7 +15,7 @@ namespace Matmon.Host.Services.SelfUpdate;
 public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string workspaceDirectory, IHttpClientFactory httpClientFactory) : ISelfUpdateTarget
 {
     private WindowsUpdateManifest? _manifest;
-    private string? _feed;
+    private IReadOnlyList<string> _feeds = [];
 
     public SelfUpdateMode Mode => SelfUpdateMode.WindowsService;
 
@@ -43,14 +43,14 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
 
     public async Task<SelfUpdateOffer> CheckAsync(CancellationToken cancellationToken)
     {
-        _feed = WindowsUpdateFeed.FeedUrl(configuredFeedUrl, MatmonVersion.Channel);
-        if (_feed is null)
+        _feeds = WindowsUpdateFeed.FeedUrls(configuredFeedUrl, MatmonVersion.Channel);
+        if (_feeds.Count == 0)
         {
             return SelfUpdateOffer.None($"this is a local build ({MatmonVersion.Current}) - there is no release channel to follow");
         }
 
         using var client = Client();
-        _manifest = await WindowsUpdateFeed.ReadManifestAsync(client, _feed, cancellationToken);
+        (_, _manifest) = await WindowsUpdateFeed.ReadManifestAsync(client, _feeds, cancellationToken);
         if (string.Equals(_manifest.Version, MatmonVersion.Current, StringComparison.OrdinalIgnoreCase))
         {
             return SelfUpdateOffer.None($"up to date ({MatmonVersion.Channel.ToLowerInvariant()} channel)");
@@ -74,7 +74,7 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
             throw new PlatformNotSupportedException();
         }
 
-        if (_feed is null || _manifest is null)
+        if (_feeds.Count == 0 || _manifest is null)
         {
             throw new InvalidOperationException("check for updates again first - the offer is no longer current");
         }
@@ -92,7 +92,7 @@ public sealed class WindowsSelfUpdateTarget(string? configuredFeedUrl, string wo
         using (var client = Client())
         {
             var verifying = false;
-            manifest = await WindowsUpdateFeed.DownloadLatestAsync(client, _feed, package, AgentPackageSignature.RequiredByThisBuild, state =>
+            manifest = await WindowsUpdateFeed.DownloadLatestAsync(client, _feeds, package, AgentPackageSignature.RequiredByThisBuild, state =>
             {
                 progress?.Download(state);
                 if (state.Complete && !verifying)

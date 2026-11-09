@@ -187,12 +187,14 @@ public sealed class AgentPackageFeedTests : IDisposable
     }
 
     [Theory]
-    [InlineData("Release", "https://github.com/Real-TTX/Matmon/releases/download/agent-latest")]
-    [InlineData("Nightly", "https://github.com/Real-TTX/Matmon/releases/download/agent-nightly")]
-    [InlineData("Local", null)]
-    public void TheFeedFollowsTheChannelAndALocalBuildFollowsNone(string channel, string? expected)
+    [InlineData("Release", "https://cloud.matmon.eu/feeds/agent-latest", "https://github.com/Real-TTX/Matmon/releases/download/agent-latest")]
+    [InlineData("Nightly", "https://cloud.matmon.eu/feeds/agent-nightly", "https://github.com/Real-TTX/Matmon/releases/download/agent-nightly")]
+    [InlineData("Local", null, null)]
+    public void TheFeedFollowsTheChannelAndALocalBuildFollowsNone(string channel, string? expected, string? fallback)
     {
+        // Matmon Cloud's copy first, GitHub when the cloud cannot be reached.
         Assert.Equal(expected, AgentFeed.FeedUrl(null, channel));
+        Assert.Equal(fallback, AgentFeed.GitHubFeedUrl(channel));
         Assert.Equal("https://mirror.example/agents", AgentFeed.FeedUrl("https://mirror.example/agents/", "Local"));
     }
 
