@@ -12,6 +12,7 @@
         ("welcome", "Welcome"),
         ("cloud", "Cloud & license"),
         ("restore", "Restore"),
+        ("safeguards", "Safeguards"),
         ("notifications", "Notifications"),
         ("structure", "Structure & networks"),
         ("discovery", "Devices & probes"),
@@ -227,6 +228,75 @@
                             </div>
                         }
                     </div>
+                }
+                break;
+
+            case "safeguards":
+                <h2 class="mm-wizard__title" id="wizard-step-title">@MatUi.Icon("shield")<span>Safeguards</span></h2>
+                <p>Both stay on this machine - Matmon Cloud never sees them.</p>
+
+                <h3 class="mm-wizard__sub">Backup passphrase</h3>
+                @if (Model.HasBackupPassphrase)
+                {
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>Set - every backup is sealed with it. Change it under <a href="/Config?tab=backup" target="_blank" rel="noopener">System → Backup @MatUi.Icon("external")</a>.</span></p>
+                }
+                else
+                {
+                    <p class="mat-muted">Seals every backup, also the ones in Matmon Cloud. With it, a backup brings its passwords and keys back on another machine too.</p>
+                    <form method="post" asp-page-handler="SetBackupPassphrase" class="mat-form" novalidate>
+                        <div class="mat-form__grid">
+                            <div class="mat-field">
+                                <label class="mat-label" for="wizard-passphrase">Passphrase</label>
+                                <input class="mat-input" id="wizard-passphrase" type="password" name="passphrase" autocomplete="new-password" minlength="@Model.MinPassphraseLength" required
+                                       data-msg-required="Please enter a passphrase." data-msg-minlength="At least @Model.MinPassphraseLength characters." />
+                                <span class="mat-hint">At least @Model.MinPassphraseLength characters. It cannot be recovered - keep it somewhere safe.</span>
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" for="wizard-passphrase-confirm">Repeat it</label>
+                                <input class="mat-input" id="wizard-passphrase-confirm" type="password" name="passphraseConfirm" autocomplete="new-password" required
+                                       data-msg-required="Please repeat the passphrase." />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                        </div>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("lock")<span>Set passphrase</span></button>
+                        </div>
+                    </form>
+                }
+
+                <h3 class="mm-wizard__sub">Local administrator</h3>
+                @if (Model.HasLocalAdmin)
+                {
+                    <p class="mm-wizard__state">@MatUi.Icon("check-circle")<span>An administrator signs in with a local password - the way in when Matmon Cloud cannot be reached.</span></p>
+                }
+                else
+                {
+                    <p class="mat-muted">Optional: an administrator with a password of its own, for when Matmon Cloud cannot be reached.</p>
+                    <form method="post" asp-page-handler="CreateLocalAdmin" class="mat-form" novalidate>
+                        <div class="mat-field">
+                            <label class="mat-label" for="wizard-admin-name">User name or e-mail</label>
+                            <input class="mat-input" id="wizard-admin-name" name="username" autocomplete="off" required data-msg-required="Please enter a user name or e-mail." />
+                            <span class="mat-error" aria-live="polite"></span>
+                        </div>
+                        <div class="mat-form__grid">
+                            <div class="mat-field">
+                                <label class="mat-label" for="wizard-admin-password">Password</label>
+                                <input class="mat-input" id="wizard-admin-password" type="password" name="password" autocomplete="new-password" minlength="8" required
+                                       data-msg-required="Please enter a password." data-msg-minlength="At least 8 characters." />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                            <div class="mat-field">
+                                <label class="mat-label" for="wizard-admin-password-confirm">Repeat it</label>
+                                <input class="mat-input" id="wizard-admin-password-confirm" type="password" name="passwordConfirm" autocomplete="new-password" required
+                                       data-msg-required="Please repeat the password." />
+                                <span class="mat-error" aria-live="polite"></span>
+                            </div>
+                        </div>
+                        <div class="mat-btn-row mat-btn-row--plain">
+                            <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("user")<span>Create administrator</span></button>
+                        </div>
+                    </form>
                 }
                 break;
 

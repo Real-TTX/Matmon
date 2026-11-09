@@ -39,11 +39,12 @@ public class WizardModel : PageModel
     // needed), then the merged setup steps. "welcome"/"done" bookend the optional action steps.
     //   cloud          - connect to Matmon.Cloud (+ license note, offline-notify)
     //   restore        - optional: restore this fresh instance from a backup on your cloud account (DR)
+    //   safeguards     - backup passphrase + a local emergency administrator: set on the instance, never through the cloud
     //   notifications  - alert delivery: via the cloud relay when connected, else local SMTP
     //   structure      - folder tree + the networks to monitor (merged)
     //   discovery      - scan those networks + add remote probes (merged)
     //   twofactor      - secure the admin account (TOTP)
-    public static readonly string[] StepOrder = ["welcome", "cloud", "restore", "notifications", "structure", "discovery", "twofactor", "done"];
+    public static readonly string[] StepOrder = ["welcome", "cloud", "restore", "safeguards", "notifications", "structure", "discovery", "twofactor", "done"];
 
     /// <summary>Suggested starter folder tree (one level of children), created under the primary node.</summary>
     public static readonly (string Name, string[] Children)[] StarterTree =
@@ -405,6 +406,71 @@ public class WizardModel : PageModel
         return RedirectToPage(new { step = "restore" });
     }
 
+    // --- Safeguards: set HERE on the instance, never through the cloud - the passphrase protects the very backups the
+    // cloud keeps, and the local administrator is the way in when the cloud cannot be reached. ---
+
+    /// <summary>A backup passphrase is set (every backup is sealed with it).</summary>
+    public bool HasBackupPassphrase { get; private set; }
+
+    /// <summary>Some enabled administrator can sign in with a local password.</summary>
+    public bool HasLocalAdmin { get; private set; }
+
+    /// <summary>The smallest passphrase the backups accept.</summary>
+    public int MinPassphraseLength => InMemoryMonitoringWorkspaceStore.MinPortablePassphraseLength;
+
+    /// <summary>Safeguards step: the backup passphrase, typed twice (it cannot be recovered).</summary>
+    public IActionResult OnPostSetBackupPassphrase(string? passphrase, string? passphraseConfirm)
+    {
+        if (string.IsNullOrEmpty(passphrase) || !string.Equals(passphrase, passphraseConfirm, StringComparison.Ordinal))
+        {
+            ErrorMessage = string.IsNullOrEmpty(passphrase) ? "Please enter a passphrase." : "The two passphrases differ - nothing was changed.";
+            return RedirectToPage(new { step = "safeguards" });
+        }
+
+        try
+        {
+            _workspaceStore.SetBackupPassphrase(passphrase);
+            StatusMessage = "Backup passphrase set. Every backup is sealed with it from now on - keep it somewhere safe, it cannot be recovered.";
+        }
+        catch (ArgumentException ex)
+        {
+            ErrorMessage = ex.Message.Split(" (Parameter", 2)[0];
+        }
+
+        return RedirectToPage(new { step = "safeguards" });
+    }
+
+    /// <summary>Safeguards step: a local administrator with a password - the way in when the cloud is not there.</summary>
+    public IActionResult OnPostCreateLocalAdmin(string? username, string? password, string? passwordConfirm)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+        {
+            ErrorMessage = "Please enter a user name (or e-mail) and a password.";
+        }
+        else if (password.Length < 8)
+        {
+            ErrorMessage = "The password needs at least 8 characters.";
+        }
+        else if (!string.Equals(password, passwordConfirm, StringComparison.Ordinal))
+        {
+            ErrorMessage = "The passwords do not match.";
+        }
+        else
+        {
+            try
+            {
+                var user = _workspaceStore.CreateUser(username.Trim(), password, MatmonUserRole.Admin);
+                StatusMessage = $"Local administrator '{user.Username}' created. It signs in with its password, also when Matmon Cloud cannot be reached.";
+            }
+            catch (InvalidOperationException ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+        }
+
+        return RedirectToPage(new { step = "safeguards" });
+    }
+
     /// <summary>2FA step: begin TOTP enrollment (generate + store a secret, show its QR). 2FA stays OFF until a
     /// code confirms it.</summary>
     public IActionResult OnPostStartTotp()
@@ -496,6 +562,12 @@ public class WizardModel : PageModel
             var cloud = _workspaceStore.GetCloudConnectionSettings();
             CloudConnected = cloud.Enabled && cloud.HasToken;
             // The backup list itself is fetched in OnGetAsync (async).
+        }
+
+        if (string.Equals(Step, "safeguards", StringComparison.OrdinalIgnoreCase))
+        {
+            HasBackupPassphrase = !string.IsNullOrEmpty(_workspaceStore.GetBackupPassphrase());
+            HasLocalAdmin = _workspaceStore.AnyLocalAdminSignIn();
         }
 
         if (string.Equals(Step, "notifications", StringComparison.OrdinalIgnoreCase))
