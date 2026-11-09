@@ -349,6 +349,107 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    /// <summary>
+    /// Find-or-create the ONE shared user for remote access as the managing partner (<c>partner:&lt;id&gt;</c>) or as Matmon
+    /// Support (<c>support</c>): every person who comes in that way is signed in as it, so the instance shows the partner and
+    /// Matmon as having access - not their individual staff. It follows the cloud's name and role, has no e-mail and no password,
+    /// and a cloud-linked, password-less user that an earlier access created for <paramref name="personEmail"/> (before shared
+    /// users existed) is removed - it was the same access under a personal name. Disabled = that access is locked out here.
+    /// </summary>
+    public MatmonUser UpsertRemoteAccessUser(string key, string displayName, MatmonUserRole role, string? personEmail)
+    {
+        var name = string.IsNullOrWhiteSpace(displayName) ? (key == RemoteAccess.SupportKey ? RemoteAccess.SupportName : "Partner") : displayName.Trim();
+        if (name.Length > 120)
+        {
+            name = name[..120];
+        }
+
+        lock (_gate)
+        {
+            EnsureDefaultUsers();
+            var now = DateTimeOffset.UtcNow;
+            var changed = false;
+
+            var person = (personEmail ?? string.Empty).Trim();
+            if (person.Length > 0)
+            {
+                var stale = _document.Users.FirstOrDefault(user => user.RemoteAccessKey is null && user.CloudLinked
+                    && string.IsNullOrWhiteSpace(user.PasswordHash)
+                    && string.Equals(user.Email, person, StringComparison.OrdinalIgnoreCase));
+                if (stale is not null && (stale.Role != MatmonUserRole.Admin
+                    || _document.Users.Count(candidate => candidate.IsEnabled && candidate.Role == MatmonUserRole.Admin) > 1))
+                {
+                    _document.Users.Remove(stale);
+                    _document.PushDevices?.RemoveAll(device => device.UserId == stale.Id);
+                    changed = true;
+                }
+            }
+
+            var shared = _document.Users.FirstOrDefault(user => string.Equals(user.RemoteAccessKey, key, StringComparison.Ordinal));
+            var username = UniqueRemoteAccessName(name, shared?.Id);
+            if (shared is null)
+            {
+                shared = new MatmonUser
+                {
+                    Username = username,
+                    Email = string.Empty,
+                    PasswordHash = string.Empty,
+                    Role = role,
+                    IsEnabled = true,
+                    CloudLinked = true,
+                    RemoteAccessKey = key,
+                    CreatedUtc = now,
+                    UpdatedUtc = now,
+                    LastLoginUtc = now
+                };
+                _document.Users.Add(shared);
+                QueueSave(SavePriority.Configuration);
+                return CloneUser(shared);
+            }
+
+            if (!shared.IsEnabled)
+            {
+                if (changed)
+                {
+                    QueueSave(SavePriority.Configuration);
+                }
+                throw new InvalidOperationException("This access is switched off on this instance.");
+            }
+
+            if (shared.Username != username || shared.Role != role)
+            {
+                shared.Username = username;
+                shared.Role = role;
+                shared.UpdatedUtc = now;
+                changed = true;
+            }
+
+            // Called for every request the tunnel replays - only a login stamp older than a few minutes is worth a save.
+            if (shared.LastLoginUtc is not { } last || now - last >= TimeSpan.FromMinutes(5))
+            {
+                shared.LastLoginUtc = now;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                QueueSave(SavePriority.Configuration);
+            }
+            return CloneUser(shared);
+        }
+    }
+
+    // The shared user's name must not collide with a local account's login name ("FeuSys" could be a person's user name).
+    private string UniqueRemoteAccessName(string name, Guid? self)
+    {
+        var candidate = name;
+        for (var n = 2; _document.Users.Any(user => user.Id != self && string.Equals(user.Username, candidate, StringComparison.OrdinalIgnoreCase)); n++)
+        {
+            candidate = $"{name} ({n})";
+        }
+        return candidate;
+    }
+
     public bool HasLocalPassword(Guid userId)
     {
         lock (_gate)
@@ -371,6 +472,11 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             if (user is null)
             {
                 return ChangePasswordResult.NotFound;
+            }
+
+            if (user.RemoteAccessKey is not null)
+            {
+                return ChangePasswordResult.NotAllowed; // the shared partner / support user never gets a local password
             }
 
             // If a local password already exists, require the current one; SSO-only accounts (no hash)
@@ -500,7 +606,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             user.Role = role;
             user.IsEnabled = isEnabled;
             user.UpdatedUtc = DateTimeOffset.UtcNow;
-            if (!string.IsNullOrWhiteSpace(password))
+            if (!string.IsNullOrWhiteSpace(password) && user.RemoteAccessKey is null)
             {
                 user.PasswordHash = MatmonPasswordHasher.Hash(password);
             }
@@ -4877,6 +4983,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
             Role = source.Role,
             IsEnabled = source.IsEnabled,
             CloudLinked = source.CloudLinked,
+            RemoteAccessKey = source.RemoteAccessKey,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc,
             LastLoginUtc = source.LastLoginUtc,

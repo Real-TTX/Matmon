@@ -64,3 +64,17 @@
 /* the download: a meter, "80 of 115 MB · 2.4 MB/s · about 15 s left", and what happened when the line broke off */
 .mm-update-download { display: grid; gap: var(--mat-space-1); width: 100%; }
 .mm-update-download[hidden], .mm-update-download [hidden] { display: none; }
+
+/* Users tab: who opens this instance through Matmon Cloud (the partner, Matmon Support) - one line each, not user rows. */
+.mm-remote-access .mat-listgroup__item { display: flex; align-items: center; gap: var(--mat-space-3, 0.75rem); }
+.mm-remote-access .mat-listgroup__text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.mm-remote-access__icon {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 2.25rem; height: 2.25rem; border-radius: 999px;
+    background: var(--mat-accent-soft, var(--mat-surface-2)); color: var(--mat-accent);
+}
+.mm-remote-access__last { font-size: 0.85em; white-space: nowrap; }
+@media (max-width: 640px) {
+    .mm-remote-access .mat-listgroup__item { flex-wrap: wrap; }
+    .mm-remote-access__last { margin-inline-start: calc(2.25rem + var(--mat-space-3, 0.75rem)); white-space: normal; }
+}

@@ -148,6 +148,31 @@ public class ConfigModel : PageModel
 
     public IReadOnlyList<MatmonUser> Users { get; private set; } = [];
 
+    /// <summary>Who can open this instance through Matmon Cloud besides its own users: the managing partner (when there is one) and
+    /// Matmon Support, each with its last access. Empty without a cloud link.</summary>
+    public IReadOnlyList<RemoteAccessRow> RemoteAccessRows { get; private set; } = [];
+
+    private IReadOnlyList<RemoteAccessRow> BuildRemoteAccessRows(IReadOnlyList<MatmonUser> users)
+    {
+        if (!CloudLinkActive)
+        {
+            return [];
+        }
+
+        var rows = new List<RemoteAccessRow>();
+        if (ServicePartnerInfo is { HasPartner: true } partner)
+        {
+            var shared = users.Where(user => RemoteAccess.IsPartnerKey(user.RemoteAccessKey)).MaxBy(user => user.LastLoginUtc);
+            rows.Add(new RemoteAccessRow(string.IsNullOrWhiteSpace(partner.Name) ? "Your partner" : partner.Name!, "Your managing partner", shared?.LastLoginUtc, false));
+        }
+
+        var support = users.FirstOrDefault(user => user.RemoteAccessKey == RemoteAccess.SupportKey);
+        rows.Add(new RemoteAccessRow(RemoteAccess.SupportName,
+            ServicePartnerInfo is { HasPartner: true } ? "Matmon's support team - your partner is told when it opens this instance" : "Matmon's support team - you are told when it opens this instance",
+            support?.LastLoginUtc, true));
+        return rows;
+    }
+
     public IReadOnlyList<WorkspaceBackupJob> BackupJobs { get; private set; } = [];
 
     public IReadOnlyList<WorkspaceBackupSnapshotInfo> BackupSnapshots { get; private set; } = [];
@@ -1178,7 +1203,10 @@ public class ConfigModel : PageModel
     private void LoadView()
     {
         Overview = _configurationOverviewProvider.GetOverview();
-        Users = _workspaceStore.GetUsers();
+        var allUsers = _workspaceStore.GetUsers();
+        // The shared partner / Matmon Support users are not people of this instance - the Users tab shows them as "who has
+        // access through Matmon Cloud" above the list (RemoteAccessRows), not as rows of their own.
+        Users = allUsers.Where(user => user.RemoteAccessKey is null).ToList();
         License = _licenseService.Current;
         HasStoredLicenseToken = !string.IsNullOrEmpty(_workspaceStore.GetLicenseToken());
         var allElements = _workspaceStore.GetAllElements();
@@ -1195,6 +1223,7 @@ public class ConfigModel : PageModel
         AllowedProgramPaths = _workspaceStore.GetAllowedProgramPaths();
         TimeZoneItems = TimeZoneOptions.Build(DisplayTimeZoneId, "Server local");
         ServicePartnerInfo = _workspaceStore.GetServicePartnerInfo();
+        RemoteAccessRows = BuildRemoteAccessRows(allUsers);
         TunnelStatus = _tunnelState.Snapshot();
         // Heartbeat staleness: warn once the last successful beat is older than ~3x the configured cadence.
         var beatSeconds = Math.Max(15, CloudSettings.CloudHeartbeatIntervalSeconds ?? _runtimeOptions.CloudHeartbeatIntervalSeconds);
@@ -1274,3 +1303,4 @@ public sealed class CloudRelayInput
     public bool RelayAlerts { get; set; }
 }
 
+public sealed record RemoteAccessRow(string Name, string Description, DateTimeOffset? LastAccessUtc, bool IsSupport);

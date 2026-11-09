@@ -29,6 +29,7 @@ public static class TunnelAutoLogin
 {
     public const string CloudUserHeader = "X-Matmon-Cloud-User";
     public const string TunnelAuthHeader = "X-Matmon-Tunnel-Auth";
+    public const string CloudAccessHeader = "X-Matmon-Cloud-Access";
 
     /// <summary>
     /// Register between <c>UseAuthentication</c> and <c>UseAuthorization</c>. Every request that arrives through
@@ -45,7 +46,11 @@ public static class TunnelAutoLogin
             try
             {
                 var store = context.RequestServices.GetRequiredService<IMonitoringWorkspaceStore>();
-                var user = store.UpsertCloudUser(email, role);
+                // As the managing partner or as Matmon Support: the one shared user (the partner / "Matmon Support"), never
+                // the individual - who it really was goes to the log. A member keeps a user of their own.
+                var user = RemoteAccess.TryParse(context.Request.Headers[CloudAccessHeader].ToString(), out var accessKey, out var accessName)
+                    ? store.UpsertRemoteAccessUser(accessKey, accessName, role, email)
+                    : store.UpsertCloudUser(email, role);
                 var principal = BuildPrincipal(user);
 
                 // Did this request already carry a valid cookie for the SAME user?
@@ -59,6 +64,13 @@ public static class TunnelAutoLogin
                 // Set-Cookie on every AJAX poll.
                 if (!alreadySignedIn)
                 {
+                    if (user.RemoteAccessKey is not null)
+                    {
+                        // The record of who it really was - the page shows only the partner / Matmon Support.
+                        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(TunnelAutoLogin))
+                            .LogInformation("Remote access as {Access} by {Email}", user.Username, email);
+                    }
+
                     await context.SignInAsync(
                         CookieAuthenticationDefaults.AuthenticationScheme,
                         principal,

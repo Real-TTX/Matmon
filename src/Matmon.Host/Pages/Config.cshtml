@@ -1046,6 +1046,40 @@ else if (Model.IsActiveTab("partner") && canManageSystem && Model.ServicePartner
 }
 else if (Model.IsActiveTab("users") && canManageUsers)
 {
+    @if (Model.RemoteAccessRows.Count > 0)
+    {
+        @* The partner and Matmon Support are no users of this instance: whoever of them opens it signs in as ONE shared access, shown here. *@
+        <section class="mat-card">
+            <div class="mat-card__head">@MatUi.Icon("cloud")<h2 class="mat-card__title">Access through Matmon Cloud</h2></div>
+            <ul class="mat-listgroup mat-listgroup--flush mm-remote-access">
+                @foreach (var row in Model.RemoteAccessRows)
+                {
+                    <li class="mat-listgroup__item">
+                        <span class="mm-remote-access__icon">@MatUi.Icon(row.IsSupport ? "shield" : "briefcase")</span>
+                        <span class="mat-listgroup__text">
+                            <strong>@row.Name</strong>
+                            <small class="mat-text-muted">@row.Description</small>
+                        </span>
+                        <span class="mm-push-end mat-text-muted mm-remote-access__last">
+                            @if (row.LastAccessUtc is not null)
+                            {
+                                <span>Last access @Model.FormatDateTime(row.LastAccessUtc)</span>
+                            }
+                            else
+                            {
+                                <span>Not opened yet</span>
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+            @if (!Model.CloudSettings.FullAccessEnabled)
+            {
+                <p class="mat-hint">Remote access is switched off, so neither can open this instance right now (System &gt; Cloud).</p>
+            }
+        </section>
+    }
+
     <section class="mat-card">
         <div class="mat-card__head">@MatUi.Icon("users")<h2 class="mat-card__title">Users</h2><span class="mat-text-muted mm-push-end">@Model.Users.Count</span></div>
         <div class="mat-table-wrap">

@@ -3,7 +3,7 @@ using Matmon.Core.Sample;
 
 namespace Matmon.Host.Services;
 
-public enum ChangePasswordResult { Success, WrongCurrent, TooShort, NotFound }
+public enum ChangePasswordResult { Success, WrongCurrent, TooShort, NotFound, NotAllowed }
 
 /// <summary>A TOTP enrollment in progress: the Base32 secret (for manual entry) + the otpauth URI (for the QR).</summary>
 public sealed record TotpEnrollmentInfo(string SecretBase32, string OtpauthUri);
@@ -54,6 +54,9 @@ public interface IMonitoringWorkspaceStore
 
     /// <summary>Find-or-create a user for a "Sign in with Matmon Cloud" identity (SSO). Existing accounts win.</summary>
     MatmonUser UpsertCloudUser(string email, MatmonUserRole role);
+
+    /// <summary>Find-or-create the ONE shared user for remote access as the managing partner or as Matmon Support (<see cref="RemoteAccess"/>).</summary>
+    MatmonUser UpsertRemoteAccessUser(string key, string displayName, MatmonUserRole role, string? personEmail);
 
     /// <summary>Whether the user has a local password set (SSO-only accounts start without one).</summary>
     bool HasLocalPassword(Guid userId);
