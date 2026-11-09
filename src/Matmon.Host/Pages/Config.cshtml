@@ -204,54 +204,45 @@ else if (Model.IsActiveTab("storage"))
     var backupBytes = storage.BackupFileBytes ?? 0;
     var totalDataBytes = storage.DataDirectoryBytes;
     var otherBytes = Math.Max(0, totalDataBytes - workspaceBytes - telemetryBytes - backupBytes);
-    string SegWidth(long part) => (totalDataBytes > 0 ? Math.Round((double)part / totalDataBytes * 100, 3) : 0)
-        .ToString("0.###", invariant);
     var usedValue = usedPercent.ToString("0.##", invariant);
     var diskTone = usedPercent >= 90 ? "error" : usedPercent >= 80 ? "warn" : "ok";
 
-    var driveUsedGigabytes = storage.DriveTotalGigabytes.HasValue && storage.DriveAvailableGigabytes.HasValue
-        ? Math.Max(0, storage.DriveTotalGigabytes.Value - storage.DriveAvailableGigabytes.Value)
-        : (double?)null;
+    // One bar for the whole disk: Matmon's data, everything else on it, and what is free (the empty rest).
+    var driveTotalBytes = storage.DriveTotalBytes ?? 0;
+    var driveFreeBytes = storage.DriveAvailableBytes ?? 0;
+    var driveOthersBytes = Math.Max(0, driveTotalBytes - driveFreeBytes - totalDataBytes);
+    string DiskWidth(long part) => (driveTotalBytes > 0 ? Math.Round((double)part / driveTotalBytes * 100, 3) : 0)
+        .ToString("0.###", invariant);
+    var othersTone = diskTone == "ok" ? null : diskTone;
 
-    @* The disk first: it is what decides whether something has to be done. *@
     <section class="mat-card">
         <div class="mat-card__head">@MatUi.Icon("hard-drive")<h2 class="mat-card__title">Disk capacity</h2><span class="mat-text-muted mat-mono mm-push-end">@storage.DriveName</span></div>
         <div class="mat-card__body mat-stack">
             <div class="mat-stat">
-                <span class="mat-stat__value">@(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB free" : ConfigModel.FormatPercent(storage.DriveFreePercent) + " free")</span>
-                <span class="mat-stat__label">@(storage.DriveTotalGigabytes.HasValue ? $"of {storage.DriveTotalGigabytes.Value:0.##} GB · " : "")@ConfigModel.FormatPercent(storage.DriveFreePercent) free</span>
+                <span class="mat-stat__value">@(storage.DriveAvailableBytes.HasValue ? storage.FormatBytes(driveFreeBytes) + " free" : ConfigModel.FormatPercent(storage.DriveFreePercent) + " free")</span>
+                <span class="mat-stat__label">@(storage.DriveTotalBytes.HasValue ? $"of {storage.FormatBytes(driveTotalBytes)} · " : "")@ConfigModel.FormatPercent(storage.DriveFreePercent) free</span>
             </div>
-            <div class="mat-meter mat-meter--lg" role="progressbar" aria-valuenow="@usedValue" aria-valuemin="0" aria-valuemax="100" aria-label="Disk used: @usedValue %">
-                <div class="mat-meter__fill" data-value="@usedValue" data-tone="@diskTone"></div>
-            </div>
-            <div class="mat-row">
-                <span class="@($"mat-pill mat-pill--{(diskTone == "error" ? "error" : diskTone == "warn" ? "warn" : "ok")}")">Used @(driveUsedGigabytes.HasValue ? $"{driveUsedGigabytes.Value:0.##} GB · " : "")@usedValue %</span>
-                <span class="mat-pill mat-pill--plain">Free @(storage.DriveAvailableGigabytes.HasValue ? $"{storage.DriveAvailableGigabytes.Value:0.##} GB" : ConfigModel.FormatPercent(storage.DriveFreePercent))</span>
-            </div>
-        </div>
-    </section>
-
-    <section class="mat-card">
-        <div class="mat-card__head">@MatUi.Icon("bar-chart")<h2 class="mat-card__title">Matmon data</h2><span class="mat-text-muted mm-push-end">@storage.DataFileCount files</span></div>
-        <div class="mat-card__body mat-stack">
-            <div class="mat-stat">
-                <span class="mat-stat__value">@storage.FormatBytes(totalDataBytes)</span>
-                <span class="mat-stat__label">in <span class="mat-mono mm-break">@storage.DataPath</span> · how it is made up</span>
-            </div>
-            @* Every part is a segment, "Other" too: an empty rest of the bar read like free disk space. *@
-            <div class="mat-meter mat-meter--lg mat-meter--stack" role="img"
-                 aria-label="Matmon data: Telemetry DB @storage.FormatBytes(telemetryBytes), Workspace @storage.FormatBytes(workspaceBytes), Backups @storage.FormatBytes(backupBytes), Other @storage.FormatBytes(otherBytes)">
-                <div class="mat-meter__fill" data-value="@SegWidth(telemetryBytes)"></div>
-                <div class="mat-meter__fill" data-value="@SegWidth(workspaceBytes)" data-tone="ok"></div>
-                <div class="mat-meter__fill" data-value="@SegWidth(backupBytes)" data-tone="warn"></div>
-                <div class="mat-meter__fill mm-meter-other" data-value="@SegWidth(otherBytes)"></div>
-            </div>
-            <div class="mat-row">
-                <span class="mat-pill mat-pill--accent">Telemetry DB @storage.FormatBytes(telemetryBytes)</span>
-                <span class="mat-pill mat-pill--ok">Workspace @storage.FormatBytes(workspaceBytes)</span>
-                <span class="mat-pill mat-pill--warn">Backups @storage.FormatBytes(backupBytes)</span>
-                <span class="mat-pill mat-pill--plain">Other @storage.FormatBytes(otherBytes)</span>
-            </div>
+            @if (driveTotalBytes > 0)
+            {
+                <div class="mat-meter mat-meter--lg mat-meter--stack" role="img"
+                     aria-label="Disk: Matmon data @storage.FormatBytes(totalDataBytes), other files @storage.FormatBytes(driveOthersBytes), free @storage.FormatBytes(driveFreeBytes)">
+                    @* Matmon's share is often a sliver of a big disk - it keeps a few pixels so it can be seen at all. *@
+                    <div class="mat-meter__fill mm-meter-min" data-value="@DiskWidth(totalDataBytes)" title="Matmon data @storage.FormatBytes(totalDataBytes)"></div>
+                    <div class="mat-meter__fill mm-meter-other" data-value="@DiskWidth(driveOthersBytes)" data-tone="@othersTone" title="Other files @storage.FormatBytes(driveOthersBytes)"></div>
+                </div>
+                <div class="mat-row">
+                    <span class="mat-pill mat-pill--accent">Matmon data @storage.FormatBytes(totalDataBytes)</span>
+                    <span class="@(othersTone is null ? "mat-pill mat-pill--plain" : $"mat-pill mat-pill--{othersTone}")">Other files @storage.FormatBytes(driveOthersBytes)</span>
+                    <span class="mat-pill mat-pill--plain">Free @storage.FormatBytes(driveFreeBytes)</span>
+                </div>
+            }
+            <dl class="mat-kv">
+                <dt>Matmon data</dt><dd><span class="mat-mono mm-break">@storage.DataPath</span> · @storage.DataFileCount files</dd>
+                <dt>Telemetry DB</dt><dd class="mat-mono">@storage.FormatBytes(telemetryBytes)</dd>
+                <dt>Workspace</dt><dd class="mat-mono">@storage.FormatBytes(workspaceBytes)</dd>
+                <dt>Backups</dt><dd class="mat-mono">@storage.FormatBytes(backupBytes)</dd>
+                <dt>Other</dt><dd class="mat-mono">@storage.FormatBytes(otherBytes)</dd>
+            </dl>
         </div>
     </section>
 
