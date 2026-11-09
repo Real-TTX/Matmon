@@ -23,6 +23,7 @@ public static class ProbeInstallCommandBuilder
 
         return $"""
 docker run -d \
+  --pull always \
   --name {containerName} \
   --restart unless-stopped \
   -p 8099:8099 \
