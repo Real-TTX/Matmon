@@ -332,9 +332,12 @@ public sealed class SlaveSensorWorker : BackgroundService
         return null;
     }
 
-    /// <summary>Drains the offline buffer to the primary oldest-first in chunks; stops at the first failed chunk
-    /// (still offline) and keeps the remainder for the next tick. When connected the buffer is normally empty and
-    /// this posts just the current tick's results.</summary>
+    /// <summary>Drains the offline buffer to the primary oldest-first in chunks; stops when the primary cannot be
+    /// reached and keeps the remainder for the next tick. When connected the buffer is normally empty and this posts
+    /// just the current tick's results. A chunk the primary REFUSES (it answered, but not with success) must never
+    /// jam the buffer: a chunk that is too large is sent again in halves, and a refused one is split until the single
+    /// result it refuses is found and dropped with a warning - before, the same chunk was offered on every tick for
+    /// good, the heartbeat kept the agent "connected" and nothing said why no result arrived.</summary>
     private async Task FlushBufferAsync(
         HttpClient client,
         string probeId,
@@ -346,44 +349,101 @@ public sealed class SlaveSensorWorker : BackgroundService
             return;
         }
 
-        const int chunkSize = 500;
         var flushed = 0;
-        var offline = false;
+        var refusedTotal = 0;
+        string? offlineReason = null;
+        string? refusedReason = null;
         while (_buffer.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var chunk = _buffer.PeekOldest(chunkSize);
-            if (!await TryPostReportsAsync(client, probeId, chunk, cancellationToken))
+            var chunk = _buffer.PeekOldest(_chunkSize);
+            var outcome = await TryPostReportsAsync(client, probeId, chunk, cancellationToken);
+            switch (outcome.Kind)
             {
-                offline = true;
-                break;
+                case PostKind.Sent:
+                    _buffer.RemoveOldest(chunk.Count);
+                    flushed += chunk.Count;
+                    refusedTotal += outcome.NotRecorded;
+                    if (outcome.NotRecorded > 0)
+                    {
+                        refusedReason ??= $"{outcome.NotRecorded} result(s) were not taken by the primary - their sensors are not assigned to this probe any more";
+                    }
+
+                    // Grow back towards the normal size once the primary takes chunks again.
+                    _chunkSize = Math.Min(MaxChunkSize, _chunkSize * 2);
+                    break;
+                case PostKind.Refused when chunk.Count > 1:
+                    // Too large, or one bad result in it: try the first half on its own.
+                    _chunkSize = Math.Max(1, chunk.Count / 2);
+                    refusedReason = outcome.Reason;
+                    break;
+                case PostKind.Refused:
+                    _logger.LogWarning(
+                        "The primary refused the result of sensor {SensorId} from {Timestamp} ({Reason}); it is dropped so the results after it can be sent",
+                        chunk[0].SensorId, chunk[0].TimestampUtc, outcome.Reason);
+                    _buffer.RemoveOldest(1);
+                    refusedTotal++;
+                    refusedReason = outcome.Reason;
+                    break;
+                default:
+                    offlineReason = outcome.Reason;
+                    break;
             }
 
-            _buffer.RemoveOldest(chunk.Count);
             _runtimeState.BufferedObservations = _buffer.Count;
-            flushed += chunk.Count;
+            if (offlineReason is not null)
+            {
+                break;
+            }
         }
 
-        if (offline)
+        if (refusedReason is not null && refusedReason != _lastRefusal)
         {
+            _logger.LogWarning("The primary did not take every result: {Reason}", refusedReason);
+        }
+
+        _lastRefusal = refusedReason;
+
+        if (offlineReason is not null)
+        {
+            if (offlineReason != _lastOfflineReason)
+            {
+                _logger.LogWarning("Results could not be sent to the primary ({Reason}); {Count} kept and sent once it answers", offlineReason, _buffer.Count);
+            }
+
+            _lastOfflineReason = offlineReason;
             _runtimeState.RecordResultPost(
                 _buffer.Count,
-                $"primary unreachable - {_buffer.Count} observation(s) buffered (retention {_runtimeOptions.OfflineBufferRetentionDays}d)",
+                $"results not sent - {offlineReason}; {_buffer.Count} kept (retention {_runtimeOptions.OfflineBufferRetentionDays}d)",
                 success: false,
                 tickResults);
+            return;
         }
-        else if (flushed > 0)
+
+        _lastOfflineReason = null;
+        if (flushed > 0 || refusedTotal > 0)
         {
             var backfilled = flushed > tickResults.Count;
-            _runtimeState.RecordResultPost(
-                flushed,
-                $"{flushed} result{(flushed == 1 ? string.Empty : "s")} posted{(backfilled ? " (incl. buffered offline data)" : string.Empty)}",
-                success: true,
-                tickResults);
+            var message = $"{flushed} result{(flushed == 1 ? string.Empty : "s")} posted{(backfilled ? " (incl. buffered offline data)" : string.Empty)}";
+            if (refusedReason is not null)
+            {
+                message += $"; {refusedReason}";
+            }
+
+            _runtimeState.RecordResultPost(flushed, message, success: refusedReason is null, tickResults);
         }
     }
 
-    private async Task<bool> TryPostReportsAsync(
+    private const int MaxChunkSize = 500;
+    private int _chunkSize = MaxChunkSize;
+    private string? _lastOfflineReason;
+    private string? _lastRefusal;
+
+    private enum PostKind { Sent, Refused, Offline }
+
+    private readonly record struct PostOutcome(PostKind Kind, string? Reason, int NotRecorded = 0);
+
+    private async Task<PostOutcome> TryPostReportsAsync(
         HttpClient client,
         string probeId,
         IReadOnlyList<ProbeSensorObservationReport> reports,
@@ -398,13 +458,75 @@ public sealed class SlaveSensorWorker : BackgroundService
             AddProbeToken(request);
 
             using var response = await client.SendAsync(request, cancellationToken);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return new PostOutcome(PostKind.Sent, null, await ReadNotRecordedAsync(response, reports.Count, cancellationToken));
+            }
+
+            var reason = await DescribeFailureAsync(response, cancellationToken);
+            return IsRefusal(response.StatusCode)
+                ? new PostOutcome(PostKind.Refused, reason)
+                : new PostOutcome(PostKind.Offline, reason);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return new PostOutcome(PostKind.Offline, ex is OperationCanceledException ? "the primary did not answer in time" : ex.Message);
         }
     }
+
+    /// <summary>The primary answered and will not take this batch as it is: too large, or a result in it it cannot
+    /// read. Sending it again unchanged can never succeed. Not a refusal: a wrong token (401/403), a missing endpoint
+    /// (404 - an older primary, or one in the middle of an update), timeouts, rate limits and server errors - those
+    /// pass, so the results are kept.</summary>
+    public static bool IsRefusal(System.Net.HttpStatusCode status) =>
+        status is System.Net.HttpStatusCode.BadRequest
+            or System.Net.HttpStatusCode.RequestEntityTooLarge
+            or System.Net.HttpStatusCode.UnprocessableEntity
+            or System.Net.HttpStatusCode.UnsupportedMediaType;
+
+    private static async Task<string> DescribeFailureAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var status = $"{(int)response.StatusCode} {response.ReasonPhrase}".Trim();
+        var hint = response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden => " - the primary does not accept this probe's id or token",
+            System.Net.HttpStatusCode.RequestEntityTooLarge => " - the request is too large for the primary or a proxy in front of it",
+            _ => string.Empty
+        };
+        string body;
+        try
+        {
+            body = (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
+        }
+        catch
+        {
+            body = string.Empty;
+        }
+
+        if (body.Length > 200 || body.StartsWith('<'))
+        {
+            body = body.StartsWith('<') ? string.Empty : body[..200];
+        }
+
+        return $"the primary answered {status}{hint}{(body.Length > 0 ? $": {body}" : string.Empty)}";
+    }
+
+    /// <summary>How many results of a taken batch the primary did NOT record: a sensor it no longer assigns to this
+    /// probe. An older primary that does not count them says nothing (0).</summary>
+    private static async Task<int> ReadNotRecordedAsync(HttpResponseMessage response, int sent, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var answer = await response.Content.ReadFromJsonAsync<ObservationPostAnswer>(JsonOptions, cancellationToken);
+            return answer?.Skipped ?? 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private sealed record ObservationPostAnswer(int Recorded, int Repeated, int? Skipped);
 
     private static SlaveProbeUpcomingExecution BuildUpcomingExecution(
         ProbeSensorAssignment assignment,

@@ -8,8 +8,8 @@
     var templateParameterCount = string.IsNullOrWhiteSpace(Model.TemplateEditor.ParametersText)
         ? 0
         : Model.TemplateEditor.ParametersText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
-    var templateCredentialCount = Model.TemplateEditor.CredentialBundles.Count(credential => !credential.IsDeleted);
-    var templateChannelCount = Model.TemplateEditor.SensorChannelThresholdFields.Count(field => !field.IsDeleted);
+    var templateCredentialCount = Model.TemplateEditor.CredentialBundles.Count(credential => !credential.IsDeleted && !string.IsNullOrWhiteSpace(credential.Name));
+    var templateChannelCount = Model.TemplateEditor.SensorChannelThresholdFields.Count(field => !field.IsDeleted && !string.IsNullOrWhiteSpace(field.ChannelKey));
     var impactCount = Model.TemplateEditor.ImpactRows.Count;
 
     if (isCreateMode)
@@ -115,6 +115,8 @@ else
 
     <form method="post" asp-page-handler="SaveTemplate" class="mat-form" novalidate data-template-scope-form>
         <input type="hidden" asp-for="TemplateEditor.Id" />
+        @* Keeps the page in edit mode across the sensor-type re-post (it posts to a URL without the id). *@
+        <input type="hidden" name="SelectedTemplateId" value="@Model.TemplateEditor.Id" />
         <input type="hidden" asp-for="ReturnUrl" />
         @* Rebuilds the parameter/threshold fields server-side when the sensor type changes. *@
         <button type="submit" asp-page-handler="PreviewSensorFields" formnovalidate hidden data-sensor-preview-submit>Preview</button>

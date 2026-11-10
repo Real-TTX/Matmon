@@ -1130,6 +1130,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
         var duplicateTolerance = clockOffset == TimeSpan.Zero ? TimeSpan.Zero : TimeSpan.FromSeconds(2);
         var recorded = 0;
         var repeated = 0;
+        var skipped = 0;
         foreach (var observation in batch.Observations)
         {
             if (!assignmentProvider.TryBuildRecordingContext(
@@ -1139,6 +1140,7 @@ if (runtimeOptions.Mode == AppMode.Primary)
                     out _,
                     out var settings))
             {
+                skipped++;
                 continue;
             }
 
@@ -1159,7 +1161,14 @@ if (runtimeOptions.Mode == AppMode.Primary)
             }
         }
 
-        return Results.Ok(new { recorded, repeated });
+        if (skipped > 0)
+        {
+            app.Logger.LogWarning(
+                "Probe {ProbeId} sent {Skipped} result(s) for sensors it does not run (moved, deleted or now run elsewhere); they were not recorded",
+                probeId, skipped);
+        }
+
+        return Results.Ok(new { recorded, repeated, skipped });
     }).AllowAnonymous();
 
     app.MapGet("/api/probes/{probeId}/discovery-jobs", (
