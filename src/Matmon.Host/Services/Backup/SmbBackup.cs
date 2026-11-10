@@ -339,11 +339,15 @@ public sealed partial class SmbclientBackupClient : ISmbBackupClient
 }
 
 /// <summary>
-/// Backups on an SMB share: the scheduler's run, the page's list and "copy to this machine", and a test. The snapshot is the
-/// same package a local job writes (sealed with the backup passphrase when one is set); a job's files carry its id, so its
-/// retention never touches anything else in the folder.
+/// Backups in a folder elsewhere - an SMB share or a WebDAV folder: the scheduler's run, the page's list and "copy to this
+/// machine", and a test. The snapshot is the same package a local job writes (sealed with the backup passphrase when one is
+/// set); a job's files carry its id, so its retention never touches anything else in the folder.
 /// </summary>
-public sealed class SmbBackupRunner(IMonitoringWorkspaceStore store, ISmbBackupClient client, ILogger<SmbBackupRunner> logger)
+public sealed class RemoteBackupRunner(
+    IMonitoringWorkspaceStore store,
+    ISmbBackupClient smb,
+    ILogger<RemoteBackupRunner> logger,
+    IHttpClientFactory? httpClients = null)
 {
     public const string FilePrefix = "matmon-backup-";
 
@@ -354,10 +358,32 @@ public sealed class SmbBackupRunner(IMonitoringWorkspaceStore store, ISmbBackupC
         fileName.StartsWith(FilePrefix, StringComparison.OrdinalIgnoreCase)
         && fileName.EndsWith($"-{job.Id:N}.json", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The folder a destination names, or null with the reason. The password is the stored one unless one is given.</summary>
+    public IBackupFolder? Folder(BackupDestination destination, string? path, string? username, string? password, string? domain, out string? problem)
+    {
+        switch (destination)
+        {
+            case BackupDestination.Smb:
+                return SmbLocation.Parse(path, username, password, domain, out problem) is { } share ? new SmbBackupFolder(share, smb) : null;
+            case BackupDestination.WebDav:
+                return WebDavLocation.Parse(path, username, password, out problem) is { } dav
+                    ? new WebDavBackupFolder(dav, httpClients?.CreateClient(WebDavBackupFolder.HttpClientName) ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
+                    : null;
+            default:
+                problem = "This job does not write into a folder elsewhere.";
+                return null;
+        }
+    }
+
+    public IBackupFolder? Folder(WorkspaceBackupJob job, out string? problem) =>
+        Folder(job.Destination, job.SmbPath, job.SmbUsername, job.SmbPassword, job.SmbDomain, out problem);
+
+    private static string KindOf(WorkspaceBackupJob job) => job.Destination == BackupDestination.WebDav ? "WebDAV" : "SMB";
+
     /// <summary>Writes the snapshot, applies the retention and records the run. Never throws - the outcome is the job's status.</summary>
     public async Task<(bool Success, string Message)> RunAsync(WorkspaceBackupJob job, CancellationToken cancellationToken)
     {
-        if (SmbLocation.For(job, out var problem) is not { } location)
+        if (Folder(job, out var problem) is not { } folder)
         {
             store.RecordRemoteBackupJobRun(job.Id, false, problem!, null);
             return (false, problem!);
@@ -365,40 +391,40 @@ public sealed class SmbBackupRunner(IMonitoringWorkspaceStore store, ISmbBackupC
 
         try
         {
-            var bytes = store.CreateBackupBytes(job.Sections, "Scheduled backup to an SMB share.");
+            var bytes = store.CreateBackupBytes(job.Sections, $"Scheduled backup to {(job.Destination == BackupDestination.WebDav ? "a WebDAV folder" : "an SMB share")}.");
             var name = FileNameFor(job, DateTimeOffset.UtcNow);
-            await client.WriteAsync(location, name, bytes, cancellationToken);
+            await folder.WriteAsync(name, bytes, cancellationToken);
 
             var removed = 0;
-            var mine = (await client.ListAsync(location, cancellationToken))
+            var mine = (await folder.ListAsync(cancellationToken))
                 .Where(file => BelongsTo(file.Name, job))
                 .OrderByDescending(file => file.Name, StringComparer.Ordinal) // the stamp sorts by time
                 .ToList();
             foreach (var old in mine.Skip(Math.Max(1, job.RetentionCount)))
             {
-                await client.DeleteAsync(location, old.Name, cancellationToken);
+                await folder.DeleteAsync(old.Name, cancellationToken);
                 removed++;
             }
 
-            var message = $"Saved {name} to {location.Display}{(removed > 0 ? $", {removed} older removed" : "")}.";
+            var message = $"Saved {name} to {folder.Display}{(removed > 0 ? $", {removed} older removed" : "")}.";
             store.RecordRemoteBackupJobRun(job.Id, true, message, bytes.LongLength);
-            logger.LogInformation("SMB backup job {Job}: {Message}", job.Name, message);
+            logger.LogInformation("{Kind} backup job {Job}: {Message}", KindOf(job), job.Name, message);
             return (true, message);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             var message = $"Not saved: {exception.Message}";
             store.RecordRemoteBackupJobRun(job.Id, false, message, null);
-            logger.LogWarning(exception, "SMB backup job {Job} failed", job.Name);
+            logger.LogWarning(exception, "{Kind} backup job {Job} failed", KindOf(job), job.Name);
             return (false, message);
         }
     }
 
-    /// <summary>This job's backups on the share, newest first.</summary>
+    /// <summary>This job's backups in its folder, newest first.</summary>
     public async Task<IReadOnlyList<SmbFile>> ListAsync(WorkspaceBackupJob job, CancellationToken cancellationToken)
     {
-        var location = SmbLocation.For(job, out var problem) ?? throw new IOException(problem);
-        return (await client.ListAsync(location, cancellationToken))
+        var folder = Folder(job, out var problem) ?? throw new IOException(problem);
+        return (await folder.ListAsync(cancellationToken))
             .Where(file => BelongsTo(file.Name, job))
             .OrderByDescending(file => file.Name, StringComparer.Ordinal)
             .ToList();
@@ -412,28 +438,28 @@ public sealed class SmbBackupRunner(IMonitoringWorkspaceStore store, ISmbBackupC
             throw new InvalidOperationException("That file is not one of this job's backups.");
         }
 
-        var location = SmbLocation.For(job, out var problem) ?? throw new IOException(problem);
-        var bytes = await client.ReadAsync(location, fileName, cancellationToken);
+        var folder = Folder(job, out var problem) ?? throw new IOException(problem);
+        var bytes = await folder.ReadAsync(fileName, cancellationToken);
         using var stream = new MemoryStream(bytes);
         return store.ImportBackupSnapshot(stream, fileName);
     }
 
     /// <summary>Writes, lists, reads back and deletes a small file - says in words what does not work.</summary>
-    public async Task<string?> TestAsync(SmbLocation location, CancellationToken cancellationToken)
+    public static async Task<string?> TestAsync(IBackupFolder folder, CancellationToken cancellationToken)
     {
         var name = $"matmon-test-{Guid.NewGuid():N}.txt";
         var content = Encoding.UTF8.GetBytes($"Matmon backup test {DateTimeOffset.UtcNow:O}");
         try
         {
-            await client.WriteAsync(location, name, content, cancellationToken);
-            var listed = await client.ListAsync(location, cancellationToken);
+            await folder.WriteAsync(name, content, cancellationToken);
+            var listed = await folder.ListAsync(cancellationToken);
             if (!listed.Any(file => file.Name == name))
             {
                 return "the file was written but is not listed - check the folder";
             }
 
-            var back = await client.ReadAsync(location, name, cancellationToken);
-            await client.DeleteAsync(location, name, cancellationToken);
+            var back = await folder.ReadAsync(name, cancellationToken);
+            await folder.DeleteAsync(name, cancellationToken);
             return back.SequenceEqual(content) ? null : "the file read back differs from what was written";
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

@@ -4,6 +4,7 @@
     var job = Model.Job!;
     ViewData["Title"] = job.Name;
     ViewData["PageSub"] = job.SmbPath;
+    var place = job.Destination == BackupDestination.WebDav ? "In the WebDAV folder" : "On the share";
     ViewData["Breadcrumbs"] = new[] { new BreadcrumbItem("System", "/Config"), new BreadcrumbItem("Backup", "/Config?tab=backup"), new BreadcrumbItem(job.Name) };
 }
 
@@ -15,22 +16,22 @@
 }
 
 <section class="mat-card">
-    <div class="mat-card__head">@MatUi.Icon("folder-open")<h2 class="mat-card__title">On the share</h2><span class="mat-text-muted mm-push-end">@Model.Files.Count</span></div>
+    <div class="mat-card__head">@MatUi.Icon("folder-open")<h2 class="mat-card__title">@place</h2><span class="mat-text-muted mm-push-end">@Model.Files.Count</span></div>
     @if (Model.Problem is not null)
     {
         <div class="mat-card__body">
-            <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">The share cannot be read: @Model.Problem</div></div>
+            <div class="mat-alert mat-alert--danger" role="alert">@MatUi.Icon("x-circle")<div class="mat-alert__body">The folder cannot be read: @Model.Problem</div></div>
         </div>
     }
     else if (Model.Files.Count == 0)
     {
-        <div class="mat-card__body"><p class="mat-muted">No backup of this job on the share yet.</p></div>
+        <div class="mat-card__body"><p class="mat-muted">No backup of this job there yet.</p></div>
     }
     else
     {
         <div class="mat-table-wrap">
             <table class="mat-table">
-                <caption class="mat-sr-only">Backups on the share</caption>
+                <caption class="mat-sr-only">Backups in the folder</caption>
                 <thead>
                     <tr>
                         <th scope="col">File</th>

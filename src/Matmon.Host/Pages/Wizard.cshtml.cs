@@ -395,7 +395,7 @@ public class WizardModel : PageModel
                 return RedirectToPage(new { step = "restore" });
             }
 
-            var result = _workspaceStore.RestoreBackupBytes(blob, WorkspaceBackupSections.CloudConfig, string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim());
+            var result = _workspaceStore.RestoreBackupBytes(blob, WorkspaceBackupSections.CloudRestore, string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim());
             StatusMessage = result.Message;
         }
         catch (Exception ex)

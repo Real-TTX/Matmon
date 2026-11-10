@@ -17,7 +17,7 @@ public sealed class BackupSchedulerService : BackgroundService
         MatmonRuntimeOptions runtimeOptions,
         CloudBackupClient cloudBackups,
         ILogger<BackupSchedulerService> logger,
-        Backup.SmbBackupRunner? smbBackups = null)
+        Backup.RemoteBackupRunner? smbBackups = null)
     {
         _workspaceStore = workspaceStore;
         _runtimeOptions = runtimeOptions;
@@ -26,7 +26,7 @@ public sealed class BackupSchedulerService : BackgroundService
         _smbBackups = smbBackups;
     }
 
-    private readonly Backup.SmbBackupRunner? _smbBackups;
+    private readonly Backup.RemoteBackupRunner? _smbBackups;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -65,7 +65,7 @@ public sealed class BackupSchedulerService : BackgroundService
                 continue;
             }
 
-            if (job.Destination == BackupDestination.Smb)
+            if (job.Destination.IsRemoteFolder())
             {
                 if (_smbBackups is { } smb)
                 {
@@ -107,7 +107,11 @@ public sealed class BackupSchedulerService : BackgroundService
             // A passphrase makes the pushed snapshot PORTABLE (recoverable on a different instance). Mark the label
             // "(encrypted)" so the restore/wizard UI knows to ask for the passphrase.
             var passphrase = string.IsNullOrEmpty(job.Passphrase) ? _workspaceStore.GetBackupPassphrase() : job.Passphrase;
-            var bytes = _workspaceStore.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "Scheduled cloud backup.", passphrase);
+            // The job's own sections (the history too, when ticked) - never the local users. A package with the history is
+            // compressed: it is mostly repetitive JSON, and the cloud takes a limited size per backup.
+            var sections = WorkspaceBackupSections.ForCloud(job.Sections);
+            var bytes = _workspaceStore.CreateBackupBytes(sections, "Scheduled cloud backup.", passphrase,
+                compress: (sections & WorkspaceBackupSections.Bulky) != 0);
             var label = $"{job.Name} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(passphrase is null ? "" : " (encrypted)")}";
             await _cloudBackups.PushAsync(bytes, label, stoppingToken, scheduled: true, encrypted: passphrase is not null);
             _workspaceStore.RecordCloudBackupJobRun(job.Id, success: true, "Backed up to Matmon.Cloud.", bytes.LongLength);

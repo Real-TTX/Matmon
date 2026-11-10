@@ -114,3 +114,71 @@ file sealed class RestoreResultTestHostEnvironment : IHostEnvironment
     public string ContentRootPath { get; set; }
     public IFileProvider ContentRootFileProvider { get; set; }
 }
+
+/// <summary>A backup may carry the history (sensor results, events, statistics) - also to Matmon.Cloud, compressed - and a
+/// restore puts back only what a package carries: restoring "everything" from a configuration-only backup used to apply
+/// the missing history sections as EMPTY and wipe the sensor history.</summary>
+public sealed class BackupHistoryTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "matmon-backup-history-" + Guid.NewGuid().ToString("N"));
+
+    public BackupHistoryTests() => Directory.CreateDirectory(_dir);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, recursive: true); } catch { }
+    }
+
+    private T Run<T>(string tag, Func<InMemoryMonitoringWorkspaceStore, T> body)
+    {
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, $"telemetry-{tag}.db"));
+        using var store = new InMemoryMonitoringWorkspaceStore(
+            new RestoreResultTestHostEnvironment(_dir),
+            new MatmonRuntimeOptions { WorkspacePath = Path.Combine(_dir, $"workspace-{tag}.json") },
+            new MatmonAuthOptions(),
+            new EphemeralDataProtectionProvider(),
+            telemetry,
+            NullLogger<InMemoryMonitoringWorkspaceStore>.Instance);
+        return body(store);
+    }
+
+    [Fact]
+    public void The_history_travels_compressed_and_a_configuration_backup_leaves_it_alone()
+    {
+        var sensorId = Guid.NewGuid();
+        var (withHistory, configOnly) = Run("source", store =>
+        {
+            var start = DateTimeOffset.UtcNow.AddHours(-1);
+            for (var i = 0; i < 50; i++)
+            {
+                store.RecordSensorObservation(sensorId, SensorExecutionResult.Healthy(TimeSpan.FromMilliseconds(12), "fine"), start.AddMinutes(i));
+            }
+
+            var sections = WorkspaceBackupSections.CloudConfig | WorkspaceBackupSections.History;
+            var compressed = store.CreateBackupBytes(sections, "test", compress: true);
+            var plain = store.CreateBackupBytes(sections, "test");
+            Assert.True(BackupPayload.IsCompressed(compressed));
+            Assert.True(compressed.Length * 3 < plain.Length);
+            return (compressed, store.CreateBackupBytes(WorkspaceBackupSections.CloudConfig, "test"));
+        });
+
+        Run("target", store =>
+        {
+            store.RestoreBackupBytes(withHistory, WorkspaceBackupSections.CloudRestore);
+            Assert.Equal(50, store.GetSensorHistory(sensorId).Count);
+
+            // A configuration-only backup restored with "everything" keeps the history it does not carry.
+            store.RestoreBackupBytes(configOnly, WorkspaceBackupSections.CloudRestore);
+            Assert.Equal(50, store.GetSensorHistory(sensorId).Count);
+            return 0;
+        });
+    }
+
+    [Fact]
+    public void A_cloud_job_never_carries_the_local_users()
+    {
+        Assert.Equal(WorkspaceBackupSections.CloudConfig, WorkspaceBackupSections.ForCloud(WorkspaceBackupSection.None));
+        Assert.False(WorkspaceBackupSections.ForCloud(WorkspaceBackupSection.All).HasFlag(WorkspaceBackupSection.Users));
+        Assert.True(WorkspaceBackupSections.ForCloud(WorkspaceBackupSection.All).HasFlag(WorkspaceBackupSection.SensorHistory));
+    }
+}

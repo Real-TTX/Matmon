@@ -343,7 +343,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
     public const int MinPortablePassphraseLength = 12;
 
     /// <summary>Builds a package in memory. Without an explicit passphrase the instance's backup passphrase seals it (when one is set).</summary>
-    public byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null)
+    public byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null, bool compress = false)
     {
         if (!string.IsNullOrEmpty(passphrase) && passphrase.Length < MinPortablePassphraseLength)
         {
@@ -359,7 +359,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             };
             var package = CreateBackupPackageLocked(job, _document, reason);
             SealPortableLocked(package, ResolveBackupPassphraseLocked(passphrase));
-            return JsonSerializer.SerializeToUtf8Bytes(package, FileSerializerOptions);
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(package, FileSerializerOptions);
+            return compress ? BackupPayload.Compress(bytes) : bytes;
         }
     }
 
@@ -419,7 +420,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             throw new ArgumentException("At least one restore section must be selected.", nameof(sections));
         }
 
-        var package = JsonSerializer.Deserialize<WorkspaceBackupPackage>(blob, FileSerializerOptions)
+        var package = JsonSerializer.Deserialize<WorkspaceBackupPackage>(BackupPayload.Decode(blob), FileSerializerOptions)
             ?? throw new InvalidOperationException("The backup could not be read.");
         passphrase = ResolveRestorePassphrase(package, passphrase);
 
@@ -499,6 +500,9 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 $"This backup was made by a newer Matmon (data version {package.Document.SchemaVersion}, this one reads up to {CurrentSchemaVersion}). Update this installation first, then restore it.");
         }
 
+        // Only what the package carries: a section it does not have would otherwise be applied as EMPTY - restoring
+        // "everything" from a configuration-only backup emptied the sensor history.
+        sections &= package.Sections;
         HydrateCredentialBundles(package.Document, secretProtector);
         var migratedFrom = MigratePackageLocked(package.Document);
         ApplyBackupSections(_document, package.Document, sections);
@@ -1069,8 +1073,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
                 return null;
             }
 
-            var json = File.ReadAllText(path, Encoding.UTF8);
-            return JsonSerializer.Deserialize<WorkspaceBackupPackage>(json, FileSerializerOptions);
+            return JsonSerializer.Deserialize<WorkspaceBackupPackage>(BackupPayload.Decode(File.ReadAllBytes(path)), FileSerializerOptions);
         }
         catch
         {

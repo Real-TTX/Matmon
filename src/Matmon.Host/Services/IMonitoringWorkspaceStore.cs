@@ -386,7 +386,7 @@ public interface IMonitoringWorkspaceStore
 
     /// <summary>Serialize a backup package to bytes in memory (for uploading to the cloud), no disk artifact.
     /// A non-empty <paramref name="passphrase"/> seals the secrets with a portable key so they restore on any instance.</summary>
-    byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null);
+    byte[] CreateBackupBytes(WorkspaceBackupSection sections, string? reason = null, string? passphrase = null, bool compress = false);
 
     /// <summary>Restore from an in-memory backup blob (e.g. downloaded from the cloud). A passphrase is required
     /// when the backup was sealed portable; it recovers the credentials, which are then re-encrypted locally.</summary>

@@ -272,7 +272,8 @@ builder.Services.AddSingleton<MapGenerator>();
 builder.Services.AddSingleton<Matmon.Host.Services.Backup.ISmbBackupClient>(_ => OperatingSystem.IsWindows()
     ? new Matmon.Host.Services.Backup.WindowsSmbBackupClient()
     : new Matmon.Host.Services.Backup.SmbclientBackupClient());
-builder.Services.AddSingleton<Matmon.Host.Services.Backup.SmbBackupRunner>();
+builder.Services.AddSingleton<Matmon.Host.Services.Backup.RemoteBackupRunner>();
+builder.Services.AddHttpClient(Matmon.Host.Services.Backup.WebDavBackupFolder.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(10));
 // Uploaded map pictures live on disk under data/uploads, NOT in workspace.json - that file is fully
 // re-serialised on a 750ms debounce, so a 1 MB floorplan in it would be rewritten every time a pin moves.
 builder.Services.AddSingleton(provider => new MapAssetStore(

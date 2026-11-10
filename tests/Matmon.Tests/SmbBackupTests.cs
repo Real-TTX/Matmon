@@ -121,7 +121,7 @@ public sealed class SmbBackupTests : IDisposable
             RetentionCount = 2,
             Sections = WorkspaceBackupSection.Topology
         });
-        var runner = new SmbBackupRunner(store, share, NullLogger<SmbBackupRunner>.Instance);
+        var runner = new RemoteBackupRunner(store, share, NullLogger<RemoteBackupRunner>.Instance);
 
         for (var run = 0; run < 3; run++)
         {
@@ -130,7 +130,7 @@ public sealed class SmbBackupTests : IDisposable
             await Task.Delay(1100); // the file name carries the second
         }
 
-        var mine = share.Files.Keys.Where(name => SmbBackupRunner.BelongsTo(name, job)).ToList();
+        var mine = share.Files.Keys.Where(name => RemoteBackupRunner.BelongsTo(name, job)).ToList();
         Assert.Equal(2, mine.Count);
         Assert.Contains("someone-elses.json", share.Files.Keys);
         Assert.Equal("ok", store.FindBackupJob(job.Id)!.LastStatus);
@@ -144,12 +144,12 @@ public sealed class SmbBackupTests : IDisposable
         source.CreateSensor(root, "Kept on the NAS", "ping", "10.0.0.3", null);
         var share = new FakeShare();
         var job = source.CreateBackupJob(new WorkspaceBackupJob { Name = "NAS", Destination = BackupDestination.Smb, SmbPath = @"\\nas\b", Sections = WorkspaceBackupSection.Topology });
-        await new SmbBackupRunner(source, share, NullLogger<SmbBackupRunner>.Instance).RunAsync(job, default);
+        await new RemoteBackupRunner(source, share, NullLogger<RemoteBackupRunner>.Instance).RunAsync(job, default);
 
         // Another instance with the same job reads the share and restores.
         var (target, _) = NewStore("target");
         var targetJob = target.CreateBackupJob(source.FindBackupJob(job.Id)!.Clone());
-        var runner = new SmbBackupRunner(target, share, NullLogger<SmbBackupRunner>.Instance);
+        var runner = new RemoteBackupRunner(target, share, NullLogger<RemoteBackupRunner>.Instance);
         var file = Assert.Single(await runner.ListAsync(targetJob, default));
         var snapshot = await runner.CopyToLocalAsync(targetJob, file.Name, default);
         target.RestoreBackupSnapshot(snapshot.FileName, WorkspaceBackupSection.Topology);
@@ -170,6 +170,114 @@ public sealed class SmbBackupTests : IDisposable
 
         Assert.DoesNotContain("nas-password-42", File.ReadAllText(Path.Combine(folder, "ws.json")));
         Assert.Equal("nas-password-42", store.FindBackupJob(job.Id)!.SmbPassword);
+    }
+
+    [Theory]
+    [InlineData("https://cloud.example/remote.php/dav/files/me/matmon", true)]
+    [InlineData("davs://cloud.example/dav/matmon", true)]
+    [InlineData("http://192.168.1.10:5005/backup", true)]   // plain http inside the house
+    [InlineData("http://cloud.example/dav/matmon", false)] // ...but not across the internet: the password travels along
+    [InlineData("https://me:secret@cloud.example/dav", false)]
+    [InlineData("ftp://cloud.example/dav", false)]
+    [InlineData("https://cloud.example/dav?x=1", false)]
+    public void A_webdav_address_is_read_strictly(string address, bool accepted) =>
+        Assert.Equal(accepted, WebDavLocation.Parse(address, "me", "pw", out _) is not null);
+
+    [Fact]
+    public async Task A_webdav_job_creates_its_folder_keeps_the_retention_and_restores()
+    {
+        var (store, _) = NewStore("webdav");
+        var root = store.GetAllElements().OfType<ProbeElement>().First().Id;
+        store.CreateSensor(root, "Kept on WebDAV", "ping", "10.0.0.4", null);
+        var dav = new FakeWebDav("me", "app-password");
+        var job = store.CreateBackupJob(new WorkspaceBackupJob
+        {
+            Name = "Nextcloud",
+            Destination = BackupDestination.WebDav,
+            SmbPath = "https://cloud.example/remote.php/dav/files/me/backups/matmon",
+            SmbUsername = "me",
+            SmbPassword = "app-password",
+            RetentionCount = 2,
+            Sections = WorkspaceBackupSection.Topology
+        });
+        var runner = new RemoteBackupRunner(store, new FakeShare(), NullLogger<RemoteBackupRunner>.Instance, new DavClients(dav));
+
+        for (var run = 0; run < 3; run++)
+        {
+            var (success, message) = await runner.RunAsync(job, default);
+            Assert.True(success, message);
+            await Task.Delay(1100);
+        }
+
+        Assert.Contains("/remote.php/dav/files/me/backups/", dav.Folders); // created on the way
+        var files = await runner.ListAsync(job, default);
+        Assert.Equal(2, files.Count);
+        Assert.All(files, file => Assert.True(file.Size > 0));
+
+        var snapshot = await runner.CopyToLocalAsync(job, files[0].Name, default);
+        Assert.NotNull(snapshot);
+
+        // A wrong password is said in words.
+        var wrong = runner.Folder(BackupDestination.WebDav, job.SmbPath, "me", "nope", null, out _)!;
+        var failure = await RemoteBackupRunner.TestAsync(wrong, default);
+        Assert.Contains("401", failure);
+    }
+
+    private sealed class DavClients(FakeWebDav dav) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(dav, disposeHandler: false);
+    }
+
+    /// <summary>A minimal WebDAV server: Basic auth, MKCOL, PUT (409 when the folder is missing, as Nextcloud answers),
+    /// PROPFIND depth 1, GET, DELETE.</summary>
+    private sealed class FakeWebDav(string user, string password) : HttpMessageHandler
+    {
+        public HashSet<string> Folders { get; } = ["/", "/remote.php/", "/remote.php/dav/", "/remote.php/dav/files/", "/remote.php/dav/files/me/"];
+
+        public Dictionary<string, byte[]> Files { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var expected = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
+            if (request.Headers.Authorization?.ToString() != expected)
+            {
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized);
+            }
+
+            var path = Uri.UnescapeDataString(request.RequestUri!.AbsolutePath);
+            var parent = path.EndsWith('/') ? path[..(path.TrimEnd('/').LastIndexOf('/') + 1)] : path[..(path.LastIndexOf('/') + 1)];
+            switch (request.Method.Method)
+            {
+                case "MKCOL":
+                    if (Folders.Contains(path)) { return new HttpResponseMessage(System.Net.HttpStatusCode.MethodNotAllowed); }
+                    if (!Folders.Contains(parent)) { return new HttpResponseMessage(System.Net.HttpStatusCode.Conflict); }
+                    Folders.Add(path);
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.Created);
+                case "PUT":
+                    if (!Folders.Contains(parent)) { return new HttpResponseMessage(System.Net.HttpStatusCode.Conflict); }
+                    Files[path] = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.Created);
+                case "GET":
+                    return Files.TryGetValue(path, out var bytes)
+                        ? new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }
+                        : new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+                case "DELETE":
+                    return new HttpResponseMessage(Files.Remove(path) ? System.Net.HttpStatusCode.NoContent : System.Net.HttpStatusCode.NotFound);
+                case "PROPFIND":
+                    if (!Folders.Contains(path)) { return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound); }
+                    var xml = new StringBuilder("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\">");
+                    xml.Append($"<d:response><d:href>{path}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>");
+                    foreach (var (name, content) in Files.Where(file => file.Key.StartsWith(path, StringComparison.Ordinal) && !file.Key[path.Length..].Contains('/')))
+                    {
+                        xml.Append($"<d:response><d:href>{Uri.EscapeDataString(name).Replace("%2F", "/")}</d:href><d:propstat><d:prop><d:getcontentlength>{content.Length}</d:getcontentlength><d:getlastmodified>Tue, 10 Nov 2026 18:00:00 GMT</d:getlastmodified><d:resourcetype/></d:prop></d:propstat></d:response>");
+                    }
+
+                    xml.Append("</d:multistatus>");
+                    return new HttpResponseMessage((System.Net.HttpStatusCode)207) { Content = new StringContent(xml.ToString(), Encoding.UTF8, "application/xml") };
+                default:
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.MethodNotAllowed);
+            }
+        }
     }
 
     private sealed class FakeShare : ISmbBackupClient

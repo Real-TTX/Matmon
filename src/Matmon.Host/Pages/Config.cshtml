@@ -417,7 +417,8 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                         ? "warning"
                                         : "error";
                             var isCloud = job.Destination == BackupDestination.Cloud;
-                            var isSmb = job.Destination == BackupDestination.Smb;
+                            var isSmb = job.Destination.IsRemoteFolder();
+                            var remoteLabel = job.Destination == BackupDestination.WebDav ? "WebDAV folder" : "SMB share";
                             <tr>
                                 <td data-label="Job" class="mat-table__primary">
                                     <div class="mat-table__name">
@@ -432,8 +433,8 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                     <small class="mat-d-block mat-text-muted">@job.Schedule.Summary()</small>
                                 </td>
                                 <td data-label="Destination">
-                                    @(isCloud ? "Matmon.Cloud (off-site)" : isSmb ? "SMB share" : "Local disk")
-                                    <small class="mat-d-block mat-text-muted">@(isCloud ? "Config only (off-site)" : isSmb ? $"{job.SmbPath} - {ConfigModel.FormatBackupSections(job.Sections)}" : ConfigModel.FormatBackupSections(job.Sections))</small>
+                                    @(isCloud ? "Matmon.Cloud (off-site)" : isSmb ? remoteLabel : "Local disk")
+                                    <small class="mat-d-block mat-text-muted">@(isCloud ? ConfigModel.FormatBackupSections(WorkspaceBackupSections.ForCloud(job.Sections)) : isSmb ? $"{job.SmbPath} - {ConfigModel.FormatBackupSections(job.Sections)}" : ConfigModel.FormatBackupSections(job.Sections))</small>
                                 </td>
                                 <td data-label="Next run" class="mat-hide-sm mat-mono">@Model.FormatDateTime(job.NextRunUtc)</td>
                                 <td data-label="Last run" class="mat-hide-sm mat-mono">@Model.FormatDateTime(job.LastRunUtc)</td>
@@ -446,7 +447,7 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
                                         </form>
                                         @if (isSmb)
                                         {
-                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupSmbFiles" asp-route-jobId="@job.Id" aria-label="Backups of @job.Name on the share" data-tip="On the share">@MatUi.Icon("folder-open")</a>
+                                            <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" asp-page="/BackupSmbFiles" asp-route-jobId="@job.Id" aria-label="Backups of @job.Name in its folder" data-tip="In the folder">@MatUi.Icon("folder-open")</a>
                                         }
                                         @if (!string.IsNullOrWhiteSpace(job.LastSnapshotFileName))
                                         {
@@ -481,9 +482,12 @@ else if (Model.IsActiveTab("backup") && canManageSystem)
         @if (Model.CloudSettings?.Configured == true || Model.CloudBackupsAvailable)
         {
             <div class="mat-card__body mat-stack">
-                <p class="mat-muted">Configuration only - no telemetry, no local users. @(Model.CloudBackupKeep is { } keep ? $"The cloud keeps the newest {keep} of each kind (by hand / scheduled)." : "The cloud keeps the newest of each kind (by hand / scheduled).") @(backupSettings.HasPassphrase ? "Sealed with the backup passphrase." : "Without a backup passphrase the credentials restore only on this instance.")</p>
+                <p class="mat-muted">The configuration, without local users - with the history too when ticked (sent compressed). @(Model.CloudBackupKeep is { } keep ? $"The cloud keeps the newest {keep} of each kind (by hand / scheduled)." : "The cloud keeps the newest of each kind (by hand / scheduled).") @(backupSettings.HasPassphrase ? "Sealed with the backup passphrase." : "Without a backup passphrase the credentials restore only on this instance.")</p>
                 <form method="post" asp-page-handler="CloudBackupNow" novalidate>
-                    <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Back up to cloud now</span></button>
+                    <div class="mat-btn-row">
+                        <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("cloud")<span>Back up to cloud now</span></button>
+                        <label class="mat-check"><input type="checkbox" name="includeHistory" value="true" /><span class="mat-check__text">With the history (sensor results, events, statistics, syslog)</span></label>
+                    </div>
                 </form>
                 @if (Model.CloudBackups.Count == 0)
                 {

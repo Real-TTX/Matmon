@@ -51,7 +51,17 @@ public enum BackupDestination
     Cloud = 1,
 
     /// <summary>A Windows / SMB share - a NAS, a file server: off the machine, in the house.</summary>
-    Smb = 2
+    Smb = 2,
+
+    /// <summary>A WebDAV folder - Nextcloud, ownCloud, a NAS, a hosted storage box: anywhere https reaches.</summary>
+    WebDav = 3
+}
+
+public static class BackupDestinations
+{
+    /// <summary>A folder somewhere else that a job writes its file into (SMB, WebDAV) - not this disk, not the cloud.</summary>
+    public static bool IsRemoteFolder(this BackupDestination destination) =>
+        destination is BackupDestination.Smb or BackupDestination.WebDav;
 }
 
 /// <summary>Well-known section masks shared across the cloud-backup paths (Config tab, scheduler, wizard restore).</summary>
@@ -65,6 +75,17 @@ public static class WorkspaceBackupSections
     /// backup carries them.</para>
     public const WorkspaceBackupSection CloudConfig =
         WorkspaceBackupSection.All & ~(WorkspaceBackupSection.SensorHistory | WorkspaceBackupSection.Events | WorkspaceBackupSection.Statistics | WorkspaceBackupSection.Users | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs | WorkspaceBackupSection.SyslogMessages);
+
+    /// <summary>What a cloud job may carry: anything but the local users (a restore elsewhere must never replace the
+    /// accounts of the instance doing it). An unset choice is the configuration.</summary>
+    public static WorkspaceBackupSection ForCloud(WorkspaceBackupSection chosen) =>
+        chosen == WorkspaceBackupSection.None ? CloudConfig : chosen & ~WorkspaceBackupSection.Users;
+
+    /// <summary>What is restored from a cloud backup: everything it carries, except the local users.</summary>
+    public const WorkspaceBackupSection CloudRestore = WorkspaceBackupSection.All & ~WorkspaceBackupSection.Users;
+
+    /// <summary>Sections that make a package large - compressed when sent.</summary>
+    public const WorkspaceBackupSection Bulky = History | WorkspaceBackupSection.MapAssets | WorkspaceBackupSection.Mibs;
 
     /// <summary>The bulky history sections - what "everything but the history" leaves out (the default nightly job).</summary>
     public const WorkspaceBackupSection History =
@@ -110,7 +131,9 @@ public sealed class WorkspaceBackupJob
 
     public DateTimeOffset? NextRunUtc { get; set; }
 
-    /// <summary>SMB destination: the share and folder, <c>\\nas\backup\matmon</c> (or <c>//nas/backup/matmon</c>).</summary>
+    /// <summary>SMB destination: the share and folder, <c>\\nas\backup\matmon</c> (or <c>//nas/backup/matmon</c>);
+    /// WebDAV destination: the folder's address (<c>https://cloud.example/remote.php/dav/files/me/matmon</c>). The user and
+    /// password below serve both - the names stay as they were stored.</summary>
     public string? SmbPath { get; set; }
 
     /// <summary>SMB user (empty = a guest share).</summary>

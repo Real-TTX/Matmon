@@ -8,7 +8,7 @@ namespace Matmon.Host.Pages;
 
 /// <summary>System > Backup > an SMB job's backups on the share: the list, and "copy to this machine" - after which the
 /// normal restore (sections, passphrase) takes the file, so a backup on the NAS restores exactly like a local one.</summary>
-public sealed class BackupSmbFilesModel(IMonitoringWorkspaceStore store, SmbBackupRunner smb) : PageModel
+public sealed class BackupSmbFilesModel(IMonitoringWorkspaceStore store, RemoteBackupRunner smb) : PageModel
 {
     [BindProperty(SupportsGet = true)]
     public Guid JobId { get; set; }
@@ -25,7 +25,7 @@ public sealed class BackupSmbFilesModel(IMonitoringWorkspaceStore store, SmbBack
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Job = store.FindBackupJob(JobId);
-        if (Job is not { Destination: BackupDestination.Smb })
+        if (Job is null || !Job.Destination.IsRemoteFolder())
         {
             return RedirectToPage("/Config", new { tab = "backup" });
         }
@@ -44,7 +44,7 @@ public sealed class BackupSmbFilesModel(IMonitoringWorkspaceStore store, SmbBack
 
     public async Task<IActionResult> OnPostCopyAsync(string fileName, CancellationToken cancellationToken)
     {
-        if (store.FindBackupJob(JobId) is not { Destination: BackupDestination.Smb } job)
+        if (store.FindBackupJob(JobId) is not { } job || !job.Destination.IsRemoteFolder())
         {
             return RedirectToPage("/Config", new { tab = "backup" });
         }

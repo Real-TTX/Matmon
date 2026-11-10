@@ -325,7 +325,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "storage" });
     }
 
-    public async Task<IActionResult> OnPostRunBackupJobAsync(Guid backupJobId, [FromServices] Services.Backup.SmbBackupRunner smb, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostRunBackupJobAsync(Guid backupJobId, [FromServices] Services.Backup.RemoteBackupRunner smb, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -334,8 +334,8 @@ public class ConfigModel : PageModel
 
         try
         {
-            // An SMB job writes to its share - "Run now" used to make a local snapshot for every job, whatever its destination.
-            if (_workspaceStore.FindBackupJob(backupJobId) is { Destination: BackupDestination.Smb } smbJob)
+            // An SMB / WebDAV job writes to its folder - "Run now" used to make a local snapshot for every job, whatever its destination.
+            if (_workspaceStore.FindBackupJob(backupJobId) is { } smbJob && smbJob.Destination.IsRemoteFolder())
             {
                 var (success, message) = await smb.RunAsync(smbJob, cancellationToken);
                 if (success)
@@ -663,7 +663,7 @@ public class ConfigModel : PageModel
         return RedirectToPage(new { tab = "backup" });
     }
 
-    public async Task<IActionResult> OnPostCloudBackupNowAsync(string? passphrase, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCloudBackupNowAsync(string? passphrase, bool includeHistory, CancellationToken cancellationToken)
     {
         if (!MatmonSecurity.IsAdmin(User))
         {
@@ -683,10 +683,11 @@ public class ConfigModel : PageModel
             // Sealed with the passphrase typed here, else with the instance's backup passphrase (CreateBackupBytes falls back to it).
             var typed = string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim();
             var portable = typed is not null || BackupSettings.HasPassphrase;
-            var bytes = _workspaceStore.CreateBackupBytes(CloudConfigSections, "Manual cloud backup", typed);
-            var label = $"Config {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(portable ? " (encrypted)" : "")}";
+            var sections = includeHistory ? CloudConfigSections | WorkspaceBackupSections.History : CloudConfigSections;
+            var bytes = _workspaceStore.CreateBackupBytes(sections, "Manual cloud backup", typed, compress: includeHistory);
+            var label = $"{(includeHistory ? "Config + history" : "Config")} {DateTimeOffset.Now:yyyy-MM-dd HH:mm}{(portable ? " (encrypted)" : "")}";
             await _cloudBackups.PushAsync(bytes, label, cancellationToken, scheduled: false, encrypted: portable);
-            StatusMessage = "Configuration backed up to Matmon.Cloud.";
+            StatusMessage = includeHistory ? $"Configuration and history backed up to Matmon.Cloud ({bytes.LongLength / 1024d / 1024d:0.#} MB compressed)." : "Configuration backed up to Matmon.Cloud.";
         }
         catch (Exception ex)
         {
@@ -720,7 +721,7 @@ public class ConfigModel : PageModel
                 return RedirectToPage(new { tab = "backup" });
             }
 
-            var result = _workspaceStore.RestoreBackupBytes(blob, CloudConfigSections, string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim());
+            var result = _workspaceStore.RestoreBackupBytes(blob, WorkspaceBackupSections.CloudRestore, string.IsNullOrWhiteSpace(passphrase) ? null : passphrase.Trim());
             StatusMessage = result.Message;
         }
         catch (Exception ex)

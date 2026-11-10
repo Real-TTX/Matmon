@@ -6,6 +6,8 @@
     var mode = Model.Input.ScheduleMode;
     var isCloud = Model.Input.Destination == BackupDestination.Cloud;
     var isSmb = Model.Input.Destination == BackupDestination.Smb;
+    var isWebDav = Model.Input.Destination == BackupDestination.WebDav;
+    var isRemote = isSmb || isWebDav;
 }
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -41,6 +43,7 @@
                     <select asp-for="Input.Destination" class="mat-select" data-backup-destination>
                         <option value="Local">Local disk</option>
                         <option value="Smb">SMB share (NAS, file server)</option>
+                        <option value="WebDav">WebDAV folder (Nextcloud, ownCloud, NAS, storage box)</option>
                         <option value="Cloud" disabled="@(!Model.CloudConnected)">Matmon.Cloud (off-site)@(Model.CloudConnected ? "" : " – connect first")</option>
                     </select>
                 </div>
@@ -54,16 +57,21 @@
                     <input asp-for="Input.Passphrase" type="password" class="mat-input" autocomplete="new-password" minlength="12" data-msg-range="Use at least 12 characters." placeholder="@(Model.JobId is null ? "min. 12 chars" : "leave blank to keep the current one")" />
                     <span class="mat-error" aria-live="polite"></span>
                 </div>
+                <div class="mat-field mat-field--full" data-webdav-only hidden="@(!isWebDav)">
+                    <label class="mat-label" for="Input_WebDavUrl">Folder address</label>
+                    <input asp-for="Input.WebDavUrl" class="mat-input mat-mono" placeholder="https://cloud.example/remote.php/dav/files/me/matmon" autocomplete="off" />
+                    <span class="mat-hint">The folder is created when it is missing. Each run writes one file; the oldest beyond the retention count are removed - only this job's files. Nextcloud with two-factor sign-in needs an app password.</span>
+                </div>
                 <div class="mat-field mat-field--full" data-smb-only hidden="@(!isSmb)">
                     <label class="mat-label" for="Input_SmbPath">Share and folder</label>
                     <input asp-for="Input.SmbPath" class="mat-input mat-mono" placeholder="\\nas\backup\matmon" autocomplete="off" />
                     <span class="mat-hint">The folder is created when it is missing. Each run writes one file; the oldest beyond the retention count are removed - only this job's files.</span>
                 </div>
-                <div class="mat-field" data-smb-only hidden="@(!isSmb)">
+                <div class="mat-field" data-remote-only hidden="@(!isRemote)">
                     <label class="mat-label" for="Input_SmbUsername">User <span class="mat-text-muted">(empty = guest)</span></label>
                     <input asp-for="Input.SmbUsername" class="mat-input" autocomplete="off" />
                 </div>
-                <div class="mat-field" data-smb-only hidden="@(!isSmb)">
+                <div class="mat-field" data-remote-only hidden="@(!isRemote)">
                     <label class="mat-label" for="Input_SmbPassword">Password</label>
                     <input asp-for="Input.SmbPassword" type="password" class="mat-input" autocomplete="new-password" placeholder="@(Model.Input.HasSmbPassword ? "leave blank to keep the current one" : "")" />
                     <input type="hidden" asp-for="Input.HasSmbPassword" />
@@ -72,8 +80,8 @@
                     <label class="mat-label" for="Input_SmbDomain">Domain / workgroup <span class="mat-text-muted">optional</span></label>
                     <input asp-for="Input.SmbDomain" class="mat-input" autocomplete="off" />
                 </div>
-                <div class="mat-field mat-self-end" data-smb-only hidden="@(!isSmb)">
-                    <button type="submit" class="mat-btn mat-btn--secondary" asp-page-handler="TestSmb" formnovalidate>@MatUi.Icon("activity")<span>Test the share</span></button>
+                <div class="mat-field mat-self-end" data-remote-only hidden="@(!isRemote)">
+                    <button type="submit" class="mat-btn mat-btn--secondary" asp-page-handler="TestSmb" formnovalidate>@MatUi.Icon("activity")<span>Test the folder</span></button>
                 </div>
                 <div class="mat-field mat-field--full">
                     <label class="mat-switch">
@@ -118,10 +126,10 @@
 
     <div class="mat-alert mat-alert--info" role="status" data-cloud-note hidden="@(!isCloud)">
         @MatUi.Icon("info")
-        <div class="mat-alert__body">Cloud backups store <strong>configuration only</strong> (no history, local users, map images, MIBs or syslog messages); Matmon.Cloud keeps the newest few of each kind - your plan decides how many.</div>
+        <div class="mat-alert__body">A cloud backup carries the sections ticked below - <strong>never the local users</strong>. With the history (sensor results, events, statistics, syslog) it is sent compressed; Matmon.Cloud takes up to 64 MB per backup and keeps the newest few of each kind - your plan decides how many.</div>
     </div>
 
-    <section class="mat-card" data-local-only hidden="@isCloud">
+    <section class="mat-card">
         <div class="mat-card__head">@MatUi.Icon("layers")<h2 class="mat-card__title">Sections</h2></div>
         <div class="mat-card__body">
             <fieldset class="mat-field mat-fieldset">

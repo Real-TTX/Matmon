@@ -12,9 +12,9 @@ public class BackupJobEditorModel : PageModel
 {
     private readonly IMonitoringWorkspaceStore _workspaceStore;
     private readonly CloudBackupClient _cloudBackups;
-    private readonly Services.Backup.SmbBackupRunner _smb;
+    private readonly Services.Backup.RemoteBackupRunner _smb;
 
-    public BackupJobEditorModel(IMonitoringWorkspaceStore workspaceStore, CloudBackupClient cloudBackups, Services.Backup.SmbBackupRunner smb)
+    public BackupJobEditorModel(IMonitoringWorkspaceStore workspaceStore, CloudBackupClient cloudBackups, Services.Backup.RemoteBackupRunner smb)
     {
         _workspaceStore = workspaceStore;
         _cloudBackups = cloudBackups;
@@ -33,14 +33,14 @@ public class BackupJobEditorModel : PageModel
         CloudConnected = _cloudBackups.IsConnected;
         var stored = JobId is Guid id ? _workspaceStore.FindBackupJob(id) : null;
         var password = string.IsNullOrEmpty(Input.SmbPassword) ? stored?.SmbPassword : Input.SmbPassword;
-        var location = Services.Backup.SmbLocation.Parse(Input.SmbPath, Input.SmbUsername, password, Input.SmbDomain, out var problem);
+        var location = _smb.Folder(Input.Destination, FolderPath, Input.SmbUsername, password, Input.SmbDomain, out var problem);
         if (location is null)
         {
             ErrorMessage = problem;
             return Page();
         }
 
-        var failure = await _smb.TestAsync(location, cancellationToken);
+        var failure = await Services.Backup.RemoteBackupRunner.TestAsync(location, cancellationToken);
         if (failure is null)
         {
             StatusMessage = $"{location.Display} works: Matmon wrote, listed, read back and deleted a test file there.";
@@ -52,6 +52,9 @@ public class BackupJobEditorModel : PageModel
 
         return Page();
     }
+
+    /// <summary>The folder the form names: the share for SMB, the address for WebDAV.</summary>
+    private string? FolderPath => Input.Destination == BackupDestination.WebDav ? Input.WebDavUrl : Input.SmbPath;
 
     /// <summary>True when this instance is linked to Matmon.Cloud - only then is the Cloud destination usable.</summary>
     public bool CloudConnected { get; private set; }
@@ -138,10 +141,12 @@ public class BackupJobEditorModel : PageModel
 
         try
         {
-            var sections = Input.Sections.ToSections();
+            var sections = Input.Destination == BackupDestination.Cloud
+                ? WorkspaceBackupSections.ForCloud(Input.Sections.ToSections()) // never the local users
+                : Input.Sections.ToSections();
             var schedule = BuildSchedule(Input);
-            if (Input.Destination == BackupDestination.Smb
-                && Services.Backup.SmbLocation.Parse(Input.SmbPath, Input.SmbUsername, null, Input.SmbDomain, out var smbProblem) is null)
+            if (Input.Destination.IsRemoteFolder()
+                && _smb.Folder(Input.Destination, FolderPath, Input.SmbUsername, null, Input.SmbDomain, out var smbProblem) is null)
             {
                 ErrorMessage = smbProblem;
                 return Page();
@@ -157,7 +162,7 @@ public class BackupJobEditorModel : PageModel
                 existing.Destination = Input.Destination;
                 existing.RetentionCount = Math.Clamp(Input.RetentionCount, 1, 100);
                 existing.Passphrase = Input.Destination == BackupDestination.Cloud ? Input.Passphrase : null; // blank = keep stored (UpdateBackupJob)
-                existing.SmbPath = Input.SmbPath;
+                existing.SmbPath = FolderPath;
                 existing.SmbUsername = Input.SmbUsername;
                 existing.SmbDomain = Input.SmbDomain;
                 existing.SmbPassword = Input.SmbPassword; // blank = keep stored (UpdateBackupJob)
@@ -175,7 +180,7 @@ public class BackupJobEditorModel : PageModel
                     Sections = sections,
                     Destination = Input.Destination,
                     Passphrase = Input.Destination == BackupDestination.Cloud ? Input.Passphrase : null,
-                    SmbPath = Input.SmbPath?.Trim(),
+                    SmbPath = FolderPath?.Trim(),
                     SmbUsername = Input.SmbUsername?.Trim(),
                     SmbDomain = Input.SmbDomain?.Trim(),
                     SmbPassword = Input.SmbPassword,
@@ -230,7 +235,8 @@ public class BackupJobEditorModel : PageModel
             Enabled = job.Enabled,
             Destination = job.Destination,
             RetentionCount = job.RetentionCount,
-            SmbPath = job.SmbPath,
+            SmbPath = job.Destination == BackupDestination.Smb ? job.SmbPath : null,
+            WebDavUrl = job.Destination == BackupDestination.WebDav ? job.SmbPath : null,
             SmbUsername = job.SmbUsername,
             SmbDomain = job.SmbDomain,
             HasSmbPassword = !string.IsNullOrEmpty(job.SmbPassword) || !string.IsNullOrEmpty(job.ProtectedSmbPassword),
@@ -317,6 +323,9 @@ public sealed class BackupJobEditorInput
 
     /// <summary>SMB destination: <c>\\nas\share\folder</c>.</summary>
     public string? SmbPath { get; set; }
+
+    /// <summary>The WebDAV folder's address - stored in the job's path, like the share.</summary>
+    public string? WebDavUrl { get; set; }
 
     public string? SmbUsername { get; set; }
 
