@@ -775,17 +775,20 @@ a.map-rack-device:focus-visible {
   height: 100%;
   overflow: visible;
 }
-.map-sun-seg {
-  --map-sun-tone: var(--mat-text-faint);
+.map-sun-seg,
+.map-sun-centre {
+  --map-sun-tone: color-mix(in srgb, var(--mat-text-faint) 60%, var(--mat-surface));
   fill: var(--map-sun-tone);
   stroke: var(--map-tile-custom-bg, var(--mat-surface));
-  stroke-width: 0.8;
+  stroke-width: 1.2;
   stroke-linejoin: round;
 }
-.map-sun-seg[data-state="ok"] { --map-sun-tone: var(--mat-success); }
-.map-sun-seg[data-state="warning"] { --map-sun-tone: var(--mat-warning); }
-.map-sun-seg[data-state="error"] { --map-sun-tone: var(--mat-danger); }
-.map-sun-seg[data-state="paused"] { --map-sun-tone: var(--mat-border); }
+/* The usual monitoring colours: OK green, warning yellow, error red, an acknowledged error orange, paused blue, no data grey. */
+.map-sun-seg[data-state="ok"], .map-sun-centre[data-state="ok"] { --map-sun-tone: var(--mat-success); }
+.map-sun-seg[data-state="warning"], .map-sun-centre[data-state="warning"] { --map-sun-tone: var(--mat-warning); }
+.map-sun-seg[data-state="error"], .map-sun-centre[data-state="error"] { --map-sun-tone: var(--mat-danger); }
+.map-sun-seg[data-state="ack"], .map-sun-centre[data-state="ack"] { --map-sun-tone: color-mix(in srgb, var(--mat-danger) 45%, var(--mat-warning)); }
+.map-sun-seg[data-state="paused"], .map-sun-centre[data-state="paused"] { --map-sun-tone: var(--mat-info); }
 .map-sunburst a {
   position: relative;
   z-index: 2;
@@ -803,15 +806,11 @@ a.map-rack-device:focus-visible {
   stroke: rgb(0 0 0 / 0.3); /* on a coloured segment in either theme */
   stroke-width: 1.2px;
 }
-.map-sun-centre {
-  fill: color-mix(in srgb, var(--mat-text-faint) 14%, var(--mat-surface));
-  stroke: var(--mat-border);
-  stroke-width: 0.6;
-}
-.map-sun-centre[data-state="error"] { stroke: var(--mat-danger); stroke-width: 1.4; }
-.map-sun-centre[data-state="warning"] { stroke: var(--mat-warning); stroke-width: 1.4; }
 .map-sun-figure {
-  fill: currentColor;
+  fill: var(--mat-app-on-accent);
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.3);
+  stroke-width: 1.2px;
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;

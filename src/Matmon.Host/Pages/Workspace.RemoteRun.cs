@@ -40,7 +40,7 @@ public sealed partial class WorkspaceModel
             return new SavedSensorRunRouting(RemoteRunOutcome.Local, null, string.Empty);
         }
 
-        var probeName = _workspaceStore.FindRunnerByProbeId(owningProbeId)?.Name ?? owningProbeId;
+        var probeName = OnDemandRunLabels.For(_workspaceStore, owningProbeId);
         var job = _onDemandRunStore.Create(
             owningProbeId,
             sensorId,
@@ -63,5 +63,5 @@ public sealed partial class WorkspaceModel
 
     /// <summary>Message for a run that was queued on a remote probe (result lands on the next ~5s sync).</summary>
     private static string BuildQueuedOnProbeMessage(string sensorName, string probeName) =>
-        $"Queued '{sensorName}' on probe '{probeName}' - the result will appear shortly (the probe syncs every ~5s).";
+        $"Running '{sensorName}' on {probeName} - the result appears on the sensor in a moment.";
 }

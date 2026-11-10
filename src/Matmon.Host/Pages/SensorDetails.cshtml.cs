@@ -35,6 +35,10 @@ public sealed partial class SensorDetailsModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? Window { get; set; }
 
+    /// <summary>A Run now still running on a probe or agent: the page waits for it (data-pending-run) and reloads with the result.</summary>
+    [BindProperty(SupportsGet = true)]
+    public Guid? RunJob { get; set; }
+
     [BindProperty(SupportsGet = true)]
     public string? StatsFrom { get; set; }
 
@@ -93,7 +97,7 @@ public sealed partial class SensorDetailsModel : PageModel
             if (_assignmentProvider.TryBuildProbeReadyRun(SensorId, out var owningProbeId, out var sensorTypeKey, out var target, out var settings)
                 && owningProbeId is not null)
             {
-                var probeName = _workspaceStore.FindRunnerByProbeId(owningProbeId)?.Name ?? owningProbeId;
+                var runnerLabel = OnDemandRunLabels.For(_workspaceStore, owningProbeId);
                 var job = _onDemandRunStore.Create(
                     owningProbeId,
                     SensorId,
@@ -103,11 +107,16 @@ public sealed partial class SensorDetailsModel : PageModel
                     recordObservation: true,
                     ProbeRunJobKind.Sensor);
                 var completed = await _onDemandRunStore.WaitForCompletionAsync(job.Id, TimeSpan.FromSeconds(12), HttpContext.RequestAborted);
-                StatusMessage = completed?.Result is { } remoteResult
-                    ? $"Run now on probe '{probeName}': {MonitoringStatePresentation.Label(remoteResult.State)} - check {remoteResult.Duration.TotalMilliseconds:0.#} ms"
-                        + (string.IsNullOrWhiteSpace(remoteResult.Message) ? string.Empty : $" - {remoteResult.Message}")
-                    : $"Queued on probe '{probeName}' - the result will appear shortly (the probe syncs every ~5s).";
-                return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window) });
+                if (completed?.Result is { } remoteResult)
+                {
+                    StatusMessage = $"Run now on {runnerLabel}: {MonitoringStatePresentation.Label(remoteResult.State)} - check {remoteResult.Duration.TotalMilliseconds:0.#} ms"
+                        + (string.IsNullOrWhiteSpace(remoteResult.Message) ? string.Empty : $" - {remoteResult.Message}");
+                    return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window) });
+                }
+
+                // Still running (a slow check, or the probe was busy): the page waits for it and reloads with the result.
+                StatusMessage = $"Running on {runnerLabel} - the page updates as soon as the result is in.";
+                return RedirectToPage(new { sensorId = SensorId, window = NormalizeWindowKey(Window), runJob = job.Id });
             }
 
             var result = await _sensorExecutionService.ExecuteNowAsync(SensorId, cancellationToken: HttpContext.RequestAborted);

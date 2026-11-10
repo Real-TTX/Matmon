@@ -133,7 +133,15 @@
    (formaction), so the actions stay one row of buttons (MatUi keeps their order). *@
 <form method="post" id="sensor-actions" hidden></form>
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+@if (Model.RunJob is { } pendingRun)
+{
+    @* A Run now still running on its probe or agent: sensor-run.js waits for it and reloads the page with the result. *@
+    <div class="mat-alert mat-alert--info" role="status" data-pending-run="@pendingRun">
+        <span class="mat-spinner mat-spinner--sm" aria-hidden="true"></span>
+        <div class="mat-alert__body" data-pending-run-text>@(string.IsNullOrWhiteSpace(Model.StatusMessage) ? "Running - the page updates as soon as the result is in." : Model.StatusMessage)</div>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
     <div class="mat-alert mat-alert--success" role="status">@MatUi.Icon("check-circle")<div class="mat-alert__body">@Model.StatusMessage</div></div>
 }

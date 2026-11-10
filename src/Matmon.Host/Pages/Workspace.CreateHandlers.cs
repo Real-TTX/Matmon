@@ -185,9 +185,9 @@ public sealed partial class WorkspaceModel
                     recordObservation: false,
                     ProbeRunJobKind.SnmpDiscover);
                 RemoteSnmpDiscoverJobId = job.Id;
-                RemoteRunProbeName = _workspaceStore.FindRunnerByProbeId(owningProbeId)?.Name ?? owningProbeId;
+                RemoteRunProbeName = OnDemandRunLabels.For(_workspaceStore, owningProbeId);
 
-                StatusMessage = $"Discovering OIDs on probe '{RemoteRunProbeName}'… the results will appear shortly.";
+                StatusMessage = $"Discovering OIDs on {RemoteRunProbeName}… the results will appear shortly.";
                 LoadViewState(populateEditorValues: false);
                 ModelState.Clear();
                 return Page();

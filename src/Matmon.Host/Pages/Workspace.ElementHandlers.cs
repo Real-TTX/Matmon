@@ -89,7 +89,7 @@ public sealed partial class WorkspaceModel
             var testMessage = result is not null
                 ? $"Test: {FormatSensorStateLabel(result.State)} - check {result.Duration.TotalMilliseconds:0.#} ms"
                     + (string.IsNullOrWhiteSpace(result.Message) ? string.Empty : $" - {result.Message}")
-                : $"Testing on probe '{RemoteRunProbeName}'… the result will appear shortly.";
+                : $"Testing on {RemoteRunProbeName}… the result will appear shortly.";
 
             // A failing test is said in the error box - "Test: Error" in a green box with a check mark read as a pass.
             if (result is { State: SensorState.Critical })
@@ -143,7 +143,7 @@ public sealed partial class WorkspaceModel
             recordObservation: false,
             ProbeRunJobKind.Sensor);
         RemoteTestJobId = job.Id;
-        RemoteRunProbeName = _workspaceStore.FindRunnerByProbeId(owningProbeId)?.Name ?? owningProbeId;
+        RemoteRunProbeName = OnDemandRunLabels.For(_workspaceStore, owningProbeId);
     }
 
     public IActionResult OnPostToggleSensorPause(Guid sensorId, string? returnUrl)
@@ -190,7 +190,7 @@ public sealed partial class WorkspaceModel
             }
             else if (routing is { Outcome: RemoteRunOutcome.Completed, Result: { } remoteResult })
             {
-                StatusMessage = $"Ran '{sensor.Name}' on probe '{routing.ProbeName}': {FormatSensorStateLabel(remoteResult.State)} - {remoteResult.Duration.TotalMilliseconds:0.#} ms"
+                StatusMessage = $"Ran '{sensor.Name}' on {routing.ProbeName}: {FormatSensorStateLabel(remoteResult.State)} - {remoteResult.Duration.TotalMilliseconds:0.#} ms"
                     + (string.IsNullOrWhiteSpace(remoteResult.Message) ? string.Empty : $" - {remoteResult.Message}");
             }
             else

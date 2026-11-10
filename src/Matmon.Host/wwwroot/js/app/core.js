@@ -57,6 +57,7 @@ const featureStarters = [
   "initializeLogViewer",
   "initializeSyslogMessages",
   "initializeRemoteRunPreviews",
+  "initializePendingRuns",
   "initializeSnmpWalkMibs",
   "initializeRunLoadingIndicator",
 ];

@@ -28,7 +28,12 @@ public sealed class SlaveSensorWorker : BackgroundService
     // The last result of each sensor on THIS probe. A sensor that works from its previous result (interface traffic as a
     // rate, the mail round-trip) needs the one before it - the copy the assignment carries is only as fresh as the
     // primary's, and while the primary is away it does not move at all.
-    private readonly Dictionary<Guid, SensorObservation> _lastObservations = new();
+    // Read by the run-job loop while the sensor pass writes it - hence concurrent.
+    private readonly ConcurrentDictionary<Guid, SensorObservation> _lastObservations = new();
+
+    // One executor per sensor type, and an executor is not built to run twice at once: a Run now and the scheduled pass
+    // (which run side by side since run jobs have a loop of their own) take turns per TYPE.
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _typeLocks = new(StringComparer.OrdinalIgnoreCase);
     // Store-and-forward: the last assignments received from the primary (so the probe keeps executing on
     // schedule while the primary is unreachable) + the observations produced meanwhile (flushed on reconnect).
     private ProbeSensorAssignmentsResponse? _cachedAssignments;
@@ -82,6 +87,10 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         _logger.LogInformation("Secondary sensor worker started for {ProbeId} against {PrimaryUrl}", probeId, primaryUri);
 
+        // Run now / Test / SNMP discover have a loop of their own: inside the main loop they waited for the whole sensor pass,
+        // and one slow check (a Windows Update search can take minutes) held every "Run now" back until the page gave up.
+        var runJobs = RunJobLoopAsync(client, probeId, stoppingToken);
+
         // Three stages, each on its own: they used to share ONE try in this order, so anything that threw in the sensor
         // pass (a check that ended in a stray cancellation, a failed post) skipped the run jobs and the discovery
         // jobs as well - and since the same sensor was due again on the next tick, it did so every tick: a scan
@@ -106,7 +115,6 @@ public sealed class SlaveSensorWorker : BackgroundService
 
             await RunStageAsync("discovery jobs", probeId, () => StartDiscoveryJobsAsync(client, probeId, stoppingToken), stoppingToken);
             await RunStageAsync("sensor assignments", probeId, () => SyncAssignmentsAsync(client, probeId, stoppingToken), stoppingToken);
-            await RunStageAsync("on-demand jobs", probeId, () => SyncRunJobsAsync(client, probeId, stoppingToken), stoppingToken);
 
             try
             {
@@ -116,6 +124,15 @@ public sealed class SlaveSensorWorker : BackgroundService
             {
                 break;
             }
+        }
+
+        try
+        {
+            await runJobs;
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
         }
 
         if (_discoveryTask is { } running)
@@ -561,7 +578,7 @@ public sealed class SlaveSensorWorker : BackgroundService
         foreach (var staleId in _lastExecutedUtc.Keys.Where(id => !assignedIds.Contains(id)).ToArray())
         {
             _lastExecutedUtc.Remove(staleId);
-            _lastObservations.Remove(staleId);
+            _lastObservations.TryRemove(staleId, out _);
         }
     }
 
@@ -585,7 +602,7 @@ public sealed class SlaveSensorWorker : BackgroundService
 
         try
         {
-            var result = await SensorRetry.ExecuteAsync(
+            var result = await WithTypeLockAsync(assignment.SensorTypeKey, () => SensorRetry.ExecuteAsync(
                 executor,
                 new SensorExecutionContext(
                     assignment.SensorTypeKey,
@@ -593,7 +610,7 @@ public sealed class SlaveSensorWorker : BackgroundService
                     assignment.Settings,
                     assignment.SensorId,
                     PreviousObservation(assignment)),
-                cancellationToken);
+                cancellationToken).AsTask(), cancellationToken);
             result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(assignment.Settings, result);
 
             _runtimeState.RecordExecution(
@@ -644,6 +661,36 @@ public sealed class SlaveSensorWorker : BackgroundService
     /// <summary>Pulls on-demand run jobs the primary queued for this probe (a "Run now"/"Test"/"Run subtree"
     /// or an SNMP-discover on a sensor that lives under this remote probe), runs each locally and posts the
     /// results back. Tolerates a missing endpoint (older primary) silently so the loop keeps running.</summary>
+    /// <summary>Picks up on-demand jobs every 2 s, independent of the sensor pass (see ExecuteAsync).</summary>
+    private async Task RunJobLoopAsync(HttpClient client, string probeId, CancellationToken stoppingToken)
+    {
+        var interval = TimeSpan.FromSeconds(2);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            if (!_runtimeState.PendingApproval)
+            {
+                await RunStageAsync("on-demand jobs", probeId, () => SyncRunJobsAsync(client, probeId, stoppingToken), stoppingToken);
+            }
+
+            await Task.Delay(interval, stoppingToken);
+        }
+    }
+
+    /// <summary>Runs <paramref name="run"/> while no other check of the same sensor type runs on this probe.</summary>
+    private async Task<T> WithTypeLockAsync<T>(string sensorTypeKey, Func<Task<T>> run, CancellationToken cancellationToken)
+    {
+        var gate = _typeLocks.GetOrAdd(sensorTypeKey, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await run();
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private async Task SyncRunJobsAsync(HttpClient client, string probeId, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/probes/{Uri.EscapeDataString(probeId)}/run-jobs");
@@ -712,9 +759,9 @@ public sealed class SlaveSensorWorker : BackgroundService
                 job.Settings,
                 job.SensorId,
                 previousObservation: previous);
-            var result = job.RecordObservation
-                ? await SensorRetry.ExecuteAsync(executor, context, cancellationToken)
-                : await executor.ExecuteAsync(context, cancellationToken);
+            var result = await WithTypeLockAsync(job.SensorTypeKey, () => job.RecordObservation
+                ? SensorRetry.ExecuteAsync(executor, context, cancellationToken).AsTask()
+                : executor.ExecuteAsync(context, cancellationToken).AsTask(), cancellationToken);
             result = SensorExecutionResultHelper.ApplyDefaultChannelSelection(job.Settings, result);
             return new ProbeRunJobResult(job.JobId, result, null, null, DateTimeOffset.UtcNow);
         }

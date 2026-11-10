@@ -882,6 +882,11 @@ public sealed class MapDisplayProvider
             return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", "-", KindLabel(tile.Kind), "chart", rows: []);
         }
 
+        // An error someone has acknowledged reads differently from a fresh one (orange, not red) - like the alert list says.
+        var acknowledged = _workspaceStore.Workspace.Alerts
+            .Where(alert => alert.IsActive && alert.IsAcknowledged && alert.RecoveredUtc is null)
+            .Select(alert => alert.ElementId)
+            .ToHashSet();
         var root = new SunburstNode { Label = element?.Name ?? (tile.TargetTag is { } tag ? "#" + tag : "All"), ElementId = element?.Id };
         var containers = new Dictionary<Guid, SunburstNode>();
         foreach (var sensor in sensors)
@@ -918,7 +923,7 @@ public sealed class MapDisplayProvider
             {
                 Label = sensor.Name,
                 ElementId = sensor.Id,
-                Tone = sensor.IsPaused ? "paused" : MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(observation?.State ?? SensorState.Unknown)),
+                Tone = sensor.IsPaused ? "paused" : SunburstTone(observation?.State ?? SensorState.Unknown, acknowledged.Contains(sensor.Id)),
                 Detail = sensor.IsPaused ? "Paused" : observation?.Message
             });
         }
@@ -934,14 +939,14 @@ public sealed class MapDisplayProvider
             .ToArray();
 
         var leaves = segments.Where(segment => segment.Node.Children.Count == 0).Select(segment => segment.Node).ToList();
-        var problems = leaves.Count(leaf => leaf.Tone is "error" or "warning");
+        var problems = leaves.Count(leaf => leaf.Tone is "error" or "ack" or "warning");
         var judged = leaves.Count(leaf => leaf.Tone != "paused");
         var ok = leaves.Count(leaf => leaf.Tone == "ok");
         var figure = judged == 0 ? "-" : $"{Math.Round(100d * ok / judged):0} %";
         var subtitle = problems == 0 ? $"{leaves.Count} sensors, all fine" : $"{problems} of {leaves.Count} sensors with a problem";
         var (stateKey, stateLabel) = root.Tone switch
         {
-            "error" => ("error", MonitoringStatePresentation.Label(MonitoringSeverity.Error)),
+            "error" or "ack" => ("error", MonitoringStatePresentation.Label(MonitoringSeverity.Error)),
             "warning" => ("warning", MonitoringStatePresentation.Label(MonitoringSeverity.Warning)),
             "ok" => ("ok", MonitoringStatePresentation.Label(MonitoringSeverity.Ok)),
             _ => ("unknown", "No data")
@@ -964,15 +969,24 @@ public sealed class MapDisplayProvider
             SortAndRollUp(child);
         }
 
+        // Worst first: a fresh error, then an acknowledged one, a warning, unknown, OK. Paused sensors count as neither.
         var tones = node.Children.Select(child => child.Tone).Where(tone => tone != "paused").ToList();
         node.Tone = tones.Count == 0 ? "paused"
             : tones.Contains("error") ? "error"
+            : tones.Contains("ack") ? "ack"
             : tones.Contains("warning") ? "warning"
             : tones.Contains("unknown") ? "unknown"
             : "ok";
-        var problems = CountLeaves(node, tone => tone is "error" or "warning");
+        var problems = CountLeaves(node, tone => tone is "error" or "ack" or "warning");
         var total = node.Weight;
         node.Detail = problems == 0 ? (total == 1 ? "1 sensor, fine" : $"{total} sensors, all fine") : $"{problems} of {total} sensors with a problem";
+    }
+
+    /// <summary>A sensor's segment colour: its state, an acknowledged error as "ack".</summary>
+    private static string SunburstTone(SensorState state, bool acknowledged)
+    {
+        var key = MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(state));
+        return key == "error" && acknowledged ? "ack" : state == SensorState.Unknown ? "unknown" : key;
     }
 
     private static int CountLeaves(SunburstNode node, Func<string, bool> match) =>

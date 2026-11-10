@@ -402,6 +402,10 @@ function initializeMapLiveData() {
       setMapTilePillTone(badge, data.stateKey);
       badge.textContent = data.stateLabel || "";
     }
+    const sunCentre = tile.querySelector(".map-sun-centre");
+    if (sunCentre) {
+      sunCentre.dataset.state = data.stateKey || "unknown";
+    }
     setText(tile, "[data-tile-value]", data.value || "");
     setText(tile, "[data-tile-subtitle]", data.subtitle || "");
     setText(tile, "[data-tile-progress-label]", data.progressLabel || "");

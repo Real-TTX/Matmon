@@ -46,7 +46,7 @@ function pollRemoteRunPreview(container) {
       const statusElement = container.querySelector("[data-remote-run-status]");
       if (statusElement) {
         // The spinner goes with the old text: nothing is being waited for on this page any more.
-        statusElement.textContent = `Still running on probe ${probeName}… the result will appear on the sensor once the probe syncs.`;
+        statusElement.textContent = `Still running on ${probeName}… the result appears on the sensor once it has finished.`;
       }
       return;
     }
@@ -315,4 +315,54 @@ async function labelSnmpWalkRows(rows) {
     }
   });
   return named;
+}
+
+// A Run now that is still running on its probe or agent (the sensor page's [data-pending-run]): asked every 2 s, and once
+// it has finished the page is loaded again without the job in its address - the sensor's new state and message are then
+// on it. A job the server no longer knows (pruned) also reloads; after 5 minutes it stops asking and says so.
+function initializePendingRuns() {
+  const banner = document.querySelector("[data-pending-run]");
+  if (!banner) {
+    return;
+  }
+
+  const jobId = banner.dataset.pendingRun;
+  const deadline = Date.now() + 5 * 60 * 1000;
+  const reloadWithoutJob = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("runJob");
+    window.location.replace(url.toString());
+  };
+
+  const tick = async () => {
+    try {
+      const response = await fetch(`/api/run-jobs/${encodeURIComponent(jobId)}`, { headers: { Accept: "application/json" } });
+      if (response.status === 404) {
+        reloadWithoutJob();
+        return;
+      }
+      if (response.ok) {
+        const job = await response.json();
+        if (job.isComplete) {
+          reloadWithoutJob();
+          return;
+        }
+      }
+    } catch {
+      // A blip - ask again.
+    }
+
+    if (Date.now() >= deadline) {
+      const text = banner.querySelector("[data-pending-run-text]");
+      if (text) {
+        text.textContent = "No result yet - it is still being waited for, and the sensor shows it once it arrives.";
+      }
+      banner.querySelector(".mat-spinner")?.remove();
+      return;
+    }
+
+    window.setTimeout(tick, 2000);
+  };
+
+  window.setTimeout(tick, 1500);
 }
