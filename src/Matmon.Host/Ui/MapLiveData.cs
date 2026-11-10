@@ -79,7 +79,9 @@ public static class MapLiveData
                     .Append(tile.Links?.Count ?? 0).Append('/')
                     .Append(tile.Links?.Count(link => link.Label is not null || link.Traffic is not null) ?? 0).Append(':')
                     // A rack's devices and where they sit are markup; their colour is a value.
-                    .Append(string.Join('/', (tile.Rack ?? []).Select(device => $"{device.Row}.{device.Height}")));
+                    .Append(string.Join('/', (tile.Rack ?? []).Select(device => $"{device.Row}.{device.Height}"))).Append(':')
+                    // A sunburst's segments and where they sit are markup (a sensor moved to another host keeps the count).
+                    .Append(tile.Tile.Kind == MonitoringMapTileKind.Sunburst ? string.Join('/', (tile.Rows ?? []).Select(row => row.Segments)) : string.Empty);
             }
         }
 

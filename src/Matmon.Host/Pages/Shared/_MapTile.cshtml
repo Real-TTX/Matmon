@@ -14,7 +14,8 @@
         or MonitoringMapTileKind.Sla or MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading
         or MonitoringMapTileKind.Image or MonitoringMapTileKind.GeoMap or MonitoringMapTileKind.Topology
         or MonitoringMapTileKind.Honeycomb or MonitoringMapTileKind.Timeline or MonitoringMapTileKind.Table
-        or MonitoringMapTileKind.Bars or MonitoringMapTileKind.Donut or MonitoringMapTileKind.Embed or MonitoringMapTileKind.Rack;
+        or MonitoringMapTileKind.Bars or MonitoringMapTileKind.Donut or MonitoringMapTileKind.Embed or MonitoringMapTileKind.Rack
+        or MonitoringMapTileKind.Sunburst;
     var isChrome = tile.Kind is MonitoringMapTileKind.Clock or MonitoringMapTileKind.Heading or MonitoringMapTileKind.Embed;
     string Pct(double? value) => (value ?? 0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     // First paint of the clock is server-rendered in the MAP timezone so the tile is never blank and a
@@ -318,6 +319,70 @@
                 }
             </ul>
         </div>
+    }
+    else if (tile.Kind == MonitoringMapTileKind.Sunburst && Model.Rows is { } sunRows)
+    {
+        @* Rings from the inside out: the target in the centre, then every level of the tree, the sensors outermost. Each
+           segment is a row (geometry in Segments, "ring,start,end"), so the live patch recolours it by position; the
+           name and its summary on hover, a click opens it. Names are written where the segment has room for them. *@
+        @if (sunRows.Count == 0)
+        {
+            <p class="map-tile-rows-empty">No sensors</p>
+        }
+        else
+        {
+            const double centre = 22;
+            const double outer = 98;
+            var rings = sunRows.Select(row => Matmon.Core.Telemetry.SunburstLayout.TryDecode(row.Segments, out var r, out _, out _) ? r : 0).DefaultIfEmpty(1).Max();
+            var ringWidth = (outer - centre) / Math.Max(1, rings);
+            string Num(double value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            <div class="map-sunburst">
+                <svg class="map-sunburst-chart" viewBox="-100 -100 200 200" role="img" aria-label="@Model.Subtitle">
+                    @foreach (var row in sunRows)
+                    {
+                        if (!Matmon.Core.Telemetry.SunburstLayout.TryDecode(row.Segments, out var ring, out var start, out var end))
+                        {
+                            continue;
+                        }
+
+                        var inner = centre + (ring - 1) * ringWidth;
+                        var path = Matmon.Core.Telemetry.SunburstLayout.ArcPath(inner, inner + ringWidth, start, end);
+                        var hint = string.IsNullOrWhiteSpace(row.Detail) ? row.Label : $"{row.Label} - {row.Detail}";
+                        if (row.Href is not null && !Model.Editable)
+                        {
+                            <a href="@row.Href" aria-label="@hint"><path class="map-sun-seg" data-state="@row.Tone" d="@path"><title>@hint</title></path></a>
+                        }
+                        else
+                        {
+                            <path class="map-sun-seg" data-state="@row.Tone" d="@path"><title>@hint</title></path>
+                        }
+                    }
+                    @foreach (var row in sunRows)
+                    {
+                        if (!Matmon.Core.Telemetry.SunburstLayout.TryDecode(row.Segments, out var ring, out var start, out var end))
+                        {
+                            continue;
+                        }
+
+                        // A name only where it fits: roughly 4.2 units per character at this size, along the segment's middle.
+                        var middle = centre + (ring - 0.5) * ringWidth;
+                        var room = (end - start) * Math.PI / 180 * middle;
+                        var fits = (int)Math.Floor(Math.Min(room, ringWidth * 2.2) / 4.2);
+                        if (ringWidth < 9 || fits < 4)
+                        {
+                            continue;
+                        }
+
+                        var text = row.Label.Length <= fits ? row.Label : row.Label[..(fits - 1)] + "…";
+                        var (x, y) = Matmon.Core.Telemetry.SunburstLayout.Point(middle, (start + end) / 2);
+                        @* Razor reads a <text> tag in code as its own; written out, with the name encoded. *@
+                        @Html.Raw($"<text class=\"map-sun-label\" x=\"{Num(x)}\" y=\"{Num(y + 2)}\" text-anchor=\"middle\">{System.Net.WebUtility.HtmlEncode(text)}</text>")
+                    }
+                    <circle class="map-sun-centre" data-state="@Model.StateKey" r="@Num(centre - 1.5)" />
+                    <text class="map-sun-figure" y="4" text-anchor="middle" data-tile-value>@Model.Value</text>
+                </svg>
+            </div>
+        }
     }
     else if (tile.Kind == MonitoringMapTileKind.Table && Model.Rows is { } tableRows)
     {

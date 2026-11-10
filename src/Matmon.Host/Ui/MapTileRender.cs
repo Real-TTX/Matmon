@@ -52,6 +52,7 @@ public static class MapTileRender
             MonitoringMapTileKind.Table => "Table",
             MonitoringMapTileKind.Bars => "Bars",
             MonitoringMapTileKind.Donut => "Donut",
+            MonitoringMapTileKind.Sunburst => "Sunburst",
             MonitoringMapTileKind.Embed => "Embed",
             MonitoringMapTileKind.Rack => "Rack",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",
@@ -80,6 +81,7 @@ public static class MapTileRender
             MonitoringMapTileKind.Table => "list",
             MonitoringMapTileKind.Bars => "chart",
             MonitoringMapTileKind.Donut => "chart",
+            MonitoringMapTileKind.Sunburst => "chart",
             MonitoringMapTileKind.Embed => "external",
             MonitoringMapTileKind.Rack => "probe",
             _ => "sensor"

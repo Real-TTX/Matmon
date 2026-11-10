@@ -47,6 +47,8 @@ public static class MapWidgetCatalog
             MonitoringMapTileKind.Bars, SearchTerms: "top ranking compare horizontal bar chart"),
         new("donut", "State donut", "How the sensors under a target split by state", "chart", MapWidgetCategory.Status,
             MonitoringMapTileKind.Donut, SearchTerms: "pie ring share distribution chart"),
+        new("sunburst", "Sunburst", "The tree under a target as rings from the inside out - which part is red", "chart", MapWidgetCategory.Status,
+            MonitoringMapTileKind.Sunburst, SearchTerms: "rings circle tree hierarchy radial sunburst noc overview"),
         new("embed", "Embed", "Another page, or a camera picture refreshed on a timer", "square", MapWidgetCategory.Content,
             MonitoringMapTileKind.Embed, SearchTerms: "iframe camera snapshot grafana web page url image"),
         new("alerts", "Alert feed", "Newest open alerts, optionally scoped to a target", "bell", MapWidgetCategory.Status,
@@ -95,6 +97,7 @@ public static class MapWidgetCatalog
         { Kind: MonitoringMapTileKind.Table } => "table",
         { Kind: MonitoringMapTileKind.Bars } => "bars",
         { Kind: MonitoringMapTileKind.Donut } => "donut",
+        { Kind: MonitoringMapTileKind.Sunburst } => "sunburst",
         { Kind: MonitoringMapTileKind.Embed } => "embed",
         { Kind: MonitoringMapTileKind.Rack } => "rack",
         // Both are Image tiles; "floorplan" is the one that exists for its pins, so it previews them.

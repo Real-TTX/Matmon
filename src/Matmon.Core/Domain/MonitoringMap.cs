@@ -499,7 +499,11 @@ public enum MonitoringMapTileKind
     /// <summary>A server rack drawn to scale: its height units (U) top to bottom, each device in the slots it really
     /// occupies, coloured by the sensors of its own target. Empty slots stay visible - a rack's free space is
     /// information too.</summary>
-    Rack = 20
+    Rack = 20,
+
+    /// <summary>The tree under the target as rings from the inside out - probes and folders, then hosts, then every
+    /// sensor - each segment as wide as its share of the sensors and in the worst state among them.</summary>
+    Sunburst = 21
 }
 
 public enum MonitoringMapListMode
@@ -605,6 +609,8 @@ public static class MonitoringMapTileConstraints
             MonitoringMapTileKind.Embed => (3, 2, 6, 4),
             // Tall and narrow, like the thing itself.
             MonitoringMapTileKind.Rack => (2, 4, 3, 7),
+            // Round: a square of cells, and big enough that the outer ring is more than a hairline.
+            MonitoringMapTileKind.Sunburst => (3, 3, 4, 4),
             _ => (2, 2, 2, 2)
         };
     }

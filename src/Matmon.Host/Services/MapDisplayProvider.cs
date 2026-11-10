@@ -445,6 +445,7 @@ public sealed class MapDisplayProvider
              or MonitoringMapTileKind.Table
              or MonitoringMapTileKind.Bars
              or MonitoringMapTileKind.Donut
+             or MonitoringMapTileKind.Sunburst
              or MonitoringMapTileKind.Embed
              or MonitoringMapTileKind.Rack
              or MonitoringMapTileKind.MultiGraph;
@@ -476,6 +477,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.MultiGraph => BuildMultiGraphTile(tile, element, latest),
             MonitoringMapTileKind.Honeycomb => BuildHoneycombTile(tile, element, latest),
             MonitoringMapTileKind.Donut => BuildDonutTile(tile, element, latest),
+            MonitoringMapTileKind.Sunburst => BuildSunburstTile(tile, element, elements, latest),
             MonitoringMapTileKind.Rack => BuildRackTile(tile, element, latest),
             MonitoringMapTileKind.Embed => CreateTile(tile, element, "ok", "Embed",
                 BrandingSafety.SafeContactUrl(tile.EmbedUrl) is null ? "No address (http or https)" : string.Empty, string.Empty, KindLabel(tile.Kind), "external"),
@@ -851,6 +853,130 @@ public sealed class MapDisplayProvider
         return CreateTile(tile, element, worst, worstLabel,
             total == 0 ? "No sensors under this target" : $"{total} sensors", healthy, KindLabel(tile.Kind), "chart", rows: rows);
     }
+
+    /// <summary>A sunburst shows at most this many sensors (its outer ring) - past that a segment is a hairline.</summary>
+    private const int SunburstMaxSensors = 600;
+
+    /// <summary>At most this many rings: deeper trees keep their top levels and the sensor, the levels between are left out.</summary>
+    private const int SunburstMaxRings = 5;
+
+    /// <summary>
+    /// The tree under the target as rings from the inside out: the target in the centre, then every level of probes,
+    /// folders and hosts, the sensors outermost. Each segment is as wide as its share of the sensors and drawn in the worst
+    /// state among them (paused sensors count as neither). Children are ordered by name, so a segment keeps its place and
+    /// the live patch goes by position; each segment is a row (its geometry in <see cref="MapTileRowDto.Segments"/>).
+    /// </summary>
+    private MapDisplayTileViewModel BuildSunburstTile(
+        MonitoringMapTile tile,
+        MonitoringElement? element,
+        IReadOnlyDictionary<Guid, MonitoringElement> elements,
+        IReadOnlyDictionary<Guid, SensorObservation> latest)
+    {
+        var sensors = _workspaceStore.ResolveTargetSensors(TargetToken(tile))
+            .OrderBy(sensor => sensor.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(sensor => sensor.Id)
+            .Take(SunburstMaxSensors)
+            .ToList();
+        if (sensors.Count == 0)
+        {
+            return CreateTile(tile, element, "unknown", "No target", "No sensors under this target", "-", KindLabel(tile.Kind), "chart", rows: []);
+        }
+
+        var root = new SunburstNode { Label = element?.Name ?? (tile.TargetTag is { } tag ? "#" + tag : "All"), ElementId = element?.Id };
+        var containers = new Dictionary<Guid, SunburstNode>();
+        foreach (var sensor in sensors)
+        {
+            // The containers between the target (exclusive) and the sensor, top down.
+            var lineage = new List<MonitoringElement>();
+            var parentId = sensor.ParentId;
+            while (parentId is { } id && id != element?.Id && elements.TryGetValue(id, out var parent))
+            {
+                lineage.Insert(0, parent);
+                parentId = parent.ParentId;
+            }
+
+            if (lineage.Count > SunburstMaxRings - 1)
+            {
+                lineage = lineage.Take(SunburstMaxRings - 2).Append(lineage[^1]).ToList();
+            }
+
+            var node = root;
+            foreach (var container in lineage)
+            {
+                if (!containers.TryGetValue(container.Id, out var child))
+                {
+                    child = new SunburstNode { Label = container.Name, ElementId = container.Id };
+                    containers[container.Id] = child;
+                    node.Children.Add(child);
+                }
+
+                node = child;
+            }
+
+            latest.TryGetValue(sensor.Id, out var observation);
+            node.Children.Add(new SunburstNode
+            {
+                Label = sensor.Name,
+                ElementId = sensor.Id,
+                Tone = sensor.IsPaused ? "paused" : MonitoringStatePresentation.Key(MonitoringStatePresentation.FromSensorState(observation?.State ?? SensorState.Unknown)),
+                Detail = sensor.IsPaused ? "Paused" : observation?.Message
+            });
+        }
+
+        SortAndRollUp(root);
+        var segments = SunburstLayout.Layout(root);
+        var rows = segments
+            .Select(segment => new MapTileRowDto(segment.Node.Label, segment.Node.Detail, segment.Node.Weight.ToString(CultureInfo.InvariantCulture), segment.Node.Tone, null)
+            {
+                ElementId = segment.Node.ElementId,
+                Segments = SunburstLayout.Encode(segment)
+            })
+            .ToArray();
+
+        var leaves = segments.Where(segment => segment.Node.Children.Count == 0).Select(segment => segment.Node).ToList();
+        var problems = leaves.Count(leaf => leaf.Tone is "error" or "warning");
+        var judged = leaves.Count(leaf => leaf.Tone != "paused");
+        var ok = leaves.Count(leaf => leaf.Tone == "ok");
+        var figure = judged == 0 ? "-" : $"{Math.Round(100d * ok / judged):0} %";
+        var subtitle = problems == 0 ? $"{leaves.Count} sensors, all fine" : $"{problems} of {leaves.Count} sensors with a problem";
+        var (stateKey, stateLabel) = root.Tone switch
+        {
+            "error" => ("error", MonitoringStatePresentation.Label(MonitoringSeverity.Error)),
+            "warning" => ("warning", MonitoringStatePresentation.Label(MonitoringSeverity.Warning)),
+            "ok" => ("ok", MonitoringStatePresentation.Label(MonitoringSeverity.Ok)),
+            _ => ("unknown", "No data")
+        };
+        return CreateTile(tile, element, stateKey, stateLabel, subtitle, figure, KindLabel(tile.Kind), "chart", rows: rows);
+    }
+
+    /// <summary>Children by name (containers and sensors alike), and every container in the worst state below it - paused
+    /// sensors left out, a container with only paused sensors is paused.</summary>
+    private static void SortAndRollUp(SunburstNode node)
+    {
+        if (node.Children.Count == 0)
+        {
+            return;
+        }
+
+        node.Children.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Label, b.Label));
+        foreach (var child in node.Children)
+        {
+            SortAndRollUp(child);
+        }
+
+        var tones = node.Children.Select(child => child.Tone).Where(tone => tone != "paused").ToList();
+        node.Tone = tones.Count == 0 ? "paused"
+            : tones.Contains("error") ? "error"
+            : tones.Contains("warning") ? "warning"
+            : tones.Contains("unknown") ? "unknown"
+            : "ok";
+        var problems = CountLeaves(node, tone => tone is "error" or "warning");
+        var total = node.Weight;
+        node.Detail = problems == 0 ? (total == 1 ? "1 sensor, fine" : $"{total} sensors, all fine") : $"{problems} of {total} sensors with a problem";
+    }
+
+    private static int CountLeaves(SunburstNode node, Func<string, bool> match) =>
+        node.Children.Count == 0 ? (match(node.Tone) ? 1 : 0) : node.Children.Sum(child => CountLeaves(child, match));
 
     /// <summary>
     /// A rack drawn to scale: every device in the units it occupies (row 1 = the TOP unit, as the grid counts), coloured
@@ -1605,6 +1731,7 @@ public sealed class MapDisplayProvider
             MonitoringMapTileKind.Table => "Table",
             MonitoringMapTileKind.Bars => "Bars",
             MonitoringMapTileKind.Donut => "Donut",
+            MonitoringMapTileKind.Sunburst => "Sunburst",
             MonitoringMapTileKind.Embed => "Embed",
             MonitoringMapTileKind.Rack => "Rack",
             MonitoringMapTileKind.MultiGraph => "Multi-graph",

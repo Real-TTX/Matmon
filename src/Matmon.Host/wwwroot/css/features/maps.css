@@ -758,6 +758,65 @@ a.map-rack-device:focus-visible {
 .map-bar-row[data-state="warning"] .map-bar { --map-bar-tone: var(--mat-warning); }
 .map-bar-row[data-state="error"] .map-bar { --map-bar-tone: var(--mat-danger); }
 
+/* ---- Sunburst: the tree as rings from the inside out, every segment in its worst state ---- */
+.map-sunburst {
+  display: grid;
+  flex: 1;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  min-height: 0;
+  container-type: size;
+}
+/* Names only where they can be read: below this the chart is a picture of colours. */
+@container (max-width: 300px) or (max-height: 300px) {
+  .map-sun-label { display: none; }
+}
+.map-sunburst-chart {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.map-sun-seg {
+  --map-sun-tone: var(--mat-text-faint);
+  fill: var(--map-sun-tone);
+  stroke: var(--map-tile-custom-bg, var(--mat-surface));
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+.map-sun-seg[data-state="ok"] { --map-sun-tone: var(--mat-success); }
+.map-sun-seg[data-state="warning"] { --map-sun-tone: var(--mat-warning); }
+.map-sun-seg[data-state="error"] { --map-sun-tone: var(--mat-danger); }
+.map-sun-seg[data-state="paused"] { --map-sun-tone: var(--mat-border); }
+.map-sunburst a {
+  position: relative;
+  z-index: 2;
+}
+.map-sunburst a:hover .map-sun-seg,
+.map-sunburst a:focus-visible .map-sun-seg {
+  filter: brightness(1.2);
+}
+.map-sun-label {
+  fill: var(--mat-app-on-accent);
+  font-size: 7px;
+  font-weight: 600;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.3); /* on a coloured segment in either theme */
+  stroke-width: 1.2px;
+}
+.map-sun-centre {
+  fill: color-mix(in srgb, var(--mat-text-faint) 14%, var(--mat-surface));
+  stroke: var(--mat-border);
+  stroke-width: 0.6;
+}
+.map-sun-centre[data-state="error"] { stroke: var(--mat-danger); stroke-width: 1.4; }
+.map-sun-centre[data-state="warning"] { stroke: var(--mat-warning); stroke-width: 1.4; }
+.map-sun-figure {
+  fill: currentColor;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- Donut: slices of one ring, each a circle drawn from --offset for --seg (pathLength 100) ---- */
 .map-donut {
   display: grid;

@@ -290,7 +290,7 @@ function initializeMapLiveData() {
       return;
     }
     // A honeycomb's cells are rows too (one per sensor, by position); a timeline row also carries its bands.
-    const items = tile.querySelectorAll(".map-tile-row, .map-hex");
+    const items = tile.querySelectorAll(".map-tile-row, .map-hex, .map-sun-seg");
     // Row COUNT is part of the revision, so a mismatch here means the payload and the markup are already out
     // of step and a reload is on its way - patching half a list would just look broken in the meantime.
     if (items.length !== rows.length) {
@@ -306,6 +306,12 @@ function initializeMapLiveData() {
       if (item.classList.contains("map-hex")) {
         const hint = row.detail ? `${row.label} - ${row.detail}` : row.label;
         item.title = hint;
+      }
+      if (item.classList.contains("map-sun-seg")) {
+        const title = item.querySelector("title");
+        if (title) {
+          title.textContent = row.detail ? `${row.label} - ${row.detail}` : row.label;
+        }
       }
       const barLength = item.querySelector("[data-row-percent]");
       if (barLength && typeof row.percent === "number") {
@@ -874,7 +880,8 @@ function initializeMapDesigner() {
     "17": "Bars",
     "18": "Donut",
     "19": "Embed",
-    "20": "Rack"
+    "20": "Rack",
+    "21": "Sunburst"
   };
   const kindLabels = {
     "0": "Text",
@@ -898,6 +905,7 @@ function initializeMapDesigner() {
     "18": "Donut",
     "19": "Embed",
     "20": "Rack",
+    "21": "Sunburst",
     Text: "Text",
     Element: "State",
     Status: "Summary",
@@ -918,7 +926,8 @@ function initializeMapDesigner() {
     Bars: "Bars",
     Donut: "Donut",
     Embed: "Embed",
-    Rack: "Rack"
+    Rack: "Rack",
+    Sunburst: "Sunburst"
   };
   const kindHints = {
     SensorList: "Lists the sensors under the target, ordered by state or by a channel value.",
@@ -931,6 +940,7 @@ function initializeMapDesigner() {
     Honeycomb: "Every sensor under the target as one cell in its state colour - hundreds at a glance.",
     Bars: "One reading across the sensors under the target as bars. Pick the channel (Rank by channel) and how many rows.",
     Donut: "How the sensors under the target split by state.",
+    Sunburst: "The tree under the target as rings from the inside out - folders, hosts, then every sensor; each segment as wide as its share and in its worst state.",
     Rack: "A rack to scale: add its devices with the unit they sit in and their height; each takes its colour from its own target.",
     Embed: "Another page in a frame, or a picture (a camera snapshot) reloaded on a timer.",
     Table: "The sensors under the target with their machine, reading and last check. Ordered like a sensor list.",
@@ -1989,7 +1999,7 @@ function initializeMapDesigner() {
     }
     if (visualField) {
       visualField.hidden = isText || isGraph || isSeries || isRows || isSla || isPinned || kind === "Clock"
-        || kind === "Honeycomb" || kind === "Timeline" || kind === "Donut" || kind === "Embed" || kind === "Rack";
+        || kind === "Honeycomb" || kind === "Timeline" || kind === "Donut" || kind === "Embed" || kind === "Rack" || kind === "Sunburst";
     }
     if (textField) {
       textField.hidden = !isText;
@@ -2071,7 +2081,7 @@ function initializeMapDesigner() {
   };
 
   // Mirrors MapDisplayProvider.IsCollectionKind - these render entirely from the server-side partial.
-  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table", "Bars", "Donut", "Embed", "Rack"]);
+  const CollectionTileKinds = new Set(["SensorList", "AlertFeed", "Sla", "Clock", "Heading", "Image", "GeoMap", "MultiGraph", "Topology", "Honeycomb", "Timeline", "Table", "Bars", "Donut", "Embed", "Rack", "Sunburst"]);
 
   const refreshTilePreview = (tile, panel) => {
     if (!tile || !panel) {
