@@ -151,5 +151,23 @@
     "tags": "Status page, Matmon, Matmon Cloud",
     "version": "1.0",
     "author": "Matmon.eu"
+  },
+  {
+    "file": "pfsense-snmp.json",
+    "title": "pfSense (SNMP)",
+    "summary": "pfSense over SNMP: reachability, CPU, load, memory, the packet filter\u0027s state table and the WAN interface\u0027s traffic.",
+    "description": "pfSense has no official API, so these templates read it over SNMP. On the firewall: Services \u003E SNMP - enable it, set a community (or use SNMPv3 in the sensor), bind it to the LAN interface and tick the modules MibII, PF and UCD.\n\n\u0022pfSense - ping\u0022 checks that the firewall answers (latency, packet loss). \u0022pfSense - system (SNMP)\u0022 reads uptime, idle CPU (warning below 15 %), the 1-minute load, real memory, whether the packet filter runs (critical when it does not) and the number of states. \u0022pfSense - WAN interface (SNMP)\u0022 shows traffic and utilisation of one interface - set its interface index after adding it (index 1 is a guess; the SNMP walk in the sensor editor lists the interfaces). \u0022pfSense - web interface certificate\u0022 warns before the certificate of the web interface runs out.\n\nAdd the templates to the host that is the firewall; they use the host\u0027s address. Put the SNMP community into an SNMP credential on the host (or type it into each sensor) - a template file never carries it.",
+    "tags": "pfSense, Firewall, SNMP, Netgate",
+    "version": "1.0",
+    "author": "Matmon.eu"
+  },
+  {
+    "file": "starface.json",
+    "title": "STARFACE",
+    "summary": "A STARFACE phone system: SIP answers, reachability, the web interface\u0027s certificate and - with SNMP switched on - CPU, load and memory.",
+    "description": "\u0022STARFACE - SIP\u0022 sends a SIP OPTIONS request to port 5060 (UDP) and expects any answer - a 401 or 407 (\u0022log in first\u0022) is a healthy answer from a phone system; silence is critical. \u0022STARFACE - ping\u0022 checks reachability, latency and packet loss. \u0022STARFACE - web interface certificate\u0022 warns before the certificate of the admin interface runs out.\n\n\u0022STARFACE - system (SNMP)\u0022 reads uptime, idle CPU (warning below 15 %), the 1-minute load and memory through the UCD-SNMP-MIB of the underlying Linux. It only works where SNMP is switched on for the STARFACE and the probe\u0027s address is allowed - leave it out otherwise. Use SIP over TCP in the sensor when the system only listens on TCP.\n\nAdd the templates to the host that is the STARFACE; they use the host\u0027s address. Trunk states, registered phones and calls are not read - that needs the STARFACE API.",
+    "tags": "STARFACE, Phone system, VoIP, SIP",
+    "version": "1.0",
+    "author": "Matmon.eu"
   }
 ]

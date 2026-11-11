@@ -1,0 +1,84 @@
+{
+  "format": "matmon-templates",
+  "version": 1,
+  "exportedBy": "Matmon.eu",
+  "exportedUtc": "2026-11-05T00:00:00\u002B00:00",
+  "templates": [
+    {
+      "id": "0b01bf6e-9a10-48dc-bf69-8625cb943a0a",
+      "name": "pfSense - ping",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "ping",
+      "settings": {
+        "pollingInterval": "00:00:30",
+        "timeout": "00:00:15",
+        "parameters": {
+          "count": "3"
+        }
+      },
+      "tags": [
+        "device",
+        "pfsense"
+      ]
+    },
+    {
+      "id": "8b3020a4-a656-4b67-8217-49b65f3bf4c6",
+      "name": "pfSense - system (SNMP)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "snmp",
+      "settings": {
+        "pollingInterval": "00:01:00",
+        "timeout": "00:00:15",
+        "defaultChannelKey": "cpu_idle",
+        "thresholds": {
+          "channel:cpu_idle:warning": "\u003C 15",
+          "channel:cpu_idle:critical": "\u003C 5",
+          "channel:pf_running:critical": "\u003E 1"
+        },
+        "parameters": {
+          "snmp.version": "v2c",
+          "snmp.port": "161",
+          "snmp.oids": "1.3.6.1.2.1.1.3.0|uptime\n1.3.6.1.4.1.2021.11.11.0|cpu_idle\n1.3.6.1.4.1.2021.10.1.5.1|load_1min_x100\n1.3.6.1.4.1.2021.4.5.0|memory_total_kb\n1.3.6.1.4.1.2021.4.6.0|memory_available_kb\n1.3.6.1.4.1.12325.1.200.1.1.1.0|pf_running\n1.3.6.1.4.1.12325.1.200.1.3.1.0|pf_states"
+        }
+      },
+      "tags": [
+        "device",
+        "pfsense"
+      ]
+    },
+    {
+      "id": "eba3cac9-c306-4237-b5e6-dac4627b0f90",
+      "name": "pfSense - WAN interface (SNMP)",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "snmp-interface",
+      "settings": {
+        "pollingInterval": "00:01:00",
+        "timeout": "00:00:15",
+        "parameters": {
+          "snmp.version": "v2c",
+          "snmp.port": "161",
+          "snmp.interfaceIndex": "1"
+        }
+      },
+      "tags": [
+        "device",
+        "pfsense"
+      ]
+    },
+    {
+      "id": "62746657-0fe6-4729-83c8-8195c66b7039",
+      "name": "pfSense - web interface certificate",
+      "targetKind": "Sensor",
+      "sensorTypeKey": "ssl-certificate",
+      "settings": {
+        "pollingInterval": "1.00:00:00",
+        "timeout": "00:00:15",
+        "parameters": {}
+      },
+      "tags": [
+        "device",
+        "pfsense"
+      ]
+    }
+  ]
+}

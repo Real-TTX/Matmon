@@ -49,7 +49,8 @@ public sealed class StoreTemplateFilesTests(ITestOutputHelper output)
         Assert.All(read.Templates, template =>
         {
             Assert.Contains(template.SensorTypeKey!, KnownTypes);
-            Assert.False(string.IsNullOrWhiteSpace(template.Target));
+            // A status-page template names the page it reads; a device template (tag "device") measures the host it is added to.
+            Assert.Equal(!template.Tags.Contains("device"), !string.IsNullOrWhiteSpace(template.Target));
             Assert.All(template.Settings.Thresholds.Keys, key => Assert.StartsWith("channel:", key));
         });
         Assert.Empty(TemplateTransfer.Scripts(read.Templates));
@@ -83,7 +84,7 @@ public sealed class StoreTemplateFilesTests(ITestOutputHelper output)
         var failures = new List<string>();
         foreach (var file in Files().Select(row => (string)row[0]))
         {
-            foreach (var template in Read(file).Templates)
+            foreach (var template in Read(file).Templates.Where(template => template.Tags.Contains("status-page")))
             {
                 ISensorExecutor executor = template.SensorTypeKey switch { "rss-feed" => rss, "ssl-certificate" => ssl, _ => http };
                 var result = await executor.ExecuteAsync(new SensorExecutionContext(template.SensorTypeKey!, template.Target!, template.Settings.Clone()));

@@ -206,6 +206,79 @@ Set("matmon-status", "Matmon status",
         new JsonObject { ["channel:latency:warning"] = "> 5000", ["channel:latency:critical"] = "> 15000" },
         poll: "01:00:00"));
 
+// ------------------------------------------------------------------ devices (no target: the sensor measures the host it is added to)
+
+// The SNMP basics every device template shares: v2c on 161. The community is a secret and never travels in a template file -
+// it comes from the host's SNMP credential or is typed into the sensor.
+JsonObject Snmp(string oids) => new()
+{
+    ["snmp.version"] = "v2c",
+    ["snmp.port"] = "161",
+    ["snmp.oids"] = oids
+};
+
+// UCD-SNMP-MIB (net-snmp's own, and pfSense's "UCD" module): idle CPU, 1-minute load x 100, real memory total / available (kB).
+const string UcdSystem = "1.3.6.1.2.1.1.3.0|uptime\n"
+    + "1.3.6.1.4.1.2021.11.11.0|cpu_idle\n"
+    + "1.3.6.1.4.1.2021.10.1.5.1|load_1min_x100\n"
+    + "1.3.6.1.4.1.2021.4.5.0|memory_total_kb\n"
+    + "1.3.6.1.4.1.2021.4.6.0|memory_available_kb";
+
+JsonObject CpuIdle() => new()
+{
+    ["channel:cpu_idle:warning"] = "< 15",
+    ["channel:cpu_idle:critical"] = "< 5"
+};
+
+Set("pfsense-snmp", "pfSense (SNMP)",
+    "pfSense over SNMP: reachability, CPU, load, memory, the packet filter's state table and the WAN interface's traffic.",
+    "pfSense has no official API, so these templates read it over SNMP. On the firewall: Services > SNMP - enable it, set a community "
+    + "(or use SNMPv3 in the sensor), bind it to the LAN interface and tick the modules MibII, PF and UCD.\n\n"
+    + "\"pfSense - ping\" checks that the firewall answers (latency, packet loss). \"pfSense - system (SNMP)\" reads uptime, idle CPU "
+    + "(warning below 15 %), the 1-minute load, real memory, whether the packet filter runs (critical when it does not) and the "
+    + "number of states. \"pfSense - WAN interface (SNMP)\" shows traffic and utilisation of one interface - set its interface "
+    + "index after adding it (index 1 is a guess; the SNMP walk in the sensor editor lists the interfaces). "
+    + "\"pfSense - web interface certificate\" warns before the certificate of the web interface runs out.\n\n"
+    + "Add the templates to the host that is the firewall; they use the host's address. Put the SNMP community into an SNMP "
+    + "credential on the host (or type it into each sensor) - a template file never carries it.",
+    ["pfSense", "Firewall", "SNMP", "Netgate"],
+    Template("pfSense - ping", "ping", null, new JsonObject { ["count"] = "3" }, ["device", "pfsense"], poll: "00:00:30"),
+    Template("pfSense - system (SNMP)", "snmp", null,
+        Snmp(UcdSystem
+            + "\n1.3.6.1.4.1.12325.1.200.1.1.1.0|pf_running"
+            + "\n1.3.6.1.4.1.12325.1.200.1.3.1.0|pf_states"),
+        ["device", "pfsense"],
+        new JsonObject
+        {
+            ["channel:cpu_idle:warning"] = "< 15",
+            ["channel:cpu_idle:critical"] = "< 5",
+            // TruthValue: 1 = true, 2 = false
+            ["channel:pf_running:critical"] = "> 1"
+        },
+        poll: "00:01:00", defaultChannel: "cpu_idle"),
+    Template("pfSense - WAN interface (SNMP)", "snmp-interface", null,
+        new JsonObject { ["snmp.version"] = "v2c", ["snmp.port"] = "161", ["snmp.interfaceIndex"] = "1" },
+        ["device", "pfsense"], poll: "00:01:00"),
+    Template("pfSense - web interface certificate", "ssl-certificate", null, new JsonObject(), ["device", "pfsense"], poll: "1.00:00:00"));
+
+Set("starface", "STARFACE",
+    "A STARFACE phone system: SIP answers, reachability, the web interface's certificate and - with SNMP switched on - CPU, load and memory.",
+    "\"STARFACE - SIP\" sends a SIP OPTIONS request to port 5060 (UDP) and expects any answer - a 401 or 407 (\"log in first\") "
+    + "is a healthy answer from a phone system; silence is critical. \"STARFACE - ping\" checks reachability, latency and packet "
+    + "loss. \"STARFACE - web interface certificate\" warns before the certificate of the admin interface runs out.\n\n"
+    + "\"STARFACE - system (SNMP)\" reads uptime, idle CPU (warning below 15 %), the 1-minute load and memory through the "
+    + "UCD-SNMP-MIB of the underlying Linux. It only works where SNMP is switched on for the STARFACE and the probe's address "
+    + "is allowed - leave it out otherwise. Use SIP over TCP in the sensor when the system only listens on TCP.\n\n"
+    + "Add the templates to the host that is the STARFACE; they use the host's address. Trunk states, registered phones and "
+    + "calls are not read - that needs the STARFACE API.",
+    ["STARFACE", "Phone system", "VoIP", "SIP"],
+    Template("STARFACE - SIP", "sip", null, new JsonObject { ["sip.transport"] = "udp", ["sip.port"] = "5060" }, ["device", "starface"],
+        new JsonObject { ["channel:responseTime:warning"] = "> 1000", ["channel:responseTime:critical"] = "> 5000" }, poll: "00:01:00"),
+    Template("STARFACE - ping", "ping", null, new JsonObject { ["count"] = "3" }, ["device", "starface"], poll: "00:00:30"),
+    Template("STARFACE - web interface certificate", "ssl-certificate", null, new JsonObject(), ["device", "starface"], poll: "1.00:00:00"),
+    Template("STARFACE - system (SNMP)", "snmp", null, Snmp(UcdSystem), ["device", "starface"], CpuIdle(),
+        poll: "00:05:00", defaultChannel: "cpu_idle"));
+
 // ------------------------------------------------------------------ the catalogue (store texts per file)
 
 File.WriteAllText(Path.Combine(root, "catalog.json"), catalog.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
