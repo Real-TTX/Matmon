@@ -58,6 +58,7 @@ public static class SensorTelemetryProfiles
         ["snmp-printer"] = Availability,
         ["redfish"] = Responsive,
         ["proxmox-backup"] = Responsive,
+        ["synology-backup"] = Availability,
         ["mssql"] = Responsive,
         ["postgres"] = Responsive,
         ["mysql"] = Responsive,

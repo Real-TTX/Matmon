@@ -32,6 +32,7 @@ public static class SensorExecutorRegistration
         services.AddTransient<ISensorExecutor>(_ => new FritzBoxSensorExecutor());
         services.AddTransient<ISensorExecutor>(_ => new RedfishSensorExecutor());
         services.AddTransient<ISensorExecutor>(_ => new ProxmoxBackupSensorExecutor());
+        services.AddTransient<ISensorExecutor>(_ => new SynologyBackupSensorExecutor());
         services.AddTransient<ISensorExecutor, PrinterSensorExecutor>();
         services.AddTransient<ISensorExecutor>(_ => new DomainExpirySensorExecutor());
         services.AddTransient<ISensorExecutor>(_ => new RssFeedSensorExecutor());

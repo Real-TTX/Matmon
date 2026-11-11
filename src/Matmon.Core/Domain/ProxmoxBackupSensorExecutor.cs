@@ -40,7 +40,7 @@ public sealed class ProxmoxBackupSensorExecutor : ISensorExecutor
     {
         Key = "proxmox-backup",
         DisplayName = "Proxmox Backup Server",
-        Description = "A Proxmox Backup Server via its API token: datastore usage and days until full, age of the newest backup and of the most neglected backup group, failed tasks in the last 24 hours, CPU / memory / root disk.",
+        Description = "A Proxmox Backup Server via its API token: datastore usage and days until full, one channel per backed-up guest (hours since its last backup, its failed backup named), the newest and the most neglected backup, failed tasks in the last 24 hours, CPU / memory / root disk.",
         ChannelMode = SensorChannelMode.Dynamic,
         Parameters =
         [
@@ -159,11 +159,17 @@ public sealed class ProxmoxBackupSensorExecutor : ISensorExecutor
                 var name = Text(entry, "store") ?? "datastore";
                 var groups = Text(entry, "error") is null
                     ? Items(await GetDataAsync(client, $"admin/datastore/{Uri.EscapeDataString(name)}/groups", required: false, timeoutCts.Token))
-                        .Select(group => Number(group, "last-backup")).OfType<double>().Select(epoch => DateTimeOffset.FromUnixTimeSeconds((long)epoch)).ToList()
+                        .Select(group => new PbsGroup(
+                            Text(group, "backup-type") ?? "group",
+                            Text(group, "backup-id") ?? Number(group, "backup-id")?.ToString(CultureInfo.InvariantCulture) ?? "?",
+                            Number(group, "last-backup") is { } epoch && epoch > 0 ? DateTimeOffset.FromUnixTimeSeconds((long)epoch) : null,
+                            Text(group, "comment"),
+                            Number(group, "backup-count") is { } count ? (int)count : null))
+                        .ToList()
                     : [];
                 stores.Add(new PbsDatastore(name, Number(entry, "total"), Number(entry, "used"), Number(entry, "avail"),
                     Number(entry, "estimated-full-date") is { } full && full > 0 ? DateTimeOffset.FromUnixTimeSeconds((long)full) : null,
-                    Text(entry, "error"), groups));
+                    Text(entry, "error"), groups.Select(group => group.LastBackup).OfType<DateTimeOffset>().ToList(), groups));
             }
 
             var since = now.AddHours(-24).ToUnixTimeSeconds();
@@ -197,7 +203,14 @@ public sealed class ProxmoxBackupSensorExecutor : ISensorExecutor
 
     // ---- the result (pure) -----------------------------------------------------------------------------------------------
 
-    public sealed record PbsDatastore(string Name, double? Total, double? Used, double? Available, DateTimeOffset? EstimatedFull, string? Error, IReadOnlyList<DateTimeOffset> GroupLastBackups);
+    public sealed record PbsDatastore(string Name, double? Total, double? Used, double? Available, DateTimeOffset? EstimatedFull, string? Error, IReadOnlyList<DateTimeOffset> GroupLastBackups, IReadOnlyList<PbsGroup>? Groups = null);
+
+    /// <summary>A backup group - one VM, container or host as PBS keeps it: its type and id, its newest snapshot, the comment of that
+    /// snapshot (Proxmox VE writes the guest name there by default) and how many snapshots it holds.</summary>
+    public sealed record PbsGroup(string Type, string Id, DateTimeOffset? LastBackup, string? Comment, int? Count);
+
+    /// <summary>At most this many group channels - a large server has hundreds of groups, and each is a channel.</summary>
+    public const int MaxGroupChannels = 150;
 
     public sealed record PbsTask(string Type, string? Id, string? Status);
 
@@ -289,6 +302,8 @@ public sealed class ProxmoxBackupSensorExecutor : ISensorExecutor
             }
         }
 
+        channels.AddRange(GroupChannels(stores, tasks, now, used));
+
         var defaultKey = channels.Any(channel => channel.Key == DatastoreUsedChannel) ? DatastoreUsedChannel : channels[0].Key;
         channels = channels.Select(channel => channel with { IsDefault = channel.Key == defaultKey }).ToList();
         var value = channels.First(channel => channel.IsDefault).Value;
@@ -298,6 +313,67 @@ public sealed class ProxmoxBackupSensorExecutor : ISensorExecutor
         return broken.Count > 0
             ? SensorExecutionResult.Critical(duration, message, value, defaultKey, channels)
             : SensorExecutionResult.Healthy(duration, message, value, defaultKey, channels);
+    }
+
+    /// <summary>
+    /// One channel per backup group (a VM, container or host): hours since its newest snapshot, named after the guest where
+    /// PBS knows it, and in the state of its backup tasks of the last 24 h - a failed backup of that guest (or one with
+    /// warnings) makes its channel a warning, with the task's own words as the channel's message. A threshold on a group's
+    /// age (say "older than 26 h") is set per channel in Channels &amp; thresholds - a weekly backup needs another limit than a
+    /// nightly one, and a guest that was retired keeps its group, so there is no default.
+    /// </summary>
+    public static IEnumerable<SensorChannelValue> GroupChannels(IReadOnlyList<PbsDatastore> stores, IReadOnlyList<PbsTask> tasks, DateTimeOffset now, HashSet<string> used)
+    {
+        var several = stores.Count(store => store.Groups is { Count: > 0 }) > 1;
+        var count = 0;
+        foreach (var store in stores)
+        {
+            foreach (var group in (store.Groups ?? [])
+                         .OrderBy(group => group.Type, StringComparer.Ordinal)
+                         .ThenBy(group => long.TryParse(group.Id, out var number) ? number : long.MaxValue)
+                         .ThenBy(group => group.Id, StringComparer.Ordinal))
+            {
+                if (count >= MaxGroupChannels)
+                {
+                    yield break;
+                }
+
+                var key = $"group.{RedfishSensorExecutor.Slug(store.Name)}.{RedfishSensorExecutor.Slug(group.Type)}-{RedfishSensorExecutor.Slug(group.Id)}.ageHours";
+                if (!used.Add(key))
+                {
+                    continue;
+                }
+
+                var kind = group.Type switch { "vm" => "VM", "ct" => "CT", "host" => "Host", _ => group.Type };
+                var name = string.IsNullOrWhiteSpace(group.Comment) ? $"{kind} {group.Id}" : $"{group.Comment.Trim()} ({kind} {group.Id})";
+                var label = several ? $"{name} on {store.Name} - last backup" : $"{name} - last backup";
+
+                // A backup task's worker id is "<datastore>:<type>/<id>".
+                var groupTasks = tasks.Where(task => string.Equals(task.Type, "backup", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(task.Id, $"{store.Name}:{group.Type}/{group.Id}", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(task.Status) && !task.Status.Equals("OK", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var failed = groupTasks.FirstOrDefault(task => !task.Status!.StartsWith("WARNINGS", StringComparison.OrdinalIgnoreCase));
+                var warned = groupTasks.FirstOrDefault(task => task.Status!.StartsWith("WARNINGS", StringComparison.OrdinalIgnoreCase));
+                var snapshots = group.Count is { } snapshotCount ? $"{snapshotCount} snapshot{(snapshotCount == 1 ? string.Empty : "s")}" : null;
+                var message = failed is not null ? $"Backup failed in the last 24 h: {failed.Status}"
+                    : warned is not null ? $"Backup with warnings in the last 24 h: {warned.Status}"
+                    : group.LastBackup is { } last ? string.Join(", ", new[] { $"last backup {Ago(now - last)}", snapshots }.Where(part => part is not null))
+                    : "no backup yet";
+                count++;
+                yield return new SensorChannelValue
+                {
+                    Key = key,
+                    Label = label,
+                    Value = group.LastBackup is { } newest ? Hours(now - newest) : null,
+                    Unit = "h",
+                    MeasurementKind = SensorMeasurementKind.Count,
+                    // Warning, like the sensor's own "failed tasks" default - a guest whose backup failed once is not yet an outage.
+                    State = failed is not null || warned is not null ? SensorState.Warning : SensorState.Healthy,
+                    Message = message
+                };
+            }
+        }
     }
 
     private static string Describe(IReadOnlyList<PbsDatastore> stores, List<PbsDatastore> readable, List<DateTimeOffset> lastBackups, List<PbsTask> failures, List<PbsTask> warnings, DateTimeOffset now, List<PbsDatastore> broken)

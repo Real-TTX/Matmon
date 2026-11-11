@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Matmon.Core.Domain;
@@ -310,6 +311,104 @@ public sealed class HardwareSensorTests
 
         Assert.Equal(SensorState.Critical, result.State);
         Assert.Contains("newest backup 60 h ago", result.Message);
+    }
+
+    [Fact]
+    public async Task Pbs_has_a_channel_per_backup_group_named_after_the_guest_and_in_the_state_of_its_backup_task()
+    {
+        var api = PbsApi("""[ { "worker_type": "backup", "worker_id": "backup:ct/200", "status": "connection error: timed out" } ]""");
+        api["/api2/json/admin/datastore/backup/groups"] = $$"""
+            { "data": [
+                { "backup-type": "vm", "backup-id": "101", "last-backup": {{Now.AddHours(-3).ToUnixTimeSeconds()}}, "backup-count": 14, "comment": "web-01" },
+                { "backup-type": "ct", "backup-id": "200", "last-backup": {{Now.AddHours(-27).ToUnixTimeSeconds()}}, "backup-count": 9 } ] }
+            """;
+        var result = await new ProxmoxBackupSensorExecutor(_ => new RoutingHandler(request => Json(api, request)))
+            .ExecuteAsync(new SensorExecutionContext("proxmox-backup", "pbs.example", PbsSettings()));
+
+        var web = result.Channels.Single(channel => channel.Key == "group.backup.vm-101.ageHours");
+        Assert.Equal("web-01 (VM 101) on backup - last backup", web.Label);
+        Assert.InRange(web.Value!.Value, 2.9, 3.1);
+        Assert.Equal(SensorState.Healthy, web.State);
+        Assert.StartsWith("last backup 3 h ago, 14 snapshots", web.Message);
+
+        var container = result.Channels.Single(channel => channel.Key == "group.backup.ct-200.ageHours");
+        Assert.Equal(SensorState.Warning, container.State);
+        Assert.Contains("connection error", container.Message);
+        Assert.NotNull(result.Channels.SingleOrDefault(channel => channel.Key == "group.offsite.vm-101.ageHours"));
+    }
+
+    // ---- Synology Hyper Backup ---------------------------------------------------------------------------------------------
+
+    private static RoutingHandler Dsm(string tasks, bool loginOk = true) => new(request =>
+    {
+        var form = request.Content?.ReadAsStringAsync().Result ?? string.Empty;
+        string json = request.RequestUri!.AbsolutePath switch
+        {
+            "/webapi/query.cgi" => """{ "success": true, "data": { "SYNO.API.Auth": { "path": "entry.cgi", "maxVersion": 7 }, "SYNO.Backup.Task": { "path": "entry.cgi", "maxVersion": 1 } } }""",
+            _ when form.Contains("method=login", StringComparison.Ordinal) => loginOk
+                ? """{ "success": true, "data": { "sid": "s1d" } }"""
+                : """{ "success": false, "error": { "code": 400 } }""",
+            _ when form.Contains("method=logout", StringComparison.Ordinal) => """{ "success": true }""",
+            _ when form.Contains("SYNO.Backup.Task", StringComparison.Ordinal) => $$"""{ "success": true, "data": { "task_list": {{tasks}} } }""",
+            _ => """{ "success": false, "error": { "code": 102 } }"""
+        };
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+    });
+
+    private static MonitoringSettings DsmSettings()
+    {
+        var settings = new MonitoringSettings();
+        settings.Parameters["generic.username"] = "monitor";
+        settings.Parameters["generic.password"] = "p@ss";
+        return settings;
+    }
+
+    private static string NasTime(TimeSpan ago) => DateTime.Now.Subtract(ago).ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture);
+
+    [Fact]
+    public async Task Synology_backup_has_a_channel_per_task_and_the_worst_task_decides()
+    {
+        var tasks = $$"""
+            [ { "task_id": 1, "name": "Daily to C2", "status": "none", "last_bkp_result": "done", "last_bkp_time": "{{NasTime(TimeSpan.FromHours(5))}}", "last_bkp_success_time": "{{NasTime(TimeSpan.FromHours(5))}}", "next_bkp_time": "{{NasTime(TimeSpan.FromHours(-19))}}" },
+              { "task_id": 2, "name": "USB copy", "status": "none", "last_bkp_result": "failed", "last_bkp_time": "{{NasTime(TimeSpan.FromHours(2))}}", "last_bkp_success_time": "{{NasTime(TimeSpan.FromDays(3))}}", "next_bkp_time": "{{NasTime(TimeSpan.FromHours(-22))}}" },
+              { "task_id": 3, "name": "Offsite", "status": "none", "last_bkp_result": "done", "last_bkp_time": "{{NasTime(TimeSpan.FromDays(2))}}", "next_bkp_time": "{{NasTime(TimeSpan.FromHours(5))}}" } ]
+            """;
+        var handler = Dsm(tasks);
+        var result = await new SynologyBackupSensorExecutor(_ => handler)
+            .ExecuteAsync(new SensorExecutionContext("synology-backup", "nas.example", DsmSettings()));
+
+        Assert.Equal(SensorState.Critical, result.State);
+        Assert.Equal(1, Channel(result, "failedTasks"));
+        Assert.Equal(1, Channel(result, "missedTasks"));
+        Assert.Equal(0, Channel(result, "task.daily-to-c2.result"));
+        Assert.InRange(Channel(result, "task.daily-to-c2.successAgeHours")!.Value, 4.9, 5.1);
+        Assert.Equal(SensorState.Critical, result.Channels.Single(channel => channel.Key == "task.usb-copy.result").State);
+        Assert.InRange(Channel(result, "task.usb-copy.successAgeHours")!.Value, 71.9, 72.1);
+        Assert.Equal(1, Channel(result, "task.offsite.result"));
+        Assert.Contains("USB copy: last run failed", result.Message);
+        Assert.Contains("Offsite: missed its scheduled run", result.Message);
+        Assert.Equal("https://nas.example:5001/webapi/query.cgi", handler.Requests[0].RequestUri!.ToString());
+        // The password never travels in the address.
+        Assert.All(handler.Requests, request => Assert.DoesNotContain("p%40ss", request.RequestUri!.Query, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Synology_backup_says_why_it_cannot_sign_in_and_a_running_task_is_fine()
+    {
+        var refused = await new SynologyBackupSensorExecutor(_ => Dsm("[]", loginOk: false))
+            .ExecuteAsync(new SensorExecutionContext("synology-backup", "nas.example", DsmSettings()));
+        Assert.Equal(SensorState.Critical, refused.State);
+        Assert.Contains("wrong user name or password", refused.Message);
+
+        var running = await new SynologyBackupSensorExecutor(_ => Dsm($$"""[ { "task_id": 1, "name": "Nightly", "status": "backup", "last_bkp_result": "failed", "next_bkp_time": "{{NasTime(TimeSpan.FromHours(3))}}" } ]"""))
+            .ExecuteAsync(new SensorExecutionContext("synology-backup", "nas.example", DsmSettings()));
+        Assert.Equal(SensorState.Healthy, running.State);
+        Assert.Contains("backing up right now", running.Channels.Single(channel => channel.Key == "task.nightly.result").Message);
+
+        var none = await new SynologyBackupSensorExecutor(_ => Dsm("[]"))
+            .ExecuteAsync(new SensorExecutionContext("synology-backup", "nas.example", DsmSettings()));
+        Assert.Equal(SensorState.Warning, none.State);
+        Assert.Contains("administrators", none.Message);
     }
 
     // ---- FRITZ!Box -------------------------------------------------------------------------------------------------------

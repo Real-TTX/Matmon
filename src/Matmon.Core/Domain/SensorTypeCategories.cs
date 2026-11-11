@@ -73,6 +73,7 @@ public static class SensorTypeCategories
         ["proxmox-node-health"] = "Virtualization & NAS",
         ["proxmox-disk"] = "Virtualization & NAS",
         ["proxmox-backup"] = "Virtualization & NAS",
+        ["synology-backup"] = "Virtualization & NAS",
         ["vmware-health"] = "Virtualization & NAS",
         ["vmware-host-health"] = "Virtualization & NAS",
         ["synology"] = "Virtualization & NAS",
