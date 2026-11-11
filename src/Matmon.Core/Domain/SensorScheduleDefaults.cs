@@ -47,6 +47,7 @@ public static class SensorScheduleDefaults
         // Backups arrive hours apart and a datastore fills over days - a quarter of an hour is plenty.
         ["proxmox-backup"] = TimeSpan.FromMinutes(15),
         ["synology-backup"] = TimeSpan.FromMinutes(15),
+        ["proxmox-backup-jobs"] = TimeSpan.FromMinutes(15),
 
         // dcdiag takes up to a minute and a domain controller does not change by the minute.
         ["ad-health"] = TimeSpan.FromMinutes(15),

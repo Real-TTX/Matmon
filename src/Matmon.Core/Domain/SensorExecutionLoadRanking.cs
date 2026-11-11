@@ -54,6 +54,7 @@ public static class SensorExecutionLoadRanking
         ["snmp-printer"] = Moderate,
         ["proxmox-backup"] = Moderate,
         ["synology-backup"] = Moderate,
+        ["proxmox-backup-jobs"] = Moderate,
         ["mssql"] = Heavy,
         ["postgres"] = Heavy,
         ["mysql"] = Heavy,

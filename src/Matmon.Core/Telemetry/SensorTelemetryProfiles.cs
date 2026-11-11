@@ -59,6 +59,7 @@ public static class SensorTelemetryProfiles
         ["redfish"] = Responsive,
         ["proxmox-backup"] = Responsive,
         ["synology-backup"] = Availability,
+        ["proxmox-backup-jobs"] = Availability,
         ["mssql"] = Responsive,
         ["postgres"] = Responsive,
         ["mysql"] = Responsive,

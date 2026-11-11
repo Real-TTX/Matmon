@@ -411,6 +411,149 @@ public sealed class HardwareSensorTests
         Assert.Contains("administrators", none.Message);
     }
 
+    // ---- Proxmox VE backup jobs ------------------------------------------------------------------------------------------
+
+    private const string PveUpid = "UPID:pve1:0000ABCD:01234567:65000000:vzdump::root@pam:";
+
+    private static HttpResponseMessage PveRoute(HttpRequestMessage request, string jobs, string log, string taskStatus = "\"status\": \"job errors\", ")
+    {
+        var path = Uri.UnescapeDataString(request.RequestUri!.AbsolutePath);
+        var started = Now.AddHours(-5).ToUnixTimeSeconds();
+        string? json = path switch
+        {
+            "/api2/json/cluster/backup" => $$"""{ "data": {{jobs}} }""",
+            "/api2/json/cluster/resources" => """
+                { "data": [
+                    { "vmid": 100, "type": "qemu", "name": "web01", "node": "pve1" },
+                    { "vmid": 101, "type": "qemu", "name": "db01", "node": "pve1" },
+                    { "vmid": 200, "type": "lxc", "name": "dns", "node": "pve2", "pool": "infra" },
+                    { "vmid": 300, "type": "qemu", "name": "lab", "node": "pve2" },
+                    { "vmid": 9000, "type": "qemu", "name": "tmpl", "node": "pve2", "template": 1 } ] }
+                """,
+            "/api2/json/nodes" => """{ "data": [ { "node": "pve1", "status": "online" }, { "node": "pve2", "status": "online" } ] }""",
+            "/api2/json/nodes/pve1/tasks" => $$"""{ "data": [ { "upid": "{{PveUpid}}", "node": "pve1", "type": "vzdump", "id": "", "starttime": {{started}}, "endtime": {{started + 600}}, {{taskStatus}}"user": "root@pam" } ] }""",
+            "/api2/json/nodes/pve2/tasks" => """{ "data": [] }""",
+            "/api2/json/nodes/pve1/tasks/" + PveUpid + "/log" => $$"""{ "data": [ {{string.Join(", ", log.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select((line, index) => $$"""{ "n": {{index + 1}}, "t": "{{line.Trim()}}" }"""))}} ] }""",
+            "/api2/json/nodes/pve1/storage" => """{ "data": [ { "storage": "pbs", "shared": 1, "active": 1 } ] }""",
+            "/api2/json/nodes/pve2/storage" => """{ "data": [ { "storage": "pbs", "shared": 1, "active": 1 } ] }""",
+            "/api2/json/nodes/pve1/storage/pbs/content" => $$"""
+                { "data": [
+                    { "volid": "pbs:backup/vm/100/a", "vmid": 100, "ctime": {{Now.AddHours(-5).ToUnixTimeSeconds()}} },
+                    { "volid": "pbs:backup/vm/101/a", "vmid": 101, "ctime": {{Now.AddDays(-3).ToUnixTimeSeconds()}} },
+                    { "volid": "pbs:backup/ct/200/a", "vmid": 200, "ctime": {{Now.AddHours(-20).ToUnixTimeSeconds()}} } ] }
+                """,
+            _ => null
+        };
+        return json is null
+            ? new HttpResponseMessage(HttpStatusCode.NotFound)
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+    }
+
+    private static MonitoringSettings PveSettings()
+    {
+        var settings = new MonitoringSettings();
+        settings.Parameters["pve.tokenId"] = "monitor@pve!matmon";
+        settings.Parameters["pve.tokenSecret"] = "c0ffee";
+        return settings;
+    }
+
+    private const string PveJobs = """
+        [ { "id": "backup-nightly", "enabled": 1, "all": 1, "exclude": "300", "node": "pve1", "storage": "pbs", "schedule": "21:00" },
+          { "id": "backup-infra", "enabled": 1, "pool": "infra", "storage": "pbs", "schedule": "sun 02:00" },
+          { "id": "backup-old", "enabled": 0, "vmid": "300", "storage": "pbs" } ]
+        """;
+
+    private const string PveLog = """
+        INFO: starting new backup job: vzdump --all 1 --exclude 300 --node pve1 --storage pbs
+        INFO: Starting Backup of VM 100 (qemu)
+        INFO: Backup started at 2026-11-10 21:00:01
+        INFO: Finished Backup of VM 100 (00:01:02)
+        INFO: Starting Backup of VM 101 (qemu)
+        ERROR: Backup of VM 101 failed - storage 'pbs' is not online
+        INFO: Failed at 2026-11-10 21:01:10
+        INFO: Backup job finished with errors
+        TASK ERROR: job errors
+        """;
+
+    [Fact]
+    public async Task Pve_backup_jobs_give_each_covered_guest_its_last_result_and_age()
+    {
+        var handler = new RoutingHandler(request => PveRoute(request, PveJobs, PveLog));
+        var result = await new ProxmoxBackupJobsSensorExecutor(_ => handler)
+            .ExecuteAsync(new SensorExecutionContext("proxmox-backup-jobs", "pve1.example", PveSettings()));
+
+        Assert.Equal(SensorState.Critical, result.State);
+        Assert.Equal("failedGuests", result.DefaultChannelKey);
+        Assert.Equal(1, Channel(result, "failedGuests"));
+        Assert.Equal(0, Channel(result, "vm.100.backup"));
+        Assert.Equal(2, Channel(result, "vm.101.backup"));
+        Assert.Equal(SensorState.Critical, result.Channels.Single(channel => channel.Key == "vm.101.backup").State);
+        Assert.Contains("storage 'pbs' is not online", result.Channels.Single(channel => channel.Key == "vm.101.backup").Message);
+        Assert.Equal("db01 (VM 101) backup", result.Channels.Single(channel => channel.Key == "vm.101.backup").Label);
+        // The pool job covers the container on pve2; it has no run in the window - a warning, its last file 20 h old.
+        Assert.Equal(1, Channel(result, "ct.200.backup"));
+        Assert.InRange(Channel(result, "ct.200.backupAgeHours")!.Value, 19.9, 20.1);
+        Assert.InRange(Channel(result, "vm.101.backupAgeHours")!.Value, 71.9, 72.1);
+        Assert.InRange(Channel(result, "vm.100.backupAgeHours")!.Value, 4.9, 5.1);
+        // VM 300 is only in a disabled job and the template counts for nothing.
+        Assert.Null(Channel(result, "vm.300.backup"));
+        Assert.Equal(1, Channel(result, "guestsWithoutJob"));
+        Assert.Equal(2, Channel(result, "backupJobs"));
+        Assert.Contains("db01 (VM 101): failed", result.Message);
+        Assert.Contains("in no job: lab", result.Message);
+        Assert.Equal("PVEAPIToken=monitor@pve!matmon=c0ffee", handler.Requests[0].Headers.GetValues("Authorization").Single());
+    }
+
+    [Fact]
+    public async Task Pve_backup_jobs_all_fine_is_healthy_and_says_how_old_the_oldest_backup_is()
+    {
+        var jobs = """[ { "id": "backup-nightly", "enabled": 1, "vmid": "100", "storage": "pbs" } ]""";
+        var log = """
+            INFO: Starting Backup of VM 100 (qemu)
+            INFO: Finished Backup of VM 100 (00:01:02)
+            """;
+        var result = await new ProxmoxBackupJobsSensorExecutor(_ => new RoutingHandler(request => PveRoute(request, jobs, log, "\"status\": \"OK\", ")))
+            .ExecuteAsync(new SensorExecutionContext("proxmox-backup-jobs", "pve1.example", PveSettings()));
+
+        Assert.Equal(SensorState.Healthy, result.State);
+        Assert.Equal(0, Channel(result, "failedGuests"));
+        Assert.StartsWith("1 guest backed up by 1 job, oldest last backup 5 h ago", result.Message);
+        Assert.Equal(3, Channel(result, "guestsWithoutJob"));
+    }
+
+    [Fact]
+    public async Task Pve_backup_jobs_no_job_and_a_refused_token_say_why()
+    {
+        var none = await new ProxmoxBackupJobsSensorExecutor(_ => new RoutingHandler(request => PveRoute(request, "[]", string.Empty)))
+            .ExecuteAsync(new SensorExecutionContext("proxmox-backup-jobs", "pve1.example", PveSettings()));
+        var forbidden = await new ProxmoxBackupJobsSensorExecutor(_ => new RoutingHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)))
+            .ExecuteAsync(new SensorExecutionContext("proxmox-backup-jobs", "pve1.example", PveSettings()));
+
+        Assert.Equal(SensorState.Warning, none.State);
+        Assert.Contains("No backup job", none.Message);
+        Assert.Equal(SensorState.Critical, forbidden.State);
+        Assert.Contains("PVEAuditor", forbidden.Message);
+    }
+
+    [Fact]
+    public void Pve_backup_log_parsing_handles_warnings_and_an_aborted_guest()
+    {
+        var runs = ProxmoxBackupJobsSensorExecutor.ParseLog(
+        [
+            "INFO: Starting Backup of VM 100 (qemu)",
+            "WARN: unable to connect to the guest agent",
+            "INFO: Finished Backup of VM 100 (00:00:40)",
+            "INFO: Starting Backup of VM 200 (lxc)",
+            "INFO: Finished Backup of VM 200 (00:00:05)",
+            "INFO: Starting Backup of VM 101 (qemu)",
+            "TASK ERROR: interrupted by signal"
+        ]);
+
+        Assert.Equal([(100, 1), (200, 0), (101, 2)], runs.Select(run => (run.VmId, run.Result)));
+        Assert.Equal("unable to connect to the guest agent", runs[0].Message);
+        Assert.Equal("done in 00:00:05", runs[1].Message);
+    }
+
     // ---- FRITZ!Box -------------------------------------------------------------------------------------------------------
 
     private static Dictionary<string, string> FritzActions(string status = "Connected") => new()

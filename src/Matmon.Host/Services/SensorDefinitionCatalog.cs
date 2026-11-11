@@ -37,6 +37,7 @@ public static class SensorDefinitionCatalog
         RedfishSensorExecutor.Definition,
         ProxmoxBackupSensorExecutor.Definition,
         SynologyBackupSensorExecutor.Definition,
+        ProxmoxBackupJobsSensorExecutor.Definition,
         PrinterSensorExecutor.Definition,
         DomainExpirySensorExecutor.Definition,
         RssFeedSensorExecutor.Definition,

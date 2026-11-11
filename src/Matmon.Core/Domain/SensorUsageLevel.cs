@@ -38,6 +38,7 @@ public static class SensorUsageCatalog
             ["redfish"] = SensorUsageLevel.Moderate,
             ["proxmox-backup"] = SensorUsageLevel.Moderate,
             ["synology-backup"] = SensorUsageLevel.Moderate,
+            ["proxmox-backup-jobs"] = SensorUsageLevel.Moderate,
             ["synology-nas"] = SensorUsageLevel.Moderate,
             ["synology-health"] = SensorUsageLevel.Moderate,
             ["ssl-certificate"] = SensorUsageLevel.Moderate,
