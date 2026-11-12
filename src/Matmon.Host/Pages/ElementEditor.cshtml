@@ -134,6 +134,19 @@ else
                                 <div class="mat-field mat-field--full">
                                     <span class="mat-hint">Its sensors run on the agent. Moving this host under another probe makes the agent talk through that probe - it has to be able to reach it. <a asp-page="/Agents">New install code or another host: Agents page</a></span>
                                 </div>
+                                <div class="mat-field mat-field--full">
+                                    <label class="mat-check">
+                                        <input asp-for="ElementEditor.AgentMayGoOffline" type="checkbox" aria-describedby="element-agent-offline-hint" />
+                                        <span class="mat-check__text">This machine may be offline (a notebook)</span>
+                                    </label>
+                                    <span class="mat-hint" id="element-agent-offline-hint">While the agent is silent - shut down, asleep, no network - the host shows "offline" instead of an error and raises no alert; its sensors wait. The agent says so itself when it shuts down or goes to sleep.</span>
+                                </div>
+                                <div class="mat-field" data-show-if="#ElementEditor_AgentMayGoOffline" data-show-value="true" hidden="@(!Model.ElementEditor.AgentMayGoOffline)">
+                                    <label class="mat-label" asp-for="ElementEditor.AgentOfflineWarnDays">Warn after (days offline)</label>
+                                    <input asp-for="ElementEditor.AgentOfflineWarnDays" type="number" min="0" max="365" inputmode="numeric" class="mat-input mat-mono" data-msg-range="0 to 365 days." />
+                                    <span class="mat-hint">0 = never. A notebook gone this long is probably lost or retired.</span>
+                                    <span class="mat-error" aria-live="polite"></span>
+                                </div>
                             }
                             else if (Model.ElementEditor.Kind == "Probe")
                             {

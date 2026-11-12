@@ -310,6 +310,29 @@ public sealed class AgentAsHostTests : IDisposable
     public void A_probe_relays_exactly_what_an_agent_calls(string path, bool relayed) =>
         Assert.Equal(relayed, AgentRelay.IsAgentPath(new PathString(path)));
 
+    [Fact]
+    public void A_host_that_may_go_offline_is_known_to_the_connection_sensor_and_survives_a_restart()
+    {
+        var redeemed = Enrol("NOTEBOOK-07");
+        Assert.False(_store.TryGet(redeemed.ProbeId, out _));
+
+        _store.UpdateElement(redeemed.ElementId, element =>
+        {
+            var agent = ((HostElement)element).Agent!;
+            agent.MayGoOffline = true;
+            agent.OfflineWarnDays = 30;
+        });
+        Assert.True(_store.TryGet(redeemed.ProbeId, out var warnDays));
+        Assert.Equal(30, warnDays);
+        Assert.False(_store.TryGet("someone-else", out _));
+
+        _store.Dispose();
+        using var telemetry = new SqliteTelemetryRepository(Path.Combine(_dir, "telemetry-offline.db"));
+        using var reopened = NewStore(Path.Combine(_dir, "workspace.json"), telemetry);
+        Assert.True(reopened.TryGet(redeemed.ProbeId, out var reopenedDays));
+        Assert.Equal(30, reopenedDays);
+    }
+
     public void Dispose()
     {
         _store.Dispose();

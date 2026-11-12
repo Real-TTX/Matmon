@@ -20,11 +20,20 @@ public sealed class AgentIdentity
     /// enrols again with a rollout key.</summary>
     public string? MachineId { get; set; }
 
+    /// <summary>The machine may be switched off, asleep or away (a notebook): while its agent is silent the host is "offline" -
+    /// its connection sensor shows that instead of an error and raises no alert (<see cref="AgentOffline"/>).</summary>
+    public bool MayGoOffline { get; set; }
+
+    /// <summary>With <see cref="MayGoOffline"/>: warn once it has been offline this many days (0 = never).</summary>
+    public int OfflineWarnDays { get; set; } = AgentOffline.DefaultWarnDays;
+
     public AgentIdentity Clone() => new()
     {
         ProbeId = ProbeId,
         Token = Token,
         EnrolledUtc = EnrolledUtc,
-        MachineId = MachineId
+        MachineId = MachineId,
+        MayGoOffline = MayGoOffline,
+        OfflineWarnDays = OfflineWarnDays
     };
 }

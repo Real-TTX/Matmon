@@ -14,19 +14,22 @@ public sealed class SlaveHeartbeatService : BackgroundService
     private readonly ProbeRuntimeOptions _runtimeOptions;
     private readonly SlaveProbeRuntimeState _runtimeState;
     private readonly IProbeSelfUpdate? _selfUpdate;
+    private readonly ProbeGoingOffline? _goingOffline;
 
     public SlaveHeartbeatService(
         IHttpClientFactory httpClientFactory,
         ILogger<SlaveHeartbeatService> logger,
         ProbeRuntimeOptions runtimeOptions,
         SlaveProbeRuntimeState runtimeState,
-        IProbeSelfUpdate? selfUpdate = null)
+        IProbeSelfUpdate? selfUpdate = null,
+        ProbeGoingOffline? goingOffline = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _runtimeOptions = runtimeOptions;
         _runtimeState = runtimeState;
         _selfUpdate = selfUpdate;
+        _goingOffline = goingOffline;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -81,6 +84,17 @@ public sealed class SlaveHeartbeatService : BackgroundService
             {
                 break;
             }
+        }
+    }
+
+    /// <summary>Stopping (the service, a shutdown, an update): the heartbeats end first, then the primary is told this machine
+    /// is going away - an agent host that may go offline shows it at once.</summary>
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+        if (_goingOffline is not null)
+        {
+            await _goingOffline.SendAsync(ProbeGoingOffline.DefaultTimeout, "stopping");
         }
     }
 

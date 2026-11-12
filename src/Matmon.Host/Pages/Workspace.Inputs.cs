@@ -317,6 +317,12 @@ public sealed class WorkspaceElementEditorInput : ISensorThresholdEditor, ISenso
     /// <summary>A remote probe: the address agents in its network use to reach it (it relays them).</summary>
     public string? ProbeAgentAddress { get; set; }
 
+    /// <summary>An agent host: the machine may be offline (a notebook) - no error while its agent is silent.</summary>
+    public bool AgentMayGoOffline { get; set; }
+
+    /// <summary>An agent host that may go offline: warn after this many days offline (0 = never).</summary>
+    public int AgentOfflineWarnDays { get; set; } = AgentOffline.DefaultWarnDays;
+
     public string? Address { get; set; }
 
     public string? SensorTypeKey { get; set; }

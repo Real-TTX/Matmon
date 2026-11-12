@@ -405,7 +405,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
             ? TryGetLatestSensorObservation(sensorHistoryMap, observedSensor.Id)
             : null;
         var sensorPresentation = element is SensorElement presentationSensor
-            ? BuildSensorPresentation(presentationSensor, sensorObservation, EffectiveStaleAfter(effectiveSettings, presentationSensor.SensorTypeKey))
+            ? BuildSensorPresentation(presentationSensor, sensorObservation, EffectiveStaleAfter(effectiveSettings, presentationSensor.SensorTypeKey), overdueReason: OfflineReason(lineage))
             : null;
         var stateKey = sensorPresentation?.StateKey ?? MonitoringStatePresentation.Key(state);
         var stateLabel = sensorPresentation?.StateLabel ?? MonitoringStatePresentation.Label(state);
@@ -573,7 +573,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         var unit = GetSensorUnit(sensor.SensorTypeKey);
         var observations = TryGetSensorObservations(sensorHistoryMap, sensor.Id);
         var latestObservation = observations.Count == 0 ? null : observations[^1];
-        var display = BuildSensorPresentation(sensor, latestObservation, EffectiveStaleAfter(effectiveSettings, sensor.SensorTypeKey), defaultChannelKey);
+        var display = BuildSensorPresentation(sensor, latestObservation, EffectiveStaleAfter(effectiveSettings, sensor.SensorTypeKey), defaultChannelKey, OfflineReason(lineage));
         // Humanize the current value exactly like the sensor-detail view + notifications: take the latest
         // observation's DEFAULT channel unit (the per-type fallback only when the channel has none) and auto-scale
         // (e.g. SNMP uptime seconds -> days). The tree, the dashboard cards and the live /api/dashboard refresh all
@@ -640,6 +640,26 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
     // per-type default) - NOT the type default alone. Using the type default made a slow-polling sensor (e.g. a
     // ping set to every 2 min) flip grey after the 30 s ping type-default window and flap green<->grey between
     // its real polls. Floored so the fastest sensors don't flap on normal poll jitter.
+    /// <summary>A sensor on an agent host that may go offline (a notebook) and is offline right now: its overdue reading says
+    /// why - the machine is away - instead of "awaiting refresh". Null otherwise.</summary>
+    private string? OfflineReason(IEnumerable<MonitoringElement> lineage)
+    {
+        if (lineage.OfType<HostElement>().LastOrDefault() is not { Agent: { MayGoOffline: true } agent } host
+            || _probeRegistry is not IProbeHeartbeatLookup lookup)
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset? lastSeen = lookup.TryGetLastHeartbeat(agent.ProbeId, out var seen, out _) ? seen : null;
+        DateTimeOffset? notice = lookup.TryGetGoingOffline(agent.ProbeId, out var at) ? at : null;
+        return AgentOffline.Since(lastSeen, notice, now) is not DateTimeOffset since
+            ? null
+            : since == DateTimeOffset.MinValue
+                ? $"{host.Name} is offline - waits for it to come back"
+                : $"{host.Name} is offline for {AgentOffline.Describe(now - since)} - waits for it to come back";
+    }
+
     private static TimeSpan EffectiveStaleAfter(MonitoringSettings settings, string sensorTypeKey)
     {
         var interval = settings.PollingInterval is { } configured && configured > TimeSpan.Zero
@@ -655,7 +675,8 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
         SensorElement sensor,
         SensorObservation? latestObservation,
         TimeSpan staleAfter,
-        string? defaultChannelKey = null)
+        string? defaultChannelKey = null,
+        string? overdueReason = null)
     {
         if (sensor.IsPaused)
         {
@@ -689,7 +710,7 @@ public sealed class DashboardSnapshotProvider : IDashboardSnapshotProvider
                 MonitoringStatePresentation.UnknownKey,
                 MonitoringStatePresentation.UnknownLabel,
                 MonitoringStatePresentation.UnknownColor,
-                "awaiting refresh (overdue)",
+                overdueReason ?? "awaiting refresh (overdue)",
                 GetObservationDefaultValue(latestObservation, defaultChannelKey));
         }
 

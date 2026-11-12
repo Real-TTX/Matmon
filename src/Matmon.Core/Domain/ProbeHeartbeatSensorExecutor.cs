@@ -30,9 +30,31 @@ public sealed class ProbeHeartbeatSensorExecutor : ISensorExecutor
         }
     }
 
-    public ProbeHeartbeatSensorExecutor(IProbeHeartbeatLookup probeHeartbeatLookup)
+    private readonly IAgentOfflinePolicy? _offlinePolicy;
+
+    public ProbeHeartbeatSensorExecutor(IProbeHeartbeatLookup probeHeartbeatLookup, IAgentOfflinePolicy? offlinePolicy = null)
     {
         _probeHeartbeatLookup = probeHeartbeatLookup;
+        _offlinePolicy = offlinePolicy;
+    }
+
+    /// <summary>An agent host that may go offline (a notebook): its silence is "offline", not an error (<see cref="AgentOffline"/>).
+    /// Null when the host is online or has no such option - then the heartbeat is judged as before.</summary>
+    private SensorExecutionResult? JudgeOffline(string probeId, bool known, DateTimeOffset lastSeenUtc, string? probeName)
+    {
+        if (_offlinePolicy is null || !_offlinePolicy.TryGet(probeId, out var warnDays))
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset? notice = _probeHeartbeatLookup.TryGetGoingOffline(probeId, out var at) ? at : null;
+        if (AgentOffline.Since(known ? lastSeenUtc : null, notice, now) is not DateTimeOffset since)
+        {
+            return null;
+        }
+
+        return AgentOffline.Result(since, warnDays, probeName, known ? Math.Max((now - lastSeenUtc).TotalSeconds, 0) : null, now);
     }
 
     public string SensorTypeKey => Definition.Key;
@@ -51,7 +73,13 @@ public sealed class ProbeHeartbeatSensorExecutor : ISensorExecutor
         var watch = Stopwatch.StartNew();
         try
         {
-            if (!_probeHeartbeatLookup.TryGetLastHeartbeat(context.Target, out var lastSeenUtc, out var probeName))
+            var known = _probeHeartbeatLookup.TryGetLastHeartbeat(context.Target, out var lastSeenUtc, out var probeName);
+            if (JudgeOffline(context.Target, known, lastSeenUtc, probeName) is { } offline)
+            {
+                return ValueTask.FromResult(offline);
+            }
+
+            if (!known)
             {
                 watch.Stop();
                 var missingChannel = new SensorChannelValue

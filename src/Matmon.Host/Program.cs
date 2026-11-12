@@ -235,6 +235,8 @@ builder.Services.AddSingleton<Matmon.Host.Services.CloudTemplateExportRelay>();
 builder.Services.AddSingleton<InMemoryProbeRegistry>();
 builder.Services.AddSingleton<IProbeRegistry>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
 builder.Services.AddSingleton<IProbeHeartbeatLookup>(sp => sp.GetRequiredService<InMemoryProbeRegistry>());
+// Agent hosts that may go offline (a notebook): the agent connection sensor asks the store for the host's option.
+builder.Services.AddSingleton<IAgentOfflinePolicy>(sp => (IAgentOfflinePolicy)sp.GetRequiredService<IMonitoringWorkspaceStore>());
 // Constructed explicitly rather than by convention so the store gets the MapAssetStore and the MibLibrary - it
 // needs them to put uploaded map pictures and MIB files into a local backup and to write them back on restore.
 builder.Services.AddSingleton<IMonitoringWorkspaceStore>(provider => new InMemoryMonitoringWorkspaceStore(
@@ -1084,12 +1086,34 @@ if (runtimeOptions.Mode == AppMode.Primary)
             return Results.Unauthorized();
         }
 
+        // Back from being away (it had said it was going offline): its connection sensor looks again at once.
+        var wasAway = registry is IProbeHeartbeatLookup lookup && lookup.TryGetGoingOffline(request.ProbeId, out _);
+
         // An agent behind a remote probe: which probe relayed it (only when that probe vouched with its own token).
         registry.Record(request, DateTimeOffset.UtcNow, AgentRelay.ReadRelay(http, workspaceStore, out _));
+        if (wasAway)
+        {
+            WakeConnectionSensor(workspaceStore, http.HttpContext.RequestServices.GetService<SensorWakeQueue>(), request.ProbeId);
+        }
         // The answer carries the primary's version and an update command for a Docker probe (Probes page > Update); an
         // older probe ignores the body, so this is backward compatible both ways.
         var command = updateCommands.OnHeartbeat(request.ProbeId, request.AgentVersion, request.SelfUpdate);
         return Results.Ok(new ProbeHeartbeatResponse(Matmon.Probe.MatmonVersion.Current, command));
+    }).AllowAnonymous();
+
+    // A probe or agent says it is going away now (its service stopping, the machine shutting down or going to sleep) - so
+    // an agent host that may go offline shows "offline" at once instead of after three missed heartbeats. Best effort on
+    // the agent's side; its next heartbeat clears it.
+    app.MapPost("/api/probes/{probeId}/going-offline", (string probeId, HttpRequest http, IProbeRegistry registry, IMonitoringWorkspaceStore workspaceStore) =>
+    {
+        if (!workspaceStore.TryValidateProbe(probeId, ReadProbeToken(http)))
+        {
+            return Results.Unauthorized();
+        }
+
+        registry.MarkGoingOffline(probeId, DateTimeOffset.UtcNow);
+        WakeConnectionSensor(workspaceStore, http.HttpContext.RequestServices.GetService<SensorWakeQueue>(), probeId);
+        return Results.NoContent();
     }).AllowAnonymous();
 
     app.MapGet("/api/probes/{probeId}/assignments", (
@@ -1448,6 +1472,23 @@ static (int Width, int Height)? PngSize(byte[] bytes)
     }
 
     return (System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4)), System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4)));
+}
+
+// The connection sensor of an agent ("Agent connection", a probe-heartbeat under its host) - polled at once when the agent
+// says it is going away or is back, so an agent host that may go offline shows it without waiting for the next poll.
+static void WakeConnectionSensor(IMonitoringWorkspaceStore store, SensorWakeQueue? wake, string probeId)
+{
+    if (wake is null || store.FindRunnerByProbeId(probeId) is not HostElement host)
+    {
+        return;
+    }
+
+    foreach (var sensor in host.Children.OfType<SensorElement>().Where(sensor =>
+        string.Equals(sensor.SensorTypeKey, ProbeHeartbeatSensorExecutor.Definition.Key, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(sensor.Target, probeId, StringComparison.OrdinalIgnoreCase)).ToList())
+    {
+        wake.Request(sensor.Id);
+    }
 }
 
 static string? ReadProbeToken(HttpRequest request)

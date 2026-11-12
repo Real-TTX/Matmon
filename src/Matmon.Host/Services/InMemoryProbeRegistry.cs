@@ -7,6 +7,7 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
     private readonly ConcurrentDictionary<string, ProbeStatusSnapshot> _probes = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DuplicateWatch> _duplicateWatch = new(StringComparer.OrdinalIgnoreCase);
     private readonly MatmonRuntimeOptions _runtimeOptions;
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _goingOffline = new(StringComparer.OrdinalIgnoreCase);
 
     public InMemoryProbeRegistry(MatmonRuntimeOptions runtimeOptions) => _runtimeOptions = runtimeOptions;
 
@@ -31,6 +32,7 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             string.IsNullOrWhiteSpace(relayProbeId) ? null : relayProbeId);
 
         _probes[request.ProbeId] = snapshot;
+        _goingOffline.TryRemove(request.ProbeId, out _);
         return snapshot;
     }
 
@@ -102,6 +104,10 @@ public sealed class InMemoryProbeRegistry : IProbeRegistry, IProbeHeartbeatLooku
             .ThenBy(probe => probe.ProbeName)
             .ToArray();
     }
+
+    public void MarkGoingOffline(string probeId, DateTimeOffset atUtc) => _goingOffline[probeId] = atUtc;
+
+    public bool TryGetGoingOffline(string probeId, out DateTimeOffset atUtc) => _goingOffline.TryGetValue(probeId, out atUtc);
 
     public bool TryGetLastHeartbeat(string probeId, out DateTimeOffset lastSeenUtc, out string probeName)
     {

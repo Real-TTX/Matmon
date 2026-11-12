@@ -81,6 +81,13 @@ builder.Configuration.AddCommandLine(args);
 // binary runs as a Windows service, as a systemd unit, and interactively from a terminal.
 builder.Services.AddWindowsService(options => options.ServiceName = "Matmon Agent");
 builder.Services.AddSystemd();
+#if WINDOWS
+// As a Windows service: the same lifetime plus the machine's power events (sleep -> "going offline", wake -> beat at once).
+if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+{
+    builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostLifetime, Matmon.Agent.AgentServiceLifetime>();
+}
+#endif
 
 // The agent polls its primary every few seconds; at Information, HttpClient logs four lines per request,
 // which on a customer's event log / journal buries everything the agent itself says. In code rather than in

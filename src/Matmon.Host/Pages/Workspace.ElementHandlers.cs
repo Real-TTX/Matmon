@@ -607,6 +607,8 @@ public sealed partial class WorkspaceModel
             EnrollmentToken = probeElement?.EnrollmentToken,
             ProbeSubnetsText = probeElement is null ? null : string.Join("\n", probeElement.Subnets),
             ProbeAgentAddress = probeElement?.AgentAddress,
+            AgentMayGoOffline = (element as HostElement)?.Agent?.MayGoOffline ?? false,
+            AgentOfflineWarnDays = (element as HostElement)?.Agent?.OfflineWarnDays ?? AgentOffline.DefaultWarnDays,
             Address = (element as HostElement)?.Address,
             SensorTypeKey = (element as SensorElement)?.SensorTypeKey,
             Target = (element as SensorElement)?.Target,
@@ -727,6 +729,11 @@ public sealed partial class WorkspaceModel
         if (element is HostElement host)
         {
             host.Address = editor.Address?.Trim() ?? string.Empty;
+            if (host.Agent is { } agentIdentity)
+            {
+                agentIdentity.MayGoOffline = editor.AgentMayGoOffline;
+                agentIdentity.OfflineWarnDays = Math.Clamp(editor.AgentOfflineWarnDays, 0, 365);
+            }
         }
 
         if (element is SensorElement sensorElement)

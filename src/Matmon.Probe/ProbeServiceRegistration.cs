@@ -22,6 +22,7 @@ public static class ProbeServiceRegistration
     {
         services.AddHttpClient();
         services.TryAddSingleton<SlaveProbeRuntimeState>();
+        services.TryAddSingleton<ProbeGoingOffline>();
         services.TryAddSingleton<NetworkDiscoveryService>();
         services.AddHostedService<SlaveHeartbeatService>();
         services.AddHostedService<SlaveSensorWorker>();
