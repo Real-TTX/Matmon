@@ -1,28 +1,68 @@
 Matmon - Proprietary License
 Copyright (c) 2026 Real-TTX. All rights reserved.
 
+1. Ownership
+
 This software and its source code (the "Software") are proprietary and
 confidential. No license or right to use, copy, modify, merge, publish,
 distribute, sublicense, sell, or create derivative works of the Software is
-granted except under a separate written agreement with the copyright holder.
+granted except as set out in this license or under a separate written agreement
+with the copyright holder.
 
-Commercial use is governed by the applicable Matmon product plan (e.g. Free,
-Business, or Enterprise) and its terms, as offered by the copyright holder.
-Absent such an agreement, you may not use the Software for any purpose.
+2. Plans
 
-Third-party components bundled with the Software (for example, libraries under
-src/Matmon.Host/wwwroot/lib) remain under their own respective licenses; those
-licenses are unaffected by this notice.
+The right to use the Software is granted per installation (an "instance") under
+one of the plans offered by the copyright holder. The plan of an instance is the
+license assigned to it through Matmon Cloud, or a license file issued by the
+copyright holder for an installation that does not connect to Matmon Cloud.
 
-Note: Prior published versions of this project were made available under the MIT
+a) Personal (free of charge). You may install and use the Software free of
+   charge for PERSONAL, NON-COMMERCIAL purposes only: to monitor your own home
+   network and devices you use privately. Personal does not cover use by or on
+   behalf of a business, a public body or any other organization, use in
+   connection with a trade, business or profession, or use to monitor devices
+   or networks of others, whether paid or not. The limits of the Personal plan
+   (for example one probe) are enforced by the Software.
+
+b) Business and Enterprise (paid). Any use not covered by Personal requires a
+   paid plan for each instance on which the Software is used that way. The
+   scope, limits and price of a plan are those stated when the plan is
+   acquired.
+
+c) Partners. A service partner of the copyright holder may provide plans to its
+   customers under its own agreement with them. The partner's customers use the
+   Software within the plan the partner assigned.
+
+d) Cloud packages. Cloud packages add services of Matmon Cloud (for example
+   cloud sensors, text messages and phone calls) to an organization. They do not
+   grant the right to use the Software on an instance.
+
+3. Restrictions
+
+You may not circumvent, disable or modify the license checks or limits of the
+Software, share a license between installations, or remove notices of the
+copyright holder (including the "powered by Matmon" attribution).
+
+4. Third-party components
+
+Third-party components bundled with the Software remain under their own
+respective licenses; those licenses are unaffected by this notice.
+
+5. Earlier versions
+
+Prior published versions of this project were made available under the MIT
 License. That grant, to the extent it applied to those versions, is not revoked
-by this change; this proprietary license governs the current and future versions.
+by this change; this proprietary license governs the current and future
+versions.
+
+6. Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
 FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
 AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE, EXCEPT WHERE SUCH
+LIABILITY CANNOT BE EXCLUDED UNDER APPLICABLE LAW.
 
 For licensing enquiries, contact Real-TTX.
