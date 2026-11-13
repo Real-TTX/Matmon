@@ -66,9 +66,21 @@ public static class ApiTokenScopes
     /// <summary>Read, create, switch on and off and delete maintenance windows.</summary>
     public const string Maintenance = "maintenance";
 
+    /// <summary>Read the monitoring: overview, sensors with their latest results and history, alerts.</summary>
+    public const string Read = "read";
+
+    /// <summary>Acknowledge alerts and mute / un-mute them.</summary>
+    public const string Alerts = "alerts";
+
+    /// <summary>Start a sensor's check now.</summary>
+    public const string Run = "run";
+
     public static IReadOnlyList<(string Key, string Title, string Description)> All { get; } =
     [
-        (Maintenance, "Maintenance windows", "List, create, switch on and off and delete maintenance windows - for a deploy job that silences the alerts of what it restarts.")
+        (Maintenance, "Maintenance windows", "List, create, switch on and off and delete maintenance windows - for a deploy job that silences the alerts of what it restarts."),
+        (Read, "Read monitoring", "Read the overview, sensors with their latest results and history, and the alerts - what an assistant connected through MCP needs to answer questions."),
+        (Alerts, "Acknowledge and mute alerts", "Acknowledge alerts and mute or un-mute the alerts of an element."),
+        (Run, "Run checks", "Start a sensor's check now (it runs where the sensor runs: here, on a probe or on an agent).")
     ];
 
     public static bool IsKnown(string scope) => All.Any(entry => string.Equals(entry.Key, scope, StringComparison.OrdinalIgnoreCase));

@@ -128,7 +128,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             {
                 return new ApiTokenCheck(ApiTokenCheckResult.Expired, found.Clone());
             }
-            if (!found.Allows(scope))
+            if (scope.Length > 0 && !found.Allows(scope)) // "" = any valid token (MCP checks per tool)
             {
                 return new ApiTokenCheck(ApiTokenCheckResult.ScopeMissing, found.Clone());
             }

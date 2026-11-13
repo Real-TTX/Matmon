@@ -1024,6 +1024,50 @@ if (runtimeOptions.Mode == AppMode.Primary)
         return refusal ?? Answer(new Matmon.Host.Services.Api.MaintenanceApi(store).Delete(id));
     });
 
+    // MCP (Model Context Protocol, "Streamable HTTP", stateless JSON answers): an AI assistant connects here with an API
+    // token; tools/list offers only the tools the token's scopes allow (McpServer). No server-sent stream (GET = 405).
+    app.MapPost("/api/mcp", async (HttpContext http, IMonitoringWorkspaceStore store, SensorWakeService wake) =>
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        if (!store.IsMcpEnabled())
+        {
+            return Results.Json(Matmon.Host.Services.Api.McpServer.Error(null, -32001, "The MCP server is switched off (System > API tokens)."), statusCode: 404);
+        }
+        // a browser page of another site must not drive the tools with a token it learned (DNS rebinding, MCP spec)
+        if (http.Request.Headers.Origin is { Count: > 0 } origin
+            && (!Uri.TryCreate(origin.ToString(), UriKind.Absolute, out var originUri)
+                || !string.Equals(originUri.Authority, http.Request.Host.Value, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Results.Json(Matmon.Host.Services.Api.McpServer.Error(null, -32600, "Requests from another web origin are refused."), statusCode: 403);
+        }
+        var secret = ApiTokenSecret.FromHeaders(http.Request.Headers.Authorization, http.Request.Headers["X-Matmon-Token"]);
+        var check = store.CheckApiToken(secret, string.Empty, http.Connection.RemoteIpAddress?.ToString());
+        if (check.Result != ApiTokenCheckResult.Ok)
+        {
+            http.Response.Headers.WWWAuthenticate = "Bearer realm=\"matmon\"";
+            var reason = check.Result switch
+            {
+                ApiTokenCheckResult.Missing => "Send an API token: Authorization: Bearer mmt_... (System > API tokens).",
+                ApiTokenCheckResult.Expired => "This API token has expired.",
+                _ => "This API token is not valid (unknown or revoked)."
+            };
+            return Results.Json(Matmon.Host.Services.Api.McpServer.Error(null, -32001, reason), statusCode: 401);
+        }
+
+        System.Text.Json.Nodes.JsonNode? message;
+        try
+        {
+            message = await System.Text.Json.Nodes.JsonNode.ParseAsync(http.Request.Body, cancellationToken: http.RequestAborted);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Results.Json(Matmon.Host.Services.Api.McpServer.Error(null, -32700, "The body is not JSON."), statusCode: 400);
+        }
+        var answer = new Matmon.Host.Services.Api.McpServer(store, ids => wake.WakeSensors(ids)).Handle(message, check.Token!, DateTimeOffset.UtcNow);
+        return answer is null ? Results.Accepted() : Results.Text(Matmon.Host.Services.Api.McpServer.Serialize(answer), "application/json");
+    }).AllowAnonymous().RequireRateLimiting("api");
+    app.MapMethods("/api/mcp", ["GET", "DELETE"], () => Results.StatusCode(405)).AllowAnonymous();
+
     // An agent trades a one-time enrolment code (issued on the Agents page) for a probe of its own. Wrong,
     // used and expired codes all answer the same 400 - which codes once existed is not the caller's business.
     // No licence check: agents are not probes in the licence model.

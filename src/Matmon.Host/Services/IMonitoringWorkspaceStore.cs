@@ -428,6 +428,11 @@ public interface IMonitoringWorkspaceStore
     /// <summary>The syslog receiver's settings (a detached, normalised copy). Off by default.</summary>
     /// <summary>System > Updates: automatic updates and their window. Instance-bound, never in a backup.</summary>
     /// <summary>The Local Program allow-list kept on the instance (System > General); the environment variable counts on top.</summary>
+    /// <summary>Whether the MCP server (/api/mcp) is switched on (System > API tokens; off by default).</summary>
+    bool IsMcpEnabled();
+
+    void SetMcpEnabled(bool enabled);
+
     /// <summary>The address public links are built from: the one an admin set, and the one last seen directly.</summary>
     (string? Configured, string? Remembered) GetPublicAddress();
 

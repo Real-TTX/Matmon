@@ -14,6 +14,18 @@ $@"curl -fsS -X POST {Model.BaseUrl}/api/v1/maintenance-windows \
     var endExample =
 $@"curl -fsS -X POST {Model.BaseUrl}/api/v1/maintenance-windows/<id>/end \
   -H ""Authorization: Bearer {secret}""";
+    var mcpUrl = $"{Model.BaseUrl}/api/mcp";
+    var mcpClaude = $@"claude mcp add --transport http matmon {mcpUrl} --header ""Authorization: Bearer {secret}""";
+    var mcpJson =
+$@"{{
+  ""mcpServers"": {{
+    ""matmon"": {{
+      ""type"": ""http"",
+      ""url"": ""{mcpUrl}"",
+      ""headers"": {{ ""Authorization"": ""Bearer {secret}"" }}
+    }}
+  }}
+}}";
 }
 
 <partial name="_SystemTabs" model="@("api")" />
@@ -109,6 +121,35 @@ $@"curl -fsS -X POST {Model.BaseUrl}/api/v1/maintenance-windows/<id>/end \
 <div class="mat-actions">
     <a class="mat-btn mat-btn--primary" asp-page="/SystemApiTokenCreate">@MatUi.Icon("plus")<span>New token</span></a>
 </div>
+
+<section class="mat-card" id="mcp">
+    <div class="mat-card__head">@MatUi.Icon("sparkles")<h2 class="mat-card__title">Connecting an AI assistant (MCP)</h2>
+        <span class="@MatUi.PillClass(Model.McpEnabled ? "ok" : "neutral") mm-push-end">@(Model.McpEnabled ? "On" : "Off")</span></div>
+    <div class="mat-card__body mat-stack">
+        <form method="post" asp-page-handler="Mcp" class="mat-btn-row">
+            @if (Model.McpEnabled)
+            {
+                <input type="hidden" name="enabled" value="false" />
+                <button type="submit" class="mat-btn mat-btn--secondary">@MatUi.Icon("x-circle")<span>Switch the MCP server off</span></button>
+            }
+            else
+            {
+                <input type="hidden" name="enabled" value="true" />
+                <button type="submit" class="mat-btn mat-btn--primary">@MatUi.Icon("check-circle")<span>Switch the MCP server on</span></button>
+            }
+        </form>
+        <p>While it is off, <code>@mcpUrl</code> refuses every request, whatever the token. Claude and other assistants that speak the Model Context Protocol connect to <code>@mcpUrl</code> with a token. They see only the tools its scopes allow: <strong>Read monitoring</strong> for questions about sensors and alerts; <strong>Acknowledge and mute alerts</strong>, <strong>Maintenance windows</strong> and <strong>Run checks</strong> for actions.</p>
+        <div class="mm-snippet">
+            <pre class="mat-code"><code id="mcp-example-claude">@mcpClaude</code></pre>
+            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#mcp-example-claude">@MatUi.Icon("copy")<span>Copy</span></button>
+        </div>
+        <div class="mm-snippet">
+            <pre class="mat-code"><code id="mcp-example-json">@mcpJson</code></pre>
+            <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-copy="#mcp-example-json">@MatUi.Icon("copy")<span>Copy</span></button>
+        </div>
+        <p class="mat-hint">Give an assistant its own token with only the scopes it needs. Sensor messages come from the monitored devices and reach the assistant as data.</p>
+    </div>
+</section>
 
 <section class="mat-card">
     <div class="mat-card__head">@MatUi.Icon("terminal")<h2 class="mat-card__title">Using it in a pipeline</h2></div>

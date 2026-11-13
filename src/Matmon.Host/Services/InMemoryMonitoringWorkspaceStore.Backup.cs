@@ -963,6 +963,8 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
         document.AllowedProgramPaths = [];
         // Where this instance is reached belongs to this machine, never to a restore elsewhere.
         document.PublicBaseUrl = null;
+        // Whether AI assistants may connect is decided on this machine.
+        document.McpEnabled = false;
         document.LastDirectOrigin = null;
         // ...and the catalog's copy of it, the program choice of the Local Program sensor (rebuilt from the live list on load).
         document.SensorDefinitions = document.SensorDefinitions
@@ -1203,6 +1205,7 @@ public sealed partial class InMemoryMonitoringWorkspaceStore
             ["SelfUpdateOutcome"] = (null, "how this installation's last update ended"),
             ["AllowedProgramPaths"] = (null, "what may be executed is decided on the machine that executes it"),
             ["PublicBaseUrl"] = (null, "where this machine is reached"),
+            ["McpEnabled"] = (null, "whether AI assistants may connect is decided on this machine"),
             ["LastDirectOrigin"] = (null, "where this machine was last reached"),
             ["Cloud"] = (null, "this installation's cloud link status"),
             ["CloudSettings"] = (null, "this installation's cloud identity and token"),

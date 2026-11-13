@@ -1593,6 +1593,26 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
         }
     }
 
+    public bool IsMcpEnabled()
+    {
+        lock (_gate)
+        {
+            return _document.McpEnabled;
+        }
+    }
+
+    public void SetMcpEnabled(bool enabled)
+    {
+        lock (_gate)
+        {
+            if (_document.McpEnabled != enabled)
+            {
+                _document.McpEnabled = enabled;
+                QueueSave(SavePriority.Configuration);
+            }
+        }
+    }
+
     public (string? Configured, string? Remembered) GetPublicAddress()
     {
         lock (_gate)
@@ -5191,6 +5211,10 @@ public sealed partial class InMemoryMonitoringWorkspaceStore : IMonitoringWorksp
 
         /// <summary>This instance's address as people outside reach it (System > General); null = not set.</summary>
         public string? PublicBaseUrl { get; set; }
+
+        /// <summary>Whether /api/mcp answers (System > API tokens). Off by default: an AI assistant gets in only once an admin
+        /// decided so here. Instance-bound, never carried in a backup.</summary>
+        public bool McpEnabled { get; set; }
 
         /// <summary>The address an admin last opened the instance at directly - the fallback for public links shown
         /// inside the cloud console, where the request only carries the internal host.</summary>

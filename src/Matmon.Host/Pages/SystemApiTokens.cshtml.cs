@@ -25,7 +25,19 @@ public sealed class SystemApiTokensModel(IMonitoringWorkspaceStore store) : Page
     /// <summary>The instance's own address, for the examples.</summary>
     public string BaseUrl => $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
+    /// <summary>Whether /api/mcp answers at all (off by default).</summary>
+    public bool McpEnabled { get; private set; }
+
     public void OnGet() => Load();
+
+    public IActionResult OnPostMcp(bool enabled)
+    {
+        store.SetMcpEnabled(enabled);
+        StatusMessage = enabled
+            ? "MCP server switched on. An assistant connects with a token whose scopes allow what it should do."
+            : "MCP server switched off. /api/mcp refuses every request, whatever the token.";
+        return RedirectToPage(null, null, "mcp");
+    }
 
     public IActionResult OnPostRevoke(Guid id)
     {
@@ -46,7 +58,11 @@ public sealed class SystemApiTokensModel(IMonitoringWorkspaceStore store) : Page
         return RedirectToPage();
     }
 
-    private void Load() => Tokens = store.GetApiTokens();
+    private void Load()
+    {
+        Tokens = store.GetApiTokens();
+        McpEnabled = store.IsMcpEnabled();
+    }
 
     public static string State(ApiToken token, DateTimeOffset now) =>
         token.RevokedUtc is not null ? "Revoked" : token.IsExpired(now) ? "Expired" : "Active";
