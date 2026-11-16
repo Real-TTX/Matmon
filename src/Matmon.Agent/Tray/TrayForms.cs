@@ -11,8 +11,8 @@ namespace Matmon.Agent.Tray;
 /// <summary>The agent's windows: the shared frame (<see cref="BrandWindow"/>) with the agent's violet-to-blue mark.</summary>
 internal abstract class AgentWindow(string title, string subtitle) : BrandWindow(title, "Matmon Agent", subtitle, MarkPalette.Agent)
 {
-    /// <summary>What the bar says on the left - the same words in every agent window.</summary>
-    public static string VersionNote => $"Version {MatmonVersion.Current} · {MatmonVersion.Channel.ToLowerInvariant()} channel";
+    /// <summary>What the bar says on the left - the same words in every agent window (SETUP-07).</summary>
+    public static string VersionNote => BrandChrome.VersionNote(MatmonVersion.Current);
 
     protected void Complete(params Button[] buttons) => Complete(VersionNote, buttons);
 }
@@ -20,7 +20,11 @@ internal abstract class AgentWindow(string title, string subtitle) : BrandWindow
 /// <summary>What the agent's Info window says - from the service's status pipe. Pure, so it is tested without a window.</summary>
 internal static class AgentInfo
 {
-    public static InfoView Build(AgentStatusSnapshot? status, TrayState state, string description)
+    /// <summary>
+    /// The state in words (TRAY-02): the first line of Info, and the same word is the second line of the tray menu and the
+    /// tooltip. Then one sentence and the facts - never the token (AGENT-03; the pipe does not carry it).
+    /// </summary>
+    public static InfoView Build(AgentStatusSnapshot? status, TrayState state)
     {
         var color = state switch
         {
@@ -34,8 +38,8 @@ internal static class AgentInfo
             TrayState.Connected => ("Connected", $"{status?.ProbeName ?? "This machine"} reports to its Matmon instance."),
             TrayState.Unreachable when status?.PendingApproval == true => ("Waiting for approval",
                 "This machine is registered. An administrator approves it under Agents on the instance - then it reports, nothing to do here."),
-            TrayState.Unreachable => ("Instance not reachable", status?.StatusMessage is { Length: > 0 } message ? message : Capitalize(description)),
-            TrayState.Stopped => ("Service not running", "The \"Matmon Agent\" service is installed but not running."),
+            TrayState.Unreachable => ("Instance not reachable", status?.StatusMessage is { Length: > 0 } message ? message : "The instance does not answer."),
+            TrayState.Stopped => ("Service not running", "The \"Matmon Agent\" service is installed but not running - Start service … in the tray menu starts it."),
             _ => ("Not set up", "This machine is not connected to a Matmon instance yet.")
         };
 
@@ -43,15 +47,15 @@ internal static class AgentInfo
         void Row(string key, string value) => rows.Add(new(key, value));
         if (status is null)
         {
-            Row("Version", MatmonVersion.Current);
-            Row("Channel", MatmonVersion.Channel.ToLowerInvariant());
+            Row("Version", BrandChrome.VersionValue(MatmonVersion.Current));
             Row("Service", state == TrayState.Stopped ? "installed, not running" : "not installed");
-            Row("Next step", state == TrayState.Stopped ? "start the \"Matmon Agent\" service" : "Set up… from the tray menu");
+            Row("Next step", state == TrayState.Stopped ? "Start service … in the tray menu" : "Set up … in the tray menu");
         }
         else
         {
             Row("Instance", status.PrimaryUrl ?? "-");
-            Row("Probe", status.ProbeId is { Length: > 0 } id ? $"{status.ProbeName} ({id})" : status.ProbeName ?? "-");
+            // To the user an agent is the machine it watches, not a probe.
+            Row("Machine", status.ProbeId is { Length: > 0 } id ? $"{status.ProbeName} ({id})" : status.ProbeName ?? "-");
             Row("Last heartbeat", status.LastHeartbeatUtc is { } beat ? $"{beat.ToLocalTime():g} ({BrandInfoForm.Ago(beat)})" : "none yet");
             Row("Sensors", status.AssignedSensorCount.ToString());
             if (status.BufferedObservations > 0)
@@ -59,8 +63,7 @@ internal static class AgentInfo
                 Row("Waiting to send", $"{status.BufferedObservations} results (sent once the instance answers)");
             }
 
-            Row("Version", status.Version);
-            Row("Channel", MatmonVersion.Channel.ToLowerInvariant());
+            Row("Version", BrandChrome.VersionValue(status.Version));
             Row("Last update", status.UpdateStatus ?? "none");
             Row("Running since", status.StartedUtc.ToLocalTime().ToString("g"));
             Row("Config", status.ConfigPath);
@@ -68,8 +71,6 @@ internal static class AgentInfo
 
         return new InfoView(color, title, detail, rows);
     }
-
-    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }
 /// <summary>
 /// "Set up": the instance URL and a code from its Agents page. Runs <c>setup</c> elevated (one UAC prompt),
@@ -91,9 +92,10 @@ internal sealed class SetupForm : AgentWindow
         Visible = false
     };
     private readonly BrandNotice _result = new(ContentWidth) { Visible = false };
-    private readonly Button _setUp = BrandChrome.FooterButton("Set up");
-    private readonly Button _cancel = BrandChrome.FooterButton("Cancel", gap: 16);
-    private readonly LinkLabel _change = new() { Text = "Change", AutoSize = true, Margin = new Padding(0, 0, 0, 10), LinkColor = Color.FromArgb(0x1A, 0x6F, 0xD0) };
+    // The primary action first, then Cancel (SETUP-01).
+    private readonly Button _setUp = BrandChrome.FooterButton("Set up", look: ButtonLook.Primary);
+    private readonly Button _cancel = BrandChrome.FooterButton("Cancel");
+    private readonly LinkLabel _change = new() { Text = "Change", AutoSize = true, Margin = new Padding(0, 0, 0, 10) };
 
     /// <summary>The values came from the download and "Change" was not pressed.</summary>
     private bool IsLocked => _locked;
@@ -115,7 +117,7 @@ internal sealed class SetupForm : AgentWindow
         {
             Text = "Setting up… Windows asks for administrator rights once.",
             AutoSize = true,
-            ForeColor = BrandChrome.TextColor,
+            ForeColor = BrandChrome.Text,
             Margin = new Padding(0, 0, 0, 6)
         });
         _busy.Controls.Add(new ProgressBar { Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 30, Size = new Size(ContentWidth, 18), Margin = Padding.Empty });

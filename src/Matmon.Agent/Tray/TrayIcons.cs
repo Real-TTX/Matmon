@@ -14,10 +14,12 @@ namespace Matmon.Agent.Tray;
 /// </summary>
 internal static partial class TrayIcons
 {
-    public static readonly Color Ok = Color.FromArgb(0x3F, 0xC4, 0x7A);
-    public static readonly Color Warning = Color.FromArgb(0xF2, 0xB1, 0x3C);
-    public static readonly Color Error = Color.FromArgb(0xE5, 0x4B, 0x5E);
-    public static readonly Color Neutral = Color.FromArgb(0x9A, 0xA4, 0xB1);
+    // The four states of TRAY-02, in the status colours of the tokens (light mode, like MatDesktop's tray icons): green running,
+    // amber waiting or attention, red stopped or an error, grey not set up. The words go with them (menu, tooltip, Info).
+    public static readonly Color Ok = BrandChrome.Solid("--mat-success");
+    public static readonly Color Warning = BrandChrome.Solid("--mat-warning");
+    public static readonly Color Error = BrandChrome.Solid("--mat-danger");
+    public static readonly Color Neutral = BrandChrome.Solid("--mat-text-muted");
 
     /// <summary>The mark's own size (the SVG's viewBox).</summary>
     public const float MarkWidth = 444;
@@ -31,26 +33,7 @@ internal static partial class TrayIcons
     public static Icon Create(Color? state, MarkPalette? palette = null)
     {
         const int size = 32;
-        using var bitmap = new Bitmap(size, size);
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            graphics.Clear(Color.Transparent);
-
-            // The mark across the full width, kept clear of the bottom-right corner the dot sits in.
-            var height = size * MarkHeight / MarkWidth;
-            DrawMark(graphics, new RectangleF(0, state is null ? (size - height) / 2 : 2, size, height), palette);
-            if (state is { } color)
-            {
-                // State: a dot in the corner, outlined so it reads on light and dark taskbars alike.
-                using var dot = new SolidBrush(color);
-                using var outline = new Pen(Color.White, 2f);
-                graphics.FillEllipse(dot, 18, 18, 13, 13);
-                graphics.DrawEllipse(outline, 18, 18, 13, 13);
-            }
-        }
-
+        using var bitmap = Draw(state, palette, size);
         var handle = bitmap.GetHicon();
         try
         {
@@ -62,6 +45,58 @@ internal static partial class TrayIcons
         {
             DestroyIcon(handle);
         }
+    }
+
+    /// <summary>
+    /// The picture of <see cref="Create"/>, <paramref name="size"/> px square: the mark, and the state as a dot at the bottom right that
+    /// stands in a cut-out of the mark - a ring of transparency, so the dot reads on a light and on a dark taskbar alike and never
+    /// touches the mark (TRAY-02; the proportions of MatDesktop's tray icons). Drawn four times as large and scaled down, because a
+    /// GDI+ clip has hard edges.
+    /// </summary>
+    public static Bitmap Draw(Color? state, MarkPalette? palette, int size)
+    {
+        const int over = 4;
+        var large = size * over;
+        using var big = new Bitmap(large, large);
+        using (var graphics = Graphics.FromImage(big))
+        {
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.Clear(Color.Transparent);
+
+            var height = large * MarkHeight / MarkWidth;
+            var mark = new RectangleF(0, (large - height) / 2, large, height);
+            if (state is { } color)
+            {
+                var center = large * 0.75f;
+                var radius = large * 0.22f;
+                var gap = large * 0.08f;
+                using var cut = new GraphicsPath();
+                cut.AddEllipse(center - radius - gap, center - radius - gap, (radius + gap) * 2, (radius + gap) * 2);
+                using var clip = new Region(new RectangleF(0, 0, large, large));
+                clip.Exclude(cut);
+                graphics.Clip = clip;
+                DrawMark(graphics, mark, palette);
+                graphics.ResetClip();
+                using var dot = new SolidBrush(color);
+                graphics.FillEllipse(dot, center - radius, center - radius, radius * 2, radius * 2);
+            }
+            else
+            {
+                DrawMark(graphics, mark, palette);
+            }
+        }
+
+        var bitmap = new Bitmap(size, size);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.Clear(Color.Transparent);
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.DrawImage(big, new Rectangle(0, 0, size, size));
+        }
+
+        return bitmap;
     }
 
     /// <summary>Draws the mark with its gradient into <paramref name="bounds"/> - a vector, so it is sharp at any size.</summary>
@@ -76,7 +111,8 @@ internal static partial class TrayIcons
         // The SVG's gradient: user space (0,0) -> (444,200), three stops.
         var from = new PointF(bounds.X, bounds.Y);
         var to = new PointF(bounds.X + bounds.Width, bounds.Y + 200 * bounds.Height / MarkHeight);
-        using var brush = new LinearGradientBrush(from, to, Color.Black, Color.Black)
+        // The two colours of the constructor are placeholders: InterpolationColors replaces them.
+        using var brush = new LinearGradientBrush(from, to, Color.Transparent, Color.Transparent)
         {
             InterpolationColors = new ColorBlend
             {
@@ -139,6 +175,8 @@ internal static partial class TrayIcons
 /// The colours of the mark's gradient (three stops along the SVG's diagonal). <see cref="Brand"/> is Matmon's own - the instance's tray and
 /// setup and every window header; <see cref="Agent"/> tells the agent's tray icon apart from the instance's on a machine that
 /// runs both: violet to blue instead of blue to teal, bright enough to read on a dark taskbar and saturated enough on a light one.
+/// These are the colours of the LOGO (brand/matmon-mark-flat.svg, scripts/make-windows-icon.cs), the only literal colours of the
+/// trays and the setup; everything a window paints comes from the tokens (<see cref="BrandChrome"/>).
 /// </summary>
 internal sealed record MarkPalette(Color[] Colors)
 {

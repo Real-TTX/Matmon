@@ -32,10 +32,16 @@ public sealed class TrayApplication : ApplicationContext
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 5000 };
     private readonly ToolStripMenuItem _stateItem = new() { Enabled = false };
     private readonly ToolStripMenuItem _openInstanceItem;
+    private readonly ToolStripSeparator _serviceSeparator = new();
+    private readonly ToolStripMenuItem _startItem;
+    private readonly ToolStripMenuItem _stopItem;
+    private readonly ToolStripMenuItem _restartItem;
     private readonly DateTime _installedWriteTimeAtStart;
     private BrandInfoForm? _infoForm;
     private SetupForm? _setupForm;
     private bool _refreshing;
+    private bool _controlling;
+    private DateTime _lastLeftClick;
 
     public AgentStatusSnapshot? Status { get; private set; }
 
@@ -43,35 +49,82 @@ public sealed class TrayApplication : ApplicationContext
 
     private TrayApplication()
     {
-        _icons = Enum.GetValues<TrayState>().ToDictionary(state => state, state => TrayIcons.Create(state switch
-        {
-            TrayState.Connected => TrayIcons.Ok,
-            TrayState.Unreachable => TrayIcons.Warning,
-            TrayState.Stopped => TrayIcons.Error,
-            _ => TrayIcons.Neutral
-        }, MarkPalette.Agent));
+        _icons = Enum.GetValues<TrayState>().ToDictionary(state => state, state => TrayIcons.Create(ColorOf(state), MarkPalette.Agent));
         _installedWriteTimeAtStart = WriteTime(SetupCommand.InstalledPath);
 
-        _openInstanceItem = new ToolStripMenuItem("Open Matmon", null, (_, _) => OpenInstance());
         var menu = new ContextMenuStrip();
-        _openInstanceItem.Font = new Font(menu.Font, FontStyle.Bold);
+        _openInstanceItem = new ToolStripMenuItem("Open Matmon", null, (_, _) => OpenInstance()) { Font = new Font(menu.Font, FontStyle.Bold) };
+        var shield = SystemIcons.Shield.ToBitmap();
+        _startItem = new ToolStripMenuItem("Start service …", shield, (_, _) => ControlService("start"));
+        _stopItem = new ToolStripMenuItem("Stop service …", shield, (_, _) => ControlService("stop"));
+        _restartItem = new ToolStripMenuItem("Restart service …", shield, (_, _) => ControlService("restart"));
+
+        // The order of TRAY-01: name and version, the state in words, Open (bold, the default), Info, Set up, the log folder,
+        // the service with the shield (it asks for administrator rights), Quit last. No Uninstall: that is Installed apps.
         menu.Items.Add(new ToolStripMenuItem($"Matmon Agent {MatmonVersion.Current}") { Enabled = false });
         menu.Items.Add(_stateItem);
         menu.Items.Add(new ToolStripSeparator());
-        // The same order and the same bold default as the instance's tray: Open Matmon (also a double-click), then Info.
         menu.Items.Add(_openInstanceItem);
-        menu.Items.Add(new ToolStripMenuItem("Info…", null, (_, _) => ShowInfo()));
-        menu.Items.Add(new ToolStripMenuItem("Set up…", null, (_, _) => ShowSetup()));
+        menu.Items.Add(new ToolStripMenuItem("Info …", null, (_, _) => ShowInfo()));
+        menu.Items.Add(new ToolStripMenuItem("Set up …", null, (_, _) => ShowSetup()));
         menu.Items.Add(new ToolStripMenuItem("Open log folder", null, (_, _) => OpenLogFolder()));
+        menu.Items.Add(_serviceSeparator);
+        menu.Items.Add(_startItem);
+        menu.Items.Add(_stopItem);
+        menu.Items.Add(_restartItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
+        // Quit ends the tray only, never the service (AGENT-04).
+        menu.Items.Add(new ToolStripMenuItem("Quit", null, (_, _) => ExitThread()));
+
+        // Until the service has answered (the pipe waits up to 2 s): nothing that depends on what it says.
+        _stateItem.Text = "Checking …";
+        _openInstanceItem.Enabled = false;
+        _serviceSeparator.Visible = _startItem.Visible = _stopItem.Visible = _restartItem.Visible = false;
 
         _icon = new NotifyIcon { ContextMenuStrip = menu, Icon = _icons[State], Text = "Matmon Agent", Visible = true };
-        _icon.DoubleClick += (_, _) => { if (_openInstanceItem.Enabled) { OpenInstance(); } else { ShowInfo(); } };
+        // TRAY-03: a left click is the default item, the right click the menu.
+        _icon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left && FirstClick())
+            {
+                OpenDefault();
+            }
+        };
 
         _timer.Tick += async (_, _) => await RefreshAsync();
         _timer.Start();
         _ = StartAsync();
+    }
+
+    /// <summary>The colour of a state's dot (TRAY-02).</summary>
+    internal static Color ColorOf(TrayState state) => state switch
+    {
+        TrayState.Connected => TrayIcons.Ok,
+        TrayState.Unreachable => TrayIcons.Warning,
+        TrayState.Stopped => TrayIcons.Error,
+        _ => TrayIcons.Neutral
+    };
+
+    /// <summary>The bold item: the instance's Agents page, or Info while the agent knows no instance.</summary>
+    private void OpenDefault()
+    {
+        if (_openInstanceItem.Enabled)
+        {
+            OpenInstance();
+        }
+        else
+        {
+            ShowInfo();
+        }
+    }
+
+    /// <summary>A double click is two clicks: only the first of them opens, so a page does not open twice.</summary>
+    private bool FirstClick()
+    {
+        var now = DateTime.UtcNow;
+        var first = (now - _lastLeftClick).TotalMilliseconds > SystemInformation.DoubleClickTime;
+        _lastLeftClick = now;
+        return first;
     }
 
     public static void Run()
@@ -140,13 +193,19 @@ public sealed class TrayApplication : ApplicationContext
             };
 
             _icon.Icon = _icons[State];
-            var text = Describe();
-            _stateItem.Text = text;
+            // The state in the same words in the menu, the tooltip and the first line of Info (TRAY-02).
+            var info = AgentInfo.Build(Status, State);
+            _stateItem.Text = info.Title;
             // NotifyIcon tooltips are capped at 127 characters.
-            var tooltip = $"Matmon Agent - {text}";
+            var tooltip = $"Matmon Agent: {info.Title}";
             _icon.Text = tooltip.Length > 127 ? tooltip[..127] : tooltip;
             _openInstanceItem.Enabled = !string.IsNullOrWhiteSpace(Status?.PrimaryUrl);
-            _infoForm?.ShowInfo(AgentInfo.Build(Status, State, text));
+            // The service's actions only where there is a service; each one only where it can do something.
+            var installed = State != TrayState.NotSetUp;
+            _serviceSeparator.Visible = _startItem.Visible = _stopItem.Visible = _restartItem.Visible = installed;
+            _startItem.Enabled = !_controlling && State == TrayState.Stopped;
+            _stopItem.Enabled = _restartItem.Enabled = !_controlling && State is TrayState.Connected or TrayState.Unreachable;
+            _infoForm?.ShowInfo(info);
 
             RestartIfUpdated();
         }
@@ -156,14 +215,46 @@ public sealed class TrayApplication : ApplicationContext
         }
     }
 
-    public string Describe() => State switch
+    /// <summary>
+    /// Start, stop or restart the service: an ELEVATED <c>matmon-agent service &lt;action&gt;</c> (one UAC prompt) - the tray itself
+    /// never runs with administrator rights (SETUP-03, AGENT-04). What the user asked for gets no notification (TRAY-04); only a
+    /// failure is said, in a message box.
+    /// </summary>
+    private async void ControlService(string action)
     {
-        TrayState.Connected => $"{Status!.ProbeName}: connected",
-        TrayState.Unreachable when Status!.PendingApproval => $"{Status.ProbeName}: waiting for approval on the instance",
-        TrayState.Unreachable => $"{Status!.ProbeName}: instance not reachable - {Status.StatusMessage}",
-        TrayState.Stopped => "the Matmon Agent service is not running",
-        _ => "not set up"
-    };
+        var program = File.Exists(SetupCommand.InstalledPath) ? SetupCommand.InstalledPath : Environment.ProcessPath!;
+        _controlling = true;
+        await RefreshAsync();
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(program, $"service {action}")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            if (process is null)
+            {
+                return;
+            }
+
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0)
+            {
+                MessageBox.Show($"The \"Matmon Agent\" service could not be {ServiceCommand.Past(action)} (exit code {process.ExitCode}).",
+                    "Matmon Agent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            // The UAC prompt was cancelled.
+        }
+        finally
+        {
+            _controlling = false;
+            await RefreshAsync();
+        }
+    }
 
     public void OpenInstance()
     {
@@ -185,14 +276,15 @@ public sealed class TrayApplication : ApplicationContext
     {
         if (_infoForm is null || _infoForm.IsDisposed)
         {
-            var openInstance = BrandChrome.FooterButton("Open Matmon", width: 124);
+            // TRAY-05: Open (the instance's page, the primary action), Log folder, Close.
+            var openInstance = BrandChrome.FooterButton("Open", width: 88, look: ButtonLook.Primary);
             openInstance.Click += (_, _) => OpenInstance();
-            var logs = BrandChrome.FooterButton("Open log folder", width: 120);
+            var logs = BrandChrome.FooterButton("Log folder", width: 104);
             logs.Click += (_, _) => OpenLogFolder();
-            _infoForm = new BrandInfoForm("Matmon Agent", MarkPalette.Agent, $"Version {MatmonVersion.Current}", openInstance, logs);
+            _infoForm = new BrandInfoForm("Matmon Agent", MarkPalette.Agent, AgentWindow.VersionNote, openInstance, logs);
         }
 
-        _infoForm.ShowInfo(AgentInfo.Build(Status, State, Describe()));
+        _infoForm.ShowInfo(AgentInfo.Build(Status, State));
         _infoForm.Show();
         _infoForm.Activate();
     }

@@ -19,9 +19,11 @@ internal sealed class SetupForm : Form
     private readonly PackageSource _source;
     private readonly BrandHeader _header;
     private readonly Panel _body = new() { Dock = DockStyle.Fill, Padding = new Padding(28, 22, 28, 12) };
-    private readonly Button _back = BrandChrome.FooterButton("< Back");
-    private readonly Button _next = BrandChrome.FooterButton("Next >");
-    private readonly Button _cancel = BrandChrome.FooterButton("Cancel", gap: 16);
+    // SETUP-01: the primary action first, then Back, then Cancel.
+    // 88 wide: three buttons leave the bar room for the whole version (0.1.212-20261115-0930 · release).
+    private readonly Button _back = BrandChrome.FooterButton("Back", width: 88);
+    private readonly Button _next = BrandChrome.FooterButton("Next", width: 88, look: ButtonLook.Primary);
+    private readonly Button _cancel = BrandChrome.FooterButton("Cancel", width: 88);
 
     private readonly TextBox _programFolder = new() { Width = 360 };
     private readonly TextBox _dataFolder = new() { Width = 360 };
@@ -77,9 +79,11 @@ internal sealed class SetupForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 540);
-        Font = new Font("Segoe UI", 9.5f);
-        BackColor = Color.White;
+        // SETUP-01: one window of 600 × 560 for install, update and uninstall, which does not change its size.
+        ClientSize = new Size(600, 560);
+        Font = BrandChrome.BodyFont();
+        BackColor = BrandChrome.Background;
+        ForeColor = BrandChrome.Text;
 
         _programFolder.Text = arguments.ProgramFolder ?? _installed?.ProgramFolder ?? WindowsInstallation.DefaultProgramFolder;
         _dataFolder.Text = arguments.DataFolder ?? _installed?.DataFolder ?? WindowsInstallation.DefaultDataFolder;
@@ -95,17 +99,17 @@ internal sealed class SetupForm : Form
         _probeToken.PlaceholderText = _storedProbe is null ? string.Empty : "(unchanged - leave empty to keep it)";
         _probeName.Text = arguments.ProbeName ?? _storedProbe?.ProbeName ?? string.Empty;
         _probeName.PlaceholderText = Environment.MachineName;
-        _removeData.Text = $"Also delete the data - configuration, history and backups in {_installed?.DataFolder ?? WindowsInstallation.DefaultDataFolder}";
+        _removeData.Text = "Also delete my data";
 
-        // The bar: version and channel on the left, the buttons on the right, both centred on the same line.
-        // The online setup does not know the version it installs until it has asked the feed - so it names the channel instead.
+        // The bar: version and channel on the left (SETUP-07), the buttons on the right, both centred on the same line. The
+        // online setup does not know the version it installs until it has asked the feed - so it names the channel instead.
         var footer = BrandChrome.Footer(
             arguments.Uninstall
-                ? $"Version {_installed?.Version ?? SetupRunner.Version}"
+                ? BrandChrome.VersionNote(_installed?.Version ?? SetupRunner.Version)
                 : _source == PackageSource.Online
-                    ? $"Online setup · {SetupRunner.ChannelName} channel"
-                    : $"Version {SetupRunner.Version} · {SetupRunner.ChannelName} channel",
-            _cancel, _next, _back);
+                    ? $"Online setup · {SetupRunner.ChannelName}"
+                    : BrandChrome.VersionNote(SetupRunner.Version),
+            _cancel, _back, _next);
         _back.Click += (_, _) => GoBack();
         _next.Click += (_, _) => Advance();
         _cancel.Click += (_, _) => Close();
@@ -333,8 +337,10 @@ internal sealed class SetupForm : Form
             Page.Options => _installed is null ? "Install" : "Update",
             Page.Confirm => "Uninstall",
             Page.Finish => "Finish",
-            _ => "Next >"
+            _ => "Next"
         };
+        // Uninstall is a destructive action: the danger button (SETUP-04, BUTTON-01).
+        BrandChrome.Style(_next, page == Page.Confirm ? ButtonLook.Danger : ButtonLook.Primary);
 
         switch (page)
         {
@@ -346,13 +352,21 @@ internal sealed class SetupForm : Form
                     : IsProbe
                         ? $"The Matmon probe {_installed.Version ?? "(installed)"} reporting to {_installed.PrimaryUrl ?? "its primary"} is installed. Setup updates it to {target} - its connection is kept."
                         : $"Matmon {_installed.Version ?? "(installed)"} is installed. Setup updates it to {target} - the configuration, the history and the sensors are kept."));
+                if (_installed is null)
+                {
+                    // SETUP-02 / SETUP-03: Welcome says where to and with which rights.
+                    content.Controls.Add(BrandChrome.Paragraph(
+                        $"It goes to {_programFolder.Text}, its data to {_dataFolder.Text} (both can be changed on the next pages). " +
+                        "A Windows service needs administrator rights - Windows asked for them once, when the setup started."));
+                }
+
                 if (_source == PackageSource.Online)
                 {
                     content.Controls.Add(BrandChrome.Paragraph("Matmon is downloaded during the installation (about 190 MB) and checked before anything is changed: its checksum and its signature must match the release."));
                 }
                 else if (_source == PackageSource.File && !File.Exists(_arguments.PackagePath))
                 {
-                    content.Controls.Add(BrandChrome.Paragraph($"The package {_arguments.PackagePath} does not exist.", Color.Firebrick));
+                    content.Controls.Add(BrandChrome.Paragraph($"The package {_arguments.PackagePath} does not exist.", BrandChrome.DangerText));
                     _next.Enabled = false;
                 }
 
@@ -400,7 +414,7 @@ internal sealed class SetupForm : Form
                 {
                     Text = IsProbe ? "The probe's status page: http://<this computer>:<port>/probe" : "Matmon answers on http://<this computer>:<port>",
                     AutoSize = true,
-                    ForeColor = Color.DimGray,
+                    ForeColor = BrandChrome.Muted,
                     Margin = new Padding(12, 6, 0, 0)
                 });
                 content.Controls.Add(portRow);
@@ -415,16 +429,21 @@ internal sealed class SetupForm : Form
                 content.Controls.Add(BrandChrome.Heading(_installed?.Role == WindowsInstallationRole.Probe ? "Uninstall the Matmon probe" : "Uninstall Matmon"));
                 content.Controls.Add(BrandChrome.Paragraph(_installed is null
                     ? "No Matmon installation was found on this computer. Uninstall still removes whatever is left (service, firewall rule, Installed apps entry)."
-                    : $"This removes the Matmon service and the program from {_installed.ProgramFolder}. Without the box below, the data stays where it is and a new installation picks it up again."));
+                    : $"This removes the Matmon service and the program from {_installed.ProgramFolder}."));
+                // SETUP-04: "Also delete my data", off; what it means under it.
+                _removeData.Margin = new Padding(0, 4, 0, 2);
                 content.Controls.Add(_removeData);
+                content.Controls.Add(Hint($"Configuration, history and backups in {_installed?.DataFolder ?? WindowsInstallation.DefaultDataFolder}. " +
+                    "Without the tick they stay where they are, and a new installation picks them up again."));
                 break;
 
             case Page.Progress:
                 content.Controls.Add(BrandChrome.Heading(_arguments.Uninstall ? "Removing Matmon" : $"Installing {Product}"));
                 content.Controls.Add(_step);
-                _progress.Width = 570;
+                _progress.Width = BrandChrome.TextWidth;
+                _progress.Margin = new Padding(0, 3, 0, 3);
                 content.Controls.Add(_progress);
-                _log.Size = new Size(570, 190);
+                _log.Size = new Size(BrandChrome.TextWidth, 190);
                 _log.Margin = new Padding(0, 12, 0, 0);
                 content.Controls.Add(_log);
                 break;
@@ -449,7 +468,7 @@ internal sealed class SetupForm : Form
                 else
                 {
                     content.Controls.Add(BrandChrome.Heading(_arguments.Uninstall ? "Uninstall did not finish" : "Setup did not finish"));
-                    content.Controls.Add(BrandChrome.Paragraph(_failure ?? "Unknown error.", Color.Firebrick));
+                    content.Controls.Add(BrandChrome.Paragraph(_failure ?? "Unknown error.", BrandChrome.DangerText));
                     var log = new LinkLabel { Text = "Open the setup log", AutoSize = true };
                     log.LinkClicked += (_, _) => Process.Start(new ProcessStartInfo("notepad.exe", SetupRunner.LogPath) { UseShellExecute = true });
                     content.Controls.Add(log);
@@ -457,6 +476,9 @@ internal sealed class SetupForm : Form
 
                 break;
         }
+
+        // Fields, lists and links in the colours of the tokens.
+        BrandChrome.Theme(content);
 
         // Added once it holds its controls and laid out at its final size: added empty first, it measured them at its default
         // 200 px width and kept a scroll range for a page that fits (a scrollbar on the options page).
@@ -476,12 +498,12 @@ internal sealed class SetupForm : Form
     {
         Text = text,
         AutoSize = true,
-        ForeColor = Color.DimGray,
-        MaximumSize = new Size(540, 0),
+        ForeColor = BrandChrome.Muted,
+        MaximumSize = new Size(BrandChrome.TextWidth - 20, 0),
         Margin = new Padding(20, 0, 0, 6)
     };
 
-    private static BrandNotice Notice(string text, NoticeTone tone) => new(560) { Text = text, Tone = tone };
+    private static BrandNotice Notice(string text, NoticeTone tone) => new(BrandChrome.TextWidth) { Text = text, Tone = tone };
 
     private static Control Field(string label, TextBox box, string? hint)
     {
@@ -491,7 +513,7 @@ internal sealed class SetupForm : Form
         panel.Controls.Add(box);
         if (hint is not null)
         {
-            panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = Color.DimGray, MaximumSize = new Size(540, 0), Margin = new Padding(0, 2, 0, 0) });
+            panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = BrandChrome.Muted, MaximumSize = new Size(BrandChrome.TextWidth, 0), Margin = new Padding(0, 2, 0, 0) });
         }
 
         return panel;
@@ -514,7 +536,7 @@ internal sealed class SetupForm : Form
         row.Controls.Add(box);
         row.Controls.Add(browse);
         panel.Controls.Add(row);
-        panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = Color.DimGray, MaximumSize = new Size(560, 0) });
+        panel.Controls.Add(new Label { Text = hint, AutoSize = true, ForeColor = BrandChrome.Muted, MaximumSize = new Size(BrandChrome.TextWidth, 0) });
         return panel;
     }
 }

@@ -14,6 +14,12 @@ if (args is ["--version"])
     return 0;
 }
 
+if (args.FirstOrDefault() == "service")
+{
+    // The tray's Start / Stop / Restart service …, run elevated (Windows).
+    return ServiceCommand.Run(args);
+}
+
 var configPath = AgentConfigFile.Resolve(args);
 if (args.FirstOrDefault() == "enroll")
 {

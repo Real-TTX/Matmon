@@ -80,32 +80,46 @@ internal sealed class TrayApp : ApplicationContext
 
         var shield = SystemIcons.Shield.ToBitmap();
         var menu = new ContextMenuStrip();
-        _openItem = new ToolStripMenuItem("Open Matmon", null, (_, _) => OpenPage(IsProbe ? "/probe" : "/")) { Font = new Font(menu.Font, FontStyle.Bold) };
+        _openItem = new ToolStripMenuItem("Open Matmon", null, (_, _) => OpenDefault()) { Font = new Font(menu.Font, FontStyle.Bold) };
         _primaryItem = new ToolStripMenuItem("Open primary", null, (_, _) => OpenPrimary());
         _logsItem = new ToolStripMenuItem("Logs", null, (_, _) => OpenPage("/Logs"));
         _updatesItem = new ToolStripMenuItem("Updates", null, (_, _) => OpenPage("/system/updates"));
-        _startItem = new ToolStripMenuItem("Start service", shield, (_, _) => ControlService("start"));
-        _stopItem = new ToolStripMenuItem("Stop service", shield, (_, _) => ControlService("stop"));
-        _restartItem = new ToolStripMenuItem("Restart service", shield, (_, _) => ControlService("restart"));
+        _startItem = new ToolStripMenuItem("Start service …", shield, (_, _) => ControlService("start"));
+        _stopItem = new ToolStripMenuItem("Stop service …", shield, (_, _) => ControlService("stop"));
+        _restartItem = new ToolStripMenuItem("Restart service …", shield, (_, _) => ControlService("restart"));
 
+        // The order of TRAY-01: name and version, the state in words, Open (bold, the default), the tray's own items (pages of
+        // the web interface) between separators, Info, the service with the shield (each asks for administrator rights), Quit
+        // last. No log folder: the instance's log is its Logs page, and opening the admin-only data folder in Explorer would
+        // add the user to its access list. No Uninstall: that is Installed apps.
         menu.Items.Add(_titleItem);
         menu.Items.Add(_stateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_openItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_primaryItem);
-        menu.Items.Add(new ToolStripMenuItem("Info…", null, (_, _) => ShowInfo()));
         menu.Items.Add(_logsItem);
         menu.Items.Add(_updatesItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem("Info …", null, (_, _) => ShowInfo()));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_startItem);
         menu.Items.Add(_stopItem);
         menu.Items.Add(_restartItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
+        // Quit ends the tray only, never the service.
+        menu.Items.Add(new ToolStripMenuItem("Quit", null, (_, _) => ExitThread()));
 
         _icon = new NotifyIcon { ContextMenuStrip = menu, Icon = _icons[InstanceState.NotInstalled], Text = "Matmon", Visible = true };
-        _icon.DoubleClick += (_, _) => OpenDefault();
-        _icon.BalloonTipClicked += (_, _) => OpenDefault();
+        // TRAY-03: a left click is the default item, the right click the menu.
+        _icon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left && FirstClick())
+            {
+                OpenOrInfo();
+            }
+        };
+        _icon.BalloonTipClicked += (_, _) => OpenOrInfo();
 
         _startedFrom = Path.GetFullPath(SetupRunner.SelfPath);
         _startedStamp = Stamp(_startedFrom);
@@ -123,6 +137,17 @@ internal sealed class TrayApp : ApplicationContext
         };
         _timer.Start();
         _ = RefreshAsync();
+    }
+
+    private DateTime _lastLeftClick;
+
+    /// <summary>A double click is two clicks: only the first of them opens, so a page does not open twice.</summary>
+    private bool FirstClick()
+    {
+        var now = DateTime.UtcNow;
+        var first = (now - _lastLeftClick).TotalMilliseconds > SystemInformation.DoubleClickTime;
+        _lastLeftClick = now;
+        return first;
     }
 
     private bool IsProbe => _installation?.Role == WindowsInstallationRole.Probe;
@@ -233,10 +258,11 @@ internal sealed class TrayApp : ApplicationContext
 
             var version = Version;
             _titleItem.Text = string.IsNullOrWhiteSpace(version) ? Product : $"{Product} {version}";
-            var text = Describe();
-            _stateItem.Text = text;
+            // The state in the same words in the menu, the tooltip and the first line of Info (TRAY-02).
+            var word = BuildInfo().Title;
+            _stateItem.Text = word;
             _icon.Icon = _icons[State];
-            var tooltip = $"{Product} - {text}";
+            var tooltip = $"{Product}: {word}";
             _icon.Text = tooltip.Length > 127 ? tooltip[..127] : tooltip;
 
             var running = _service is ServiceControllerStatus.Running;
@@ -267,16 +293,6 @@ internal sealed class TrayApp : ApplicationContext
     private string? Version => _version ?? _installation?.Version;
 
     private string? PrimaryAddress => WindowsProbeSettings.DisplayAddress(_probe?.PrimaryUrl) ?? _installation?.PrimaryUrl;
-
-    private string Describe() => State switch
-    {
-        InstanceState.Running => IsProbe ? $"connected to {PrimaryAddress ?? "its primary"}" : $"running on port {_port}",
-        InstanceState.Starting => "starting ...",
-        InstanceState.NotAnswering => $"the service runs, but Matmon does not answer on port {_port}",
-        InstanceState.Unreachable => $"cannot reach {PrimaryAddress ?? "its primary"}",
-        InstanceState.Stopped => _service is ServiceControllerStatus.StopPending ? "stopping ..." : "the service is stopped",
-        _ => "not installed on this computer"
-    };
 
     // A balloon when Matmon goes away or comes back on its own - not for the change the user just asked for.
     private void Announce()
@@ -321,20 +337,16 @@ internal sealed class TrayApp : ApplicationContext
         {
             _infoForm?.Dispose();
             _infoForProbe = IsProbe;
-            var buttons = new List<Button>();
+            // TRAY-05: Open (the web interface, a probe's status page - the primary action), a probe's primary, Close.
+            // No log folder: see the menu.
+            var open = BrandChrome.FooterButton("Open", width: 88, look: ButtonLook.Primary);
+            open.Click += (_, _) => OpenDefault();
+            var buttons = new List<Button> { open };
             if (IsProbe)
             {
                 var primary = BrandChrome.FooterButton("Open primary", width: 112);
                 primary.Click += (_, _) => OpenPrimary();
-                var status = BrandChrome.FooterButton("Status page", width: 104);
-                status.Click += (_, _) => OpenPage("/probe");
-                buttons.AddRange([primary, status]);
-            }
-            else
-            {
-                var open = BrandChrome.FooterButton("Open Matmon", width: 124);
-                open.Click += (_, _) => OpenPage("/");
-                buttons.Add(open);
+                buttons.Add(primary);
             }
 
             _infoForm = new BrandInfoForm(Product, null, VersionNote, [.. buttons]);
@@ -349,20 +361,8 @@ internal sealed class TrayApp : ApplicationContext
         }
     }
 
-    private string VersionNote
-    {
-        get
-        {
-            var version = Version ?? SetupRunner.Version;
-            // The channel is a row of the window - beside three buttons the bar has room for the version only.
-            return $"Version {version}";
-        }
-    }
-
-    private static string ChannelOf(string version) =>
-        version.StartsWith("nightly", StringComparison.OrdinalIgnoreCase) ? "nightly"
-        : version.StartsWith("local", StringComparison.OrdinalIgnoreCase) ? "local"
-        : "release";
+    /// <summary><c>Version x · channel</c> (SETUP-07).</summary>
+    private string VersionNote => BrandChrome.VersionNote(Version ?? SetupRunner.Version);
 
     private InfoView BuildInfo() => BuildInfo(_installation, _service, State, Version, _probe);
 
@@ -401,7 +401,8 @@ internal sealed class TrayApp : ApplicationContext
                     string.IsNullOrWhiteSpace(probe?.StatusMessage) ? $"It cannot reach {primaryAddress ?? "its primary"}." : probe.StatusMessage!),
                 InstanceState.Starting => ("Starting", "The Matmon service is starting."),
                 InstanceState.NotAnswering => ("Not answering", $"The service runs, but the probe does not answer on port {port}."),
-                _ => ("Service not running", "The Matmon service is stopped - start it from the tray menu.")
+                InstanceState.Stopped when service is ServiceControllerStatus.StopPending => ("Stopping", "The Matmon service is stopping."),
+                _ => ("Service not running", "The Matmon service is stopped - Start service … in the tray menu starts it.")
             };
             Row("Primary", primaryAddress ?? "-");
             Row("Probe", probe is null ? null : probe.ProbeId is { Length: > 0 } id ? $"{probe.ProbeName} ({id})" : probe.ProbeName);
@@ -410,8 +411,7 @@ internal sealed class TrayApp : ApplicationContext
             Row("Sensors", probe?.AssignedSensorCount.ToString());
             Row("Results sent", probe?.LastResultPostUtc is { } sent ? $"{sent.ToLocalTime():g} ({BrandInfoForm.Ago(sent)})" : null);
             Row("Waiting to send", probe is { BufferedObservations: > 0 } waiting ? $"{waiting.BufferedObservations} results (sent once the primary answers)" : null);
-            Row("Version", version);
-            Row("Channel", ChannelOf(version ?? SetupRunner.Version));
+            Row("Version", BrandChrome.VersionValue(version ?? SetupRunner.Version));
             Row("Update", probe?.Update);
             Row("Service", serviceText);
             Row("Status page", $"http://localhost:{port}/probe");
@@ -424,12 +424,12 @@ internal sealed class TrayApp : ApplicationContext
                 InstanceState.Running => ("Running", $"Matmon answers on http://localhost:{port}."),
                 InstanceState.Starting => ("Starting", "The Matmon service is starting."),
                 InstanceState.NotAnswering => ("Not answering", $"The service runs, but Matmon does not answer on port {port}."),
-                InstanceState.Stopped => ("Service not running", "The Matmon service is stopped - start it from the tray menu."),
+                InstanceState.Stopped when service is ServiceControllerStatus.StopPending => ("Stopping", "The Matmon service is stopping."),
+                InstanceState.Stopped => ("Service not running", "The Matmon service is stopped - Start service … in the tray menu starts it."),
                 _ => ("Not installed", "Matmon is not installed on this computer.")
             };
             Row("Address", installation is null ? null : $"http://localhost:{port}");
-            Row("Version", version ?? "-");
-            Row("Channel", ChannelOf(version ?? SetupRunner.Version));
+            Row("Version", BrandChrome.VersionValue(version ?? SetupRunner.Version));
             Row("Service", serviceText);
             Row("Program folder", installation?.ProgramFolder);
             Row("Data folder", installation?.DataFolder);
@@ -497,15 +497,19 @@ internal sealed class TrayApp : ApplicationContext
         }
     }
 
-    private void OpenDefault()
+    /// <summary>The bold item of the menu (and a left click): the web interface - for a probe its status page.</summary>
+    private void OpenDefault() => OpenPage(IsProbe ? "/probe" : "/");
+
+    /// <summary>A click on the icon or a balloon: the bold item - or Info while the service does not run (there is no page to open).</summary>
+    private void OpenOrInfo()
     {
-        if (IsProbe)
+        if (_openItem.Enabled)
         {
-            ShowInfo();
+            OpenDefault();
         }
         else
         {
-            OpenPage("/");
+            ShowInfo();
         }
     }
 
@@ -552,7 +556,8 @@ internal sealed class TrayApp : ApplicationContext
             _controlling = false;
             if (process.ExitCode != 0)
             {
-                _icon.ShowBalloonTip(8000, Product, $"The service could not be {Past(action)}. See {SetupRunner.LogPath}.", ToolTipIcon.Error);
+                // The answer to what the user just did is a window, not a notification (TRAY-04).
+                MessageBox.Show($"The service could not be {Past(action)}. See {SetupRunner.LogPath}.", Product, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
             {

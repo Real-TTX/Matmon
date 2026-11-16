@@ -1,0 +1,4 @@
+MatDesktop 0.1.0 – a copy from MatDesign src/MatDesktop (tools/matdesktop-copy.js --tokens-only)
+a483212a705cdcd02dc59253d3af12a070c7ac6dbbcd81d8fcdd815286c0aa10  Tokens/MatColor.cs
+cd01298d17c47bc8307e03846ee1d1c70598d0b05c67a8eed64cc7f12620d1f4  Tokens/MatPalette.cs
+17357c2a75e224d26485e5cfdb35384906b6fc21f8fa49753f666f12257f705c  Tokens/MatTokens.g.cs
